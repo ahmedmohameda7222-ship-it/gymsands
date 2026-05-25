@@ -99,6 +99,44 @@ export type WorkoutSession = {
   status: "started" | "completed";
 };
 
+export type Weekday = "Sunday" | "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday";
+
+export type UserWorkoutPlanExercise = {
+  id: string;
+  plan_day_id: string;
+  workout_id: string | null;
+  source_workout_id: string | null;
+  exercise_name: string;
+  category: string | null;
+  target_muscle: string | null;
+  equipment: string | null;
+  sets: number | null;
+  reps: string | null;
+  rest_seconds: number | null;
+  sort_order: number;
+  notes: string | null;
+};
+
+export type UserWorkoutPlanDay = {
+  id: string;
+  plan_id: string;
+  day_number: number;
+  day_name: string;
+  weekday: Weekday | null;
+  notes: string | null;
+  exercises: UserWorkoutPlanExercise[];
+};
+
+export type UserWorkoutPlan = {
+  id: string;
+  user_id: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  days: UserWorkoutPlanDay[];
+};
+
 export type ProgressEntry = {
   id: string;
   user_id: string;

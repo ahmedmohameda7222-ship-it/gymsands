@@ -5,7 +5,7 @@ import { WorkoutPlanBuilder } from "@/components/workouts/workout-plan-builder";
 export default function WorkoutsPage() {
   return (
     <>
-      <PageHeading title="Workouts" description="Choose workouts by category, view instructions, and build your own day-by-day plan." />
+      <PageHeading title="Workouts" description="Build a weekly workout plan, save it, start today's workout, and browse exercises by category." />
       <div className="space-y-6">
         <WorkoutPlanBuilder />
         <WorkoutBrowser />
