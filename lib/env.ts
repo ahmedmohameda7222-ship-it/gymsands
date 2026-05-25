@@ -1,7 +1,11 @@
+const hardcodedSupabaseUrl = "";
+const hardcodedSupabaseAnonKey = "";
+const hardcodedAppUrl = "";
+
 export const env = {
-  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-  supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
-  appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "",
+  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || hardcodedSupabaseUrl,
+  supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || hardcodedSupabaseAnonKey,
+  appUrl: process.env.NEXT_PUBLIC_APP_URL || hardcodedAppUrl,
   useMockAuth: process.env.NEXT_PUBLIC_USE_MOCK_AUTH === "true"
 };
 

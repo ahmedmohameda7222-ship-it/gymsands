@@ -28,6 +28,8 @@ NEXT_PUBLIC_APP_URL=https://your-netlify-site.netlify.app
 NEXT_PUBLIC_USE_MOCK_AUTH=false
 ```
 
+The app also has a code fallback in `lib/env.ts` for the public Supabase URL and anon key. Prefer Netlify variables, but if Netlify env injection is not working, those public values can be placed there and committed. Never place a Supabase `service_role` key in frontend code.
+
 ## Netlify Build Settings
 
 - Framework preset: Next.js
@@ -58,10 +60,13 @@ https://your-netlify-site.netlify.app/profile
 Run these in order:
 
 1. `supabase/migrations/001_initial_schema.sql`
-2. `supabase/seed/001_egyptian_foods.sql`
-3. `supabase/seed/002_sample_workouts_and_videos.sql`
-4. Register your first user on the deployed site.
-5. Edit and run `supabase/seed/004_admin_setup_placeholder.sql` with your email to make yourself admin.
+2. `supabase/migrations/002_policy_refresh.sql`
+3. `supabase/seed/001_egyptian_foods.sql`
+4. `supabase/seed/002_sample_workouts_and_videos.sql`
+5. Register your first user on the deployed site.
+6. Edit and run `supabase/seed/004_admin_setup_placeholder.sql` with your email to make yourself admin.
+
+If you already ran `001_initial_schema.sql`, you can still paste and run `002_policy_refresh.sql` afterward. It refreshes grants, RLS policies, and the private `progress-photos` storage policies.
 
 The placeholder for adding the full 3000+ workout video table later is:
 
