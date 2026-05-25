@@ -87,19 +87,110 @@ function localWorkouts(query = "", category?: string) {
   });
 }
 
-export async function getGlobalFoods(query = "") {
-  if (!supabase) {
-    return mockDelay(localFoods(query));
+export async function getFoodCategories() {
+  const fallback = Array.from(new Set(egyptianFoods.map((food) => food.category).filter(Boolean))).sort() as string[];
+  if (!supabase) return mockDelay(fallback);
+
+  const { data, error } = await supabase
+    .from("food_items")
+    .select("category")
+    .eq("is_global", true)
+    .not("category", "is", null)
+    .limit(1000);
+
+  if (error) {
+    console.warn("S&S Gym could not load food categories, using local fallback.", error.message);
+    return fallback;
   }
 
-  let request = supabase.from("food_items").select("*").eq("is_global", true).order("food_name");
+  const values = Array.from(new Set((data ?? []).map((item) => item.category).filter(Boolean))).sort() as string[];
+  return values.length ? values : fallback;
+}
+
+export async function getGlobalFoods(
+  query = "",
+  options: { category?: string; limit?: number } = {}
+) {
+  const limit = options.limit ?? 36;
+  const category = options.category;
+  const fallback = localFoods(query)
+    .filter((food) => !category || food.category === category)
+    .slice(0, limit);
+
+  if (!supabase) {
+    return mockDelay(fallback);
+  }
+
+  let request = supabase
+    .from("food_items")
+    .select("*")
+    .eq("is_global", true)
+    .order("food_name")
+    .limit(limit);
+
+  if (category) request = request.eq("category", category);
   if (query) request = request.ilike("food_name", `%${query}%`);
+
   const { data, error } = await request;
   if (error) {
     console.warn("S&S Gym could not load Supabase foods, using local fallback.", error.message);
-    return localFoods(query);
+    return fallback;
   }
-  return ((data?.length ? data : localFoods(query)) ?? []) as FoodItem[];
+  return ((data?.length ? data : fallback) ?? []) as FoodItem[];
+}
+
+export async function getCalorieTargets(userId: string) {
+  const fallback = { daily_calories: 2200, protein_g: 150, carbs_g: 250, fat_g: 70, water_ml: 2500 };
+  if (!supabase) return mockDelay(fallback);
+
+  const { data, error } = await supabase
+    .from("calorie_targets")
+    .select("daily_calories,protein_g,carbs_g,fat_g,water_ml")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("S&S Gym could not load calorie targets.", error.message);
+    return fallback;
+  }
+
+  return data ?? fallback;
+}
+
+export async function upsertCalorieTargets({
+  userId,
+  dailyCalories,
+  proteinG,
+  carbsG,
+  fatG,
+  waterMl = 2500
+}: {
+  userId: string;
+  dailyCalories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  waterMl?: number;
+}) {
+  const payload = {
+    user_id: userId,
+    daily_calories: dailyCalories,
+    protein_g: proteinG,
+    carbs_g: carbsG,
+    fat_g: fatG,
+    water_ml: waterMl
+  };
+
+  if (!supabase) return mockDelay(payload);
+
+  const { data, error } = await supabase
+    .from("calorie_targets")
+    .upsert(payload, { onConflict: "user_id" })
+    .select("daily_calories,protein_g,carbs_g,fat_g,water_ml")
+    .single();
+
+  if (error) throw error;
+  return data;
 }
 
 export async function getTodayFoodLogs(userId: string, date = todayIso()) {
@@ -358,6 +449,81 @@ export async function getWorkoutHistory(userId: string) {
   }
   return (data ?? []) as WorkoutSession[];
 }
+
+export type WorkoutPlanDayInput = {
+  dayName: string;
+  notes?: string;
+  exercises: Workout[];
+};
+
+export async function createUserWorkoutPlan({
+  userId,
+  planName,
+  days
+}: {
+  userId: string;
+  planName: string;
+  days: WorkoutPlanDayInput[];
+}) {
+  const cleanDays = days
+    .map((day) => ({
+      ...day,
+      dayName: day.dayName.trim(),
+      exercises: day.exercises.filter(Boolean)
+    }))
+    .filter((day) => day.dayName && day.exercises.length);
+
+  if (!planName.trim()) throw new Error("Plan name is required.");
+  if (!cleanDays.length) throw new Error("Add at least one day with one workout.");
+
+  if (!supabase) {
+    return mockDelay({ id: crypto.randomUUID(), name: planName, days: cleanDays });
+  }
+
+  const { data: plan, error: planError } = await supabase
+    .from("user_workout_plans")
+    .insert({ user_id: userId, name: planName.trim(), is_active: true })
+    .select("id")
+    .single();
+
+  if (planError) throw planError;
+
+  for (let dayIndex = 0; dayIndex < cleanDays.length; dayIndex += 1) {
+    const day = cleanDays[dayIndex];
+    const { data: savedDay, error: dayError } = await supabase
+      .from("user_workout_plan_days")
+      .insert({
+        plan_id: plan.id,
+        day_number: dayIndex + 1,
+        day_name: day.dayName,
+        notes: day.notes || null
+      })
+      .select("id")
+      .single();
+
+    if (dayError) throw dayError;
+
+    const exerciseRows = day.exercises.map((workout, exerciseIndex) => ({
+      plan_day_id: savedDay.id,
+      workout_id: isUuid(workout.id) ? workout.id : null,
+      exercise_name: workout.name,
+      category: workout.category,
+      target_muscle: workout.target_muscle,
+      equipment: workout.equipment,
+      sets: workout.sets ?? 3,
+      reps: workout.reps ?? "8-12",
+      rest_seconds: workout.rest_seconds ?? 75,
+      sort_order: exerciseIndex + 1,
+      notes: workout.notes
+    }));
+
+    const { error: exercisesError } = await supabase.from("user_workout_plan_exercises").insert(exerciseRows);
+    if (exercisesError) throw exercisesError;
+  }
+
+  return plan;
+}
+
 
 export async function saveOnboarding(answers: OnboardingAnswers) {
   if (!supabase) return mockDelay(answers);

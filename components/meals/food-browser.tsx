@@ -10,10 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
-import { getGlobalFoods, addGlobalFoodToToday } from "@/services/database/repository";
+import { getFoodCategories, getGlobalFoods, addGlobalFoodToToday } from "@/services/database/repository";
 import { defaultTargets, remainingMacros, scaleFoodMacros, validateFoodLogInput } from "@/services/nutrition/calculations";
 import type { FoodItem, FoodLog } from "@/types";
 import { nutritionDisclaimer } from "@/data/egyptian-foods";
+
+const pageSize = 36;
 
 export function FoodBrowser({
   initialLogs = [],
@@ -25,25 +27,57 @@ export function FoodBrowser({
   const { user } = useAuth();
   const { toast } = useToast();
   const [foods, setFoods] = useState<FoodItem[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState("");
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [logs, setLogs] = useState<FoodLog[]>(initialLogs);
-  const [isLoadingFoods, setIsLoadingFoods] = useState(true);
+  const [isLoadingFoods, setIsLoadingFoods] = useState(false);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    getFoodCategories()
+      .then(setCategories)
+      .catch((error) => {
+        setCategories([]);
+        setLoadError(error instanceof Error ? error.message : "Could not load food categories.");
+      });
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 350);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    if (!selectedCategory && !debouncedQuery) {
+      setFoods([]);
+      setIsLoadingFoods(false);
+      return;
+    }
+
+    let active = true;
     setIsLoadingFoods(true);
-    getGlobalFoods(query)
+    getGlobalFoods(debouncedQuery, { category: selectedCategory || undefined, limit: pageSize })
       .then((items) => {
+        if (!active) return;
         setFoods(items);
         setLoadError("");
       })
       .catch((error) => {
+        if (!active) return;
         setFoods([]);
         setLoadError(error instanceof Error ? error.message : "Could not load foods.");
       })
-      .finally(() => setIsLoadingFoods(false));
-  }, [query]);
+      .finally(() => {
+        if (active) setIsLoadingFoods(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [debouncedQuery, selectedCategory]);
 
   useEffect(() => {
     setLogs(initialLogs);
@@ -101,7 +135,7 @@ export function FoodBrowser({
         <CardContent className="pt-5">
           <p className="text-sm font-semibold text-blue-900">{nutritionDisclaimer}</p>
           <p className="mt-1 text-sm text-blue-800">
-            Members can change serving quantity only. Global Egyptian food calories and macros are admin-managed.
+            Choose a category first. This keeps the Meals page fast and stops all foods loading at once.
           </p>
         </CardContent>
       </Card>
@@ -111,16 +145,38 @@ export function FoodBrowser({
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search Egyptian food, e.g. Koshary or Molokhia"
+          placeholder="Search Egyptian food, e.g. chicken, rice, sauce"
           className="pl-10"
         />
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <Button variant={!selectedCategory ? "default" : "outline"} size="sm" onClick={() => setSelectedCategory("")}>
+          Search only
+        </Button>
+        {categories.map((category) => (
+          <Button
+            key={category}
+            variant={selectedCategory === category ? "default" : "outline"}
+            size="sm"
+            onClick={() => setSelectedCategory(category)}
+          >
+            {category}
+          </Button>
+        ))}
+      </div>
+
+      {!selectedCategory && !debouncedQuery ? (
+        <div className="rounded-md border bg-white p-4 text-sm text-muted-foreground">
+          Pick Protein Meal, Side, Sauce, Breakfast, Snack, etc. or search by food name.
+        </div>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {isLoadingFoods ? <p className="text-sm text-muted-foreground">Loading Egyptian foods...</p> : null}
+        {isLoadingFoods ? <p className="text-sm text-muted-foreground">Loading foods...</p> : null}
         {loadError ? <p className="text-sm text-red-600">{loadError}</p> : null}
-        {!isLoadingFoods && !foods.length ? (
-          <p className="text-sm text-muted-foreground">No foods found. Try another Egyptian food name.</p>
+        {!isLoadingFoods && (selectedCategory || debouncedQuery) && !foods.length ? (
+          <p className="text-sm text-muted-foreground">No foods found. Try another category or search word.</p>
         ) : null}
         {foods.map((food) => {
           const quantity = quantities[food.id] ?? 1;
