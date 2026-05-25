@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   BarChart3,
+  ClipboardList,
   Dumbbell,
   Home,
   LogOut,
@@ -22,11 +23,20 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: Home },
+  { href: "/my-meal-plan", label: "My Meal Plan", icon: ClipboardList },
   { href: "/meals", label: "Meals", icon: Soup },
   { href: "/calories", label: "Calories", icon: Utensils },
   { href: "/workouts", label: "Workouts", icon: Dumbbell },
   { href: "/progress", label: "Progress", icon: BarChart3 },
   { href: "/profile", label: "Profile", icon: User }
+];
+
+const mobileNavItems = [
+  { href: "/dashboard", label: "Dashboard", icon: Home },
+  { href: "/my-meal-plan", label: "Meal Plan", icon: ClipboardList },
+  { href: "/calories", label: "Calories", icon: Utensils },
+  { href: "/workouts", label: "Workouts", icon: Dumbbell },
+  { href: "/progress", label: "Progress", icon: BarChart3 }
 ];
 
 const adminItems = [
@@ -97,7 +107,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t bg-white lg:hidden">
         <div className="grid grid-cols-5">
-          {navItems.slice(0, 5).map((item) => {
+          {mobileNavItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (

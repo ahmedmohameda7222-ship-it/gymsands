@@ -8,6 +8,8 @@ import type {
   ExerciseVideo,
   FoodItem,
   FoodLog,
+  MealPlanItem,
+  MealType,
   OnboardingAnswers,
   ProgressEntry,
   ExerciseLog,
@@ -36,6 +38,7 @@ function looksLikeUrl(value: string | null | undefined) {
 }
 
 export const weekDays: Weekday[] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+export const mealTypes: MealType[] = ["Breakfast", "Lunch", "Snack", "Dinner"];
 
 export function getCurrentWeekday(date = new Date()): Weekday {
   return weekDays[date.getDay()];
@@ -167,12 +170,20 @@ export async function getGlobalFoods(
   if (category) request = request.eq("category", category);
   if (query) request = request.ilike("food_name", `%${query}%`);
 
-  const { data, error } = await request;
-  if (error) {
-    console.warn("S&S Gym could not load Supabase foods, using local fallback.", error.message);
-    return fallback;
-  }
-  return ((data?.length ? data : fallback) ?? []) as FoodItem[];
+  const result = await withTimeout(
+    request.then(({ data, error }) => {
+      if (error) {
+        console.warn("S&S Gym could not load Supabase foods, using local fallback.", error.message);
+        return fallback;
+      }
+      return ((data?.length ? data : fallback) ?? []) as FoodItem[];
+    }),
+    fallback,
+    "Foods",
+    3500
+  );
+
+  return result;
 }
 
 export async function getCalorieTargets(userId: string) {
@@ -279,6 +290,119 @@ export async function addGlobalFoodToToday({
     throw error;
   }
   return data as FoodLog;
+}
+
+
+export async function getTodayMealPlanItems(userId: string, date = todayIso()) {
+  if (!supabase) return mockDelay<MealPlanItem[]>([]);
+  const { data, error } = await supabase
+    .from("user_meal_plan_items")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("plan_date", date)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.warn("S&S Gym could not load today's meal plan.", error.message);
+    return [];
+  }
+
+  return (data ?? []) as MealPlanItem[];
+}
+
+export async function addFoodToMealPlan({
+  userId,
+  food,
+  quantity,
+  mealType = "Breakfast"
+}: {
+  userId: string;
+  food: FoodItem;
+  quantity: number;
+  mealType?: MealType;
+}) {
+  const macros = scaleFoodMacros(food, quantity);
+  const payload = {
+    user_id: userId,
+    plan_date: todayIso(),
+    meal_type: mealType,
+    food_item_id: isUuid(food.id) ? food.id : null,
+    user_food_item_id: null,
+    food_name: food.food_name,
+    serving_size: food.serving_size,
+    quantity,
+    calories: macros.calories,
+    protein_g: macros.protein_g,
+    carbs_g: macros.carbs_g,
+    fat_g: macros.fat_g,
+    status: "planned",
+    food_log_id: null,
+    completed_at: null,
+    notes: null
+  };
+
+  if (!supabase) return mockDelay({ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as MealPlanItem);
+
+  const { data, error } = await supabase.from("user_meal_plan_items").insert(payload).select("*").single();
+  if (error) {
+    console.warn("S&S Gym could not add this food to My Meal Plan.", error.message);
+    throw error;
+  }
+  return data as MealPlanItem;
+}
+
+export async function markMealPlanItemDone(item: MealPlanItem) {
+  if (item.status === "done") return { item, log: null as FoodLog | null };
+
+  const logPayload = {
+    user_id: item.user_id,
+    food_item_id: item.food_item_id,
+    user_food_item_id: item.user_food_item_id,
+    log_date: item.plan_date,
+    meal_type: item.meal_type,
+    food_name: item.food_name,
+    serving_size: item.serving_size,
+    quantity: item.quantity,
+    calories: item.calories,
+    protein_g: item.protein_g,
+    carbs_g: item.carbs_g,
+    fat_g: item.fat_g,
+    notes: item.notes
+  };
+
+  if (!supabase) {
+    const log = { ...logPayload, id: crypto.randomUUID() } as FoodLog;
+    return {
+      item: { ...item, status: "done", food_log_id: log.id, completed_at: new Date().toISOString() } as MealPlanItem,
+      log
+    };
+  }
+
+  const inserted = await supabase.from("food_logs").insert(logPayload).select("*").single();
+  if (inserted.error) throw inserted.error;
+
+  const updated = await supabase
+    .from("user_meal_plan_items")
+    .update({ status: "done", food_log_id: inserted.data.id, completed_at: new Date().toISOString() })
+    .eq("id", item.id)
+    .select("*")
+    .single();
+
+  if (updated.error) throw updated.error;
+  return { item: updated.data as MealPlanItem, log: inserted.data as FoodLog };
+}
+
+export async function deleteMealPlanItem(item: MealPlanItem) {
+  if (!supabase) return mockDelay(true);
+
+  if (item.food_log_id) {
+    const logDelete = await supabase.from("food_logs").delete().eq("id", item.food_log_id).eq("user_id", item.user_id);
+    if (logDelete.error) throw logDelete.error;
+  }
+
+  const { error } = await supabase.from("user_meal_plan_items").delete().eq("id", item.id);
+  if (error) throw error;
+  return true;
 }
 
 export async function addCustomFoodLog(payload: Omit<FoodLog, "id">) {
@@ -479,6 +603,61 @@ export async function startWorkoutDaySession(userId: string, day: WorkoutPlanDay
     throw error;
   }
   return data as WorkoutSession;
+}
+
+export async function getOpenWorkoutDaySession(userId: string, planDayId: string) {
+  if (!supabase) return mockDelay<WorkoutSession | null>(null);
+  const { data, error } = await supabase
+    .from("workout_sessions")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("plan_day_id", planDayId)
+    .eq("status", "started")
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("S&S Gym could not load the open workout session.", error.message);
+    return null;
+  }
+
+  return (data ?? null) as WorkoutSession | null;
+}
+
+export async function getOrStartWorkoutDaySession(userId: string, day: WorkoutPlanDaySession) {
+  const open = await getOpenWorkoutDaySession(userId, day.id);
+  if (open) return open;
+  return startWorkoutDaySession(userId, day);
+}
+
+export async function getWorkoutSessionLogs(sessionId: string) {
+  if (!supabase) return mockDelay<ExerciseLog[]>([]);
+  const { data, error } = await supabase
+    .from("exercise_logs")
+    .select("*")
+    .eq("workout_session_id", sessionId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.warn("S&S Gym could not load workout session logs.", error.message);
+    return [];
+  }
+
+  return (data ?? []) as ExerciseLog[];
+}
+
+export async function updateWorkoutSessionDuration(sessionId: string, durationMinutes: number) {
+  if (!supabase) return mockDelay(true);
+  const { error } = await supabase
+    .from("workout_sessions")
+    .update({ duration_minutes: Math.max(0, durationMinutes) })
+    .eq("id", sessionId)
+    .eq("status", "started");
+  if (error) {
+    console.warn("S&S Gym could not update workout duration.", error.message);
+  }
+  return true;
 }
 
 export type WorkoutSetLogInput = {

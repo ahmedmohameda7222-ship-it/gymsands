@@ -1,54 +1,47 @@
+
 "use client";
 
-import { Search, Utensils } from "lucide-react";
+import { CheckCircle2, PlusCircle, Search, Utensils } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
-import { addGlobalFoodToToday, getDefaultFoodCategories, getFoodCategories, getGlobalFoods } from "@/services/database/repository";
+import { addFoodToMealPlan, addGlobalFoodToToday, getDefaultFoodCategories, getGlobalFoods, mealTypes } from "@/services/database/repository";
 import { defaultTargets, remainingMacros, scaleFoodMacros, validateFoodLogInput } from "@/services/nutrition/calculations";
-import type { FoodItem, FoodLog } from "@/types";
+import type { FoodItem, FoodLog, MealPlanItem, MealType } from "@/types";
 import { nutritionDisclaimer } from "@/data/egyptian-foods";
 
-const pageSize = 18;
+const pageSize = 12;
 
 export function FoodBrowser({
   initialLogs = [],
-  onLogAdded
+  onLogAdded,
+  onPlanAdded,
+  defaultMealType = "Breakfast"
 }: {
   initialLogs?: FoodLog[];
   onLogAdded?: (log: FoodLog) => void;
+  onPlanAdded?: (item: MealPlanItem) => void;
+  defaultMealType?: MealType;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [foods, setFoods] = useState<FoodItem[]>([]);
-  const [categories, setCategories] = useState<string[]>(() => getDefaultFoodCategories());
+  const [categories] = useState<string[]>(() => getDefaultFoodCategories());
   const [selectedCategory, setSelectedCategory] = useState("");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [mealType, setMealType] = useState<MealType>(defaultMealType);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [logs, setLogs] = useState<FoodLog[]>(initialLogs);
   const [isLoadingFoods, setIsLoadingFoods] = useState(false);
   const [visibleCount, setVisibleCount] = useState(pageSize);
   const [loadError, setLoadError] = useState("");
-
-  useEffect(() => {
-    let mounted = true;
-    getFoodCategories()
-      .then((nextCategories) => {
-        if (mounted && nextCategories.length) setCategories(nextCategories);
-      })
-      .catch(() => {
-        if (mounted) setCategories(getDefaultFoodCategories());
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
@@ -69,7 +62,7 @@ export function FoodBrowser({
 
     let active = true;
     setIsLoadingFoods(true);
-    getGlobalFoods(debouncedQuery, { category: selectedCategory || undefined, limit: 80 })
+    getGlobalFoods(debouncedQuery, { category: selectedCategory || undefined, limit: 48 })
       .then((items) => {
         if (!active) return;
         setFoods(items);
@@ -97,10 +90,10 @@ export function FoodBrowser({
     () =>
       logs.reduce(
         (sum, log) => ({
-          calories: sum.calories + log.calories,
-          protein_g: sum.protein_g + log.protein_g,
-          carbs_g: sum.carbs_g + log.carbs_g,
-          fat_g: sum.fat_g + log.fat_g
+          calories: sum.calories + Number(log.calories),
+          protein_g: sum.protein_g + Number(log.protein_g),
+          carbs_g: sum.carbs_g + Number(log.carbs_g),
+          fat_g: sum.fat_g + Number(log.fat_g)
         }),
         { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
       ),
@@ -109,7 +102,7 @@ export function FoodBrowser({
 
   const visibleFoods = useMemo(() => foods.slice(0, visibleCount), [foods, visibleCount]);
 
-  async function addFood(food: FoodItem) {
+  async function logFoodNow(food: FoodItem) {
     const quantity = quantities[food.id] ?? 1;
     const macros = scaleFoodMacros(food, quantity);
     const validation = validateFoodLogInput(food.food_name, quantity, macros);
@@ -119,7 +112,8 @@ export function FoodBrowser({
       const log = await addGlobalFoodToToday({
         userId: user?.id ?? "mock-user",
         food,
-        quantity
+        quantity,
+        mealType
       });
       setLogs((current) => [log, ...current]);
       onLogAdded?.(log);
@@ -130,8 +124,8 @@ export function FoodBrowser({
         fat_g: totals.fat_g + macros.fat_g
       });
       toast({
-        title: "Meal added to today",
-        description: `+${macros.calories} kcal | +${macros.protein_g}g protein | remaining ${remaining.calories} kcal`
+        title: "Added to today's calories",
+        description: `${mealType}: +${macros.calories} kcal | remaining ${remaining.calories} kcal`
       });
     } catch (error) {
       toast({
@@ -141,32 +135,65 @@ export function FoodBrowser({
     }
   }
 
+  async function addToPlan(food: FoodItem) {
+    const quantity = quantities[food.id] ?? 1;
+    const macros = scaleFoodMacros(food, quantity);
+    const validation = validateFoodLogInput(food.food_name, quantity, macros);
+    if (validation) return toast({ title: "Check this food entry", description: validation });
+
+    try {
+      const item = await addFoodToMealPlan({
+        userId: user?.id ?? "mock-user",
+        food,
+        quantity,
+        mealType
+      });
+      onPlanAdded?.(item);
+      toast({ title: "Added to My Meal Plan", description: `${food.food_name} added to ${mealType}. It will count after you mark it done.` });
+    } catch (error) {
+      toast({ title: "Could not add to plan", description: error instanceof Error ? error.message : "Run the latest SQL migration first." });
+    }
+  }
+
   return (
     <div className="space-y-4">
       <Card className="bg-blue-50">
         <CardContent className="pt-5">
           <p className="text-sm font-semibold text-blue-950">{nutritionDisclaimer}</p>
-          <p className="mt-1 text-sm text-blue-800">Pick a food category first. The page will not render the full food list at once.</p>
+          <p className="mt-1 text-sm text-blue-800">Food does not load all at once. Choose a category or search, then add it to your plan or log it now.</p>
         </CardContent>
       </Card>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search food, e.g. chicken, rice, sauce"
-          className="pl-10"
-        />
+      <div className="grid gap-3 lg:grid-cols-[1fr_220px]">
+        <div className="relative">
+          <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search food, e.g. chicken, rice, sauce"
+            className="pl-10"
+          />
+        </div>
+        <Select value={mealType} onValueChange={(value) => setMealType(value as MealType)}>
+          <SelectTrigger>
+            <SelectValue placeholder="Meal" />
+          </SelectTrigger>
+          <SelectContent>
+            {mealTypes.map((type) => (
+              <SelectItem key={type} value={type}>{type}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex gap-2 overflow-x-auto pb-2 lg:flex-wrap lg:overflow-visible">
         {categories.map((category) => (
           <Button
             key={category}
             variant={selectedCategory === category ? "default" : "outline"}
             size="sm"
             onClick={() => setSelectedCategory((current) => (current === category ? "" : category))}
+            className="shrink-0"
           >
             {category}
           </Button>
@@ -175,7 +202,7 @@ export function FoodBrowser({
 
       {!selectedCategory && !debouncedQuery ? (
         <div className="rounded-md border bg-white p-4 text-sm text-muted-foreground">
-          Choose a category such as Protein, Side, Sauce, Drink, Snack, Breakfast, or search by food name.
+          Choose a category or search. This keeps the mobile page fast and prevents the full food database from rendering at once.
         </div>
       ) : null}
 
@@ -220,10 +247,16 @@ export function FoodBrowser({
                     placeholder="Meal quantity, e.g. 1.5 servings"
                   />
                 </div>
-                <Button className="mt-4 w-full" onClick={() => addFood(food)}>
-                  <Utensils className="h-4 w-4" />
-                  Add to Today
-                </Button>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <Button variant="outline" onClick={() => addToPlan(food)}>
+                    <PlusCircle className="h-4 w-4" />
+                    Add to plan
+                  </Button>
+                  <Button onClick={() => logFoodNow(food)}>
+                    <CheckCircle2 className="h-4 w-4" />
+                    Done now
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           );

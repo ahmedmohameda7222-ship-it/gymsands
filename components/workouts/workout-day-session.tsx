@@ -12,8 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { completeWorkoutSession, saveWorkoutSetLogs, startWorkoutDaySession } from "@/services/database/repository";
-import type { UserWorkoutPlanExercise, WorkoutPlanDaySession, WorkoutSession } from "@/types";
+import { completeWorkoutSession, getOrStartWorkoutDaySession, getWorkoutSessionLogs, saveWorkoutSetLogs, updateWorkoutSessionDuration } from "@/services/database/repository";
+import type { ExerciseLog, UserWorkoutPlanExercise, WorkoutPlanDaySession, WorkoutSession } from "@/types";
 
 const defaultInstructions = "Use controlled form, keep the target muscle engaged, avoid rushing the eccentric part, and stop if the movement feels painful.";
 
@@ -65,12 +65,35 @@ function toNumberOrNull(value: string) {
   return Number.isFinite(next) ? next : null;
 }
 
+function hydrateStates(baseStates: ExerciseState[], logs: ExerciseLog[]) {
+  if (!logs.length) return baseStates;
+  return baseStates.map((item) => ({
+    ...item,
+    sets: item.sets.map((set) => {
+      const log = logs.find(
+        (entry) =>
+          entry.set_number === set.setNumber &&
+          ((entry.plan_exercise_id && entry.plan_exercise_id === item.exercise.id) || entry.exercise_name === item.exercise.exercise_name)
+      );
+      if (!log) return set;
+      return {
+        ...set,
+        reps: log.reps === null || log.reps === undefined ? set.reps : String(log.reps),
+        weightKg: log.weight_kg === null || log.weight_kg === undefined ? "" : String(log.weight_kg),
+        notes: log.notes ?? "",
+        completedAt: log.completed_at ?? log.created_at ?? new Date().toISOString()
+      };
+    })
+  }));
+}
+
 export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [session, setSession] = useState<WorkoutSession | null>(null);
-  const [startedAt] = useState(() => Date.now());
+  const [startedAtMs, setStartedAtMs] = useState(() => Date.now());
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [sessionNotes, setSessionNotes] = useState("");
   const [exerciseStates, setExerciseStates] = useState<ExerciseState[]>(() => day.exercises.map(makeExerciseState));
   const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
@@ -79,14 +102,46 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const [timerLeft, setTimerLeft] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isStarting, setIsStarting] = useState(true);
 
   useEffect(() => {
-    startWorkoutDaySession(user?.id ?? "mock-user", day)
-      .then(setSession)
+    let active = true;
+    getOrStartWorkoutDaySession(user?.id ?? "mock-user", day)
+      .then(async (nextSession) => {
+        if (!active) return;
+        setSession(nextSession);
+        const parsedStartedAt = Date.parse(nextSession.started_at);
+        if (Number.isFinite(parsedStartedAt)) setStartedAtMs(parsedStartedAt);
+        setSessionNotes(nextSession.notes ?? "");
+        const existingLogs = await getWorkoutSessionLogs(nextSession.id);
+        if (active) setExerciseStates((current) => hydrateStates(current, existingLogs));
+      })
       .catch((error) => {
-        toast({ title: "Could not start cloud session", description: error instanceof Error ? error.message : "Run the latest SQL migration first." });
+        toast({ title: "Could not start workout session", description: error instanceof Error ? error.message : "Run the latest SQL migration first." });
+      })
+      .finally(() => {
+        if (active) setIsStarting(false);
       });
+    return () => {
+      active = false;
+    };
   }, [day, toast, user]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [startedAtMs]);
+
+  useEffect(() => {
+    if (!session) return;
+    const interval = window.setInterval(() => {
+      const durationMinutes = Math.max(1, Math.ceil((Date.now() - startedAtMs) / 60000));
+      updateWorkoutSessionDuration(session.id, durationMinutes).catch(() => undefined);
+    }, 20000);
+    return () => window.clearInterval(interval);
+  }, [session, startedAtMs]);
 
   useEffect(() => {
     if (!isTimerRunning) return;
@@ -104,53 +159,11 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const completedSets = exerciseStates.reduce((sum, item) => sum + item.sets.filter((set) => set.completedAt).length, 0);
   const progress = totalSets ? Math.round((completedSets / totalSets) * 100) : 0;
   const isFinished = completedSets === totalSets && totalSets > 0;
-
   const currentVideoUrl = activeExercise?.exercise.video_url || (activeExercise?.exercise.notes?.startsWith("http") ? activeExercise.exercise.notes : null);
-  const durationMinutes = useMemo(() => Math.max(1, Math.round((Date.now() - startedAt) / 60000)), [completedSets, startedAt]);
+  const durationMinutes = Math.max(1, Math.ceil(elapsedSeconds / 60));
 
-  function updateSet(exerciseIndex: number, setIndex: number, patch: Partial<SetState>) {
-    setExerciseStates((current) =>
-      current.map((item, itemIndex) =>
-        itemIndex === exerciseIndex
-          ? { ...item, sets: item.sets.map((set, currentSetIndex) => (currentSetIndex === setIndex ? { ...set, ...patch } : set)) }
-          : item
-      )
-    );
-  }
-
-  function moveToNextSet() {
-    const currentExercise = exerciseStates[activeExerciseIndex];
-    if (!currentExercise) return;
-    if (activeSetIndex + 1 < currentExercise.sets.length) {
-      setActiveSetIndex(activeSetIndex + 1);
-      return;
-    }
-    if (activeExerciseIndex + 1 < exerciseStates.length) {
-      const nextExercise = exerciseStates[activeExerciseIndex + 1];
-      setActiveExerciseIndex(activeExerciseIndex + 1);
-      setActiveSetIndex(0);
-      setTimerSeconds(nextExercise.exercise.rest_seconds ?? 75);
-    }
-  }
-
-  function finishCurrentSet() {
-    if (!activeSet || activeSet.completedAt) return;
-    updateSet(activeExerciseIndex, activeSetIndex, { completedAt: new Date().toISOString() });
-    const hasNextSet = completedSets + 1 < totalSets;
-    if (hasNextSet) {
-      setTimerLeft(timerSeconds);
-      setIsTimerRunning(timerSeconds > 0);
-      moveToNextSet();
-    }
-  }
-
-  function restartCurrentSet() {
-    if (!activeSet) return;
-    updateSet(activeExerciseIndex, activeSetIndex, { completedAt: null });
-  }
-
-  function buildLogRows() {
-    return exerciseStates.flatMap((item) =>
+  function buildLogRows(states = exerciseStates) {
+    return states.flatMap((item) =>
       item.sets
         .filter((set) => set.completedAt)
         .map((set) => ({
@@ -166,6 +179,73 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
           completedAt: set.completedAt
         }))
     );
+  }
+
+  function updateSet(exerciseIndex: number, setIndex: number, patch: Partial<SetState>) {
+    setExerciseStates((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === exerciseIndex
+          ? { ...item, sets: item.sets.map((set, currentSetIndex) => (currentSetIndex === setIndex ? { ...set, ...patch } : set)) }
+          : item
+      )
+    );
+  }
+
+  function statesWithSetPatch(exerciseIndex: number, setIndex: number, patch: Partial<SetState>) {
+    return exerciseStates.map((item, itemIndex) =>
+      itemIndex === exerciseIndex
+        ? { ...item, sets: item.sets.map((set, currentSetIndex) => (currentSetIndex === setIndex ? { ...set, ...patch } : set)) }
+        : item
+    );
+  }
+
+  function moveToNextSet(states = exerciseStates) {
+    const currentExercise = states[activeExerciseIndex];
+    if (!currentExercise) return;
+    if (activeSetIndex + 1 < currentExercise.sets.length) {
+      setActiveSetIndex(activeSetIndex + 1);
+      return;
+    }
+    if (activeExerciseIndex + 1 < states.length) {
+      const nextExercise = states[activeExerciseIndex + 1];
+      setActiveExerciseIndex(activeExerciseIndex + 1);
+      setActiveSetIndex(0);
+      setTimerSeconds(nextExercise.exercise.rest_seconds ?? 75);
+    }
+  }
+
+  async function persistProgress(states = exerciseStates) {
+    if (!session) return;
+    await saveWorkoutSetLogs(session.id, buildLogRows(states));
+    await updateWorkoutSessionDuration(session.id, Math.max(1, Math.ceil((Date.now() - startedAtMs) / 60000)));
+  }
+
+  async function finishCurrentSet() {
+    if (!activeSet || activeSet.completedAt) return;
+    const nextStates = statesWithSetPatch(activeExerciseIndex, activeSetIndex, { completedAt: new Date().toISOString() });
+    setExerciseStates(nextStates);
+    const hasNextSet = completedSets + 1 < totalSets;
+    if (hasNextSet) {
+      setTimerLeft(timerSeconds);
+      setIsTimerRunning(timerSeconds > 0);
+      moveToNextSet(nextStates);
+    }
+    try {
+      await persistProgress(nextStates);
+    } catch (error) {
+      toast({ title: "Set saved locally only", description: error instanceof Error ? error.message : "Cloud save failed. Try finishing the workout again." });
+    }
+  }
+
+  async function restartCurrentSet() {
+    if (!activeSet) return;
+    const nextStates = statesWithSetPatch(activeExerciseIndex, activeSetIndex, { completedAt: null });
+    setExerciseStates(nextStates);
+    try {
+      await persistProgress(nextStates);
+    } catch {
+      toast({ title: "Could not update cloud progress", description: "Try again after checking Supabase." });
+    }
   }
 
   async function completeSession() {
@@ -208,14 +288,15 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         <div className="flex flex-wrap gap-2">
           <Badge>{day.weekday ?? "Workout day"}</Badge>
           <Badge variant="outline">{completedSets}/{totalSets} sets done</Badge>
-          <Badge variant="outline">{durationMinutes} min</Badge>
+          <Badge variant="outline">{formatTime(elapsedSeconds)}</Badge>
+          {isStarting ? <Badge variant="outline">Saving session...</Badge> : null}
         </div>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>{day.day_name}</CardTitle>
-          <p className="text-sm text-muted-foreground">Log actual reps and weight for every set, then finish the workout to save the history.</p>
+          <p className="text-sm text-muted-foreground">Your session starts in the database immediately. Finished sets are saved as you complete them, so refresh will keep your progress.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <Progress value={progress} />
@@ -229,7 +310,8 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                   type="button"
                   onClick={() => {
                     setActiveExerciseIndex(index);
-                    setActiveSetIndex(Math.max(0, item.sets.findIndex((set) => !set.completedAt)));
+                    const firstOpen = item.sets.findIndex((set) => !set.completedAt);
+                    setActiveSetIndex(firstOpen >= 0 ? firstOpen : item.sets.length - 1);
                     setTimerSeconds(item.exercise.rest_seconds ?? 75);
                   }}
                   className={`rounded-md border p-3 text-left transition ${active ? "border-primary bg-blue-50" : "bg-white hover:border-primary"}`}
@@ -249,64 +331,54 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
             <CardTitle>{activeExercise.exercise.exercise_name}</CardTitle>
             <div className="flex flex-wrap gap-2 pt-2">
               <Badge variant="outline">Planned {activeExercise.exercise.sets ?? activeExercise.sets.length} sets</Badge>
-              <Badge variant="outline">{activeExercise.exercise.reps ?? "Reps not set"}</Badge>
-              <Badge variant="outline">{activeExercise.exercise.rest_seconds ?? 75}s rest</Badge>
+              <Badge variant="outline">Reps {activeExercise.exercise.reps ?? "custom"}</Badge>
+              <Badge variant="outline">Rest {activeExercise.exercise.rest_seconds ?? timerSeconds}s</Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-md border bg-slate-50 p-3">
-              <p className="text-sm font-semibold">Instructions</p>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">{activeExercise.exercise.instructions || defaultInstructions}</p>
+            <div className="rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+              {activeExercise.exercise.instructions || defaultInstructions}
               {currentVideoUrl ? (
-                <a href={currentVideoUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary">
-                  Open instruction video <ExternalLink className="h-4 w-4" />
+                <a href={currentVideoUrl} target="_blank" rel="noreferrer" className="mt-2 flex items-center gap-2 font-semibold text-primary">
+                  Instruction video link <ExternalLink className="h-4 w-4" />
                 </a>
               ) : null}
             </div>
 
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-semibold">Set {activeSet.setNumber}</p>
-                {activeSet.completedAt ? <Badge><CheckCircle2 className="h-3.5 w-3.5" /> Done</Badge> : <Badge variant="outline">Current set</Badge>}
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>Actual reps</Label>
-                  <Input value={activeSet.reps} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { reps: event.target.value })} inputMode="numeric" />
+              {activeExercise.sets.map((set, setIndex) => (
+                <div key={set.setNumber} className={`rounded-md border p-3 ${setIndex === activeSetIndex ? "border-primary bg-blue-50" : "bg-white"}`}>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <p className="font-semibold">Set {set.setNumber}</p>
+                    {set.completedAt ? <Badge variant="success">Done</Badge> : <Badge variant="outline">Open</Badge>}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="space-y-1">
+                      <Label>Actual reps</Label>
+                      <Input value={set.reps} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { reps: event.target.value })} inputMode="numeric" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Weight kg</Label>
+                      <Input value={set.weightKg} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { weightKg: event.target.value })} inputMode="decimal" placeholder="0" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Notes</Label>
+                      <Input value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional" />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Weight kg</Label>
-                  <Input value={activeSet.weightKg} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { weightKg: event.target.value })} inputMode="decimal" placeholder="0" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Set note</Label>
-                  <Input value={activeSet.notes} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { notes: event.target.value })} placeholder="Optional" />
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={finishCurrentSet} disabled={Boolean(activeSet.completedAt)}>
-                  <CheckCircle2 className="h-4 w-4" />
-                  Finish this set
-                </Button>
-                <Button variant="outline" onClick={restartCurrentSet} disabled={!activeSet.completedAt}>
-                  <RotateCcw className="h-4 w-4" />
-                  Reopen set
-                </Button>
-              </div>
+              ))}
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {activeExercise.sets.map((set, index) => (
-                <button
-                  key={set.setNumber}
-                  type="button"
-                  onClick={() => setActiveSetIndex(index)}
-                  className={`rounded-md border p-3 text-left text-sm ${index === activeSetIndex ? "border-primary bg-blue-50" : "bg-white"}`}
-                >
-                  <p className="font-semibold">Set {set.setNumber}</p>
-                  <p className="text-muted-foreground">{set.completedAt ? `${set.reps || 0} reps | ${set.weightKg || 0} kg` : "Not finished"}</p>
-                </button>
-              ))}
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={finishCurrentSet} disabled={!activeSet || Boolean(activeSet.completedAt)}>
+                <CheckCircle2 className="h-4 w-4" />
+                Finish this set
+              </Button>
+              <Button variant="outline" onClick={restartCurrentSet} disabled={!activeSet?.completedAt}>
+                <RotateCcw className="h-4 w-4" />
+                Reopen set
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -314,25 +386,20 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Clock className="h-5 w-5 text-primary" /> Rest timer</CardTitle>
+              <CardTitle className="flex items-center gap-2"><TimerReset className="h-5 w-5" /> Rest timer</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-2">
                 <Label>Timer seconds</Label>
                 <Input type="number" min="0" value={timerSeconds} onChange={(event) => setTimerSeconds(Math.max(0, Number(event.target.value) || 0))} />
               </div>
-              <div className="rounded-md bg-blue-50 p-5 text-center">
-                <p className="text-4xl font-bold text-primary">{formatTime(timerLeft)}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{isTimerRunning ? "Timer running" : "Timer stopped"}</p>
+              <div className="rounded-md bg-navy-950 p-5 text-center text-white">
+                <Clock className="mx-auto h-6 w-6" />
+                <p className="mt-2 text-4xl font-bold">{formatTime(timerLeft)}</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={() => { setTimerLeft(timerSeconds); setIsTimerRunning(timerSeconds > 0); }}>
-                  <TimerReset className="h-4 w-4" />
-                  Start timer
-                </Button>
-                <Button variant="outline" onClick={() => { setTimerLeft(0); setIsTimerRunning(false); }}>
-                  Skip rest
-                </Button>
+                <Button variant="outline" onClick={() => { setTimerLeft(timerSeconds); setIsTimerRunning(timerSeconds > 0); }}>Start timer</Button>
+                <Button variant="outline" onClick={() => { setTimerLeft(0); setIsTimerRunning(false); }}>Stop</Button>
               </div>
             </CardContent>
           </Card>
@@ -342,19 +409,17 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               <CardTitle>Finish workout</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="space-y-2">
-                <Label>Workout notes</Label>
-                <textarea
-                  value={sessionNotes}
-                  onChange={(event) => setSessionNotes(event.target.value)}
-                  placeholder="How did the workout feel?"
-                  className="min-h-24 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-              </div>
-              <Button className="w-full" onClick={completeSession} disabled={!isFinished || isSaving}>
+              <textarea
+                value={sessionNotes}
+                onChange={(event) => setSessionNotes(event.target.value)}
+                placeholder="How did this workout feel?"
+                className="min-h-24 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <Button className="w-full" onClick={completeSession} disabled={isSaving || !session}>
                 <Save className="h-4 w-4" />
-                {isSaving ? "Saving..." : isFinished ? "Finish workout" : "Complete all sets first"}
+                {isSaving ? "Saving..." : isFinished ? "Finish workout" : "Finish and save partial workout"}
               </Button>
+              <p className="text-xs text-muted-foreground">Time spent: {formatTime(elapsedSeconds)}. Completed sets are already saved while the session is open.</p>
             </CardContent>
           </Card>
         </div>

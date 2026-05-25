@@ -60,6 +60,32 @@ export type FoodLog = {
   notes: string | null;
 };
 
+export type MealType = "Breakfast" | "Lunch" | "Snack" | "Dinner";
+
+export type MealPlanItemStatus = "planned" | "done";
+
+export type MealPlanItem = {
+  id: string;
+  user_id: string;
+  plan_date: string;
+  meal_type: MealType;
+  food_item_id: string | null;
+  user_food_item_id: string | null;
+  food_name: string;
+  serving_size: string;
+  quantity: number;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  status: MealPlanItemStatus;
+  food_log_id: string | null;
+  completed_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Workout = {
   id: string;
   name: string;
