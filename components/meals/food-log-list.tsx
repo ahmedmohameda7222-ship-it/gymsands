@@ -12,9 +12,16 @@ export function FoodLogList({ logs, onDeleted }: { logs: FoodLog[]; onDeleted?: 
   const { toast } = useToast();
 
   async function remove(id: string) {
-    await deleteFoodLog(id);
-    onDeleted?.(id);
-    toast({ title: "Food log deleted", description: "Today has been updated." });
+    try {
+      await deleteFoodLog(id);
+      onDeleted?.(id);
+      toast({ title: "Food log deleted", description: "Today has been updated." });
+    } catch (error) {
+      toast({
+        title: "Could not delete food",
+        description: error instanceof Error ? error.message : "Please try again."
+      });
+    }
   }
 
   return (

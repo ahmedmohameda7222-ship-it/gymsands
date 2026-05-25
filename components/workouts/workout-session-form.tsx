@@ -26,17 +26,35 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const [duration, setDuration] = useState(45);
   const [notes, setNotes] = useState("");
   const [sets, setSets] = useState<SetLog[]>([{ reps: 10, weight: 0, notes: "" }]);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    startWorkoutSession(user?.id ?? "mock-user", workout).then(setSession);
-  }, [user, workout]);
+    startWorkoutSession(user?.id ?? "mock-user", workout)
+      .then(setSession)
+      .catch((error) =>
+        toast({
+          title: "Workout opened without cloud session",
+          description: error instanceof Error ? error.message : "You can still log this workout on screen."
+        })
+      );
+  }, [toast, user, workout]);
 
   async function complete() {
-    if (session) {
-      await completeWorkoutSession(session.id, notes, duration);
+    try {
+      setIsSaving(true);
+      if (session) {
+        await completeWorkoutSession(session.id, notes, duration);
+      }
+      toast({ title: "Workout completed", description: `${workout.name} was saved to your S&S Gym history.` });
+      router.push("/workouts");
+    } catch (error) {
+      toast({
+        title: "Could not save workout",
+        description: error instanceof Error ? error.message : "Please try again."
+      });
+    } finally {
+      setIsSaving(false);
     }
-    toast({ title: "Workout completed", description: `${workout.name} was saved to your S&S Gym history.` });
-    router.push("/workouts");
   }
 
   return (
@@ -116,9 +134,9 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
             />
           </div>
         </div>
-        <Button className="w-full" onClick={complete}>
+        <Button className="w-full" onClick={complete} disabled={isSaving}>
           <CheckCircle2 className="h-4 w-4" />
-          Mark workout completed
+          {isSaving ? "Saving workout..." : "Mark workout completed"}
         </Button>
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Timer className="h-4 w-4" />

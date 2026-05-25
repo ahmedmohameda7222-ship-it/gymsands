@@ -1,60 +1,157 @@
 "use client";
 
 import Link from "next/link";
-import { Play, Search } from "lucide-react";
+import { ArrowLeft, Dumbbell, Play, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getWorkouts } from "@/services/database/repository";
+import { getWorkoutCategories, getWorkouts } from "@/services/database/repository";
+import { useToast } from "@/components/ui/toaster";
 import type { Workout } from "@/types";
 
 const allValue = "all";
+const pageSize = 60;
 
 export function WorkoutBrowser() {
+  const { toast } = useToast();
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState(allValue);
-  const [equipment, setEquipment] = useState(allValue);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState("");
   const [difficulty, setDifficulty] = useState(allValue);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [page, setPage] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
 
   useEffect(() => {
-    getWorkouts(query, {
-      category: category === allValue ? undefined : category,
-      equipment: equipment === allValue ? undefined : equipment,
-      difficulty: difficulty === allValue ? undefined : difficulty
-    }).then(setWorkouts);
-  }, [category, difficulty, equipment, query]);
+    getWorkoutCategories()
+      .then(setCategories)
+      .catch((error) => {
+        setCategories([]);
+        toast({
+          title: "Could not load workout categories",
+          description: error instanceof Error ? error.message : "Please check Supabase setup."
+        });
+      });
+  }, [toast]);
+
+  useEffect(() => {
+    if (!selectedCategory) {
+      setWorkouts([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setPage(0);
+    getWorkouts(
+      query,
+      {
+        category: selectedCategory,
+        difficulty: difficulty === allValue ? undefined : difficulty
+      },
+      0
+    )
+      .then((items) => {
+        setWorkouts(items);
+        setHasMore(items.length >= pageSize);
+      })
+      .catch((error) => {
+        setWorkouts([]);
+        toast({
+          title: "Could not load workouts",
+          description: error instanceof Error ? error.message : "Please try another category."
+        });
+      })
+      .finally(() => setIsLoading(false));
+  }, [difficulty, query, selectedCategory, toast]);
 
   const options = useMemo(() => {
     const source = workouts.length ? workouts : [];
     return {
-      categories: Array.from(new Set(source.map((item) => item.category))),
-      equipment: Array.from(new Set(source.map((item) => item.equipment))),
       difficulty: Array.from(new Set(source.map((item) => item.difficulty)))
     };
   }, [workouts]);
 
+  async function loadMore() {
+    const nextPage = page + 1;
+    setIsLoading(true);
+    try {
+      const items = await getWorkouts(
+        query,
+        {
+          category: selectedCategory,
+          difficulty: difficulty === allValue ? undefined : difficulty
+        },
+        nextPage
+      );
+      setWorkouts((current) => [...current, ...items]);
+      setPage(nextPage);
+      setHasMore(items.length >= pageSize);
+    } catch (error) {
+      toast({
+        title: "Could not load more workouts",
+        description: error instanceof Error ? error.message : "Please try again."
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  if (!selectedCategory) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-md border bg-blue-50 p-4">
+          <p className="font-semibold text-blue-950">Choose a category first</p>
+          <p className="mt-1 text-sm text-blue-800">Workouts load only after a category is selected, so the page stays fast on mobile.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {categories.map((item) => (
+            <Button
+              key={item}
+              variant="outline"
+              className="h-auto justify-start rounded-md p-4 text-left"
+              onClick={() => setSelectedCategory(item)}
+            >
+              <Dumbbell className="h-5 w-5 shrink-0 text-primary" />
+              <span className="min-w-0 truncate">{item}</span>
+            </Button>
+          ))}
+        </div>
+        {!categories.length ? <p className="text-sm text-muted-foreground">No workout categories found yet.</p> : null}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" onClick={() => setSelectedCategory("")}>
+          <ArrowLeft className="h-4 w-4" />
+          Categories
+        </Button>
+        <Badge>{selectedCategory}</Badge>
+        <span className="text-sm text-muted-foreground">{workouts.length} loaded</span>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-[1.4fr_1fr]">
         <div className="relative">
           <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search workouts, e.g. Squat or Cable Row"
+            placeholder={`Search ${selectedCategory} workouts, e.g. Squat or Cable Row`}
             className="pl-10"
           />
         </div>
-        <FilterSelect value={category} onValueChange={setCategory} placeholder="Category" values={options.categories} />
-        <FilterSelect value={equipment} onValueChange={setEquipment} placeholder="Equipment" values={options.equipment} />
         <FilterSelect value={difficulty} onValueChange={setDifficulty} placeholder="Difficulty" values={options.difficulty} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {isLoading && !workouts.length ? <p className="text-sm text-muted-foreground">Loading {selectedCategory} workouts...</p> : null}
+        {!isLoading && !workouts.length ? <p className="text-sm text-muted-foreground">No workouts found in this category yet.</p> : null}
         {workouts.map((workout) => (
           <Card key={workout.id}>
             <CardContent className="pt-5">
@@ -87,6 +184,13 @@ export function WorkoutBrowser() {
           </Card>
         ))}
       </div>
+      {hasMore ? (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={loadMore} disabled={isLoading}>
+            {isLoading ? "Loading..." : "Load more"}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

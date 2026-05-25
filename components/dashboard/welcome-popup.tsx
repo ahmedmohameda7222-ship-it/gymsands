@@ -14,14 +14,18 @@ export function WelcomePopup() {
   useEffect(() => {
     async function load() {
       if (!user) return;
-      const settings = await getWelcomeSettings(user.id);
-      setMessage(settings.default_message);
-      if (!settings.popup_enabled) return;
-      const key = `ss-gym-welcome-${user.id}-${new Date().toISOString().slice(0, 10)}`;
-      const seenToday = window.localStorage.getItem(key);
-      if (settings.show_frequency === "every_login" || !seenToday) {
+      try {
+        const settings = await getWelcomeSettings(user.id);
+        setMessage(settings.default_message);
+        if (!settings.popup_enabled) return;
+        const key = `ss-gym-welcome-${user.id}-${new Date().toISOString().slice(0, 10)}`;
+        const seenToday = window.localStorage.getItem(key);
+        if (settings.show_frequency === "every_login" || !seenToday) {
+          setOpen(true);
+          window.localStorage.setItem(key, "true");
+        }
+      } catch {
         setOpen(true);
-        window.localStorage.setItem(key, "true");
       }
     }
     load();

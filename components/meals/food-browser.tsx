@@ -28,10 +28,26 @@ export function FoodBrowser({
   const [query, setQuery] = useState("");
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [logs, setLogs] = useState<FoodLog[]>(initialLogs);
+  const [isLoadingFoods, setIsLoadingFoods] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    getGlobalFoods(query).then(setFoods).catch(() => setFoods([]));
+    setIsLoadingFoods(true);
+    getGlobalFoods(query)
+      .then((items) => {
+        setFoods(items);
+        setLoadError("");
+      })
+      .catch((error) => {
+        setFoods([]);
+        setLoadError(error instanceof Error ? error.message : "Could not load foods.");
+      })
+      .finally(() => setIsLoadingFoods(false));
   }, [query]);
+
+  useEffect(() => {
+    setLogs(initialLogs);
+  }, [initialLogs]);
 
   const totals = useMemo(
     () =>
@@ -53,23 +69,30 @@ export function FoodBrowser({
     const validation = validateFoodLogInput(food.food_name, quantity, macros);
     if (validation) return toast({ title: "Check this food entry", description: validation });
 
-    const log = await addGlobalFoodToToday({
-      userId: user?.id ?? "mock-user",
-      food,
-      quantity
-    });
-    setLogs((current) => [log, ...current]);
-    onLogAdded?.(log);
-    const remaining = remainingMacros(defaultTargets, {
-      calories: totals.calories + macros.calories,
-      protein_g: totals.protein_g + macros.protein_g,
-      carbs_g: totals.carbs_g + macros.carbs_g,
-      fat_g: totals.fat_g + macros.fat_g
-    });
-    toast({
-      title: "Meal added to today",
-      description: `+${macros.calories} kcal | +${macros.protein_g}g protein | remaining ${remaining.calories} kcal`
-    });
+    try {
+      const log = await addGlobalFoodToToday({
+        userId: user?.id ?? "mock-user",
+        food,
+        quantity
+      });
+      setLogs((current) => [log, ...current]);
+      onLogAdded?.(log);
+      const remaining = remainingMacros(defaultTargets, {
+        calories: totals.calories + macros.calories,
+        protein_g: totals.protein_g + macros.protein_g,
+        carbs_g: totals.carbs_g + macros.carbs_g,
+        fat_g: totals.fat_g + macros.fat_g
+      });
+      toast({
+        title: "Meal added to today",
+        description: `+${macros.calories} kcal | +${macros.protein_g}g protein | remaining ${remaining.calories} kcal`
+      });
+    } catch (error) {
+      toast({
+        title: "Could not add meal",
+        description: error instanceof Error ? error.message : "Please try again after checking Supabase setup."
+      });
+    }
   }
 
   return (
@@ -94,6 +117,11 @@ export function FoodBrowser({
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {isLoadingFoods ? <p className="text-sm text-muted-foreground">Loading Egyptian foods...</p> : null}
+        {loadError ? <p className="text-sm text-red-600">{loadError}</p> : null}
+        {!isLoadingFoods && !foods.length ? (
+          <p className="text-sm text-muted-foreground">No foods found. Try another Egyptian food name.</p>
+        ) : null}
         {foods.map((food) => {
           const quantity = quantities[food.id] ?? 1;
           const macros = scaleFoodMacros(food, quantity);

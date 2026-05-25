@@ -8,16 +8,26 @@ import { ProgressEntryModal } from "@/components/progress/progress-entry-modal";
 import { ProgressCharts } from "@/components/progress/progress-charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
+import { useToast } from "@/components/ui/toaster";
 import { getProgressEntries } from "@/services/database/repository";
 import type { ProgressEntry } from "@/types";
 
 export default function ProgressPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [entries, setEntries] = useState<ProgressEntry[]>([]);
 
   useEffect(() => {
-    if (user) getProgressEntries(user.id).then(setEntries);
-  }, [user]);
+    if (!user) return;
+    getProgressEntries(user.id)
+      .then(setEntries)
+      .catch((error) =>
+        toast({
+          title: "Could not load progress",
+          description: error instanceof Error ? error.message : "Please refresh and try again."
+        })
+      );
+  }, [toast, user]);
 
   const latest = entries.at(-1);
 

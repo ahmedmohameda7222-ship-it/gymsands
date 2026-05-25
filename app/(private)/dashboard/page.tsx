@@ -11,20 +11,36 @@ import { MetricCard } from "@/components/dashboard/metric-card";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import { WelcomePopup } from "@/components/dashboard/welcome-popup";
 import { useAuth } from "@/components/auth/auth-provider";
+import { useToast } from "@/components/ui/toaster";
 import { getTodayFoodLogs, getWorkoutHistory } from "@/services/database/repository";
 import { defaultTargets, percent, remainingMacros, sumFoodLogs } from "@/services/nutrition/calculations";
 import type { FoodLog, WorkoutSession } from "@/types";
 
 export default function DashboardPage() {
   const { user, profile } = useAuth();
+  const { toast } = useToast();
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [history, setHistory] = useState<WorkoutSession[]>([]);
 
   useEffect(() => {
     if (!user) return;
-    getTodayFoodLogs(user.id).then(setLogs);
-    getWorkoutHistory(user.id).then(setHistory);
-  }, [user]);
+    getTodayFoodLogs(user.id)
+      .then(setLogs)
+      .catch((error) =>
+        toast({
+          title: "Could not load meals",
+          description: error instanceof Error ? error.message : "The dashboard will keep working with empty meal data."
+        })
+      );
+    getWorkoutHistory(user.id)
+      .then(setHistory)
+      .catch((error) =>
+        toast({
+          title: "Could not load workouts",
+          description: error instanceof Error ? error.message : "The dashboard will keep working with empty workout data."
+        })
+      );
+  }, [toast, user]);
 
   const totals = useMemo(() => sumFoodLogs(logs), [logs]);
   const remaining = remainingMacros(defaultTargets, totals);

@@ -16,6 +16,8 @@ grant select on public.admin_settings to authenticated;
 drop policy if exists "profiles_select_own_or_admin" on public.profiles;
 drop policy if exists "profiles_insert_own" on public.profiles;
 drop policy if exists "profiles_update_own_or_admin" on public.profiles;
+drop policy if exists "profiles_update_own_basic" on public.profiles;
+drop policy if exists "profiles_admin_update_all" on public.profiles;
 drop policy if exists "onboarding_own_all" on public.onboarding_answers;
 drop policy if exists "calorie_targets_own_all" on public.calorie_targets;
 drop policy if exists "food_items_read_global" on public.food_items;
@@ -51,10 +53,18 @@ create policy "profiles_insert_own" on public.profiles
 for insert to authenticated
 with check (id = auth.uid());
 
-create policy "profiles_update_own_or_admin" on public.profiles
+create policy "profiles_update_own_basic" on public.profiles
 for update to authenticated
-using (id = auth.uid() or public.is_admin())
-with check (id = auth.uid() or public.is_admin());
+using (id = auth.uid())
+with check (
+  id = auth.uid()
+  and role = coalesce((select role from public.profiles where id = auth.uid()), role)
+);
+
+create policy "profiles_admin_update_all" on public.profiles
+for update to authenticated
+using (public.is_admin())
+with check (public.is_admin());
 
 create policy "onboarding_own_all" on public.onboarding_answers
 for all to authenticated

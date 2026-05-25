@@ -11,6 +11,18 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
 import { supabase, setRememberSession } from "@/lib/supabase/client";
 
+async function withAuthTimeout<T>(request: Promise<T>) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("Supabase took too long to respond. Please try again in a moment.")), 15000);
+  });
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -39,12 +51,14 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       }
 
       if (mode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await withAuthTimeout(supabase.auth.signInWithPassword({ email, password }));
         if (error) throw error;
+        if (!data.session) throw new Error("Login succeeded but Supabase did not return a session. Check email confirmation settings.");
         toast({ title: "Welcome back to S&S Gym", description: "Your session is ready." });
-        router.push(searchParams.get("next") ?? "/dashboard");
+        router.replace(searchParams.get("next") ?? "/dashboard");
+        router.refresh();
       } else {
-        const { error } = await supabase.auth.signUp({
+        const { error } = await withAuthTimeout(supabase.auth.signUp({
           email,
           password,
           options: {
@@ -53,10 +67,11 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             },
             emailRedirectTo: `${window.location.origin}/onboarding`
           }
-        });
+        }));
         if (error) throw error;
         toast({ title: "S&S Gym account created", description: "Check your email if confirmation is enabled, then finish onboarding." });
-        router.push("/onboarding");
+        router.replace("/onboarding");
+        router.refresh();
       }
     } catch (error) {
       toast({

@@ -9,26 +9,36 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeading } from "@/components/layout/page-heading";
 import { ExerciseVideoPlayer } from "@/components/workouts/video-player";
+import { useToast } from "@/components/ui/toaster";
 import { getExerciseVideos, getWorkout } from "@/services/database/repository";
 import { findExerciseVideo } from "@/services/workouts/video-matching";
 import type { ExerciseVideo, Workout } from "@/types";
 
 export default function WorkoutDetailsPage() {
   const params = useParams<{ id: string }>();
+  const { toast } = useToast();
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [video, setVideo] = useState<ExerciseVideo | null>(null);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     async function load() {
-      const nextWorkout = await getWorkout(params.id);
-      const videos = await getExerciseVideos(nextWorkout.name);
-      setWorkout(nextWorkout);
-      setVideo(findExerciseVideo(nextWorkout, videos));
+      try {
+        const nextWorkout = await getWorkout(params.id);
+        const videos = await getExerciseVideos(nextWorkout.name);
+        setWorkout(nextWorkout);
+        setVideo(findExerciseVideo(nextWorkout, videos));
+        setLoadError("");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not load workout details.";
+        setLoadError(message);
+        toast({ title: "Could not load workout", description: message });
+      }
     }
     load();
-  }, [params.id]);
+  }, [params.id, toast]);
 
-  if (!workout) return <p className="text-sm text-muted-foreground">Loading workout...</p>;
+  if (!workout) return <p className="text-sm text-muted-foreground">{loadError || "Loading workout..."}</p>;
 
   return (
     <>

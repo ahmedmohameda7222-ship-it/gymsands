@@ -32,30 +32,41 @@ export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntr
   const [notes, setNotes] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [measurements, setMeasurements] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   async function save() {
-    const extraMeasurements = Object.fromEntries(
-      Object.entries(measurements).map(([key, value]) => [key, value ? Number(value) : null])
-    );
-    const entry = await addProgressEntry(
-      {
-        user_id: user?.id ?? "mock-user",
-        entry_date: todayIso(),
-        body_weight_kg: weight ? Number(weight) : null,
-        waist_cm: waist ? Number(waist) : null,
-        notes: notes || null
-      },
-      photos,
-      extraMeasurements
-    );
-    onSaved?.(entry);
-    toast({ title: "Progress entry saved", description: "Your progress page has been updated." });
-    setOpen(false);
-    setWeight("");
-    setWaist("");
-    setNotes("");
-    setPhotos([]);
-    setMeasurements({});
+    try {
+      setIsSaving(true);
+      const extraMeasurements = Object.fromEntries(
+        Object.entries(measurements).map(([key, value]) => [key, value ? Number(value) : null])
+      );
+      const entry = await addProgressEntry(
+        {
+          user_id: user?.id ?? "mock-user",
+          entry_date: todayIso(),
+          body_weight_kg: weight ? Number(weight) : null,
+          waist_cm: waist ? Number(waist) : null,
+          notes: notes || null
+        },
+        photos,
+        extraMeasurements
+      );
+      onSaved?.(entry);
+      toast({ title: "Progress entry saved", description: "Your progress page has been updated." });
+      setOpen(false);
+      setWeight("");
+      setWaist("");
+      setNotes("");
+      setPhotos([]);
+      setMeasurements({});
+    } catch (error) {
+      toast({
+        title: "Could not save progress",
+        description: error instanceof Error ? error.message : "Please check Supabase Storage policies and try again."
+      });
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -136,8 +147,8 @@ export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntr
             </label>
           </div>
         </div>
-        <Button onClick={save} className="w-full">
-          Save progress entry
+        <Button onClick={save} className="w-full" disabled={isSaving}>
+          {isSaving ? "Saving..." : "Save progress entry"}
         </Button>
       </DialogContent>
     </Dialog>

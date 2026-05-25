@@ -65,12 +65,15 @@ Run these in order:
 2. `supabase/migrations/002_policy_refresh.sql`
 3. `supabase/seed/001_egyptian_foods.sql`
 4. `supabase/seed/002_sample_workouts_and_videos.sql`
-5. Register your first user on the deployed site.
-6. Edit and run `supabase/seed/004_admin_setup_placeholder.sql` with your email to make yourself admin.
+5. `supabase/migrations/003_production_hotfix.sql`
+6. Register your first user on the deployed site.
+7. Run `supabase/seed/004_admin_setup_placeholder.sql` to make `ahmeedmostafaa@hotmail.com` admin.
 
 If you already ran `001_initial_schema.sql`, you can still paste and run `002_policy_refresh.sql` afterward. It refreshes grants, RLS policies, and the private `progress-photos` storage policies.
 
-The placeholder for adding the full 3000+ workout video table later is:
+If the app ever shows only a few workouts after importing more videos, run `003_production_hotfix.sql` again. It safely turns every row in `exercise_videos` into a browsable workout without duplicating existing workout rows.
+
+The helper for materializing imported workout videos as browsable workouts is:
 
 ```text
 supabase/seed/005_full_workout_video_import_placeholder.sql

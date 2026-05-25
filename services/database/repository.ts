@@ -1,9 +1,9 @@
 "use client";
 
 import { supabase } from "@/lib/supabase/client";
-import { todayIso } from "@/lib/utils";
+import { isUuid, todayIso } from "@/lib/utils";
 import { egyptianFoods } from "@/data/egyptian-foods";
-import { sampleExerciseVideos, sampleWorkouts } from "@/data/workouts";
+import { defaultExerciseInstructions, sampleExerciseVideos, sampleWorkouts } from "@/data/workouts";
 import type {
   ExerciseVideo,
   FoodItem,
@@ -20,17 +20,86 @@ function mockDelay<T>(value: T) {
   return Promise.resolve(value);
 }
 
+const workoutPageSize = 60;
+
+function normalizeText(value: string | null | undefined) {
+  return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function localFoods(query = "") {
+  const normalized = normalizeText(query);
+  return egyptianFoods.filter((food) => normalizeText(food.food_name).includes(normalized));
+}
+
+function mapVideoToWorkout(video: ExerciseVideo): Workout {
+  return {
+    id: video.id,
+    name: video.exercise_name,
+    category: video.category_type ?? "Exercise",
+    target_muscle: video.category ?? "General",
+    equipment: video.category_type === "Equipment" ? video.category ?? "Varies" : "Varies",
+    difficulty: "Beginner",
+    sets: 3,
+    reps: "8-12",
+    rest_seconds: 75,
+    instructions: video.instructions || defaultExerciseInstructions,
+    notes: video.exercise_url,
+    is_global: video.is_global
+  };
+}
+
+function dedupeWorkouts(workouts: Workout[]) {
+  const seen = new Set<string>();
+  return workouts.filter((workout) => {
+    const key = `${normalizeText(workout.name)}-${normalizeText(workout.target_muscle)}-${normalizeText(workout.equipment)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function localWorkoutCategories() {
+  return Array.from(
+    new Set([
+      ...sampleWorkouts.map((workout) => workout.target_muscle),
+      ...sampleExerciseVideos.map((video) => video.category).filter(Boolean)
+    ])
+  ).sort() as string[];
+}
+
+function localWorkouts(query = "", category?: string) {
+  const normalized = normalizeText(query);
+  return dedupeWorkouts([
+    ...sampleWorkouts,
+    ...sampleExerciseVideos.map(mapVideoToWorkout)
+  ]).filter((workout) => {
+    const matchesCategory =
+      !category ||
+      workout.category === category ||
+      workout.target_muscle === category ||
+      workout.equipment === category;
+    const matchesQuery =
+      !normalized ||
+      normalizeText(workout.name).includes(normalized) ||
+      normalizeText(workout.target_muscle).includes(normalized) ||
+      normalizeText(workout.equipment).includes(normalized);
+    return matchesCategory && matchesQuery;
+  });
+}
+
 export async function getGlobalFoods(query = "") {
   if (!supabase) {
-    const normalized = query.toLowerCase();
-    return mockDelay(egyptianFoods.filter((food) => food.food_name.toLowerCase().includes(normalized)));
+    return mockDelay(localFoods(query));
   }
 
   let request = supabase.from("food_items").select("*").eq("is_global", true).order("food_name");
   if (query) request = request.ilike("food_name", `%${query}%`);
   const { data, error } = await request;
-  if (error) throw error;
-  return (data ?? []) as FoodItem[];
+  if (error) {
+    console.warn("S&S Gym could not load Supabase foods, using local fallback.", error.message);
+    return localFoods(query);
+  }
+  return ((data?.length ? data : localFoods(query)) ?? []) as FoodItem[];
 }
 
 export async function getTodayFoodLogs(userId: string, date = todayIso()) {
@@ -41,7 +110,10 @@ export async function getTodayFoodLogs(userId: string, date = todayIso()) {
     .eq("user_id", userId)
     .eq("log_date", date)
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) {
+    console.warn("S&S Gym could not load today's food logs.", error.message);
+    return [];
+  }
   return (data ?? []) as FoodLog[];
 }
 
@@ -59,7 +131,7 @@ export async function addGlobalFoodToToday({
   const macros = scaleFoodMacros(food, quantity);
   const payload = {
     user_id: userId,
-    food_item_id: food.id,
+    food_item_id: isUuid(food.id) ? food.id : null,
     user_food_item_id: null,
     log_date: todayIso(),
     meal_type: mealType,
@@ -75,7 +147,10 @@ export async function addGlobalFoodToToday({
 
   if (!supabase) return mockDelay(payload as FoodLog);
   const { data, error } = await supabase.from("food_logs").insert(payload).select("*").single();
-  if (error) throw error;
+  if (error) {
+    console.warn("S&S Gym could not add this food log.", error.message);
+    throw error;
+  }
   return data as FoodLog;
 }
 
@@ -108,7 +183,10 @@ export async function updateFoodLogQuantity(log: FoodLog, quantity: number) {
 export async function deleteFoodLog(id: string) {
   if (!supabase) return mockDelay(true);
   const { error } = await supabase.from("food_logs").delete().eq("id", id);
-  if (error) throw error;
+  if (error) {
+    console.warn("S&S Gym could not delete this food log.", error.message);
+    throw error;
+  }
   return true;
 }
 
@@ -117,7 +195,10 @@ export async function copyYesterdaysMeals(userId: string) {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const { data, error } = await supabase.from("food_logs").select("*").eq("user_id", userId).eq("log_date", yesterday.toISOString().slice(0, 10));
-  if (error) throw error;
+  if (error) {
+    console.warn("S&S Gym could not copy yesterday's meals.", error.message);
+    return [];
+  }
   const copies = (data ?? []).map(({ id: _id, created_at: _created, ...log }) => ({ ...log, log_date: todayIso() }));
   if (!copies.length) return [];
   const inserted = await supabase.from("food_logs").insert(copies).select("*");
@@ -125,35 +206,97 @@ export async function copyYesterdaysMeals(userId: string) {
   return inserted.data as FoodLog[];
 }
 
-export async function getWorkouts(query = "", filters?: { category?: string; equipment?: string; difficulty?: string }) {
-  if (!supabase) {
-    const normalized = query.toLowerCase();
-    return mockDelay(
-      sampleWorkouts.filter((workout) => {
-        const matchesSearch = workout.name.toLowerCase().includes(normalized) || workout.target_muscle.toLowerCase().includes(normalized);
-        const matchesCategory = !filters?.category || workout.category === filters.category;
-        const matchesEquipment = !filters?.equipment || workout.equipment === filters.equipment;
-        const matchesDifficulty = !filters?.difficulty || workout.difficulty === filters.difficulty;
-        return matchesSearch && matchesCategory && matchesEquipment && matchesDifficulty;
-      })
+export async function getWorkoutCategories() {
+  if (!supabase) return mockDelay(localWorkoutCategories());
+
+  const [workoutResult, videoResult] = await Promise.all([
+    supabase.from("workouts").select("category,target_muscle,equipment").eq("is_global", true).limit(5000),
+    supabase.from("exercise_videos").select("category,category_type").eq("is_global", true).limit(5000)
+  ]);
+
+  if (workoutResult.error || videoResult.error) {
+    console.warn(
+      "S&S Gym could not load workout categories, using local fallback.",
+      workoutResult.error?.message || videoResult.error?.message
     );
+    return localWorkoutCategories();
   }
 
-  let request = supabase.from("workouts").select("*").eq("is_global", true).order("name");
-  if (query) request = request.or(`name.ilike.%${query}%,target_muscle.ilike.%${query}%,equipment.ilike.%${query}%`);
-  if (filters?.category) request = request.eq("category", filters.category);
-  if (filters?.equipment) request = request.eq("equipment", filters.equipment);
-  if (filters?.difficulty) request = request.eq("difficulty", filters.difficulty);
-  const { data, error } = await request;
-  if (error) throw error;
-  return (data ?? []) as Workout[];
+  const categories = new Set<string>();
+  workoutResult.data?.forEach((workout) => {
+    if (workout.target_muscle) categories.add(workout.target_muscle);
+    if (workout.equipment) categories.add(workout.equipment);
+  });
+  videoResult.data?.forEach((video) => {
+    if (video.category) categories.add(video.category);
+  });
+
+  const values = Array.from(categories).filter(Boolean).sort();
+  return values.length ? values : localWorkoutCategories();
+}
+
+export async function getWorkouts(
+  query = "",
+  filters?: { category?: string; equipment?: string; difficulty?: string },
+  page = 0
+) {
+  const selectedCategory = filters?.category || filters?.equipment;
+  if (!supabase) {
+    return mockDelay(localWorkouts(query, selectedCategory).slice(page * workoutPageSize, (page + 1) * workoutPageSize));
+  }
+
+  const from = page * workoutPageSize;
+  const to = from + workoutPageSize - 1;
+
+  let workoutRequest = supabase.from("workouts").select("*").eq("is_global", true).order("name").range(from, to);
+  if (selectedCategory) {
+    workoutRequest = workoutRequest.or(`category.eq.${selectedCategory},target_muscle.eq.${selectedCategory},equipment.eq.${selectedCategory}`);
+  } else if (query) {
+    workoutRequest = workoutRequest.or(`name.ilike.%${query}%,target_muscle.ilike.%${query}%,equipment.ilike.%${query}%`);
+  }
+  if (filters?.difficulty) workoutRequest = workoutRequest.eq("difficulty", filters.difficulty);
+
+  let videoRequest = supabase.from("exercise_videos").select("*").eq("is_global", true).order("exercise_name").range(from, to);
+  if (selectedCategory) videoRequest = videoRequest.eq("category", selectedCategory);
+  if (query) videoRequest = videoRequest.ilike("exercise_name", `%${query}%`);
+
+  const [workoutResult, videoResult] = await Promise.all([workoutRequest, videoRequest]);
+  if (workoutResult.error || videoResult.error) {
+    console.warn(
+      "S&S Gym could not load Supabase workouts, using local fallback.",
+      workoutResult.error?.message || videoResult.error?.message
+    );
+    return localWorkouts(query, selectedCategory).slice(from, to + 1);
+  }
+
+  const normalizedQuery = normalizeText(query);
+  const directWorkouts = ((workoutResult.data ?? []) as Workout[]).filter(
+    (workout) =>
+      !normalizedQuery ||
+      normalizeText(workout.name).includes(normalizedQuery) ||
+      normalizeText(workout.target_muscle).includes(normalizedQuery) ||
+      normalizeText(workout.equipment).includes(normalizedQuery)
+  );
+  const videoWorkouts = ((videoResult.data ?? []) as ExerciseVideo[]).map(mapVideoToWorkout);
+  return dedupeWorkouts([...directWorkouts, ...videoWorkouts]);
 }
 
 export async function getWorkout(id: string) {
-  if (!supabase) return mockDelay(sampleWorkouts.find((workout) => workout.id === id) ?? sampleWorkouts[0]);
-  const { data, error } = await supabase.from("workouts").select("*").eq("id", id).single();
-  if (error) throw error;
-  return data as Workout;
+  const local = localWorkouts("").find((workout) => workout.id === id) ?? sampleWorkouts[0];
+  if (!supabase) return mockDelay(local);
+
+  const workoutResult = await supabase.from("workouts").select("*").eq("id", id).maybeSingle();
+  if (workoutResult.error) {
+    console.warn("S&S Gym could not load workout from workouts table.", workoutResult.error.message);
+  }
+  if (workoutResult.data) return workoutResult.data as Workout;
+
+  const videoResult = await supabase.from("exercise_videos").select("*").eq("id", id).maybeSingle();
+  if (videoResult.error) {
+    console.warn("S&S Gym could not load workout from exercise videos.", videoResult.error.message);
+    return local;
+  }
+  return videoResult.data ? mapVideoToWorkout(videoResult.data as ExerciseVideo) : local;
 }
 
 export async function getExerciseVideos(query = "") {
@@ -161,7 +304,10 @@ export async function getExerciseVideos(query = "") {
   let request = supabase.from("exercise_videos").select("*").order("exercise_name").limit(100);
   if (query) request = request.ilike("exercise_name", `%${query}%`);
   const { data, error } = await request;
-  if (error) throw error;
+  if (error) {
+    console.warn("S&S Gym could not load exercise videos, using local fallback.", error.message);
+    return sampleExerciseVideos.filter((video) => normalizeText(video.exercise_name).includes(normalizeText(query)));
+  }
   return (data ?? []) as ExerciseVideo[];
 }
 
@@ -178,7 +324,10 @@ export async function startWorkoutSession(userId: string, workout: Workout) {
   };
   if (!supabase) return mockDelay({ ...payload, id: crypto.randomUUID() } as WorkoutSession);
   const { data, error } = await supabase.from("workout_sessions").insert(payload).select("*").single();
-  if (error) throw error;
+  if (error) {
+    console.warn("S&S Gym could not start a Supabase workout session.", error.message);
+    return { ...payload, id: crypto.randomUUID() } as WorkoutSession;
+  }
   return data as WorkoutSession;
 }
 
@@ -188,7 +337,10 @@ export async function completeWorkoutSession(sessionId: string, notes: string, d
     .from("workout_sessions")
     .update({ status: "completed", completed_at: new Date().toISOString(), notes, duration_minutes: durationMinutes })
     .eq("id", sessionId);
-  if (error) throw error;
+  if (error) {
+    console.warn("S&S Gym could not complete this workout session.", error.message);
+    throw error;
+  }
   return true;
 }
 
@@ -200,7 +352,10 @@ export async function getWorkoutHistory(userId: string) {
     .eq("user_id", userId)
     .order("started_at", { ascending: false })
     .limit(10);
-  if (error) throw error;
+  if (error) {
+    console.warn("S&S Gym could not load workout history.", error.message);
+    return [];
+  }
   return (data ?? []) as WorkoutSession[];
 }
 
@@ -225,7 +380,10 @@ export async function getProgressEntries(userId: string) {
     .select("*")
     .eq("user_id", userId)
     .order("entry_date", { ascending: true });
-  if (error) throw error;
+  if (error) {
+    console.warn("S&S Gym could not load progress entries.", error.message);
+    return [];
+  }
   return (data ?? []) as ProgressEntry[];
 }
 
@@ -276,11 +434,21 @@ export async function getWelcomeSettings(userId: string): Promise<WelcomeSetting
   };
   if (!supabase) return fallback;
 
-  const [{ data: settings }, { data: custom }] = await Promise.all([
+  const [settingsResult, customResult] = await Promise.all([
     supabase.from("admin_settings").select("value").eq("key", "welcome_settings").maybeSingle(),
     supabase.from("user_welcome_messages").select("message,popup_enabled,show_frequency").eq("user_id", userId).eq("is_active", true).maybeSingle()
   ]);
 
+  if (settingsResult.error || customResult.error) {
+    console.warn(
+      "S&S Gym could not load welcome settings.",
+      settingsResult.error?.message || customResult.error?.message
+    );
+    return fallback;
+  }
+
+  const settings = settingsResult.data;
+  const custom = customResult.data;
   const parsed = (settings?.value as WelcomeSettings | null) ?? fallback;
   return {
     ...parsed,
@@ -309,7 +477,10 @@ export async function adminListUsers() {
     ]);
   }
   const { data, error } = await supabase.from("profiles").select("id,email,full_name,role,created_at").order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) {
+    console.warn("S&S Gym could not load admin users.", error.message);
+    return [];
+  }
   return data ?? [];
 }
 

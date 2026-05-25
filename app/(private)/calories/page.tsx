@@ -20,16 +20,31 @@ export default function CaloriesPage() {
   const [logs, setLogs] = useState<FoodLog[]>([]);
 
   useEffect(() => {
-    if (user) getTodayFoodLogs(user.id).then(setLogs);
-  }, [user]);
+    if (!user) return;
+    getTodayFoodLogs(user.id)
+      .then(setLogs)
+      .catch((error) =>
+        toast({
+          title: "Could not load calorie tracker",
+          description: error instanceof Error ? error.message : "Please refresh and try again."
+        })
+      );
+  }, [toast, user]);
 
   const totals = useMemo(() => sumFoodLogs(logs), [logs]);
   const remaining = remainingMacros(defaultTargets, totals);
 
   async function copyYesterday() {
-    const copied = await copyYesterdaysMeals(user?.id ?? "mock-user");
-    setLogs((current) => [...copied, ...current]);
-    toast({ title: "Yesterday copied", description: `${copied.length} food items added to today.` });
+    try {
+      const copied = await copyYesterdaysMeals(user?.id ?? "mock-user");
+      setLogs((current) => [...copied, ...current]);
+      toast({ title: "Yesterday copied", description: `${copied.length} food items added to today.` });
+    } catch (error) {
+      toast({
+        title: "Could not copy yesterday",
+        description: error instanceof Error ? error.message : "Please try again."
+      });
+    }
   }
 
   return (

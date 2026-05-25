@@ -28,7 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     email: "member@ssgym.test"
   } as User;
 
-  async function loadProfile(userId: string) {
+  async function loadProfile(userId: string, email?: string | null) {
     if (!supabase) {
       setProfile({
         id: "mock-user",
@@ -42,14 +42,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
-    setProfile((data as Profile | null) ?? null);
+    const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    if (error) {
+      console.warn("S&S Gym could not load profile.", error.message);
+      setProfile(null);
+      return;
+    }
+
+    if (data) {
+      setProfile(data as Profile);
+      return;
+    }
+
+    const inserted = await supabase
+      .from("profiles")
+      .insert({
+        id: userId,
+        email: email ?? null,
+        full_name: email?.split("@")[0] ?? "S&S Gym Member"
+      })
+      .select("*")
+      .maybeSingle();
+
+    if (inserted.error) {
+      console.warn("S&S Gym could not create the missing profile.", inserted.error.message);
+      setProfile(null);
+      return;
+    }
+
+    setProfile((inserted.data as Profile | null) ?? null);
   }
 
   async function refreshProfile() {
     const currentUser = session?.user;
     if (currentUser) {
-      await loadProfile(currentUser.id);
+      await loadProfile(currentUser.id, currentUser.email);
     }
   }
 
@@ -57,20 +84,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
 
     async function boot() {
-      if (!supabase || env.useMockAuth) {
-        setSession({ user: mockUser } as Session);
-        await loadProfile("mock-user");
-        setIsLoading(false);
-        return;
-      }
+      try {
+        if (!supabase || env.useMockAuth) {
+          setSession({ user: mockUser } as Session);
+          await loadProfile("mock-user");
+          return;
+        }
 
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) return;
-      setSession(data.session);
-      if (data.session?.user) {
-        await loadProfile(data.session.user.id);
+        const { data, error } = await supabase.auth.getSession();
+        if (error) console.warn("S&S Gym could not read the current auth session.", error.message);
+        if (!mounted) return;
+        setSession(data.session);
+        if (data.session?.user) {
+          await loadProfile(data.session.user.id, data.session.user.email);
+        }
+      } finally {
+        if (mounted) setIsLoading(false);
       }
-      setIsLoading(false);
     }
 
     boot();
@@ -79,12 +109,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
       setSession(nextSession);
+      setIsLoading(false);
       if (nextSession?.user) {
-        await loadProfile(nextSession.user.id);
+        setTimeout(() => {
+          loadProfile(nextSession.user.id, nextSession.user.email);
+        }, 0);
       } else {
         setProfile(null);
       }
-      setIsLoading(false);
     });
 
     return () => {
