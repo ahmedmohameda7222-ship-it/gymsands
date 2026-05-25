@@ -91,6 +91,9 @@ export type WorkoutSession = {
   id: string;
   user_id: string;
   workout_id: string | null;
+  plan_id?: string | null;
+  plan_day_id?: string | null;
+  workout_day_name?: string | null;
   workout_name: string;
   started_at: string;
   completed_at: string | null;
@@ -100,6 +103,26 @@ export type WorkoutSession = {
 };
 
 export type Weekday = "Sunday" | "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday";
+
+export type ExerciseLog = {
+  id: string;
+  workout_session_id: string;
+  plan_exercise_id: string | null;
+  exercise_name: string;
+  planned_sets: number | null;
+  planned_reps: string | null;
+  planned_rest_seconds: number | null;
+  set_number: number;
+  reps: number | null;
+  weight_kg: number | null;
+  notes: string | null;
+  completed_at: string | null;
+  created_at: string;
+};
+
+export type WorkoutSessionSummary = WorkoutSession & {
+  exercise_logs: ExerciseLog[];
+};
 
 export type UserWorkoutPlanExercise = {
   id: string;
@@ -113,6 +136,8 @@ export type UserWorkoutPlanExercise = {
   sets: number | null;
   reps: string | null;
   rest_seconds: number | null;
+  instructions?: string | null;
+  video_url?: string | null;
   sort_order: number;
   notes: string | null;
 };
@@ -125,6 +150,10 @@ export type UserWorkoutPlanDay = {
   weekday: Weekday | null;
   notes: string | null;
   exercises: UserWorkoutPlanExercise[];
+};
+
+export type WorkoutPlanDaySession = UserWorkoutPlanDay & {
+  plan: Pick<UserWorkoutPlan, "id" | "name" | "user_id"> | null;
 };
 
 export type UserWorkoutPlan = {

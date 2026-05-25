@@ -9,6 +9,8 @@ import type { Weekday, Workout } from "@/types";
 import { getCurrentWeekday, weekDays } from "@/services/database/repository";
 
 export type WeeklyPlanDay = {
+  id?: string;
+  planId?: string;
   dayName: string;
   weekday: Weekday | null;
   notes: string;

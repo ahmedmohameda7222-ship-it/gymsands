@@ -10,11 +10,14 @@ import type {
   FoodLog,
   OnboardingAnswers,
   ProgressEntry,
+  ExerciseLog,
   UserWorkoutPlan,
   Weekday,
   WelcomeSettings,
   Workout,
-  WorkoutSession
+  WorkoutPlanDaySession,
+  WorkoutSession,
+  WorkoutSessionSummary
 } from "@/types";
 import { scaleFoodMacros } from "@/services/nutrition/calculations";
 
@@ -26,6 +29,10 @@ const workoutPageSize = 60;
 
 function normalizeText(value: string | null | undefined) {
   return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function looksLikeUrl(value: string | null | undefined) {
+  return Boolean(value && /^https?:\/\//i.test(value));
 }
 
 export const weekDays: Weekday[] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -434,7 +441,7 @@ export async function getExerciseVideos(query = "") {
 export async function startWorkoutSession(userId: string, workout: Workout) {
   const payload = {
     user_id: userId,
-    workout_id: workout.id,
+    workout_id: isUuid(workout.id) ? workout.id : null,
     workout_name: workout.name,
     started_at: new Date().toISOString(),
     completed_at: null,
@@ -449,6 +456,67 @@ export async function startWorkoutSession(userId: string, workout: Workout) {
     return { ...payload, id: crypto.randomUUID() } as WorkoutSession;
   }
   return data as WorkoutSession;
+}
+
+export async function startWorkoutDaySession(userId: string, day: WorkoutPlanDaySession) {
+  const payload = {
+    user_id: userId,
+    workout_id: null,
+    plan_id: day.plan_id,
+    plan_day_id: day.id,
+    workout_day_name: day.day_name,
+    workout_name: day.weekday ? `${day.day_name} - ${day.weekday}` : day.day_name,
+    started_at: new Date().toISOString(),
+    completed_at: null,
+    duration_minutes: null,
+    notes: null,
+    status: "started"
+  };
+  if (!supabase) return mockDelay({ ...payload, id: crypto.randomUUID() } as WorkoutSession);
+  const { data, error } = await supabase.from("workout_sessions").insert(payload).select("*").single();
+  if (error) {
+    console.warn("S&S Gym could not start a workout day session.", error.message);
+    throw error;
+  }
+  return data as WorkoutSession;
+}
+
+export type WorkoutSetLogInput = {
+  planExerciseId?: string | null;
+  exerciseName: string;
+  plannedSets?: number | null;
+  plannedReps?: string | null;
+  plannedRestSeconds?: number | null;
+  setNumber: number;
+  reps: number | null;
+  weightKg: number | null;
+  notes?: string | null;
+  completedAt?: string | null;
+};
+
+export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogInput[]) {
+  if (!supabase) return mockDelay(true);
+  const deleteResult = await supabase.from("exercise_logs").delete().eq("workout_session_id", sessionId);
+  if (deleteResult.error) throw deleteResult.error;
+
+  const rows = logs.map((log) => ({
+    workout_session_id: sessionId,
+    plan_exercise_id: log.planExerciseId ?? null,
+    exercise_name: log.exerciseName,
+    planned_sets: log.plannedSets ?? null,
+    planned_reps: log.plannedReps ?? null,
+    planned_rest_seconds: log.plannedRestSeconds ?? null,
+    set_number: log.setNumber,
+    reps: log.reps,
+    weight_kg: log.weightKg,
+    notes: log.notes ?? null,
+    completed_at: log.completedAt ?? null
+  }));
+
+  if (!rows.length) return true;
+  const { error } = await supabase.from("exercise_logs").insert(rows);
+  if (error) throw error;
+  return true;
 }
 
 export async function completeWorkoutSession(sessionId: string, notes: string, durationMinutes: number) {
@@ -479,6 +547,28 @@ export async function getWorkoutHistory(userId: string) {
   return (data ?? []) as WorkoutSession[];
 }
 
+export async function getWorkoutHistoryDetailed(userId: string) {
+  if (!supabase) return mockDelay<WorkoutSessionSummary[]>([]);
+  const { data, error } = await supabase
+    .from("workout_sessions")
+    .select("*, exercise_logs(*)")
+    .eq("user_id", userId)
+    .eq("status", "completed")
+    .order("started_at", { ascending: false })
+    .limit(12);
+  if (error) {
+    console.warn("S&S Gym could not load workout history details.", error.message);
+    return [];
+  }
+  return ((data ?? []) as WorkoutSessionSummary[]).map((session) => ({
+    ...session,
+    exercise_logs: [...(session.exercise_logs ?? [])].sort((a, b) => {
+      if (a.exercise_name !== b.exercise_name) return a.exercise_name.localeCompare(b.exercise_name);
+      return a.set_number - b.set_number;
+    })
+  }));
+}
+
 export type WorkoutPlanDayInput = {
   dayName: string;
   weekday: Weekday | null;
@@ -498,6 +588,8 @@ type RawPlanExercise = {
   sets: number | null;
   reps: string | null;
   rest_seconds: number | null;
+  instructions?: string | null;
+  video_url?: string | null;
   sort_order: number;
   notes: string | null;
 };
@@ -533,8 +625,8 @@ function mapPlanExerciseToWorkout(exercise: RawPlanExercise): Workout {
     sets: exercise.sets,
     reps: exercise.reps,
     rest_seconds: exercise.rest_seconds,
-    instructions: defaultExerciseInstructions,
-    notes: exercise.notes,
+    instructions: exercise.instructions || defaultExerciseInstructions,
+    notes: exercise.video_url || exercise.notes,
     is_global: true
   };
 }
@@ -567,7 +659,7 @@ export async function getActiveUserWorkoutPlan(userId: string) {
   const { data, error } = await supabase
     .from("user_workout_plans")
     .select(
-      "id,user_id,name,is_active,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,sort_order,notes))"
+      "id,user_id,name,is_active,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))"
     )
     .eq("user_id", userId)
     .eq("is_active", true)
@@ -581,6 +673,38 @@ export async function getActiveUserWorkoutPlan(userId: string) {
   }
 
   return data ? normalizeWorkoutPlan(data as RawWorkoutPlan) : null;
+}
+
+
+export async function getUserWorkoutPlanDay(dayId: string) {
+  if (!supabase) return mockDelay<WorkoutPlanDaySession | null>(null);
+
+  const { data, error } = await supabase
+    .from("user_workout_plan_days")
+    .select(
+      "id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes),user_workout_plans(id,user_id,name)"
+    )
+    .eq("id", dayId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("S&S Gym could not load this workout day.", error.message);
+    throw error;
+  }
+
+  if (!data) return null;
+  const row = data as unknown as RawPlanDay & { user_workout_plans?: { id: string; user_id: string; name: string } | { id: string; user_id: string; name: string }[] | null };
+  const planRelation = Array.isArray(row.user_workout_plans) ? row.user_workout_plans[0] : row.user_workout_plans;
+  return {
+    id: row.id,
+    plan_id: row.plan_id,
+    day_number: row.day_number,
+    day_name: row.day_name,
+    weekday: row.weekday,
+    notes: row.notes,
+    exercises: (row.user_workout_plan_exercises ?? []).sort((a, b) => a.sort_order - b.sort_order),
+    plan: planRelation ? { id: planRelation.id, user_id: planRelation.user_id, name: planRelation.name } : null
+  };
 }
 
 export async function createUserWorkoutPlan({
@@ -650,8 +774,10 @@ export async function createUserWorkoutPlan({
       sets: workout.sets ?? 3,
       reps: workout.reps ?? "8-12",
       rest_seconds: workout.rest_seconds ?? 75,
+      instructions: workout.instructions || defaultExerciseInstructions,
+      video_url: looksLikeUrl(workout.notes) ? workout.notes : null,
       sort_order: exerciseIndex + 1,
-      notes: workout.notes
+      notes: looksLikeUrl(workout.notes) ? null : workout.notes
     }));
 
     const { error: exercisesError } = await supabase.from("user_workout_plan_exercises").insert(exerciseRows);
