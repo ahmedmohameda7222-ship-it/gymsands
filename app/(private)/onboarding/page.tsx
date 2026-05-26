@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Sparkles } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,10 +17,11 @@ import { saveOnboarding } from "@/services/database/repository";
 const steps = ["Basic info", "Goal", "Training", "Nutrition", "Finish"];
 
 export default function OnboardingPage() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
   const [answers, setAnswers] = useState({
     age_range: "25-34",
     gender: "Prefer not to say",
@@ -31,17 +32,41 @@ export default function OnboardingPage() {
     training_place: "Gym",
     training_days_per_week: 3,
     workout_duration_minutes: 45,
+    available_equipment: ["Full gym"],
     nutrition_preferences: ["Egyptian food preferred"],
     allergies_limitations: ""
   });
 
   async function finish() {
-    await saveOnboarding({
-      ...answers,
-      user_id: user?.id ?? "mock-user"
-    });
-    toast({ title: "Onboarding saved", description: "Your S&S Gym dashboard is ready." });
-    router.push("/dashboard");
+    setIsSaving(true);
+    try {
+      if (!session?.access_token) {
+        await saveOnboarding({
+          ...answers,
+          user_id: user?.id ?? "mock-user"
+        });
+        toast({ title: "Onboarding saved", description: "Your setup is ready." });
+        router.push("/my-workout");
+        return;
+      }
+
+      const response = await fetch("/api/workout-plan/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ answers })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not generate your workout plan.");
+      toast({ title: "Workout plan created", description: data.plan?.title ? `${data.plan.title} is ready.` : "Your recommended plan is ready." });
+      router.push("/my-workout");
+    } catch (error) {
+      toast({ title: "Could not finish onboarding", description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -73,6 +98,14 @@ export default function OnboardingPage() {
               <ChoiceGroup label="Training place" value={answers.training_place} values={["Gym", "Home", "Both"]} onChange={(training_place) => setAnswers((current) => ({ ...current, training_place }))} />
               <ChoiceGroup label="Training availability" value={`${answers.training_days_per_week} days/week`} values={["2 days/week", "3 days/week", "4 days/week", "5 days/week", "6 days/week"]} onChange={(value) => setAnswers((current) => ({ ...current, training_days_per_week: Number(value[0]) }))} />
               <ChoiceGroup label="Workout duration" value={`${answers.workout_duration_minutes} minutes`} values={["20 minutes", "30 minutes", "45 minutes", "60 minutes", "75 minutes"]} onChange={(value) => setAnswers((current) => ({ ...current, workout_duration_minutes: Number(value.split(" ")[0]) }))} />
+              <div className="sm:col-span-2">
+                <MultiChoice
+                  label="Available equipment"
+                  values={["Full gym", "Bodyweight", "Dumbbells", "Barbell", "Machines", "Cables", "Kettle Bells", "EZ Bar", "Bands", "Medicine Ball", "Exercise Ball"]}
+                  selected={answers.available_equipment}
+                  onChange={(available_equipment) => setAnswers((current) => ({ ...current, available_equipment }))}
+                />
+              </div>
             </div>
           ) : null}
           {step === 3 ? (
@@ -96,9 +129,9 @@ export default function OnboardingPage() {
           ) : null}
           {step === 4 ? (
             <div className="rounded-lg bg-blue-50 p-5">
-              <h2 className="text-lg font-semibold">Ready to use S&S Gym</h2>
+              <h2 className="text-lg font-semibold">Ready for your plan</h2>
               <p className="mt-2 text-sm text-blue-900">
-                This saves your profile only. S&S Gym does not generate workouts or meals automatically.
+                S&S Gym will match your answers to the best workout template in the library.
               </p>
             </div>
           ) : null}
@@ -114,9 +147,9 @@ export default function OnboardingPage() {
                 <ChevronRight className="h-4 w-4" />
               </Button>
             ) : (
-              <Button onClick={finish}>
-                <Save className="h-4 w-4" />
-                Save onboarding
+              <Button onClick={finish} disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {isSaving ? "Creating plan..." : "Generate my plan"}
               </Button>
             )}
           </div>

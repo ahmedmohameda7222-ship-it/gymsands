@@ -9,16 +9,20 @@ import type {
   ExerciseVideo,
   FoodItem,
   FoodLog,
+  GeneratedWorkoutPlan,
   MealPlanItem,
   MealType,
   OnboardingAnswers,
   Profile,
   ProgressEntry,
   ExerciseLog,
+  UserExerciseLog,
+  UserWorkoutSession,
   UserWorkoutPlan,
   Weekday,
   WelcomeSettings,
   Workout,
+  WorkoutTemplate,
   WorkoutPlanDaySession,
   WorkoutSession,
   WorkoutSessionSummary
@@ -95,6 +99,19 @@ function isSchemaCompatibilityError(error: { message?: string; code?: string } |
   );
 }
 
+function isMissingTemplateSchemaError(error: { message?: string; code?: string } | null | undefined) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return (
+    error?.code === "PGRST204" ||
+    error?.code === "42P01" ||
+    message.includes("workout_templates") ||
+    message.includes("user_workout_sessions") ||
+    message.includes("user_exercise_logs") ||
+    message.includes("template_id") ||
+    message.includes("source")
+  );
+}
+
 function markSkippedNote(notes = "") {
   return `${skippedNotePrefix}${notes ? ` ${notes}` : ""}`.trim();
 }
@@ -111,6 +128,30 @@ function normalizeWorkoutSession(session: WorkoutSession): WorkoutSession {
     };
   }
   return session;
+}
+
+function generatedSessionDate(session: UserWorkoutSession) {
+  return session.completed_at || session.skipped_at || session.started_at || `${session.scheduled_date}T00:00:00.000Z`;
+}
+
+function mapGeneratedSessionToWorkoutSession(session: UserWorkoutSession): WorkoutSession {
+  const date = generatedSessionDate(session);
+  return {
+    id: session.id,
+    user_id: session.user_id,
+    workout_id: null,
+    plan_id: session.user_workout_plan_id,
+    plan_day_id: session.plan_day_id,
+    workout_day_name: session.day_title,
+    workout_category: "Generated plan",
+    workout_name: session.day_title,
+    started_at: session.started_at || date,
+    completed_at: session.completed_at,
+    skipped_at: session.skipped_at,
+    duration_minutes: session.duration_minutes,
+    notes: session.notes,
+    status: session.status === "skipped" ? "skipped" : session.status === "completed" ? "completed" : "started"
+  };
 }
 
 function canUseUserData(userId: string | null | undefined) {
@@ -986,9 +1027,13 @@ export async function getWorkoutHistory(userId: string) {
   }
   if (error) {
     console.warn("S&S Gym could not load workout history.", error.message);
-    return [];
+    return getGeneratedWorkoutActivity(userId, 20);
   }
-  return ((data ?? []) as WorkoutSession[]).map(normalizeWorkoutSession);
+  const legacyHistory = ((data ?? []) as WorkoutSession[]).map(normalizeWorkoutSession);
+  const generatedHistory = await getGeneratedWorkoutActivity(userId, 20);
+  return [...legacyHistory, ...generatedHistory]
+    .sort((a, b) => sessionDateForSort(b).getTime() - sessionDateForSort(a).getTime())
+    .slice(0, 20);
 }
 
 export async function getWorkoutHistoryDetailed(userId: string, limit = 100) {
@@ -1038,10 +1083,18 @@ export async function getWorkoutActivity(userId: string, limit = 180) {
 
   if (error) {
     console.warn("S&S Gym could not load workout activity.", error.message);
-    return [];
+    return getGeneratedWorkoutActivity(userId, limit);
   }
 
-  return ((data ?? []) as WorkoutSession[]).map(normalizeWorkoutSession);
+  const legacyActivity = ((data ?? []) as WorkoutSession[]).map(normalizeWorkoutSession);
+  const generatedActivity = await getGeneratedWorkoutActivity(userId, limit);
+  return [...legacyActivity, ...generatedActivity]
+    .sort((a, b) => sessionDateForSort(b).getTime() - sessionDateForSort(a).getTime())
+    .slice(0, limit);
+}
+
+function sessionDateForSort(session: WorkoutSession) {
+  return new Date(session.completed_at || session.skipped_at || session.started_at);
 }
 
 export type WorkoutPlanDayInput = {
@@ -1084,9 +1137,72 @@ type RawWorkoutPlan = {
   user_id: string;
   name: string;
   is_active: boolean;
+  template_id?: string | null;
+  source?: "manual" | "template_recommendation";
+  match_score?: number | null;
+  match_explanation?: string | null;
+  match_reasons?: string[] | null;
+  program_duration_weeks?: number | null;
+  days_per_week?: number | null;
   created_at: string;
   updated_at: string;
   user_workout_plan_days?: RawPlanDay[] | null;
+};
+
+type RawTemplateExercise = {
+  id: string;
+  workout_template_day_id?: string;
+  exercise_order: number;
+  exercise_name: string;
+  sets: string | null;
+  reps: string | null;
+};
+
+type RawTemplateDay = {
+  id: string;
+  workout_template_id?: string;
+  day_index: number;
+  day_title: string;
+  workout_template_exercises?: RawTemplateExercise[] | null;
+};
+
+type RawTemplate = {
+  id: string;
+  title: string;
+  main_goal: string;
+  workout_type: string | null;
+  training_level: string;
+  program_duration_weeks: number;
+  days_per_week: number;
+  time_per_workout: string | null;
+  equipment_required: string[] | null;
+  target_gender: string | null;
+  workout_template_days?: RawTemplateDay[] | null;
+};
+
+type RawGeneratedSession = {
+  id: string;
+  user_id: string;
+  user_workout_plan_id: string;
+  workout_template_day_id: string | null;
+  plan_day_id: string | null;
+  week_index: number;
+  day_index: number;
+  session_number: number;
+  scheduled_date: string;
+  day_title: string;
+  status: UserWorkoutSession["status"];
+  started_at: string | null;
+  completed_at: string | null;
+  skipped_at: string | null;
+  duration_minutes: number | null;
+  notes: string | null;
+  user_exercise_logs?: UserExerciseLog[] | null;
+};
+
+type RawGeneratedPlan = RawWorkoutPlan & {
+  workout_templates?: RawTemplate | RawTemplate[] | null;
+  user_workout_sessions?: RawGeneratedSession[] | null;
 };
 
 function mapPlanExerciseToWorkout(exercise: RawPlanExercise): Workout {
@@ -1112,6 +1228,13 @@ function normalizeWorkoutPlan(plan: RawWorkoutPlan): UserWorkoutPlan {
     user_id: plan.user_id,
     name: plan.name,
     is_active: plan.is_active,
+    template_id: plan.template_id ?? null,
+    source: plan.source ?? "manual",
+    match_score: plan.match_score ?? null,
+    match_explanation: plan.match_explanation ?? null,
+    match_reasons: plan.match_reasons ?? [],
+    program_duration_weeks: plan.program_duration_weeks ?? null,
+    days_per_week: plan.days_per_week ?? null,
     created_at: plan.created_at,
     updated_at: plan.updated_at,
     days: (plan.user_workout_plan_days ?? [])
@@ -1128,19 +1251,108 @@ function normalizeWorkoutPlan(plan: RawWorkoutPlan): UserWorkoutPlan {
   };
 }
 
+function normalizeWorkoutTemplate(template: RawTemplate | RawTemplate[] | null | undefined): WorkoutTemplate | null {
+  const row = Array.isArray(template) ? template[0] : template;
+  if (!row) return null;
+  return {
+    id: row.id,
+    title: row.title,
+    main_goal: row.main_goal,
+    workout_type: row.workout_type,
+    training_level: row.training_level,
+    program_duration_weeks: row.program_duration_weeks,
+    days_per_week: row.days_per_week,
+    time_per_workout: row.time_per_workout,
+    equipment_required: row.equipment_required ?? [],
+    target_gender: row.target_gender,
+    days: (row.workout_template_days ?? [])
+      .map((day) => ({
+        id: day.id,
+        workout_template_id: day.workout_template_id ?? row.id,
+        day_index: day.day_index,
+        day_title: day.day_title,
+        exercises: (day.workout_template_exercises ?? [])
+          .map((exercise) => ({
+            id: exercise.id,
+            workout_template_day_id: exercise.workout_template_day_id ?? day.id,
+            exercise_order: exercise.exercise_order,
+            exercise_name: exercise.exercise_name,
+            sets: exercise.sets,
+            reps: exercise.reps
+          }))
+          .sort((a, b) => a.exercise_order - b.exercise_order)
+      }))
+      .sort((a, b) => a.day_index - b.day_index)
+  };
+}
+
+function normalizeGeneratedSession(session: RawGeneratedSession): UserWorkoutSession {
+  return {
+    id: session.id,
+    user_id: session.user_id,
+    user_workout_plan_id: session.user_workout_plan_id,
+    workout_template_day_id: session.workout_template_day_id,
+    plan_day_id: session.plan_day_id,
+    week_index: session.week_index,
+    day_index: session.day_index,
+    session_number: session.session_number,
+    scheduled_date: session.scheduled_date,
+    day_title: session.day_title,
+    status: session.status,
+    started_at: session.started_at,
+    completed_at: session.completed_at,
+    skipped_at: session.skipped_at,
+    duration_minutes: session.duration_minutes,
+    notes: session.notes,
+    logs: [...(session.user_exercise_logs ?? [])].sort((a, b) => a.exercise_order - b.exercise_order)
+  };
+}
+
+function normalizeGeneratedWorkoutPlan(plan: RawGeneratedPlan): GeneratedWorkoutPlan {
+  return {
+    ...normalizeWorkoutPlan(plan),
+    template: normalizeWorkoutTemplate(plan.workout_templates),
+    sessions: (plan.user_workout_sessions ?? [])
+      .map(normalizeGeneratedSession)
+      .sort((a, b) => {
+        const dateSort = a.scheduled_date.localeCompare(b.scheduled_date);
+        return dateSort || a.session_number - b.session_number;
+      })
+  };
+}
+
 export async function getActiveUserWorkoutPlan(userId: string) {
   if (!canUseUserData(userId)) return mockDelay<UserWorkoutPlan | null>(null);
 
-  const { data, error } = await supabase!
+  const selectWithSource =
+    "id,user_id,name,is_active,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
+  const selectLegacy =
+    "id,user_id,name,is_active,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
+
+  const result = await supabase!
     .from("user_workout_plans")
-    .select(
-      "id,user_id,name,is_active,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))"
-    )
+    .select(selectWithSource)
     .eq("user_id", userId)
     .eq("is_active", true)
+    .or("source.is.null,source.eq.manual")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  let data: unknown = result.data;
+  let error = result.error;
+
+  if (error && isMissingTemplateSchemaError(error)) {
+    const legacy = await supabase!
+      .from("user_workout_plans")
+      .select(selectLegacy)
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    data = legacy.data;
+    error = legacy.error;
+  }
 
   if (error) {
     console.warn("S&S Gym could not load the saved workout plan.", error.message);
@@ -1150,6 +1362,152 @@ export async function getActiveUserWorkoutPlan(userId: string) {
   return data ? normalizeWorkoutPlan(data as RawWorkoutPlan) : null;
 }
 
+export async function getGeneratedWorkoutPlan(userId: string) {
+  if (!canUseUserData(userId)) return mockDelay<GeneratedWorkoutPlan | null>(null);
+
+  const { data, error } = await supabase!
+    .from("user_workout_plans")
+    .select(
+      "id,user_id,name,is_active,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes)),workout_templates(id,title,main_goal,workout_type,training_level,program_duration_weeks,days_per_week,time_per_workout,equipment_required,target_gender,workout_template_days(id,workout_template_id,day_index,day_title,workout_template_exercises(id,workout_template_day_id,exercise_order,exercise_name,sets,reps))),user_workout_sessions(id,user_id,user_workout_plan_id,workout_template_day_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes,user_exercise_logs(id,user_workout_session_id,workout_template_exercise_id,plan_exercise_id,exercise_order,exercise_name,planned_sets,planned_reps,weight_kg,reps,notes,completed,completed_at,created_at,updated_at))"
+    )
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .eq("source", "template_recommendation")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    if (!isMissingTemplateSchemaError(error)) console.warn("S&S Gym could not load the generated workout plan.", error.message);
+    return null;
+  }
+
+  return data ? normalizeGeneratedWorkoutPlan(data as unknown as RawGeneratedPlan) : null;
+}
+
+export type GeneratedExerciseLogInput = {
+  workoutTemplateExerciseId?: string | null;
+  planExerciseId?: string | null;
+  exerciseOrder: number;
+  exerciseName: string;
+  plannedSets?: string | null;
+  plannedReps?: string | null;
+  weightKg?: number | null;
+  reps?: number | null;
+  notes?: string | null;
+  completed: boolean;
+};
+
+export async function completeGeneratedWorkoutSession({
+  userId,
+  sessionId,
+  logs,
+  notes,
+  durationMinutes
+}: {
+  userId: string;
+  sessionId: string;
+  logs: GeneratedExerciseLogInput[];
+  notes?: string;
+  durationMinutes?: number;
+}) {
+  if (!canUseUserData(userId) || !isUuid(sessionId)) return mockDelay(true);
+
+  const deleteResult = await supabase!.from("user_exercise_logs").delete().eq("user_workout_session_id", sessionId);
+  if (deleteResult.error) throw deleteResult.error;
+
+  const completedAt = new Date().toISOString();
+  const rows = logs.map((log) => ({
+    user_workout_session_id: sessionId,
+    workout_template_exercise_id: log.workoutTemplateExerciseId ?? null,
+    plan_exercise_id: log.planExerciseId ?? null,
+    exercise_order: log.exerciseOrder,
+    exercise_name: log.exerciseName,
+    planned_sets: log.plannedSets ?? null,
+    planned_reps: log.plannedReps ?? null,
+    weight_kg: log.weightKg ?? null,
+    reps: log.reps ?? null,
+    notes: log.notes ?? null,
+    completed: log.completed,
+    completed_at: log.completed ? completedAt : null
+  }));
+
+  if (rows.length) {
+    const { error: logsError } = await supabase!.from("user_exercise_logs").insert(rows);
+    if (logsError) throw logsError;
+  }
+
+  const { error: sessionError } = await supabase!
+    .from("user_workout_sessions")
+    .update({
+      status: "completed",
+      started_at: completedAt,
+      completed_at: completedAt,
+      duration_minutes: Math.max(0, durationMinutes ?? 0),
+      notes: notes || null
+    })
+    .eq("id", sessionId)
+    .eq("user_id", userId);
+
+  if (sessionError) throw sessionError;
+  return true;
+}
+
+export async function skipGeneratedWorkoutSession(userId: string, sessionId: string, notes = "") {
+  if (!canUseUserData(userId) || !isUuid(sessionId)) return mockDelay(true);
+  const skippedAt = new Date().toISOString();
+  const { error } = await supabase!
+    .from("user_workout_sessions")
+    .update({
+      status: "skipped",
+      skipped_at: skippedAt,
+      duration_minutes: 0,
+      notes: notes || null
+    })
+    .eq("id", sessionId)
+    .eq("user_id", userId);
+
+  if (error) throw error;
+  return true;
+}
+
+export async function getGeneratedWorkoutHistory(userId: string, limit = 100) {
+  if (!canUseUserData(userId)) return mockDelay<UserWorkoutSession[]>([]);
+  const { data, error } = await supabase!
+    .from("user_workout_sessions")
+    .select(
+      "id,user_id,user_workout_plan_id,workout_template_day_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes,user_exercise_logs(id,user_workout_session_id,workout_template_exercise_id,plan_exercise_id,exercise_order,exercise_name,planned_sets,planned_reps,weight_kg,reps,notes,completed,completed_at,created_at,updated_at)"
+    )
+    .eq("user_id", userId)
+    .eq("status", "completed")
+    .order("completed_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    if (!isMissingTemplateSchemaError(error)) console.warn("S&S Gym could not load generated workout history.", error.message);
+    return [];
+  }
+
+  return ((data ?? []) as unknown as RawGeneratedSession[]).map(normalizeGeneratedSession);
+}
+
+export async function getGeneratedWorkoutActivity(userId: string, limit = 180) {
+  if (!canUseUserData(userId)) return mockDelay<WorkoutSession[]>([]);
+  const { data, error } = await supabase!
+    .from("user_workout_sessions")
+    .select("id,user_id,user_workout_plan_id,workout_template_day_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes")
+    .eq("user_id", userId)
+    .in("status", ["completed", "skipped"])
+    .order("scheduled_date", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    if (!isMissingTemplateSchemaError(error)) console.warn("S&S Gym could not load generated workout activity.", error.message);
+    return [];
+  }
+
+  return ((data ?? []) as unknown as RawGeneratedSession[]).map((session) => mapGeneratedSessionToWorkoutSession(normalizeGeneratedSession(session)));
+}
 
 export async function getUserWorkoutPlanDay(dayId: string) {
   if (!supabase) return mockDelay<WorkoutPlanDaySession | null>(null);
@@ -1269,7 +1627,13 @@ export function workoutsFromPlanDay(day: UserWorkoutPlan["days"][number] | null 
 
 export async function saveOnboarding(answers: OnboardingAnswers) {
   if (!canUseUserData(answers.user_id)) return mockDelay(answers);
-  const { data, error } = await supabase!.from("onboarding_answers").upsert(answers, { onConflict: "user_id" }).select("*").single();
+  let { data, error } = await supabase!.from("onboarding_answers").upsert(answers, { onConflict: "user_id" }).select("*").single();
+  if (error && error.message.toLowerCase().includes("available_equipment")) {
+    const { available_equipment: _availableEquipment, ...compatibleAnswers } = answers;
+    const compatible = await supabase!.from("onboarding_answers").upsert(compatibleAnswers, { onConflict: "user_id" }).select("*").single();
+    data = compatible.data;
+    error = compatible.error;
+  }
   if (error) throw error;
   return data as OnboardingAnswers;
 }

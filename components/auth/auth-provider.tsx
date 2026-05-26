@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   } as User;
 
   async function loadProfile(userId: string, email?: string | null) {
-    if (!supabase) {
+    if (!supabase || env.useMockAuth) {
       setProfile({
         id: "mock-user",
         email: "member@ssgym.test",

@@ -15,8 +15,12 @@ Run these files one by one in this exact order:
 9. 005_full_workout_video_import_part_09.sql
 10. 002_sample_workouts_and_videos.sql
 11. 006_check_workout_import.sql
+12. Run ../migrations/009_workout_template_recommendations.sql
+13. 007_muscle_strength_templates.sql
 
 Expected count in exercise_videos: 3105.
+Expected count in workout_templates from Muscle & Strength: 328.
+Expected count in workout_template_exercises from Muscle & Strength: 8799.
 Expected category_type counts:
 - Equipment: 939
 - Mechanics: 857

@@ -66,8 +66,15 @@ Run these in order:
 3. `supabase/seed/001_egyptian_foods.sql`
 4. `supabase/seed/002_sample_workouts_and_videos.sql`
 5. `supabase/migrations/003_production_hotfix.sql`
-6. Register your first user on the deployed site.
-7. Run `supabase/seed/004_admin_setup_placeholder.sql` to make `ahmeedmostafaa@hotmail.com` admin.
+6. `supabase/migrations/004_user_workout_plans.sql`
+7. `supabase/migrations/005_weekly_workout_plan_calendar.sql`
+8. `supabase/migrations/006_workout_session_tracking.sql`
+9. `supabase/migrations/007_meal_plan_and_persistent_sessions.sql`
+10. `supabase/migrations/008_workout_history_skip_status.sql`
+11. `supabase/migrations/009_workout_template_recommendations.sql`
+12. `supabase/seed/007_muscle_strength_templates.sql`
+13. Register your first user on the deployed site.
+14. Run `supabase/seed/004_admin_setup_placeholder.sql` to make `ahmeedmostafaa@hotmail.com` admin.
 
 If you already ran `001_initial_schema.sql`, you can still paste and run `002_policy_refresh.sql` afterward. It refreshes grants, RLS policies, and the private `progress-photos` storage policies.
 
@@ -77,6 +84,12 @@ The helper for materializing imported workout videos as browsable workouts is:
 
 ```text
 supabase/seed/005_full_workout_video_import_placeholder.sql
+```
+
+The Muscle & Strength template import is generated from the cleaned workbook with:
+
+```text
+python scripts/import-muscle-strength-workouts.py --workbook C:/path/muscleandstrength_workouts_clean.xlsx
 ```
 
 CSV import format:
