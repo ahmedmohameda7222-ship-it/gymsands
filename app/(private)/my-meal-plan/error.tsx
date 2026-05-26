@@ -9,7 +9,7 @@ export default function MyMealPlanError({ error, reset }: { error: Error; reset:
       <CardContent className="space-y-4 pt-6 text-center">
         <h2 className="text-2xl font-bold text-slate-950">My Meal Plan could not load</h2>
         <p className="mx-auto max-w-2xl text-sm text-amber-900">
-          The page hit a runtime error. The fixed version keeps the food picker isolated so Add food does not crash the whole page.
+          Something interrupted your meal plan. Try again or return to the dashboard.
         </p>
         <p className="mx-auto max-w-2xl break-words text-xs text-amber-800">{error.message}</p>
         <div className="flex justify-center gap-2">

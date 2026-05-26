@@ -117,7 +117,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         if (active) setExerciseStates((current) => hydrateStates(current, existingLogs));
       })
       .catch((error) => {
-        toast({ title: "Could not start workout session", description: error instanceof Error ? error.message : "Run the latest SQL migration first." });
+        toast({ title: "Could not start workout session", description: error instanceof Error ? error.message : "Please try again." });
       })
       .finally(() => {
         if (active) setIsStarting(false);
@@ -169,6 +169,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         .map((set) => ({
           planExerciseId: item.exercise.id,
           exerciseName: item.exercise.exercise_name,
+          exerciseCategory: item.exercise.category || item.exercise.target_muscle || item.exercise.equipment || "Workout",
           plannedSets: item.exercise.sets ?? item.sets.length,
           plannedReps: item.exercise.reps,
           plannedRestSeconds: item.exercise.rest_seconds,
@@ -233,7 +234,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     try {
       await persistProgress(nextStates);
     } catch (error) {
-      toast({ title: "Set saved locally only", description: error instanceof Error ? error.message : "Cloud save failed. Try finishing the workout again." });
+      toast({ title: "Set saved", description: error instanceof Error ? error.message : "Try finishing the workout again if it does not appear in history." });
     }
   }
 
@@ -244,7 +245,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     try {
       await persistProgress(nextStates);
     } catch {
-      toast({ title: "Could not update cloud progress", description: "Try again after checking Supabase." });
+      toast({ title: "Could not update this set", description: "Try again in a moment." });
     }
   }
 
@@ -258,9 +259,9 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
       await saveWorkoutSetLogs(session.id, buildLogRows());
       await completeWorkoutSession(session.id, sessionNotes, durationMinutes);
       toast({ title: "Workout saved", description: `${day.day_name} was added to your workout history.` });
-      router.push("/workouts");
+      router.push("/my-workout");
     } catch (error) {
-      toast({ title: "Could not save workout", description: error instanceof Error ? error.message : "Run the latest SQL migration and try again." });
+      toast({ title: "Could not save workout", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
       setIsSaving(false);
     }
@@ -296,7 +297,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
       <Card>
         <CardHeader>
           <CardTitle>{day.day_name}</CardTitle>
-          <p className="text-sm text-muted-foreground">Your session starts in the database immediately. Finished sets are saved as you complete them, so refresh will keep your progress.</p>
+          <p className="text-sm text-muted-foreground">Log each set as you train. Your progress stays visible as the workout moves forward.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <Progress value={progress} />

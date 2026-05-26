@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Plus, Timer } from "lucide-react";
+import { CheckCircle2, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
-import { completeWorkoutSession, startWorkoutSession } from "@/services/database/repository";
+import { completeWorkoutSession, saveWorkoutSetLogs, startWorkoutSession } from "@/services/database/repository";
 import type { Workout, WorkoutSession } from "@/types";
 
 type SetLog = {
@@ -43,10 +43,25 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
     try {
       setIsSaving(true);
       if (session) {
+        await saveWorkoutSetLogs(
+          session.id,
+          sets.map((set, index) => ({
+            exerciseName: workout.name,
+            exerciseCategory: workout.category || workout.target_muscle,
+            plannedSets: workout.sets ?? sets.length,
+            plannedReps: workout.reps,
+            plannedRestSeconds: workout.rest_seconds,
+            setNumber: index + 1,
+            reps: Number.isFinite(set.reps) ? set.reps : null,
+            weightKg: Number.isFinite(set.weight) ? set.weight : null,
+            notes: set.notes || null,
+            completedAt: new Date().toISOString()
+          }))
+        );
         await completeWorkoutSession(session.id, notes, duration);
       }
       toast({ title: "Workout completed", description: `${workout.name} was saved to your S&S Gym history.` });
-      router.push("/workouts");
+      router.push("/workout-history");
     } catch (error) {
       toast({
         title: "Could not save workout",
@@ -138,10 +153,6 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
           <CheckCircle2 className="h-4 w-4" />
           {isSaving ? "Saving workout..." : "Mark workout completed"}
         </Button>
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Timer className="h-4 w-4" />
-          Total volume is calculated from logged sets when exercise logs are saved in Supabase.
-        </p>
       </CardContent>
     </Card>
   );

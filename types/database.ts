@@ -120,12 +120,14 @@ export type WorkoutSession = {
   plan_id?: string | null;
   plan_day_id?: string | null;
   workout_day_name?: string | null;
+  workout_category?: string | null;
   workout_name: string;
   started_at: string;
   completed_at: string | null;
+  skipped_at?: string | null;
   duration_minutes: number | null;
   notes: string | null;
-  status: "started" | "completed";
+  status: "started" | "completed" | "skipped";
 };
 
 export type Weekday = "Sunday" | "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday";
@@ -135,6 +137,7 @@ export type ExerciseLog = {
   workout_session_id: string;
   plan_exercise_id: string | null;
   exercise_name: string;
+  exercise_category?: string | null;
   planned_sets: number | null;
   planned_reps: string | null;
   planned_rest_seconds: number | null;
@@ -199,6 +202,28 @@ export type ProgressEntry = {
   body_weight_kg: number | null;
   waist_cm: number | null;
   notes: string | null;
+  measurements?: BodyMeasurement | null;
+};
+
+export type BodyMeasurement = {
+  id: string;
+  user_id: string;
+  progress_entry_id: string | null;
+  measured_at: string;
+  waist_cm: number | null;
+  hips_cm: number | null;
+  chest_cm: number | null;
+  bust_cm: number | null;
+  underbust_cm: number | null;
+  neck_cm: number | null;
+  shoulders_cm: number | null;
+  left_arm_cm: number | null;
+  right_arm_cm: number | null;
+  left_thigh_cm: number | null;
+  right_thigh_cm: number | null;
+  glutes_cm: number | null;
+  calves_cm: number | null;
+  created_at: string;
 };
 
 export type WelcomeSettings = {

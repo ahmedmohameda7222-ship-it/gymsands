@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, PlusCircle, Search, Utensils } from "lucide-react";
+import { AlertTriangle, CheckCircle2, PlusCircle, Search } from "lucide-react";
 import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,8 +12,9 @@ import { egyptianFoods, nutritionDisclaimer } from "@/data/egyptian-foods";
 import type { FoodItem, FoodLog, MealPlanItem, MealType } from "@/types";
 
 const pageSize = 12;
-const mealOptions: MealType[] = ["Breakfast", "Lunch", "Snack", "Dinner"];
+const mealOptions: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
 const fallbackCategories = Array.from(new Set(egyptianFoods.map((food) => food.category).filter((category): category is string => Boolean(category)))).sort();
+const emptyFoodLogs: FoodLog[] = [];
 
 type FoodBrowserProps = {
   initialLogs?: FoodLog[];
@@ -47,7 +48,7 @@ class FoodBrowserBoundary extends Component<{ children: ReactNode }, { message: 
               <AlertTriangle className="h-4 w-4" />
               Food picker could not load
             </div>
-            <p>Open Dashboard, then come back. If it keeps happening, run the latest meal-plan SQL migration and redeploy.</p>
+            <p>The food picker stayed open. Try again or choose another category.</p>
             <p className="break-words text-xs text-amber-800">{this.state.message}</p>
             <Button variant="outline" size="sm" onClick={() => this.setState({ message: null })}>
               Try again
@@ -70,7 +71,7 @@ export function FoodBrowser(props: FoodBrowserProps) {
 }
 
 function FoodBrowserInner({
-  initialLogs = [],
+  initialLogs = emptyFoodLogs,
   onLogAdded,
   onPlanAdded,
   defaultMealType = "Breakfast"
@@ -86,6 +87,10 @@ function FoodBrowserInner({
   const [isLoadingFoods, setIsLoadingFoods] = useState(false);
   const [visibleCount, setVisibleCount] = useState(pageSize);
   const [notice, setNotice] = useState<Notice | null>(null);
+
+  useEffect(() => {
+    setMealType(mealOptions.includes(defaultMealType) ? defaultMealType : "Breakfast");
+  }, [defaultMealType]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 350);
@@ -121,8 +126,8 @@ function FoodBrowserInner({
         setFoods(localFallback);
         setNotice({
           type: "error",
-          title: "Supabase foods could not load",
-          description: error instanceof Error ? error.message : "Showing local fallback foods."
+          title: "Could not load every food",
+          description: error instanceof Error ? error.message : "Showing available foods."
         });
       })
       .finally(() => {
@@ -187,7 +192,7 @@ function FoodBrowserInner({
       setNotice({
         type: "error",
         title: "Could not add meal",
-        description: error instanceof Error ? error.message : "Please check Supabase and try again."
+        description: error instanceof Error ? error.message : "Please try again."
       });
     }
   }
@@ -212,13 +217,13 @@ function FoodBrowserInner({
       setNotice({
         type: "success",
         title: "Added to My Meal Plan",
-        description: `${food.food_name} was added to ${mealType}. It counts after Mark done.`
+        description: `${food.food_name} was added to ${displayMealType(mealType)}.`
       });
     } catch (error) {
       setNotice({
         type: "error",
         title: "Could not add to plan",
-        description: error instanceof Error ? error.message : "Run the latest meal-plan SQL migration first."
+        description: error instanceof Error ? error.message : "Please try again."
       });
     }
   }
@@ -228,7 +233,7 @@ function FoodBrowserInner({
       <Card className="bg-blue-50">
         <CardContent className="pt-5">
           <p className="text-sm font-semibold text-blue-950">{nutritionDisclaimer}</p>
-          <p className="mt-1 text-sm text-blue-800">Choose a category or search first. The full food database is not rendered at once.</p>
+          <p className="mt-1 text-sm text-blue-800">Pick a meal type, then search or choose a category.</p>
         </CardContent>
       </Card>
 
@@ -251,7 +256,7 @@ function FoodBrowserInner({
           aria-label="Meal type"
         >
           {mealOptions.map((type) => (
-            <option key={type} value={type}>{type}</option>
+            <option key={type} value={type}>{displayMealType(type)}</option>
           ))}
         </select>
       </div>
@@ -273,7 +278,7 @@ function FoodBrowserInner({
 
       {!selectedCategory && !debouncedQuery ? (
         <div className="rounded-md border bg-white p-4 text-sm text-muted-foreground">
-          Choose a category or search. This keeps the page fast on mobile.
+          Choose a category or search for a food.
         </div>
       ) : null}
 
@@ -378,10 +383,15 @@ function Macro({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function displayMealType(type: MealType) {
+  return type === "Snack" ? "Snacks" : type;
+}
+
 function normalizeFoodItem(food: FoodItem): FoodItem {
+  const fallbackId = `food-${food.food_name || "item"}-${food.serving_size || "serving"}-${food.category || "general"}`;
   return {
     ...food,
-    id: String(food.id || `food-${food.food_name || Math.random()}`),
+    id: String(food.id || fallbackId),
     food_name: String(food.food_name || "Unnamed food"),
     serving_size: String(food.serving_size || "1 serving"),
     calories: toNumber(food.calories),

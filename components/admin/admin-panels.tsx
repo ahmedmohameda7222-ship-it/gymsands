@@ -247,7 +247,7 @@ export function AdminWelcomePanel() {
         </CardHeader>
         <CardContent>
           <form className="space-y-3" onSubmit={saveUserMessage}>
-            <TextField label="User ID" value={userId} onChange={setUserId} placeholder="Supabase user id for custom message" />
+            <TextField label="User ID" value={userId} onChange={setUserId} placeholder="Member user ID" />
             <TextField label="Message" value={message} onChange={setMessage} placeholder="Welcome back to S&S Gym. Ready for today?" />
             <Select value={frequency} onValueChange={(value) => setFrequency(value as "every_login" | "once_per_day")}>
               <SelectTrigger>

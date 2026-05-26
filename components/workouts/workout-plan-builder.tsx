@@ -1,7 +1,7 @@
 "use client";
 
-import { Dumbbell, ExternalLink, Play, Plus, Save, Search, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { CalendarCheck, Dumbbell, ExternalLink, Play, Plus, Save, Search, SkipForward, Trash2, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,12 +16,14 @@ import {
   createUserWorkoutPlan,
   getActiveUserWorkoutPlan,
   getCurrentWeekday,
+  getWorkoutActivity,
   getWorkoutCategories,
   getWorkouts,
+  skipWorkoutDay,
   weekDays,
   workoutsFromPlanDay
 } from "@/services/database/repository";
-import type { Weekday, Workout } from "@/types";
+import type { Weekday, Workout, WorkoutSession } from "@/types";
 
 const defaultDays: WeeklyPlanDay[] = [
   { dayName: "Push day", weekday: "Sunday", notes: "", exercises: [] },
@@ -56,7 +58,9 @@ export function WorkoutPlanBuilder() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingSavedPlan, setIsLoadingSavedPlan] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSkipping, setIsSkipping] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
+  const [activity, setActivity] = useState<WorkoutSession[]>([]);
 
   useEffect(() => {
     getWorkoutCategories()
@@ -88,12 +92,29 @@ export function WorkoutPlanBuilder() {
       })
       .catch((error) => {
         if (!active) return;
-        toast({ title: "Could not load saved plan", description: error instanceof Error ? error.message : "Run the workout plan SQL migration." });
+        toast({ title: "Could not load saved plan", description: error instanceof Error ? error.message : "Please try again." });
       })
       .finally(() => {
         if (active) setIsLoadingSavedPlan(false);
       });
 
+    return () => {
+      active = false;
+    };
+  }, [toast, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    getWorkoutActivity(user.id)
+      .then((items) => {
+        if (active) setActivity(items);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setActivity([]);
+        toast({ title: "Could not load workout activity", description: error instanceof Error ? error.message : "Please try again." });
+      });
     return () => {
       active = false;
     };
@@ -132,6 +153,7 @@ export function WorkoutPlanBuilder() {
   const totalExercises = useMemo(() => days.reduce((sum, day) => sum + day.exercises.length, 0), [days]);
   const today = getCurrentWeekday();
   const todaysDay = days.find((day) => day.weekday === today && day.exercises.length > 0);
+  const stats = useMemo(() => buildWorkoutStats(activity, days), [activity, days]);
 
   function updateDay(index: number, patch: Partial<WeeklyPlanDay>) {
     setDays((current) => current.map((day, itemIndex) => (itemIndex === index ? { ...day, ...patch, id: patch.exercises ? undefined : day.id } : day)));
@@ -192,10 +214,10 @@ export function WorkoutPlanBuilder() {
           exercises: workoutsFromPlanDay(day).map(withTrainingDefaults)
         })));
       }
-      setSavedMessage("Saved to Supabase. Refreshing the page will keep this plan.");
+      setSavedMessage("Plan saved.");
       toast({ title: "Workout plan saved", description: `${planName} saved with ${totalExercises} workouts.` });
     } catch (error) {
-      toast({ title: "Could not save plan", description: error instanceof Error ? error.message : "Please run the latest SQL migration." });
+      toast({ title: "Could not save plan", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
       setIsSaving(false);
     }
@@ -218,13 +240,60 @@ export function WorkoutPlanBuilder() {
     startPlanDay(todaysDay);
   }
 
+  async function skipToday() {
+    if (!todaysDay) {
+      toast({ title: "No workout scheduled today", description: `Today is ${today}.` });
+      return;
+    }
+    if (!todaysDay.id) {
+      toast({ title: "Save your plan first", description: "Saved days can be completed or skipped from the calendar." });
+      return;
+    }
+    const existingStatus = latestCurrentWeekStatus(activity, todaysDay.id);
+    if (existingStatus === "completed") {
+      toast({ title: "Workout already completed", description: "This day is already marked done." });
+      return;
+    }
+
+    try {
+      setIsSkipping(true);
+      const skipped = await skipWorkoutDay(user?.id ?? "mock-user", { ...todaysDay, id: todaysDay.id });
+      setActivity((current) => [
+        skipped,
+        ...current.filter((session) => !(session.plan_day_id === skipped.plan_day_id && isCurrentWeekSession(session)))
+      ]);
+      const todayIndex = days.findIndex((day) => day.id === todaysDay.id);
+      setActiveDayIndex(findNextWorkoutDayIndex(days, todayIndex));
+      toast({ title: "Workout skipped", description: "The next workout day is ready." });
+    } catch (error) {
+      toast({ title: "Could not skip workout", description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      setIsSkipping(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <WorkoutCalendar days={days} activeDayIndex={activeDayIndex} onSelectDay={setActiveDayIndex} onStartToday={startToday} />
+      <WorkoutCalendar
+        days={days}
+        activity={activity}
+        activeDayIndex={activeDayIndex}
+        onSelectDay={setActiveDayIndex}
+        onStartToday={startToday}
+        onSkipToday={skipToday}
+        isSkipping={isSkipping}
+      />
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={CalendarCheck} label="Completed days" value={stats.completed} detail={`${stats.completedThisWeek} this week`} />
+        <StatCard icon={SkipForward} label="Skipped days" value={stats.skipped} detail={`${stats.skippedThisWeek} this week`} />
+        <StatCard icon={TrendingUp} label="Weekly progress" value={`${stats.weeklyPercent}%`} detail={`${stats.completedThisMonth} completed this month`} />
+        <StatCard icon={Dumbbell} label="Planned days" value={stats.plannedDays} detail={`${totalExercises} workouts in plan`} />
+      </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Create your own workout plan</CardTitle>
+          <CardTitle>My workout plan</CardTitle>
           {isLoadingSavedPlan ? <p className="text-sm text-muted-foreground">Loading saved plan...</p> : null}
           {savedMessage ? <p className="text-sm text-emerald-700">{savedMessage}</p> : null}
         </CardHeader>
@@ -362,7 +431,7 @@ export function WorkoutPlanBuilder() {
                 </div>
               </div>
 
-              {!selectedCategory ? <p className="rounded-md border bg-blue-50 p-3 text-sm text-blue-900">Choose a category first, then add exercises to the selected weekday.</p> : null}
+              {!selectedCategory ? <p className="rounded-md border bg-blue-50 p-3 text-sm text-blue-900">Choose a category, then add exercises to the selected weekday.</p> : null}
               {isLoading ? <p className="text-sm text-muted-foreground">Loading workouts...</p> : null}
               <div className="grid gap-3 md:grid-cols-2">
                 {results.map((workout) => (
@@ -392,4 +461,91 @@ export function WorkoutPlanBuilder() {
       </Card>
     </div>
   );
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  detail
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: string | number;
+  detail: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="pt-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+          </div>
+          <div className="flex h-11 w-11 items-center justify-center rounded-md bg-blue-50 text-primary">
+            <Icon className="h-5 w-5" />
+          </div>
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">{detail}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function buildWorkoutStats(activity: WorkoutSession[], days: WeeklyPlanDay[]) {
+  const now = new Date();
+  const weekStart = startOfWeek(now);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const plannedDays = days.filter((day) => day.exercises.length > 0).length;
+
+  const completed = activity.filter((session) => session.status === "completed");
+  const skipped = activity.filter((session) => session.status === "skipped");
+  const completedThisWeek = completed.filter((session) => sessionDate(session) >= weekStart).length;
+  const skippedThisWeek = skipped.filter((session) => sessionDate(session) >= weekStart).length;
+  const completedThisMonth = completed.filter((session) => sessionDate(session) >= monthStart).length;
+
+  return {
+    completed: completed.length,
+    skipped: skipped.length,
+    completedThisWeek,
+    skippedThisWeek,
+    completedThisMonth,
+    plannedDays,
+    weeklyPercent: plannedDays ? Math.min(100, Math.round((completedThisWeek / plannedDays) * 100)) : 0
+  };
+}
+
+function sessionDate(session: WorkoutSession) {
+  return new Date(session.completed_at || session.skipped_at || session.started_at);
+}
+
+function startOfWeek(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  next.setDate(next.getDate() - next.getDay());
+  return next;
+}
+
+function findNextWorkoutDayIndex(days: WeeklyPlanDay[], currentIndex: number) {
+  if (!days.length) return 0;
+  for (let offset = 1; offset <= days.length; offset += 1) {
+    const nextIndex = (Math.max(0, currentIndex) + offset) % days.length;
+    if (days[nextIndex]?.exercises.length) return nextIndex;
+  }
+  return Math.max(0, currentIndex);
+}
+
+function latestCurrentWeekStatus(activity: WorkoutSession[], planDayId: string) {
+  const match = activity
+    .filter((session) => session.plan_day_id === planDayId && isCurrentWeekSession(session))
+    .sort((a, b) => sessionDate(b).getTime() - sessionDate(a).getTime())[0];
+  return match?.status ?? null;
+}
+
+function isCurrentWeekSession(session: WorkoutSession) {
+  const date = sessionDate(session);
+  const weekStart = startOfWeek(new Date());
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 7);
+  return date >= weekStart && date < weekEnd;
 }

@@ -38,14 +38,19 @@ export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntr
     try {
       setIsSaving(true);
       const extraMeasurements = Object.fromEntries(
-        Object.entries(measurements).map(([key, value]) => [key, value ? Number(value) : null])
+        Object.entries(measurements).map(([key, value]) => {
+          const parsed = Number(value);
+          return [key, value && Number.isFinite(parsed) ? parsed : null];
+        })
       );
+      const bodyWeight = Number(weight);
+      const waistValue = Number(waist);
       const entry = await addProgressEntry(
         {
           user_id: user?.id ?? "mock-user",
           entry_date: todayIso(),
-          body_weight_kg: weight ? Number(weight) : null,
-          waist_cm: waist ? Number(waist) : null,
+          body_weight_kg: weight && Number.isFinite(bodyWeight) ? bodyWeight : null,
+          waist_cm: waist && Number.isFinite(waistValue) ? waistValue : null,
           notes: notes || null
         },
         photos,
@@ -62,7 +67,7 @@ export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntr
     } catch (error) {
       toast({
         title: "Could not save progress",
-        description: error instanceof Error ? error.message : "Please check Supabase Storage policies and try again."
+        description: error instanceof Error ? error.message : "Please try again."
       });
     } finally {
       setIsSaving(false);

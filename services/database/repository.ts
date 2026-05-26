@@ -5,12 +5,14 @@ import { isUuid, todayIso } from "@/lib/utils";
 import { egyptianFoods } from "@/data/egyptian-foods";
 import { defaultExerciseInstructions, sampleExerciseVideos, sampleWorkouts } from "@/data/workouts";
 import type {
+  BodyMeasurement,
   ExerciseVideo,
   FoodItem,
   FoodLog,
   MealPlanItem,
   MealType,
   OnboardingAnswers,
+  Profile,
   ProgressEntry,
   ExerciseLog,
   UserWorkoutPlan,
@@ -28,6 +30,7 @@ function mockDelay<T>(value: T) {
 }
 
 const workoutPageSize = 60;
+const skippedNotePrefix = "[skipped]";
 
 function normalizeText(value: string | null | undefined) {
   return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -38,7 +41,81 @@ function looksLikeUrl(value: string | null | undefined) {
 }
 
 export const weekDays: Weekday[] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-export const mealTypes: MealType[] = ["Breakfast", "Lunch", "Snack", "Dinner"];
+export const mealTypes: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
+
+function toNumber(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeMealType(value: string | null | undefined): MealType {
+  return mealTypes.includes(value as MealType) ? (value as MealType) : "Breakfast";
+}
+
+function summarizeWorkoutCategory(
+  day: { exercises?: Array<{ category?: string | null; target_muscle?: string | null; equipment?: string | null }> } | null | undefined
+) {
+  const categories = new Set(
+    (day?.exercises ?? [])
+      .map((exercise) => exercise.category || exercise.target_muscle || exercise.equipment)
+      .filter(Boolean)
+  );
+  const values = Array.from(categories) as string[];
+  if (!values.length) return "Workout";
+  return values.slice(0, 2).join(", ");
+}
+
+type SkipWorkoutDayInput = {
+  id: string;
+  plan_id?: string | null;
+  planId?: string | null;
+  day_name?: string;
+  dayName?: string;
+  weekday: Weekday | null;
+  exercises: Array<{ category?: string | null; target_muscle?: string | null; equipment?: string | null }>;
+};
+
+function skipDayName(day: SkipWorkoutDayInput) {
+  return day.day_name || day.dayName || "Workout day";
+}
+
+function skipDayPlanId(day: SkipWorkoutDayInput) {
+  return day.plan_id ?? day.planId ?? null;
+}
+
+function isSchemaCompatibilityError(error: { message?: string; code?: string } | null | undefined) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return (
+    error?.code === "PGRST204" ||
+    message.includes("workout_category") ||
+    message.includes("skipped") ||
+    message.includes("skipped_at") ||
+    message.includes("exercise_category") ||
+    message.includes("invalid input value for enum")
+  );
+}
+
+function markSkippedNote(notes = "") {
+  return `${skippedNotePrefix}${notes ? ` ${notes}` : ""}`.trim();
+}
+
+function normalizeWorkoutSession(session: WorkoutSession): WorkoutSession {
+  if (session.status === "skipped" || session.notes?.startsWith(skippedNotePrefix)) {
+    return {
+      ...session,
+      status: "skipped",
+      skipped_at: session.skipped_at ?? session.completed_at ?? session.started_at,
+      notes: session.notes?.startsWith(skippedNotePrefix)
+        ? session.notes.replace(skippedNotePrefix, "").trim() || null
+        : session.notes
+    };
+  }
+  return session;
+}
+
+function canUseUserData(userId: string | null | undefined) {
+  return Boolean(supabase && isUuid(userId));
+}
 
 export function getCurrentWeekday(date = new Date()): Weekday {
   return weekDays[date.getDay()];
@@ -127,7 +204,7 @@ export async function getFoodCategories() {
   const fallback = getDefaultFoodCategories();
   if (!supabase) return mockDelay(fallback);
 
-  const request = supabase
+  const request = supabase!
     .from("food_items")
     .select("category")
     .eq("is_global", true)
@@ -160,7 +237,7 @@ export async function getGlobalFoods(
     return mockDelay(fallback);
   }
 
-  let request = supabase
+  let request = supabase!
     .from("food_items")
     .select("*")
     .eq("is_global", true)
@@ -188,9 +265,9 @@ export async function getGlobalFoods(
 
 export async function getCalorieTargets(userId: string) {
   const fallback = { daily_calories: 2200, protein_g: 150, carbs_g: 250, fat_g: 70, water_ml: 2500 };
-  if (!supabase) return mockDelay(fallback);
+  if (!canUseUserData(userId)) return mockDelay(fallback);
 
-  const { data, error } = await supabase
+  const { data, error } = await supabase!
     .from("calorie_targets")
     .select("daily_calories,protein_g,carbs_g,fat_g,water_ml")
     .eq("user_id", userId)
@@ -228,9 +305,9 @@ export async function upsertCalorieTargets({
     water_ml: waterMl
   };
 
-  if (!supabase) return mockDelay(payload);
+  if (!canUseUserData(userId)) return mockDelay(payload);
 
-  const { data, error } = await supabase
+  const { data, error } = await supabase!
     .from("calorie_targets")
     .upsert(payload, { onConflict: "user_id" })
     .select("daily_calories,protein_g,carbs_g,fat_g,water_ml")
@@ -241,8 +318,8 @@ export async function upsertCalorieTargets({
 }
 
 export async function getTodayFoodLogs(userId: string, date = todayIso()) {
-  if (!supabase) return mockDelay<FoodLog[]>([]);
-  const { data, error } = await supabase
+  if (!canUseUserData(userId)) return mockDelay<FoodLog[]>([]);
+  const { data, error } = await supabase!
     .from("food_logs")
     .select("*")
     .eq("user_id", userId)
@@ -259,7 +336,7 @@ export async function addGlobalFoodToToday({
   userId,
   food,
   quantity,
-  mealType = "Meal"
+  mealType = "Breakfast"
 }: {
   userId: string;
   food: FoodItem;
@@ -267,12 +344,13 @@ export async function addGlobalFoodToToday({
   mealType?: string;
 }) {
   const macros = scaleFoodMacros(food, quantity);
+  const safeMealType = normalizeMealType(mealType);
   const payload = {
     user_id: userId,
     food_item_id: isUuid(food.id) ? food.id : null,
     user_food_item_id: null,
     log_date: todayIso(),
-    meal_type: mealType,
+    meal_type: safeMealType,
     food_name: food.food_name,
     serving_size: food.serving_size,
     quantity,
@@ -283,8 +361,8 @@ export async function addGlobalFoodToToday({
     notes: null
   };
 
-  if (!supabase) return mockDelay(payload as FoodLog);
-  const { data, error } = await supabase.from("food_logs").insert(payload).select("*").single();
+  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: crypto.randomUUID() } as FoodLog);
+  const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
   if (error) {
     console.warn("S&S Gym could not add this food log.", error.message);
     throw error;
@@ -294,8 +372,8 @@ export async function addGlobalFoodToToday({
 
 
 export async function getTodayMealPlanItems(userId: string, date = todayIso()) {
-  if (!supabase) return mockDelay<MealPlanItem[]>([]);
-  const { data, error } = await supabase
+  if (!canUseUserData(userId)) return mockDelay<MealPlanItem[]>([]);
+  const { data, error } = await supabase!
     .from("user_meal_plan_items")
     .select("*")
     .eq("user_id", userId)
@@ -322,10 +400,11 @@ export async function addFoodToMealPlan({
   mealType?: MealType;
 }) {
   const macros = scaleFoodMacros(food, quantity);
+  const safeMealType = normalizeMealType(mealType);
   const payload = {
     user_id: userId,
     plan_date: todayIso(),
-    meal_type: mealType,
+    meal_type: safeMealType,
     food_item_id: isUuid(food.id) ? food.id : null,
     user_food_item_id: null,
     food_name: food.food_name,
@@ -341,9 +420,9 @@ export async function addFoodToMealPlan({
     notes: null
   };
 
-  if (!supabase) return mockDelay({ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as MealPlanItem);
+  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as MealPlanItem);
 
-  const { data, error } = await supabase.from("user_meal_plan_items").insert(payload).select("*").single();
+  const { data, error } = await supabase!.from("user_meal_plan_items").insert(payload).select("*").single();
   if (error) {
     console.warn("S&S Gym could not add this food to My Meal Plan.", error.message);
     throw error;
@@ -378,10 +457,10 @@ export async function markMealPlanItemDone(item: MealPlanItem) {
     };
   }
 
-  const inserted = await supabase.from("food_logs").insert(logPayload).select("*").single();
+  const inserted = await supabase!.from("food_logs").insert(logPayload).select("*").single();
   if (inserted.error) throw inserted.error;
 
-  const updated = await supabase
+  const updated = await supabase!
     .from("user_meal_plan_items")
     .update({ status: "done", food_log_id: inserted.data.id, completed_at: new Date().toISOString() })
     .eq("id", item.id)
@@ -393,21 +472,74 @@ export async function markMealPlanItemDone(item: MealPlanItem) {
 }
 
 export async function deleteMealPlanItem(item: MealPlanItem) {
-  if (!supabase) return mockDelay(true);
+  if (!canUseUserData(item.user_id)) return mockDelay(true);
 
   if (item.food_log_id) {
-    const logDelete = await supabase.from("food_logs").delete().eq("id", item.food_log_id).eq("user_id", item.user_id);
+    const logDelete = await supabase!.from("food_logs").delete().eq("id", item.food_log_id).eq("user_id", item.user_id);
     if (logDelete.error) throw logDelete.error;
   }
 
-  const { error } = await supabase.from("user_meal_plan_items").delete().eq("id", item.id);
+  const { error } = await supabase!.from("user_meal_plan_items").delete().eq("id", item.id);
   if (error) throw error;
   return true;
 }
 
+export async function updateMealPlanItem(
+  item: MealPlanItem,
+  patch: { mealType?: MealType; quantity?: number; notes?: string | null }
+) {
+  const previousQuantity = Math.max(0.1, toNumber(item.quantity, 1));
+  const nextQuantity = Math.max(0.1, toNumber(patch.quantity ?? item.quantity, previousQuantity));
+  const ratio = nextQuantity / previousQuantity;
+  const macros = {
+    calories: Math.round(toNumber(item.calories) * ratio),
+    protein_g: Math.round(toNumber(item.protein_g) * ratio * 10) / 10,
+    carbs_g: Math.round(toNumber(item.carbs_g) * ratio * 10) / 10,
+    fat_g: Math.round(toNumber(item.fat_g) * ratio * 10) / 10
+  };
+  const payload = {
+    meal_type: normalizeMealType(patch.mealType ?? item.meal_type),
+    quantity: nextQuantity,
+    ...macros,
+    notes: patch.notes ?? item.notes ?? null
+  };
+
+  if (!canUseUserData(item.user_id)) {
+    return mockDelay({ ...item, ...payload, updated_at: new Date().toISOString() } as MealPlanItem);
+  }
+
+  const { data, error } = await supabase!
+    .from("user_meal_plan_items")
+    .update(payload)
+    .eq("id", item.id)
+    .eq("user_id", item.user_id)
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  if (item.food_log_id) {
+    const logUpdate = await supabase!
+      .from("food_logs")
+      .update({
+        meal_type: payload.meal_type,
+        quantity: payload.quantity,
+        calories: payload.calories,
+        protein_g: payload.protein_g,
+        carbs_g: payload.carbs_g,
+        fat_g: payload.fat_g,
+        notes: payload.notes
+      })
+      .eq("id", item.food_log_id)
+      .eq("user_id", item.user_id);
+    if (logUpdate.error) console.warn("S&S Gym could not sync the linked calorie log.", logUpdate.error.message);
+  }
+
+  return data as MealPlanItem;
+}
+
 export async function addCustomFoodLog(payload: Omit<FoodLog, "id">) {
-  if (!supabase) return mockDelay({ ...payload, id: crypto.randomUUID() } as FoodLog);
-  const { data, error } = await supabase.from("food_logs").insert(payload).select("*").single();
+  if (!canUseUserData(payload.user_id)) return mockDelay({ ...payload, id: crypto.randomUUID() } as FoodLog);
+  const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
   if (error) throw error;
   return data as FoodLog;
 }
@@ -421,7 +553,7 @@ export async function updateFoodLogQuantity(log: FoodLog, quantity: number) {
   };
   const macros = scaleFoodMacros(unit, quantity);
   if (!supabase) return mockDelay({ ...log, quantity, ...macros });
-  const { data, error } = await supabase
+  const { data, error } = await supabase!
     .from("food_logs")
     .update({ quantity, ...macros })
     .eq("id", log.id)
@@ -433,7 +565,7 @@ export async function updateFoodLogQuantity(log: FoodLog, quantity: number) {
 
 export async function deleteFoodLog(id: string) {
   if (!supabase) return mockDelay(true);
-  const { error } = await supabase.from("food_logs").delete().eq("id", id);
+  const { error } = await supabase!.from("food_logs").delete().eq("id", id);
   if (error) {
     console.warn("S&S Gym could not delete this food log.", error.message);
     throw error;
@@ -442,17 +574,17 @@ export async function deleteFoodLog(id: string) {
 }
 
 export async function copyYesterdaysMeals(userId: string) {
-  if (!supabase) return mockDelay<FoodLog[]>([]);
+  if (!canUseUserData(userId)) return mockDelay<FoodLog[]>([]);
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const { data, error } = await supabase.from("food_logs").select("*").eq("user_id", userId).eq("log_date", yesterday.toISOString().slice(0, 10));
+  const { data, error } = await supabase!.from("food_logs").select("*").eq("user_id", userId).eq("log_date", yesterday.toISOString().slice(0, 10));
   if (error) {
     console.warn("S&S Gym could not copy yesterday's meals.", error.message);
     return [];
   }
   const copies = (data ?? []).map(({ id: _id, created_at: _created, ...log }) => ({ ...log, log_date: todayIso() }));
   if (!copies.length) return [];
-  const inserted = await supabase.from("food_logs").insert(copies).select("*");
+  const inserted = await supabase!.from("food_logs").insert(copies).select("*");
   if (inserted.error) throw inserted.error;
   return inserted.data as FoodLog[];
 }
@@ -461,8 +593,8 @@ export async function getWorkoutCategories() {
   if (!supabase) return mockDelay(localWorkoutCategories());
 
   const [workoutResult, videoResult] = await Promise.all([
-    supabase.from("workouts").select("category,target_muscle,equipment").eq("is_global", true).limit(5000),
-    supabase.from("exercise_videos").select("category,category_type").eq("is_global", true).limit(5000)
+    supabase!.from("workouts").select("category,target_muscle,equipment").eq("is_global", true).limit(5000),
+    supabase!.from("exercise_videos").select("category,category_type").eq("is_global", true).limit(5000)
   ]);
 
   if (workoutResult.error || videoResult.error) {
@@ -499,7 +631,7 @@ export async function getWorkouts(
   const from = page * workoutPageSize;
   const to = from + workoutPageSize - 1;
 
-  let workoutRequest = supabase.from("workouts").select("*").eq("is_global", true).order("name").range(from, to);
+  let workoutRequest = supabase!.from("workouts").select("*").eq("is_global", true).order("name").range(from, to);
   if (selectedCategory) {
     workoutRequest = workoutRequest.or(`category.eq.${selectedCategory},target_muscle.eq.${selectedCategory},equipment.eq.${selectedCategory}`);
   } else if (query) {
@@ -507,7 +639,7 @@ export async function getWorkouts(
   }
   if (filters?.difficulty) workoutRequest = workoutRequest.eq("difficulty", filters.difficulty);
 
-  let videoRequest = supabase.from("exercise_videos").select("*").eq("is_global", true).order("exercise_name").range(from, to);
+  let videoRequest = supabase!.from("exercise_videos").select("*").eq("is_global", true).order("exercise_name").range(from, to);
   if (selectedCategory) videoRequest = videoRequest.eq("category", selectedCategory);
   if (query) videoRequest = videoRequest.ilike("exercise_name", `%${query}%`);
 
@@ -536,13 +668,13 @@ export async function getWorkout(id: string) {
   const local = localWorkouts("").find((workout) => workout.id === id) ?? sampleWorkouts[0];
   if (!supabase) return mockDelay(local);
 
-  const workoutResult = await supabase.from("workouts").select("*").eq("id", id).maybeSingle();
+  const workoutResult = await supabase!.from("workouts").select("*").eq("id", id).maybeSingle();
   if (workoutResult.error) {
     console.warn("S&S Gym could not load workout from workouts table.", workoutResult.error.message);
   }
   if (workoutResult.data) return workoutResult.data as Workout;
 
-  const videoResult = await supabase.from("exercise_videos").select("*").eq("id", id).maybeSingle();
+  const videoResult = await supabase!.from("exercise_videos").select("*").eq("id", id).maybeSingle();
   if (videoResult.error) {
     console.warn("S&S Gym could not load workout from exercise videos.", videoResult.error.message);
     return local;
@@ -552,7 +684,7 @@ export async function getWorkout(id: string) {
 
 export async function getExerciseVideos(query = "") {
   if (!supabase) return mockDelay(sampleExerciseVideos);
-  let request = supabase.from("exercise_videos").select("*").order("exercise_name").limit(100);
+  let request = supabase!.from("exercise_videos").select("*").order("exercise_name").limit(100);
   if (query) request = request.ilike("exercise_name", `%${query}%`);
   const { data, error } = await request;
   if (error) {
@@ -566,6 +698,7 @@ export async function startWorkoutSession(userId: string, workout: Workout) {
   const payload = {
     user_id: userId,
     workout_id: isUuid(workout.id) ? workout.id : null,
+    workout_category: workout.category || workout.target_muscle || "Workout",
     workout_name: workout.name,
     started_at: new Date().toISOString(),
     completed_at: null,
@@ -573,13 +706,19 @@ export async function startWorkoutSession(userId: string, workout: Workout) {
     notes: null,
     status: "started"
   };
-  if (!supabase) return mockDelay({ ...payload, id: crypto.randomUUID() } as WorkoutSession);
-  const { data, error } = await supabase.from("workout_sessions").insert(payload).select("*").single();
+  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: `mock-${crypto.randomUUID()}` } as WorkoutSession);
+  let { data, error } = await supabase!.from("workout_sessions").insert(payload).select("*").single();
+  if (error && isSchemaCompatibilityError(error)) {
+    const { workout_category: _category, ...compatiblePayload } = payload;
+    const compatible = await supabase!.from("workout_sessions").insert(compatiblePayload).select("*").single();
+    data = compatible.data;
+    error = compatible.error;
+  }
   if (error) {
     console.warn("S&S Gym could not start a Supabase workout session.", error.message);
     return { ...payload, id: crypto.randomUUID() } as WorkoutSession;
   }
-  return data as WorkoutSession;
+  return normalizeWorkoutSession(data as WorkoutSession);
 }
 
 export async function startWorkoutDaySession(userId: string, day: WorkoutPlanDaySession) {
@@ -589,6 +728,7 @@ export async function startWorkoutDaySession(userId: string, day: WorkoutPlanDay
     plan_id: day.plan_id,
     plan_day_id: day.id,
     workout_day_name: day.day_name,
+    workout_category: summarizeWorkoutCategory(day),
     workout_name: day.weekday ? `${day.day_name} - ${day.weekday}` : day.day_name,
     started_at: new Date().toISOString(),
     completed_at: null,
@@ -596,18 +736,24 @@ export async function startWorkoutDaySession(userId: string, day: WorkoutPlanDay
     notes: null,
     status: "started"
   };
-  if (!supabase) return mockDelay({ ...payload, id: crypto.randomUUID() } as WorkoutSession);
-  const { data, error } = await supabase.from("workout_sessions").insert(payload).select("*").single();
+  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: `mock-${crypto.randomUUID()}` } as WorkoutSession);
+  let { data, error } = await supabase!.from("workout_sessions").insert(payload).select("*").single();
+  if (error && isSchemaCompatibilityError(error)) {
+    const { workout_category: _category, ...compatiblePayload } = payload;
+    const compatible = await supabase!.from("workout_sessions").insert(compatiblePayload).select("*").single();
+    data = compatible.data;
+    error = compatible.error;
+  }
   if (error) {
     console.warn("S&S Gym could not start a workout day session.", error.message);
     throw error;
   }
-  return data as WorkoutSession;
+  return normalizeWorkoutSession(data as WorkoutSession);
 }
 
 export async function getOpenWorkoutDaySession(userId: string, planDayId: string) {
-  if (!supabase) return mockDelay<WorkoutSession | null>(null);
-  const { data, error } = await supabase
+  if (!canUseUserData(userId)) return mockDelay<WorkoutSession | null>(null);
+  const { data, error } = await supabase!
     .from("workout_sessions")
     .select("*")
     .eq("user_id", userId)
@@ -622,7 +768,7 @@ export async function getOpenWorkoutDaySession(userId: string, planDayId: string
     return null;
   }
 
-  return (data ?? null) as WorkoutSession | null;
+  return data ? normalizeWorkoutSession(data as WorkoutSession) : null;
 }
 
 export async function getOrStartWorkoutDaySession(userId: string, day: WorkoutPlanDaySession) {
@@ -632,8 +778,8 @@ export async function getOrStartWorkoutDaySession(userId: string, day: WorkoutPl
 }
 
 export async function getWorkoutSessionLogs(sessionId: string) {
-  if (!supabase) return mockDelay<ExerciseLog[]>([]);
-  const { data, error } = await supabase
+  if (!supabase || !isUuid(sessionId)) return mockDelay<ExerciseLog[]>([]);
+  const { data, error } = await supabase!
     .from("exercise_logs")
     .select("*")
     .eq("workout_session_id", sessionId)
@@ -648,8 +794,8 @@ export async function getWorkoutSessionLogs(sessionId: string) {
 }
 
 export async function updateWorkoutSessionDuration(sessionId: string, durationMinutes: number) {
-  if (!supabase) return mockDelay(true);
-  const { error } = await supabase
+  if (!supabase || !isUuid(sessionId)) return mockDelay(true);
+  const { error } = await supabase!
     .from("workout_sessions")
     .update({ duration_minutes: Math.max(0, durationMinutes) })
     .eq("id", sessionId)
@@ -663,6 +809,7 @@ export async function updateWorkoutSessionDuration(sessionId: string, durationMi
 export type WorkoutSetLogInput = {
   planExerciseId?: string | null;
   exerciseName: string;
+  exerciseCategory?: string | null;
   plannedSets?: number | null;
   plannedReps?: string | null;
   plannedRestSeconds?: number | null;
@@ -674,14 +821,15 @@ export type WorkoutSetLogInput = {
 };
 
 export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogInput[]) {
-  if (!supabase) return mockDelay(true);
-  const deleteResult = await supabase.from("exercise_logs").delete().eq("workout_session_id", sessionId);
+  if (!supabase || !isUuid(sessionId)) return mockDelay(true);
+  const deleteResult = await supabase!.from("exercise_logs").delete().eq("workout_session_id", sessionId);
   if (deleteResult.error) throw deleteResult.error;
 
   const rows = logs.map((log) => ({
     workout_session_id: sessionId,
     plan_exercise_id: log.planExerciseId ?? null,
     exercise_name: log.exerciseName,
+    exercise_category: log.exerciseCategory ?? null,
     planned_sets: log.plannedSets ?? null,
     planned_reps: log.plannedReps ?? null,
     planned_rest_seconds: log.plannedRestSeconds ?? null,
@@ -693,14 +841,19 @@ export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogI
   }));
 
   if (!rows.length) return true;
-  const { error } = await supabase.from("exercise_logs").insert(rows);
+  let { error } = await supabase!.from("exercise_logs").insert(rows);
+  if (error && isSchemaCompatibilityError(error)) {
+    const compatibleRows = rows.map(({ exercise_category: _category, ...row }) => row);
+    const compatible = await supabase!.from("exercise_logs").insert(compatibleRows);
+    error = compatible.error;
+  }
   if (error) throw error;
   return true;
 }
 
 export async function completeWorkoutSession(sessionId: string, notes: string, durationMinutes: number) {
-  if (!supabase) return mockDelay(true);
-  const { error } = await supabase
+  if (!supabase || !isUuid(sessionId)) return mockDelay(true);
+  const { error } = await supabase!
     .from("workout_sessions")
     .update({ status: "completed", completed_at: new Date().toISOString(), notes, duration_minutes: durationMinutes })
     .eq("id", sessionId);
@@ -711,41 +864,184 @@ export async function completeWorkoutSession(sessionId: string, notes: string, d
   return true;
 }
 
+export async function skipWorkoutDay(userId: string, day: SkipWorkoutDayInput, notes = "") {
+  const skippedAt = new Date().toISOString();
+  const existing = await getOpenWorkoutDaySession(userId, day.id);
+  const dayName = skipDayName(day);
+  const planId = skipDayPlanId(day);
+  const workoutName = day.weekday ? `${dayName} - ${day.weekday}` : dayName;
+
+  if (!canUseUserData(userId)) {
+    return mockDelay({
+      id: `mock-${crypto.randomUUID()}`,
+      user_id: userId,
+      workout_id: null,
+      plan_id: planId,
+      plan_day_id: day.id,
+      workout_day_name: dayName,
+      workout_category: summarizeWorkoutCategory(day),
+      workout_name: workoutName,
+      started_at: skippedAt,
+      completed_at: skippedAt,
+      skipped_at: skippedAt,
+      duration_minutes: 0,
+      notes: notes || null,
+      status: "skipped"
+    } as WorkoutSession);
+  }
+
+  if (existing) {
+    let { data, error } = await supabase!
+      .from("workout_sessions")
+      .update({
+        status: "skipped",
+        completed_at: skippedAt,
+        skipped_at: skippedAt,
+        duration_minutes: 0,
+        notes: notes || existing.notes || null
+      })
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+    if (error && isSchemaCompatibilityError(error)) {
+      const compatible = await supabase!
+        .from("workout_sessions")
+        .update({
+          status: "completed",
+          completed_at: skippedAt,
+          duration_minutes: 0,
+          notes: markSkippedNote(notes || existing.notes || "")
+        })
+        .eq("id", existing.id)
+        .select("*")
+        .single();
+      data = compatible.data;
+      error = compatible.error;
+    }
+    if (error) throw error;
+    return normalizeWorkoutSession(data as WorkoutSession);
+  }
+
+  const payload = {
+    user_id: userId,
+    workout_id: null,
+    plan_id: planId,
+    plan_day_id: day.id,
+    workout_day_name: dayName,
+    workout_category: summarizeWorkoutCategory(day),
+    workout_name: workoutName,
+    started_at: skippedAt,
+    completed_at: skippedAt,
+    skipped_at: skippedAt,
+    duration_minutes: 0,
+    notes: notes || null,
+    status: "skipped"
+  };
+
+  let { data, error } = await supabase!.from("workout_sessions").insert(payload).select("*").single();
+  if (error && isSchemaCompatibilityError(error)) {
+    const compatiblePayload = {
+      user_id: payload.user_id,
+      workout_id: payload.workout_id,
+      plan_id: payload.plan_id,
+      plan_day_id: payload.plan_day_id,
+      workout_day_name: payload.workout_day_name,
+      workout_name: payload.workout_name,
+      started_at: payload.started_at,
+      completed_at: payload.completed_at,
+      duration_minutes: payload.duration_minutes,
+      notes: markSkippedNote(notes),
+      status: "completed"
+    };
+    const compatible = await supabase!.from("workout_sessions").insert(compatiblePayload).select("*").single();
+    data = compatible.data;
+    error = compatible.error;
+  }
+  if (error) {
+    console.warn("S&S Gym could not skip this workout day.", error.message);
+    throw error;
+  }
+  return normalizeWorkoutSession(data as WorkoutSession);
+}
+
 export async function getWorkoutHistory(userId: string) {
-  if (!supabase) return mockDelay<WorkoutSession[]>([]);
-  const { data, error } = await supabase
+  if (!canUseUserData(userId)) return mockDelay<WorkoutSession[]>([]);
+  let { data, error } = await supabase!
     .from("workout_sessions")
     .select("*")
     .eq("user_id", userId)
+    .in("status", ["completed", "skipped"])
     .order("started_at", { ascending: false })
-    .limit(10);
+    .limit(20);
+  if (error && isSchemaCompatibilityError(error)) {
+    const compatible = await supabase!
+      .from("workout_sessions")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "completed")
+      .order("started_at", { ascending: false })
+      .limit(20);
+    data = compatible.data;
+    error = compatible.error;
+  }
   if (error) {
     console.warn("S&S Gym could not load workout history.", error.message);
     return [];
   }
-  return (data ?? []) as WorkoutSession[];
+  return ((data ?? []) as WorkoutSession[]).map(normalizeWorkoutSession);
 }
 
-export async function getWorkoutHistoryDetailed(userId: string) {
-  if (!supabase) return mockDelay<WorkoutSessionSummary[]>([]);
-  const { data, error } = await supabase
+export async function getWorkoutHistoryDetailed(userId: string, limit = 100) {
+  if (!canUseUserData(userId)) return mockDelay<WorkoutSessionSummary[]>([]);
+  const { data, error } = await supabase!
     .from("workout_sessions")
     .select("*, exercise_logs(*)")
     .eq("user_id", userId)
     .eq("status", "completed")
     .order("started_at", { ascending: false })
-    .limit(12);
+    .limit(limit);
   if (error) {
     console.warn("S&S Gym could not load workout history details.", error.message);
     return [];
   }
-  return ((data ?? []) as WorkoutSessionSummary[]).map((session) => ({
-    ...session,
-    exercise_logs: [...(session.exercise_logs ?? [])].sort((a, b) => {
+  return ((data ?? []) as WorkoutSessionSummary[])
+    .map((session) => ({
+      ...normalizeWorkoutSession(session),
+      exercise_logs: [...(session.exercise_logs ?? [])].sort((a, b) => {
       if (a.exercise_name !== b.exercise_name) return a.exercise_name.localeCompare(b.exercise_name);
       return a.set_number - b.set_number;
-    })
-  }));
+      })
+    }))
+    .filter((session) => session.status === "completed");
+}
+
+export async function getWorkoutActivity(userId: string, limit = 180) {
+  if (!canUseUserData(userId)) return mockDelay<WorkoutSession[]>([]);
+  let { data, error } = await supabase!
+    .from("workout_sessions")
+    .select("*")
+    .eq("user_id", userId)
+    .in("status", ["completed", "skipped"])
+    .order("started_at", { ascending: false })
+    .limit(limit);
+  if (error && isSchemaCompatibilityError(error)) {
+    const compatible = await supabase!
+      .from("workout_sessions")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "completed")
+      .order("started_at", { ascending: false })
+      .limit(limit);
+    data = compatible.data;
+    error = compatible.error;
+  }
+
+  if (error) {
+    console.warn("S&S Gym could not load workout activity.", error.message);
+    return [];
+  }
+
+  return ((data ?? []) as WorkoutSession[]).map(normalizeWorkoutSession);
 }
 
 export type WorkoutPlanDayInput = {
@@ -833,9 +1129,9 @@ function normalizeWorkoutPlan(plan: RawWorkoutPlan): UserWorkoutPlan {
 }
 
 export async function getActiveUserWorkoutPlan(userId: string) {
-  if (!supabase) return mockDelay<UserWorkoutPlan | null>(null);
+  if (!canUseUserData(userId)) return mockDelay<UserWorkoutPlan | null>(null);
 
-  const { data, error } = await supabase
+  const { data, error } = await supabase!
     .from("user_workout_plans")
     .select(
       "id,user_id,name,is_active,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))"
@@ -858,7 +1154,7 @@ export async function getActiveUserWorkoutPlan(userId: string) {
 export async function getUserWorkoutPlanDay(dayId: string) {
   if (!supabase) return mockDelay<WorkoutPlanDaySession | null>(null);
 
-  const { data, error } = await supabase
+  const { data, error } = await supabase!
     .from("user_workout_plan_days")
     .select(
       "id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes),user_workout_plans(id,user_id,name)"
@@ -906,11 +1202,11 @@ export async function createUserWorkoutPlan({
   if (!planName.trim()) throw new Error("Plan name is required.");
   if (!cleanDays.length) throw new Error("Add at least one weekday with one workout.");
 
-  if (!supabase) {
+  if (!canUseUserData(userId)) {
     return mockDelay({ id: crypto.randomUUID(), name: planName, days: cleanDays });
   }
 
-  const inactiveResult = await supabase
+  const inactiveResult = await supabase!
     .from("user_workout_plans")
     .update({ is_active: false })
     .eq("user_id", userId)
@@ -918,7 +1214,7 @@ export async function createUserWorkoutPlan({
 
   if (inactiveResult.error) throw inactiveResult.error;
 
-  const { data: plan, error: planError } = await supabase
+  const { data: plan, error: planError } = await supabase!
     .from("user_workout_plans")
     .insert({ user_id: userId, name: planName.trim(), is_active: true })
     .select("id")
@@ -928,7 +1224,7 @@ export async function createUserWorkoutPlan({
 
   for (let dayIndex = 0; dayIndex < cleanDays.length; dayIndex += 1) {
     const day = cleanDays[dayIndex];
-    const { data: savedDay, error: dayError } = await supabase
+    const { data: savedDay, error: dayError } = await supabase!
       .from("user_workout_plan_days")
       .insert({
         plan_id: plan.id,
@@ -959,7 +1255,7 @@ export async function createUserWorkoutPlan({
       notes: looksLikeUrl(workout.notes) ? null : workout.notes
     }));
 
-    const { error: exercisesError } = await supabase.from("user_workout_plan_exercises").insert(exerciseRows);
+    const { error: exercisesError } = await supabase!.from("user_workout_plan_exercises").insert(exerciseRows);
     if (exercisesError) throw exercisesError;
   }
 
@@ -972,22 +1268,22 @@ export function workoutsFromPlanDay(day: UserWorkoutPlan["days"][number] | null 
 
 
 export async function saveOnboarding(answers: OnboardingAnswers) {
-  if (!supabase) return mockDelay(answers);
-  const { data, error } = await supabase.from("onboarding_answers").upsert(answers, { onConflict: "user_id" }).select("*").single();
+  if (!canUseUserData(answers.user_id)) return mockDelay(answers);
+  const { data, error } = await supabase!.from("onboarding_answers").upsert(answers, { onConflict: "user_id" }).select("*").single();
   if (error) throw error;
   return data as OnboardingAnswers;
 }
 
 export async function getOnboarding(userId: string) {
-  if (!supabase) return mockDelay<OnboardingAnswers | null>(null);
-  const { data, error } = await supabase.from("onboarding_answers").select("*").eq("user_id", userId).maybeSingle();
+  if (!canUseUserData(userId)) return mockDelay<OnboardingAnswers | null>(null);
+  const { data, error } = await supabase!.from("onboarding_answers").select("*").eq("user_id", userId).maybeSingle();
   if (error) throw error;
   return data as OnboardingAnswers | null;
 }
 
 export async function getProgressEntries(userId: string) {
-  if (!supabase) return mockDelay<ProgressEntry[]>([]);
-  const { data, error } = await supabase
+  if (!canUseUserData(userId)) return mockDelay<ProgressEntry[]>([]);
+  const { data, error } = await supabase!
     .from("progress_entries")
     .select("*")
     .eq("user_id", userId)
@@ -996,7 +1292,45 @@ export async function getProgressEntries(userId: string) {
     console.warn("S&S Gym could not load progress entries.", error.message);
     return [];
   }
-  return (data ?? []) as ProgressEntry[];
+
+  const entries = (data ?? []) as ProgressEntry[];
+  if (!entries.length) return [];
+
+  const { data: measurements, error: measurementError } = await supabase!
+    .from("body_measurements")
+    .select("*")
+    .eq("user_id", userId)
+    .order("measured_at", { ascending: true });
+
+  if (measurementError) {
+    console.warn("S&S Gym could not load body measurements.", measurementError.message);
+    return entries;
+  }
+
+  const byProgressId = new Map<string, BodyMeasurement>();
+  (measurements ?? []).forEach((measurement) => {
+    if (measurement.progress_entry_id) byProgressId.set(measurement.progress_entry_id, measurement as BodyMeasurement);
+  });
+
+  return entries.map((entry) => ({
+    ...entry,
+    measurements: byProgressId.get(entry.id) ?? null
+  }));
+}
+
+export async function updateProfile(userId: string, patch: { fullName: string }) {
+  const payload = { full_name: patch.fullName.trim(), updated_at: new Date().toISOString() };
+  if (!payload.full_name) throw new Error("Enter your name before saving.");
+  if (!canUseUserData(userId)) return mockDelay({ id: userId, ...payload } as Profile);
+
+  const { data, error } = await supabase!
+    .from("profiles")
+    .update(payload)
+    .eq("id", userId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as Profile;
 }
 
 export async function addProgressEntry(
@@ -1004,10 +1338,27 @@ export async function addProgressEntry(
   photos?: File[],
   measurements?: Record<string, number | null>
 ) {
-  if (!supabase) return mockDelay({ ...entry, id: crypto.randomUUID() } as ProgressEntry);
-  const client = supabase;
+  if (!canUseUserData(entry.user_id)) {
+    return mockDelay({
+      ...entry,
+      id: crypto.randomUUID(),
+      measurements: measurements
+        ? ({
+            id: crypto.randomUUID(),
+            user_id: entry.user_id,
+            progress_entry_id: null,
+            measured_at: entry.entry_date,
+            waist_cm: entry.waist_cm,
+            created_at: new Date().toISOString(),
+            ...measurements
+          } as BodyMeasurement)
+        : null
+    } as ProgressEntry);
+  }
+  const client = supabase!;
   const { data, error } = await client.from("progress_entries").insert(entry).select("*").single();
   if (error) throw error;
+  let savedMeasurement: BodyMeasurement | null = null;
 
   if (photos?.length) {
     await Promise.all(
@@ -1026,16 +1377,22 @@ export async function addProgressEntry(
   }
 
   if (measurements && Object.values(measurements).some((value) => value !== null)) {
-    const { error: measurementError } = await client.from("body_measurements").insert({
-      user_id: entry.user_id,
-      progress_entry_id: data.id,
-      measured_at: entry.entry_date,
-      ...measurements
-    });
+    const { data: measurementData, error: measurementError } = await client
+      .from("body_measurements")
+      .insert({
+        user_id: entry.user_id,
+        progress_entry_id: data.id,
+        measured_at: entry.entry_date,
+        waist_cm: entry.waist_cm,
+        ...measurements
+      })
+      .select("*")
+      .single();
     if (measurementError) throw measurementError;
+    savedMeasurement = measurementData as BodyMeasurement;
   }
 
-  return data as ProgressEntry;
+  return { ...(data as ProgressEntry), measurements: savedMeasurement };
 }
 
 export async function getWelcomeSettings(userId: string): Promise<WelcomeSettings> {
@@ -1044,11 +1401,11 @@ export async function getWelcomeSettings(userId: string): Promise<WelcomeSetting
     show_frequency: "once_per_day",
     default_message: "Welcome back to S&S Gym. Ready for today?"
   };
-  if (!supabase) return fallback;
+  if (!canUseUserData(userId)) return fallback;
 
   const [settingsResult, customResult] = await Promise.all([
-    supabase.from("admin_settings").select("value").eq("key", "welcome_settings").maybeSingle(),
-    supabase.from("user_welcome_messages").select("message,popup_enabled,show_frequency").eq("user_id", userId).eq("is_active", true).maybeSingle()
+    supabase!.from("admin_settings").select("value").eq("key", "welcome_settings").maybeSingle(),
+    supabase!.from("user_welcome_messages").select("message,popup_enabled,show_frequency").eq("user_id", userId).eq("is_active", true).maybeSingle()
   ]);
 
   if (settingsResult.error || customResult.error) {
@@ -1077,7 +1434,7 @@ export async function adminUpsertWelcomeMessage(payload: {
   show_frequency: "every_login" | "once_per_day";
 }) {
   if (!supabase) return mockDelay(payload);
-  const { data, error } = await supabase.from("user_welcome_messages").upsert({ ...payload, is_active: true }, { onConflict: "user_id" }).select("*").single();
+  const { data, error } = await supabase!.from("user_welcome_messages").upsert({ ...payload, is_active: true }, { onConflict: "user_id" }).select("*").single();
   if (error) throw error;
   return data;
 }
@@ -1088,7 +1445,7 @@ export async function adminListUsers() {
       { id: "mock-user", email: "member@ssgym.test", full_name: "S&S Gym Member", role: "admin" }
     ]);
   }
-  const { data, error } = await supabase.from("profiles").select("id,email,full_name,role,created_at").order("created_at", { ascending: false });
+  const { data, error } = await supabase!.from("profiles").select("id,email,full_name,role,created_at").order("created_at", { ascending: false });
   if (error) {
     console.warn("S&S Gym could not load admin users.", error.message);
     return [];
@@ -1098,14 +1455,14 @@ export async function adminListUsers() {
 
 export async function adminUpdateUserRole(userId: string, role: "member" | "admin") {
   if (!supabase) return mockDelay(true);
-  const { error } = await supabase.from("profiles").update({ role }).eq("id", userId);
+  const { error } = await supabase!.from("profiles").update({ role }).eq("id", userId);
   if (error) throw error;
   return true;
 }
 
 export async function adminUpsertGlobalFood(food: Partial<FoodItem>) {
   if (!supabase) return mockDelay(food);
-  const { data, error } = await supabase
+  const { data, error } = await supabase!
     .from("food_items")
     .upsert({ ...food, is_global: true, is_editable_by_user: false, cuisine: food.cuisine ?? "Egyptian" })
     .select("*")
@@ -1116,21 +1473,21 @@ export async function adminUpsertGlobalFood(food: Partial<FoodItem>) {
 
 export async function adminUpsertWorkout(workout: Partial<Workout>) {
   if (!supabase) return mockDelay(workout);
-  const { data, error } = await supabase.from("workouts").upsert({ ...workout, is_global: true }).select("*").single();
+  const { data, error } = await supabase!.from("workouts").upsert({ ...workout, is_global: true }).select("*").single();
   if (error) throw error;
   return data as Workout;
 }
 
 export async function adminUpsertExerciseVideo(video: Partial<ExerciseVideo>) {
   if (!supabase) return mockDelay(video);
-  const { data, error } = await supabase.from("exercise_videos").upsert({ ...video, is_global: true }).select("*").single();
+  const { data, error } = await supabase!.from("exercise_videos").upsert({ ...video, is_global: true }).select("*").single();
   if (error) throw error;
   return data as ExerciseVideo;
 }
 
 export async function adminUpdateWelcomeSettings(settings: WelcomeSettings) {
   if (!supabase) return mockDelay(settings);
-  const { data, error } = await supabase
+  const { data, error } = await supabase!
     .from("admin_settings")
     .upsert({ key: "welcome_settings", value: settings }, { onConflict: "key" })
     .select("*")
@@ -1141,9 +1498,9 @@ export async function adminUpdateWelcomeSettings(settings: WelcomeSettings) {
 
 export async function adminImportExerciseVideos(rows: Omit<ExerciseVideo, "id" | "is_global">[]) {
   if (!supabase) return mockDelay(rows.length);
-  const importResult = await supabase.from("workout_video_imports").insert({ imported_count: rows.length, status: "queued" }).select("id").single();
+  const importResult = await supabase!.from("workout_video_imports").insert({ imported_count: rows.length, status: "queued" }).select("id").single();
   if (importResult.error) throw importResult.error;
-  const { error } = await supabase.from("exercise_videos").upsert(
+  const { error } = await supabase!.from("exercise_videos").upsert(
     rows.map((row) => ({
       ...row,
       is_global: true,
@@ -1152,6 +1509,6 @@ export async function adminImportExerciseVideos(rows: Omit<ExerciseVideo, "id" |
     { onConflict: "exercise_name,category_type,category" }
   );
   if (error) throw error;
-  await supabase.from("workout_video_imports").update({ status: "completed" }).eq("id", importResult.data.id);
+  await supabase!.from("workout_video_imports").update({ status: "completed" }).eq("id", importResult.data.id);
   return rows.length;
 }

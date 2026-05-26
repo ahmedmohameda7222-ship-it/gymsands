@@ -4,17 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export default function AdminSettingsPage() {
   return (
     <>
-      <PageHeading title="Admin Settings" description="Review important S&S Gym deployment and privacy settings." />
+      <PageHeading title="Admin Settings" description="Review app privacy and member experience settings." />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Deployment</CardTitle>
+            <CardTitle>App readiness</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>Netlify build command: npm run build</p>
-            <p>Publish directory: .next</p>
-            <p>Framework preset: Next.js</p>
-            <p>NEXT_PUBLIC_USE_MOCK_AUTH=false for real Supabase auth.</p>
+            <p>Member dashboards are private.</p>
+            <p>Meal, workout, profile, and progress areas are connected across the app.</p>
+            <p>Use the admin pages to keep library content polished.</p>
           </CardContent>
         </Card>
         <Card>
@@ -22,9 +21,9 @@ export default function AdminSettingsPage() {
             <CardTitle>Privacy</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>Passwords are handled by Supabase Auth and are never stored in app tables.</p>
-            <p>Progress photos are stored in a protected Supabase Storage bucket.</p>
-            <p>Users can only access their own private logs through RLS policies.</p>
+            <p>Passwords are never visible to admins.</p>
+            <p>Members can only see their own logs and progress.</p>
+            <p>Keep health and nutrition guidance general and supportive.</p>
           </CardContent>
         </Card>
       </div>

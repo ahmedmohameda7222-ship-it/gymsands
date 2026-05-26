@@ -1,57 +1,108 @@
 "use client";
 
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, Bar, BarChart } from "recharts";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { ProgressEntry } from "@/types";
+import type { ProgressEntry, WorkoutSession } from "@/types";
 
-export function ProgressCharts({ entries }: { entries: ProgressEntry[] }) {
-  const data = entries.length
-    ? entries.map((entry) => ({
-        date: entry.entry_date.slice(5),
-        weight: entry.body_weight_kg,
-        waist: entry.waist_cm
-      }))
-    : [
-        { date: "W1", weight: 78, waist: 88 },
-        { date: "W2", weight: 77.8, waist: 87.5 },
-        { date: "W3", weight: 77.4, waist: 87 },
-        { date: "W4", weight: 77.1, waist: 86.5 }
-      ];
+export function ProgressCharts({
+  entries,
+  workoutActivity = []
+}: {
+  entries: ProgressEntry[];
+  workoutActivity?: WorkoutSession[];
+}) {
+  const progressData = entries.map((entry) => ({
+    date: formatShortDate(entry.entry_date),
+    weight: toNumberOrNull(entry.body_weight_kg),
+    waist: toNumberOrNull(entry.measurements?.waist_cm ?? entry.waist_cm),
+    hips: toNumberOrNull(entry.measurements?.hips_cm),
+    chest: toNumberOrNull(entry.measurements?.chest_cm)
+  }));
+
+  const workoutData = buildWorkoutData(workoutActivity);
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Body weight</CardTitle>
+          <CardTitle>Body changes</CardTitle>
         </CardHeader>
-        <CardContent className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="date" tickLine={false} axisLine={false} />
-              <YAxis tickLine={false} axisLine={false} width={35} />
-              <Tooltip />
-              <Line dataKey="weight" stroke="#0284c7" strokeWidth={3} dot={{ r: 4 }} />
-            </LineChart>
-          </ResponsiveContainer>
+        <CardContent className="h-72">
+          {progressData.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={progressData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} width={35} />
+                <Tooltip />
+                <Line dataKey="weight" name="Weight kg" stroke="#0284c7" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+                <Line dataKey="waist" name="Waist cm" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+                <Line dataKey="hips" name="Hips cm" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+                <Line dataKey="chest" name="Chest cm" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyChartText text="Add progress entries to compare weight and measurements over time." />
+          )}
         </CardContent>
       </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Workout consistency</CardTitle>
         </CardHeader>
-        <CardContent className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={[{ week: "W1", done: 3 }, { week: "W2", done: 4 }, { week: "W3", done: 3 }, { week: "W4", done: 5 }]}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="week" tickLine={false} axisLine={false} />
-              <YAxis tickLine={false} axisLine={false} width={30} />
-              <Tooltip />
-              <Bar dataKey="done" fill="#0284c7" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+        <CardContent className="h-72">
+          {workoutData.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={workoutData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} width={30} allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="completed" name="Completed" fill="#10b981" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="skipped" name="Skipped" fill="#f59e0b" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyChartText text="Complete or skip workouts to see daily consistency." />
+          )}
         </CardContent>
       </Card>
     </div>
   );
+}
+
+function EmptyChartText({ text }: { text: string }) {
+  return (
+    <div className="flex h-full items-center justify-center rounded-md bg-slate-50 p-4 text-center text-sm text-muted-foreground">
+      {text}
+    </div>
+  );
+}
+
+function buildWorkoutData(activity: WorkoutSession[]) {
+  const byDate = new Map<string, { date: string; completed: number; skipped: number }>();
+  activity.forEach((session) => {
+    const key = (session.completed_at || session.skipped_at || session.started_at || "").slice(0, 10);
+    if (!key) return;
+    const current = byDate.get(key) ?? { date: formatShortDate(key), completed: 0, skipped: 0 };
+    if (session.status === "completed") current.completed += 1;
+    if (session.status === "skipped") current.skipped += 1;
+    byDate.set(key, current);
+  });
+  return Array.from(byDate.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, value]) => value);
+}
+
+function formatShortDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function toNumberOrNull(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }

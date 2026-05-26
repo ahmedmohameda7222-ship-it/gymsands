@@ -14,7 +14,7 @@ import { supabase, setRememberSession } from "@/lib/supabase/client";
 async function withAuthTimeout<T>(request: Promise<T>) {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error("Supabase took too long to respond. Please try again in a moment.")), 15000);
+    timeoutId = setTimeout(() => reject(new Error("The request took too long. Please try again in a moment.")), 15000);
   });
   try {
     return await Promise.race([request, timeout]);
@@ -45,7 +45,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
 
     try {
       if (!supabase) {
-        toast({ title: "Demo mode", description: "Add Supabase variables in Netlify to enable real authentication." });
+        toast({ title: "Welcome", description: "You can continue to the dashboard." });
         router.push("/dashboard");
         return;
       }
@@ -53,7 +53,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       if (mode === "login") {
         const { data, error } = await withAuthTimeout(supabase.auth.signInWithPassword({ email, password }));
         if (error) throw error;
-        if (!data.session) throw new Error("Login succeeded but Supabase did not return a session. Check email confirmation settings.");
+        if (!data.session) throw new Error("Login could not finish. Please try again.");
         toast({ title: "Welcome back to S&S Gym", description: "Your session is ready." });
         router.replace(searchParams.get("next") ?? "/dashboard");
         router.refresh();
@@ -86,7 +86,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   async function handlePasswordReset() {
     const targetEmail = resetEmail || email;
     if (!targetEmail.trim()) return toast({ title: "Email is required", description: "Enter your S&S Gym account email first." });
-    if (!supabase) return toast({ title: "Supabase required", description: "Password reset works after Netlify Supabase variables are added." });
+    if (!supabase) return toast({ title: "Password reset unavailable", description: "Please try again later." });
     const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
       redirectTo: `${window.location.origin}/profile`
     });

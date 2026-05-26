@@ -6,9 +6,12 @@ import { motion } from "framer-motion";
 import {
   BarChart3,
   ClipboardList,
+  CalendarCheck,
   Dumbbell,
+  History,
   Home,
   LogOut,
+  Menu,
   Settings,
   Shield,
   Soup,
@@ -18,6 +21,7 @@ import {
 } from "lucide-react";
 import { Brand } from "@/components/layout/brand";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { cn } from "@/lib/utils";
 
@@ -27,16 +31,10 @@ const navItems = [
   { href: "/meals", label: "Meals", icon: Soup },
   { href: "/calories", label: "Calories", icon: Utensils },
   { href: "/workouts", label: "Workouts", icon: Dumbbell },
+  { href: "/my-workout", label: "My Workout", icon: CalendarCheck },
+  { href: "/workout-history", label: "Workout History", icon: History },
   { href: "/progress", label: "Progress", icon: BarChart3 },
   { href: "/profile", label: "Profile", icon: User }
-];
-
-const mobileNavItems = [
-  { href: "/dashboard", label: "Dashboard", icon: Home },
-  { href: "/my-meal-plan", label: "Meal Plan", icon: ClipboardList },
-  { href: "/calories", label: "Calories", icon: Utensils },
-  { href: "/workouts", label: "Workouts", icon: Dumbbell },
-  { href: "/progress", label: "Progress", icon: BarChart3 }
 ];
 
 const adminItems = [
@@ -51,7 +49,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { profile, isAdmin, signOut } = useAuth();
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20 lg:pb-0">
+    <div className="min-h-screen bg-slate-50">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r bg-white lg:flex lg:flex-col">
         <div className="flex h-20 items-center px-6">
           <Brand href="/dashboard" />
@@ -81,12 +79,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <header className="sticky top-0 z-30 border-b bg-white/90 backdrop-blur lg:ml-72">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Brand href="/dashboard" className="lg:hidden" />
-          <div className="hidden lg:block">
-            <p className="text-sm text-muted-foreground">S&S Gym private dashboard</p>
-            <h1 className="text-lg font-semibold">Simple tracking for real life</h1>
+          <div className="flex items-center gap-3 lg:hidden">
+            <MobileMenu pathname={pathname} isAdmin={isAdmin} signOut={signOut} />
+            <Brand href="/dashboard" />
           </div>
-          <Button variant="outline" size="sm" onClick={signOut}>
+          <div className="hidden lg:block">
+            <p className="text-sm text-muted-foreground">S&S Gym</p>
+            <h1 className="text-lg font-semibold">Training, meals, and progress</h1>
+          </div>
+          <Button variant="outline" size="sm" onClick={signOut} className="hidden lg:inline-flex">
             <LogOut className="h-4 w-4" />
             Logout
           </Button>
@@ -104,29 +105,57 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </motion.div>
       </main>
+    </div>
+  );
+}
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t bg-white lg:hidden">
-        <div className="grid grid-cols-5">
-          {mobileNavItems.map((item) => {
-            const Icon = item.icon;
+function MobileMenu({
+  pathname,
+  isAdmin,
+  signOut
+}: {
+  pathname: string;
+  isAdmin: boolean;
+  signOut: () => Promise<void>;
+}) {
+  const items = isAdmin ? [...navItems, ...adminItems] : navItems;
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="icon" aria-label="Open navigation menu">
+          <Menu className="h-5 w-5" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="left-3 top-3 max-h-[calc(100vh-1.5rem)] w-[calc(100vw-1.5rem)] max-w-sm translate-x-0 translate-y-0 p-4">
+        <DialogHeader>
+          <DialogTitle>Menu</DialogTitle>
+        </DialogHeader>
+        <nav className="grid gap-2">
+          {items.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const Icon = item.icon;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-medium",
-                  active ? "text-primary" : "text-slate-500"
-                )}
-              >
-                <Icon className="h-5 w-5" />
-                <span>{item.label}</span>
-              </Link>
+              <DialogClose key={item.href} asChild>
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium transition",
+                    active ? "bg-blue-50 text-primary" : "text-slate-700 hover:bg-blue-50 hover:text-primary"
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              </DialogClose>
             );
           })}
-        </div>
-      </nav>
-    </div>
+        </nav>
+        <Button variant="outline" className="mt-3 w-full justify-start" onClick={signOut}>
+          <LogOut className="h-4 w-4" />
+          Logout
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }
 

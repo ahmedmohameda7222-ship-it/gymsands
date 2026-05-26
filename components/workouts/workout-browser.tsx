@@ -33,7 +33,7 @@ export function WorkoutBrowser() {
         setCategories([]);
         toast({
           title: "Could not load workout categories",
-          description: error instanceof Error ? error.message : "Please check Supabase setup."
+          description: error instanceof Error ? error.message : "Please try again."
         });
       });
   }, [toast]);

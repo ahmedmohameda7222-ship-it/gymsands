@@ -1,13 +1,14 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, PlusCircle, Trash2, Utensils } from "lucide-react";
-import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
+import { AlertTriangle, CheckCircle2, Edit3, PlusCircle, Save, Trash2, Utensils, X } from "lucide-react";
+import { Component, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth/auth-provider";
 import { FoodBrowser } from "@/components/meals/food-browser";
-import { deleteMealPlanItem, getTodayMealPlanItems, markMealPlanItemDone, mealTypes } from "@/services/database/repository";
+import { deleteMealPlanItem, getTodayMealPlanItems, markMealPlanItemDone, mealTypes, updateMealPlanItem } from "@/services/database/repository";
 import type { MealPlanItem, MealType } from "@/types";
 
 type MacroTotals = {
@@ -83,6 +84,9 @@ function MyMealPlanBuilderInner() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
   const [showFoodPicker, setShowFoodPicker] = useState(false);
+  const [pickerMealType, setPickerMealType] = useState<MealType>("Breakfast");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ mealType: "Breakfast" as MealType, quantity: "1", notes: "" });
   const [notice, setNotice] = useState<Notice | null>(null);
 
   useEffect(() => {
@@ -106,7 +110,7 @@ function MyMealPlanBuilderInner() {
         setNotice({
           type: "error",
           title: "Saved meal plan could not load",
-          description: error instanceof Error ? error.message : "Run the latest meal-plan SQL migration."
+          description: error instanceof Error ? error.message : "Please try again."
         });
       } finally {
         if (active) setIsLoading(false);
@@ -141,7 +145,7 @@ function MyMealPlanBuilderInner() {
       setNotice({
         type: "error",
         title: "Could not mark meal done",
-        description: error instanceof Error ? error.message : "Please run the latest Supabase SQL migration and try again."
+        description: error instanceof Error ? error.message : "Please try again."
       });
     } finally {
       setIsUpdatingId(null);
@@ -157,6 +161,44 @@ function MyMealPlanBuilderInner() {
       setNotice({ title: "Meal removed", type: "success", description: item.status === "done" ? "Linked calorie log was removed too." : "Planned meal was removed." });
     } catch (error) {
       setNotice({ title: "Could not remove meal", type: "error", description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      setIsUpdatingId(null);
+    }
+  }
+
+  function openFoodPicker(type: MealType = "Breakfast") {
+    setPickerMealType(type);
+    setShowFoodPicker(true);
+  }
+
+  function startEditing(item: MealPlanItem) {
+    setEditingId(item.id);
+    setEditDraft({
+      mealType: normalizeMealType(item.meal_type),
+      quantity: String(item.quantity || 1),
+      notes: item.notes ?? ""
+    });
+  }
+
+  async function saveEdit(item: MealPlanItem) {
+    const quantity = Number(editDraft.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setNotice({ title: "Check quantity", type: "error", description: "Quantity must be greater than zero." });
+      return;
+    }
+
+    try {
+      setIsUpdatingId(item.id);
+      const updated = await updateMealPlanItem(item, {
+        mealType: normalizeMealType(editDraft.mealType),
+        quantity,
+        notes: editDraft.notes.trim() || null
+      });
+      setItems((current) => current.map((currentItem) => (currentItem.id === item.id ? normalizeMealPlanItem(updated) : currentItem)));
+      setEditingId(null);
+      setNotice({ title: "Meal updated", type: "success", description: `${updated.food_name} is now in ${updated.meal_type}.` });
+    } catch (error) {
+      setNotice({ title: "Could not update meal", type: "error", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
       setIsUpdatingId(null);
     }
@@ -186,7 +228,7 @@ function MyMealPlanBuilderInner() {
           <h2 className="text-lg font-semibold">Today's meals</h2>
           <p className="text-sm text-muted-foreground">Planned food counts only after you press Mark done.</p>
         </div>
-        <Button type="button" onClick={() => setShowFoodPicker((current) => !current)}>
+        <Button type="button" onClick={() => (showFoodPicker ? setShowFoodPicker(false) : openFoodPicker("Breakfast"))}>
           <PlusCircle className="h-4 w-4" />
           {showFoodPicker ? "Hide food picker" : "Add food"}
         </Button>
@@ -196,7 +238,21 @@ function MyMealPlanBuilderInner() {
 
       <div className="grid gap-4 xl:grid-cols-4">
         {mealTypes.map((type) => (
-          <MealColumn key={type} type={type} items={items.filter((item) => item.meal_type === type)} onDone={markDone} onDelete={removeItem} updatingId={isUpdatingId} />
+          <MealColumn
+            key={type}
+            type={type}
+            items={items.filter((item) => item.meal_type === type)}
+            onAdd={() => openFoodPicker(type)}
+            onDone={markDone}
+            onDelete={removeItem}
+            onStartEdit={startEditing}
+            onSaveEdit={saveEdit}
+            onCancelEdit={() => setEditingId(null)}
+            editingId={editingId}
+            editDraft={editDraft}
+            setEditDraft={setEditDraft}
+            updatingId={isUpdatingId}
+          />
         ))}
       </div>
 
@@ -205,12 +261,11 @@ function MyMealPlanBuilderInner() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <PlusCircle className="h-5 w-5" />
-              Add food to My Meal Plan
+              Add food to {displayMealType(pickerMealType)}
             </CardTitle>
-            <p className="text-sm text-muted-foreground">Choose Breakfast, Lunch, Snack, or Dinner before adding food.</p>
           </CardHeader>
           <CardContent>
-            <FoodBrowser onPlanAdded={addPlannedItem} />
+            <FoodBrowser key={pickerMealType} onPlanAdded={addPlannedItem} defaultMealType={pickerMealType} />
           </CardContent>
         </Card>
       ) : null}
@@ -235,14 +290,28 @@ function SummaryCard({ label, value, detail, suffix = " kcal" }: { label: string
 function MealColumn({
   type,
   items,
+  onAdd,
   onDone,
   onDelete,
+  onStartEdit,
+  onSaveEdit,
+  onCancelEdit,
+  editingId,
+  editDraft,
+  setEditDraft,
   updatingId
 }: {
   type: MealType;
   items: MealPlanItem[];
+  onAdd: () => void;
   onDone: (item: MealPlanItem) => void;
   onDelete: (item: MealPlanItem) => void;
+  onStartEdit: (item: MealPlanItem) => void;
+  onSaveEdit: (item: MealPlanItem) => void;
+  onCancelEdit: () => void;
+  editingId: string | null;
+  editDraft: { mealType: MealType; quantity: string; notes: string };
+  setEditDraft: Dispatch<SetStateAction<{ mealType: MealType; quantity: string; notes: string }>>;
   updatingId: string | null;
 }) {
   const totals = items.reduce(
@@ -257,34 +326,84 @@ function MealColumn({
     <Card className="h-full">
       <CardHeader>
         <CardTitle className="flex items-center justify-between gap-2 text-base">
-          <span className="flex items-center gap-2"><Utensils className="h-4 w-4" /> {type}</span>
-          <Badge variant="outline">{items.length}</Badge>
+          <span className="flex items-center gap-2"><Utensils className="h-4 w-4" /> {displayMealType(type)}</span>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">{items.length}</Badge>
+            <Button type="button" size="icon" variant="ghost" onClick={onAdd} aria-label={`Add food to ${displayMealType(type)}`}>
+              <PlusCircle className="h-4 w-4" />
+            </Button>
+          </div>
         </CardTitle>
         <p className="text-xs text-muted-foreground">{Math.round(totals.calories)} kcal | {Math.round(totals.protein_g)}g protein</p>
       </CardHeader>
       <CardContent className="space-y-3">
         {!items.length ? <p className="text-sm text-muted-foreground">No food planned yet.</p> : null}
-        {items.map((item) => (
-          <div key={item.id} className="rounded-md border bg-white p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="font-semibold leading-5">{item.food_name}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{item.quantity}x {item.serving_size}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{Math.round(toNumber(item.calories))} kcal | {Math.round(toNumber(item.protein_g))}g protein</p>
+        {items.map((item) => {
+          const isEditing = editingId === item.id;
+          return (
+            <div key={item.id} className="rounded-md border bg-white p-3 transition hover:-translate-y-0.5 hover:shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold leading-5">{item.food_name}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.quantity}x {item.serving_size}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{Math.round(toNumber(item.calories))} kcal | {Math.round(toNumber(item.protein_g))}g protein</p>
+                </div>
+                <Badge variant={item.status === "done" ? "success" : "outline"}>{item.status}</Badge>
               </div>
-              <Badge variant={item.status === "done" ? "success" : "outline"}>{item.status}</Badge>
+
+              {isEditing ? (
+                <div className="mt-3 grid gap-2">
+                  <select
+                    value={editDraft.mealType}
+                    onChange={(event) => setEditDraft((current) => ({ ...current, mealType: normalizeMealType(event.target.value) }))}
+                    className="h-10 rounded-md border bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    aria-label="Meal type"
+                  >
+                    {mealTypes.map((mealType) => (
+                      <option key={mealType} value={mealType}>{displayMealType(mealType)}</option>
+                    ))}
+                  </select>
+                  <Input
+                    type="number"
+                    min="0.1"
+                    step="0.1"
+                    value={editDraft.quantity}
+                    onChange={(event) => setEditDraft((current) => ({ ...current, quantity: event.target.value }))}
+                    aria-label="Meal quantity"
+                  />
+                  <Input
+                    value={editDraft.notes}
+                    onChange={(event) => setEditDraft((current) => ({ ...current, notes: event.target.value }))}
+                    placeholder="Notes"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button type="button" size="sm" onClick={() => onSaveEdit(item)} disabled={updatingId === item.id}>
+                      <Save className="h-4 w-4" />
+                      Save
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={onCancelEdit}>
+                      <X className="h-4 w-4" />
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 grid grid-cols-[1fr_auto_auto] gap-2">
+                  <Button type="button" size="sm" onClick={() => onDone(item)} disabled={item.status === "done" || updatingId === item.id}>
+                    <CheckCircle2 className="h-4 w-4" />
+                    {item.status === "done" ? "Done" : "Mark done"}
+                  </Button>
+                  <Button type="button" size="icon" variant="ghost" onClick={() => onStartEdit(item)} disabled={updatingId === item.id} aria-label={`Edit ${item.food_name}`}>
+                    <Edit3 className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" size="icon" variant="ghost" onClick={() => onDelete(item)} disabled={updatingId === item.id} aria-label={`Remove ${item.food_name}`}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
-            <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-              <Button type="button" size="sm" onClick={() => onDone(item)} disabled={item.status === "done" || updatingId === item.id}>
-                <CheckCircle2 className="h-4 w-4" />
-                {item.status === "done" ? "Done" : "Mark done"}
-              </Button>
-              <Button type="button" size="icon" variant="ghost" onClick={() => onDelete(item)} disabled={updatingId === item.id} aria-label={`Remove ${item.food_name}`}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </CardContent>
     </Card>
   );
@@ -313,9 +432,19 @@ function NoticeBox({ notice, onClose }: { notice: Notice; onClose: () => void })
   );
 }
 
+function displayMealType(type: MealType) {
+  return type === "Snack" ? "Snacks" : type;
+}
+
+function normalizeMealType(value: string | null | undefined): MealType {
+  return mealTypes.includes(value as MealType) ? (value as MealType) : "Breakfast";
+}
+
 function normalizeMealPlanItem(item: MealPlanItem): MealPlanItem {
+  const now = new Date().toISOString();
   return {
     ...item,
+    id: String(item.id || crypto.randomUUID()),
     food_name: String(item.food_name || "Unnamed food"),
     serving_size: String(item.serving_size || "1 serving"),
     quantity: toNumber(item.quantity) || 1,
@@ -323,8 +452,10 @@ function normalizeMealPlanItem(item: MealPlanItem): MealPlanItem {
     protein_g: toNumber(item.protein_g),
     carbs_g: toNumber(item.carbs_g),
     fat_g: toNumber(item.fat_g),
-    meal_type: mealTypes.includes(item.meal_type) ? item.meal_type : "Breakfast",
-    status: item.status === "done" ? "done" : "planned"
+    meal_type: normalizeMealType(item.meal_type),
+    status: item.status === "done" ? "done" : "planned",
+    created_at: item.created_at || now,
+    updated_at: item.updated_at || now
   };
 }
 
