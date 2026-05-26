@@ -71,8 +71,9 @@ export function MyMealPlanBuilder() {
     try {
       setIsUpdatingId(item.id);
       const result = await markMealPlanItemDone(item);
+      const createdLog = result.log;
       setItems((current) => current.map((currentItem) => (currentItem.id === result.item.id ? result.item : currentItem)));
-      if (result.log) setCreatedLogs((current) => [result.log, ...current]);
+      if (createdLog) setCreatedLogs((current) => [createdLog, ...current]);
       toast({ title: "Meal marked done", description: `${item.food_name} was added to today's calories.` });
     } catch (error) {
       toast({ title: "Could not mark meal done", description: error instanceof Error ? error.message : "Please try again." });
