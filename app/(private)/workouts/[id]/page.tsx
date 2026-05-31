@@ -1,24 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, Play } from "lucide-react";
+import { ExternalLink, Play, RotateCcw, Save } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PageHeading } from "@/components/layout/page-heading";
 import { ExerciseVideoPlayer } from "@/components/workouts/video-player";
+import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { getExerciseVideos, getWorkout } from "@/services/database/repository";
+import { getExerciseVideos, getUserExerciseVideo, getWorkout, resetUserExerciseVideo, upsertUserExerciseVideo } from "@/services/database/repository";
 import { findExerciseVideo } from "@/services/workouts/video-matching";
 import type { ExerciseVideo, Workout } from "@/types";
 
 export default function WorkoutDetailsPage() {
   const params = useParams<{ id: string }>();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [video, setVideo] = useState<ExerciseVideo | null>(null);
+  const [customVideoUrl, setCustomVideoUrl] = useState("");
+  const [customVideoDraft, setCustomVideoDraft] = useState("");
+  const [isSavingVideo, setIsSavingVideo] = useState(false);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
@@ -26,8 +33,11 @@ export default function WorkoutDetailsPage() {
       try {
         const nextWorkout = await getWorkout(params.id);
         const videos = await getExerciseVideos(nextWorkout.name);
+        const customVideo = user?.id ? await getUserExerciseVideo(user.id, nextWorkout.id) : null;
         setWorkout(nextWorkout);
         setVideo(findExerciseVideo(nextWorkout, videos));
+        setCustomVideoUrl(customVideo?.custom_video_url ?? "");
+        setCustomVideoDraft(customVideo?.custom_video_url ?? "");
         setLoadError("");
       } catch (error) {
         const message = error instanceof Error ? error.message : "Could not load workout details.";
@@ -36,13 +46,60 @@ export default function WorkoutDetailsPage() {
       }
     }
     load();
-  }, [params.id, toast]);
+  }, [params.id, toast, user?.id]);
 
   if (!workout) return <p className="text-sm text-muted-foreground">{loadError || "Loading workout..."}</p>;
 
   const guideUrl = workout.exercise_url || (workout.notes?.startsWith("http") ? workout.notes : video?.exercise_url);
-  const videoUrl = workout.video_url || video?.video_url || video?.exercise_url || guideUrl;
+  const videoUrl = customVideoUrl || workout.video_url || video?.video_url || video?.exercise_url || guideUrl;
+  const displayVideo = video
+    ? { ...video, video_url: customVideoUrl || video.video_url }
+    : videoUrl
+      ? {
+          id: workout.id,
+          exercise_name: workout.name,
+          category_type: workout.category,
+          category: workout.target_muscle,
+          exercise_url: videoUrl,
+          video_url: customVideoUrl || workout.video_url || null,
+          instructions: workout.instructions,
+          source: "user_custom_or_workout",
+          is_global: true
+        }
+      : null;
   const secondaryMuscles = workout.secondary_muscles ?? video?.secondary_muscles ?? [];
+
+  async function saveCustomVideo() {
+    if (!workout) return;
+    if (!user?.id) return toast({ title: "Login required", description: "Sign in again before saving a custom video link." });
+    try {
+      setIsSavingVideo(true);
+      const saved = await upsertUserExerciseVideo(user.id, workout.id, customVideoDraft);
+      setCustomVideoUrl(saved.custom_video_url);
+      setCustomVideoDraft(saved.custom_video_url);
+      toast({ title: "Video link saved", description: "This exercise now uses your custom instruction video." });
+    } catch (error) {
+      toast({ title: "Could not save video link", description: error instanceof Error ? error.message : "Please check the URL." });
+    } finally {
+      setIsSavingVideo(false);
+    }
+  }
+
+  async function resetCustomVideo() {
+    if (!workout) return;
+    if (!user?.id) return;
+    try {
+      setIsSavingVideo(true);
+      await resetUserExerciseVideo(user.id, workout.id);
+      setCustomVideoUrl("");
+      setCustomVideoDraft("");
+      toast({ title: "Video link reset", description: "The default instruction link is active again." });
+    } catch (error) {
+      toast({ title: "Could not reset video link", description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      setIsSavingVideo(false);
+    }
+  }
 
   return (
     <>
@@ -118,12 +175,33 @@ export default function WorkoutDetailsPage() {
               ) : null}
             </div>
 
+            <div className="rounded-md border p-3">
+              <Label htmlFor="custom-video-url">My instruction video link</Label>
+              <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                <Input
+                  id="custom-video-url"
+                  value={customVideoDraft}
+                  onChange={(event) => setCustomVideoDraft(event.target.value)}
+                  placeholder="https://youtube.com/watch?v=..."
+                />
+                <Button type="button" onClick={saveCustomVideo} disabled={isSavingVideo || !customVideoDraft.trim()}>
+                  <Save className="h-4 w-4" />
+                  Save
+                </Button>
+                <Button type="button" variant="outline" onClick={resetCustomVideo} disabled={isSavingVideo || !customVideoUrl}>
+                  <RotateCcw className="h-4 w-4" />
+                  Reset
+                </Button>
+              </div>
+              {customVideoUrl ? <p className="mt-2 text-sm text-emerald-700">Your custom video overrides the default link.</p> : null}
+            </div>
+
             <p className="text-sm text-muted-foreground">
               This app is for general fitness tracking only. Do not train through serious pain.
             </p>
           </CardContent>
         </Card>
-        <ExerciseVideoPlayer video={video} />
+        <ExerciseVideoPlayer video={displayVideo} />
       </div>
     </>
   );

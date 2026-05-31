@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { CalendarCheck, Dumbbell, ExternalLink, Pencil, Play, Plus, Save, Search, SkipForward, Trash2, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
@@ -49,7 +50,13 @@ function workoutIdentity(workout: Workout) {
   return `${workout.name.toLowerCase()}-${(workout.muscle_category || workout.target_muscle).toLowerCase()}-${(workout.equipment_required || workout.equipment).toLowerCase()}`;
 }
 
-export function WorkoutPlanBuilder() {
+export function WorkoutPlanBuilder({
+  loadActivePlan = true,
+  onSaved
+}: {
+  loadActivePlan?: boolean;
+  onSaved?: () => void | Promise<void>;
+}) {
   const { user } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
@@ -77,7 +84,7 @@ export function WorkoutPlanBuilder() {
   }, [toast]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !loadActivePlan) return;
     let active = true;
     setIsLoadingSavedPlan(true);
     getActiveUserWorkoutPlan(user.id)
@@ -106,7 +113,7 @@ export function WorkoutPlanBuilder() {
     return () => {
       active = false;
     };
-  }, [toast, user]);
+  }, [loadActivePlan, toast, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -221,6 +228,7 @@ export function WorkoutPlanBuilder() {
       }
       setSavedMessage("Plan saved.");
       toast({ title: "Workout plan saved", description: `${planName} saved with ${totalExercises} workouts.` });
+      await onSaved?.();
     } catch (error) {
       toast({ title: "Could not save plan", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
@@ -477,10 +485,27 @@ export function WorkoutPlanBuilder() {
                       <Badge variant="outline">{workout.reps ?? "8-12"}</Badge>
                       <Badge variant="outline">{workout.rest_seconds ?? 75}s rest</Badge>
                     </div>
-                    <Button className="mt-3 w-full" variant="outline" size="sm" onClick={() => addWorkout(workout)}>
-                      <Plus className="h-4 w-4" />
-                      Add to {activeDay.weekday ?? activeDay.dayName}
-                    </Button>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <Button variant="outline" size="sm" onClick={() => addWorkout(workout)}>
+                        <Plus className="h-4 w-4" />
+                        Add
+                      </Button>
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={`/workouts/${workout.id}`}>Details</Link>
+                      </Button>
+                      {isVideoLink(workout.exercise_url || workout.video_url || workout.notes) ? (
+                        <Button asChild variant="ghost" size="sm" className="sm:col-span-2">
+                          <a href={workout.exercise_url || workout.video_url || workout.notes || "#"} target="_blank" rel="noreferrer">
+                            <ExternalLink className="h-4 w-4" />
+                            Instruction Video
+                          </a>
+                        </Button>
+                      ) : (
+                        <Button variant="ghost" size="sm" className="sm:col-span-2" disabled>
+                          No video available
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

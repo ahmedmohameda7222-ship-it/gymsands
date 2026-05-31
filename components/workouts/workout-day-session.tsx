@@ -105,6 +105,8 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const [isSaving, setIsSaving] = useState(false);
   const [isStarting, setIsStarting] = useState(true);
   const workoutTimerKey = useMemo(() => workoutStorageKey(["workout-day-session", user?.id ?? "mock-user", day.id]), [day.id, user?.id]);
+  const restTimerKey = useMemo(() => workoutStorageKey(["workout-day-rest-timer", user?.id ?? "mock-user", day.id]), [day.id, user?.id]);
+  const [timerEndsAtMs, setTimerEndsAtMs] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -149,14 +151,32 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   }, [session, startedAtMs]);
 
   useEffect(() => {
-    if (!isTimerRunning) return;
-    if (timerLeft <= 0) {
-      setIsTimerRunning(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setTimerLeft((current) => Math.max(0, current - 1)), 1000);
-    return () => window.clearTimeout(timer);
-  }, [isTimerRunning, timerLeft]);
+    const storedRestDeadline = readStoredTimestamp(restTimerKey);
+    if (!storedRestDeadline || storedRestDeadline <= Date.now()) return;
+    setTimerEndsAtMs(storedRestDeadline);
+    setTimerLeft(Math.max(0, Math.ceil((storedRestDeadline - Date.now()) / 1000)));
+    setIsTimerRunning(true);
+  }, [restTimerKey]);
+
+  useEffect(() => {
+    if (!timerEndsAtMs) return;
+    const tick = () => {
+      const nextLeft = Math.max(0, Math.ceil((timerEndsAtMs - Date.now()) / 1000));
+      setTimerLeft(nextLeft);
+      if (nextLeft <= 0) {
+        setTimerEndsAtMs(null);
+        setIsTimerRunning(false);
+        clearStoredValue(restTimerKey);
+        toast({ title: "Rest finished", description: "Next set ready." });
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+          new Notification("Rest finished", { body: "Next set ready." });
+        }
+      }
+    };
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [restTimerKey, timerEndsAtMs, toast]);
 
   const activeExercise = exerciseStates[activeExerciseIndex];
   const activeSet = activeExercise?.sets[activeSetIndex];
@@ -206,16 +226,17 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     );
   }
 
-  function moveToNextSet(states = exerciseStates) {
-    const currentExercise = states[activeExerciseIndex];
+  function moveToNextSet(states = exerciseStates, fromExerciseIndex = activeExerciseIndex, fromSetIndex = activeSetIndex) {
+    const currentExercise = states[fromExerciseIndex];
     if (!currentExercise) return;
-    if (activeSetIndex + 1 < currentExercise.sets.length) {
-      setActiveSetIndex(activeSetIndex + 1);
+    if (fromSetIndex + 1 < currentExercise.sets.length) {
+      setActiveExerciseIndex(fromExerciseIndex);
+      setActiveSetIndex(fromSetIndex + 1);
       return;
     }
-    if (activeExerciseIndex + 1 < states.length) {
-      const nextExercise = states[activeExerciseIndex + 1];
-      setActiveExerciseIndex(activeExerciseIndex + 1);
+    if (fromExerciseIndex + 1 < states.length) {
+      const nextExercise = states[fromExerciseIndex + 1];
+      setActiveExerciseIndex(fromExerciseIndex + 1);
       setActiveSetIndex(0);
       setTimerSeconds(nextExercise.exercise.rest_seconds ?? 75);
     }
@@ -227,15 +248,36 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     await updateWorkoutSessionDuration(session.id, Math.max(1, Math.ceil((Date.now() - startedAtMs) / 60000)));
   }
 
-  async function finishCurrentSet() {
-    if (!activeSet || activeSet.completedAt) return;
-    const nextStates = statesWithSetPatch(activeExerciseIndex, activeSetIndex, { completedAt: new Date().toISOString() });
+  function startRestTimer(seconds: number) {
+    const safeSeconds = Math.max(0, seconds);
+    if (!safeSeconds) return;
+    const deadline = Date.now() + safeSeconds * 1000;
+    setTimerSeconds(safeSeconds);
+    setTimerLeft(safeSeconds);
+    setTimerEndsAtMs(deadline);
+    setIsTimerRunning(true);
+    storeTimestamp(restTimerKey, deadline);
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => undefined);
+    }
+  }
+
+  function stopRestTimer() {
+    setTimerLeft(0);
+    setTimerEndsAtMs(null);
+    setIsTimerRunning(false);
+    clearStoredValue(restTimerKey);
+  }
+
+  async function finishSet(exerciseIndex: number, setIndex: number) {
+    const targetSet = exerciseStates[exerciseIndex]?.sets[setIndex];
+    if (!targetSet || targetSet.completedAt) return;
+    const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: new Date().toISOString() });
     setExerciseStates(nextStates);
     const hasNextSet = completedSets + 1 < totalSets;
     if (hasNextSet) {
-      setTimerLeft(timerSeconds);
-      setIsTimerRunning(timerSeconds > 0);
-      moveToNextSet(nextStates);
+      startRestTimer(exerciseStates[exerciseIndex]?.exercise.rest_seconds ?? timerSeconds);
+      moveToNextSet(nextStates, exerciseIndex, setIndex);
     }
     try {
       await persistProgress(nextStates);
@@ -244,15 +286,24 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     }
   }
 
-  async function restartCurrentSet() {
-    if (!activeSet) return;
-    const nextStates = statesWithSetPatch(activeExerciseIndex, activeSetIndex, { completedAt: null });
+  async function finishCurrentSet() {
+    await finishSet(activeExerciseIndex, activeSetIndex);
+  }
+
+  async function restartSet(exerciseIndex: number, setIndex: number) {
+    const targetSet = exerciseStates[exerciseIndex]?.sets[setIndex];
+    if (!targetSet) return;
+    const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: null });
     setExerciseStates(nextStates);
     try {
       await persistProgress(nextStates);
     } catch {
       toast({ title: "Could not update this set", description: "Try again in a moment." });
     }
+  }
+
+  async function restartCurrentSet() {
+    await restartSet(activeExerciseIndex, activeSetIndex);
   }
 
   async function completeSession() {
@@ -266,8 +317,9 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
       await saveWorkoutSetLogs(session.id, buildLogRows());
       await completeWorkoutSession(session.id, sessionNotes, durationMinutes);
       clearStoredValue(workoutTimerKey);
+      clearStoredValue(restTimerKey);
       toast({ title: "Workout saved", description: `${day.day_name} was added to your workout history.` });
-      router.push("/my-workout");
+      router.push("/my-workout/plans");
     } catch (error) {
       toast({ title: "Could not save workout", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
@@ -289,7 +341,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         <CardContent className="space-y-3 pt-5">
           <p className="text-sm text-muted-foreground">This workout day has no exercises yet.</p>
           <Button asChild variant="outline">
-            <Link href="/my-workout"><ArrowLeft className="h-4 w-4" /> Back to plan</Link>
+            <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to plan</Link>
           </Button>
         </CardContent>
       </Card>
@@ -300,7 +352,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="outline">
-          <Link href="/my-workout"><ArrowLeft className="h-4 w-4" /> Back to plan</Link>
+          <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to plan</Link>
         </Button>
         <div className="flex flex-wrap gap-2">
           <Badge>{day.weekday ?? "Workout day"}</Badge>
@@ -368,7 +420,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
 
             <div className="space-y-3">
               {activeExercise.sets.map((set, setIndex) => (
-                <div key={set.setNumber} className={`rounded-md border p-3 ${setIndex === activeSetIndex ? "border-primary bg-blue-50" : "bg-white"}`}>
+                <div key={set.setNumber} className={`rounded-md border p-3 ${set.completedAt ? "border-emerald-300 bg-emerald-50" : setIndex === activeSetIndex ? "border-primary bg-blue-50" : "bg-white"}`}>
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <p className="font-semibold">Set {set.setNumber}</p>
                     {set.completedAt ? <Badge variant="success">Done</Badge> : <Badge variant="outline">Open</Badge>}
@@ -386,6 +438,16 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                       <Label>Notes</Label>
                       <Input value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional" />
                     </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" onClick={() => finishSet(activeExerciseIndex, setIndex)} disabled={Boolean(set.completedAt)}>
+                      <CheckCircle2 className="h-4 w-4" />
+                      Finish Set
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => restartSet(activeExerciseIndex, setIndex)} disabled={!set.completedAt}>
+                      <RotateCcw className="h-4 w-4" />
+                      Reopen
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -419,8 +481,8 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                 <p className="mt-2 text-4xl font-bold">{formatTime(timerLeft)}</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={() => { setTimerLeft(timerSeconds); setIsTimerRunning(timerSeconds > 0); }}>Start timer</Button>
-                <Button variant="outline" onClick={() => { setTimerLeft(0); setIsTimerRunning(false); }}>Stop</Button>
+                <Button variant="outline" onClick={() => startRestTimer(timerSeconds)}>Start timer</Button>
+                <Button variant="outline" onClick={stopRestTimer}>Stop</Button>
               </div>
             </CardContent>
           </Card>

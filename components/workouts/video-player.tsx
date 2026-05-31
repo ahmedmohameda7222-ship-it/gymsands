@@ -37,9 +37,6 @@ export function ExerciseVideoPlayer({ video }: { video: ExerciseVideo | null }) 
         ) : (
           <div className="flex h-full flex-col items-center justify-center p-6 text-center text-white">
             <PlayCircle className="h-12 w-12 text-sky-300" />
-            <p className="mt-4 max-w-sm text-sm text-blue-100">
-              This source is an exercise instruction page. Admin can replace it with a direct YouTube, Vimeo, or hosted video URL for embedded playback.
-            </p>
             <Button asChild className="mt-4" variant="outline">
               <a href={video.exercise_url} target="_blank" rel="noreferrer">
                 <ExternalLink className="h-4 w-4" />

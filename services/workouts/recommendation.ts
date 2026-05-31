@@ -18,6 +18,8 @@ export type WorkoutRecommendationInput = {
   workoutTimeMinutes?: number | null;
   availableEquipment: string[];
   gender: string;
+  ageRange?: string | null;
+  desiredDurationWeeks?: number | null;
 };
 
 export type WorkoutTemplateScore = {
@@ -54,6 +56,16 @@ function normalizeGender(value: string | null | undefined) {
   if (tokens.has("female")) return "female";
   if (tokens.has("male")) return "male";
   return "male and female";
+}
+
+function ageBucket(value: string | null | undefined) {
+  const normalized = normalize(value);
+  const firstNumber = normalized.match(/\d+/)?.[0];
+  const age = firstNumber ? Number(firstNumber) : 30;
+  if (age >= 45) return "45+";
+  if (age >= 35) return "35-44";
+  if (age >= 25) return "25-34";
+  return "18-24";
 }
 
 function equipmentSet(values: string[] | null | undefined) {
@@ -100,6 +112,7 @@ export function scoreWorkoutTemplate(template: WorkoutTemplateCandidate, input: 
   const templateGoal = canonicalGoal(template.main_goal);
   const inputLevel = normalizeLevel(input.trainingLevel);
   const templateLevel = normalizeLevel(template.training_level);
+  const userAgeBucket = ageBucket(input.ageRange);
 
   if (templateGoal === inputGoal) {
     score += 35;
@@ -135,6 +148,29 @@ export function scoreWorkoutTemplate(template: WorkoutTemplateCandidate, input: 
   score += equipment.score;
   if (equipment.score >= 16) reasons.push("works with most of your available equipment");
   else if (equipment.score > 0) reasons.push("shares some of your available equipment");
+
+  if (input.desiredDurationWeeks) {
+    const durationDifference = Math.abs(Number(template.program_duration_weeks) - Number(input.desiredDurationWeeks));
+    if (durationDifference === 0) {
+      score += 12;
+      reasons.push(`matches your ${input.desiredDurationWeeks}-week finish target`);
+    } else if (durationDifference <= 2) {
+      score += 6;
+      reasons.push("is close to your target plan duration");
+    }
+  }
+
+  if ((userAgeBucket === "45+" || userAgeBucket === "35-44") && inputLevel === "beginner") {
+    if (templateLevel === "beginner" && template.days_per_week <= Math.max(4, input.daysPerWeek)) {
+      score += 8;
+      reasons.push("keeps recovery realistic for your age and beginner level");
+    } else if (template.days_per_week > input.daysPerWeek + 1) {
+      score -= 8;
+    }
+  } else if ((userAgeBucket === "18-24" || userAgeBucket === "25-34") && inputLevel === "advanced" && templateLevel === "advanced") {
+    score += 5;
+    reasons.push("supports higher training capacity with your experience level");
+  }
 
   const explanation = reasons.length
     ? `Selected because it ${reasons.join(", ")}.`

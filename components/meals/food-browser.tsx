@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth/auth-provider";
-import { addFoodToMealPlan, addGlobalFoodToToday, getGlobalFoods } from "@/services/database/repository";
+import { addFoodToMealPlan, addGlobalFoodToToday, egyptianFoodSubcategories, getFoodLibrary } from "@/services/database/repository";
 import { defaultTargets, remainingMacros, scaleFoodMacros, validateFoodLogInput } from "@/services/nutrition/calculations";
 import { egyptianFoods, nutritionDisclaimer } from "@/data/egyptian-foods";
 import type { FoodItem, FoodLog, MealPlanItem, MealType } from "@/types";
 
 const pageSize = 12;
 const mealOptions: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
-const fallbackCategories = Array.from(new Set(egyptianFoods.map((food) => food.category).filter((category): category is string => Boolean(category)))).sort();
+const fallbackCategories = [...egyptianFoodSubcategories];
 const emptyFoodLogs: FoodLog[] = [];
 
 type FoodBrowserProps = {
@@ -21,6 +21,7 @@ type FoodBrowserProps = {
   onLogAdded?: (log: FoodLog) => void;
   onPlanAdded?: (item: MealPlanItem) => void;
   defaultMealType?: MealType;
+  logDate?: string;
 };
 
 type Notice = {
@@ -28,6 +29,14 @@ type Notice = {
   title: string;
   description?: string;
 };
+
+function fallbackSubcategory(value: string | null | undefined) {
+  if (value && fallbackCategories.includes(value as (typeof fallbackCategories)[number])) return value;
+  if (value === "Rice") return "Carb";
+  if (value === "Sauce" || value === "Salad") return "Dip";
+  if (value === "Protein" || value === "Sandwich" || value === "Meal" || value === "Side") return "Breakfast";
+  return "Snack";
+}
 
 class FoodBrowserBoundary extends Component<{ children: ReactNode }, { message: string | null }> {
   constructor(props: { children: ReactNode }) {
@@ -74,7 +83,8 @@ function FoodBrowserInner({
   initialLogs = emptyFoodLogs,
   onLogAdded,
   onPlanAdded,
-  defaultMealType = "Breakfast"
+  defaultMealType = "Breakfast",
+  logDate
 }: FoodBrowserProps) {
   const { user } = useAuth();
   const [foods, setFoods] = useState<FoodItem[]>([]);
@@ -112,7 +122,7 @@ function FoodBrowserInner({
     setIsLoadingFoods(true);
     setNotice(null);
 
-    getGlobalFoods(debouncedQuery, { category: selectedCategory || undefined, limit: 60 })
+    getFoodLibrary(user?.id ?? "mock-user", debouncedQuery, { category: selectedCategory || undefined, limit: 60 })
       .then((items) => {
         if (!active) return;
         setFoods(items.map(normalizeFoodItem));
@@ -120,6 +130,7 @@ function FoodBrowserInner({
       .catch((error) => {
         if (!active) return;
         const localFallback = egyptianFoods
+          .map((food) => ({ ...food, cuisine: "Egyptian Food", category: fallbackSubcategory(food.category) }))
           .filter((food) => (!selectedCategory || food.category === selectedCategory) && (!debouncedQuery || food.food_name.toLowerCase().includes(debouncedQuery.toLowerCase())))
           .slice(0, 60)
           .map(normalizeFoodItem);
@@ -137,7 +148,7 @@ function FoodBrowserInner({
     return () => {
       active = false;
     };
-  }, [debouncedQuery, selectedCategory]);
+  }, [debouncedQuery, selectedCategory, user?.id]);
 
   useEffect(() => {
     setLogs(initialLogs);
@@ -174,7 +185,7 @@ function FoodBrowserInner({
     }
 
     try {
-      const log = await addGlobalFoodToToday({ userId: user.id, food, quantity, mealType });
+      const log = await addGlobalFoodToToday({ userId: user.id, food, quantity, mealType, date: logDate });
       setLogs((current) => [log, ...current]);
       onLogAdded?.(log);
       const remaining = remainingMacros(defaultTargets, {
@@ -303,6 +314,7 @@ function FoodBrowserInner({
                     {food.category || "Food"}
                   </span>
                 </div>
+                <p className="mt-2 text-xs text-muted-foreground">{food.cuisine || "Egyptian Food"}</p>
                 <div className="mt-4 grid grid-cols-4 gap-2 text-center">
                   <Macro label="kcal" value={macros.calories} />
                   <Macro label="protein" value={`${macros.protein_g}g`} />

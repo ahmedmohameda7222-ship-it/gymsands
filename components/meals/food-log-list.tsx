@@ -8,7 +8,7 @@ import type { FoodLog } from "@/types";
 import { deleteFoodLog } from "@/services/database/repository";
 import { useToast } from "@/components/ui/toaster";
 
-export function FoodLogList({ logs = [], onDeleted }: { logs?: FoodLog[]; onDeleted?: (id: string) => void }) {
+export function FoodLogList({ logs = [], onDeleted, title = "Today's food log" }: { logs?: FoodLog[]; onDeleted?: (id: string) => void; title?: string }) {
   const { toast } = useToast();
 
   async function remove(id: string) {
@@ -27,7 +27,7 @@ export function FoodLogList({ logs = [], onDeleted }: { logs?: FoodLog[]; onDele
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Today&apos;s food log</CardTitle>
+        <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {logs.length ? (

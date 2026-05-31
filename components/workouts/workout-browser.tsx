@@ -33,8 +33,61 @@ const emptyOptions: WorkoutFilterOptions = {
   secondaryMuscles: []
 };
 
+const filterStorageKey = "ss-gym-workout-browser-filters";
+const filterParamKeys: Record<FilterKey, string> = {
+  categories: "cat",
+  equipmentRequired: "equip",
+  mechanics: "mech",
+  forceTypes: "force",
+  experienceLevels: "level",
+  secondaryMuscles: "secondary"
+};
+
 function isLink(value: string | null | undefined) {
   return Boolean(value && /^https?:\/\//i.test(value));
+}
+
+function splitParam(value: string | null) {
+  return value ? value.split("|").map((item) => item.trim()).filter(Boolean) : [];
+}
+
+function readPersistedFilterState() {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const urlFilters = Object.keys(filterParamKeys).reduce((next, key) => {
+    const filterKey = key as FilterKey;
+    next[filterKey] = splitParam(params.get(filterParamKeys[filterKey]));
+    return next;
+  }, { ...emptyFilters } as Record<FilterKey, string[]>);
+  const urlQuery = params.get("q") ?? "";
+  const hasUrlState = Boolean(urlQuery || Object.values(urlFilters).some((values) => values.length));
+  if (hasUrlState) return { query: urlQuery, filters: urlFilters };
+
+  const stored = window.localStorage.getItem(filterStorageKey);
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored) as { query: string; filters: Record<FilterKey, string[]> };
+  } catch {
+    return null;
+  }
+}
+
+function persistFilterState(query: string, filters: Record<FilterKey, string[]>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(filterStorageKey, JSON.stringify({ query, filters }));
+  const params = new URLSearchParams(window.location.search);
+  if (query) params.set("q", query);
+  else params.delete("q");
+  (Object.keys(filterParamKeys) as FilterKey[]).forEach((key) => {
+    const values = filters[key];
+    if (values.length) params.set(filterParamKeys[key], values.join("|"));
+    else params.delete(filterParamKeys[key]);
+  });
+  const nextSearch = params.toString();
+  const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}`;
+  if (`${window.location.pathname}${window.location.search}` !== nextUrl) {
+    window.history.replaceState(null, "", nextUrl);
+  }
 }
 
 export function WorkoutBrowser() {
@@ -46,6 +99,16 @@ export function WorkoutBrowser() {
   const [page, setPage] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const persisted = readPersistedFilterState();
+    if (persisted) {
+      setQuery(persisted.query ?? "");
+      setFilters({ ...emptyFilters, ...(persisted.filters ?? {}) });
+    }
+    setIsHydrated(true);
+  }, []);
 
   useEffect(() => {
     getWorkoutFilterOptions()
@@ -63,6 +126,12 @@ export function WorkoutBrowser() {
   const requestFilters: WorkoutFilters = filters;
 
   useEffect(() => {
+    if (!isHydrated) return;
+    persistFilterState(query, filters);
+  }, [filters, isHydrated, query]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
     let active = true;
     const timer = window.setTimeout(() => {
       setIsLoading(true);
@@ -90,7 +159,7 @@ export function WorkoutBrowser() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [filters, query, requestFilters, toast]);
+  }, [filters, isHydrated, query, requestFilters, toast]);
 
   async function loadMore() {
     const nextPage = page + 1;
@@ -121,6 +190,7 @@ export function WorkoutBrowser() {
   function resetFilters() {
     setQuery("");
     setFilters(emptyFilters);
+    if (typeof window !== "undefined") window.localStorage.removeItem(filterStorageKey);
   }
 
   return (

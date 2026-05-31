@@ -7,20 +7,28 @@ import muscleStrengthExercisesData from "@/data/muscle-strength-exercises.json";
 import { defaultExerciseInstructions, sampleExerciseVideos, sampleWorkouts } from "@/data/workouts";
 import type {
   BodyMeasurement,
+  CustomMeal,
+  DailyNutritionSummary,
   ExerciseMetadata,
   ExerciseVideo,
   FoodItem,
+  FoodKitchen,
   FoodLog,
+  FoodSubcategory,
   GeneratedWorkoutPlan,
+  MealItem,
   MealPlanItem,
   MealType,
   OnboardingAnswers,
   Profile,
   ProgressEntry,
   ExerciseLog,
+  UserExerciseVideo,
   UserExerciseLog,
+  UserFoodItem,
   UserWorkoutSession,
   UserWorkoutPlan,
+  WaterLog,
   Weekday,
   WelcomeSettings,
   Workout,
@@ -29,7 +37,7 @@ import type {
   WorkoutSession,
   WorkoutSessionSummary
 } from "@/types";
-import { scaleFoodMacros } from "@/services/nutrition/calculations";
+import { scaleFoodMacros, sumFoodLogs } from "@/services/nutrition/calculations";
 
 function mockDelay<T>(value: T) {
   return Promise.resolve(value);
@@ -91,10 +99,37 @@ function looksLikeUrl(value: string | null | undefined) {
 
 export const weekDays: Weekday[] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 export const mealTypes: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
+export const egyptianFoodKitchenName = "Egyptian Food";
+export const egyptianFoodSubcategories = [
+  "Bread",
+  "Breakfast",
+  "Carb",
+  "Dairy",
+  "Dessert",
+  "Dip",
+  "Drink",
+  "Legumes",
+  "Snack",
+  "Soup",
+  "Stew",
+  "Vegetable"
+] as const;
+
+const allowedEgyptianSubcategories = new Set<string>(egyptianFoodSubcategories);
 
 function toNumber(value: unknown, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeFoodSubcategory(value: string | null | undefined) {
+  const clean = value?.trim();
+  if (!clean) return "Snack";
+  if (allowedEgyptianSubcategories.has(clean)) return clean;
+  if (clean === "Rice") return "Carb";
+  if (clean === "Sauce" || clean === "Salad") return "Dip";
+  if (clean === "Protein" || clean === "Sandwich" || clean === "Meal" || clean === "Side") return "Breakfast";
+  return "Snack";
 }
 
 function normalizeMealType(value: string | null | undefined): MealType {
@@ -212,7 +247,7 @@ export function getCurrentWeekday(date = new Date()): Weekday {
 }
 
 export function getDefaultFoodCategories() {
-  return Array.from(new Set(egyptianFoods.map((food) => food.category).filter(Boolean))).sort() as string[];
+  return [...egyptianFoodSubcategories];
 }
 
 function withTimeout<T>(request: PromiseLike<T>, fallback: T, label: string, timeoutMs = 4500) {
@@ -231,7 +266,13 @@ function withTimeout<T>(request: PromiseLike<T>, fallback: T, label: string, tim
 
 function localFoods(query = "") {
   const normalized = normalizeText(query);
-  return egyptianFoods.filter((food) => normalizeText(food.food_name).includes(normalized));
+  return egyptianFoods
+    .filter((food) => normalizeText(food.food_name).includes(normalized))
+    .map((food) => ({
+      ...food,
+      cuisine: egyptianFoodKitchenName,
+      category: normalizeFoodSubcategory(food.category)
+    }));
 }
 
 function findExerciseMetadata(name: string | null | undefined) {
@@ -560,20 +601,23 @@ export async function addGlobalFoodToToday({
   userId,
   food,
   quantity,
-  mealType = "Breakfast"
+  mealType = "Breakfast",
+  date = todayIso()
 }: {
   userId: string;
   food: FoodItem;
   quantity: number;
   mealType?: string;
+  date?: string;
 }) {
   const macros = scaleFoodMacros(food, quantity);
   const safeMealType = normalizeMealType(mealType);
+  const isGlobalFood = food.is_global !== false;
   const payload = {
     user_id: userId,
-    food_item_id: isUuid(food.id) ? food.id : null,
-    user_food_item_id: null,
-    log_date: todayIso(),
+    food_item_id: isGlobalFood && isUuid(food.id) ? food.id : null,
+    user_food_item_id: !isGlobalFood && isUuid(food.id) ? food.id : null,
+    log_date: date,
     meal_type: safeMealType,
     food_name: food.food_name,
     serving_size: food.serving_size,
@@ -594,6 +638,517 @@ export async function addGlobalFoodToToday({
   return data as FoodLog;
 }
 
+function normalizeUserFood(row: Record<string, unknown>): UserFoodItem {
+  return {
+    id: String(row.id),
+    user_id: String(row.user_id),
+    food_name: String(row.food_name ?? "Custom food"),
+    serving_size: String(row.serving_size ?? "1 serving"),
+    calories: toNumber(row.calories),
+    protein_g: toNumber(row.protein_g),
+    carbs_g: toNumber(row.carbs_g),
+    fat_g: toNumber(row.fat_g),
+    category: (row.category as string | null) ?? null,
+    cuisine: (row.cuisine as string | null) ?? null,
+    kitchen_id: (row.kitchen_id as string | null) ?? null,
+    subcategory_id: (row.subcategory_id as string | null) ?? null,
+    fiber_g: row.fiber_g === null || row.fiber_g === undefined ? null : toNumber(row.fiber_g),
+    sugar_g: row.sugar_g === null || row.sugar_g === undefined ? null : toNumber(row.sugar_g),
+    sodium_mg: row.sodium_mg === null || row.sodium_mg === undefined ? null : toNumber(row.sodium_mg),
+    tags: (row.tags as string[] | null) ?? [],
+    notes: (row.notes as string | null) ?? null,
+    source_type: "user_created",
+    is_global: false,
+    is_editable_by_user: true
+  };
+}
+
+function assertNonNegative(value: number, label: string) {
+  if (!Number.isFinite(value) || value < 0) throw new Error(`${label} must be a non-negative number.`);
+}
+
+export type UserFoodInput = {
+  id?: string;
+  userId: string;
+  foodName: string;
+  kitchenId?: string | null;
+  cuisine?: string | null;
+  subcategoryId?: string | null;
+  category: string;
+  servingSize: string;
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  fiberG?: number | null;
+  sugarG?: number | null;
+  sodiumMg?: number | null;
+  notes?: string | null;
+};
+
+function validateUserFoodInput(input: UserFoodInput) {
+  if (!input.foodName.trim()) throw new Error("Food name is required.");
+  if (!input.servingSize.trim()) throw new Error("Serving size is required.");
+  if (!input.category.trim()) throw new Error("Choose or create a subcategory.");
+  assertNonNegative(input.calories, "Calories");
+  assertNonNegative(input.proteinG, "Protein");
+  assertNonNegative(input.carbsG, "Carbs");
+  assertNonNegative(input.fatG, "Fat");
+  if (input.fiberG !== null && input.fiberG !== undefined) assertNonNegative(input.fiberG, "Fiber");
+  if (input.sugarG !== null && input.sugarG !== undefined) assertNonNegative(input.sugarG, "Sugar");
+  if (input.sodiumMg !== null && input.sodiumMg !== undefined) assertNonNegative(input.sodiumMg, "Sodium");
+}
+
+function userFoodPayload(input: UserFoodInput) {
+  validateUserFoodInput(input);
+  return {
+    user_id: input.userId,
+    food_name: input.foodName.trim(),
+    serving_size: input.servingSize.trim(),
+    calories: input.calories,
+    protein_g: input.proteinG,
+    carbs_g: input.carbsG,
+    fat_g: input.fatG,
+    category: input.category.trim(),
+    cuisine: input.cuisine?.trim() || null,
+    kitchen_id: input.kitchenId || null,
+    subcategory_id: input.subcategoryId || null,
+    fiber_g: input.fiberG ?? null,
+    sugar_g: input.sugarG ?? null,
+    sodium_mg: input.sodiumMg ?? null,
+    notes: input.notes?.trim() || null
+  };
+}
+
+export async function getFoodKitchens(userId: string) {
+  const fallbackKitchen: FoodKitchen = {
+    id: "egyptian-food",
+    user_id: null,
+    name: egyptianFoodKitchenName,
+    is_system: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  const fallbackSubcategories = egyptianFoodSubcategories.map((name) => ({
+    id: `egyptian-${name.toLowerCase()}`,
+    kitchen_id: fallbackKitchen.id,
+    name,
+    created_at: fallbackKitchen.created_at,
+    updated_at: fallbackKitchen.updated_at
+  })) as FoodSubcategory[];
+
+  if (!canUseUserData(userId)) {
+    return mockDelay({ kitchens: [fallbackKitchen], subcategories: fallbackSubcategories });
+  }
+
+  const [kitchensResult, subcategoriesResult] = await Promise.all([
+    supabase!
+      .from("food_kitchens")
+      .select("*")
+      .or(`is_system.eq.true,user_id.eq.${userId}`)
+      .order("is_system", { ascending: false })
+      .order("name"),
+    supabase!.from("food_subcategories").select("*").order("name")
+  ]);
+
+  if (kitchensResult.error || subcategoriesResult.error) {
+    console.warn(
+      "S&S Gym could not load food kitchens.",
+      kitchensResult.error?.message || subcategoriesResult.error?.message
+    );
+    return { kitchens: [fallbackKitchen], subcategories: fallbackSubcategories };
+  }
+
+  return {
+    kitchens: ((kitchensResult.data?.length ? kitchensResult.data : [fallbackKitchen]) ?? []) as FoodKitchen[],
+    subcategories: ((subcategoriesResult.data?.length ? subcategoriesResult.data : fallbackSubcategories) ?? []) as FoodSubcategory[]
+  };
+}
+
+export async function createFoodKitchen(userId: string, name: string) {
+  const cleanName = name.trim();
+  if (!cleanName) throw new Error("Kitchen name is required.");
+  if (!canUseUserData(userId)) {
+    return mockDelay({
+      id: crypto.randomUUID(),
+      user_id: userId,
+      name: cleanName,
+      is_system: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    } as FoodKitchen);
+  }
+
+  const { data, error } = await supabase!
+    .from("food_kitchens")
+    .insert({ user_id: userId, name: cleanName, is_system: false })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as FoodKitchen;
+}
+
+export async function createFoodSubcategory(kitchenId: string, name: string) {
+  const cleanName = name.trim();
+  if (!cleanName) throw new Error("Subcategory name is required.");
+  if (!supabase || !isUuid(kitchenId)) {
+    return mockDelay({
+      id: crypto.randomUUID(),
+      kitchen_id: kitchenId,
+      name: cleanName,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    } as FoodSubcategory);
+  }
+
+  const { data, error } = await supabase!
+    .from("food_subcategories")
+    .insert({ kitchen_id: kitchenId, name: cleanName })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as FoodSubcategory;
+}
+
+export async function getUserFoods(userId: string) {
+  if (!canUseUserData(userId)) return mockDelay<UserFoodItem[]>([]);
+  const { data, error } = await supabase!.from("user_food_items").select("*").eq("user_id", userId).order("food_name");
+  if (error) {
+    console.warn("S&S Gym could not load custom foods.", error.message);
+    return [];
+  }
+  return (data ?? []).map((row) => normalizeUserFood(row as Record<string, unknown>));
+}
+
+export async function getFoodLibrary(
+  userId: string,
+  query = "",
+  options: { category?: string; kitchen?: string; limit?: number } = {}
+) {
+  const [globalFoods, userFoods] = await Promise.all([
+    getGlobalFoods(query, { category: options.category, limit: options.limit ?? 60 }),
+    getUserFoods(userId)
+  ]);
+  const normalizedQuery = normalizeText(query);
+  const foods = [...globalFoods, ...userFoods].filter((food) => {
+    const matchesQuery = !normalizedQuery || normalizeText(food.food_name).includes(normalizedQuery);
+    const matchesCategory = !options.category || food.category === options.category;
+    const matchesKitchen = !options.kitchen || food.cuisine === options.kitchen || food.kitchen_id === options.kitchen;
+    return matchesQuery && matchesCategory && matchesKitchen;
+  });
+  return foods.slice(0, options.limit ?? 80);
+}
+
+export async function upsertUserFood(input: UserFoodInput) {
+  const payload = userFoodPayload(input);
+
+  if (!canUseUserData(input.userId)) {
+    return mockDelay(normalizeUserFood({ ...payload, id: input.id ?? crypto.randomUUID() }));
+  }
+
+  const request =
+    input.id && isUuid(input.id)
+      ? supabase!.from("user_food_items").update(payload).eq("id", input.id).eq("user_id", input.userId)
+      : supabase!.from("user_food_items").insert(payload);
+
+  const { data, error } = await request.select("*").single();
+  if (error) throw error;
+  return normalizeUserFood(data as Record<string, unknown>);
+}
+
+export async function deleteUserFood(userId: string, foodId: string) {
+  if (!canUseUserData(userId) || !isUuid(foodId)) return mockDelay(true);
+  const { error } = await supabase!.from("user_food_items").delete().eq("id", foodId).eq("user_id", userId);
+  if (error) throw error;
+  return true;
+}
+
+export async function getWaterLogs(userId: string, date: string) {
+  if (!canUseUserData(userId)) return mockDelay<WaterLog[]>([]);
+  const { data, error } = await supabase!
+    .from("water_logs")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("log_date", date)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.warn("S&S Gym could not load water logs.", error.message);
+    return [];
+  }
+  return (data ?? []) as WaterLog[];
+}
+
+export async function addWaterLog(userId: string, date: string, amountMl: number) {
+  if (!Number.isFinite(amountMl) || amountMl <= 0) throw new Error("Water amount must be greater than zero.");
+  const payload = { user_id: userId, log_date: date, amount_ml: Math.round(amountMl) };
+  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString() } as WaterLog);
+  const { data, error } = await supabase!.from("water_logs").insert(payload).select("*").single();
+  if (error) throw error;
+  return data as WaterLog;
+}
+
+export async function deleteWaterLog(userId: string, id: string) {
+  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  const { error } = await supabase!.from("water_logs").delete().eq("id", id).eq("user_id", userId);
+  if (error) throw error;
+  return true;
+}
+
+function weekDates(weekStart: string) {
+  const start = new Date(`${weekStart}T00:00:00`);
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return date.toISOString().slice(0, 10);
+  });
+}
+
+export async function getNutritionWeek(userId: string, weekStart: string) {
+  const dates = weekDates(weekStart);
+  const [targets, logsResult, waterResult] = await Promise.all([
+    getCalorieTargets(userId),
+    canUseUserData(userId)
+      ? supabase!
+          .from("food_logs")
+          .select("*")
+          .eq("user_id", userId)
+          .gte("log_date", dates[0])
+          .lte("log_date", dates[6])
+          .order("log_date", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+    canUseUserData(userId)
+      ? supabase!
+          .from("water_logs")
+          .select("*")
+          .eq("user_id", userId)
+          .gte("log_date", dates[0])
+          .lte("log_date", dates[6])
+      : Promise.resolve({ data: [], error: null })
+  ]);
+
+  if (logsResult.error) console.warn("S&S Gym could not load weekly calorie logs.", logsResult.error.message);
+  if (waterResult.error) console.warn("S&S Gym could not load weekly water logs.", waterResult.error.message);
+
+  const logs = ((logsResult.data ?? []) as FoodLog[]).reduce<Record<string, FoodLog[]>>((byDate, log) => {
+    byDate[log.log_date] = [...(byDate[log.log_date] ?? []), log];
+    return byDate;
+  }, {});
+  const water = ((waterResult.data ?? []) as WaterLog[]).reduce<Record<string, number>>((byDate, log) => {
+    byDate[log.log_date] = (byDate[log.log_date] ?? 0) + toNumber(log.amount_ml);
+    return byDate;
+  }, {});
+
+  return dates.map((date) => {
+    const dayLogs = logs[date] ?? [];
+    const totals = sumFoodLogs(dayLogs);
+    return {
+      date,
+      planned_calories: toNumber(targets.daily_calories, 2200),
+      calories: totals.calories,
+      protein_g: totals.protein_g,
+      carbs_g: totals.carbs_g,
+      fat_g: totals.fat_g,
+      water_ml: water[date] ?? 0,
+      logs: dayLogs
+    } satisfies DailyNutritionSummary;
+  });
+}
+
+export type CustomMealInput = {
+  id?: string;
+  userId: string;
+  mealName: string;
+  mealCategory?: string | null;
+  notes?: string | null;
+  isFavorite?: boolean;
+  items: Array<{ food: FoodItem; quantity: number }>;
+};
+
+function mealItemTotals(food: Pick<FoodItem, "calories" | "protein_g" | "carbs_g" | "fat_g">, quantity: number) {
+  return scaleFoodMacros(food, Math.max(0.1, quantity));
+}
+
+function summarizeMeal(items: MealItem[]) {
+  return items.reduce(
+    (sum, item) => ({
+      calories: sum.calories + toNumber(item.calories),
+      protein_g: Math.round((sum.protein_g + toNumber(item.protein_g)) * 10) / 10,
+      carbs_g: Math.round((sum.carbs_g + toNumber(item.carbs_g)) * 10) / 10,
+      fat_g: Math.round((sum.fat_g + toNumber(item.fat_g)) * 10) / 10
+    }),
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+  );
+}
+
+async function foodsById(foodIds: string[], userFoodIds: string[]) {
+  const [globalResult, userResult] = await Promise.all([
+    foodIds.length ? supabase!.from("food_items").select("*").in("id", foodIds) : Promise.resolve({ data: [], error: null }),
+    userFoodIds.length ? supabase!.from("user_food_items").select("*").in("id", userFoodIds) : Promise.resolve({ data: [], error: null })
+  ]);
+  if (globalResult.error) console.warn("S&S Gym could not hydrate meal foods.", globalResult.error.message);
+  if (userResult.error) console.warn("S&S Gym could not hydrate custom meal foods.", userResult.error.message);
+
+  const map = new Map<string, FoodItem>();
+  ((globalResult.data ?? []) as FoodItem[]).forEach((food) => map.set(food.id, food));
+  ((userResult.data ?? []) as Record<string, unknown>[]).map(normalizeUserFood).forEach((food) => map.set(food.id, food));
+  return map;
+}
+
+export async function getCustomMeals(userId: string) {
+  if (!canUseUserData(userId)) return mockDelay<CustomMeal[]>([]);
+
+  const { data: meals, error } = await supabase!
+    .from("meals")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.warn("S&S Gym could not load custom meals.", error.message);
+    return [];
+  }
+  const mealRows = meals ?? [];
+  if (!mealRows.length) return [];
+
+  const mealIds = mealRows.map((meal) => meal.id);
+  const { data: rawItems, error: itemError } = await supabase!.from("meal_food_items").select("*").in("meal_id", mealIds);
+  if (itemError) throw itemError;
+
+  const foodIds = Array.from(new Set((rawItems ?? []).map((item) => item.food_item_id).filter(Boolean))) as string[];
+  const userFoodIds = Array.from(new Set((rawItems ?? []).map((item) => item.user_food_item_id).filter(Boolean))) as string[];
+  const foodMap = await foodsById(foodIds, userFoodIds);
+
+  const itemsByMeal = (rawItems ?? []).reduce<Record<string, MealItem[]>>((byMeal, item) => {
+    const foodId = item.food_item_id || item.user_food_item_id;
+    const food = foodId ? foodMap.get(foodId) : null;
+    const quantity = toNumber(item.quantity, 1);
+    const macros = food ? mealItemTotals(food, quantity) : { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+    const nextItem: MealItem = {
+      id: item.id,
+      meal_id: item.meal_id,
+      food_item_id: item.food_item_id,
+      user_food_item_id: item.user_food_item_id,
+      food_name: food?.food_name ?? "Saved food",
+      serving_size: food?.serving_size ?? "1 serving",
+      quantity,
+      ...macros
+    };
+    byMeal[item.meal_id] = [...(byMeal[item.meal_id] ?? []), nextItem];
+    return byMeal;
+  }, {});
+
+  return mealRows.map((meal) => {
+    const items = itemsByMeal[meal.id] ?? [];
+    return {
+      id: meal.id,
+      user_id: meal.user_id,
+      meal_name: meal.meal_name,
+      meal_category: meal.meal_category ?? null,
+      notes: meal.notes,
+      is_favorite: Boolean(meal.is_favorite),
+      created_at: meal.created_at,
+      updated_at: meal.updated_at,
+      items,
+      totals: summarizeMeal(items)
+    } satisfies CustomMeal;
+  });
+}
+
+export async function upsertCustomMeal(input: CustomMealInput) {
+  const cleanName = input.mealName.trim();
+  if (!cleanName) throw new Error("Meal name is required.");
+  if (!input.items.length) throw new Error("Add at least one food to the meal.");
+  input.items.forEach((item) => {
+    if (!Number.isFinite(item.quantity) || item.quantity <= 0) throw new Error("Meal food quantities must be greater than zero.");
+  });
+
+  if (!canUseUserData(input.userId)) {
+    const items = input.items.map((item) => {
+      const macros = mealItemTotals(item.food, item.quantity);
+      return {
+        id: crypto.randomUUID(),
+        meal_id: input.id ?? "mock-meal",
+        food_item_id: item.food.is_global === false ? null : item.food.id,
+        user_food_item_id: item.food.is_global === false ? item.food.id : null,
+        food_name: item.food.food_name,
+        serving_size: item.food.serving_size,
+        quantity: item.quantity,
+        ...macros
+      };
+    });
+    const now = new Date().toISOString();
+    return mockDelay({
+      id: input.id ?? crypto.randomUUID(),
+      user_id: input.userId,
+      meal_name: cleanName,
+      meal_category: input.mealCategory ?? null,
+      notes: input.notes ?? null,
+      is_favorite: Boolean(input.isFavorite),
+      created_at: now,
+      updated_at: now,
+      items,
+      totals: summarizeMeal(items)
+    } as CustomMeal);
+  }
+
+  const mealPayload = {
+    user_id: input.userId,
+    meal_name: cleanName,
+    meal_category: input.mealCategory?.trim() || null,
+    notes: input.notes?.trim() || null,
+    is_favorite: Boolean(input.isFavorite)
+  };
+
+  const mealRequest =
+    input.id && isUuid(input.id)
+      ? supabase!.from("meals").update(mealPayload).eq("id", input.id).eq("user_id", input.userId)
+      : supabase!.from("meals").insert(mealPayload);
+  const { data: meal, error } = await mealRequest.select("*").single();
+  if (error) throw error;
+
+  const deleteResult = await supabase!.from("meal_food_items").delete().eq("meal_id", meal.id);
+  if (deleteResult.error) throw deleteResult.error;
+
+  const rows = input.items.map((item) => ({
+    meal_id: meal.id,
+    food_item_id: item.food.is_global !== false && isUuid(item.food.id) ? item.food.id : null,
+    user_food_item_id: item.food.is_global === false && isUuid(item.food.id) ? item.food.id : null,
+    quantity: item.quantity
+  }));
+  const { error: itemError } = await supabase!.from("meal_food_items").insert(rows);
+  if (itemError) throw itemError;
+
+  const meals = await getCustomMeals(input.userId);
+  return meals.find((savedMeal) => savedMeal.id === meal.id) ?? meals[0];
+}
+
+export async function deleteCustomMeal(userId: string, mealId: string) {
+  if (!canUseUserData(userId) || !isUuid(mealId)) return mockDelay(true);
+  const { error } = await supabase!.from("meals").delete().eq("id", mealId).eq("user_id", userId);
+  if (error) throw error;
+  return true;
+}
+
+export async function addCustomMealToLog(userId: string, meal: CustomMeal, date = todayIso(), mealType: MealType = "Breakfast") {
+  const payload = {
+    user_id: userId,
+    food_item_id: null,
+    user_food_item_id: null,
+    log_date: date,
+    meal_type: normalizeMealType(mealType),
+    food_name: meal.meal_name,
+    serving_size: `${meal.items.length} foods`,
+    quantity: 1,
+    calories: meal.totals.calories,
+    protein_g: meal.totals.protein_g,
+    carbs_g: meal.totals.carbs_g,
+    fat_g: meal.totals.fat_g,
+    notes: meal.notes
+  };
+  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: crypto.randomUUID() } as FoodLog);
+  const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
+  if (error) throw error;
+  return data as FoodLog;
+}
 
 export async function getTodayMealPlanItems(userId: string, date = todayIso()) {
   if (!canUseUserData(userId)) return mockDelay<MealPlanItem[]>([]);
@@ -625,12 +1180,13 @@ export async function addFoodToMealPlan({
 }) {
   const macros = scaleFoodMacros(food, quantity);
   const safeMealType = normalizeMealType(mealType);
+  const isGlobalFood = food.is_global !== false;
   const payload = {
     user_id: userId,
     plan_date: todayIso(),
     meal_type: safeMealType,
-    food_item_id: isUuid(food.id) ? food.id : null,
-    user_food_item_id: null,
+    food_item_id: isGlobalFood && isUuid(food.id) ? food.id : null,
+    user_food_item_id: !isGlobalFood && isUuid(food.id) ? food.id : null,
     food_name: food.food_name,
     serving_size: food.serving_size,
     quantity,
@@ -948,6 +1504,46 @@ export async function getExerciseVideos(query = "") {
     return localVideos;
   }
   return dedupeExerciseVideos([...((data ?? []) as ExerciseVideo[]), ...localVideos]);
+}
+
+export async function getUserExerciseVideo(userId: string, exerciseId: string) {
+  if (!canUseUserData(userId) || !exerciseId) return mockDelay<UserExerciseVideo | null>(null);
+  const { data, error } = await supabase!
+    .from("user_exercise_videos")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("exercise_id", exerciseId)
+    .maybeSingle();
+  if (error) {
+    console.warn("S&S Gym could not load custom exercise video.", error.message);
+    return null;
+  }
+  return data as UserExerciseVideo | null;
+}
+
+export async function upsertUserExerciseVideo(userId: string, exerciseId: string, customVideoUrl: string) {
+  const cleanUrl = customVideoUrl.trim();
+  if (!/^https?:\/\/[^\s]+$/i.test(cleanUrl)) throw new Error("Enter a valid http or https video URL.");
+  const payload = { user_id: userId, exercise_id: exerciseId, custom_video_url: cleanUrl };
+  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as UserExerciseVideo);
+  const { data, error } = await supabase!
+    .from("user_exercise_videos")
+    .upsert(payload, { onConflict: "user_id,exercise_id" })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as UserExerciseVideo;
+}
+
+export async function resetUserExerciseVideo(userId: string, exerciseId: string) {
+  if (!canUseUserData(userId)) return mockDelay(true);
+  const { error } = await supabase!
+    .from("user_exercise_videos")
+    .delete()
+    .eq("user_id", userId)
+    .eq("exercise_id", exerciseId);
+  if (error) throw error;
+  return true;
 }
 
 export async function startWorkoutSession(userId: string, workout: Workout) {
@@ -1587,6 +2183,61 @@ export async function getActiveUserWorkoutPlan(userId: string) {
   return data ? normalizeWorkoutPlan(data as RawWorkoutPlan) : null;
 }
 
+export async function getUserWorkoutPlans(userId: string) {
+  if (!canUseUserData(userId)) return mockDelay<UserWorkoutPlan[]>([]);
+
+  const selectWithSource =
+    "id,user_id,name,is_active,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
+
+  const { data, error } = await supabase!
+    .from("user_workout_plans")
+    .select(selectWithSource)
+    .eq("user_id", userId)
+    .or("source.is.null,source.eq.manual")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.warn("S&S Gym could not load My Plans.", error.message);
+    return [];
+  }
+
+  return ((data ?? []) as unknown as RawWorkoutPlan[]).map(normalizeWorkoutPlan);
+}
+
+export async function getUserWorkoutPlan(userId: string, planId: string) {
+  if (!canUseUserData(userId) || !isUuid(planId)) return mockDelay<UserWorkoutPlan | null>(null);
+  const selectWithSource =
+    "id,user_id,name,is_active,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
+  const { data, error } = await supabase!
+    .from("user_workout_plans")
+    .select(selectWithSource)
+    .eq("user_id", userId)
+    .eq("id", planId)
+    .maybeSingle();
+  if (error) {
+    console.warn("S&S Gym could not load this plan.", error.message);
+    return null;
+  }
+  return data ? normalizeWorkoutPlan(data as unknown as RawWorkoutPlan) : null;
+}
+
+export async function getWorkoutTemplateWeekOptions() {
+  const fallback = { min: 1, max: 12, values: Array.from({ length: 12 }, (_, index) => index + 1) };
+  if (!supabase) return mockDelay(fallback);
+  const { data, error } = await supabase!
+    .from("workout_templates")
+    .select("program_duration_weeks")
+    .not("program_duration_weeks", "is", null)
+    .limit(1000);
+  if (error) {
+    console.warn("S&S Gym could not load workout template week options.", error.message);
+    return fallback;
+  }
+  const values = Array.from(new Set((data ?? []).map((item) => Number(item.program_duration_weeks)).filter((value) => Number.isFinite(value) && value > 0))).sort((a, b) => a - b);
+  if (!values.length) return fallback;
+  return { min: values[0], max: values[values.length - 1], values };
+}
+
 export async function getGeneratedWorkoutPlan(userId: string) {
   if (!canUseUserData(userId)) return mockDelay<GeneratedWorkoutPlan | null>(null);
 
@@ -1913,8 +2564,8 @@ export function workoutsFromPlanDay(day: UserWorkoutPlan["days"][number] | null 
 export async function saveOnboarding(answers: OnboardingAnswers) {
   if (!canUseUserData(answers.user_id)) return mockDelay(answers);
   let { data, error } = await supabase!.from("onboarding_answers").upsert(answers, { onConflict: "user_id" }).select("*").single();
-  if (error && error.message.toLowerCase().includes("available_equipment")) {
-    const { available_equipment: _availableEquipment, ...compatibleAnswers } = answers;
+  if (error && (error.message.toLowerCase().includes("available_equipment") || error.message.toLowerCase().includes("desired_duration_weeks"))) {
+    const { available_equipment: _availableEquipment, desired_duration_weeks: _desiredDurationWeeks, ...compatibleAnswers } = answers;
     const compatible = await supabase!.from("onboarding_answers").upsert(compatibleAnswers, { onConflict: "user_id" }).select("*").single();
     data = compatible.data;
     error = compatible.error;

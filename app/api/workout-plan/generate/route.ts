@@ -36,6 +36,7 @@ type OnboardingRequest = {
     days_per_week?: number;
     workout_duration_minutes?: number;
     workout_time_minutes?: number;
+    desired_duration_weeks?: number;
     available_equipment?: string[];
     nutrition_preferences?: string[];
     allergies_limitations?: string | null;
@@ -122,6 +123,7 @@ export async function POST(request: Request) {
   const trainingLevel = cleanString(answers.training_level, "Beginner");
   const daysPerWeek = Math.max(1, Math.min(7, cleanNumber(answers.days_per_week ?? answers.training_days_per_week, 3)));
   const workoutTimeMinutes = Math.max(10, cleanNumber(answers.workout_time_minutes ?? answers.workout_duration_minutes, 45));
+  const desiredDurationWeeks = Math.max(0, cleanNumber(answers.desired_duration_weeks, 0));
   const gender = cleanString(answers.gender, "Prefer not to say");
   const availableEquipment = cleanEquipment(answers.available_equipment, trainingPlace);
 
@@ -184,7 +186,9 @@ export async function POST(request: Request) {
     daysPerWeek,
     workoutTimeMinutes,
     availableEquipment,
-    gender
+    gender,
+    ageRange: onboardingAnswersPayload.age_range,
+    desiredDurationWeeks: desiredDurationWeeks || null
   };
   const recommendation = recommendWorkoutTemplate(templates, recommendationInput);
 
@@ -209,6 +213,7 @@ export async function POST(request: Request) {
   if (!templateDays.length) {
     return NextResponse.json({ error: "The selected workout template has no workout days." }, { status: 400 });
   }
+  const selectedDurationWeeks = desiredDurationWeeks || template.program_duration_weeks;
 
   const deactivate = await supabase.from("user_workout_plans").update({ is_active: false }).eq("user_id", userId).eq("is_active", true);
   if (deactivate.error) {
@@ -227,7 +232,7 @@ export async function POST(request: Request) {
       match_explanation: recommendation.explanation,
       match_reasons: recommendation.reasons,
       generated_from_onboarding_id: onboarding.id,
-      program_duration_weeks: template.program_duration_weeks,
+      program_duration_weeks: selectedDurationWeeks,
       days_per_week: template.days_per_week
     })
     .select("id,name")
@@ -294,7 +299,7 @@ export async function POST(request: Request) {
 
   const sessionRows = [];
   let sessionNumber = 1;
-  for (let weekIndex = 1; weekIndex <= template.program_duration_weeks; weekIndex += 1) {
+  for (let weekIndex = 1; weekIndex <= selectedDurationWeeks; weekIndex += 1) {
     for (let index = 0; index < templateDays.length; index += 1) {
       const day = templateDays[index];
       const scheduledDate = addDays(today, (weekIndex - 1) * 7 + (firstWeekOffsets[index] ?? index));
@@ -328,6 +333,7 @@ export async function POST(request: Request) {
       goal: template.main_goal,
       level: template.training_level,
       durationWeeks: template.program_duration_weeks,
+      selectedDurationWeeks,
       daysPerWeek: template.days_per_week,
       equipment: template.equipment_required ?? [],
       sessionsCreated: sessionRows.length

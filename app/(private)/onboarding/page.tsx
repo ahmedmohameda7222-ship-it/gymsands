@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Sparkles } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
@@ -9,10 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { saveOnboarding } from "@/services/database/repository";
+import { getWorkoutTemplateWeekOptions, saveOnboarding } from "@/services/database/repository";
 
 const steps = ["Basic info", "Goal", "Training", "Nutrition", "Finish"];
 
@@ -32,10 +31,24 @@ export default function OnboardingPage() {
     training_place: "Gym",
     training_days_per_week: 3,
     workout_duration_minutes: 45,
+    desired_duration_weeks: 4,
     available_equipment: ["Full gym"],
     nutrition_preferences: ["Egyptian food preferred"],
     allergies_limitations: ""
   });
+  const [weekOptions, setWeekOptions] = useState<number[]>([1, 2, 3, 4]);
+
+  useEffect(() => {
+    getWorkoutTemplateWeekOptions().then((options) => {
+      setWeekOptions(options.values);
+      setAnswers((current) => ({
+        ...current,
+        desired_duration_weeks: options.values.includes(current.desired_duration_weeks)
+          ? current.desired_duration_weeks
+          : options.min
+      }));
+    });
+  }, []);
 
   async function finish() {
     setIsSaving(true);
@@ -46,7 +59,7 @@ export default function OnboardingPage() {
           user_id: user?.id ?? "mock-user"
         });
         toast({ title: "Onboarding saved", description: "Your setup is ready." });
-        router.push("/my-workout");
+        router.push("/my-workout/generated");
         return;
       }
 
@@ -61,7 +74,7 @@ export default function OnboardingPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Could not generate your workout plan.");
       toast({ title: "Workout plan created", description: data.plan?.title ? `${data.plan.title} is ready.` : "Your recommended plan is ready." });
-      router.push("/my-workout");
+      router.push("/my-workout/generated");
     } catch (error) {
       toast({ title: "Could not finish onboarding", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
@@ -98,6 +111,7 @@ export default function OnboardingPage() {
               <ChoiceGroup label="Training place" value={answers.training_place} values={["Gym", "Home", "Both"]} onChange={(training_place) => setAnswers((current) => ({ ...current, training_place }))} />
               <ChoiceGroup label="Training availability" value={`${answers.training_days_per_week} days/week`} values={["2 days/week", "3 days/week", "4 days/week", "5 days/week", "6 days/week"]} onChange={(value) => setAnswers((current) => ({ ...current, training_days_per_week: Number(value[0]) }))} />
               <ChoiceGroup label="Workout duration" value={`${answers.workout_duration_minutes} minutes`} values={["20 minutes", "30 minutes", "45 minutes", "60 minutes", "75 minutes"]} onChange={(value) => setAnswers((current) => ({ ...current, workout_duration_minutes: Number(value.split(" ")[0]) }))} />
+              <ChoiceGroup label="Plan duration" value={`${answers.desired_duration_weeks} weeks`} values={weekOptions.map((week) => `${week} weeks`)} onChange={(value) => setAnswers((current) => ({ ...current, desired_duration_weeks: Number(value.split(" ")[0]) }))} />
               <div className="sm:col-span-2">
                 <MultiChoice
                   label="Available equipment"

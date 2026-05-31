@@ -22,6 +22,7 @@ export type OnboardingAnswers = {
   training_place: string;
   training_days_per_week: number;
   workout_duration_minutes: number;
+  desired_duration_weeks?: number;
   available_equipment?: string[];
   nutrition_preferences: string[];
   allergies_limitations?: string | null;
@@ -37,11 +38,39 @@ export type FoodItem = {
   fat_g: number;
   category: string | null;
   cuisine: string | null;
+  kitchen_id?: string | null;
+  subcategory_id?: string | null;
+  fiber_g?: number | null;
+  sugar_g?: number | null;
+  sodium_mg?: number | null;
   tags: string[] | null;
   notes: string | null;
   source_type: string;
   is_global: boolean;
   is_editable_by_user: boolean;
+};
+
+export type FoodKitchen = {
+  id: string;
+  user_id: string | null;
+  name: string;
+  is_system: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FoodSubcategory = {
+  id: string;
+  kitchen_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserFoodItem = FoodItem & {
+  user_id: string;
+  is_global: false;
+  is_editable_by_user: true;
 };
 
 export type FoodLog = {
@@ -62,6 +91,66 @@ export type FoodLog = {
 };
 
 export type MealType = "Breakfast" | "Lunch" | "Snack" | "Dinner";
+
+export type MealItem = {
+  id: string;
+  meal_id: string;
+  food_item_id: string | null;
+  user_food_item_id: string | null;
+  food_name: string;
+  serving_size: string;
+  quantity: number;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+};
+
+export type CustomMeal = {
+  id: string;
+  user_id: string;
+  meal_name: string;
+  meal_category: string | null;
+  notes: string | null;
+  is_favorite: boolean;
+  created_at: string;
+  updated_at: string;
+  items: MealItem[];
+  totals: {
+    calories: number;
+    protein_g: number;
+    carbs_g: number;
+    fat_g: number;
+  };
+};
+
+export type WaterLog = {
+  id: string;
+  user_id: string;
+  log_date: string;
+  amount_ml: number;
+  created_at: string;
+};
+
+export type DailyNutritionSummary = {
+  date: string;
+  planned_calories: number;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  water_ml: number;
+  logs: FoodLog[];
+};
+
+export type UserExerciseVideo = {
+  id: string;
+  user_id: string;
+  exercise_id: string;
+  custom_video_url: string;
+  created_at: string;
+  updated_at: string;
+};
 
 export type MealPlanItemStatus = "planned" | "done";
 

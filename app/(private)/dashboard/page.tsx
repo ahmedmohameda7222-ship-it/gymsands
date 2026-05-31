@@ -60,7 +60,7 @@ export default function DashboardPage() {
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/my-workout">Start Workout</Link>
+              <Link href="/my-workout/plans">Start Workout</Link>
             </Button>
           </>
         }
@@ -102,9 +102,9 @@ export default function DashboardPage() {
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/my-workout">
+              <Link href="/my-workout/plans">
                 <Dumbbell className="h-4 w-4" />
-                My Workout
+                My Plans
               </Link>
             </Button>
             <Button asChild variant="outline">
