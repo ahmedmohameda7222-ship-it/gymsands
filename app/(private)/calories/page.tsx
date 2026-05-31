@@ -32,6 +32,19 @@ const fallbackTargets: Targets = {
   water_ml: 2500
 };
 
+function mixColor(start: [number, number, number], end: [number, number, number], amount: number) {
+  const clamped = Math.min(1, Math.max(0, amount));
+  const [r, g, b] = start.map((value, index) => Math.round(value + (end[index] - value) * clamped));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function calorieProgressColor(progressPercent: number) {
+  if (progressPercent <= 50) return "rgb(37, 99, 235)";
+  if (progressPercent <= 80) return mixColor([37, 99, 235], [245, 158, 11], (progressPercent - 50) / 30);
+  if (progressPercent <= 95) return mixColor([245, 158, 11], [239, 68, 68], (progressPercent - 80) / 15);
+  return "rgb(220, 38, 38)";
+}
+
 export default function CaloriesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -200,13 +213,19 @@ function TargetField({ label, value, onChange }: { label: string; value: string;
 }
 
 function TrackerCard({ label, value, target, unit }: { label: string; value: number; target: number; unit: string }) {
+  const progressValue = percent(value, target);
+  const isCalories = label.toLowerCase() === "calories";
   return (
     <Card>
       <CardContent className="pt-5">
         <p className="text-sm text-muted-foreground">{label}</p>
         <p className="mt-2 text-2xl font-bold">{value}{unit}</p>
         <p className="mt-1 text-sm text-muted-foreground">Target {target}{unit}</p>
-        <Progress value={percent(value, target)} className="mt-4" />
+        <Progress
+          value={progressValue}
+          className="mt-4"
+          indicatorStyle={isCalories ? { background: calorieProgressColor(progressValue) } : undefined}
+        />
       </CardContent>
     </Card>
   );

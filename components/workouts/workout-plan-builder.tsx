@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarCheck, Dumbbell, ExternalLink, Play, Plus, Save, Search, SkipForward, Trash2, TrendingUp } from "lucide-react";
+import { CalendarCheck, Dumbbell, ExternalLink, Pencil, Play, Plus, Save, Search, SkipForward, Trash2, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { WorkoutCalendar, type WeeklyPlanDay } from "@/components/workouts/workout-calendar";
+import { clearStoredValue, workoutStorageKey } from "@/lib/workout-persistence";
 import {
   createUserWorkoutPlan,
   getActiveUserWorkoutPlan,
@@ -42,6 +43,10 @@ function withTrainingDefaults(workout: Workout): Workout {
 
 function isVideoLink(value: string | null | undefined) {
   return Boolean(value && /^https?:\/\//i.test(value));
+}
+
+function workoutIdentity(workout: Workout) {
+  return `${workout.name.toLowerCase()}-${(workout.muscle_category || workout.target_muscle).toLowerCase()}-${(workout.equipment_required || workout.equipment).toLowerCase()}`;
 }
 
 export function WorkoutPlanBuilder() {
@@ -174,7 +179,7 @@ export function WorkoutPlanBuilder() {
   function addWorkout(workout: Workout) {
     const nextWorkout = withTrainingDefaults(workout);
     updateDay(activeDayIndex, {
-      exercises: activeDay.exercises.some((item) => item.id === workout.id) ? activeDay.exercises : [...activeDay.exercises, nextWorkout]
+      exercises: activeDay.exercises.some((item) => workoutIdentity(item) === workoutIdentity(nextWorkout)) ? activeDay.exercises : [...activeDay.exercises, nextWorkout]
     });
   }
 
@@ -232,6 +237,25 @@ export function WorkoutPlanBuilder() {
     router.push(`/workouts/session/day/${day.id}`);
   }
 
+  function editPlanDay(day: WeeklyPlanDay | undefined, fallbackIndex = activeDayIndex) {
+    if (!day) return;
+    if (!day.id) {
+      setActiveDayIndex(fallbackIndex);
+      toast({ title: "Save the plan first", description: "Saved workout days open in the dedicated editor." });
+      return;
+    }
+    router.push(`/my-workout/day/${day.id}`);
+  }
+
+  function openCalendarDay(index: number) {
+    const day = days[index];
+    if (day?.id) {
+      router.push(`/my-workout/day/${day.id}`);
+      return;
+    }
+    setActiveDayIndex(index);
+  }
+
   function startToday() {
     if (!todaysDay) {
       toast({ title: "No workout for today", description: `Today is ${today}. Add exercises to ${today}, then save the plan.` });
@@ -258,6 +282,7 @@ export function WorkoutPlanBuilder() {
     try {
       setIsSkipping(true);
       const skipped = await skipWorkoutDay(user?.id ?? "mock-user", { ...todaysDay, id: todaysDay.id });
+      clearStoredValue(workoutStorageKey(["workout-day-session", user?.id ?? "mock-user", todaysDay.id]));
       setActivity((current) => [
         skipped,
         ...current.filter((session) => !(session.plan_day_id === skipped.plan_day_id && isCurrentWeekSession(session)))
@@ -278,7 +303,7 @@ export function WorkoutPlanBuilder() {
         days={days}
         activity={activity}
         activeDayIndex={activeDayIndex}
-        onSelectDay={setActiveDayIndex}
+        onSelectDay={openCalendarDay}
         onStartToday={startToday}
         onSkipToday={skipToday}
         isSkipping={isSkipping}
@@ -298,7 +323,7 @@ export function WorkoutPlanBuilder() {
           {savedMessage ? <p className="text-sm text-emerald-700">{savedMessage}</p> : null}
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
+          <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto]">
             <div className="space-y-2">
               <Label>Plan name</Label>
               <Input value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder="Push Pull Legs, Ramadan plan, etc." />
@@ -306,6 +331,10 @@ export function WorkoutPlanBuilder() {
             <Button className="self-end" variant="outline" onClick={() => startPlanDay(activeDay)} disabled={!activeDay?.exercises.length}>
               <Play className="h-4 w-4" />
               Start this day
+            </Button>
+            <Button className="self-end" variant="outline" onClick={() => editPlanDay(activeDay)} disabled={!activeDay?.exercises.length}>
+              <Pencil className="h-4 w-4" />
+              Edit day
             </Button>
             <Button className="self-end" onClick={savePlan} disabled={isSaving || totalExercises === 0}>
               <Save className="h-4 w-4" />
@@ -315,7 +344,7 @@ export function WorkoutPlanBuilder() {
 
           <div className="flex flex-wrap gap-2">
             {days.map((day, index) => (
-              <Button key={`${day.dayName}-${index}`} variant={activeDayIndex === index ? "default" : "outline"} size="sm" onClick={() => setActiveDayIndex(index)}>
+              <Button key={`${day.dayName}-${index}`} variant={activeDayIndex === index ? "default" : "outline"} size="sm" onClick={() => openCalendarDay(index)}>
                 {day.weekday ?? `Day ${index + 1}`} <Badge className="ml-2" variant="outline">{day.exercises.length}</Badge>
               </Button>
             ))}

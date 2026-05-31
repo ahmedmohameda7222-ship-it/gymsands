@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
 import { completeWorkoutSession, getOrStartWorkoutDaySession, getWorkoutSessionLogs, saveWorkoutSetLogs, updateWorkoutSessionDuration } from "@/services/database/repository";
 import type { ExerciseLog, UserWorkoutPlanExercise, WorkoutPlanDaySession, WorkoutSession } from "@/types";
 
@@ -103,6 +104,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isStarting, setIsStarting] = useState(true);
+  const workoutTimerKey = useMemo(() => workoutStorageKey(["workout-day-session", user?.id ?? "mock-user", day.id]), [day.id, user?.id]);
 
   useEffect(() => {
     let active = true;
@@ -111,7 +113,10 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         if (!active) return;
         setSession(nextSession);
         const parsedStartedAt = Date.parse(nextSession.started_at);
-        if (Number.isFinite(parsedStartedAt)) setStartedAtMs(parsedStartedAt);
+        const storedStartedAt = readStoredTimestamp(workoutTimerKey);
+        const nextStartedAt = storedStartedAt ?? (Number.isFinite(parsedStartedAt) ? parsedStartedAt : Date.now());
+        setStartedAtMs(nextStartedAt);
+        storeTimestamp(workoutTimerKey, nextStartedAt);
         setSessionNotes(nextSession.notes ?? "");
         const existingLogs = await getWorkoutSessionLogs(nextSession.id);
         if (active) setExerciseStates((current) => hydrateStates(current, existingLogs));
@@ -125,7 +130,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     return () => {
       active = false;
     };
-  }, [day, toast, user]);
+  }, [day, toast, user, workoutTimerKey]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -163,11 +168,12 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const durationMinutes = Math.max(1, Math.ceil(elapsedSeconds / 60));
 
   function buildLogRows(states = exerciseStates) {
-    return states.flatMap((item) =>
+    return states.flatMap((item, exerciseIndex) =>
       item.sets
         .filter((set) => set.completedAt)
         .map((set) => ({
           planExerciseId: item.exercise.id,
+          exerciseOrder: exerciseIndex + 1,
           exerciseName: item.exercise.exercise_name,
           exerciseCategory: item.exercise.category || item.exercise.target_muscle || item.exercise.equipment || "Workout",
           plannedSets: item.exercise.sets ?? item.sets.length,
@@ -254,10 +260,12 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
       toast({ title: "Session is still starting", description: "Try again in a moment." });
       return;
     }
+    if (isSaving) return;
     try {
       setIsSaving(true);
       await saveWorkoutSetLogs(session.id, buildLogRows());
       await completeWorkoutSession(session.id, sessionNotes, durationMinutes);
+      clearStoredValue(workoutTimerKey);
       toast({ title: "Workout saved", description: `${day.day_name} was added to your workout history.` });
       router.push("/my-workout");
     } catch (error) {
@@ -267,13 +275,21 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     }
   }
 
+  function resetWorkoutTimer() {
+    const nextStartedAt = Date.now();
+    setStartedAtMs(nextStartedAt);
+    setElapsedSeconds(0);
+    storeTimestamp(workoutTimerKey, nextStartedAt);
+    if (session) updateWorkoutSessionDuration(session.id, 1).catch(() => undefined);
+  }
+
   if (!exerciseStates.length) {
     return (
       <Card>
         <CardContent className="space-y-3 pt-5">
           <p className="text-sm text-muted-foreground">This workout day has no exercises yet.</p>
           <Button asChild variant="outline">
-            <Link href="/workouts"><ArrowLeft className="h-4 w-4" /> Back to workouts</Link>
+            <Link href="/my-workout"><ArrowLeft className="h-4 w-4" /> Back to plan</Link>
           </Button>
         </CardContent>
       </Card>
@@ -284,13 +300,17 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="outline">
-          <Link href="/workouts"><ArrowLeft className="h-4 w-4" /> Back to plan</Link>
+          <Link href="/my-workout"><ArrowLeft className="h-4 w-4" /> Back to plan</Link>
         </Button>
         <div className="flex flex-wrap gap-2">
           <Badge>{day.weekday ?? "Workout day"}</Badge>
           <Badge variant="outline">{completedSets}/{totalSets} sets done</Badge>
           <Badge variant="outline">{formatTime(elapsedSeconds)}</Badge>
           {isStarting ? <Badge variant="outline">Saving session...</Badge> : null}
+          <Button variant="outline" size="sm" onClick={resetWorkoutTimer}>
+            <TimerReset className="h-4 w-4" />
+            Reset workout timer
+          </Button>
         </div>
       </div>
 

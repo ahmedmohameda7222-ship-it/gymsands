@@ -99,6 +99,14 @@ export type Workout = {
   rest_seconds: number | null;
   instructions: string;
   notes: string | null;
+  muscle_category?: string | null;
+  equipment_required?: string | null;
+  mechanics?: string | null;
+  force_type?: string | null;
+  experience_level?: string | null;
+  secondary_muscles?: string[] | null;
+  exercise_url?: string | null;
+  video_url?: string | null;
   is_global: boolean;
 };
 
@@ -111,7 +119,25 @@ export type ExerciseVideo = {
   video_url: string | null;
   instructions: string | null;
   source: string | null;
+  muscle_category?: string | null;
+  equipment_required?: string | null;
+  mechanics?: string | null;
+  force_type?: string | null;
+  experience_level?: string | null;
+  secondary_muscles?: string[] | null;
   is_global: boolean;
+};
+
+export type ExerciseMetadata = {
+  id: string;
+  muscle_category: string;
+  exercise_name: string;
+  equipment_required: string;
+  mechanics: string;
+  force_type: string;
+  experience_level: string;
+  secondary_muscles: string;
+  exercise_url: string;
 };
 
 export type WorkoutSession = {
@@ -137,6 +163,7 @@ export type ExerciseLog = {
   id: string;
   workout_session_id: string;
   plan_exercise_id: string | null;
+  exercise_order?: number | null;
   exercise_name: string;
   exercise_category?: string | null;
   planned_sets: number | null;

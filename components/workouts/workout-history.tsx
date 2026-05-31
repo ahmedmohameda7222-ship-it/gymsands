@@ -18,8 +18,7 @@ type HistoryExercise = {
   name: string;
   category: string;
   sets: string;
-  reps: string;
-  weight: string;
+  setDetails: string[];
   notes: string;
 };
 
@@ -36,26 +35,26 @@ type HistoryItem = {
 function groupLogs(logs: ExerciseLog[]) {
   const groups = new Map<string, ExerciseLog[]>();
   logs.forEach((log) => {
-    const key = log.plan_exercise_id || log.exercise_name || log.id;
-    groups.set(key, [...(groups.get(key) ?? []), log]);
+    const key = log.plan_exercise_id || (log.exercise_order ? `${log.exercise_order}-${log.exercise_name}` : log.exercise_name || log.id);
+    groups.set(key, [...(groups.get(key) ?? []), log].sort((a, b) => a.set_number - b.set_number));
   });
   return Array.from(groups.values());
 }
 
-function totalReps(logs: ExerciseLog[]) {
-  return logs.reduce((sum, log) => sum + (Number(log.reps) || 0), 0);
-}
-
-function setWeights(logs: ExerciseLog[]) {
-  const values = logs
-    .map((log) => log.weight_kg)
-    .filter((value): value is number => value !== null && value !== undefined && Number.isFinite(Number(value)))
-    .map((value) => `${Number(value)} kg`);
-  return values.length ? Array.from(new Set(values)).join(", ") : "Bodyweight";
-}
-
 function setNotes(logs: ExerciseLog[]) {
   return logs.map((log) => log.notes).filter(Boolean).join("; ");
+}
+
+function formatSetLine(log: Pick<ExerciseLog, "set_number" | "reps" | "weight_kg" | "planned_reps">) {
+  const reps = log.reps === null || log.reps === undefined ? log.planned_reps || "Custom reps" : `${log.reps} reps`;
+  const weight = log.weight_kg === null || log.weight_kg === undefined ? "" : ` x ${Number(log.weight_kg)}kg`;
+  return `Set ${log.set_number}: ${reps}${weight}`;
+}
+
+function parseSetCount(value: string | number | null | undefined) {
+  if (typeof value === "number") return Math.max(1, value);
+  const parsed = value?.match(/\d+/)?.[0];
+  return parsed ? Math.max(1, Number(parsed)) : 1;
 }
 
 export function WorkoutHistory() {
@@ -171,18 +170,21 @@ export function WorkoutHistory() {
                     return (
                       <div
                         key={`${session.id}-${exercise.id}`}
-                        className={cn("grid gap-2 rounded-md bg-slate-50 p-3 text-sm", "lg:grid-cols-[1.2fr_0.7fr_0.7fr_1fr]")}
+                        className={cn("grid gap-3 rounded-md bg-slate-50 p-3 text-sm", "lg:grid-cols-[1.1fr_1.5fr_0.8fr]")}
                       >
                         <div>
                           <p className="font-medium text-slate-950">{exercise.name}</p>
                           <p className="text-xs text-muted-foreground">{exercise.category}</p>
                         </div>
-                        <p>{exercise.sets}</p>
-                        <p>{exercise.reps}</p>
-                        <p className="text-muted-foreground">
-                          {exercise.weight}
-                          {exercise.notes ? ` - ${exercise.notes}` : ""}
-                        </p>
+                        <div className="space-y-1">
+                          {exercise.setDetails.map((line, lineIndex) => (
+                            <p key={`${exercise.id}-set-${lineIndex}`} className="text-slate-800">{line}</p>
+                          ))}
+                        </div>
+                        <div>
+                          <p>{exercise.sets}</p>
+                          {exercise.notes ? <p className="mt-1 text-muted-foreground">{exercise.notes}</p> : null}
+                        </div>
                       </div>
                     );
                   })}
@@ -227,8 +229,7 @@ function normalizeLegacyHistory(session: WorkoutSessionSummary): HistoryItem {
         name: first?.exercise_name || session.workout_name,
         category: first?.exercise_category || category,
         sets: `${logsForExercise.length} sets`,
-        reps: `${totalReps(logsForExercise)} reps`,
-        weight: setWeights(logsForExercise),
+        setDetails: logsForExercise.map(formatSetLine),
         notes: setNotes(logsForExercise)
       };
     })
@@ -243,14 +244,24 @@ function normalizeGeneratedHistory(session: UserWorkoutSession): HistoryItem {
     date: session.completed_at || session.started_at || `${session.scheduled_date}T00:00:00`,
     durationMinutes: session.duration_minutes ?? 0,
     notes: session.notes,
-    exercises: session.logs.map((log) => ({
-      id: log.id,
-      name: log.exercise_name,
-      category: `${log.planned_sets || "Custom"} sets`,
-      sets: log.planned_sets ? `${log.planned_sets} sets` : "Custom",
-      reps: log.reps === null || log.reps === undefined ? log.planned_reps || "Custom reps" : `${log.reps} reps`,
-      weight: log.weight_kg === null || log.weight_kg === undefined ? "Bodyweight" : `${log.weight_kg} kg`,
-      notes: log.notes ?? ""
-    }))
+    exercises: session.logs.map((log) => {
+      const setCount = parseSetCount(log.planned_sets);
+      const setDetails = Array.from({ length: setCount }, (_, index) =>
+        formatSetLine({
+          set_number: index + 1,
+          reps: log.reps,
+          weight_kg: log.weight_kg,
+          planned_reps: log.planned_reps
+        })
+      );
+      return {
+        id: log.id,
+        name: log.exercise_name,
+        category: `${log.planned_sets || "Custom"} sets`,
+        sets: log.planned_sets ? `${log.planned_sets} sets` : "Custom",
+        setDetails,
+        notes: log.notes ?? ""
+      };
+    })
   };
 }

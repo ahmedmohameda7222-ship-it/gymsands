@@ -1,7 +1,7 @@
 "use client";
 
 import type { Session, User } from "@supabase/supabase-js";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { env } from "@/lib/env";
 import type { Profile } from "@/types";
@@ -18,17 +18,17 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const mockUser = {
+  id: "mock-user",
+  email: "member@ssgym.test"
+} as User;
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const mockUser = {
-    id: "mock-user",
-    email: "member@ssgym.test"
-  } as User;
-
-  async function loadProfile(userId: string, email?: string | null) {
+  const loadProfile = useCallback(async (userId: string, email?: string | null) => {
     if (!supabase || env.useMockAuth) {
       setProfile({
         id: "mock-user",
@@ -71,14 +71,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     setProfile((inserted.data as Profile | null) ?? null);
-  }
+  }, []);
 
-  async function refreshProfile() {
+  const refreshProfile = useCallback(async () => {
     const currentUser = session?.user;
     if (currentUser) {
       await loadProfile(currentUser.id, currentUser.email);
     }
-  }
+  }, [loadProfile, session?.user]);
 
   useEffect(() => {
     let mounted = true;
@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [loadProfile]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -139,7 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(null);
       }
     }),
-    [session, profile, isLoading]
+    [session, profile, isLoading, refreshProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -3,9 +3,11 @@
 import { supabase } from "@/lib/supabase/client";
 import { isUuid, todayIso } from "@/lib/utils";
 import { egyptianFoods } from "@/data/egyptian-foods";
+import muscleStrengthExercisesData from "@/data/muscle-strength-exercises.json";
 import { defaultExerciseInstructions, sampleExerciseVideos, sampleWorkouts } from "@/data/workouts";
 import type {
   BodyMeasurement,
+  ExerciseMetadata,
   ExerciseVideo,
   FoodItem,
   FoodLog,
@@ -35,9 +37,52 @@ function mockDelay<T>(value: T) {
 
 const workoutPageSize = 60;
 const skippedNotePrefix = "[skipped]";
+const muscleStrengthExercises = muscleStrengthExercisesData as ExerciseMetadata[];
+
+export type WorkoutFilters = {
+  category?: string;
+  categories?: string[];
+  equipment?: string;
+  equipmentRequired?: string[];
+  difficulty?: string;
+  experienceLevels?: string[];
+  mechanics?: string[];
+  forceTypes?: string[];
+  secondaryMuscles?: string[];
+};
+
+export type WorkoutFilterOptions = {
+  muscleCategories: string[];
+  equipmentRequired: string[];
+  mechanics: string[];
+  forceTypes: string[];
+  experienceLevels: string[];
+  secondaryMuscles: string[];
+};
 
 function normalizeText(value: string | null | undefined) {
   return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function uniqueSorted(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter(Boolean) as string[])).sort((a, b) =>
+    a.localeCompare(b)
+  );
+}
+
+function splitList(value: string | string[] | null | undefined) {
+  if (Array.isArray(value)) return value.map((item) => item.trim()).filter(Boolean);
+  if (!value || value.toLowerCase() === "none") return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item && item.toLowerCase() !== "none");
+}
+
+function hasAnySelected(values: Array<string | null | undefined>, selected: string[] | undefined) {
+  if (!selected?.length) return true;
+  const normalizedValues = values.map(normalizeText).filter(Boolean);
+  return selected.some((item) => normalizedValues.includes(normalizeText(item)));
 }
 
 function looksLikeUrl(value: string | null | undefined) {
@@ -95,6 +140,7 @@ function isSchemaCompatibilityError(error: { message?: string; code?: string } |
     message.includes("skipped") ||
     message.includes("skipped_at") ||
     message.includes("exercise_category") ||
+    message.includes("exercise_order") ||
     message.includes("invalid input value for enum")
   );
 }
@@ -108,7 +154,10 @@ function isMissingTemplateSchemaError(error: { message?: string; code?: string }
     message.includes("user_workout_sessions") ||
     message.includes("user_exercise_logs") ||
     message.includes("template_id") ||
-    message.includes("source")
+    message.includes("source") ||
+    message.includes("source_workout_id") ||
+    message.includes("instructions") ||
+    message.includes("video_url")
   );
 }
 
@@ -185,19 +234,109 @@ function localFoods(query = "") {
   return egyptianFoods.filter((food) => normalizeText(food.food_name).includes(normalized));
 }
 
+function findExerciseMetadata(name: string | null | undefined) {
+  const normalized = normalizeText(name);
+  return muscleStrengthExercises.find((exercise) => normalizeText(exercise.exercise_name) === normalized) ?? null;
+}
+
+function mapMetadataToWorkout(exercise: ExerciseMetadata): Workout {
+  const secondaryMuscles = splitList(exercise.secondary_muscles);
+  return {
+    id: exercise.id,
+    name: exercise.exercise_name,
+    category: exercise.mechanics || "Exercise",
+    target_muscle: exercise.muscle_category || "General",
+    equipment: exercise.equipment_required || "Varies",
+    difficulty: exercise.experience_level || "Beginner",
+    sets: 3,
+    reps: "8-12",
+    rest_seconds: 75,
+    instructions: defaultExerciseInstructions,
+    notes: exercise.exercise_url,
+    muscle_category: exercise.muscle_category,
+    equipment_required: exercise.equipment_required,
+    mechanics: exercise.mechanics,
+    force_type: exercise.force_type,
+    experience_level: exercise.experience_level,
+    secondary_muscles: secondaryMuscles,
+    exercise_url: exercise.exercise_url,
+    video_url: null,
+    is_global: true
+  };
+}
+
+function mapMetadataToVideo(exercise: ExerciseMetadata): ExerciseVideo {
+  return {
+    id: exercise.id,
+    exercise_name: exercise.exercise_name,
+    category_type: "Muscle Category",
+    category: exercise.muscle_category,
+    exercise_url: exercise.exercise_url,
+    video_url: null,
+    instructions: defaultExerciseInstructions,
+    source: "muscle_strength_exercise_metadata_csv",
+    muscle_category: exercise.muscle_category,
+    equipment_required: exercise.equipment_required,
+    mechanics: exercise.mechanics,
+    force_type: exercise.force_type,
+    experience_level: exercise.experience_level,
+    secondary_muscles: splitList(exercise.secondary_muscles),
+    is_global: true
+  };
+}
+
+function hydrateWorkoutMetadata(workout: Workout): Workout {
+  const metadata = findExerciseMetadata(workout.name);
+  if (!metadata) {
+    return {
+      ...workout,
+      muscle_category: workout.muscle_category ?? workout.target_muscle,
+      equipment_required: workout.equipment_required ?? workout.equipment,
+      experience_level: workout.experience_level ?? workout.difficulty,
+      exercise_url: workout.exercise_url ?? (looksLikeUrl(workout.notes) ? workout.notes : null),
+      secondary_muscles: workout.secondary_muscles ?? []
+    };
+  }
+
+  const secondaryMuscles = splitList(metadata.secondary_muscles);
+  return {
+    ...workout,
+    target_muscle: workout.target_muscle || metadata.muscle_category,
+    equipment: workout.equipment || metadata.equipment_required,
+    difficulty: workout.difficulty || metadata.experience_level,
+    notes: workout.notes ?? metadata.exercise_url,
+    muscle_category: workout.muscle_category ?? metadata.muscle_category,
+    equipment_required: workout.equipment_required ?? metadata.equipment_required,
+    mechanics: workout.mechanics ?? metadata.mechanics,
+    force_type: workout.force_type ?? metadata.force_type,
+    experience_level: workout.experience_level ?? metadata.experience_level,
+    secondary_muscles: workout.secondary_muscles ?? secondaryMuscles,
+    exercise_url: workout.exercise_url ?? metadata.exercise_url
+  };
+}
+
 function mapVideoToWorkout(video: ExerciseVideo): Workout {
+  const metadata = findExerciseMetadata(video.exercise_name);
   return {
     id: video.id,
     name: video.exercise_name,
-    category: video.category_type ?? "Exercise",
-    target_muscle: video.category ?? "General",
-    equipment: video.category_type === "Equipment" ? video.category ?? "Varies" : "Varies",
-    difficulty: "Beginner",
+    category: metadata?.mechanics ?? video.category_type ?? "Exercise",
+    target_muscle: metadata?.muscle_category ?? video.muscle_category ?? video.category ?? "General",
+    equipment: metadata?.equipment_required ?? video.equipment_required ?? (video.category_type === "Equipment" ? video.category ?? "Varies" : "Varies"),
+    difficulty: metadata?.experience_level ?? video.experience_level ?? "Beginner",
     sets: 3,
     reps: "8-12",
     rest_seconds: 75,
     instructions: video.instructions || defaultExerciseInstructions,
     notes: video.exercise_url,
+    muscle_category: metadata?.muscle_category ?? video.muscle_category ?? video.category,
+    equipment_required: metadata?.equipment_required ?? video.equipment_required ?? null,
+    mechanics: metadata?.mechanics ?? video.mechanics ?? null,
+    force_type: metadata?.force_type ?? video.force_type ?? null,
+    experience_level: metadata?.experience_level ?? video.experience_level ?? "Beginner",
+    secondary_muscles: metadata ? splitList(metadata.secondary_muscles) : video.secondary_muscles ?? [],
+    exercise_url: video.exercise_url,
+    video_url: video.video_url,
     is_global: video.is_global
   };
 }
@@ -212,33 +351,77 @@ function dedupeWorkouts(workouts: Workout[]) {
   });
 }
 
+function dedupeExerciseVideos(videos: ExerciseVideo[]) {
+  const seen = new Set<string>();
+  return videos.filter((video) => {
+    const key = `${normalizeText(video.exercise_name)}-${normalizeText(video.category)}-${normalizeText(video.exercise_url)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function localWorkoutCategories() {
   return Array.from(
     new Set([
       ...sampleWorkouts.map((workout) => workout.target_muscle),
-      ...sampleExerciseVideos.map((video) => video.category).filter(Boolean)
+      ...sampleExerciseVideos.map((video) => video.category).filter(Boolean),
+      ...muscleStrengthExercises.map((exercise) => exercise.muscle_category),
+      ...muscleStrengthExercises.map((exercise) => exercise.equipment_required)
     ])
   ).sort() as string[];
 }
 
-function localWorkouts(query = "", category?: string) {
+function getLocalWorkoutFilterOptions(): WorkoutFilterOptions {
+  return {
+    muscleCategories: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.muscle_category)),
+    equipmentRequired: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.equipment_required)),
+    mechanics: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.mechanics)),
+    forceTypes: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.force_type)),
+    experienceLevels: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.experience_level)),
+    secondaryMuscles: uniqueSorted(muscleStrengthExercises.flatMap((exercise) => splitList(exercise.secondary_muscles)))
+  };
+}
+
+function matchesWorkoutFilters(workout: Workout, query = "", filters: WorkoutFilters = {}) {
   const normalized = normalizeText(query);
-  return dedupeWorkouts([
-    ...sampleWorkouts,
+  const muscleCategories = filters.categories ?? (filters.category ? [filters.category] : []);
+  const equipmentRequired = filters.equipmentRequired ?? (filters.equipment ? [filters.equipment] : []);
+  const experienceLevels = filters.experienceLevels ?? (filters.difficulty ? [filters.difficulty] : []);
+  const secondaryMuscles = workout.secondary_muscles ?? [];
+
+  const matchesQuery =
+    !normalized ||
+    [
+      workout.name,
+      workout.target_muscle,
+      workout.equipment,
+      workout.category,
+      workout.mechanics,
+      workout.force_type,
+      workout.experience_level,
+      ...(secondaryMuscles ?? [])
+    ].some((value) => normalizeText(value).includes(normalized));
+
+  return (
+    matchesQuery &&
+    hasAnySelected([workout.muscle_category, workout.target_muscle, workout.category], muscleCategories) &&
+    hasAnySelected([workout.equipment_required, workout.equipment], equipmentRequired) &&
+    hasAnySelected([workout.mechanics, workout.category], filters.mechanics) &&
+    hasAnySelected([workout.force_type], filters.forceTypes) &&
+    hasAnySelected([workout.experience_level, workout.difficulty], experienceLevels) &&
+    hasAnySelected(secondaryMuscles, filters.secondaryMuscles)
+  );
+}
+
+function localWorkouts(query = "", filters: WorkoutFilters = {}) {
+  const normalized = normalizeText(query);
+  const source = dedupeWorkouts([
+    ...muscleStrengthExercises.map(mapMetadataToWorkout),
+    ...sampleWorkouts.map(hydrateWorkoutMetadata),
     ...sampleExerciseVideos.map(mapVideoToWorkout)
-  ]).filter((workout) => {
-    const matchesCategory =
-      !category ||
-      workout.category === category ||
-      workout.target_muscle === category ||
-      workout.equipment === category;
-    const matchesQuery =
-      !normalized ||
-      normalizeText(workout.name).includes(normalized) ||
-      normalizeText(workout.target_muscle).includes(normalized) ||
-      normalizeText(workout.equipment).includes(normalized);
-    return matchesCategory && matchesQuery;
-  });
+  ]);
+  return source.filter((workout) => matchesWorkoutFilters(workout, normalized, filters));
 }
 
 export async function getFoodCategories() {
@@ -631,11 +814,12 @@ export async function copyYesterdaysMeals(userId: string) {
 }
 
 export async function getWorkoutCategories() {
-  if (!supabase) return mockDelay(localWorkoutCategories());
+  const fallback = localWorkoutCategories();
+  if (!supabase) return mockDelay(fallback);
 
   const [workoutResult, videoResult] = await Promise.all([
-    supabase!.from("workouts").select("category,target_muscle,equipment").eq("is_global", true).limit(5000),
-    supabase!.from("exercise_videos").select("category,category_type").eq("is_global", true).limit(5000)
+    supabase!.from("workouts").select("*").eq("is_global", true).limit(5000),
+    supabase!.from("exercise_videos").select("*").eq("is_global", true).limit(5000)
   ]);
 
   if (workoutResult.error || videoResult.error) {
@@ -643,44 +827,78 @@ export async function getWorkoutCategories() {
       "S&S Gym could not load workout categories, using local fallback.",
       workoutResult.error?.message || videoResult.error?.message
     );
-    return localWorkoutCategories();
+    return fallback;
   }
 
   const categories = new Set<string>();
   workoutResult.data?.forEach((workout) => {
+    if (workout.muscle_category) categories.add(workout.muscle_category);
+    if (workout.equipment_required) categories.add(workout.equipment_required);
     if (workout.target_muscle) categories.add(workout.target_muscle);
     if (workout.equipment) categories.add(workout.equipment);
   });
   videoResult.data?.forEach((video) => {
+    if (video.muscle_category) categories.add(video.muscle_category);
+    if (video.equipment_required) categories.add(video.equipment_required);
     if (video.category) categories.add(video.category);
   });
+  fallback.forEach((value) => categories.add(value));
 
   const values = Array.from(categories).filter(Boolean).sort();
-  return values.length ? values : localWorkoutCategories();
+  return values.length ? values : fallback;
+}
+
+export async function getWorkoutFilterOptions() {
+  const fallback = getLocalWorkoutFilterOptions();
+  if (!supabase) return mockDelay(fallback);
+
+  const [workoutResult, videoResult] = await Promise.all([
+    supabase!.from("workouts").select("*").eq("is_global", true).limit(5000),
+    supabase!.from("exercise_videos").select("*").eq("is_global", true).limit(5000)
+  ]);
+
+  if (workoutResult.error || videoResult.error) {
+    console.warn(
+      "S&S Gym could not load workout filter metadata, using local fallback.",
+      workoutResult.error?.message || videoResult.error?.message
+    );
+    return fallback;
+  }
+
+  const workouts = ((workoutResult.data ?? []) as Workout[]).map(hydrateWorkoutMetadata);
+  const videos = ((videoResult.data ?? []) as ExerciseVideo[]).map(mapVideoToWorkout);
+  const all = [...workouts, ...videos, ...muscleStrengthExercises.map(mapMetadataToWorkout)];
+
+  return {
+    muscleCategories: uniqueSorted([...fallback.muscleCategories, ...all.map((item) => item.muscle_category ?? item.target_muscle)]),
+    equipmentRequired: uniqueSorted([...fallback.equipmentRequired, ...all.map((item) => item.equipment_required ?? item.equipment)]),
+    mechanics: uniqueSorted([...fallback.mechanics, ...all.map((item) => item.mechanics ?? item.category)]),
+    forceTypes: uniqueSorted([...fallback.forceTypes, ...all.map((item) => item.force_type)]),
+    experienceLevels: uniqueSorted([...fallback.experienceLevels, ...all.map((item) => item.experience_level ?? item.difficulty)]),
+    secondaryMuscles: uniqueSorted([...fallback.secondaryMuscles, ...all.flatMap((item) => item.secondary_muscles ?? [])])
+  };
 }
 
 export async function getWorkouts(
   query = "",
-  filters?: { category?: string; equipment?: string; difficulty?: string },
+  filters: WorkoutFilters = {},
   page = 0
 ) {
-  const selectedCategory = filters?.category || filters?.equipment;
-  if (!supabase) {
-    return mockDelay(localWorkouts(query, selectedCategory).slice(page * workoutPageSize, (page + 1) * workoutPageSize));
-  }
-
+  const selectedCategory = filters.category || filters.equipment || filters.categories?.[0] || filters.equipmentRequired?.[0];
+  const localMatches = localWorkouts(query, filters);
   const from = page * workoutPageSize;
   const to = from + workoutPageSize - 1;
 
-  let workoutRequest = supabase!.from("workouts").select("*").eq("is_global", true).order("name").range(from, to);
-  if (selectedCategory) {
-    workoutRequest = workoutRequest.or(`category.eq.${selectedCategory},target_muscle.eq.${selectedCategory},equipment.eq.${selectedCategory}`);
-  } else if (query) {
+  if (!supabase) {
+    return mockDelay(localMatches.slice(from, to + 1));
+  }
+
+  let workoutRequest = supabase!.from("workouts").select("*").eq("is_global", true).order("name").limit(1200);
+  if (query) {
     workoutRequest = workoutRequest.or(`name.ilike.%${query}%,target_muscle.ilike.%${query}%,equipment.ilike.%${query}%`);
   }
-  if (filters?.difficulty) workoutRequest = workoutRequest.eq("difficulty", filters.difficulty);
 
-  let videoRequest = supabase!.from("exercise_videos").select("*").eq("is_global", true).order("exercise_name").range(from, to);
+  let videoRequest = supabase!.from("exercise_videos").select("*").eq("is_global", true).order("exercise_name").limit(1200);
   if (selectedCategory) videoRequest = videoRequest.eq("category", selectedCategory);
   if (query) videoRequest = videoRequest.ilike("exercise_name", `%${query}%`);
 
@@ -690,30 +908,23 @@ export async function getWorkouts(
       "S&S Gym could not load Supabase workouts, using local fallback.",
       workoutResult.error?.message || videoResult.error?.message
     );
-    return localWorkouts(query, selectedCategory).slice(from, to + 1);
+    return localMatches.slice(from, to + 1);
   }
 
-  const normalizedQuery = normalizeText(query);
-  const directWorkouts = ((workoutResult.data ?? []) as Workout[]).filter(
-    (workout) =>
-      !normalizedQuery ||
-      normalizeText(workout.name).includes(normalizedQuery) ||
-      normalizeText(workout.target_muscle).includes(normalizedQuery) ||
-      normalizeText(workout.equipment).includes(normalizedQuery)
-  );
-  const videoWorkouts = ((videoResult.data ?? []) as ExerciseVideo[]).map(mapVideoToWorkout);
-  return dedupeWorkouts([...directWorkouts, ...videoWorkouts]);
+  const directWorkouts = ((workoutResult.data ?? []) as Workout[]).map(hydrateWorkoutMetadata).filter((workout) => matchesWorkoutFilters(workout, query, filters));
+  const videoWorkouts = ((videoResult.data ?? []) as ExerciseVideo[]).map(mapVideoToWorkout).filter((workout) => matchesWorkoutFilters(workout, query, filters));
+  return dedupeWorkouts([...localMatches, ...directWorkouts, ...videoWorkouts]).slice(from, to + 1);
 }
 
 export async function getWorkout(id: string) {
-  const local = localWorkouts("").find((workout) => workout.id === id) ?? sampleWorkouts[0];
-  if (!supabase) return mockDelay(local);
+  const local = localWorkouts("").find((workout) => workout.id === id) ?? sampleWorkouts.map(hydrateWorkoutMetadata)[0];
+  if (!supabase || !isUuid(id)) return mockDelay(local);
 
   const workoutResult = await supabase!.from("workouts").select("*").eq("id", id).maybeSingle();
   if (workoutResult.error) {
     console.warn("S&S Gym could not load workout from workouts table.", workoutResult.error.message);
   }
-  if (workoutResult.data) return workoutResult.data as Workout;
+  if (workoutResult.data) return hydrateWorkoutMetadata(workoutResult.data as Workout);
 
   const videoResult = await supabase!.from("exercise_videos").select("*").eq("id", id).maybeSingle();
   if (videoResult.error) {
@@ -724,15 +935,19 @@ export async function getWorkout(id: string) {
 }
 
 export async function getExerciseVideos(query = "") {
-  if (!supabase) return mockDelay(sampleExerciseVideos);
+  const localVideos = dedupeExerciseVideos([
+    ...muscleStrengthExercises.map(mapMetadataToVideo),
+    ...sampleExerciseVideos
+  ]).filter((video) => !query || normalizeText(video.exercise_name).includes(normalizeText(query)));
+  if (!supabase) return mockDelay(localVideos);
   let request = supabase!.from("exercise_videos").select("*").order("exercise_name").limit(100);
   if (query) request = request.ilike("exercise_name", `%${query}%`);
   const { data, error } = await request;
   if (error) {
     console.warn("S&S Gym could not load exercise videos, using local fallback.", error.message);
-    return sampleExerciseVideos.filter((video) => normalizeText(video.exercise_name).includes(normalizeText(query)));
+    return localVideos;
   }
-  return (data ?? []) as ExerciseVideo[];
+  return dedupeExerciseVideos([...((data ?? []) as ExerciseVideo[]), ...localVideos]);
 }
 
 export async function startWorkoutSession(userId: string, workout: Workout) {
@@ -849,6 +1064,7 @@ export async function updateWorkoutSessionDuration(sessionId: string, durationMi
 
 export type WorkoutSetLogInput = {
   planExerciseId?: string | null;
+  exerciseOrder?: number | null;
   exerciseName: string;
   exerciseCategory?: string | null;
   plannedSets?: number | null;
@@ -869,6 +1085,7 @@ export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogI
   const rows = logs.map((log) => ({
     workout_session_id: sessionId,
     plan_exercise_id: log.planExerciseId ?? null,
+    exercise_order: log.exerciseOrder ?? null,
     exercise_name: log.exerciseName,
     exercise_category: log.exerciseCategory ?? null,
     planned_sets: log.plannedSets ?? null,
@@ -884,7 +1101,7 @@ export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogI
   if (!rows.length) return true;
   let { error } = await supabase!.from("exercise_logs").insert(rows);
   if (error && isSchemaCompatibilityError(error)) {
-    const compatibleRows = rows.map(({ exercise_category: _category, ...row }) => row);
+    const compatibleRows = rows.map(({ exercise_category: _category, exercise_order: _order, ...row }) => row);
     const compatible = await supabase!.from("exercise_logs").insert(compatibleRows);
     error = compatible.error;
   }
@@ -1052,10 +1269,7 @@ export async function getWorkoutHistoryDetailed(userId: string, limit = 100) {
   return ((data ?? []) as WorkoutSessionSummary[])
     .map((session) => ({
       ...normalizeWorkoutSession(session),
-      exercise_logs: [...(session.exercise_logs ?? [])].sort((a, b) => {
-      if (a.exercise_name !== b.exercise_name) return a.exercise_name.localeCompare(b.exercise_name);
-      return a.set_number - b.set_number;
-      })
+      exercise_logs: sortExerciseLogsByWorkoutOrder(session.exercise_logs ?? [])
     }))
     .filter((session) => session.status === "completed");
 }
@@ -1095,6 +1309,16 @@ export async function getWorkoutActivity(userId: string, limit = 180) {
 
 function sessionDateForSort(session: WorkoutSession) {
   return new Date(session.completed_at || session.skipped_at || session.started_at);
+}
+
+function sortExerciseLogsByWorkoutOrder(logs: ExerciseLog[]) {
+  return [...logs].sort((a, b) => {
+    const orderA = a.exercise_order ?? Number.MAX_SAFE_INTEGER;
+    const orderB = b.exercise_order ?? Number.MAX_SAFE_INTEGER;
+    if (orderA !== orderB) return orderA - orderB;
+    const createdSort = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    return createdSort || a.set_number - b.set_number;
+  });
 }
 
 export type WorkoutPlanDayInput = {
@@ -1206,7 +1430,7 @@ type RawGeneratedPlan = RawWorkoutPlan & {
 };
 
 function mapPlanExerciseToWorkout(exercise: RawPlanExercise): Workout {
-  return {
+  return hydrateWorkoutMetadata({
     id: exercise.source_workout_id || exercise.workout_id || exercise.id,
     name: exercise.exercise_name,
     category: exercise.category || "Exercise",
@@ -1217,9 +1441,10 @@ function mapPlanExerciseToWorkout(exercise: RawPlanExercise): Workout {
     reps: exercise.reps,
     rest_seconds: exercise.rest_seconds,
     instructions: exercise.instructions || defaultExerciseInstructions,
+    video_url: exercise.video_url ?? null,
     notes: exercise.video_url || exercise.notes,
     is_global: true
-  };
+  });
 }
 
 function normalizeWorkoutPlan(plan: RawWorkoutPlan): UserWorkoutPlan {
@@ -1403,13 +1628,15 @@ export async function completeGeneratedWorkoutSession({
   sessionId,
   logs,
   notes,
-  durationMinutes
+  durationMinutes,
+  startedAt
 }: {
   userId: string;
   sessionId: string;
   logs: GeneratedExerciseLogInput[];
   notes?: string;
   durationMinutes?: number;
+  startedAt?: string;
 }) {
   if (!canUseUserData(userId) || !isUuid(sessionId)) return mockDelay(true);
 
@@ -1441,7 +1668,7 @@ export async function completeGeneratedWorkoutSession({
     .from("user_workout_sessions")
     .update({
       status: "completed",
-      started_at: completedAt,
+      started_at: startedAt ?? completedAt,
       completed_at: completedAt,
       duration_minutes: Math.max(0, durationMinutes ?? 0),
       notes: notes || null
@@ -1540,6 +1767,61 @@ export async function getUserWorkoutPlanDay(dayId: string) {
   };
 }
 
+export async function updateUserWorkoutPlanDay(dayId: string, day: WorkoutPlanDayInput) {
+  const cleanExercises = day.exercises.filter(Boolean);
+  const cleanName = day.dayName.trim();
+
+  if (!cleanName) throw new Error("Workout day name is required.");
+  if (!cleanExercises.length) throw new Error("Add at least one exercise before saving this workout day.");
+
+  if (!supabase || !isUuid(dayId)) return mockDelay(true);
+
+  const { error: dayError } = await supabase!
+    .from("user_workout_plan_days")
+    .update({
+      day_name: cleanName,
+      weekday: day.weekday,
+      notes: day.notes || null
+    })
+    .eq("id", dayId);
+
+  if (dayError) throw dayError;
+
+  const deleteResult = await supabase!.from("user_workout_plan_exercises").delete().eq("plan_day_id", dayId);
+  if (deleteResult.error) throw deleteResult.error;
+
+  const rows = cleanExercises.map((workout, exerciseIndex) => {
+    const exerciseUrl = workout.exercise_url || workout.video_url || (looksLikeUrl(workout.notes) ? workout.notes : null);
+    return {
+      plan_day_id: dayId,
+      workout_id: null,
+      source_workout_id: workout.id,
+      exercise_name: workout.name,
+      category: workout.category,
+      target_muscle: workout.muscle_category || workout.target_muscle,
+      equipment: workout.equipment_required || workout.equipment,
+      sets: workout.sets ?? 3,
+      reps: workout.reps ?? "8-12",
+      rest_seconds: workout.rest_seconds ?? 75,
+      instructions: workout.instructions || defaultExerciseInstructions,
+      video_url: exerciseUrl,
+      sort_order: exerciseIndex + 1,
+      notes: looksLikeUrl(workout.notes) ? null : workout.notes
+    };
+  });
+
+  if (!rows.length) return true;
+
+  let { error } = await supabase!.from("user_workout_plan_exercises").insert(rows);
+  if (error && isMissingTemplateSchemaError(error)) {
+    const compatibleRows = rows.map(({ source_workout_id: _source, instructions: _instructions, video_url: _video, ...row }) => row);
+    const compatible = await supabase!.from("user_workout_plan_exercises").insert(compatibleRows);
+    error = compatible.error;
+  }
+  if (error) throw error;
+  return true;
+}
+
 export async function createUserWorkoutPlan({
   userId,
   planName,
@@ -1596,22 +1878,25 @@ export async function createUserWorkoutPlan({
 
     if (dayError) throw dayError;
 
-    const exerciseRows = day.exercises.map((workout, exerciseIndex) => ({
-      plan_day_id: savedDay.id,
-      workout_id: null,
-      source_workout_id: workout.id,
-      exercise_name: workout.name,
-      category: workout.category,
-      target_muscle: workout.target_muscle,
-      equipment: workout.equipment,
-      sets: workout.sets ?? 3,
-      reps: workout.reps ?? "8-12",
-      rest_seconds: workout.rest_seconds ?? 75,
-      instructions: workout.instructions || defaultExerciseInstructions,
-      video_url: looksLikeUrl(workout.notes) ? workout.notes : null,
-      sort_order: exerciseIndex + 1,
-      notes: looksLikeUrl(workout.notes) ? null : workout.notes
-    }));
+    const exerciseRows = day.exercises.map((workout, exerciseIndex) => {
+      const exerciseUrl = workout.exercise_url || workout.video_url || (looksLikeUrl(workout.notes) ? workout.notes : null);
+      return {
+        plan_day_id: savedDay.id,
+        workout_id: null,
+        source_workout_id: workout.id,
+        exercise_name: workout.name,
+        category: workout.category,
+        target_muscle: workout.muscle_category || workout.target_muscle,
+        equipment: workout.equipment_required || workout.equipment,
+        sets: workout.sets ?? 3,
+        reps: workout.reps ?? "8-12",
+        rest_seconds: workout.rest_seconds ?? 75,
+        instructions: workout.instructions || defaultExerciseInstructions,
+        video_url: exerciseUrl,
+        sort_order: exerciseIndex + 1,
+        notes: looksLikeUrl(workout.notes) ? null : workout.notes
+      };
+    });
 
     const { error: exercisesError } = await supabase!.from("user_workout_plan_exercises").insert(exerciseRows);
     if (exercisesError) throw exercisesError;

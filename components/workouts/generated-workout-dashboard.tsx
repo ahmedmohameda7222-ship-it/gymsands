@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { CalendarDays, CheckCircle2, ClipboardCheck, Dumbbell, Loader2, RefreshCcw, SkipForward, Sparkles, TrendingUp } from "lucide-react";
+import { CalendarDays, CheckCircle2, ClipboardCheck, Clock, Dumbbell, Loader2, RefreshCcw, SkipForward, Sparkles, TimerReset, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
 import {
   completeGeneratedWorkoutSession,
   getGeneratedWorkoutPlan,
@@ -48,6 +50,12 @@ function displayDate(value: string) {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function formatTime(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function statusClass(status: UserWorkoutSession["status"]) {
@@ -153,12 +161,14 @@ function buildStats(sessions: UserWorkoutSession[]) {
 export function GeneratedWorkoutDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [plan, setPlan] = useState<GeneratedWorkoutPlan | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSkipping, setIsSkipping] = useState(false);
   const [sessionNotes, setSessionNotes] = useState("");
   const [startedAt, setStartedAt] = useState(() => Date.now());
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [inputs, setInputs] = useState<ExerciseInput[]>([]);
 
   async function loadPlan() {
@@ -167,7 +177,6 @@ export function GeneratedWorkoutDashboard() {
     try {
       const nextPlan = await getGeneratedWorkoutPlan(user.id);
       setPlan(nextPlan);
-      setStartedAt(Date.now());
     } catch (error) {
       setPlan(null);
       toast({ title: "Could not load your workout plan", description: error instanceof Error ? error.message : "Please try again." });
@@ -182,6 +191,10 @@ export function GeneratedWorkoutDashboard() {
   }, [user?.id]);
 
   const activeSession = useMemo(() => chooseActiveSession(plan?.sessions ?? []), [plan?.sessions]);
+  const activeTimerKey = useMemo(
+    () => workoutStorageKey(["generated-workout-session", user?.id ?? "mock-user", activeSession?.id ?? "none"]),
+    [activeSession?.id, user?.id]
+  );
   const stats = useMemo(() => buildStats(plan?.sessions ?? []), [plan?.sessions]);
   const activeDayTitle = activeSession?.day_title ?? "Workout day";
   const visibleSessions = useMemo(() => (plan?.sessions ?? []).slice(0, 56), [plan?.sessions]);
@@ -195,12 +208,33 @@ export function GeneratedWorkoutDashboard() {
     setSessionNotes(activeSession?.notes ?? "");
   }, [activeSession, plan]);
 
+  useEffect(() => {
+    if (!activeSession) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const parsedStartedAt = activeSession.started_at ? Date.parse(activeSession.started_at) : null;
+    const storedStartedAt = readStoredTimestamp(activeTimerKey);
+    const nextStartedAt = storedStartedAt ?? (parsedStartedAt && Number.isFinite(parsedStartedAt) ? parsedStartedAt : Date.now());
+    setStartedAt(nextStartedAt);
+    storeTimestamp(activeTimerKey, nextStartedAt);
+  }, [activeSession, activeTimerKey]);
+
+  useEffect(() => {
+    if (!activeSession) return;
+    const interval = window.setInterval(() => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [activeSession, startedAt]);
+
   function updateInput(index: number, patch: Partial<ExerciseInput>) {
     setInputs((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
   }
 
   async function completeWorkout() {
     if (!user || !activeSession) return;
+    if (isSaving) return;
     const logRows: GeneratedExerciseLogInput[] = inputs.map((input) => {
       const hasData = input.completed || input.weightKg.trim() || input.reps.trim() || input.notes.trim();
       return {
@@ -224,8 +258,10 @@ export function GeneratedWorkoutDashboard() {
         sessionId: activeSession.id,
         logs: logRows,
         notes: sessionNotes,
-        durationMinutes: Math.max(1, Math.ceil((Date.now() - startedAt) / 60000))
+        durationMinutes: Math.max(1, Math.ceil((Date.now() - startedAt) / 60000)),
+        startedAt: new Date(startedAt).toISOString()
       });
+      clearStoredValue(activeTimerKey);
       toast({ title: "Workout saved", description: `${activeDayTitle} was added to your history.` });
       await loadPlan();
     } catch (error) {
@@ -237,9 +273,11 @@ export function GeneratedWorkoutDashboard() {
 
   async function skipWorkout() {
     if (!user || !activeSession) return;
+    if (isSkipping) return;
     try {
       setIsSkipping(true);
       await skipGeneratedWorkoutSession(user.id, activeSession.id, sessionNotes);
+      clearStoredValue(activeTimerKey);
       toast({ title: "Workout skipped", description: "Your next workout day is ready." });
       await loadPlan();
     } catch (error) {
@@ -247,6 +285,13 @@ export function GeneratedWorkoutDashboard() {
     } finally {
       setIsSkipping(false);
     }
+  }
+
+  function resetWorkoutTimer() {
+    const nextStartedAt = Date.now();
+    setStartedAt(nextStartedAt);
+    setElapsedSeconds(0);
+    storeTimestamp(activeTimerKey, nextStartedAt);
   }
 
   if (isLoading) {
@@ -343,6 +388,18 @@ export function GeneratedWorkoutDashboard() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              {activeSession ? (
+                <Badge variant="outline" className="gap-1">
+                  <Clock className="h-3.5 w-3.5" />
+                  {formatTime(elapsedSeconds)}
+                </Badge>
+              ) : null}
+              {activeSession ? (
+                <Button variant="outline" onClick={resetWorkoutTimer}>
+                  <TimerReset className="h-4 w-4" />
+                  Reset timer
+                </Button>
+              ) : null}
               <Button variant="outline" onClick={skipWorkout} disabled={!activeSession || isSkipping}>
                 <SkipForward className="h-4 w-4" />
                 {isSkipping ? "Skipping..." : "Skip"}
@@ -435,6 +492,7 @@ export function GeneratedWorkoutDashboard() {
                 <button
                   key={session.id}
                   type="button"
+                  onClick={() => session.plan_day_id && router.push(`/my-workout/day/${session.plan_day_id}`)}
                   className={cn(
                     "rounded-md border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm",
                     statusClass(session.status),
