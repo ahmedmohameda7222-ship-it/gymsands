@@ -4,7 +4,7 @@ import { AuthProvider } from "@/components/auth/auth-provider";
 import { ToastProvider } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: "S&S Gym",
+  title: "FitLife Hub",
   description: "Simple workout, meal, and progress tracking for real life."
 };
 

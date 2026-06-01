@@ -229,13 +229,13 @@ export default function CaloriesPage() {
             <Button asChild variant="outline">
               <Link href="/calories/weekly-overview">
                 <BarChart3 className="h-4 w-4" />
-                Weekly Overview
+                Weekly Summary
               </Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/calories/custom-food-meal">
                 <ChefHat className="h-4 w-4" />
-                Custom Food / Meal
+                Food Builder
               </Link>
             </Button>
             <Button variant="outline" onClick={copyYesterday}>
@@ -407,7 +407,7 @@ function WeeklyOverview({ weekData, waterGoalMl }: { weekData: DailyNutritionSum
   return (
     <Card className="mt-4">
       <CardHeader>
-        <CardTitle>Weekly Overview</CardTitle>
+        <CardTitle>Weekly Summary</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -441,8 +441,8 @@ function WeeklyOverview({ weekData, waterGoalMl }: { weekData: DailyNutritionSum
                 <div key={day.date} className="grid grid-cols-[76px_1fr] items-center gap-3 text-xs">
                   <span>{formatDay(day.date).split(",")[0]}</span>
                   <div className="space-y-1">
-                    <div className="h-2 rounded bg-blue-100">
-                      <div className="h-2 rounded bg-blue-500" style={{ width: `${Math.min(100, (day.planned_calories / maxCalories) * 100)}%` }} />
+                    <div className="h-2 rounded bg-primary">
+                      <div className="h-2 rounded bg-primary" style={{ width: `${Math.min(100, (day.planned_calories / maxCalories) * 100)}%` }} />
                     </div>
                     <div className="h-2 rounded bg-emerald-100">
                       <div className="h-2 rounded bg-emerald-500" style={{ width: `${Math.min(100, (day.calories / maxCalories) * 100)}%` }} />

@@ -50,7 +50,7 @@ export default function DashboardPage() {
       <WelcomePopup />
       <PageHeading
         title={`Welcome back${profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}`}
-        description="Your simple S&S Gym overview for meals, workouts, water, and progress."
+        description="Your simple FitLife Hub overview for meals, workouts, water, and progress."
         action={
           <>
             <Button asChild>
@@ -104,13 +104,13 @@ export default function DashboardPage() {
             <Button asChild variant="outline">
               <Link href="/my-workout/plans">
                 <Dumbbell className="h-4 w-4" />
-                My Plans
+                Workout Plans
               </Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/progress">
                 <Activity className="h-4 w-4" />
-                Add Progress
+                Progress Tracker
               </Link>
             </Button>
             <Button asChild variant="outline">

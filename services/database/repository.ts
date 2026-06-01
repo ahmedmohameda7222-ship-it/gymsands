@@ -8,9 +8,11 @@ import { defaultExerciseInstructions, sampleExerciseVideos, sampleWorkouts } fro
 import type {
   BodyMeasurement,
   CustomMeal,
+  DailyFitTask,
   DailyNutritionSummary,
   ExerciseMetadata,
   ExerciseVideo,
+  FitnessHabit,
   FoodItem,
   FoodKitchen,
   FoodLog,
@@ -20,9 +22,12 @@ import type {
   MealPlanItem,
   MealType,
   OnboardingAnswers,
+  PersonalRecord,
   Profile,
   ProgressEntry,
   ExerciseLog,
+  SleepRecoveryLog,
+  SupplementLog,
   UserExerciseVideo,
   UserExerciseLog,
   UserFoodItem,
@@ -90,6 +95,13 @@ function splitList(value: string | string[] | null | undefined) {
     .split(",")
     .map((item) => item.trim())
     .filter((item) => item && item.toLowerCase() !== "none");
+}
+
+function parseDurationMinutes(value: string | number | null | undefined) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const matches = value?.match(/\d+/g)?.map(Number).filter((item) => Number.isFinite(item) && item > 0) ?? [];
+  if (!matches.length) return null;
+  return Math.round(matches.reduce((sum, item) => sum + item, 0) / matches.length);
 }
 
 function hasAnySelected(values: Array<string | null | undefined>, selected: string[] | undefined) {
@@ -197,7 +209,9 @@ function isMissingTemplateSchemaError(error: { message?: string; code?: string }
     message.includes("source") ||
     message.includes("source_workout_id") ||
     message.includes("instructions") ||
+    message.includes("exercise_url") ||
     message.includes("video_url") ||
+    message.includes("custom_video_url") ||
     message.includes("is_default")
   );
 }
@@ -496,7 +510,7 @@ export async function getFoodCategories() {
     .limit(250)
     .then(({ data, error }) => {
       if (error) {
-        console.warn("S&S Gym could not load food categories, using local fallback.", error.message);
+        console.warn("FitLife Hub could not load food categories, using local fallback.", error.message);
         return fallback;
       }
 
@@ -538,7 +552,7 @@ export async function getGlobalFoods(
   const result = await withTimeout(
     request.then(({ data, error }) => {
       if (error) {
-        console.warn("S&S Gym could not load Supabase foods, using local fallback.", error.message);
+        console.warn("FitLife Hub could not load Supabase foods, using local fallback.", error.message);
         return fallback;
       }
       return ((data?.length ? data : fallback) ?? []) as FoodItem[];
@@ -562,7 +576,7 @@ export async function getCalorieTargets(userId: string) {
     .maybeSingle();
 
   if (error) {
-    console.warn("S&S Gym could not load calorie targets.", error.message);
+    console.warn("FitLife Hub could not load calorie targets.", error.message);
     return fallback;
   }
 
@@ -614,7 +628,7 @@ export async function getTodayFoodLogs(userId: string, date = todayIso()) {
     .eq("log_date", date)
     .order("created_at", { ascending: false });
   if (error) {
-    console.warn("S&S Gym could not load today's food logs.", error.message);
+    console.warn("FitLife Hub could not load today's food logs.", error.message);
     return [];
   }
   return (data ?? []) as FoodLog[];
@@ -655,7 +669,7 @@ export async function addGlobalFoodToToday({
   if (!canUseUserData(userId)) return mockDelay({ ...payload, id: crypto.randomUUID() } as FoodLog);
   const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
   if (error) {
-    console.warn("S&S Gym could not add this food log.", error.message);
+    console.warn("FitLife Hub could not add this food log.", error.message);
     throw error;
   }
   return data as FoodLog;
@@ -776,7 +790,7 @@ export async function getFoodKitchens(userId: string) {
 
   if (kitchensResult.error || subcategoriesResult.error) {
     console.warn(
-      "S&S Gym could not load food kitchens.",
+      "FitLife Hub could not load food kitchens.",
       kitchensResult.error?.message || subcategoriesResult.error?.message
     );
     return { kitchens: [fallbackKitchen], subcategories: fallbackSubcategories };
@@ -837,7 +851,7 @@ export async function getUserFoods(userId: string) {
   if (!canUseUserData(userId)) return mockDelay<UserFoodItem[]>([]);
   const { data, error } = await supabase!.from("user_food_items").select("*").eq("user_id", userId).order("food_name");
   if (error) {
-    console.warn("S&S Gym could not load custom foods.", error.message);
+    console.warn("FitLife Hub could not load custom foods.", error.message);
     return [];
   }
   return (data ?? []).map((row) => normalizeUserFood(row as Record<string, unknown>));
@@ -900,7 +914,7 @@ export async function getWaterLogs(userId: string, date: string) {
     .eq("log_date", date)
     .order("created_at", { ascending: false });
   if (error) {
-    console.warn("S&S Gym could not load water logs.", error.message);
+    console.warn("FitLife Hub could not load water logs.", error.message);
     return [];
   }
   return (data ?? []) as WaterLog[];
@@ -954,8 +968,8 @@ export async function getNutritionWeek(userId: string, weekStart: string) {
       : Promise.resolve({ data: [], error: null })
   ]);
 
-  if (logsResult.error) console.warn("S&S Gym could not load weekly calorie logs.", logsResult.error.message);
-  if (waterResult.error) console.warn("S&S Gym could not load weekly water logs.", waterResult.error.message);
+  if (logsResult.error) console.warn("FitLife Hub could not load weekly calorie logs.", logsResult.error.message);
+  if (waterResult.error) console.warn("FitLife Hub could not load weekly water logs.", waterResult.error.message);
 
   const logs = ((logsResult.data ?? []) as FoodLog[]).reduce<Record<string, FoodLog[]>>((byDate, log) => {
     byDate[log.log_date] = [...(byDate[log.log_date] ?? []), log];
@@ -1013,8 +1027,8 @@ async function foodsById(foodIds: string[], userFoodIds: string[]) {
     foodIds.length ? supabase!.from("food_items").select("*").in("id", foodIds) : Promise.resolve({ data: [], error: null }),
     userFoodIds.length ? supabase!.from("user_food_items").select("*").in("id", userFoodIds) : Promise.resolve({ data: [], error: null })
   ]);
-  if (globalResult.error) console.warn("S&S Gym could not hydrate meal foods.", globalResult.error.message);
-  if (userResult.error) console.warn("S&S Gym could not hydrate custom meal foods.", userResult.error.message);
+  if (globalResult.error) console.warn("FitLife Hub could not hydrate meal foods.", globalResult.error.message);
+  if (userResult.error) console.warn("FitLife Hub could not hydrate custom meal foods.", userResult.error.message);
 
   const map = new Map<string, FoodItem>();
   ((globalResult.data ?? []) as FoodItem[]).forEach((food) => map.set(food.id, food));
@@ -1031,7 +1045,7 @@ export async function getCustomMeals(userId: string) {
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error) {
-    console.warn("S&S Gym could not load custom meals.", error.message);
+    console.warn("FitLife Hub could not load custom meals.", error.message);
     return [];
   }
   const mealRows = meals ?? [];
@@ -1218,7 +1232,7 @@ export async function getTodayMealPlanItems(userId: string, date = todayIso()) {
     .order("created_at", { ascending: true });
 
   if (error) {
-    console.warn("S&S Gym could not load today's meal plan.", error.message);
+    console.warn("FitLife Hub could not load today's meal plan.", error.message);
     return [];
   }
 
@@ -1262,7 +1276,7 @@ export async function addFoodToMealPlan({
 
   const { data, error } = await supabase!.from("user_meal_plan_items").insert(payload).select("*").single();
   if (error) {
-    console.warn("S&S Gym could not add this food to My Meal Plan.", error.message);
+    console.warn("FitLife Hub could not add this food to My Meal Plan.", error.message);
     throw error;
   }
   return data as MealPlanItem;
@@ -1369,7 +1383,7 @@ export async function updateMealPlanItem(
       })
       .eq("id", item.food_log_id)
       .eq("user_id", item.user_id);
-    if (logUpdate.error) console.warn("S&S Gym could not sync the linked calorie log.", logUpdate.error.message);
+    if (logUpdate.error) console.warn("FitLife Hub could not sync the linked calorie log.", logUpdate.error.message);
   }
 
   return data as MealPlanItem;
@@ -1405,7 +1419,7 @@ export async function deleteFoodLog(id: string) {
   if (!supabase) return mockDelay(true);
   const { error } = await supabase!.from("food_logs").delete().eq("id", id);
   if (error) {
-    console.warn("S&S Gym could not delete this food log.", error.message);
+    console.warn("FitLife Hub could not delete this food log.", error.message);
     throw error;
   }
   return true;
@@ -1417,7 +1431,7 @@ export async function copyYesterdaysMeals(userId: string) {
   yesterday.setDate(yesterday.getDate() - 1);
   const { data, error } = await supabase!.from("food_logs").select("*").eq("user_id", userId).eq("log_date", yesterday.toISOString().slice(0, 10));
   if (error) {
-    console.warn("S&S Gym could not copy yesterday's meals.", error.message);
+    console.warn("FitLife Hub could not copy yesterday's meals.", error.message);
     return [];
   }
   const copies = (data ?? []).map(({ id: _id, created_at: _created, ...log }) => ({ ...log, log_date: todayIso() }));
@@ -1438,7 +1452,7 @@ export async function getWorkoutCategories() {
 
   if (workoutResult.error || videoResult.error) {
     console.warn(
-      "S&S Gym could not load workout categories, using local fallback.",
+      "FitLife Hub could not load workout categories, using local fallback.",
       workoutResult.error?.message || videoResult.error?.message
     );
     return fallback;
@@ -1473,7 +1487,7 @@ export async function getWorkoutFilterOptions() {
 
   if (workoutResult.error || videoResult.error) {
     console.warn(
-      "S&S Gym could not load workout filter metadata, using local fallback.",
+      "FitLife Hub could not load workout filter metadata, using local fallback.",
       workoutResult.error?.message || videoResult.error?.message
     );
     return fallback;
@@ -1521,7 +1535,7 @@ export async function getWorkouts(
   const [workoutResult, videoResult] = await Promise.all([workoutRequest, videoRequest]);
   if (workoutResult.error || videoResult.error) {
     console.warn(
-      "S&S Gym could not load Supabase workouts, using local fallback.",
+      "FitLife Hub could not load Supabase workouts, using local fallback.",
       workoutResult.error?.message || videoResult.error?.message
     );
     return localMatches.slice(from, to + 1);
@@ -1538,13 +1552,13 @@ export async function getWorkout(id: string) {
 
   const workoutResult = await supabase!.from("workouts").select("*").eq("id", id).maybeSingle();
   if (workoutResult.error) {
-    console.warn("S&S Gym could not load workout from workouts table.", workoutResult.error.message);
+    console.warn("FitLife Hub could not load workout from workouts table.", workoutResult.error.message);
   }
   if (workoutResult.data) return hydrateWorkoutMetadata(workoutResult.data as Workout);
 
   const videoResult = await supabase!.from("exercise_videos").select("*").eq("id", id).maybeSingle();
   if (videoResult.error) {
-    console.warn("S&S Gym could not load workout from exercise videos.", videoResult.error.message);
+    console.warn("FitLife Hub could not load workout from exercise videos.", videoResult.error.message);
     return local;
   }
   return videoResult.data ? mapVideoToWorkout(videoResult.data as ExerciseVideo) : local;
@@ -1560,7 +1574,7 @@ export async function getExerciseVideos(query = "") {
   if (query) request = request.ilike("exercise_name", `%${query}%`);
   const { data, error } = await request;
   if (error) {
-    console.warn("S&S Gym could not load exercise videos, using local fallback.", error.message);
+    console.warn("FitLife Hub could not load exercise videos, using local fallback.", error.message);
     return localVideos;
   }
   return dedupeExerciseVideos([...((data ?? []) as ExerciseVideo[]), ...localVideos]);
@@ -1575,7 +1589,7 @@ export async function getUserExerciseVideo(userId: string, exerciseId: string) {
     .eq("exercise_id", exerciseId)
     .maybeSingle();
   if (error) {
-    console.warn("S&S Gym could not load custom exercise video.", error.message);
+    console.warn("FitLife Hub could not load custom exercise video.", error.message);
     return null;
   }
   return data as UserExerciseVideo | null;
@@ -1627,7 +1641,7 @@ export async function startWorkoutSession(userId: string, workout: Workout) {
     error = compatible.error;
   }
   if (error) {
-    console.warn("S&S Gym could not start a Supabase workout session.", error.message);
+    console.warn("FitLife Hub could not start a Supabase workout session.", error.message);
     return { ...payload, id: crypto.randomUUID() } as WorkoutSession;
   }
   return normalizeWorkoutSession(data as WorkoutSession);
@@ -1657,7 +1671,7 @@ export async function startWorkoutDaySession(userId: string, day: WorkoutPlanDay
     error = compatible.error;
   }
   if (error) {
-    console.warn("S&S Gym could not start a workout day session.", error.message);
+    console.warn("FitLife Hub could not start a workout day session.", error.message);
     throw error;
   }
   return normalizeWorkoutSession(data as WorkoutSession);
@@ -1676,7 +1690,7 @@ export async function getOpenWorkoutDaySession(userId: string, planDayId: string
     .maybeSingle();
 
   if (error) {
-    console.warn("S&S Gym could not load the open workout session.", error.message);
+    console.warn("FitLife Hub could not load the open workout session.", error.message);
     return null;
   }
 
@@ -1698,7 +1712,7 @@ export async function getWorkoutSessionLogs(sessionId: string) {
     .order("created_at", { ascending: true });
 
   if (error) {
-    console.warn("S&S Gym could not load workout session logs.", error.message);
+    console.warn("FitLife Hub could not load workout session logs.", error.message);
     return [];
   }
 
@@ -1713,7 +1727,7 @@ export async function updateWorkoutSessionDuration(sessionId: string, durationMi
     .eq("id", sessionId)
     .eq("status", "started");
   if (error) {
-    console.warn("S&S Gym could not update workout duration.", error.message);
+    console.warn("FitLife Hub could not update workout duration.", error.message);
   }
   return true;
 }
@@ -1772,7 +1786,7 @@ export async function completeWorkoutSession(sessionId: string, notes: string, d
     .update({ status: "completed", completed_at: new Date().toISOString(), notes, duration_minutes: durationMinutes })
     .eq("id", sessionId);
   if (error) {
-    console.warn("S&S Gym could not complete this workout session.", error.message);
+    console.warn("FitLife Hub could not complete this workout session.", error.message);
     throw error;
   }
   return true;
@@ -1872,7 +1886,7 @@ export async function skipWorkoutDay(userId: string, day: SkipWorkoutDayInput, n
     error = compatible.error;
   }
   if (error) {
-    console.warn("S&S Gym could not skip this workout day.", error.message);
+    console.warn("FitLife Hub could not skip this workout day.", error.message);
     throw error;
   }
   return normalizeWorkoutSession(data as WorkoutSession);
@@ -1899,7 +1913,7 @@ export async function getWorkoutHistory(userId: string) {
     error = compatible.error;
   }
   if (error) {
-    console.warn("S&S Gym could not load workout history.", error.message);
+    console.warn("FitLife Hub could not load workout history.", error.message);
     return getGeneratedWorkoutActivity(userId, 20);
   }
   const legacyHistory = ((data ?? []) as WorkoutSession[]).map(normalizeWorkoutSession);
@@ -1919,7 +1933,7 @@ export async function getWorkoutHistoryDetailed(userId: string, limit = 100) {
     .order("started_at", { ascending: false })
     .limit(limit);
   if (error) {
-    console.warn("S&S Gym could not load workout history details.", error.message);
+    console.warn("FitLife Hub could not load workout history details.", error.message);
     return [];
   }
   return ((data ?? []) as WorkoutSessionSummary[])
@@ -1952,7 +1966,7 @@ export async function getWorkoutActivity(userId: string, limit = 180) {
   }
 
   if (error) {
-    console.warn("S&S Gym could not load workout activity.", error.message);
+    console.warn("FitLife Hub could not load workout activity.", error.message);
     return getGeneratedWorkoutActivity(userId, limit);
   }
 
@@ -1997,7 +2011,9 @@ type RawPlanExercise = {
   reps: string | null;
   rest_seconds: number | null;
   instructions?: string | null;
+  exercise_url?: string | null;
   video_url?: string | null;
+  custom_video_url?: string | null;
   sort_order: number;
   notes: string | null;
 };
@@ -2098,8 +2114,10 @@ function mapPlanExerciseToWorkout(exercise: RawPlanExercise): Workout {
     reps: exercise.reps,
     rest_seconds: exercise.rest_seconds,
     instructions: exercise.instructions || defaultExerciseInstructions,
-    video_url: exercise.video_url ?? null,
-    notes: exercise.video_url || exercise.notes,
+    exercise_url: exercise.exercise_url ?? null,
+    video_url: exercise.custom_video_url ?? exercise.video_url ?? null,
+    custom_video_url: exercise.custom_video_url ?? exercise.video_url ?? null,
+    notes: exercise.notes,
     is_global: true
   });
 }
@@ -2208,7 +2226,7 @@ export async function getActiveUserWorkoutPlan(userId: string) {
   if (!canUseUserData(userId)) return mockDelay<UserWorkoutPlan | null>(null);
 
   const selectWithSource =
-    "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
+    "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
   const selectLegacy =
     "id,user_id,name,is_active,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
 
@@ -2217,7 +2235,6 @@ export async function getActiveUserWorkoutPlan(userId: string) {
     .select(selectWithSource)
     .eq("user_id", userId)
     .eq("is_active", true)
-    .or("source.is.null,source.eq.manual")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -2238,7 +2255,7 @@ export async function getActiveUserWorkoutPlan(userId: string) {
   }
 
   if (error) {
-    console.warn("S&S Gym could not load the saved workout plan.", error.message);
+    console.warn("FitLife Hub could not load the saved workout plan.", error.message);
     return null;
   }
 
@@ -2253,7 +2270,7 @@ export async function getUserWorkoutPlans(userId: string) {
   if (!canUseUserData(userId)) return mockDelay<UserWorkoutPlan[]>([]);
 
   const selectWithSource =
-    "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
+    "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
   const selectLegacy =
     "id,user_id,name,is_active,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
 
@@ -2278,7 +2295,7 @@ export async function getUserWorkoutPlans(userId: string) {
   }
 
   if (error) {
-    console.warn("S&S Gym could not load My Plans.", error.message);
+    console.warn("FitLife Hub could not load Workout Plans.", error.message);
     return [];
   }
 
@@ -2288,7 +2305,7 @@ export async function getUserWorkoutPlans(userId: string) {
 export async function getUserWorkoutPlan(userId: string, planId: string) {
   if (!canUseUserData(userId) || !isUuid(planId)) return mockDelay<UserWorkoutPlan | null>(null);
   const selectWithSource =
-    "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
+    "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
   const selectLegacy =
     "id,user_id,name,is_active,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
   const result = await supabase!
@@ -2310,7 +2327,7 @@ export async function getUserWorkoutPlan(userId: string, planId: string) {
     error = legacy.error;
   }
   if (error) {
-    console.warn("S&S Gym could not load this plan.", error.message);
+    console.warn("FitLife Hub could not load this plan.", error.message);
     return null;
   }
   return data ? normalizeWorkoutPlan(data as unknown as RawWorkoutPlan) : null;
@@ -2377,10 +2394,29 @@ export async function getWorkoutTemplateWeekOptions() {
     .not("program_duration_weeks", "is", null)
     .limit(1000);
   if (error) {
-    console.warn("S&S Gym could not load workout template week options.", error.message);
+    console.warn("FitLife Hub could not load workout template week options.", error.message);
     return fallback;
   }
   const values = Array.from(new Set((data ?? []).map((item) => Number(item.program_duration_weeks)).filter((value) => Number.isFinite(value) && value > 0))).sort((a, b) => a - b);
+  if (!values.length) return fallback;
+  return { min: values[0], max: values[values.length - 1], values };
+}
+
+export async function getWorkoutTemplateDurationOptions() {
+  const fallback = { min: 20, max: 75, values: [20, 30, 45, 60, 75] };
+  if (!supabase) return mockDelay(fallback);
+  const { data, error } = await supabase!
+    .from("workout_templates")
+    .select("time_per_workout")
+    .not("time_per_workout", "is", null)
+    .limit(1000);
+  if (error) {
+    console.warn("FitLife Hub could not load workout duration options.", error.message);
+    return fallback;
+  }
+  const values = Array.from(
+    new Set((data ?? []).map((item) => parseDurationMinutes(item.time_per_workout)).filter((value): value is number => Boolean(value)))
+  ).sort((a, b) => a - b);
   if (!values.length) return fallback;
   return { min: values[0], max: values[values.length - 1], values };
 }
@@ -2391,7 +2427,7 @@ export async function getGeneratedWorkoutPlan(userId: string) {
   const { data, error } = await supabase!
     .from("user_workout_plans")
     .select(
-      "id,user_id,name,is_active,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes)),workout_templates(id,title,main_goal,workout_type,training_level,program_duration_weeks,days_per_week,time_per_workout,equipment_required,target_gender,workout_template_days(id,workout_template_id,day_index,day_title,workout_template_exercises(id,workout_template_day_id,exercise_order,exercise_name,sets,reps))),user_workout_sessions(id,user_id,user_workout_plan_id,workout_template_day_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes,user_exercise_logs(id,user_workout_session_id,workout_template_exercise_id,plan_exercise_id,exercise_order,exercise_name,planned_sets,planned_reps,weight_kg,reps,notes,completed,completed_at,created_at,updated_at))"
+      "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes)),workout_templates(id,title,main_goal,workout_type,training_level,program_duration_weeks,days_per_week,time_per_workout,equipment_required,target_gender,workout_template_days(id,workout_template_id,day_index,day_title,workout_template_exercises(id,workout_template_day_id,exercise_order,exercise_name,sets,reps))),user_workout_sessions(id,user_id,user_workout_plan_id,workout_template_day_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes,user_exercise_logs(id,user_workout_session_id,workout_template_exercise_id,plan_exercise_id,exercise_order,exercise_name,planned_sets,planned_reps,weight_kg,reps,notes,completed,completed_at,created_at,updated_at))"
     )
     .eq("user_id", userId)
     .eq("is_active", true)
@@ -2401,11 +2437,34 @@ export async function getGeneratedWorkoutPlan(userId: string) {
     .maybeSingle();
 
   if (error) {
-    if (!isMissingTemplateSchemaError(error)) console.warn("S&S Gym could not load the generated workout plan.", error.message);
+    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load the generated workout plan.", error.message);
     return null;
   }
 
   return data ? normalizeGeneratedWorkoutPlan(data as unknown as RawGeneratedPlan) : null;
+}
+
+export async function getGeneratedWorkoutPlans(userId: string) {
+  if (!canUseUserData(userId)) return mockDelay<GeneratedWorkoutPlan[]>([]);
+
+  const { data, error } = await supabase!
+    .from("user_workout_plans")
+    .select(
+      "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes)),workout_templates(id,title,main_goal,workout_type,training_level,program_duration_weeks,days_per_week,time_per_workout,equipment_required,target_gender,workout_template_days(id,workout_template_id,day_index,day_title,workout_template_exercises(id,workout_template_day_id,exercise_order,exercise_name,sets,reps)))"
+    )
+    .eq("user_id", userId)
+    .eq("source", "template_recommendation")
+    .order("match_score", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load generated workout plans.", error.message);
+    return [];
+  }
+
+  return ((data ?? []) as unknown as RawGeneratedPlan[]).map((plan) =>
+    normalizeGeneratedWorkoutPlan({ ...plan, user_workout_sessions: plan.user_workout_sessions ?? [] })
+  );
 }
 
 export type GeneratedExerciseLogInput = {
@@ -2509,7 +2568,7 @@ export async function getGeneratedWorkoutHistory(userId: string, limit = 100) {
     .limit(limit);
 
   if (error) {
-    if (!isMissingTemplateSchemaError(error)) console.warn("S&S Gym could not load generated workout history.", error.message);
+    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load generated workout history.", error.message);
     return [];
   }
 
@@ -2527,7 +2586,7 @@ export async function getGeneratedWorkoutActivity(userId: string, limit = 180) {
     .limit(limit);
 
   if (error) {
-    if (!isMissingTemplateSchemaError(error)) console.warn("S&S Gym could not load generated workout activity.", error.message);
+    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load generated workout activity.", error.message);
     return [];
   }
 
@@ -2537,16 +2596,30 @@ export async function getGeneratedWorkoutActivity(userId: string, limit = 180) {
 export async function getUserWorkoutPlanDay(dayId: string) {
   if (!supabase) return mockDelay<WorkoutPlanDaySession | null>(null);
 
-  const { data, error } = await supabase!
+  const result = await supabase!
     .from("user_workout_plan_days")
     .select(
-      "id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes),user_workout_plans(id,user_id,name,is_active)"
+      "id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes),user_workout_plans(id,user_id,name,is_active)"
     )
     .eq("id", dayId)
     .maybeSingle();
+  let data: unknown = result.data;
+  let error = result.error;
+
+  if (error && isMissingTemplateSchemaError(error)) {
+    const compatible = await supabase!
+      .from("user_workout_plan_days")
+      .select(
+        "id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes),user_workout_plans(id,user_id,name,is_active)"
+      )
+      .eq("id", dayId)
+      .maybeSingle();
+    data = compatible.data;
+    error = compatible.error;
+  }
 
   if (error) {
-    console.warn("S&S Gym could not load this workout day.", error.message);
+    console.warn("FitLife Hub could not load this workout day.", error.message);
     throw error;
   }
 
@@ -2591,7 +2664,8 @@ export async function updateUserWorkoutPlanDay(dayId: string, day: WorkoutPlanDa
   if (deleteResult.error) throw deleteResult.error;
 
   const rows = cleanExercises.map((workout, exerciseIndex) => {
-    const exerciseUrl = workout.exercise_url || workout.video_url || (looksLikeUrl(workout.notes) ? workout.notes : null);
+    const exerciseGuideUrl = workout.exercise_url || (looksLikeUrl(workout.notes) ? workout.notes : null);
+    const customVideoUrl = workout.custom_video_url || null;
     return {
       plan_day_id: dayId,
       workout_id: null,
@@ -2604,7 +2678,9 @@ export async function updateUserWorkoutPlanDay(dayId: string, day: WorkoutPlanDa
       reps: workout.reps ?? "8-12",
       rest_seconds: workout.rest_seconds ?? 75,
       instructions: workout.instructions || defaultExerciseInstructions,
-      video_url: exerciseUrl,
+      exercise_url: exerciseGuideUrl,
+      video_url: customVideoUrl,
+      custom_video_url: customVideoUrl,
       sort_order: exerciseIndex + 1,
       notes: looksLikeUrl(workout.notes) ? null : workout.notes
     };
@@ -2614,12 +2690,88 @@ export async function updateUserWorkoutPlanDay(dayId: string, day: WorkoutPlanDa
 
   let { error } = await supabase!.from("user_workout_plan_exercises").insert(rows);
   if (error && isMissingTemplateSchemaError(error)) {
-    const compatibleRows = rows.map(({ source_workout_id: _source, instructions: _instructions, video_url: _video, ...row }) => row);
+    const compatibleRows = rows.map(({ source_workout_id: _source, instructions: _instructions, exercise_url: _exerciseUrl, video_url: _video, custom_video_url: _customVideo, ...row }) => row);
     const compatible = await supabase!.from("user_workout_plan_exercises").insert(compatibleRows);
     error = compatible.error;
   }
   if (error) throw error;
   return true;
+}
+
+export async function createUserWorkoutPlanDay(planId: string, day: WorkoutPlanDayInput) {
+  const cleanName = day.dayName.trim();
+  const cleanExercises = day.exercises.filter(Boolean);
+  if (!cleanName) throw new Error("Workout day name is required.");
+  if (!supabase || !isUuid(planId)) {
+    return mockDelay({
+      id: crypto.randomUUID(),
+      plan_id: planId,
+      day_number: 1,
+      day_name: cleanName,
+      weekday: day.weekday,
+      notes: day.notes || null,
+      exercises: []
+    } as UserWorkoutPlan["days"][number]);
+  }
+
+  const { data: existingDays, error: countError } = await supabase!
+    .from("user_workout_plan_days")
+    .select("day_number")
+    .eq("plan_id", planId)
+    .order("day_number", { ascending: false })
+    .limit(1);
+  if (countError) throw countError;
+  const nextDayNumber = Number(existingDays?.[0]?.day_number ?? 0) + 1;
+
+  const { data: savedDay, error: dayError } = await supabase!
+    .from("user_workout_plan_days")
+    .insert({
+      plan_id: planId,
+      day_number: nextDayNumber,
+      day_name: cleanName,
+      weekday: day.weekday,
+      notes: day.notes || null
+    })
+    .select("id,plan_id,day_number,day_name,weekday,notes")
+    .single();
+  if (dayError) throw dayError;
+
+  if (cleanExercises.length) {
+    const rows = cleanExercises.map((workout, exerciseIndex) => {
+      const exerciseGuideUrl = workout.exercise_url || (looksLikeUrl(workout.notes) ? workout.notes : null);
+      const customVideoUrl = workout.custom_video_url || null;
+      return {
+        plan_day_id: savedDay.id,
+        workout_id: null,
+        source_workout_id: workout.id,
+        exercise_name: workout.name,
+        category: workout.category,
+        target_muscle: workout.muscle_category || workout.target_muscle,
+        equipment: workout.equipment_required || workout.equipment,
+        sets: workout.sets ?? 3,
+        reps: workout.reps ?? "8-12",
+        rest_seconds: workout.rest_seconds ?? 75,
+        instructions: workout.instructions || defaultExerciseInstructions,
+        exercise_url: exerciseGuideUrl,
+        video_url: customVideoUrl,
+        custom_video_url: customVideoUrl,
+        sort_order: exerciseIndex + 1,
+        notes: looksLikeUrl(workout.notes) ? null : workout.notes
+      };
+    });
+    let { error: exerciseError } = await supabase!.from("user_workout_plan_exercises").insert(rows);
+    if (exerciseError && isMissingTemplateSchemaError(exerciseError)) {
+      const compatibleRows = rows.map(({ source_workout_id: _source, instructions: _instructions, exercise_url: _exerciseUrl, video_url: _video, custom_video_url: _customVideo, ...row }) => row);
+      const compatible = await supabase!.from("user_workout_plan_exercises").insert(compatibleRows);
+      exerciseError = compatible.error;
+    }
+    if (exerciseError) throw exerciseError;
+  }
+
+  return {
+    ...(savedDay as Omit<UserWorkoutPlan["days"][number], "exercises">),
+    exercises: []
+  };
 }
 
 export async function createUserWorkoutPlan({
@@ -2698,7 +2850,8 @@ export async function createUserWorkoutPlan({
     if (dayError) throw dayError;
 
     const exerciseRows = day.exercises.map((workout, exerciseIndex) => {
-      const exerciseUrl = workout.exercise_url || workout.video_url || (looksLikeUrl(workout.notes) ? workout.notes : null);
+      const exerciseGuideUrl = workout.exercise_url || (looksLikeUrl(workout.notes) ? workout.notes : null);
+      const customVideoUrl = workout.custom_video_url || null;
       return {
         plan_day_id: savedDay.id,
         workout_id: null,
@@ -2711,13 +2864,20 @@ export async function createUserWorkoutPlan({
         reps: workout.reps ?? "8-12",
         rest_seconds: workout.rest_seconds ?? 75,
         instructions: workout.instructions || defaultExerciseInstructions,
-        video_url: exerciseUrl,
+        exercise_url: exerciseGuideUrl,
+        video_url: customVideoUrl,
+        custom_video_url: customVideoUrl,
         sort_order: exerciseIndex + 1,
         notes: looksLikeUrl(workout.notes) ? null : workout.notes
       };
     });
 
-    const { error: exercisesError } = await supabase!.from("user_workout_plan_exercises").insert(exerciseRows);
+    let { error: exercisesError } = await supabase!.from("user_workout_plan_exercises").insert(exerciseRows);
+    if (exercisesError && isMissingTemplateSchemaError(exercisesError)) {
+      const compatibleRows = exerciseRows.map(({ source_workout_id: _source, instructions: _instructions, exercise_url: _exerciseUrl, video_url: _video, custom_video_url: _customVideo, ...row }) => row);
+      const compatible = await supabase!.from("user_workout_plan_exercises").insert(compatibleRows);
+      exercisesError = compatible.error;
+    }
     if (exercisesError) throw exercisesError;
   }
 
@@ -2732,8 +2892,26 @@ export function workoutsFromPlanDay(day: UserWorkoutPlan["days"][number] | null 
 export async function saveOnboarding(answers: OnboardingAnswers) {
   if (!canUseUserData(answers.user_id)) return mockDelay(answers);
   let { data, error } = await supabase!.from("onboarding_answers").upsert(answers, { onConflict: "user_id" }).select("*").single();
-  if (error && (error.message.toLowerCase().includes("available_equipment") || error.message.toLowerCase().includes("desired_duration_weeks"))) {
-    const { available_equipment: _availableEquipment, desired_duration_weeks: _desiredDurationWeeks, ...compatibleAnswers } = answers;
+  if (
+    error &&
+    (
+      error.message.toLowerCase().includes("available_equipment") ||
+      error.message.toLowerCase().includes("desired_duration_weeks") ||
+      error.message.toLowerCase().includes("goals") ||
+      error.message.toLowerCase().includes("training_cycle") ||
+      error.message.toLowerCase().includes("min_workout_duration_minutes") ||
+      error.message.toLowerCase().includes("max_workout_duration_minutes")
+    )
+  ) {
+    const {
+      available_equipment: _availableEquipment,
+      desired_duration_weeks: _desiredDurationWeeks,
+      goals: _goals,
+      training_cycle: _trainingCycle,
+      min_workout_duration_minutes: _minWorkoutDuration,
+      max_workout_duration_minutes: _maxWorkoutDuration,
+      ...compatibleAnswers
+    } = answers;
     const compatible = await supabase!.from("onboarding_answers").upsert(compatibleAnswers, { onConflict: "user_id" }).select("*").single();
     data = compatible.data;
     error = compatible.error;
@@ -2749,6 +2927,188 @@ export async function getOnboarding(userId: string) {
   return data as OnboardingAnswers | null;
 }
 
+function mockStamped<T extends { user_id: string }>(payload: T) {
+  const now = new Date().toISOString();
+  return { id: crypto.randomUUID(), created_at: now, updated_at: now, ...payload };
+}
+
+export type DailyFitTaskInput = Omit<DailyFitTask, "id" | "created_at" | "updated_at"> & { id?: string };
+
+export async function getDailyFitTasks(userId: string, date = todayIso()) {
+  if (!canUseUserData(userId)) return mockDelay<DailyFitTask[]>([]);
+  const { data, error } = await supabase!
+    .from("daily_fit_tasks")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("task_date", date)
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.warn("FitLife Hub could not load daily fit tasks.", error.message);
+    return [];
+  }
+  return (data ?? []) as DailyFitTask[];
+}
+
+export async function upsertDailyFitTask(input: DailyFitTaskInput) {
+  const payload = { ...input, title: input.title.trim(), notes: input.notes?.trim() || null };
+  if (!payload.title) throw new Error("Task title is required.");
+  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as DailyFitTask);
+  const { data, error } = await supabase!.from("daily_fit_tasks").upsert(payload).select("*").single();
+  if (error) throw error;
+  return data as DailyFitTask;
+}
+
+export async function deleteDailyFitTask(userId: string, id: string) {
+  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  const { error } = await supabase!.from("daily_fit_tasks").delete().eq("user_id", userId).eq("id", id);
+  if (error) throw error;
+  return true;
+}
+
+export type FitnessHabitInput = Omit<FitnessHabit, "id" | "created_at" | "updated_at"> & { id?: string };
+
+export async function getFitnessHabits(userId: string, date = todayIso()) {
+  if (!canUseUserData(userId)) return mockDelay<FitnessHabit[]>([]);
+  const { data, error } = await supabase!
+    .from("fitness_habits")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("habit_date", date)
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.warn("FitLife Hub could not load fitness habits.", error.message);
+    return [];
+  }
+  return (data ?? []) as FitnessHabit[];
+}
+
+export async function upsertFitnessHabit(input: FitnessHabitInput) {
+  const payload = { ...input, name: input.name.trim(), notes: input.notes?.trim() || null };
+  if (!payload.name) throw new Error("Habit name is required.");
+  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as FitnessHabit);
+  const { data, error } = await supabase!.from("fitness_habits").upsert(payload).select("*").single();
+  if (error) throw error;
+  return data as FitnessHabit;
+}
+
+export async function deleteFitnessHabit(userId: string, id: string) {
+  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  const { error } = await supabase!.from("fitness_habits").delete().eq("user_id", userId).eq("id", id);
+  if (error) throw error;
+  return true;
+}
+
+export type SleepRecoveryInput = Omit<SleepRecoveryLog, "id" | "created_at" | "updated_at"> & { id?: string };
+
+export async function getSleepRecoveryLogs(userId: string, limit = 30) {
+  if (!canUseUserData(userId)) return mockDelay<SleepRecoveryLog[]>([]);
+  const { data, error } = await supabase!
+    .from("sleep_recovery_logs")
+    .select("*")
+    .eq("user_id", userId)
+    .order("log_date", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.warn("FitLife Hub could not load sleep and recovery logs.", error.message);
+    return [];
+  }
+  return (data ?? []) as SleepRecoveryLog[];
+}
+
+export async function upsertSleepRecoveryLog(input: SleepRecoveryInput) {
+  const payload = { ...input, notes: input.notes?.trim() || null };
+  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as SleepRecoveryLog);
+  const { data, error } = await supabase!.from("sleep_recovery_logs").upsert(payload).select("*").single();
+  if (error) throw error;
+  return data as SleepRecoveryLog;
+}
+
+export async function deleteSleepRecoveryLog(userId: string, id: string) {
+  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  const { error } = await supabase!.from("sleep_recovery_logs").delete().eq("user_id", userId).eq("id", id);
+  if (error) throw error;
+  return true;
+}
+
+export type SupplementLogInput = Omit<SupplementLog, "id" | "created_at" | "updated_at"> & { id?: string };
+
+export async function getSupplementLogs(userId: string, date = todayIso()) {
+  if (!canUseUserData(userId)) return mockDelay<SupplementLog[]>([]);
+  const { data, error } = await supabase!
+    .from("supplement_logs")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("supplement_date", date)
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.warn("FitLife Hub could not load supplements.", error.message);
+    return [];
+  }
+  return (data ?? []) as SupplementLog[];
+}
+
+export async function upsertSupplementLog(input: SupplementLogInput) {
+  const payload = {
+    ...input,
+    name: input.name.trim(),
+    dose: input.dose?.trim() || null,
+    time: input.time?.trim() || null,
+    reminder: input.reminder?.trim() || null
+  };
+  if (!payload.name) throw new Error("Supplement name is required.");
+  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as SupplementLog);
+  const { data, error } = await supabase!.from("supplement_logs").upsert(payload).select("*").single();
+  if (error) throw error;
+  return data as SupplementLog;
+}
+
+export async function deleteSupplementLog(userId: string, id: string) {
+  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  const { error } = await supabase!.from("supplement_logs").delete().eq("user_id", userId).eq("id", id);
+  if (error) throw error;
+  return true;
+}
+
+export type PersonalRecordInput = Omit<PersonalRecord, "id" | "created_at" | "updated_at"> & { id?: string };
+
+export async function getPersonalRecords(userId: string, limit = 100) {
+  if (!canUseUserData(userId)) return mockDelay<PersonalRecord[]>([]);
+  const { data, error } = await supabase!
+    .from("personal_records")
+    .select("*")
+    .eq("user_id", userId)
+    .order("exercise_name", { ascending: true })
+    .order("record_date", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.warn("FitLife Hub could not load personal records.", error.message);
+    return [];
+  }
+  return (data ?? []) as PersonalRecord[];
+}
+
+export async function upsertPersonalRecord(input: PersonalRecordInput) {
+  const payload = {
+    ...input,
+    exercise_name: input.exercise_name.trim(),
+    record_type: input.record_type.trim(),
+    notes: input.notes?.trim() || null
+  };
+  if (!payload.exercise_name) throw new Error("Exercise name is required.");
+  if (!payload.record_type) throw new Error("Record type is required.");
+  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as PersonalRecord);
+  const { data, error } = await supabase!.from("personal_records").upsert(payload).select("*").single();
+  if (error) throw error;
+  return data as PersonalRecord;
+}
+
+export async function deletePersonalRecord(userId: string, id: string) {
+  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  const { error } = await supabase!.from("personal_records").delete().eq("user_id", userId).eq("id", id);
+  if (error) throw error;
+  return true;
+}
+
 export async function getProgressEntries(userId: string) {
   if (!canUseUserData(userId)) return mockDelay<ProgressEntry[]>([]);
   const { data, error } = await supabase!
@@ -2757,7 +3117,7 @@ export async function getProgressEntries(userId: string) {
     .eq("user_id", userId)
     .order("entry_date", { ascending: true });
   if (error) {
-    console.warn("S&S Gym could not load progress entries.", error.message);
+    console.warn("FitLife Hub could not load progress entries.", error.message);
     return [];
   }
 
@@ -2771,7 +3131,7 @@ export async function getProgressEntries(userId: string) {
     .order("measured_at", { ascending: true });
 
   if (measurementError) {
-    console.warn("S&S Gym could not load body measurements.", measurementError.message);
+    console.warn("FitLife Hub could not load body measurements.", measurementError.message);
     return entries;
   }
 
@@ -2867,7 +3227,7 @@ export async function getWelcomeSettings(userId: string): Promise<WelcomeSetting
   const fallback: WelcomeSettings = {
     popup_enabled: true,
     show_frequency: "once_per_day",
-    default_message: "Welcome back to S&S Gym. Ready for today?"
+    default_message: "Welcome back to FitLife Hub. Ready for today?"
   };
   if (!canUseUserData(userId)) return fallback;
 
@@ -2878,7 +3238,7 @@ export async function getWelcomeSettings(userId: string): Promise<WelcomeSetting
 
   if (settingsResult.error || customResult.error) {
     console.warn(
-      "S&S Gym could not load welcome settings.",
+      "FitLife Hub could not load welcome settings.",
       settingsResult.error?.message || customResult.error?.message
     );
     return fallback;
@@ -2910,12 +3270,12 @@ export async function adminUpsertWelcomeMessage(payload: {
 export async function adminListUsers() {
   if (!supabase) {
     return mockDelay([
-      { id: "mock-user", email: "member@ssgym.test", full_name: "S&S Gym Member", role: "admin" }
+      { id: "mock-user", email: "member@ssgym.test", full_name: "FitLife Hub Member", role: "admin" }
     ]);
   }
   const { data, error } = await supabase!.from("profiles").select("id,email,full_name,role,created_at").order("created_at", { ascending: false });
   if (error) {
-    console.warn("S&S Gym could not load admin users.", error.message);
+    console.warn("FitLife Hub could not load admin users.", error.message);
     return [];
   }
   return data ?? [];

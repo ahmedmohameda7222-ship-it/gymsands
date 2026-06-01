@@ -1,8 +1,8 @@
 {
-  "name": "ss-gym",
+  "name": "fitlife-hub",
   "version": "1.0.0",
   "private": true,
-  "description": "S&S Gym private workout, meal, and progress tracking app.",
+  "description": "FitLife Hub private workout, meal, and progress tracking app.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

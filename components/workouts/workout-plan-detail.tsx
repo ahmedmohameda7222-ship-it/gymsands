@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, Play } from "lucide-react";
+import { ArrowLeft, Pencil, Play, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { getCurrentWeekday, getUserWorkoutPlan, getWorkoutActivity, workoutsFromPlanDay } from "@/services/database/repository";
+import { createUserWorkoutPlanDay, getCurrentWeekday, getUserWorkoutPlan, getWorkoutActivity, weekDays, workoutsFromPlanDay } from "@/services/database/repository";
 import { WorkoutCalendar, type WeeklyPlanDay } from "@/components/workouts/workout-calendar";
 import type { UserWorkoutPlan, WorkoutSession } from "@/types";
 
@@ -33,6 +33,7 @@ export function WorkoutPlanDetail() {
   const [activity, setActivity] = useState<WorkoutSession[]>([]);
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAddingDay, setIsAddingDay] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -82,6 +83,27 @@ export function WorkoutPlanDetail() {
     startDay(days[todayIndex]);
   }
 
+  async function addDay() {
+    if (!plan || isAddingDay) return;
+    const usedWeekdays = new Set(plan.days.map((day) => day.weekday).filter(Boolean));
+    const nextWeekday = weekDays.find((weekday) => !usedWeekdays.has(weekday)) ?? null;
+    try {
+      setIsAddingDay(true);
+      const day = await createUserWorkoutPlanDay(plan.id, {
+        dayName: `Workout day ${plan.days.length + 1}`,
+        weekday: nextWeekday,
+        notes: "",
+        exercises: []
+      });
+      toast({ title: "Workout day added", description: "Add exercises to finish the new day." });
+      router.push(`/my-workout/day/${day.id}/add-exercise`);
+    } catch (error) {
+      toast({ title: "Could not add day", description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      setIsAddingDay(false);
+    }
+  }
+
   if (isLoading) return <p className="text-sm text-muted-foreground">Loading plan...</p>;
   if (!plan) {
     return (
@@ -89,7 +111,7 @@ export function WorkoutPlanDetail() {
         <CardContent className="space-y-3 pt-5">
           <p className="text-sm text-muted-foreground">This workout plan could not be found.</p>
           <Button asChild variant="outline">
-            <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to My Plans</Link>
+            <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to Workout Plans</Link>
           </Button>
         </CardContent>
       </Card>
@@ -100,12 +122,16 @@ export function WorkoutPlanDetail() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="outline">
-          <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to My Plans</Link>
+          <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to Workout Plans</Link>
         </Button>
         <div className="flex flex-wrap gap-2">
           {(plan.is_default ?? plan.is_active) ? <Badge>Default Plan</Badge> : null}
           <Badge>{plan.days.length} days</Badge>
           <Badge variant="outline">{plan.days.reduce((sum, day) => sum + day.exercises.length, 0)} exercises</Badge>
+          <Button size="sm" onClick={addDay} disabled={isAddingDay || plan.days.length >= 7}>
+            <Plus className="h-4 w-4" />
+            {isAddingDay ? "Adding..." : "Add Day"}
+          </Button>
         </div>
       </div>
 

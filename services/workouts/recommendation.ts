@@ -13,12 +13,18 @@ export type WorkoutTemplateCandidate = {
 
 export type WorkoutRecommendationInput = {
   mainGoal: string;
+  goals?: string[];
+  trainingCycle?: string | null;
   trainingLevel: string;
   daysPerWeek: number;
   workoutTimeMinutes?: number | null;
+  minWorkoutDurationMinutes?: number | null;
+  maxWorkoutDurationMinutes?: number | null;
   availableEquipment: string[];
   gender: string;
   ageRange?: string | null;
+  heightCm?: number | null;
+  weightKg?: number | null;
   desiredDurationWeeks?: number | null;
 };
 
@@ -35,9 +41,12 @@ function normalize(value: string | null | undefined) {
 
 function canonicalGoal(value: string) {
   const normalized = normalize(value);
+  if (normalized.includes("wellness") || normalized.includes("health") || normalized.includes("stress") || normalized.includes("mobility")) return "general fitness";
   if (normalized.includes("build") || normalized.includes("muscle") || normalized.includes("mass")) return "build muscle";
   if (normalized.includes("lose") || normalized.includes("fat") || normalized.includes("cut")) return "lose fat";
   if (normalized.includes("strength")) return "increase strength";
+  if (normalized.includes("endurance") || normalized.includes("cardio")) return "sports performance";
+  if (normalized.includes("recomposition")) return "build muscle";
   if (normalized.includes("sport")) return "sports performance";
   return "general fitness";
 }
@@ -94,6 +103,25 @@ function equipmentScore(required: string[] | null | undefined, available: string
   };
 }
 
+function durationMinutes(value: string | null | undefined) {
+  const numbers = value?.match(/\d+/g)?.map(Number).filter((item) => Number.isFinite(item) && item > 0) ?? [];
+  if (!numbers.length) return null;
+  return Math.round(numbers.reduce((sum, item) => sum + item, 0) / numbers.length);
+}
+
+function matchesTrainingCycle(templateType: string | null | undefined, selectedCycle: string | null | undefined) {
+  if (!selectedCycle) return false;
+  const template = normalize(templateType);
+  const cycle = normalize(selectedCycle);
+  if (!template || !cycle) return false;
+  if (template.includes(cycle) || cycle.includes(template)) return true;
+  if (cycle.includes("upper lower") && (template.includes("upper") || template.includes("lower"))) return true;
+  if (cycle.includes("push pull legs") && (template.includes("ppl") || template.includes("push") || template.includes("pull"))) return true;
+  if (cycle.includes("wellness") && (template.includes("mobility") || template.includes("full body"))) return true;
+  if (cycle.includes("cardio strength") && (template.includes("cardio") || template.includes("strength"))) return true;
+  return false;
+}
+
 function goalLabel(value: string) {
   const canonical = canonicalGoal(value);
   if (canonical === "build muscle") return "Build Muscle";
@@ -108,15 +136,20 @@ export function scoreWorkoutTemplate(template: WorkoutTemplateCandidate, input: 
 
   const reasons: string[] = [];
   let score = 0;
-  const inputGoal = canonicalGoal(input.mainGoal);
+  const selectedGoals = input.goals?.length ? input.goals : [input.mainGoal];
+  const inputGoals = selectedGoals.map(canonicalGoal);
   const templateGoal = canonicalGoal(template.main_goal);
   const inputLevel = normalizeLevel(input.trainingLevel);
   const templateLevel = normalizeLevel(template.training_level);
   const userAgeBucket = ageBucket(input.ageRange);
 
-  if (templateGoal === inputGoal) {
+  if (inputGoals.includes(templateGoal)) {
     score += 35;
-    reasons.push(`matches your ${goalLabel(input.mainGoal).toLowerCase()} goal`);
+    const matchedGoal = selectedGoals.find((goal) => canonicalGoal(goal) === templateGoal) ?? input.mainGoal;
+    reasons.push(`matches your ${goalLabel(matchedGoal).toLowerCase()} goal`);
+  } else if (inputGoals.includes("general fitness") && templateGoal !== "sports performance") {
+    score += 12;
+    reasons.push("supports your broader wellness goals");
   }
 
   if (templateLevel === inputLevel) {
@@ -149,6 +182,27 @@ export function scoreWorkoutTemplate(template: WorkoutTemplateCandidate, input: 
   if (equipment.score >= 16) reasons.push("works with most of your available equipment");
   else if (equipment.score > 0) reasons.push("shares some of your available equipment");
 
+  if (matchesTrainingCycle(template.workout_type, input.trainingCycle)) {
+    score += 18;
+    reasons.push(`matches your ${input.trainingCycle?.toLowerCase()} training cycle`);
+  }
+
+  const templateMinutes = durationMinutes(template.time_per_workout);
+  const minDuration = input.minWorkoutDurationMinutes ?? input.workoutTimeMinutes ?? null;
+  const maxDuration = input.maxWorkoutDurationMinutes ?? input.workoutTimeMinutes ?? null;
+  if (templateMinutes && minDuration && maxDuration) {
+    if (templateMinutes >= Math.min(minDuration, maxDuration) && templateMinutes <= Math.max(minDuration, maxDuration)) {
+      score += 15;
+      reasons.push(`fits your ${Math.min(minDuration, maxDuration)}-${Math.max(minDuration, maxDuration)} minute workout window`);
+    } else {
+      const nearest = Math.min(Math.abs(templateMinutes - minDuration), Math.abs(templateMinutes - maxDuration));
+      if (nearest <= 10) {
+        score += 5;
+        reasons.push("is close to your preferred workout duration");
+      }
+    }
+  }
+
   if (input.desiredDurationWeeks) {
     const durationDifference = Math.abs(Number(template.program_duration_weeks) - Number(input.desiredDurationWeeks));
     if (durationDifference === 0) {
@@ -172,6 +226,11 @@ export function scoreWorkoutTemplate(template: WorkoutTemplateCandidate, input: 
     reasons.push("supports higher training capacity with your experience level");
   }
 
+  if (input.heightCm && input.weightKg) {
+    score += 2;
+    reasons.push("uses your height and weight profile in the match");
+  }
+
   const explanation = reasons.length
     ? `Selected because it ${reasons.join(", ")}.`
     : "Selected as the closest safe match from the workout template library.";
@@ -180,7 +239,11 @@ export function scoreWorkoutTemplate(template: WorkoutTemplateCandidate, input: 
 }
 
 export function recommendWorkoutTemplate(templates: WorkoutTemplateCandidate[], input: WorkoutRecommendationInput) {
-  const scored = templates
+  return recommendWorkoutTemplates(templates, input)[0] ?? null;
+}
+
+export function recommendWorkoutTemplates(templates: WorkoutTemplateCandidate[], input: WorkoutRecommendationInput) {
+  return templates
     .map((template) => scoreWorkoutTemplate(template, input))
     .filter((item): item is WorkoutTemplateScore => Boolean(item))
     .sort((a, b) => {
@@ -190,6 +253,4 @@ export function recommendWorkoutTemplate(templates: WorkoutTemplateCandidate[], 
       if (bLevel !== aLevel) return bLevel - aLevel;
       return Math.abs(b.template.days_per_week - input.daysPerWeek) - Math.abs(a.template.days_per_week - input.daysPerWeek);
     });
-
-  return scored[0] ?? null;
 }

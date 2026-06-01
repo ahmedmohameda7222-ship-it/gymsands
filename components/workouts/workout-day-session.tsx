@@ -184,7 +184,8 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const completedSets = exerciseStates.reduce((sum, item) => sum + item.sets.filter((set) => set.completedAt).length, 0);
   const progress = totalSets ? Math.round((completedSets / totalSets) * 100) : 0;
   const isFinished = completedSets === totalSets && totalSets > 0;
-  const currentVideoUrl = activeExercise?.exercise.video_url || (activeExercise?.exercise.notes?.startsWith("http") ? activeExercise.exercise.notes : null);
+  const currentGuideUrl = activeExercise?.exercise.exercise_url || (activeExercise?.exercise.notes?.startsWith("http") ? activeExercise.exercise.notes : null);
+  const currentCustomVideoUrl = activeExercise?.exercise.custom_video_url || null;
   const currentInstructions = activeExercise?.exercise.instructions || defaultInstructions;
   const durationMinutes = Math.max(1, Math.ceil(elapsedSeconds / 60));
 
@@ -378,11 +379,22 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
             {exerciseStates.map((item, index) => {
               const done = item.sets.filter((set) => set.completedAt).length;
               const active = index === activeExerciseIndex;
+              const guideUrl = item.exercise.exercise_url || (item.exercise.notes?.startsWith("http") ? item.exercise.notes : null);
+              const customVideoUrl = item.exercise.custom_video_url || null;
               return (
-                <button
+                <div
                   key={item.exercise.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => {
+                    setActiveExerciseIndex(index);
+                    const firstOpen = item.sets.findIndex((set) => !set.completedAt);
+                    setActiveSetIndex(firstOpen >= 0 ? firstOpen : item.sets.length - 1);
+                    setTimerSeconds(item.exercise.rest_seconds ?? 75);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
                     setActiveExerciseIndex(index);
                     const firstOpen = item.sets.findIndex((set) => !set.completedAt);
                     setActiveSetIndex(firstOpen >= 0 ? firstOpen : item.sets.length - 1);
@@ -392,7 +404,37 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                 >
                   <p className="truncate text-sm font-semibold">{index + 1}. {item.exercise.exercise_name}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{done}/{item.sets.length} sets</p>
-                </button>
+                  <div className="mt-3 grid gap-2">
+                    {guideUrl ? (
+                      <a
+                        href={guideUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => event.stopPropagation()}
+                        className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border bg-white px-2 text-xs font-semibold text-foreground transition hover:bg-secondary"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Open Exercise Guide
+                      </a>
+                    ) : (
+                      <span className="inline-flex min-h-9 items-center justify-center rounded-md border px-2 text-xs font-semibold text-muted-foreground">No guide added</span>
+                    )}
+                    {customVideoUrl ? (
+                      <a
+                        href={customVideoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => event.stopPropagation()}
+                        className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border bg-white px-2 text-xs font-semibold text-foreground transition hover:bg-secondary"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Open Custom Video
+                      </a>
+                    ) : (
+                      <span className="inline-flex min-h-9 items-center justify-center rounded-md border px-2 text-xs font-semibold text-muted-foreground">No custom video</span>
+                    )}
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -412,22 +454,32 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
           <CardContent className="space-y-4">
             <div className="rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">
               {currentInstructions}
-              {currentVideoUrl ? (
-                <Button asChild variant="outline" size="sm" className="mt-3">
-                  <a href={currentVideoUrl} target="_blank" rel="noreferrer">
+              <div className="mt-3 flex flex-wrap gap-2">
+                {currentGuideUrl ? (
+                <Button asChild variant="outline" size="sm">
+                  <a href={currentGuideUrl} target="_blank" rel="noreferrer">
                     <ExternalLink className="h-4 w-4" />
-                    Open Video/Instructions
+                    Open Exercise Guide
                   </a>
                 </Button>
-              ) : currentInstructions ? (
-                <Button type="button" variant="outline" size="sm" className="mt-3" disabled>
-                  Instructions shown here
-                </Button>
               ) : (
-                <Button type="button" variant="outline" size="sm" className="mt-3" disabled>
-                  No video/instructions available
+                <Button type="button" variant="outline" size="sm" disabled>
+                  No guide added
                 </Button>
               )}
+                {currentCustomVideoUrl ? (
+                  <Button asChild variant="outline" size="sm">
+                    <a href={currentCustomVideoUrl} target="_blank" rel="noreferrer">
+                      <ExternalLink className="h-4 w-4" />
+                      Open Custom Video
+                    </a>
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" disabled>
+                    No custom video
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3">

@@ -37,7 +37,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!email.trim()) return toast({ title: "Email is required", description: "Use the email for your S&S Gym account." });
+    if (!email.trim()) return toast({ title: "Email is required", description: "Use the email for your FitLife Hub account." });
     if (password.length < 6) return toast({ title: "Password is too short", description: "Use at least 6 characters." });
 
     setIsLoading(true);
@@ -54,7 +54,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         const { data, error } = await withAuthTimeout(supabase.auth.signInWithPassword({ email, password }));
         if (error) throw error;
         if (!data.session) throw new Error("Login could not finish. Please try again.");
-        toast({ title: "Welcome back to S&S Gym", description: "Your session is ready." });
+        toast({ title: "Welcome back to FitLife Hub", description: "Your session is ready." });
         router.replace(searchParams.get("next") ?? "/dashboard");
         router.refresh();
       } else {
@@ -69,7 +69,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           }
         }));
         if (error) throw error;
-        toast({ title: "S&S Gym account created", description: "Check your email if confirmation is enabled, then finish onboarding." });
+        toast({ title: "FitLife Hub account created", description: "Check your email if confirmation is enabled, then finish onboarding." });
         router.replace("/onboarding");
         router.refresh();
       }
@@ -85,7 +85,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
 
   async function handlePasswordReset() {
     const targetEmail = resetEmail || email;
-    if (!targetEmail.trim()) return toast({ title: "Email is required", description: "Enter your S&S Gym account email first." });
+    if (!targetEmail.trim()) return toast({ title: "Email is required", description: "Enter your FitLife Hub account email first." });
     if (!supabase) return toast({ title: "Password reset unavailable", description: "Please try again later." });
     const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
       redirectTo: `${window.location.origin}/profile`
@@ -100,7 +100,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle>{mode === "login" ? "Login to S&S Gym" : "Create your S&S Gym account"}</CardTitle>
+        <CardTitle>{mode === "login" ? "Login to FitLife Hub" : "Create your FitLife Hub account"}</CardTitle>
         <CardDescription>
           {mode === "login" ? "Continue to your private fitness dashboard." : "Start with a quick, simple onboarding."}
         </CardDescription>
@@ -192,7 +192,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         ) : null}
 
         <p className="mt-5 text-center text-sm text-muted-foreground">
-          {mode === "login" ? "New to S&S Gym?" : "Already have an account?"}{" "}
+          {mode === "login" ? "New to FitLife Hub?" : "Already have an account?"}{" "}
           <Link href={mode === "login" ? "/register" : "/login"} className="font-semibold text-primary">
             {mode === "login" ? "Create account" : "Login"}
           </Link>

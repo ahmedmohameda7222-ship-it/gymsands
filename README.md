@@ -1,6 +1,6 @@
-# S&S Gym
+# FitLife Hub
 
-S&S Gym is a private gym web app for workout logging, Egyptian food/macros, calorie tracking, progress tracking, and admin management.
+FitLife Hub is a private gym web app for workout logging, Egyptian food/macros, calorie tracking, progress tracking, and admin management.
 
 It is not a commercial SaaS app. There is no pricing, checkout, subscription, payment, or billing flow.
 
@@ -147,7 +147,7 @@ The app includes:
 - Matching by exercise name and category
 - Fallback display: `Video will be added soon.`
 
-The URLs you provided from `muscleandstrength.com` are instruction pages, not direct video file/embed URLs. S&S Gym stores them as instruction sources now. If a direct YouTube, Vimeo, or hosted video URL is added in `video_url`, the app embeds it as a video.
+The URLs you provided from `muscleandstrength.com` are instruction pages, not direct video file/embed URLs. FitLife Hub stores them as instruction sources now. If a direct YouTube, Vimeo, or hosted video URL is added in `video_url`, the app embeds it as a video.
 
 ## Welcome Back Popup
 
@@ -182,7 +182,7 @@ After Netlify deploys:
 
 ## Safety Notes
 
-- S&S Gym is for general fitness tracking only.
+- FitLife Hub is for general fitness tracking only.
 - It is not medical advice.
 - Users with medical conditions should speak with a doctor.
 - Do not train through serious pain.

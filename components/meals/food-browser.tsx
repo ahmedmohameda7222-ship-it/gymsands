@@ -360,8 +360,8 @@ function FoodBrowserInner({
     <div className="space-y-4">
       <Card className="bg-blue-50">
         <CardContent className="pt-5">
-          <p className="text-sm font-semibold text-blue-950">{nutritionDisclaimer}</p>
-          <p className="mt-1 text-sm text-blue-800">Pick a meal type, kitchen, and subcategory, then search or choose food.</p>
+          <p className="text-sm font-semibold text-foreground">{nutritionDisclaimer}</p>
+          <p className="mt-1 text-sm text-primary-foreground">Pick a meal type, kitchen, and subcategory, then search or choose food.</p>
         </CardContent>
       </Card>
 
@@ -444,7 +444,7 @@ function FoodBrowserInner({
                     <p className="font-semibold text-slate-950">{meal.meal_name}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{meal.items.length} foods | {meal.totals.calories} kcal</p>
                   </div>
-                  <span className="rounded-md bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">
+                  <span className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">
                     {meal.meal_category || "Meal"}
                   </span>
                 </div>
@@ -487,7 +487,7 @@ function FoodBrowserInner({
                     <h3 className="font-semibold text-slate-950">{food.food_name}</h3>
                     <p className="mt-1 text-sm text-muted-foreground">{food.serving_size}</p>
                   </div>
-                  <span className="shrink-0 rounded-md bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">
+                  <span className="shrink-0 rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">
                     {food.category || "Food"}
                   </span>
                 </div>
@@ -546,7 +546,7 @@ function NoticeBox({ notice, onClose }: { notice: Notice; onClose: () => void })
       ? "border-emerald-200 bg-emerald-50 text-emerald-950"
       : notice.type === "error"
         ? "border-red-200 bg-red-50 text-red-950"
-        : "border-blue-200 bg-blue-50 text-blue-950";
+        : "border-primary/40 bg-blue-50 text-foreground";
 
   return (
     <div className={`rounded-md border p-4 text-sm ${styles}`}>

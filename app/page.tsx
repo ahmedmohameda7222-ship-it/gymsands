@@ -1,73 +1,68 @@
 import Link from "next/link";
-import { Activity, Dumbbell, LineChart, Smartphone, Soup, Utensils } from "lucide-react";
+import { Activity, BedDouble, Dumbbell, LineChart, Pill, Soup, Trophy, Utensils } from "lucide-react";
 import { PublicNav } from "@/components/layout/public-nav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+
+const heroImages = [
+  "https://images.unsplash.com/photo-1571902943202-507ec2618e8f?auto=format&fit=crop&w=1800&q=85",
+  "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1800&q=85",
+  "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=1800&q=85"
+];
 
 const features = [
-  { icon: Utensils, title: "Track your meals", text: "Log food, portions, calories, and macros in a simple daily view." },
-  { icon: Dumbbell, title: "Log your workouts", text: "Browse workouts, start sessions, and save workout history." },
-  { icon: Soup, title: "Follow Egyptian food macros", text: "Use the Egyptian food database with adjustable serving quantities." },
-  { icon: LineChart, title: "View your progress", text: "Follow weight, measurements, consistency, and nutrition trends." },
-  { icon: Smartphone, title: "Works perfectly on mobile", text: "Every core action is designed for phones first." },
-  { icon: Activity, title: "Private gym dashboard", text: "Built for members, not public sales pages or subscriptions." }
+  { icon: Dumbbell, title: "Workout plans", text: "Generated and custom plans with active default selection." },
+  { icon: Activity, title: "Exercise library", text: "Filter exercises by muscle, equipment, mechanics, level, and force type." },
+  { icon: Soup, title: "Meal planning", text: "Plan meals, build custom foods, and track daily nutrition." },
+  { icon: Utensils, title: "Calorie tracking", text: "Calories, macros, water, and weekly summaries in one flow." },
+  { icon: LineChart, title: "Progress tracking", text: "Body metrics, charts, and consistency history." },
+  { icon: BedDouble, title: "Sleep & recovery", text: "Recovery, soreness, fatigue, sleep quality, and notes." },
+  { icon: Pill, title: "Habits & supplements", text: "Daily tasks, habits, hydration, and supplement check-ins." },
+  { icon: Trophy, title: "Personal records", text: "Track best sets, max reps, 1RM, and custom milestones." }
 ];
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-background text-foreground">
       <PublicNav />
       <main>
-        <section className="blue-surface text-white">
-          <div className="container grid min-h-[calc(100vh-4rem)] gap-10 py-10 lg:grid-cols-[1fr_0.9fr] lg:items-center">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-sky-200">Private fitness dashboard</p>
-              <h1 className="mt-4 text-5xl font-bold tracking-normal sm:text-6xl">S&S Gym</h1>
-              <p className="mt-5 max-w-xl text-lg leading-8 text-blue-100">
-                Simple workout, meal, and progress tracking for real life.
+        <section className="relative min-h-[88vh] overflow-hidden">
+          {heroImages.map((image, index) => (
+            <div
+              key={image}
+              className="hero-slide absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url(${image})`, animationDelay: `${index * 6}s` }}
+            />
+          ))}
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(11,18,32,0.94),rgba(11,18,32,0.64),rgba(11,18,32,0.28)),linear-gradient(180deg,rgba(11,18,32,0.08),#0b1220)]" />
+          <div className="container relative flex min-h-[88vh] items-center pb-16 pt-14">
+            <div className="max-w-3xl">
+              <p className="text-sm font-semibold uppercase tracking-wide text-primary">Luxury wellness dashboard</p>
+              <h1 className="mt-4 text-5xl font-bold tracking-normal sm:text-7xl">FitLife Hub</h1>
+              <p className="mt-5 max-w-2xl text-lg leading-8 text-[#f4efe6]/85">
+                A calm premium space for generated workout plans, exercise guidance, meal planning, calorie tracking, recovery, habits, supplements, and personal records.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Button asChild size="lg">
                   <Link href="/register">Create account</Link>
                 </Button>
-                <Button asChild variant="outline" size="lg" className="border-blue-200 bg-white/10 text-white hover:bg-white/15">
+                <Button asChild variant="outline" size="lg" className="border-primary/60 bg-card/50 text-foreground hover:bg-card/80">
                   <Link href="/login">Login</Link>
                 </Button>
               </div>
-              <p className="mt-6 max-w-lg text-sm text-blue-100">
-                General fitness tracking only. Not medical advice. Nutrition values are approximate.
-              </p>
-            </div>
-            <div className="rounded-lg border border-white/15 bg-white/10 p-4 shadow-blue backdrop-blur">
-              <div className="rounded-lg bg-white p-4 text-slate-950">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Today</p>
-                    <h2 className="text-xl font-bold">Dashboard snapshot</h2>
-                  </div>
-                  <span className="rounded-md bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-800">S&S Gym</span>
-                </div>
-                <div className="mt-5 grid grid-cols-2 gap-3">
-                  <MiniMetric label="Calories" value="1,420" detail="780 remaining" />
-                  <MiniMetric label="Protein" value="92g" detail="58g left" />
-                </div>
-                <div className="mt-5 space-y-4">
-                  <ProgressLine label="Calories" value={64} />
-                  <ProgressLine label="Protein" value={61} />
-                  <ProgressLine label="Workout" value={75} />
-                </div>
-                <div className="mt-5 rounded-md bg-blue-50 p-4">
-                  <p className="text-sm font-semibold">Welcome back to S&S Gym. Ready for today?</p>
-                  <p className="mt-1 text-sm text-slate-600">Add food, start a workout, or record progress.</p>
-                </div>
+              <div className="mt-8 flex flex-wrap gap-2">
+                {["Workout plans", "Generated plans", "Exercise library", "Meal planning", "Progress tracking", "Sleep & recovery", "Habits", "Supplements", "Personal records"].map((item) => (
+                  <span key={item} className="rounded-md border border-primary/25 bg-card/50 px-3 py-1 text-sm text-[#f4efe6]/85 backdrop-blur">
+                    {item}
+                  </span>
+                ))}
               </div>
             </div>
           </div>
         </section>
 
-        <section className="container py-14">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <section className="container py-12">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {features.map((feature) => {
               const Icon = feature.icon;
               return (
@@ -83,28 +78,6 @@ export default function LandingPage() {
           </div>
         </section>
       </main>
-    </div>
-  );
-}
-
-function MiniMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <div className="rounded-md border bg-slate-50 p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-xl font-bold">{value}</p>
-      <p className="text-xs text-slate-500">{detail}</p>
-    </div>
-  );
-}
-
-function ProgressLine({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between text-sm">
-        <span className="font-medium">{label}</span>
-        <span className="text-muted-foreground">{value}%</span>
-      </div>
-      <Progress value={value} />
     </div>
   );
 }

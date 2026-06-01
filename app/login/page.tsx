@@ -8,8 +8,8 @@ export default function LoginPage() {
       <section className="blue-surface hidden p-10 text-white lg:flex lg:flex-col lg:justify-between">
         <Brand className="text-white" />
         <div>
-          <h1 className="max-w-lg text-5xl font-bold tracking-normal">S&S Gym</h1>
-          <p className="mt-4 max-w-md text-lg text-blue-100">Simple workout, meal, and progress tracking for real life.</p>
+          <h1 className="max-w-lg text-5xl font-bold tracking-normal">FitLife Hub</h1>
+          <p className="mt-4 max-w-md text-lg text-[#f4efe6]/80">Simple workout, meal, and progress tracking for real life.</p>
         </div>
       </section>
       <section className="flex min-h-screen items-center justify-center p-4">

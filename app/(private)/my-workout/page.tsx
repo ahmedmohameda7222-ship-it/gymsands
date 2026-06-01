@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 export default function MyWorkoutPage() {
   return (
     <>
-      <PageHeading title="My Workout" description="Choose generated workout plans or the plans you created yourself." />
+      <PageHeading title="Workout Plans" description="Choose generated workout plans or the plans you created yourself." />
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardContent className="space-y-4 pt-5">
@@ -32,12 +32,12 @@ export default function MyWorkoutPage() {
                 <CalendarDays className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-slate-950">My Plans</h2>
+                <h2 className="text-lg font-bold text-slate-950">Workout Plans</h2>
                 <p className="text-sm text-muted-foreground">Create, open, edit, and start your own saved workout plans.</p>
               </div>
             </div>
             <Button asChild variant="outline">
-              <Link href="/my-workout/plans">Open My Plans</Link>
+              <Link href="/my-workout/plans">Open Workout Plans</Link>
             </Button>
           </CardContent>
         </Card>

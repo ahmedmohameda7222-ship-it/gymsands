@@ -4,7 +4,7 @@ import { AdminWelcomePanel } from "@/components/admin/admin-panels";
 export default function AdminWelcomePage() {
   return (
     <>
-      <PageHeading title="Manage Welcome Messages" description="Set default or user-specific S&S Gym welcome popups." />
+      <PageHeading title="Manage Welcome Messages" description="Set default or user-specific FitLife Hub welcome popups." />
       <AdminWelcomePanel />
     </>
   );

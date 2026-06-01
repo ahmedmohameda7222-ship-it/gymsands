@@ -29,7 +29,7 @@ export function MyWorkoutPlans() {
     try {
       setPlans(await getUserWorkoutPlans(user.id));
     } catch (error) {
-      toast({ title: "Could not load My Plans", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not load Workout Plans", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
       setIsLoading(false);
     }
@@ -53,7 +53,7 @@ export function MyWorkoutPlans() {
     );
     try {
       await setDefaultUserWorkoutPlan(user.id, plan.id);
-      toast({ title: "Default plan updated", description: `${plan.name} is now used for Today's Workout and Weekly Overview.` });
+      toast({ title: "Default plan updated", description: `${plan.name} is now used for Today's Workout and Weekly Summary.` });
     } catch (error) {
       setPlans(previousPlans);
       toast({ title: "Could not set default plan", description: error instanceof Error ? error.message : "Please try again." });
@@ -73,7 +73,7 @@ export function MyWorkoutPlans() {
     try {
       await deleteUserWorkoutPlan(user.id, plan.id);
       await loadPlans();
-      toast({ title: "Plan deleted", description: `${plan.name} was removed from My Plans.` });
+      toast({ title: "Plan deleted", description: `${plan.name} was removed from Workout Plans.` });
     } catch (error) {
       setPlans(previousPlans);
       toast({ title: "Could not delete plan", description: error instanceof Error ? error.message : "Please try again." });
@@ -86,7 +86,7 @@ export function MyWorkoutPlans() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-950">My Plans</h2>
+          <h2 className="text-lg font-bold text-slate-950">Workout Plans</h2>
           <p className="text-sm text-muted-foreground">Workout plans saved to your account.</p>
         </div>
         <div className="flex flex-wrap gap-2">

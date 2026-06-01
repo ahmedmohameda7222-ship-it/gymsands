@@ -50,13 +50,17 @@ const config: Config = {
           foreground: "hsl(var(--card-foreground))"
         },
         navy: {
-          950: "#031124",
-          900: "#061a36",
-          800: "#0a2a55"
+          950: "#0B1220",
+          900: "#111A2E",
+          800: "#253044"
         },
-        skyline: {
-          500: "#23a6f5",
-          600: "#0689db"
+        champagne: {
+          500: "#D6B76A",
+          600: "#C8A75B"
+        },
+        sage: {
+          500: "#7FA68A",
+          600: "#6f9679"
         }
       },
       borderRadius: {
@@ -65,7 +69,8 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)"
       },
       boxShadow: {
-        blue: "0 20px 50px rgba(14, 116, 244, 0.18)"
+        blue: "0 20px 50px rgba(214, 183, 106, 0.16)",
+        luxe: "0 20px 60px rgba(0, 0, 0, 0.28)"
       }
     }
   },

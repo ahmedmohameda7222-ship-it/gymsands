@@ -7,10 +7,10 @@ export default function AboutPage() {
       <PublicNav />
       <main className="container py-12">
         <section className="max-w-3xl">
-          <p className="text-sm font-semibold uppercase tracking-wide text-primary">About S&S Gym</p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-primary">About FitLife Hub</p>
           <h1 className="mt-3 text-4xl font-bold tracking-normal text-slate-950">A private gym tracker for daily consistency.</h1>
           <p className="mt-5 text-lg leading-8 text-slate-600">
-            S&S Gym is a simple member dashboard for logging Egyptian meals, workouts, calories, macros, body progress,
+            FitLife Hub is a simple member dashboard for logging Egyptian meals, workouts, calories, macros, body progress,
             and welcome messages from the admin team.
           </p>
         </section>

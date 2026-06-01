@@ -6,7 +6,7 @@ export default function GeneratedPlansPage() {
     <>
       <PageHeading
         title="Generated Plans"
-        description="Follow your generated workout plan, track sessions, and review the scheduled calendar."
+        description="Browse matched workout plans, inspect every day, then choose the one that becomes your active default."
       />
       <GeneratedWorkoutDashboard />
     </>

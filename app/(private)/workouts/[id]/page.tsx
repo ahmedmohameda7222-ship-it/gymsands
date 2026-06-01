@@ -51,19 +51,19 @@ export default function WorkoutDetailsPage() {
   if (!workout) return <p className="text-sm text-muted-foreground">{loadError || "Loading workout..."}</p>;
 
   const guideUrl = workout.exercise_url || (workout.notes?.startsWith("http") ? workout.notes : video?.exercise_url);
-  const videoUrl = customVideoUrl || workout.video_url || video?.video_url || video?.exercise_url || guideUrl;
+  const videoUrl = customVideoUrl || null;
   const displayVideo = video
-    ? { ...video, video_url: customVideoUrl || video.video_url }
+    ? { ...video, exercise_url: guideUrl ?? video.exercise_url, video_url: customVideoUrl || null }
     : videoUrl
       ? {
           id: workout.id,
           exercise_name: workout.name,
           category_type: workout.category,
           category: workout.target_muscle,
-          exercise_url: videoUrl,
-          video_url: customVideoUrl || workout.video_url || null,
+          exercise_url: guideUrl ?? "",
+          video_url: customVideoUrl,
           instructions: workout.instructions,
-          source: "user_custom_or_workout",
+          source: "user_custom",
           is_global: true
         }
       : null;
@@ -77,7 +77,7 @@ export default function WorkoutDetailsPage() {
       const saved = await upsertUserExerciseVideo(user.id, workout.id, customVideoDraft);
       setCustomVideoUrl(saved.custom_video_url);
       setCustomVideoDraft(saved.custom_video_url);
-      toast({ title: "Video link saved", description: "This exercise now uses your custom instruction video." });
+      toast({ title: "Custom video saved", description: "This exercise now has your manually added custom video." });
     } catch (error) {
       toast({ title: "Could not save video link", description: error instanceof Error ? error.message : "Please check the URL." });
     } finally {
@@ -93,7 +93,7 @@ export default function WorkoutDetailsPage() {
       await resetUserExerciseVideo(user.id, workout.id);
       setCustomVideoUrl("");
       setCustomVideoDraft("");
-      toast({ title: "Video link reset", description: "The default instruction link is active again." });
+      toast({ title: "Custom video cleared", description: "The exercise guide remains separate from your custom video link." });
     } catch (error) {
       toast({ title: "Could not reset video link", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
@@ -164,19 +164,23 @@ export default function WorkoutDetailsPage() {
                     Open Exercise Guide
                   </a>
                 </Button>
-              ) : null}
-              {videoUrl ? (
+              ) : (
+                <Button type="button" variant="outline" disabled>No guide added</Button>
+              )}
+              {customVideoUrl ? (
                 <Button asChild variant="outline">
-                  <a href={videoUrl} target="_blank" rel="noreferrer">
+                  <a href={customVideoUrl} target="_blank" rel="noreferrer">
                     <ExternalLink className="h-4 w-4" />
-                    Open Video/Instructions
+                    Open Custom Video
                   </a>
                 </Button>
-              ) : null}
+              ) : (
+                <Button type="button" variant="outline" disabled>No custom video</Button>
+              )}
             </div>
 
             <div className="rounded-md border p-3">
-              <Label htmlFor="custom-video-url">My instruction video link</Label>
+              <Label htmlFor="custom-video-url">Open Custom Video URL</Label>
               <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                 <Input
                   id="custom-video-url"
@@ -193,7 +197,7 @@ export default function WorkoutDetailsPage() {
                   Reset
                 </Button>
               </div>
-              {customVideoUrl ? <p className="mt-2 text-sm text-emerald-700">Your custom video overrides the default link.</p> : null}
+              {customVideoUrl ? <p className="mt-2 text-sm text-emerald-700">Your custom video is saved separately from the exercise guide.</p> : null}
             </div>
 
             <p className="text-sm text-muted-foreground">

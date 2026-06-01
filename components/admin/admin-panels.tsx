@@ -32,7 +32,7 @@ export function AdminUsersPanel() {
   async function setRole(id: string, role: "member" | "admin") {
     await adminUpdateUserRole(id, role);
     setUsers((current) => current.map((user) => (user.id === id ? { ...user, role } : user)));
-    toast({ title: "User role updated", description: "Passwords are never visible in S&S Gym admin." });
+    toast({ title: "User role updated", description: "Passwords are never visible in FitLife Hub admin." });
   }
 
   return (
@@ -40,7 +40,7 @@ export function AdminUsersPanel() {
       {users.map((user) => (
         <Card key={user.id}>
           <CardContent className="pt-5">
-            <p className="font-semibold">{user.full_name || "S&S Gym member"}</p>
+            <p className="font-semibold">{user.full_name || "FitLife Hub member"}</p>
             <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
             <div className="mt-4">
               <Label>Role</Label>
@@ -224,13 +224,13 @@ export function AdminVideoPanel() {
 export function AdminWelcomePanel() {
   const { toast } = useToast();
   const [userId, setUserId] = useState("");
-  const [message, setMessage] = useState("Welcome back to S&S Gym. Ready for today?");
+  const [message, setMessage] = useState("Welcome back to FitLife Hub. Ready for today?");
   const [frequency, setFrequency] = useState<"every_login" | "once_per_day">("once_per_day");
 
   async function saveUserMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await adminUpsertWelcomeMessage({ user_id: userId, message, popup_enabled: true, show_frequency: frequency });
-    toast({ title: "Welcome message saved", description: "This user will see the custom S&S Gym message." });
+    toast({ title: "Welcome message saved", description: "This user will see the custom FitLife Hub message." });
   }
 
   async function saveDefault() {
@@ -248,7 +248,7 @@ export function AdminWelcomePanel() {
         <CardContent>
           <form className="space-y-3" onSubmit={saveUserMessage}>
             <TextField label="User ID" value={userId} onChange={setUserId} placeholder="Member user ID" />
-            <TextField label="Message" value={message} onChange={setMessage} placeholder="Welcome back to S&S Gym. Ready for today?" />
+            <TextField label="Message" value={message} onChange={setMessage} placeholder="Welcome back to FitLife Hub. Ready for today?" />
             <Select value={frequency} onValueChange={(value) => setFrequency(value as "every_login" | "once_per_day")}>
               <SelectTrigger>
                 <SelectValue />

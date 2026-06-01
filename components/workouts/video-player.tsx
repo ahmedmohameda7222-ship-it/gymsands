@@ -9,40 +9,45 @@ import { isEmbeddableVideo, toEmbedUrl } from "@/services/workouts/video-matchin
 export function ExerciseVideoPlayer({ video }: { video: ExerciseVideo | null }) {
   if (!video) {
     return (
-      <Card className="bg-blue-50">
+      <Card>
         <CardContent className="flex aspect-video flex-col items-center justify-center text-center">
           <PlayCircle className="h-10 w-10 text-primary" />
-          <p className="mt-3 font-semibold">Video will be added soon.</p>
-          <p className="mt-1 text-sm text-muted-foreground">Admin can connect a video from the workout video panel.</p>
+          <p className="mt-3 font-semibold">No custom video added</p>
+          <p className="mt-1 text-sm text-muted-foreground">Add a custom URL manually to show it here.</p>
         </CardContent>
       </Card>
     );
   }
 
-  const playableUrl = video.video_url ?? video.exercise_url;
+  const playableUrl = video.video_url;
   const embed = toEmbedUrl(playableUrl);
   const embeddable = isEmbeddableVideo(playableUrl);
 
   return (
     <Card className="overflow-hidden">
       <div className="aspect-video bg-navy-950">
-        {embeddable && embed ? (
+        {playableUrl && embeddable && embed ? (
           <iframe
             src={embed}
-            title={`${video.exercise_name} instruction video`}
+            title={`${video.exercise_name} custom video`}
             className="h-full w-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
           />
-        ) : (
+        ) : playableUrl ? (
           <div className="flex h-full flex-col items-center justify-center p-6 text-center text-white">
-            <PlayCircle className="h-12 w-12 text-sky-300" />
+            <PlayCircle className="h-12 w-12 text-primary" />
             <Button asChild className="mt-4" variant="outline">
-              <a href={video.exercise_url} target="_blank" rel="noreferrer">
+              <a href={playableUrl} target="_blank" rel="noreferrer">
                 <ExternalLink className="h-4 w-4" />
-                Open instruction source
+                Open Custom Video
               </a>
             </Button>
+          </div>
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center p-6 text-center text-white">
+            <PlayCircle className="h-12 w-12 text-primary" />
+            <p className="mt-3 font-semibold">No custom video added</p>
           </div>
         )}
       </div>

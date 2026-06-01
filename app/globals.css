@@ -3,25 +3,25 @@
 @tailwind utilities;
 
 :root {
-  --background: 216 55% 98%;
-  --foreground: 222 47% 11%;
-  --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --primary: 209 100% 45%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 215 31% 93%;
-  --secondary-foreground: 222 47% 11%;
-  --muted: 215 31% 93%;
-  --muted-foreground: 215 16% 47%;
-  --accent: 199 94% 52%;
-  --accent-foreground: 222 47% 11%;
+  --background: 220 49% 8%;
+  --foreground: 39 39% 93%;
+  --card: 222 46% 12%;
+  --card-foreground: 39 39% 93%;
+  --popover: 222 46% 12%;
+  --popover-foreground: 39 39% 93%;
+  --primary: 43 57% 63%;
+  --primary-foreground: 220 49% 8%;
+  --secondary: 136 20% 57%;
+  --secondary-foreground: 220 49% 8%;
+  --muted: 220 29% 21%;
+  --muted-foreground: 218 13% 70%;
+  --accent: 136 20% 57%;
+  --accent-foreground: 220 49% 8%;
   --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 214 32% 88%;
-  --input: 214 32% 88%;
-  --ring: 205 92% 52%;
+  --destructive-foreground: 39 39% 93%;
+  --border: 220 29% 21%;
+  --input: 220 29% 21%;
+  --ring: 43 57% 63%;
   --radius: 0.5rem;
 }
 
@@ -36,8 +36,9 @@ html {
 body {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(35, 166, 245, 0.12), transparent 32rem),
-    linear-gradient(180deg, #f7fbff 0%, #eef6ff 100%);
+    radial-gradient(circle at top left, rgba(214, 183, 106, 0.14), transparent 30rem),
+    radial-gradient(circle at 80% 12%, rgba(127, 166, 138, 0.12), transparent 28rem),
+    linear-gradient(180deg, #0b1220 0%, #0d1526 48%, #0b1220 100%);
   color: hsl(var(--foreground));
 }
 
@@ -51,8 +52,61 @@ textarea {
 
 .blue-surface {
   background:
-    linear-gradient(135deg, rgba(3, 17, 36, 0.97), rgba(6, 26, 54, 0.96)),
-    linear-gradient(135deg, rgba(35, 166, 245, 0.2), transparent);
+    linear-gradient(135deg, rgba(11, 18, 32, 0.96), rgba(17, 26, 46, 0.94)),
+    linear-gradient(135deg, rgba(214, 183, 106, 0.16), rgba(127, 166, 138, 0.12));
+}
+
+.luxury-surface {
+  background:
+    linear-gradient(180deg, rgba(11, 18, 32, 0.7), rgba(11, 18, 32, 0.96)),
+    #0b1220;
+}
+
+.hero-slide {
+  animation: heroCrossfade 18s ease-in-out infinite;
+  opacity: 0;
+  transform: scale(1.04);
+}
+
+@keyframes heroCrossfade {
+  0% {
+    opacity: 0;
+    transform: scale(1.04) translateY(0);
+  }
+  8%,
+  30% {
+    opacity: 1;
+  }
+  45%,
+  100% {
+    opacity: 0;
+    transform: scale(1.12) translateY(-1.5%);
+  }
+}
+
+.text-slate-950,
+.text-slate-900,
+.text-slate-800,
+.text-slate-700 {
+  color: hsl(var(--foreground)) !important;
+}
+
+.text-slate-600,
+.text-slate-500,
+.text-slate-400 {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.bg-white,
+.bg-slate-50,
+.bg-slate-100,
+.bg-blue-50 {
+  background-color: hsl(var(--card)) !important;
+}
+
+.border-slate-200,
+.border-slate-300 {
+  border-color: hsl(var(--border)) !important;
 }
 
 .scrollbar-thin {

@@ -103,7 +103,7 @@ export function WorkoutPlanBuilder({
   const { user } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-  const [planName, setPlanName] = useState("My workout plan");
+  const [planName, setPlanName] = useState("My FitLife plan");
   const [days, setDays] = useState<WeeklyPlanDay[]>(defaultDays);
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [filterOptions, setFilterOptions] = useState<WorkoutFilterOptions>(emptyOptions);
@@ -390,7 +390,7 @@ export function WorkoutPlanBuilder({
 
       <Card>
         <CardHeader>
-          <CardTitle>My workout plan</CardTitle>
+          <CardTitle>Workout plan</CardTitle>
           {isLoadingSavedPlan ? <p className="text-sm text-muted-foreground">Loading saved plan...</p> : null}
           {savedMessage ? <p className="text-sm text-emerald-700">{savedMessage}</p> : null}
         </CardHeader>
@@ -480,7 +480,7 @@ export function WorkoutPlanBuilder({
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                       <div className="space-y-1">
                         <Label>Sets</Label>
                         <Input
@@ -503,12 +503,37 @@ export function WorkoutPlanBuilder({
                           onChange={(event) => updateWorkout(workout.id, { rest_seconds: Math.max(0, Number(event.target.value) || 0) })}
                         />
                       </div>
+                      <div className="space-y-1 sm:col-span-2 xl:col-span-1">
+                        <Label>Custom video URL</Label>
+                        <Input
+                          value={workout.custom_video_url ?? ""}
+                          onChange={(event) => updateWorkout(workout.id, { custom_video_url: event.target.value, video_url: event.target.value })}
+                          placeholder="Optional user-added URL"
+                        />
+                      </div>
                     </div>
-                    {isVideoLink(workout.notes) ? (
-                      <a href={workout.notes ?? "#"} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-primary">
-                        Instruction video <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      {isVideoLink(workout.exercise_url || workout.notes) ? (
+                        <Button asChild variant="ghost" size="sm">
+                          <a href={workout.exercise_url || workout.notes || "#"} target="_blank" rel="noreferrer">
+                            <ExternalLink className="h-4 w-4" />
+                            Open Exercise Guide
+                          </a>
+                        </Button>
+                      ) : (
+                        <Button variant="ghost" size="sm" disabled>No guide added</Button>
+                      )}
+                      {workout.custom_video_url ? (
+                        <Button asChild variant="ghost" size="sm">
+                          <a href={workout.custom_video_url} target="_blank" rel="noreferrer">
+                            <ExternalLink className="h-4 w-4" />
+                            Open Custom Video
+                          </a>
+                        </Button>
+                      ) : (
+                        <Button variant="ghost" size="sm" disabled>No custom video</Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -576,16 +601,16 @@ export function WorkoutPlanBuilder({
                       <Button asChild variant="ghost" size="sm">
                         <Link href={`/workouts/${workout.id}`}>Details</Link>
                       </Button>
-                      {isVideoLink(workout.exercise_url || workout.video_url || workout.notes) ? (
+                      {isVideoLink(workout.exercise_url || workout.notes) ? (
                         <Button asChild variant="ghost" size="sm" className="sm:col-span-2">
-                          <a href={workout.exercise_url || workout.video_url || workout.notes || "#"} target="_blank" rel="noreferrer">
+                          <a href={workout.exercise_url || workout.notes || "#"} target="_blank" rel="noreferrer">
                             <ExternalLink className="h-4 w-4" />
-                            Instruction Video
+                            Open Exercise Guide
                           </a>
                         </Button>
                       ) : (
                         <Button variant="ghost" size="sm" className="sm:col-span-2" disabled>
-                          No video available
+                          No guide added
                         </Button>
                       )}
                     </div>

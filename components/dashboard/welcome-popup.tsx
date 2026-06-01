@@ -9,7 +9,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 export function WelcomePopup() {
   const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
-  const [message, setMessage] = useState("Welcome back to S&S Gym. Ready for today?");
+  const [message, setMessage] = useState("Welcome back to FitLife Hub. Ready for today?");
 
   useEffect(() => {
     async function load() {
@@ -18,7 +18,7 @@ export function WelcomePopup() {
         const settings = await getWelcomeSettings(user.id);
         setMessage(settings.default_message);
         if (!settings.popup_enabled) return;
-        const key = `ss-gym-welcome-${user.id}-${new Date().toISOString().slice(0, 10)}`;
+        const key = `fitlife-hub-welcome-${user.id}-${new Date().toISOString().slice(0, 10)}`;
         const seenToday = window.localStorage.getItem(key);
         if (settings.show_frequency === "every_login" || !seenToday) {
           setOpen(true);
@@ -35,7 +35,7 @@ export function WelcomePopup() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Welcome back, {profile?.full_name || "S&S Gym member"}</DialogTitle>
+          <DialogTitle>Welcome back, {profile?.full_name || "FitLife Hub member"}</DialogTitle>
           <DialogDescription>{message}</DialogDescription>
         </DialogHeader>
         <Button onClick={() => setOpen(false)}>Start today</Button>

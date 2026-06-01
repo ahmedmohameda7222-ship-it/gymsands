@@ -186,7 +186,8 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
           <CardContent className="space-y-3">
             {!draft.exercises.length ? <p className="rounded-md bg-slate-50 p-3 text-sm text-muted-foreground">No exercises added yet.</p> : null}
             {draft.exercises.map((exercise, index) => {
-              const guideUrl = exercise.exercise_url || exercise.video_url || (isLink(exercise.notes) ? exercise.notes : null);
+              const guideUrl = exercise.exercise_url || (isLink(exercise.notes) ? exercise.notes : null);
+              const customVideoUrl = exercise.custom_video_url || null;
               const isEditing = editingIndex === index;
               return (
                 <div key={`${exercise.id}-${index}`} className="rounded-md border bg-white p-3">
@@ -223,7 +224,7 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
                   </div>
 
                   {isEditing ? (
-                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                       <div className="space-y-1">
                         <Label>Sets</Label>
                         <Input type="number" min="1" value={exercise.sets ?? 3} onChange={(event) => updateExercise(index, { sets: Math.max(1, Number(event.target.value) || 1) })} />
@@ -235,6 +236,14 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
                       <div className="space-y-1">
                         <Label>Rest seconds</Label>
                         <Input type="number" min="0" value={exercise.rest_seconds ?? 75} onChange={(event) => updateExercise(index, { rest_seconds: Math.max(0, Number(event.target.value) || 0) })} />
+                      </div>
+                      <div className="space-y-1 sm:col-span-2 lg:col-span-1">
+                        <Label>Custom video URL</Label>
+                        <Input
+                          value={exercise.custom_video_url ?? ""}
+                          onChange={(event) => updateExercise(index, { custom_video_url: event.target.value, video_url: event.target.value })}
+                          placeholder="Optional user-added URL"
+                        />
                       </div>
                     </div>
                   ) : null}
@@ -250,7 +259,23 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
                           Open Exercise Guide
                         </a>
                       </Button>
-                    ) : null}
+                    ) : (
+                      <Button type="button" variant="ghost" size="sm" disabled>
+                        No guide added
+                      </Button>
+                    )}
+                    {customVideoUrl ? (
+                      <Button asChild variant="ghost" size="sm">
+                        <a href={customVideoUrl} target="_blank" rel="noreferrer">
+                          <ExternalLink className="h-4 w-4" />
+                          Open Custom Video
+                        </a>
+                      </Button>
+                    ) : (
+                      <Button type="button" variant="ghost" size="sm" disabled>
+                        No custom video
+                      </Button>
+                    )}
                   </div>
                 </div>
               );

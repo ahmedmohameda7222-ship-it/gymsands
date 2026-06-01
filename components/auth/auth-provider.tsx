@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile({
         id: "mock-user",
         email: "member@ssgym.test",
-        full_name: "S&S Gym Member",
+        full_name: "FitLife Hub Member",
         role: "admin",
         avatar_url: null,
         created_at: new Date().toISOString(),
@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
     if (error) {
-      console.warn("S&S Gym could not load profile.", error.message);
+      console.warn("FitLife Hub could not load profile.", error.message);
       setProfile(null);
       return;
     }
@@ -59,13 +59,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .insert({
         id: userId,
         email: email ?? null,
-        full_name: email?.split("@")[0] ?? "S&S Gym Member"
+        full_name: email?.split("@")[0] ?? "FitLife Hub Member"
       })
       .select("*")
       .maybeSingle();
 
     if (inserted.error) {
-      console.warn("S&S Gym could not create the missing profile.", inserted.error.message);
+      console.warn("FitLife Hub could not create the missing profile.", inserted.error.message);
       setProfile(null);
       return;
     }
@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const { data, error } = await supabase.auth.getSession();
-        if (error) console.warn("S&S Gym could not read the current auth session.", error.message);
+        if (error) console.warn("FitLife Hub could not read the current auth session.", error.message);
         if (!mounted) return;
         setSession(data.session);
         if (data.session?.user) {

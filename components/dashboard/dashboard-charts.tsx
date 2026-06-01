@@ -22,9 +22,9 @@ const weightTrend = [
 
 export function DashboardCharts({ macros }: { macros: { protein_g: number; carbs_g: number; fat_g: number } }) {
   const macroData = [
-    { name: "Protein", value: macros.protein_g, color: "#0284c7" },
-    { name: "Carbs", value: macros.carbs_g, color: "#38bdf8" },
-    { name: "Fat", value: macros.fat_g, color: "#0f172a" }
+    { name: "Protein", value: macros.protein_g, color: "#D6B76A" },
+    { name: "Carbs", value: macros.carbs_g, color: "#7FA68A" },
+    { name: "Fat", value: macros.fat_g, color: "#A8B0BD" }
   ];
 
   return (
@@ -36,11 +36,11 @@ export function DashboardCharts({ macros }: { macros: { protein_g: number; carbs
         <CardContent className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={weeklyActivity}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#253044" />
               <XAxis dataKey="day" tickLine={false} axisLine={false} />
               <YAxis tickLine={false} axisLine={false} width={30} />
               <Tooltip />
-              <Bar dataKey="workouts" name="Workouts" fill="#0284c7" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="workouts" name="Workouts" fill="#D6B76A" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -69,11 +69,11 @@ export function DashboardCharts({ macros }: { macros: { protein_g: number; carbs
         <CardContent className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={weightTrend}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#253044" />
               <XAxis dataKey="date" tickLine={false} axisLine={false} />
               <YAxis tickLine={false} axisLine={false} width={35} />
               <Tooltip />
-              <Line dataKey="weight" name="Weight kg" stroke="#0284c7" strokeWidth={3} dot={{ r: 4 }} />
+              <Line dataKey="weight" name="Weight kg" stroke="#D6B76A" strokeWidth={3} dot={{ r: 4, fill: "#7FA68A" }} />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>

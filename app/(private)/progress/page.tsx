@@ -40,7 +40,7 @@ export default function ProgressPage() {
   return (
     <>
       <PageHeading
-        title="Progress"
+        title="Progress Tracker"
         description="Track body weight, measurements, workout consistency, and trends by day."
         action={<ProgressEntryModal onSaved={(entry) => setEntries((current) => [...current, entry])} />}
       />

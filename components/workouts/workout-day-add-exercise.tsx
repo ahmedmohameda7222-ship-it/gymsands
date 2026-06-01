@@ -248,7 +248,7 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {results.map((workout) => {
-          const guideUrl = workout.exercise_url || workout.video_url || (isLink(workout.notes) ? workout.notes : null);
+          const guideUrl = workout.exercise_url || (isLink(workout.notes) ? workout.notes : null);
           const isAdded = addedKeys.has(exerciseKey(workout));
           return (
             <Card key={workout.id}>

@@ -9,19 +9,19 @@ const adminLinks = [
   { href: "/admin/workouts", label: "Manage Workouts", icon: Dumbbell, text: "Review global workout library and instructions." },
   { href: "/admin/videos", label: "Manage Workout Videos", icon: Video, text: "Add video sources and prepare 3000+ record imports." },
   { href: "/admin/welcome", label: "Manage Welcome Messages", icon: MessageSquare, text: "Set default and user-specific welcome popups." },
-  { href: "/admin/settings", label: "Admin Settings", icon: Settings, text: "Configure S&S Gym admin-level settings." }
+  { href: "/admin/settings", label: "Admin Settings", icon: Settings, text: "Configure FitLife Hub admin-level settings." }
 ];
 
 export default function AdminDashboardPage() {
   return (
     <>
-      <PageHeading title="Admin Dashboard" description="Manage S&S Gym users, foods, workouts, videos, and welcome messages." />
+      <PageHeading title="Admin Dashboard" description="Manage FitLife Hub users, foods, workouts, videos, and welcome messages." />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {adminLinks.map((item) => {
           const Icon = item.icon;
           return (
             <Link key={item.href} href={item.href}>
-              <Card className="h-full transition hover:border-primary hover:shadow-blue">
+              <Card className="h-full transition hover:border-primary hover:shadow-luxe">
                 <CardContent className="pt-5">
                   <Icon className="h-8 w-8 text-primary" />
                   <h2 className="mt-4 text-lg font-semibold">{item.label}</h2>

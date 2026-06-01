@@ -200,7 +200,7 @@ export function WeeklyOverviewPage() {
               </p>
             ) : (
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                No default workout plan is selected, so trained and skipped counts stay safe at zero until you choose one from My Plans.
+                No default workout plan is selected, so trained and skipped counts stay safe at zero until you choose one from Workout Plans.
               </p>
             )}
           </div>

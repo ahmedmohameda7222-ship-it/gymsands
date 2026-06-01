@@ -11,9 +11,30 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { getWorkoutTemplateWeekOptions, saveOnboarding } from "@/services/database/repository";
+import { getWorkoutTemplateDurationOptions, getWorkoutTemplateWeekOptions, saveOnboarding } from "@/services/database/repository";
 
-const steps = ["Basic info", "Goal", "Training", "Nutrition", "Finish"];
+const steps = ["Basic info", "Goals", "Training", "Nutrition", "Finish"];
+const goalOptions = [
+  "Lose fat",
+  "Build muscle",
+  "Improve strength",
+  "Improve endurance",
+  "General wellness",
+  "Reduce stress",
+  "Improve mobility",
+  "Improve health",
+  "Body recomposition"
+];
+const trainingCycles = [
+  "Full Body",
+  "Upper / Lower",
+  "Push Pull Legs",
+  "Bro Split",
+  "Strength Split",
+  "Hybrid",
+  "Cardio + Strength",
+  "Wellness / Mobility"
+];
 
 export default function OnboardingPage() {
   const { user, session } = useAuth();
@@ -26,27 +47,44 @@ export default function OnboardingPage() {
     gender: "Prefer not to say",
     height_cm: 175,
     weight_kg: 75,
-    goal: "Improve fitness",
+    goal: "General wellness",
+    goals: ["General wellness"],
+    training_cycle: "Full Body",
     training_level: "Beginner",
     training_place: "Gym",
     training_days_per_week: 3,
     workout_duration_minutes: 45,
+    min_workout_duration_minutes: 30,
+    max_workout_duration_minutes: 60,
     desired_duration_weeks: 4,
     available_equipment: ["Full gym"],
     nutrition_preferences: ["Egyptian food preferred"],
     allergies_limitations: ""
   });
   const [weekOptions, setWeekOptions] = useState<number[]>([1, 2, 3, 4]);
+  const [durationOptions, setDurationOptions] = useState<number[]>([20, 30, 45, 60, 75]);
 
   useEffect(() => {
-    getWorkoutTemplateWeekOptions().then((options) => {
-      setWeekOptions(options.values);
-      setAnswers((current) => ({
-        ...current,
-        desired_duration_weeks: options.values.includes(current.desired_duration_weeks)
-          ? current.desired_duration_weeks
-          : options.min
-      }));
+    Promise.all([getWorkoutTemplateWeekOptions(), getWorkoutTemplateDurationOptions()]).then(([weekData, durationData]) => {
+      setWeekOptions(weekData.values);
+      setDurationOptions(durationData.values);
+      setAnswers((current) => {
+        const minDuration = durationData.values.includes(current.min_workout_duration_minutes)
+          ? current.min_workout_duration_minutes
+          : durationData.min;
+        const maxDuration = durationData.values.includes(current.max_workout_duration_minutes)
+          ? current.max_workout_duration_minutes
+          : durationData.max;
+        return {
+          ...current,
+          desired_duration_weeks: weekData.values.includes(current.desired_duration_weeks)
+            ? current.desired_duration_weeks
+            : weekData.min,
+          workout_duration_minutes: Math.round((minDuration + maxDuration) / 2),
+          min_workout_duration_minutes: minDuration,
+          max_workout_duration_minutes: Math.max(minDuration, maxDuration)
+        };
+      });
     });
   }, []);
 
@@ -56,6 +94,7 @@ export default function OnboardingPage() {
       if (!session?.access_token) {
         await saveOnboarding({
           ...answers,
+          goal: answers.goals.join(", "),
           user_id: user?.id ?? "mock-user"
         });
         toast({ title: "Onboarding saved", description: "Your setup is ready." });
@@ -73,7 +112,10 @@ export default function OnboardingPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Could not generate your workout plan.");
-      toast({ title: "Workout plan created", description: data.plan?.title ? `${data.plan.title} is ready.` : "Your recommended plan is ready." });
+      toast({
+        title: "Generated plans ready",
+        description: data.plans?.length ? `${data.plans.length} matched plans are ready to compare.` : "Your matched plans are ready."
+      });
       router.push("/my-workout/generated");
     } catch (error) {
       toast({ title: "Could not finish onboarding", description: error instanceof Error ? error.message : "Please try again." });
@@ -84,7 +126,7 @@ export default function OnboardingPage() {
 
   return (
     <>
-      <PageHeading title="S&S Gym Onboarding" description="A quick setup with choices, sliders, and simple controls." />
+      <PageHeading title="FitLife Hub Onboarding" description="Build a profile so generated workout plans can be matched by goal, cycle, equipment, and schedule." />
       <Card className="mx-auto max-w-3xl">
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
@@ -98,19 +140,42 @@ export default function OnboardingPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <ChoiceGroup label="Age range" value={answers.age_range} values={["18-24", "25-34", "35-44", "45+"]} onChange={(age_range) => setAnswers((current) => ({ ...current, age_range }))} />
               <ChoiceGroup label="Gender / sex" value={answers.gender} values={["Male", "Female", "Prefer not to say"]} onChange={(gender) => setAnswers((current) => ({ ...current, gender }))} />
-              <SliderField label="Height" value={answers.height_cm} min={140} max={210} suffix="cm" onChange={(height_cm) => setAnswers((current) => ({ ...current, height_cm }))} />
-              <SliderField label="Weight" value={answers.weight_kg} min={40} max={180} suffix="kg" onChange={(weight_kg) => setAnswers((current) => ({ ...current, weight_kg }))} />
+              <NumberField label="Height" value={answers.height_cm} suffix="cm" onChange={(height_cm) => setAnswers((current) => ({ ...current, height_cm }))} />
+              <NumberField label="Weight" value={answers.weight_kg} suffix="kg" onChange={(weight_kg) => setAnswers((current) => ({ ...current, weight_kg }))} />
             </div>
           ) : null}
           {step === 1 ? (
-            <ChoiceGroup label="Goal" value={answers.goal} values={["Lose fat", "Build muscle", "Maintain weight", "Improve fitness", "Improve strength", "Improve endurance"]} onChange={(goal) => setAnswers((current) => ({ ...current, goal }))} />
+            <MultiChoice
+              label="Goals"
+              values={goalOptions}
+              selected={answers.goals}
+              onChange={(goals) => setAnswers((current) => ({ ...current, goals, goal: goals.join(", ") || "General wellness" }))}
+            />
           ) : null}
           {step === 2 ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <ChoiceGroup label="Training level" value={answers.training_level} values={["Beginner", "Intermediate", "Advanced"]} onChange={(training_level) => setAnswers((current) => ({ ...current, training_level }))} />
               <ChoiceGroup label="Training place" value={answers.training_place} values={["Gym", "Home", "Both"]} onChange={(training_place) => setAnswers((current) => ({ ...current, training_place }))} />
+              <ChoiceGroup label="Training cycle" value={answers.training_cycle} values={trainingCycles} onChange={(training_cycle) => setAnswers((current) => ({ ...current, training_cycle }))} />
               <ChoiceGroup label="Training availability" value={`${answers.training_days_per_week} days/week`} values={["2 days/week", "3 days/week", "4 days/week", "5 days/week", "6 days/week"]} onChange={(value) => setAnswers((current) => ({ ...current, training_days_per_week: Number(value[0]) }))} />
-              <ChoiceGroup label="Workout duration" value={`${answers.workout_duration_minutes} minutes`} values={["20 minutes", "30 minutes", "45 minutes", "60 minutes", "75 minutes"]} onChange={(value) => setAnswers((current) => ({ ...current, workout_duration_minutes: Number(value.split(" ")[0]) }))} />
+              <ChoiceGroup label="Minimum duration" value={`${answers.min_workout_duration_minutes} minutes`} values={durationOptions.map((duration) => `${duration} minutes`)} onChange={(value) => {
+                const min = Number(value.split(" ")[0]);
+                setAnswers((current) => ({
+                  ...current,
+                  min_workout_duration_minutes: min,
+                  max_workout_duration_minutes: Math.max(min, current.max_workout_duration_minutes),
+                  workout_duration_minutes: Math.round((min + Math.max(min, current.max_workout_duration_minutes)) / 2)
+                }));
+              }} />
+              <ChoiceGroup label="Maximum duration" value={`${answers.max_workout_duration_minutes} minutes`} values={durationOptions.map((duration) => `${duration} minutes`)} onChange={(value) => {
+                const max = Number(value.split(" ")[0]);
+                setAnswers((current) => ({
+                  ...current,
+                  min_workout_duration_minutes: Math.min(current.min_workout_duration_minutes, max),
+                  max_workout_duration_minutes: max,
+                  workout_duration_minutes: Math.round((Math.min(current.min_workout_duration_minutes, max) + max) / 2)
+                }));
+              }} />
               <ChoiceGroup label="Plan duration" value={`${answers.desired_duration_weeks} weeks`} values={weekOptions.map((week) => `${week} weeks`)} onChange={(value) => setAnswers((current) => ({ ...current, desired_duration_weeks: Number(value.split(" ")[0]) }))} />
               <div className="sm:col-span-2">
                 <MultiChoice
@@ -142,10 +207,10 @@ export default function OnboardingPage() {
             </div>
           ) : null}
           {step === 4 ? (
-            <div className="rounded-lg bg-blue-50 p-5">
+            <div className="rounded-lg border bg-card p-5">
               <h2 className="text-lg font-semibold">Ready for your plan</h2>
-              <p className="mt-2 text-sm text-blue-900">
-                S&S Gym will match your answers to the best workout template in the library.
+              <p className="mt-2 text-sm text-muted-foreground">
+                FitLife Hub will return all matching plans from the workout template library, sorted by best match first.
               </p>
             </div>
           ) : null}
@@ -216,6 +281,24 @@ function MultiChoice({ label, values, selected, onChange }: { label: string; val
   );
 }
 
+function NumberField({ label, value, suffix, onChange }: { label: string; value: number; suffix: string; onChange: (value: number) => void }) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <Input
+          type="text"
+          inputMode="decimal"
+          value={value}
+          onChange={(event) => onChange(Math.max(0, Number(event.target.value) || 0))}
+          placeholder={label}
+        />
+        <span className="flex h-11 items-center rounded-md border bg-card px-3 text-sm font-semibold text-muted-foreground">{suffix}</span>
+      </div>
+    </div>
+  );
+}
+
 function SliderField({ label, value, min, max, suffix, onChange }: { label: string; value: number; min: number; max: number; suffix: string; onChange: (value: number) => void }) {
   return (
     <div className="space-y-2">
@@ -229,7 +312,7 @@ function SliderField({ label, value, min, max, suffix, onChange }: { label: stri
         max={max}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="h-2 w-full cursor-pointer accent-sky-500"
+        className="h-2 w-full cursor-pointer accent-[#d6b76a]"
       />
     </div>
   );

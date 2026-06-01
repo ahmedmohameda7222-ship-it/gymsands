@@ -18,10 +18,14 @@ export type OnboardingAnswers = {
   height_cm: number;
   weight_kg: number;
   goal: string;
+  goals?: string[];
+  training_cycle?: string | null;
   training_level: string;
   training_place: string;
   training_days_per_week: number;
   workout_duration_minutes: number;
+  min_workout_duration_minutes?: number;
+  max_workout_duration_minutes?: number;
   desired_duration_weeks?: number;
   available_equipment?: string[];
   nutrition_preferences: string[];
@@ -196,6 +200,7 @@ export type Workout = {
   secondary_muscles?: string[] | null;
   exercise_url?: string | null;
   video_url?: string | null;
+  custom_video_url?: string | null;
   is_global: boolean;
 };
 
@@ -354,7 +359,9 @@ export type UserWorkoutPlanExercise = {
   reps: string | null;
   rest_seconds: number | null;
   instructions?: string | null;
+  exercise_url?: string | null;
   video_url?: string | null;
+  custom_video_url?: string | null;
   sort_order: number;
   notes: string | null;
 };
@@ -394,6 +401,68 @@ export type UserWorkoutPlan = {
 export type GeneratedWorkoutPlan = UserWorkoutPlan & {
   template: WorkoutTemplate | null;
   sessions: UserWorkoutSession[];
+};
+
+export type DailyFitTask = {
+  id: string;
+  user_id: string;
+  task_date: string;
+  title: string;
+  notes: string | null;
+  completed: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FitnessHabit = {
+  id: string;
+  user_id: string;
+  habit_date: string;
+  name: string;
+  completed: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SleepRecoveryLog = {
+  id: string;
+  user_id: string;
+  log_date: string;
+  hours_slept: number | null;
+  sleep_quality: string | null;
+  recovery_level: string | null;
+  fatigue_level: string | null;
+  soreness_level: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SupplementLog = {
+  id: string;
+  user_id: string;
+  supplement_date: string;
+  name: string;
+  dose: string | null;
+  time: string | null;
+  reminder: string | null;
+  taken_today: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PersonalRecord = {
+  id: string;
+  user_id: string;
+  exercise_name: string;
+  record_type: string;
+  weight_kg: number | null;
+  reps: number | null;
+  record_date: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ProgressEntry = {

@@ -12,9 +12,9 @@ export function Progress({
 }) {
   const safeValue = Math.min(100, Math.max(0, value));
   return (
-    <div className={cn("h-2.5 w-full overflow-hidden rounded-full bg-blue-100", className)}>
+    <div className={cn("h-2.5 w-full overflow-hidden rounded-full bg-muted", className)}>
       <div
-        className="h-full rounded-full bg-gradient-to-r from-sky-400 to-blue-600 transition-all duration-500"
+        className="h-full rounded-full bg-gradient-to-r from-[#7FA68A] to-[#D6B76A] transition-all duration-500"
         style={{ width: `${safeValue}%`, ...indicatorStyle }}
       />
     </div>

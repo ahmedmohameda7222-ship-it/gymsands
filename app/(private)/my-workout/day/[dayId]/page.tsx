@@ -18,7 +18,7 @@ export default function WorkoutDayEditorPage() {
     getUserWorkoutPlanDay(params.dayId)
       .then((nextDay) => {
         setDay(nextDay);
-        setLoadError(nextDay ? "" : "Workout day was not found. Save your plan again and try opening it from My Workout.");
+        setLoadError(nextDay ? "" : "Workout day was not found. Save your plan again and try opening it from Workout Plans.");
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : "Could not load this workout day.";

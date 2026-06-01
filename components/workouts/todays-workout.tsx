@@ -16,7 +16,11 @@ function isLink(value: string | null | undefined) {
 }
 
 function guideUrl(exercise: Workout) {
-  return exercise.video_url || exercise.exercise_url || (isLink(exercise.notes) ? exercise.notes : null);
+  return exercise.exercise_url || (isLink(exercise.notes) ? exercise.notes : null);
+}
+
+function customVideoUrl(exercise: Workout) {
+  return exercise.custom_video_url || null;
 }
 
 export function TodaysWorkout() {
@@ -73,9 +77,9 @@ export function TodaysWorkout() {
     return (
       <Card>
         <CardContent className="space-y-3 pt-5">
-          <p className="text-sm text-muted-foreground">No default workout plan selected. Please choose a default plan from My Plans.</p>
+          <p className="text-sm text-muted-foreground">No default workout plan selected. Please choose a default plan from Workout Plans.</p>
           <Button asChild>
-            <Link href="/my-workout/plans">Open My Plans</Link>
+            <Link href="/my-workout/plans">Open Workout Plans</Link>
           </Button>
         </CardContent>
       </Card>
@@ -127,6 +131,7 @@ export function TodaysWorkout() {
         <CardContent className="grid gap-3 md:grid-cols-2">
           {exercises.map((exercise, index) => {
             const url = guideUrl(exercise);
+            const customUrl = customVideoUrl(exercise);
             return (
               <div key={`${exercise.id}-${index}`} className="rounded-md border bg-white p-3">
                 <p className="font-semibold text-slate-950">{index + 1}. {exercise.name}</p>
@@ -138,22 +143,33 @@ export function TodaysWorkout() {
                   <Badge variant="outline">{exercise.reps ?? "8-12"}</Badge>
                   <Badge variant="outline">{exercise.rest_seconds ?? 75}s rest</Badge>
                 </div>
-                <div className="mt-3">
+                <div className="mt-3 flex flex-wrap gap-2">
                   {url ? (
                     <Button asChild variant="outline" size="sm">
                       <a href={url} target="_blank" rel="noreferrer">
                         <ExternalLink className="h-4 w-4" />
-                        Open Video/Instructions
+                        Open Exercise Guide
                       </a>
                     </Button>
-                  ) : exercise.instructions ? (
-                    <p className="text-sm leading-6 text-muted-foreground">{exercise.instructions}</p>
                   ) : (
                     <Button type="button" variant="outline" size="sm" disabled>
-                      No video/instructions available
+                      No guide added
+                    </Button>
+                  )}
+                  {customUrl ? (
+                    <Button asChild variant="outline" size="sm">
+                      <a href={customUrl} target="_blank" rel="noreferrer">
+                        <ExternalLink className="h-4 w-4" />
+                        Open Custom Video
+                      </a>
+                    </Button>
+                  ) : (
+                    <Button type="button" variant="outline" size="sm" disabled>
+                      No custom video
                     </Button>
                   )}
                 </div>
+                {!url && exercise.instructions ? <p className="mt-3 text-sm leading-6 text-muted-foreground">{exercise.instructions}</p> : null}
               </div>
             );
           })}

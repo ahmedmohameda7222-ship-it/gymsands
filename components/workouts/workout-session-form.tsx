@@ -41,7 +41,8 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const [startedAtMs, setStartedAtMs] = useState(() => Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerKey = useMemo(() => workoutStorageKey(["single-workout-session", user?.id ?? "mock-user", workout.id]), [user?.id, workout.id]);
-  const guideUrl = workout.video_url || workout.exercise_url || (isLink(workout.notes) ? workout.notes : null);
+  const guideUrl = workout.exercise_url || (isLink(workout.notes) ? workout.notes : null);
+  const customVideoUrl = workout.custom_video_url || null;
 
   useEffect(() => {
     startWorkoutSession(user?.id ?? "mock-user", workout)
@@ -94,7 +95,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         await completeWorkoutSession(session.id, notes, duration);
       }
       clearStoredValue(timerKey);
-      toast({ title: "Workout completed", description: `${workout.name} was saved to your S&S Gym history.` });
+      toast({ title: "Workout completed", description: `${workout.name} was saved to your FitLife Hub history.` });
       router.push("/workout-history");
     } catch (error) {
       toast({
@@ -122,18 +123,32 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
       <CardContent className="space-y-4">
         <div className="rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">
           <p>{workout.instructions || "Use controlled form and stop if the movement feels painful."}</p>
-          {guideUrl ? (
-            <Button asChild variant="outline" size="sm" className="mt-3">
-              <a href={guideUrl} target="_blank" rel="noreferrer">
-                <ExternalLink className="h-4 w-4" />
-                Open Video/Instructions
-              </a>
-            </Button>
-          ) : (
-            <Button type="button" variant="outline" size="sm" className="mt-3" disabled>
-              No video/instructions available
-            </Button>
-          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {guideUrl ? (
+              <Button asChild variant="outline" size="sm">
+                <a href={guideUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink className="h-4 w-4" />
+                  Open Exercise Guide
+                </a>
+              </Button>
+            ) : (
+              <Button type="button" variant="outline" size="sm" disabled>
+                No guide added
+              </Button>
+            )}
+            {customVideoUrl ? (
+              <Button asChild variant="outline" size="sm">
+                <a href={customVideoUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink className="h-4 w-4" />
+                  Open Custom Video
+                </a>
+              </Button>
+            ) : (
+              <Button type="button" variant="outline" size="sm" disabled>
+                No custom video
+              </Button>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-slate-50 p-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
