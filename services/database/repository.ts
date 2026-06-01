@@ -441,8 +441,8 @@ function getLocalWorkoutFilterOptions(): WorkoutFilterOptions {
 
 function matchesWorkoutFilters(workout: Workout, query = "", filters: WorkoutFilters = {}) {
   const normalized = normalizeText(query);
-  const muscleCategories = filters.muscleCategories ?? filters.categories ?? (filters.category ? [filters.category] : []);
-  const exerciseCategories = filters.category ? [filters.category] : [];
+  const broadCategories = filters.categories ?? (filters.category ? [filters.category] : []);
+  const muscleCategories = filters.muscleCategories ?? [];
   const equipmentRequired = filters.equipmentRequired ?? (filters.equipment ? [filters.equipment] : []);
   const experienceLevels = filters.experienceLevels ?? (filters.difficulty ? [filters.difficulty] : []);
   const secondaryMuscles = workout.secondary_muscles ?? [];
@@ -462,9 +462,9 @@ function matchesWorkoutFilters(workout: Workout, query = "", filters: WorkoutFil
 
   return (
     matchesQuery &&
+    hasAnySelected([workout.muscle_category, workout.target_muscle, workout.category, workout.equipment_required, workout.equipment], broadCategories) &&
     hasAnySelected([workout.muscle_category], muscleCategories) &&
     hasAnySelected([workout.target_muscle, workout.muscle_category], filters.primaryMuscles) &&
-    hasAnySelected([workout.category], exerciseCategories) &&
     hasAnySelected([workout.equipment_required, workout.equipment], equipmentRequired) &&
     hasAnySelected([workout.mechanics, workout.category], filters.mechanics) &&
     hasAnySelected([workout.category, workout.mechanics], filters.exerciseTypes) &&
