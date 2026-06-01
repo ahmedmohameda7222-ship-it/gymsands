@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarCheck, Dumbbell, ExternalLink, Pencil, Play, Plus, Save, Search, SkipForward, Trash2, TrendingUp } from "lucide-react";
+import { CalendarCheck, Dumbbell, ExternalLink, Pencil, Play, Plus, RotateCcw, Save, Search, SkipForward, SlidersHorizontal, Trash2, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -19,11 +19,13 @@ import {
   getActiveUserWorkoutPlan,
   getCurrentWeekday,
   getWorkoutActivity,
-  getWorkoutCategories,
+  getWorkoutFilterOptions,
   getWorkouts,
   skipWorkoutDay,
   weekDays,
-  workoutsFromPlanDay
+  workoutsFromPlanDay,
+  type WorkoutFilterOptions,
+  type WorkoutFilters
 } from "@/services/database/repository";
 import type { Weekday, Workout, WorkoutSession } from "@/types";
 
@@ -32,6 +34,43 @@ const defaultDays: WeeklyPlanDay[] = [
   { dayName: "Pull day", weekday: "Tuesday", notes: "", exercises: [] },
   { dayName: "Leg day", weekday: "Thursday", notes: "", exercises: [] }
 ];
+
+type BuilderFilterState = {
+  query: string;
+  muscleCategory: string;
+  primaryMuscle: string;
+  secondaryMuscle: string;
+  forceType: string;
+  exerciseType: string;
+  equipment: string;
+  mechanics: string;
+  level: string;
+};
+
+const allValue = "all";
+
+const emptyOptions: WorkoutFilterOptions = {
+  muscleCategories: [],
+  primaryMuscles: [],
+  equipmentRequired: [],
+  mechanics: [],
+  exerciseTypes: [],
+  forceTypes: [],
+  experienceLevels: [],
+  secondaryMuscles: []
+};
+
+const emptyFilterState: BuilderFilterState = {
+  query: "",
+  muscleCategory: allValue,
+  primaryMuscle: allValue,
+  secondaryMuscle: allValue,
+  forceType: allValue,
+  exerciseType: allValue,
+  equipment: allValue,
+  mechanics: allValue,
+  level: allValue
+};
 
 function withTrainingDefaults(workout: Workout): Workout {
   return {
@@ -50,6 +89,10 @@ function workoutIdentity(workout: Workout) {
   return `${workout.name.toLowerCase()}-${(workout.muscle_category || workout.target_muscle).toLowerCase()}-${(workout.equipment_required || workout.equipment).toLowerCase()}`;
 }
 
+function selectedList(value: string) {
+  return value === allValue ? [] : [value];
+}
+
 export function WorkoutPlanBuilder({
   loadActivePlan = true,
   onSaved
@@ -63,9 +106,8 @@ export function WorkoutPlanBuilder({
   const [planName, setPlanName] = useState("My workout plan");
   const [days, setDays] = useState<WeeklyPlanDay[]>(defaultDays);
   const [activeDayIndex, setActiveDayIndex] = useState(0);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [query, setQuery] = useState("");
+  const [filterOptions, setFilterOptions] = useState<WorkoutFilterOptions>(emptyOptions);
+  const [filters, setFilters] = useState<BuilderFilterState>(emptyFilterState);
   const [results, setResults] = useState<Workout[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingSavedPlan, setIsLoadingSavedPlan] = useState(false);
@@ -75,11 +117,11 @@ export function WorkoutPlanBuilder({
   const [activity, setActivity] = useState<WorkoutSession[]>([]);
 
   useEffect(() => {
-    getWorkoutCategories()
-      .then(setCategories)
+    getWorkoutFilterOptions()
+      .then(setFilterOptions)
       .catch((error) => {
-        setCategories([]);
-        toast({ title: "Could not load workout categories", description: error instanceof Error ? error.message : "Please try again." });
+        setFilterOptions(emptyOptions);
+        toast({ title: "Could not load exercise filters", description: error instanceof Error ? error.message : "Please try again." });
       });
   }, [toast]);
 
@@ -132,23 +174,37 @@ export function WorkoutPlanBuilder({
     };
   }, [toast, user]);
 
-  useEffect(() => {
-    if (!selectedCategory) {
-      setResults([]);
-      return;
-    }
+  const requestFilters: WorkoutFilters = useMemo(
+    () => ({
+      muscleCategories: selectedList(filters.muscleCategory),
+      primaryMuscles: selectedList(filters.primaryMuscle),
+      secondaryMuscles: selectedList(filters.secondaryMuscle),
+      forceTypes: selectedList(filters.forceType),
+      exerciseTypes: selectedList(filters.exerciseType),
+      equipmentRequired: selectedList(filters.equipment),
+      mechanics: selectedList(filters.mechanics),
+      experienceLevels: selectedList(filters.level)
+    }),
+    [filters.equipment, filters.exerciseType, filters.forceType, filters.level, filters.mechanics, filters.muscleCategory, filters.primaryMuscle, filters.secondaryMuscle]
+  );
 
+  const activeFilterCount = useMemo(
+    () => Object.entries(filters).filter(([key, value]) => key !== "query" && value !== allValue).length + (filters.query ? 1 : 0),
+    [filters]
+  );
+
+  useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
       setIsLoading(true);
-      getWorkouts(query.trim(), { categories: [selectedCategory] }, 0)
+      getWorkouts(filters.query.trim(), requestFilters, 0)
         .then((items) => {
-          if (active) setResults(items.slice(0, 30).map(withTrainingDefaults));
+          if (active) setResults(items.slice(0, 60).map(withTrainingDefaults));
         })
         .catch((error) => {
           if (!active) return;
           setResults([]);
-          toast({ title: "Could not load workouts", description: error instanceof Error ? error.message : "Try another category." });
+          toast({ title: "Could not load workouts", description: error instanceof Error ? error.message : "Try another filter." });
         })
         .finally(() => {
           if (active) setIsLoading(false);
@@ -159,7 +215,7 @@ export function WorkoutPlanBuilder({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [query, selectedCategory, toast]);
+  }, [filters.query, requestFilters, toast]);
 
   const activeDay = days[activeDayIndex] ?? days[0];
   const totalExercises = useMemo(() => days.reduce((sum, day) => sum + day.exercises.length, 0), [days]);
@@ -198,6 +254,14 @@ export function WorkoutPlanBuilder({
 
   function removeWorkout(workoutId: string) {
     updateDay(activeDayIndex, { exercises: activeDay.exercises.filter((item) => item.id !== workoutId) });
+  }
+
+  function patchFilters(patch: Partial<BuilderFilterState>) {
+    setFilters((current) => ({ ...current, ...patch }));
+  }
+
+  function resetFilters() {
+    setFilters({ ...emptyFilterState });
   }
 
   function removeDay(index: number) {
@@ -451,25 +515,44 @@ export function WorkoutPlanBuilder({
             </div>
 
             <div className="space-y-3">
-              <div className="grid gap-3 md:grid-cols-[0.9fr_1.1fr]">
-                <Select value={selectedCategory || undefined} onValueChange={setSelectedCategory}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category} value={category}>{category}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                  <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workouts" className="pl-10" />
+              <div className="space-y-3 rounded-md border bg-white p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="h-5 w-5 text-primary" />
+                    <p className="font-semibold text-slate-950">Exercise filters</p>
+                    {activeFilterCount ? <Badge>{activeFilterCount} selected</Badge> : null}
+                  </div>
+                  <p className="text-sm text-muted-foreground">{results.length} exercises loaded</p>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                    <Input
+                      value={filters.query}
+                      onChange={(event) => patchFilters({ query: event.target.value })}
+                      placeholder="Search workouts"
+                      className="pl-10"
+                    />
+                  </div>
+                  <Button type="button" variant="outline" onClick={resetFilters} disabled={!activeFilterCount}>
+                    <RotateCcw className="h-4 w-4" />
+                    Clear filters
+                  </Button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+                  <FilterSelect label="Muscle category" value={filters.muscleCategory} values={filterOptions.muscleCategories} onChange={(muscleCategory) => patchFilters({ muscleCategory })} />
+                  <FilterSelect label="Primary muscle" value={filters.primaryMuscle} values={filterOptions.primaryMuscles} onChange={(primaryMuscle) => patchFilters({ primaryMuscle })} />
+                  <FilterSelect label="Secondary muscle" value={filters.secondaryMuscle} values={filterOptions.secondaryMuscles} onChange={(secondaryMuscle) => patchFilters({ secondaryMuscle })} />
+                  <FilterSelect label="Equipment" value={filters.equipment} values={filterOptions.equipmentRequired} onChange={(equipment) => patchFilters({ equipment })} />
+                  <FilterSelect label="Mechanics" value={filters.mechanics} values={filterOptions.mechanics} onChange={(mechanics) => patchFilters({ mechanics })} />
+                  <FilterSelect label="Exercise type" value={filters.exerciseType} values={filterOptions.exerciseTypes} onChange={(exerciseType) => patchFilters({ exerciseType })} />
+                  <FilterSelect label="Force type" value={filters.forceType} values={filterOptions.forceTypes} onChange={(forceType) => patchFilters({ forceType })} />
+                  <FilterSelect label="Difficulty / level" value={filters.level} values={filterOptions.experienceLevels} onChange={(level) => patchFilters({ level })} />
                 </div>
               </div>
 
-              {!selectedCategory ? <p className="rounded-md border bg-blue-50 p-3 text-sm text-blue-900">Choose a category, then add exercises to the selected weekday.</p> : null}
               {isLoading ? <p className="text-sm text-muted-foreground">Loading workouts...</p> : null}
+              {!isLoading && !results.length ? <p className="text-sm text-muted-foreground">No exercises match these filters.</p> : null}
               <div className="grid gap-3 md:grid-cols-2">
                 {results.map((workout) => (
                   <div key={workout.id} className="rounded-md border bg-white p-3">
@@ -543,6 +626,35 @@ function StatCard({
         <p className="mt-3 text-sm text-muted-foreground">{detail}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  values,
+  onChange
+}: {
+  label: string;
+  value: string;
+  values: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs font-semibold text-slate-700">{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger aria-label={label}>
+          <SelectValue placeholder={label} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={allValue}>All {label.toLowerCase()}</SelectItem>
+          {values.map((item) => (
+            <SelectItem key={item} value={item}>{item}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 
