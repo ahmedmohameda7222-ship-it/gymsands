@@ -13,12 +13,22 @@ import type { Workout } from "@/types";
 
 const pageSize = 60;
 
-type FilterKey = "categories" | "equipmentRequired" | "mechanics" | "forceTypes" | "experienceLevels" | "secondaryMuscles";
+type FilterKey =
+  | "muscleCategories"
+  | "primaryMuscles"
+  | "equipmentRequired"
+  | "mechanics"
+  | "exerciseTypes"
+  | "forceTypes"
+  | "experienceLevels"
+  | "secondaryMuscles";
 
 const emptyFilters: Record<FilterKey, string[]> = {
-  categories: [],
+  muscleCategories: [],
+  primaryMuscles: [],
   equipmentRequired: [],
   mechanics: [],
+  exerciseTypes: [],
   forceTypes: [],
   experienceLevels: [],
   secondaryMuscles: []
@@ -26,8 +36,10 @@ const emptyFilters: Record<FilterKey, string[]> = {
 
 const emptyOptions: WorkoutFilterOptions = {
   muscleCategories: [],
+  primaryMuscles: [],
   equipmentRequired: [],
   mechanics: [],
+  exerciseTypes: [],
   forceTypes: [],
   experienceLevels: [],
   secondaryMuscles: []
@@ -35,9 +47,11 @@ const emptyOptions: WorkoutFilterOptions = {
 
 const filterStorageKey = "ss-gym-workout-browser-filters";
 const filterParamKeys: Record<FilterKey, string> = {
-  categories: "cat",
+  muscleCategories: "muscle",
+  primaryMuscles: "primary",
   equipmentRequired: "equip",
   mechanics: "mech",
+  exerciseTypes: "type",
   forceTypes: "force",
   experienceLevels: "level",
   secondaryMuscles: "secondary"
@@ -221,9 +235,11 @@ export function WorkoutBrowser() {
           <p className="text-sm text-muted-foreground">{workouts.length} exercises loaded</p>
         </div>
         <div className="grid gap-4 lg:grid-cols-3">
-          <FilterGroup title="Muscle Category" values={filterOptions.muscleCategories} selected={filters.categories} onToggle={(value) => toggleFilter("categories", value)} />
+          <FilterGroup title="Muscle Category" values={filterOptions.muscleCategories} selected={filters.muscleCategories} onToggle={(value) => toggleFilter("muscleCategories", value)} />
+          <FilterGroup title="Primary Muscle" values={filterOptions.primaryMuscles} selected={filters.primaryMuscles} onToggle={(value) => toggleFilter("primaryMuscles", value)} />
           <FilterGroup title="Equipment Required" values={filterOptions.equipmentRequired} selected={filters.equipmentRequired} onToggle={(value) => toggleFilter("equipmentRequired", value)} />
           <FilterGroup title="Mechanics" values={filterOptions.mechanics} selected={filters.mechanics} onToggle={(value) => toggleFilter("mechanics", value)} />
+          <FilterGroup title="Exercise Type" values={filterOptions.exerciseTypes} selected={filters.exerciseTypes} onToggle={(value) => toggleFilter("exerciseTypes", value)} />
           <FilterGroup title="Force Type" values={filterOptions.forceTypes} selected={filters.forceTypes} onToggle={(value) => toggleFilter("forceTypes", value)} />
           <FilterGroup title="Experience Level" values={filterOptions.experienceLevels} selected={filters.experienceLevels} onToggle={(value) => toggleFilter("experienceLevels", value)} />
           <FilterGroup title="Secondary Muscles" values={filterOptions.secondaryMuscles} selected={filters.secondaryMuscles} onToggle={(value) => toggleFilter("secondaryMuscles", value)} />

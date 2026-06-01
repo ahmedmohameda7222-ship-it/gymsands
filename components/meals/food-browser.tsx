@@ -1,15 +1,25 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, PlusCircle, Search } from "lucide-react";
+import { AlertTriangle, CheckCircle2, PlusCircle, RotateCcw, Search, Utensils } from "lucide-react";
 import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth/auth-provider";
-import { addFoodToMealPlan, addGlobalFoodToToday, egyptianFoodSubcategories, getFoodLibrary } from "@/services/database/repository";
+import {
+  addCustomMealToLog,
+  addCustomMealToMealPlan,
+  addFoodToMealPlan,
+  addGlobalFoodToToday,
+  egyptianFoodKitchenName,
+  egyptianFoodSubcategories,
+  getCustomMeals,
+  getFoodKitchens,
+  getFoodLibrary
+} from "@/services/database/repository";
 import { defaultTargets, remainingMacros, scaleFoodMacros, validateFoodLogInput } from "@/services/nutrition/calculations";
 import { egyptianFoods, nutritionDisclaimer } from "@/data/egyptian-foods";
-import type { FoodItem, FoodLog, MealPlanItem, MealType } from "@/types";
+import type { CustomMeal, FoodItem, FoodKitchen, FoodLog, FoodSubcategory, MealPlanItem, MealType } from "@/types";
 
 const pageSize = 12;
 const mealOptions: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
@@ -57,7 +67,7 @@ class FoodBrowserBoundary extends Component<{ children: ReactNode }, { message: 
               <AlertTriangle className="h-4 w-4" />
               Food picker could not load
             </div>
-            <p>The food picker stayed open. Try again or choose another category.</p>
+            <p>The food picker stayed open. Try again or choose another kitchen.</p>
             <p className="break-words text-xs text-amber-800">{this.state.message}</p>
             <Button variant="outline" size="sm" onClick={() => this.setState({ message: null })}>
               Try again
@@ -87,16 +97,29 @@ function FoodBrowserInner({
   logDate
 }: FoodBrowserProps) {
   const { user } = useAuth();
+  const [kitchens, setKitchens] = useState<FoodKitchen[]>([]);
+  const [subcategories, setSubcategories] = useState<FoodSubcategory[]>([]);
+  const [customMeals, setCustomMeals] = useState<CustomMeal[]>([]);
   const [foods, setFoods] = useState<FoodItem[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedKitchenId, setSelectedKitchenId] = useState("");
+  const [selectedSubcategoryId, setSelectedSubcategoryId] = useState("");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [mealType, setMealType] = useState<MealType>(defaultMealType);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [logs, setLogs] = useState<FoodLog[]>(initialLogs);
   const [isLoadingFoods, setIsLoadingFoods] = useState(false);
+  const [isLoadingKitchenData, setIsLoadingKitchenData] = useState(true);
   const [visibleCount, setVisibleCount] = useState(pageSize);
   const [notice, setNotice] = useState<Notice | null>(null);
+
+  const selectedKitchen = kitchens.find((kitchen) => kitchen.id === selectedKitchenId) ?? kitchens[0];
+  const visibleSubcategories = useMemo(
+    () => subcategories.filter((subcategory) => subcategory.kitchen_id === selectedKitchen?.id),
+    [selectedKitchen?.id, subcategories]
+  );
+  const selectedSubcategory =
+    visibleSubcategories.find((subcategory) => subcategory.id === selectedSubcategoryId) ?? visibleSubcategories[0];
 
   useEffect(() => {
     setMealType(mealOptions.includes(defaultMealType) ? defaultMealType : "Breakfast");
@@ -108,11 +131,50 @@ function FoodBrowserInner({
   }, [query]);
 
   useEffect(() => {
-    setVisibleCount(pageSize);
-  }, [selectedCategory, debouncedQuery]);
+    let active = true;
+    setIsLoadingKitchenData(true);
+    Promise.all([
+      getFoodKitchens(user?.id ?? "mock-user"),
+      user?.id ? getCustomMeals(user.id) : Promise.resolve<CustomMeal[]>([])
+    ])
+      .then(([kitchenData, meals]) => {
+        if (!active) return;
+        setKitchens(kitchenData.kitchens);
+        setSubcategories(kitchenData.subcategories);
+        setCustomMeals(meals);
+        const currentKitchen = kitchenData.kitchens.find((kitchen) => kitchen.id === selectedKitchenId) ?? kitchenData.kitchens[0];
+        const firstSubcategory = kitchenData.subcategories.find((subcategory) => subcategory.kitchen_id === currentKitchen?.id);
+        setSelectedKitchenId(currentKitchen?.id ?? "");
+        setSelectedSubcategoryId((current) =>
+          kitchenData.subcategories.some((subcategory) => subcategory.id === current && subcategory.kitchen_id === currentKitchen?.id)
+            ? current
+            : firstSubcategory?.id ?? ""
+        );
+      })
+      .catch((error) => {
+        if (!active) return;
+        setNotice({
+          type: "error",
+          title: "Could not load kitchens",
+          description: error instanceof Error ? error.message : "Showing the default food categories."
+        });
+      })
+      .finally(() => {
+        if (active) setIsLoadingKitchenData(false);
+      });
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   useEffect(() => {
-    if (!selectedCategory && !debouncedQuery) {
+    setVisibleCount(pageSize);
+  }, [selectedKitchenId, selectedSubcategoryId, debouncedQuery]);
+
+  useEffect(() => {
+    if (!selectedKitchen && !debouncedQuery) {
       setFoods([]);
       setIsLoadingFoods(false);
       return;
@@ -122,7 +184,13 @@ function FoodBrowserInner({
     setIsLoadingFoods(true);
     setNotice(null);
 
-    getFoodLibrary(user?.id ?? "mock-user", debouncedQuery, { category: selectedCategory || undefined, limit: 60 })
+    getFoodLibrary(user?.id ?? "mock-user", debouncedQuery, {
+      kitchen: selectedKitchen?.name,
+      kitchenId: selectedKitchen?.id,
+      subcategoryId: selectedSubcategory?.id,
+      category: selectedSubcategory?.name,
+      limit: 90
+    })
       .then((items) => {
         if (!active) return;
         setFoods(items.map(normalizeFoodItem));
@@ -130,9 +198,13 @@ function FoodBrowserInner({
       .catch((error) => {
         if (!active) return;
         const localFallback = egyptianFoods
-          .map((food) => ({ ...food, cuisine: "Egyptian Food", category: fallbackSubcategory(food.category) }))
-          .filter((food) => (!selectedCategory || food.category === selectedCategory) && (!debouncedQuery || food.food_name.toLowerCase().includes(debouncedQuery.toLowerCase())))
-          .slice(0, 60)
+          .map((food) => ({ ...food, cuisine: egyptianFoodKitchenName, category: fallbackSubcategory(food.category) }))
+          .filter(
+            (food) =>
+              (!selectedSubcategory?.name || food.category === selectedSubcategory.name) &&
+              (!debouncedQuery || food.food_name.toLowerCase().includes(debouncedQuery.toLowerCase()))
+          )
+          .slice(0, 90)
           .map(normalizeFoodItem);
         setFoods(localFallback);
         setNotice({
@@ -148,7 +220,7 @@ function FoodBrowserInner({
     return () => {
       active = false;
     };
-  }, [debouncedQuery, selectedCategory, user?.id]);
+  }, [debouncedQuery, selectedKitchen, selectedSubcategory, user?.id]);
 
   useEffect(() => {
     setLogs(initialLogs);
@@ -169,6 +241,20 @@ function FoodBrowserInner({
   );
 
   const visibleFoods = useMemo(() => foods.slice(0, visibleCount), [foods, visibleCount]);
+
+  function selectKitchen(kitchenId: string) {
+    const firstSubcategory = subcategories.find((subcategory) => subcategory.kitchen_id === kitchenId);
+    setSelectedKitchenId(kitchenId);
+    setSelectedSubcategoryId(firstSubcategory?.id ?? "");
+  }
+
+  function resetFilters() {
+    const firstKitchen = kitchens[0];
+    const firstSubcategory = subcategories.find((subcategory) => subcategory.kitchen_id === firstKitchen?.id);
+    setQuery("");
+    setSelectedKitchenId(firstKitchen?.id ?? "");
+    setSelectedSubcategoryId(firstSubcategory?.id ?? "");
+  }
 
   async function logFoodNow(food: FoodItem) {
     const quantity = quantities[food.id] ?? 1;
@@ -239,18 +325,49 @@ function FoodBrowserInner({
     }
   }
 
+  async function logCustomMealNow(meal: CustomMeal) {
+    if (!user?.id) {
+      setNotice({ type: "error", title: "Login required", description: "Please log in again before saving meals." });
+      return;
+    }
+
+    try {
+      const log = await addCustomMealToLog(user.id, meal, logDate, mealType);
+      setLogs((current) => [log, ...current]);
+      onLogAdded?.(log);
+      setNotice({ type: "success", title: "Custom meal logged", description: `${meal.meal_name} was added to ${displayMealType(mealType)}.` });
+    } catch (error) {
+      setNotice({ type: "error", title: "Could not log custom meal", description: error instanceof Error ? error.message : "Please try again." });
+    }
+  }
+
+  async function addCustomMealPlan(meal: CustomMeal) {
+    if (!user?.id) {
+      setNotice({ type: "error", title: "Login required", description: "Please log in again before saving your meal plan." });
+      return;
+    }
+
+    try {
+      const item = await addCustomMealToMealPlan(user.id, meal, mealType);
+      onPlanAdded?.(item);
+      setNotice({ type: "success", title: "Custom meal added to plan", description: `${meal.meal_name} was added to ${displayMealType(mealType)}.` });
+    } catch (error) {
+      setNotice({ type: "error", title: "Could not add custom meal", description: error instanceof Error ? error.message : "Please try again." });
+    }
+  }
+
   return (
     <div className="space-y-4">
       <Card className="bg-blue-50">
         <CardContent className="pt-5">
           <p className="text-sm font-semibold text-blue-950">{nutritionDisclaimer}</p>
-          <p className="mt-1 text-sm text-blue-800">Pick a meal type, then search or choose a category.</p>
+          <p className="mt-1 text-sm text-blue-800">Pick a meal type, kitchen, and subcategory, then search or choose food.</p>
         </CardContent>
       </Card>
 
       {notice ? <NoticeBox notice={notice} onClose={() => setNotice(null)} /> : null}
 
-      <div className="grid gap-3 lg:grid-cols-[1fr_220px]">
+      <div className="grid gap-3 lg:grid-cols-[1fr_190px_190px_auto]">
         <div className="relative">
           <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
           <Input
@@ -270,32 +387,92 @@ function FoodBrowserInner({
             <option key={type} value={type}>{displayMealType(type)}</option>
           ))}
         </select>
+        <select
+          value={selectedKitchen?.id ?? ""}
+          onChange={(event) => selectKitchen(event.target.value)}
+          className="h-11 w-full rounded-md border bg-white px-3 text-sm font-medium text-slate-900 outline-none focus:ring-2 focus:ring-ring"
+          aria-label="Kitchen"
+        >
+          {kitchens.map((kitchen) => (
+            <option key={kitchen.id} value={kitchen.id}>{kitchen.name}</option>
+          ))}
+        </select>
+        <Button variant="outline" onClick={resetFilters} disabled={!query && selectedKitchen?.id === kitchens[0]?.id && selectedSubcategory?.id === visibleSubcategories[0]?.id}>
+          <RotateCcw className="h-4 w-4" />
+          Reset
+        </Button>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-2 lg:flex-wrap lg:overflow-visible">
-        {fallbackCategories.map((category) => (
-          <Button
-            key={category}
-            type="button"
-            variant={selectedCategory === category ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSelectedCategory((current) => (current === category ? "" : category))}
-            className="shrink-0"
-          >
-            {category}
-          </Button>
-        ))}
-      </div>
-
-      {!selectedCategory && !debouncedQuery ? (
-        <div className="rounded-md border bg-white p-4 text-sm text-muted-foreground">
-          Choose a category or search for a food.
+      <div className="rounded-md border bg-white p-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-slate-950">{selectedKitchen?.name ?? "Kitchen"}</p>
+            <p className="text-xs text-muted-foreground">{isLoadingKitchenData ? "Loading kitchen data..." : `${visibleSubcategories.length} subcategories available`}</p>
+          </div>
+          {selectedSubcategory ? <span className="text-xs font-semibold text-primary">{selectedSubcategory.name}</span> : null}
         </div>
+        <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible">
+          {visibleSubcategories.map((subcategory) => (
+            <Button
+              key={subcategory.id}
+              type="button"
+              variant={selectedSubcategory?.id === subcategory.id ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedSubcategoryId((current) => (current === subcategory.id ? "" : subcategory.id))}
+              className="shrink-0"
+            >
+              {subcategory.name}
+            </Button>
+          ))}
+          {!visibleSubcategories.length ? <p className="text-sm text-muted-foreground">No subcategories for this kitchen yet.</p> : null}
+        </div>
+      </div>
+
+      {customMeals.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Utensils className="h-5 w-5 text-primary" />
+              Custom meals
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {customMeals.map((meal) => (
+              <div key={meal.id} className="rounded-md border bg-white p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-950">{meal.meal_name}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{meal.items.length} foods | {meal.totals.calories} kcal</p>
+                  </div>
+                  <span className="rounded-md bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">
+                    {meal.meal_category || "Meal"}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+                  <Macro label="kcal" value={meal.totals.calories} />
+                  <Macro label="protein" value={`${meal.totals.protein_g}g`} />
+                  <Macro label="carbs" value={`${meal.totals.carbs_g}g`} />
+                  <Macro label="fat" value={`${meal.totals.fat_g}g`} />
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <Button type="button" variant="outline" onClick={() => addCustomMealPlan(meal)}>
+                    <PlusCircle className="h-4 w-4" />
+                    Add to plan
+                  </Button>
+                  <Button type="button" onClick={() => logCustomMealNow(meal)}>
+                    <CheckCircle2 className="h-4 w-4" />
+                    Done now
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       ) : null}
 
       {isLoadingFoods ? <p className="text-sm text-muted-foreground">Loading foods...</p> : null}
-      {!isLoadingFoods && (selectedCategory || debouncedQuery) && !foods.length ? (
-        <p className="text-sm text-muted-foreground">No foods found. Try another category or search word.</p>
+      {!isLoadingFoods && !foods.length ? (
+        <p className="text-sm text-muted-foreground">No foods found. Try another kitchen, subcategory, or search word.</p>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -314,7 +491,7 @@ function FoodBrowserInner({
                     {food.category || "Food"}
                   </span>
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">{food.cuisine || "Egyptian Food"}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{food.cuisine || selectedKitchen?.name || egyptianFoodKitchenName}</p>
                 <div className="mt-4 grid grid-cols-4 gap-2 text-center">
                   <Macro label="kcal" value={macros.calories} />
                   <Macro label="protein" value={`${macros.protein_g}g`} />
@@ -410,7 +587,8 @@ function normalizeFoodItem(food: FoodItem): FoodItem {
     protein_g: toNumber(food.protein_g),
     carbs_g: toNumber(food.carbs_g),
     fat_g: toNumber(food.fat_g),
-    category: food.category || "Food"
+    category: food.category || "Food",
+    cuisine: food.cuisine || egyptianFoodKitchenName
   };
 }
 

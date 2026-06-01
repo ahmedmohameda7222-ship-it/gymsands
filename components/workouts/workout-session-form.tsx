@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock, Plus, TimerReset } from "lucide-react";
+import { CheckCircle2, Clock, ExternalLink, Plus, TimerReset } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,10 @@ type SetLog = {
   weight: number;
   notes: string;
 };
+
+function isLink(value: string | null | undefined) {
+  return Boolean(value && /^https?:\/\//i.test(value));
+}
 
 function formatTime(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
@@ -37,6 +41,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const [startedAtMs, setStartedAtMs] = useState(() => Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerKey = useMemo(() => workoutStorageKey(["single-workout-session", user?.id ?? "mock-user", workout.id]), [user?.id, workout.id]);
+  const guideUrl = workout.video_url || workout.exercise_url || (isLink(workout.notes) ? workout.notes : null);
 
   useEffect(() => {
     startWorkoutSession(user?.id ?? "mock-user", workout)
@@ -115,6 +120,21 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         <CardTitle>Log workout results</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+          <p>{workout.instructions || "Use controlled form and stop if the movement feels painful."}</p>
+          {guideUrl ? (
+            <Button asChild variant="outline" size="sm" className="mt-3">
+              <a href={guideUrl} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-4 w-4" />
+                Open Video/Instructions
+              </a>
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" size="sm" className="mt-3" disabled>
+              No video/instructions available
+            </Button>
+          )}
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-slate-50 p-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
             <Clock className="h-4 w-4 text-primary" />

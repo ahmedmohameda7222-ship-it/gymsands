@@ -103,6 +103,7 @@ export function WorkoutPlanDetail() {
           <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to My Plans</Link>
         </Button>
         <div className="flex flex-wrap gap-2">
+          {(plan.is_default ?? plan.is_active) ? <Badge>Default Plan</Badge> : null}
           <Badge>{plan.days.length} days</Badge>
           <Badge variant="outline">{plan.days.reduce((sum, day) => sum + day.exercises.length, 0)} exercises</Badge>
         </div>

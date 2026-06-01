@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Copy, Droplets, Plus, Save, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { BarChart3, ChefHat, ChevronLeft, ChevronRight, Copy, Droplets, Plus, Save, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +11,6 @@ import { Progress } from "@/components/ui/progress";
 import { PageHeading } from "@/components/layout/page-heading";
 import { FoodBrowser } from "@/components/meals/food-browser";
 import { FoodLogList } from "@/components/meals/food-log-list";
-import { CustomNutritionManager } from "@/components/meals/custom-nutrition-manager";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import {
@@ -223,12 +223,26 @@ export default function CaloriesPage() {
     <>
       <PageHeading
         title="Calorie Tracker"
-        description="Track daily food, custom meals, weekly calories, macros, and water intake."
+        description="Track daily food, macros, and water intake."
         action={
-          <Button variant="outline" onClick={copyYesterday}>
-            <Copy className="h-4 w-4" />
-            Copy yesterday
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link href="/calories/weekly-overview">
+                <BarChart3 className="h-4 w-4" />
+                Weekly Overview
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/calories/custom-food-meal">
+                <ChefHat className="h-4 w-4" />
+                Custom Food / Meal
+              </Link>
+            </Button>
+            <Button variant="outline" onClick={copyYesterday}>
+              <Copy className="h-4 w-4" />
+              Copy yesterday
+            </Button>
+          </div>
         }
       />
 
@@ -264,8 +278,6 @@ export default function CaloriesPage() {
         onMoveWeek={moveWeek}
       />
 
-      <WeeklyOverview weekData={weekData} waterGoalMl={targets.water_ml} />
-
       <div className="mt-4 grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
         <div className="space-y-4">
           <WaterCard
@@ -293,10 +305,6 @@ export default function CaloriesPage() {
           </div>
           <FoodBrowser initialLogs={logs} logDate={selectedDate} onLogAdded={handleLogAdded} />
         </div>
-      </div>
-
-      <div className="mt-6">
-        <CustomNutritionManager selectedDate={selectedDate} onLogAdded={handleLogAdded} />
       </div>
     </>
   );

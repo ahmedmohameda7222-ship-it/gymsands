@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarDays, Dumbbell, Plus, RefreshCcw } from "lucide-react";
+import { CalendarDays, Dumbbell, Plus, RefreshCcw, Star, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { getUserWorkoutPlans } from "@/services/database/repository";
+import { deleteUserWorkoutPlan, getUserWorkoutPlans, setDefaultUserWorkoutPlan } from "@/services/database/repository";
 import { WorkoutPlanBuilder } from "@/components/workouts/workout-plan-builder";
 import type { UserWorkoutPlan } from "@/types";
 
@@ -18,6 +18,7 @@ export function MyWorkoutPlans() {
   const [plans, setPlans] = useState<UserWorkoutPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showBuilder, setShowBuilder] = useState(false);
+  const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
 
   async function loadPlans() {
     if (!user?.id) {
@@ -38,6 +39,48 @@ export function MyWorkoutPlans() {
     loadPlans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  async function setDefaultPlan(plan: UserWorkoutPlan) {
+    if (!user?.id || busyPlanId) return;
+    setBusyPlanId(plan.id);
+    const previousPlans = plans;
+    setPlans((current) =>
+      current.map((item) => ({
+        ...item,
+        is_active: item.id === plan.id,
+        is_default: item.id === plan.id
+      }))
+    );
+    try {
+      await setDefaultUserWorkoutPlan(user.id, plan.id);
+      toast({ title: "Default plan updated", description: `${plan.name} is now used for Today's Workout and Weekly Overview.` });
+    } catch (error) {
+      setPlans(previousPlans);
+      toast({ title: "Could not set default plan", description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      setBusyPlanId(null);
+    }
+  }
+
+  async function deletePlan(plan: UserWorkoutPlan) {
+    if (!user?.id || busyPlanId) return;
+    const confirmed = window.confirm(`Delete "${plan.name}"? This removes the plan only from your account.`);
+    if (!confirmed) return;
+
+    const previousPlans = plans;
+    setBusyPlanId(plan.id);
+    setPlans((current) => current.filter((item) => item.id !== plan.id));
+    try {
+      await deleteUserWorkoutPlan(user.id, plan.id);
+      await loadPlans();
+      toast({ title: "Plan deleted", description: `${plan.name} was removed from My Plans.` });
+    } catch (error) {
+      setPlans(previousPlans);
+      toast({ title: "Could not delete plan", description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      setBusyPlanId(null);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -64,12 +107,13 @@ export function MyWorkoutPlans() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {plans.map((plan) => {
           const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
+          const isDefault = plan.is_default ?? plan.is_active;
           return (
             <Card key={plan.id}>
               <CardHeader>
                 <CardTitle className="flex items-start justify-between gap-3">
                   <span>{plan.name}</span>
-                  {plan.is_active ? <Badge>Active</Badge> : <Badge variant="outline">Saved</Badge>}
+                  {isDefault ? <Badge>Default</Badge> : <Badge variant="outline">Saved</Badge>}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -82,9 +126,19 @@ export function MyWorkoutPlans() {
                     <Badge key={day.id} variant="outline">{day.weekday ?? day.day_name}</Badge>
                   ))}
                 </div>
-                <Button asChild className="w-full">
-                  <Link href={`/my-workout/plans/${plan.id}`}>Open Plan</Link>
-                </Button>
+                <div className="grid gap-2">
+                  <Button asChild className="w-full">
+                    <Link href={`/my-workout/plans/${plan.id}`}>Open Plan</Link>
+                  </Button>
+                  <Button type="button" variant={isDefault ? "secondary" : "outline"} className="w-full" onClick={() => setDefaultPlan(plan)} disabled={isDefault || busyPlanId === plan.id}>
+                    <Star className="h-4 w-4" />
+                    {isDefault ? "Default Plan" : "Set as Default Plan"}
+                  </Button>
+                  <Button type="button" variant="destructive" className="w-full" onClick={() => deletePlan(plan)} disabled={busyPlanId === plan.id}>
+                    <Trash2 className="h-4 w-4" />
+                    Delete Plan
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           );

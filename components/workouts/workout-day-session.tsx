@@ -185,6 +185,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const progress = totalSets ? Math.round((completedSets / totalSets) * 100) : 0;
   const isFinished = completedSets === totalSets && totalSets > 0;
   const currentVideoUrl = activeExercise?.exercise.video_url || (activeExercise?.exercise.notes?.startsWith("http") ? activeExercise.exercise.notes : null);
+  const currentInstructions = activeExercise?.exercise.instructions || defaultInstructions;
   const durationMinutes = Math.max(1, Math.ceil(elapsedSeconds / 60));
 
   function buildLogRows(states = exerciseStates) {
@@ -410,12 +411,23 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">
-              {activeExercise.exercise.instructions || defaultInstructions}
+              {currentInstructions}
               {currentVideoUrl ? (
-                <a href={currentVideoUrl} target="_blank" rel="noreferrer" className="mt-2 flex items-center gap-2 font-semibold text-primary">
-                  Instruction video link <ExternalLink className="h-4 w-4" />
-                </a>
-              ) : null}
+                <Button asChild variant="outline" size="sm" className="mt-3">
+                  <a href={currentVideoUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-4 w-4" />
+                    Open Video/Instructions
+                  </a>
+                </Button>
+              ) : currentInstructions ? (
+                <Button type="button" variant="outline" size="sm" className="mt-3" disabled>
+                  Instructions shown here
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" size="sm" className="mt-3" disabled>
+                  No video/instructions available
+                </Button>
+              )}
             </div>
 
             <div className="space-y-3">
