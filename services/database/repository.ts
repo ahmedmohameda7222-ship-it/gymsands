@@ -50,19 +50,24 @@ const muscleStrengthExercises = muscleStrengthExercisesData as ExerciseMetadata[
 export type WorkoutFilters = {
   category?: string;
   categories?: string[];
+  muscleCategories?: string[];
+  primaryMuscles?: string[];
   equipment?: string;
   equipmentRequired?: string[];
   difficulty?: string;
   experienceLevels?: string[];
   mechanics?: string[];
+  exerciseTypes?: string[];
   forceTypes?: string[];
   secondaryMuscles?: string[];
 };
 
 export type WorkoutFilterOptions = {
   muscleCategories: string[];
+  primaryMuscles: string[];
   equipmentRequired: string[];
   mechanics: string[];
+  exerciseTypes: string[];
   forceTypes: string[];
   experienceLevels: string[];
   secondaryMuscles: string[];
@@ -99,7 +104,7 @@ function looksLikeUrl(value: string | null | undefined) {
 
 export const weekDays: Weekday[] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 export const mealTypes: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
-export const egyptianFoodKitchenName = "Egyptian Food";
+export const egyptianFoodKitchenName = "Egyptian Kitchen";
 export const egyptianFoodSubcategories = [
   "Bread",
   "Breakfast",
@@ -192,7 +197,8 @@ function isMissingTemplateSchemaError(error: { message?: string; code?: string }
     message.includes("source") ||
     message.includes("source_workout_id") ||
     message.includes("instructions") ||
-    message.includes("video_url")
+    message.includes("video_url") ||
+    message.includes("is_default")
   );
 }
 
@@ -416,8 +422,17 @@ function localWorkoutCategories() {
 function getLocalWorkoutFilterOptions(): WorkoutFilterOptions {
   return {
     muscleCategories: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.muscle_category)),
+    primaryMuscles: uniqueSorted([
+      ...muscleStrengthExercises.map((exercise) => exercise.muscle_category),
+      ...sampleWorkouts.map((workout) => workout.target_muscle)
+    ]),
     equipmentRequired: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.equipment_required)),
     mechanics: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.mechanics)),
+    exerciseTypes: uniqueSorted([
+      ...muscleStrengthExercises.map((exercise) => exercise.mechanics),
+      ...sampleWorkouts.map((workout) => workout.category),
+      ...sampleExerciseVideos.map((video) => video.category_type)
+    ]),
     forceTypes: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.force_type)),
     experienceLevels: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.experience_level)),
     secondaryMuscles: uniqueSorted(muscleStrengthExercises.flatMap((exercise) => splitList(exercise.secondary_muscles)))
@@ -426,7 +441,8 @@ function getLocalWorkoutFilterOptions(): WorkoutFilterOptions {
 
 function matchesWorkoutFilters(workout: Workout, query = "", filters: WorkoutFilters = {}) {
   const normalized = normalizeText(query);
-  const muscleCategories = filters.categories ?? (filters.category ? [filters.category] : []);
+  const muscleCategories = filters.muscleCategories ?? filters.categories ?? (filters.category ? [filters.category] : []);
+  const exerciseCategories = filters.category ? [filters.category] : [];
   const equipmentRequired = filters.equipmentRequired ?? (filters.equipment ? [filters.equipment] : []);
   const experienceLevels = filters.experienceLevels ?? (filters.difficulty ? [filters.difficulty] : []);
   const secondaryMuscles = workout.secondary_muscles ?? [];
@@ -446,9 +462,12 @@ function matchesWorkoutFilters(workout: Workout, query = "", filters: WorkoutFil
 
   return (
     matchesQuery &&
-    hasAnySelected([workout.muscle_category, workout.target_muscle, workout.category], muscleCategories) &&
+    hasAnySelected([workout.muscle_category], muscleCategories) &&
+    hasAnySelected([workout.target_muscle, workout.muscle_category], filters.primaryMuscles) &&
+    hasAnySelected([workout.category], exerciseCategories) &&
     hasAnySelected([workout.equipment_required, workout.equipment], equipmentRequired) &&
     hasAnySelected([workout.mechanics, workout.category], filters.mechanics) &&
+    hasAnySelected([workout.category, workout.mechanics], filters.exerciseTypes) &&
     hasAnySelected([workout.force_type], filters.forceTypes) &&
     hasAnySelected([workout.experience_level, workout.difficulty], experienceLevels) &&
     hasAnySelected(secondaryMuscles, filters.secondaryMuscles)
@@ -490,12 +509,14 @@ export async function getFoodCategories() {
 
 export async function getGlobalFoods(
   query = "",
-  options: { category?: string; limit?: number } = {}
+  options: { category?: string; kitchen?: string; kitchenId?: string; subcategoryId?: string; limit?: number } = {}
 ) {
   const limit = options.limit ?? 36;
   const category = options.category;
   const fallback = localFoods(query)
     .filter((food) => !category || food.category === category)
+    .filter((food) => !options.kitchenId || options.kitchen === egyptianFoodKitchenName || food.kitchen_id === options.kitchenId)
+    .filter((food) => !options.subcategoryId || food.subcategory_id === options.subcategoryId || food.category === category)
     .slice(0, limit);
 
   if (!supabase) {
@@ -510,6 +531,8 @@ export async function getGlobalFoods(
     .limit(limit);
 
   if (category) request = request.eq("category", category);
+  if (options.kitchenId) request = request.eq("kitchen_id", options.kitchenId);
+  if (options.subcategoryId) request = request.eq("subcategory_id", options.subcategoryId);
   if (query) request = request.ilike("food_name", `%${query}%`);
 
   const result = await withTimeout(
@@ -722,7 +745,7 @@ function userFoodPayload(input: UserFoodInput) {
 
 export async function getFoodKitchens(userId: string) {
   const fallbackKitchen: FoodKitchen = {
-    id: "egyptian-food",
+    id: "egyptian-kitchen",
     user_id: null,
     name: egyptianFoodKitchenName,
     is_system: true,
@@ -823,18 +846,23 @@ export async function getUserFoods(userId: string) {
 export async function getFoodLibrary(
   userId: string,
   query = "",
-  options: { category?: string; kitchen?: string; limit?: number } = {}
+  options: { category?: string; kitchen?: string; kitchenId?: string; subcategoryId?: string; limit?: number } = {}
 ) {
   const [globalFoods, userFoods] = await Promise.all([
-    getGlobalFoods(query, { category: options.category, limit: options.limit ?? 60 }),
+    getGlobalFoods(query, { category: options.category, kitchen: options.kitchen, kitchenId: options.kitchenId, subcategoryId: options.subcategoryId, limit: options.limit ?? 60 }),
     getUserFoods(userId)
   ]);
   const normalizedQuery = normalizeText(query);
   const foods = [...globalFoods, ...userFoods].filter((food) => {
     const matchesQuery = !normalizedQuery || normalizeText(food.food_name).includes(normalizedQuery);
     const matchesCategory = !options.category || food.category === options.category;
-    const matchesKitchen = !options.kitchen || food.cuisine === options.kitchen || food.kitchen_id === options.kitchen;
-    return matchesQuery && matchesCategory && matchesKitchen;
+    const matchesKitchen =
+      !options.kitchenId ||
+      food.kitchen_id === options.kitchenId ||
+      (food.cuisine === egyptianFoodKitchenName && options.kitchen === egyptianFoodKitchenName);
+    const matchesLegacyKitchen = !options.kitchen || food.cuisine === options.kitchen || food.kitchen_id === options.kitchen;
+    const matchesSubcategory = !options.subcategoryId || food.subcategory_id === options.subcategoryId || food.category === options.category;
+    return matchesQuery && matchesCategory && matchesKitchen && matchesLegacyKitchen && matchesSubcategory;
   });
   return foods.slice(0, options.limit ?? 80);
 }
@@ -1150,6 +1178,36 @@ export async function addCustomMealToLog(userId: string, meal: CustomMeal, date 
   return data as FoodLog;
 }
 
+export async function addCustomMealToMealPlan(userId: string, meal: CustomMeal, mealType: MealType = "Breakfast", date = todayIso()) {
+  const safeMealType = normalizeMealType(mealType);
+  const payload = {
+    user_id: userId,
+    plan_date: date,
+    meal_type: safeMealType,
+    food_item_id: null,
+    user_food_item_id: null,
+    food_name: meal.meal_name,
+    serving_size: `${meal.items.length} foods`,
+    quantity: 1,
+    calories: meal.totals.calories,
+    protein_g: meal.totals.protein_g,
+    carbs_g: meal.totals.carbs_g,
+    fat_g: meal.totals.fat_g,
+    status: "planned",
+    food_log_id: null,
+    completed_at: null,
+    notes: meal.notes
+  };
+
+  if (!canUseUserData(userId)) {
+    return mockDelay({ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as MealPlanItem);
+  }
+
+  const { data, error } = await supabase!.from("user_meal_plan_items").insert(payload).select("*").single();
+  if (error) throw error;
+  return data as MealPlanItem;
+}
+
 export async function getTodayMealPlanItems(userId: string, date = todayIso()) {
   if (!canUseUserData(userId)) return mockDelay<MealPlanItem[]>([]);
   const { data, error } = await supabase!
@@ -1427,8 +1485,10 @@ export async function getWorkoutFilterOptions() {
 
   return {
     muscleCategories: uniqueSorted([...fallback.muscleCategories, ...all.map((item) => item.muscle_category ?? item.target_muscle)]),
+    primaryMuscles: uniqueSorted([...fallback.primaryMuscles, ...all.map((item) => item.target_muscle ?? item.muscle_category)]),
     equipmentRequired: uniqueSorted([...fallback.equipmentRequired, ...all.map((item) => item.equipment_required ?? item.equipment)]),
     mechanics: uniqueSorted([...fallback.mechanics, ...all.map((item) => item.mechanics ?? item.category)]),
+    exerciseTypes: uniqueSorted([...fallback.exerciseTypes, ...all.map((item) => item.category ?? item.mechanics)]),
     forceTypes: uniqueSorted([...fallback.forceTypes, ...all.map((item) => item.force_type)]),
     experienceLevels: uniqueSorted([...fallback.experienceLevels, ...all.map((item) => item.experience_level ?? item.difficulty)]),
     secondaryMuscles: uniqueSorted([...fallback.secondaryMuscles, ...all.flatMap((item) => item.secondary_muscles ?? [])])
@@ -1440,7 +1500,7 @@ export async function getWorkouts(
   filters: WorkoutFilters = {},
   page = 0
 ) {
-  const selectedCategory = filters.category || filters.equipment || filters.categories?.[0] || filters.equipmentRequired?.[0];
+  const selectedCategory = filters.category || filters.equipment || filters.muscleCategories?.[0] || filters.categories?.[0] || filters.equipmentRequired?.[0];
   const localMatches = localWorkouts(query, filters);
   const from = page * workoutPageSize;
   const to = from + workoutPageSize - 1;
@@ -1957,6 +2017,7 @@ type RawWorkoutPlan = {
   user_id: string;
   name: string;
   is_active: boolean;
+  is_default?: boolean | null;
   template_id?: string | null;
   source?: "manual" | "template_recommendation";
   match_score?: number | null;
@@ -2049,6 +2110,7 @@ function normalizeWorkoutPlan(plan: RawWorkoutPlan): UserWorkoutPlan {
     user_id: plan.user_id,
     name: plan.name,
     is_active: plan.is_active,
+    is_default: plan.is_default ?? plan.is_active,
     template_id: plan.template_id ?? null,
     source: plan.source ?? "manual",
     match_score: plan.match_score ?? null,
@@ -2146,7 +2208,7 @@ export async function getActiveUserWorkoutPlan(userId: string) {
   if (!canUseUserData(userId)) return mockDelay<UserWorkoutPlan | null>(null);
 
   const selectWithSource =
-    "id,user_id,name,is_active,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
+    "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
   const selectLegacy =
     "id,user_id,name,is_active,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
 
@@ -2183,18 +2245,37 @@ export async function getActiveUserWorkoutPlan(userId: string) {
   return data ? normalizeWorkoutPlan(data as RawWorkoutPlan) : null;
 }
 
+export async function getDefaultUserWorkoutPlan(userId: string) {
+  return getActiveUserWorkoutPlan(userId);
+}
+
 export async function getUserWorkoutPlans(userId: string) {
   if (!canUseUserData(userId)) return mockDelay<UserWorkoutPlan[]>([]);
 
   const selectWithSource =
+    "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
+  const selectLegacy =
     "id,user_id,name,is_active,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
 
-  const { data, error } = await supabase!
+  const result = await supabase!
     .from("user_workout_plans")
     .select(selectWithSource)
     .eq("user_id", userId)
     .or("source.is.null,source.eq.manual")
     .order("created_at", { ascending: false });
+  let data: unknown = result.data;
+  let error = result.error;
+
+  if (error && isMissingTemplateSchemaError(error)) {
+    const legacy = await supabase!
+      .from("user_workout_plans")
+      .select(selectLegacy)
+      .eq("user_id", userId)
+      .or("source.is.null,source.eq.manual")
+      .order("created_at", { ascending: false });
+    data = legacy.data as unknown;
+    error = legacy.error;
+  }
 
   if (error) {
     console.warn("S&S Gym could not load My Plans.", error.message);
@@ -2207,18 +2288,84 @@ export async function getUserWorkoutPlans(userId: string) {
 export async function getUserWorkoutPlan(userId: string, planId: string) {
   if (!canUseUserData(userId) || !isUuid(planId)) return mockDelay<UserWorkoutPlan | null>(null);
   const selectWithSource =
+    "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
+  const selectLegacy =
     "id,user_id,name,is_active,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
-  const { data, error } = await supabase!
+  const result = await supabase!
     .from("user_workout_plans")
     .select(selectWithSource)
     .eq("user_id", userId)
     .eq("id", planId)
     .maybeSingle();
+  let data: unknown = result.data;
+  let error = result.error;
+  if (error && isMissingTemplateSchemaError(error)) {
+    const legacy = await supabase!
+      .from("user_workout_plans")
+      .select(selectLegacy)
+      .eq("user_id", userId)
+      .eq("id", planId)
+      .maybeSingle();
+    data = legacy.data as unknown;
+    error = legacy.error;
+  }
   if (error) {
     console.warn("S&S Gym could not load this plan.", error.message);
     return null;
   }
   return data ? normalizeWorkoutPlan(data as unknown as RawWorkoutPlan) : null;
+}
+
+export async function setDefaultUserWorkoutPlan(userId: string, planId: string) {
+  if (!canUseUserData(userId) || !isUuid(planId)) return mockDelay(true);
+
+  let clearResult = await supabase!
+    .from("user_workout_plans")
+    .update({ is_active: false, is_default: false })
+    .eq("user_id", userId);
+
+  if (clearResult.error && isMissingTemplateSchemaError(clearResult.error)) {
+    clearResult = await supabase!.from("user_workout_plans").update({ is_active: false }).eq("user_id", userId);
+  }
+  if (clearResult.error) throw clearResult.error;
+
+  let defaultResult = await supabase!
+    .from("user_workout_plans")
+    .update({ is_active: true, is_default: true })
+    .eq("id", planId)
+    .eq("user_id", userId);
+
+  if (defaultResult.error && isMissingTemplateSchemaError(defaultResult.error)) {
+    defaultResult = await supabase!
+      .from("user_workout_plans")
+      .update({ is_active: true })
+      .eq("id", planId)
+      .eq("user_id", userId);
+  }
+  if (defaultResult.error) throw defaultResult.error;
+  return true;
+}
+
+export async function deleteUserWorkoutPlan(userId: string, planId: string) {
+  if (!canUseUserData(userId) || !isUuid(planId)) return mockDelay(true);
+
+  const currentPlans = await getUserWorkoutPlans(userId);
+  const deletingPlan = currentPlans.find((plan) => plan.id === planId);
+
+  const { error } = await supabase!
+    .from("user_workout_plans")
+    .delete()
+    .eq("id", planId)
+    .eq("user_id", userId);
+  if (error) throw error;
+
+  const shouldPromoteReplacement = Boolean(deletingPlan?.is_default ?? deletingPlan?.is_active);
+  if (shouldPromoteReplacement) {
+    const replacement = currentPlans.find((plan) => plan.id !== planId);
+    if (replacement) await setDefaultUserWorkoutPlan(userId, replacement.id);
+  }
+
+  return true;
 }
 
 export async function getWorkoutTemplateWeekOptions() {
@@ -2393,7 +2540,7 @@ export async function getUserWorkoutPlanDay(dayId: string) {
   const { data, error } = await supabase!
     .from("user_workout_plan_days")
     .select(
-      "id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes),user_workout_plans(id,user_id,name)"
+      "id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes),user_workout_plans(id,user_id,name,is_active)"
     )
     .eq("id", dayId)
     .maybeSingle();
@@ -2404,7 +2551,7 @@ export async function getUserWorkoutPlanDay(dayId: string) {
   }
 
   if (!data) return null;
-  const row = data as unknown as RawPlanDay & { user_workout_plans?: { id: string; user_id: string; name: string } | { id: string; user_id: string; name: string }[] | null };
+  const row = data as unknown as RawPlanDay & { user_workout_plans?: { id: string; user_id: string; name: string; is_active: boolean; is_default?: boolean | null } | { id: string; user_id: string; name: string; is_active: boolean; is_default?: boolean | null }[] | null };
   const planRelation = Array.isArray(row.user_workout_plans) ? row.user_workout_plans[0] : row.user_workout_plans;
   return {
     id: row.id,
@@ -2414,7 +2561,9 @@ export async function getUserWorkoutPlanDay(dayId: string) {
     weekday: row.weekday,
     notes: row.notes,
     exercises: (row.user_workout_plan_exercises ?? []).sort((a, b) => a.sort_order - b.sort_order),
-    plan: planRelation ? { id: planRelation.id, user_id: planRelation.user_id, name: planRelation.name } : null
+    plan: planRelation
+      ? { id: planRelation.id, user_id: planRelation.user_id, name: planRelation.name, is_active: planRelation.is_active, is_default: planRelation.is_default ?? planRelation.is_active }
+      : null
   };
 }
 
@@ -2497,21 +2646,40 @@ export async function createUserWorkoutPlan({
     return mockDelay({ id: crypto.randomUUID(), name: planName, days: cleanDays });
   }
 
-  const inactiveResult = await supabase!
+  let inactiveResult = await supabase!
     .from("user_workout_plans")
-    .update({ is_active: false })
+    .update({ is_active: false, is_default: false })
     .eq("user_id", userId)
     .eq("is_active", true);
 
+  if (inactiveResult.error && isMissingTemplateSchemaError(inactiveResult.error)) {
+    inactiveResult = await supabase!
+      .from("user_workout_plans")
+      .update({ is_active: false })
+      .eq("user_id", userId)
+      .eq("is_active", true);
+  }
+
   if (inactiveResult.error) throw inactiveResult.error;
 
-  const { data: plan, error: planError } = await supabase!
+  let { data: plan, error: planError } = await supabase!
     .from("user_workout_plans")
-    .insert({ user_id: userId, name: planName.trim(), is_active: true })
+    .insert({ user_id: userId, name: planName.trim(), is_active: true, is_default: true })
     .select("id")
     .single();
 
+  if (planError && isMissingTemplateSchemaError(planError)) {
+    const compatible = await supabase!
+      .from("user_workout_plans")
+      .insert({ user_id: userId, name: planName.trim(), is_active: true })
+      .select("id")
+      .single();
+    plan = compatible.data;
+    planError = compatible.error;
+  }
+
   if (planError) throw planError;
+  if (!plan) throw new Error("Workout plan could not be created.");
 
   for (let dayIndex = 0; dayIndex < cleanDays.length; dayIndex += 1) {
     const day = cleanDays[dayIndex];

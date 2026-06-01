@@ -5,8 +5,10 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   BarChart3,
+  CalendarClock,
   ClipboardList,
   CalendarCheck,
+  ChefHat,
   Dumbbell,
   History,
   Home,
@@ -30,8 +32,11 @@ const navItems = [
   { href: "/my-meal-plan", label: "My Meal Plan", icon: ClipboardList },
   { href: "/meals", label: "Meals", icon: Soup },
   { href: "/calories", label: "Calories", icon: Utensils },
+  { href: "/calories/weekly-overview", label: "Weekly Overview", icon: BarChart3 },
+  { href: "/calories/custom-food-meal", label: "Custom Food / Meal", icon: ChefHat },
   { href: "/workouts", label: "Workouts", icon: Dumbbell },
   { href: "/my-workout", label: "My Workout", icon: CalendarCheck },
+  { href: "/today-workout", label: "Today's Workout", icon: CalendarClock },
   { href: "/workout-history", label: "Workout History", icon: History },
   { href: "/progress", label: "Progress", icon: BarChart3 },
   { href: "/profile", label: "Profile", icon: User }

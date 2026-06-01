@@ -370,7 +370,7 @@ export type UserWorkoutPlanDay = {
 };
 
 export type WorkoutPlanDaySession = UserWorkoutPlanDay & {
-  plan: Pick<UserWorkoutPlan, "id" | "name" | "user_id"> | null;
+  plan: Pick<UserWorkoutPlan, "id" | "name" | "user_id" | "is_active" | "is_default"> | null;
 };
 
 export type UserWorkoutPlan = {
@@ -378,6 +378,7 @@ export type UserWorkoutPlan = {
   user_id: string;
   name: string;
   is_active: boolean;
+  is_default?: boolean;
   template_id?: string | null;
   source?: "manual" | "template_recommendation";
   match_score?: number | null;

@@ -9,7 +9,7 @@ export default function MealsPage() {
     <>
       <PageHeading
         title="Meal Section"
-        description="Browse foods by category, then add them to My Meal Plan or log them as done now."
+        description="Select a kitchen and subcategory, then add foods or custom meals to your plan or log."
       />
       <FoodBrowser />
     </>

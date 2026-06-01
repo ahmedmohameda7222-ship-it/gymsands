@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowLeft, ArrowUp, ExternalLink, Pencil, Plus, RotateCcw, Save, Search, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ExternalLink, Pencil, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -14,12 +14,9 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { clearStoredValue, readStoredJson, storeJson, workoutStorageKey } from "@/lib/workout-persistence";
 import {
-  getWorkoutFilterOptions,
-  getWorkouts,
   updateUserWorkoutPlanDay,
   weekDays,
-  workoutsFromPlanDay,
-  type WorkoutFilterOptions
+  workoutsFromPlanDay
 } from "@/services/database/repository";
 import type { Weekday, Workout, WorkoutPlanDaySession } from "@/types";
 
@@ -29,17 +26,6 @@ type EditorDraft = {
   notes: string;
   exercises: Workout[];
 };
-
-const emptyOptions: WorkoutFilterOptions = {
-  muscleCategories: [],
-  equipmentRequired: [],
-  mechanics: [],
-  forceTypes: [],
-  experienceLevels: [],
-  secondaryMuscles: []
-};
-
-const allValue = "all";
 
 function withTrainingDefaults(workout: Workout): Workout {
   return {
@@ -59,10 +45,6 @@ function draftFromDay(day: WorkoutPlanDaySession): EditorDraft {
   };
 }
 
-function exerciseKey(workout: Workout) {
-  return `${workout.name.toLowerCase()}-${(workout.muscle_category || workout.target_muscle).toLowerCase()}-${(workout.equipment_required || workout.equipment).toLowerCase()}`;
-}
-
 function isLink(value: string | null | undefined) {
   return Boolean(value && /^https?:\/\//i.test(value));
 }
@@ -72,17 +54,9 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
   const { toast } = useToast();
   const router = useRouter();
   const draftKey = useMemo(() => workoutStorageKey(["workout-day-draft", user?.id ?? "mock-user", day.id]), [day.id, user?.id]);
-  const addFilterKey = useMemo(() => workoutStorageKey(["workout-day-add-filter", user?.id ?? "mock-user", day.id]), [day.id, user?.id]);
   const [draft, setDraft] = useState<EditorDraft>(() => draftFromDay(day));
   const [isHydrated, setIsHydrated] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [showAddExercise, setShowAddExercise] = useState(false);
-  const [query, setQuery] = useState("");
-  const [selectedMuscle, setSelectedMuscle] = useState(allValue);
-  const [selectedEquipment, setSelectedEquipment] = useState(allValue);
-  const [filterOptions, setFilterOptions] = useState<WorkoutFilterOptions>(emptyOptions);
-  const [results, setResults] = useState<Workout[]>([]);
-  const [isLoadingResults, setIsLoadingResults] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -95,55 +69,6 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
     if (!isHydrated) return;
     storeJson(draftKey, draft);
   }, [draft, draftKey, isHydrated]);
-
-  useEffect(() => {
-    const stored = readStoredJson<{ query: string; selectedMuscle: string; selectedEquipment: string }>(addFilterKey);
-    if (!stored) return;
-    setQuery(stored.query ?? "");
-    setSelectedMuscle(stored.selectedMuscle ?? allValue);
-    setSelectedEquipment(stored.selectedEquipment ?? allValue);
-  }, [addFilterKey]);
-
-  useEffect(() => {
-    storeJson(addFilterKey, { query, selectedMuscle, selectedEquipment });
-  }, [addFilterKey, query, selectedEquipment, selectedMuscle]);
-
-  useEffect(() => {
-    getWorkoutFilterOptions()
-      .then(setFilterOptions)
-      .catch((error) => {
-        setFilterOptions(emptyOptions);
-        toast({ title: "Could not load exercise filters", description: error instanceof Error ? error.message : "Please try again." });
-      });
-  }, [toast]);
-
-  useEffect(() => {
-    if (!showAddExercise) return;
-    let active = true;
-    const timer = window.setTimeout(() => {
-      setIsLoadingResults(true);
-      getWorkouts(query.trim(), {
-        categories: selectedMuscle === allValue ? [] : [selectedMuscle],
-        equipmentRequired: selectedEquipment === allValue ? [] : [selectedEquipment]
-      }, 0)
-        .then((items) => {
-          if (active) setResults(items.slice(0, 24).map(withTrainingDefaults));
-        })
-        .catch((error) => {
-          if (!active) return;
-          setResults([]);
-          toast({ title: "Could not load exercises", description: error instanceof Error ? error.message : "Please try another filter." });
-        })
-        .finally(() => {
-          if (active) setIsLoadingResults(false);
-        });
-    }, 220);
-
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [query, selectedEquipment, selectedMuscle, showAddExercise, toast]);
 
   function patchDraft(patch: Partial<EditorDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -171,24 +96,6 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
       return { ...current, exercises };
     });
     setEditingIndex((current) => (current === index ? index + direction : current));
-  }
-
-  function addExercise(workout: Workout) {
-    const nextWorkout = withTrainingDefaults(workout);
-    setDraft((current) => {
-      if (current.exercises.some((item) => exerciseKey(item) === exerciseKey(nextWorkout))) {
-        toast({ title: "Exercise already added", description: `${nextWorkout.name} is already in this workout day.` });
-        return current;
-      }
-      return { ...current, exercises: [...current.exercises, nextWorkout] };
-    });
-  }
-
-  function resetAddFilters() {
-    setQuery("");
-    setSelectedMuscle(allValue);
-    setSelectedEquipment(allValue);
-    clearStoredValue(addFilterKey);
   }
 
   async function saveWorkout() {
@@ -351,93 +258,20 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
           </CardContent>
         </Card>
 
-        <div className="space-y-3">
-          <Button type="button" className="w-full" onClick={() => setShowAddExercise((current) => !current)}>
-            <Plus className="h-4 w-4" />
-            {showAddExercise ? "Done" : "Add Exercise"}
-          </Button>
-
-          {showAddExercise ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Add Exercise</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search exercises" className="pl-10" />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Select value={selectedMuscle} onValueChange={setSelectedMuscle}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Muscle" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={allValue}>All muscles</SelectItem>
-                  {filterOptions.muscleCategories.map((item) => (
-                    <SelectItem key={item} value={item}>{item}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={selectedEquipment} onValueChange={setSelectedEquipment}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Equipment" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={allValue}>All equipment</SelectItem>
-                  {filterOptions.equipmentRequired.map((item) => (
-                    <SelectItem key={item} value={item}>{item}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={resetAddFilters} disabled={!query && selectedMuscle === allValue && selectedEquipment === allValue}>
-              <RotateCcw className="h-4 w-4" />
-              Reset Filter
+        <Card>
+          <CardHeader>
+            <CardTitle>Add exercises</CardTitle>
+            <p className="text-sm text-muted-foreground">Open the exercise browser on its own page, add movements, then return here to save the workout day.</p>
+          </CardHeader>
+          <CardContent>
+            <Button asChild className="w-full">
+              <Link href={`/my-workout/day/${day.id}/add-exercise`}>
+                <Plus className="h-4 w-4" />
+                Add Exercise
+              </Link>
             </Button>
-            {isLoadingResults ? <p className="text-sm text-muted-foreground">Loading exercises...</p> : null}
-            <div className="grid max-h-[42rem] gap-3 overflow-y-auto pr-1">
-              {results.map((workout) => {
-                const guideUrl = workout.exercise_url || workout.video_url || (isLink(workout.notes) ? workout.notes : null);
-                return (
-                <div key={workout.id} className="rounded-md border bg-white p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-950">{workout.name}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {workout.muscle_category || workout.target_muscle} | {workout.equipment_required || workout.equipment}
-                      </p>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => addExercise(workout)}>
-                      <Plus className="h-4 w-4" />
-                      Add
-                    </Button>
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <Button asChild size="sm" variant="ghost">
-                      <Link href={`/workouts/${workout.id}`}>Details</Link>
-                    </Button>
-                    {guideUrl ? (
-                      <Button asChild size="sm" variant="ghost">
-                        <a href={guideUrl} target="_blank" rel="noreferrer">
-                          <ExternalLink className="h-4 w-4" />
-                          Instruction Video
-                        </a>
-                      </Button>
-                    ) : (
-                      <Button size="sm" variant="ghost" disabled>
-                        No video available
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );})}
-              {!isLoadingResults && !results.length ? <p className="text-sm text-muted-foreground">No exercises match this search.</p> : null}
-            </div>
-            </CardContent>
-          </Card>
-          ) : null}
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
