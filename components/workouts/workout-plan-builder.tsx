@@ -141,7 +141,7 @@ export function WorkoutPlanBuilder({
     let active = true;
     const timer = window.setTimeout(() => {
       setIsLoading(true);
-      getWorkouts(query.trim(), { category: selectedCategory }, 0)
+      getWorkouts(query.trim(), { categories: [selectedCategory] }, 0)
         .then((items) => {
           if (active) setResults(items.slice(0, 30).map(withTrainingDefaults));
         })

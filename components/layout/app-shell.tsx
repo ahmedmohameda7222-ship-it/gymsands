@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: Home },
+  { href: "/today-workout", label: "Today's Workout", icon: CalendarClock },
   { href: "/my-meal-plan", label: "My Meal Plan", icon: ClipboardList },
   { href: "/meals", label: "Meals", icon: Soup },
   { href: "/calories", label: "Calories", icon: Utensils },
@@ -36,7 +37,6 @@ const navItems = [
   { href: "/calories/custom-food-meal", label: "Custom Food / Meal", icon: ChefHat },
   { href: "/workouts", label: "Workouts", icon: Dumbbell },
   { href: "/my-workout", label: "My Workout", icon: CalendarCheck },
-  { href: "/today-workout", label: "Today's Workout", icon: CalendarClock },
   { href: "/workout-history", label: "Workout History", icon: History },
   { href: "/progress", label: "Progress", icon: BarChart3 },
   { href: "/profile", label: "Profile", icon: User }
