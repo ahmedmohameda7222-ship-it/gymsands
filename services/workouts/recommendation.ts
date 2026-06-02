@@ -142,6 +142,12 @@ export function scoreWorkoutTemplate(template: WorkoutTemplateCandidate, input: 
   const inputLevel = normalizeLevel(input.trainingLevel);
   const templateLevel = normalizeLevel(template.training_level);
   const userAgeBucket = ageBucket(input.ageRange);
+  const templateGender = normalizeGender(template.target_gender);
+  const userGender = normalizeGender(input.gender);
+
+  if ((userGender === "male" || userGender === "female") && templateGender !== userGender) {
+    return null;
+  }
 
   if (inputGoals.includes(templateGoal)) {
     score += 35;
@@ -170,8 +176,6 @@ export function scoreWorkoutTemplate(template: WorkoutTemplateCandidate, input: 
     reasons.push("is within one training day of your schedule");
   }
 
-  const templateGender = normalizeGender(template.target_gender);
-  const userGender = normalizeGender(input.gender);
   if (templateGender === userGender || templateGender === "male and female" || userGender === "male and female") {
     score += 10;
     reasons.push("fits your profile");
