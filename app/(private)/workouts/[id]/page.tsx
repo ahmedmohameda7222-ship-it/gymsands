@@ -147,15 +147,6 @@ export default function WorkoutDetailsPage() {
               <p className="mt-2 leading-7 text-slate-700">{video?.instructions || workout.instructions}</p>
             </div>
 
-            {guideUrl ? (
-              <div className="rounded-md border p-3">
-                <p className="text-sm font-semibold text-slate-950">Exercise URL</p>
-                <a href={guideUrl} target="_blank" rel="noreferrer" className="mt-1 break-all text-sm font-medium text-primary">
-                  {guideUrl}
-                </a>
-              </div>
-            ) : null}
-
             <div className="grid gap-2 sm:grid-cols-2">
               {guideUrl ? (
                 <Button asChild variant="outline">
