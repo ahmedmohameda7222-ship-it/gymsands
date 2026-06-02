@@ -5,27 +5,47 @@ import { useEffect, useState } from "react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { WorkoutSessionForm } from "@/components/workouts/workout-session-form";
 import { useToast } from "@/components/ui/toaster";
-import { getWorkout } from "@/services/database/repository";
+import { useAuth } from "@/components/auth/auth-provider";
+import { getUserExerciseVideo, getWorkout } from "@/services/database/repository";
 import type { Workout } from "@/types";
 
 export default function WorkoutSessionPage() {
   const params = useParams<{ id: string }>();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    getWorkout(params.id)
-      .then((nextWorkout) => {
-        setWorkout(nextWorkout);
+    let active = true;
+
+    async function loadWorkout() {
+      try {
+        const nextWorkout = await getWorkout(params.id);
+        const customVideo = user?.id ? await getUserExerciseVideo(user.id, nextWorkout.id) : null;
+        if (!active) return;
+        const hydratedWorkout = customVideo?.custom_video_url
+          ? {
+            ...nextWorkout,
+            video_url: customVideo.custom_video_url,
+            custom_video_url: customVideo.custom_video_url
+          }
+          : nextWorkout;
+        setWorkout(hydratedWorkout);
         setLoadError("");
-      })
-      .catch((error) => {
+      } catch (error) {
+        if (!active) return;
         const message = error instanceof Error ? error.message : "Could not load workout session.";
         setLoadError(message);
         toast({ title: "Could not start workout", description: message });
-      });
-  }, [params.id, toast]);
+      }
+    }
+
+    loadWorkout();
+    return () => {
+      active = false;
+    };
+  }, [params.id, toast, user?.id]);
 
   if (!workout) return <p className="text-sm text-muted-foreground">{loadError || "Loading workout session..."}</p>;
 
