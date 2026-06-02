@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, CheckCircle2, Clock, Dumbbell, Eye, Loader2, RefreshCcw, Sparkles, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { supabase } from "@/lib/supabase/client";
 import { getGeneratedWorkoutPlans, setDefaultUserWorkoutPlan } from "@/services/database/repository";
 import type { GeneratedWorkoutPlan, UserWorkoutPlanDay } from "@/types";
 
@@ -66,6 +67,20 @@ function goalTags(plan: GeneratedWorkoutPlan) {
   return values;
 }
 
+async function keepOnlyGeneratedPlan(userId: string, planId: string) {
+  await setDefaultUserWorkoutPlan(userId, planId);
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from("user_workout_plans")
+    .delete()
+    .eq("user_id", userId)
+    .eq("source", "template_recommendation")
+    .neq("id", planId);
+
+  if (error) throw error;
+}
+
 export function GeneratedWorkoutDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -73,6 +88,7 @@ export function GeneratedWorkoutDashboard() {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   async function loadPlans() {
     if (!user?.id) {
@@ -102,20 +118,21 @@ export function GeneratedWorkoutDashboard() {
     [plans, selectedPlanId]
   );
 
+  function previewPlan(planId: string) {
+    setSelectedPlanId(planId);
+    window.requestAnimationFrame(() => previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
   async function setActivePlan(plan: GeneratedWorkoutPlan) {
     if (!user?.id || busyPlanId) return;
     setBusyPlanId(plan.id);
     const previousPlans = plans;
-    setPlans((current) =>
-      current.map((item) => ({
-        ...item,
-        is_active: item.id === plan.id,
-        is_default: item.id === plan.id
-      }))
-    );
+    const activatedPlan = { ...plan, is_active: true, is_default: true };
+    setPlans([activatedPlan]);
+    setSelectedPlanId(plan.id);
     try {
-      await setDefaultUserWorkoutPlan(user.id, plan.id);
-      toast({ title: "Active plan updated", description: `${plan.name} now drives Dashboard and Today's Workout.` });
+      await keepOnlyGeneratedPlan(user.id, plan.id);
+      toast({ title: "Active plan updated", description: `${plan.name} is the only generated plan saved now.` });
     } catch (error) {
       setPlans(previousPlans);
       toast({ title: "Could not activate plan", description: error instanceof Error ? error.message : "Please try again." });
@@ -196,7 +213,7 @@ export function GeneratedWorkoutDashboard() {
                     <PlanMetric icon={Sparkles} label="Level" value={plan.template?.training_level ?? "All levels"} />
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    <Button type="button" variant={isSelected ? "secondary" : "outline"} onClick={() => setSelectedPlanId(plan.id)}>
+                    <Button type="button" variant={isSelected ? "secondary" : "outline"} onClick={() => previewPlan(plan.id)}>
                       <Eye className="h-4 w-4" />
                       Preview
                     </Button>
@@ -211,7 +228,9 @@ export function GeneratedWorkoutDashboard() {
           })}
         </div>
 
-        <PlanOverview plan={selectedPlan} onActivate={setActivePlan} busyPlanId={busyPlanId} />
+        <div ref={previewRef}>
+          <PlanOverview plan={selectedPlan} onActivate={setActivePlan} busyPlanId={busyPlanId} />
+        </div>
       </div>
     </div>
   );
