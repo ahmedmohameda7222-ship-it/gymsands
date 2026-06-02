@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, Play, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, ExternalLink, Play, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -114,6 +114,7 @@ export function WorkoutBrowser() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [openFilters, setOpenFilters] = useState<FilterKey[]>([]);
 
   useEffect(() => {
     const persisted = readPersistedFilterState();
@@ -199,11 +200,20 @@ export function WorkoutBrowser() {
       const nextValues = values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
       return { ...current, [key]: nextValues };
     });
+    setOpenFilters((current) => Array.from(new Set([...current, key])));
+  }
+
+  function toggleFilterGroup(key: FilterKey) {
+    setOpenFilters((current) => {
+      if (current.includes(key)) return current.filter((item) => item !== key);
+      return Array.from(new Set([...current.filter((item) => filters[item].length), key]));
+    });
   }
 
   function resetFilters() {
     setQuery("");
     setFilters(emptyFilters);
+    setOpenFilters([]);
     if (typeof window !== "undefined") window.localStorage.removeItem(filterStorageKey);
   }
 
@@ -235,14 +245,14 @@ export function WorkoutBrowser() {
           <p className="text-sm text-muted-foreground">{workouts.length} exercises loaded</p>
         </div>
         <div className="grid gap-4 lg:grid-cols-3">
-          <FilterGroup title="Muscle Category" values={filterOptions.muscleCategories} selected={filters.muscleCategories} onToggle={(value) => toggleFilter("muscleCategories", value)} />
-          <FilterGroup title="Primary Muscle" values={filterOptions.primaryMuscles} selected={filters.primaryMuscles} onToggle={(value) => toggleFilter("primaryMuscles", value)} />
-          <FilterGroup title="Equipment Required" values={filterOptions.equipmentRequired} selected={filters.equipmentRequired} onToggle={(value) => toggleFilter("equipmentRequired", value)} />
-          <FilterGroup title="Mechanics" values={filterOptions.mechanics} selected={filters.mechanics} onToggle={(value) => toggleFilter("mechanics", value)} />
-          <FilterGroup title="Exercise Type" values={filterOptions.exerciseTypes} selected={filters.exerciseTypes} onToggle={(value) => toggleFilter("exerciseTypes", value)} />
-          <FilterGroup title="Force Type" values={filterOptions.forceTypes} selected={filters.forceTypes} onToggle={(value) => toggleFilter("forceTypes", value)} />
-          <FilterGroup title="Experience Level" values={filterOptions.experienceLevels} selected={filters.experienceLevels} onToggle={(value) => toggleFilter("experienceLevels", value)} />
-          <FilterGroup title="Secondary Muscles" values={filterOptions.secondaryMuscles} selected={filters.secondaryMuscles} onToggle={(value) => toggleFilter("secondaryMuscles", value)} />
+          <FilterGroup title="Muscle Category" values={filterOptions.muscleCategories} selected={filters.muscleCategories} open={openFilters.includes("muscleCategories")} onOpenChange={() => toggleFilterGroup("muscleCategories")} onToggle={(value) => toggleFilter("muscleCategories", value)} />
+          <FilterGroup title="Primary Muscle" values={filterOptions.primaryMuscles} selected={filters.primaryMuscles} open={openFilters.includes("primaryMuscles")} onOpenChange={() => toggleFilterGroup("primaryMuscles")} onToggle={(value) => toggleFilter("primaryMuscles", value)} />
+          <FilterGroup title="Equipment Required" values={filterOptions.equipmentRequired} selected={filters.equipmentRequired} open={openFilters.includes("equipmentRequired")} onOpenChange={() => toggleFilterGroup("equipmentRequired")} onToggle={(value) => toggleFilter("equipmentRequired", value)} />
+          <FilterGroup title="Mechanics" values={filterOptions.mechanics} selected={filters.mechanics} open={openFilters.includes("mechanics")} onOpenChange={() => toggleFilterGroup("mechanics")} onToggle={(value) => toggleFilter("mechanics", value)} />
+          <FilterGroup title="Exercise Type" values={filterOptions.exerciseTypes} selected={filters.exerciseTypes} open={openFilters.includes("exerciseTypes")} onOpenChange={() => toggleFilterGroup("exerciseTypes")} onToggle={(value) => toggleFilter("exerciseTypes", value)} />
+          <FilterGroup title="Force Type" values={filterOptions.forceTypes} selected={filters.forceTypes} open={openFilters.includes("forceTypes")} onOpenChange={() => toggleFilterGroup("forceTypes")} onToggle={(value) => toggleFilter("forceTypes", value)} />
+          <FilterGroup title="Experience Level" values={filterOptions.experienceLevels} selected={filters.experienceLevels} open={openFilters.includes("experienceLevels")} onOpenChange={() => toggleFilterGroup("experienceLevels")} onToggle={(value) => toggleFilter("experienceLevels", value)} />
+          <FilterGroup title="Secondary Muscles" values={filterOptions.secondaryMuscles} selected={filters.secondaryMuscles} open={openFilters.includes("secondaryMuscles")} onOpenChange={() => toggleFilterGroup("secondaryMuscles")} onToggle={(value) => toggleFilter("secondaryMuscles", value)} />
         </div>
       </div>
 
@@ -311,33 +321,47 @@ function FilterGroup({
   title,
   values,
   selected,
+  open,
+  onOpenChange,
   onToggle
 }: {
   title: string;
   values: string[];
   selected: string[];
+  open: boolean;
+  onOpenChange: () => void;
   onToggle: (value: string) => void;
 }) {
   return (
     <div className="rounded-md bg-slate-50 p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-slate-900">{title}</p>
-        {selected.length ? <Badge variant="outline">{selected.length}</Badge> : null}
-      </div>
-      <div className="grid max-h-44 gap-2 overflow-y-auto pr-1">
-        {values.map((value) => (
-          <label key={value} className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-sm transition hover:bg-white">
-            <input
-              type="checkbox"
-              checked={selected.includes(value)}
-              onChange={() => onToggle(value)}
-              className="h-4 w-4 rounded border-slate-300 text-primary"
-            />
-            <span className="min-w-0 truncate">{value}</span>
-          </label>
-        ))}
-        {!values.length ? <p className="text-sm text-muted-foreground">No options yet.</p> : null}
-      </div>
+      <button
+        type="button"
+        onClick={onOpenChange}
+        aria-expanded={open}
+        className="flex min-h-10 w-full items-center justify-between gap-2 rounded-md px-1 text-left"
+      >
+        <span className="min-w-0 text-sm font-semibold text-slate-900">{title}</span>
+        <span className="flex items-center gap-2">
+          {selected.length ? <Badge variant="outline">{selected.length}</Badge> : null}
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition ${open ? "rotate-180" : ""}`} />
+        </span>
+      </button>
+      {open ? (
+        <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto pr-1">
+          {values.map((value) => (
+            <label key={value} className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-sm transition hover:bg-white">
+              <input
+                type="checkbox"
+                checked={selected.includes(value)}
+                onChange={() => onToggle(value)}
+                className="h-4 w-4 rounded border-slate-300 text-primary"
+              />
+              <span className="min-w-0 truncate">{value}</span>
+            </label>
+          ))}
+          {!values.length ? <p className="text-sm text-muted-foreground">No options yet.</p> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
