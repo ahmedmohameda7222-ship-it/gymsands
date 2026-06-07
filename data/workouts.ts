@@ -132,10 +132,10 @@ export const sampleExerciseVideos: ExerciseVideo[] = [
     exercise_name: "Barbell Back Squat",
     category_type: "Muscle Group",
     category: "Quads",
-    exercise_url: "https://www.muscleandstrength.com/exercises/squat.html",
+    exercise_url: "",
     video_url: null,
     instructions: sampleWorkouts[0].instructions,
-    source: "user_provided_workout_video_table",
+    source: "manual_sample",
     is_global: true
   },
   {
@@ -143,10 +143,10 @@ export const sampleExerciseVideos: ExerciseVideo[] = [
     exercise_name: "Dumbbell Bench Press",
     category_type: "Muscle Group",
     category: "Chest",
-    exercise_url: "https://www.muscleandstrength.com/exercises/dumbbell-bench-press.html",
+    exercise_url: "",
     video_url: null,
     instructions: sampleWorkouts[1].instructions,
-    source: "user_provided_workout_video_table",
+    source: "manual_sample",
     is_global: true
   },
   {
@@ -154,10 +154,10 @@ export const sampleExerciseVideos: ExerciseVideo[] = [
     exercise_name: "Seated Cable Row",
     category_type: "Muscle Group",
     category: "Middle Back",
-    exercise_url: "https://www.muscleandstrength.com/exercises/seated-row.html",
+    exercise_url: "",
     video_url: null,
     instructions: sampleWorkouts[2].instructions,
-    source: "user_provided_workout_video_table",
+    source: "manual_sample",
     is_global: true
   },
   {
@@ -165,10 +165,10 @@ export const sampleExerciseVideos: ExerciseVideo[] = [
     exercise_name: "Lat Pull Down",
     category_type: "Muscle Group",
     category: "Lats",
-    exercise_url: "https://www.muscleandstrength.com/exercises/lat-pull-down.html",
+    exercise_url: "",
     video_url: null,
     instructions: sampleWorkouts[3].instructions,
-    source: "user_provided_workout_video_table",
+    source: "manual_sample",
     is_global: true
   },
   {
@@ -176,10 +176,10 @@ export const sampleExerciseVideos: ExerciseVideo[] = [
     exercise_name: "Plank",
     category_type: "Muscle Group",
     category: "Abs",
-    exercise_url: "https://www.muscleandstrength.com/exercises/hover.html",
+    exercise_url: "",
     video_url: null,
     instructions: sampleWorkouts[5].instructions,
-    source: "user_provided_workout_video_table",
+    source: "manual_sample",
     is_global: true
   }
 ];

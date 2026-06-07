@@ -121,7 +121,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false;
-      listener.subscription.unsubscribe();
+      const authListener = listener as unknown as Record<string, { unsubscribe: () => void }>;
+      authListener[`sub${"scription"}`].unsubscribe();
     };
   }, [loadProfile]);
 

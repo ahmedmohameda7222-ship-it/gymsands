@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Save, Upload } from "lucide-react";
+import { CheckCircle2, RefreshCcw, Save, Upload, XCircle } from "lucide-react";
+import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ import {
   getWorkouts
 } from "@/services/database/repository";
 import type { FoodItem, Workout } from "@/types";
+import { supabase } from "@/lib/supabase/client";
 
 export function AdminUsersPanel() {
   const { toast } = useToast();
@@ -161,6 +163,271 @@ export function AdminWorkoutPanel() {
   );
 }
 
+type ExerciseRow = {
+  id: string;
+  source: string;
+  source_id: string | null;
+  source_url: string | null;
+  license: string | null;
+  license_author: string | null;
+  name: string;
+  primary_muscle: string | null;
+  equipment: string[] | null;
+  difficulty: string | null;
+  is_approved: boolean;
+  is_global: boolean;
+};
+
+export function AdminExerciseLibraryPanel() {
+  const { session } = useAuth();
+  const { toast } = useToast();
+  const [exercises, setExercises] = useState<ExerciseRow[]>([]);
+  const [filters, setFilters] = useState({ source: "all", approval: "all", muscle: "", equipment: "", difficulty: "" });
+  const [form, setForm] = useState({ name: "", primary_muscle: "", equipment: "", difficulty: "Beginner", instructions: "" });
+
+  async function loadExercises() {
+    if (!supabase) return;
+    let request = supabase.from("exercises").select("id,source,source_id,source_url,license,license_author,name,primary_muscle,equipment,difficulty,is_approved,is_global").order("created_at", { ascending: false }).limit(100);
+    if (filters.source !== "all") request = request.eq("source", filters.source);
+    if (filters.approval !== "all") request = request.eq("is_approved", filters.approval === "approved");
+    if (filters.muscle) request = request.ilike("primary_muscle", `%${filters.muscle}%`);
+    if (filters.difficulty) request = request.ilike("difficulty", `%${filters.difficulty}%`);
+    const { data, error } = await request;
+    if (error) {
+      toast({ title: "Could not load exercises", description: error.message });
+      return;
+    }
+    const equipmentFilter = filters.equipment.toLowerCase();
+    setExercises(((data ?? []) as ExerciseRow[]).filter((exercise) => !equipmentFilter || (exercise.equipment ?? []).join(" ").toLowerCase().includes(equipmentFilter)));
+  }
+
+  useEffect(() => {
+    loadExercises();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.source, filters.approval]);
+
+  async function review(id: string, action: "approve" | "reject") {
+    const response = await fetch(`/api/exercises/${action}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token ?? ""}`
+      },
+      body: JSON.stringify({ id })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return toast({ title: "Review failed", description: data.error ?? "Please try again." });
+    toast({ title: action === "approve" ? "Exercise approved" : "Exercise rejected" });
+    loadExercises();
+  }
+
+  async function addManual(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !form.name.trim()) return;
+    const { error } = await supabase.from("exercises").insert({
+      source: "manual",
+      name: form.name.trim(),
+      slug: `manual-${form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`,
+      primary_muscle: form.primary_muscle || null,
+      equipment: form.equipment.split(",").map((item) => item.trim()).filter(Boolean),
+      difficulty: form.difficulty || null,
+      instructions: form.instructions || null,
+      is_approved: true,
+      is_global: true
+    });
+    if (error) return toast({ title: "Could not add exercise", description: error.message });
+    setForm({ name: "", primary_muscle: "", equipment: "", difficulty: "Beginner", instructions: "" });
+    toast({ title: "Manual exercise added", description: "It is approved and available to the generator." });
+    loadExercises();
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Exercise filters</CardTitle>
+          <CardDescription>Review approved global exercises and imported wger rows.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-5">
+          <Select value={filters.source} onValueChange={(source) => setFilters((current) => ({ ...current, source }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All sources</SelectItem>
+              <SelectItem value="wger">wger</SelectItem>
+              <SelectItem value="manual">Manual</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filters.approval} onValueChange={(approval) => setFilters((current) => ({ ...current, approval }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input placeholder="Muscle" value={filters.muscle} onChange={(event) => setFilters((current) => ({ ...current, muscle: event.target.value }))} />
+          <Input placeholder="Equipment" value={filters.equipment} onChange={(event) => setFilters((current) => ({ ...current, equipment: event.target.value }))} />
+          <Button type="button" variant="outline" onClick={loadExercises}><RefreshCcw className="h-4 w-4" /> Refresh</Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Add manual exercise</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form className="grid gap-3 md:grid-cols-5" onSubmit={addManual}>
+            <Input placeholder="Name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+            <Input placeholder="Primary muscle" value={form.primary_muscle} onChange={(event) => setForm((current) => ({ ...current, primary_muscle: event.target.value }))} />
+            <Input placeholder="Equipment, comma-separated" value={form.equipment} onChange={(event) => setForm((current) => ({ ...current, equipment: event.target.value }))} />
+            <Input placeholder="Difficulty" value={form.difficulty} onChange={(event) => setForm((current) => ({ ...current, difficulty: event.target.value }))} />
+            <Button><Save className="h-4 w-4" /> Add</Button>
+          </form>
+        </CardContent>
+      </Card>
+      <div className="grid gap-3 xl:grid-cols-2">
+        {exercises.map((exercise) => (
+          <Card key={exercise.id}>
+            <CardContent className="space-y-3 pt-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold">{exercise.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {exercise.source} | {exercise.primary_muscle ?? "General"} | {(exercise.equipment ?? []).join(", ") || "Varies"}
+                  </p>
+                </div>
+                <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${exercise.is_approved ? "text-primary" : "text-muted-foreground"}`}>
+                  {exercise.is_approved ? "Approved" : "Pending"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Source ID: {exercise.source_id ?? "manual"} | License: {exercise.license ?? "not supplied"} {exercise.license_author ? `by ${exercise.license_author}` : ""}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => review(exercise.id, "approve")} disabled={exercise.is_approved}>
+                  <CheckCircle2 className="h-4 w-4" />
+                  Approve
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => review(exercise.id, "reject")}>
+                  <XCircle className="h-4 w-4" />
+                  Reject
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function AdminApiImportsPanel() {
+  const { session } = useAuth();
+  const { toast } = useToast();
+  const [limit, setLimit] = useState("50");
+  const [offset, setOffset] = useState("0");
+  const [batches, setBatches] = useState<any[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+
+  async function loadBatches() {
+    if (!supabase) return;
+    const { data } = await supabase.from("exercise_import_batches").select("*").order("created_at", { ascending: false }).limit(20);
+    setBatches(data ?? []);
+  }
+
+  useEffect(() => {
+    loadBatches();
+  }, []);
+
+  async function importWger() {
+    setIsImporting(true);
+    const response = await fetch("/api/exercises/wger/import", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token ?? ""}`
+      },
+      body: JSON.stringify({ limit: Number(limit), offset: Number(offset) })
+    });
+    const data = await response.json().catch(() => ({}));
+    setIsImporting(false);
+    if (!response.ok) return toast({ title: "wger import not completed", description: data.error ?? "Please check configuration." });
+    toast({ title: "wger import completed", description: `${data.importedCount} exercises imported for review.` });
+    loadBatches();
+  }
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+      <Card>
+        <CardHeader>
+          <CardTitle>Import from wger</CardTitle>
+          <CardDescription>wger is the only exercise API import source. Imported rows require approval.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <TextField label="Limit" type="number" value={limit} onChange={setLimit} placeholder="50" />
+          <TextField label="Offset" type="number" value={offset} onChange={setOffset} placeholder="0" />
+          <Button onClick={importWger} disabled={isImporting}>
+            <Upload className="h-4 w-4" />
+            {isImporting ? "Importing..." : "Import wger exercises"}
+          </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Import batch history</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {batches.map((batch) => (
+            <div key={batch.id} className="rounded-md border p-3">
+              <p className="font-semibold">{batch.source} | {batch.status}</p>
+              <p className="text-sm text-muted-foreground">
+                Imported {batch.imported_count ?? 0} | Approved {batch.approved_count ?? 0} | Rejected {batch.rejected_count ?? 0}
+              </p>
+              {batch.error_message ? <p className="mt-1 text-sm text-destructive">{batch.error_message}</p> : null}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export function AdminApiStatusPanel() {
+  const { session } = useAuth();
+  const [providers, setProviders] = useState<Array<{ provider: string; configured: boolean }>>([]);
+  const { toast } = useToast();
+
+  async function loadStatus() {
+    const response = await fetch("/api/admin/api-status", {
+      headers: { Authorization: `Bearer ${session?.access_token ?? ""}` }
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return toast({ title: "Could not load API status", description: data.error ?? "Please try again." });
+    setProviders(data.providers ?? []);
+  }
+
+  useEffect(() => {
+    if (session?.access_token) loadStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.access_token]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>API Status</CardTitle>
+        <CardDescription>Secrets are never displayed. Only configured state is shown.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {providers.map((item) => (
+          <div key={item.provider} className="flex items-center justify-between rounded-md border bg-card p-3">
+            <span className="font-medium">{item.provider}</span>
+            <span className={item.configured ? "text-primary" : "text-muted-foreground"}>{item.configured ? "Configured" : "Not configured"}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function AdminVideoPanel() {
   const { toast } = useToast();
   const [exerciseName, setExerciseName] = useState("");
@@ -182,16 +449,16 @@ export function AdminVideoPanel() {
   async function importSample() {
     await adminImportExerciseVideos([
       {
-        exercise_name: "Military Press (AKA Overhead Press)",
+        exercise_name: "Dumbbell Shoulder Press",
         category_type: "Muscle Group",
         category: "Shoulders",
-        exercise_url: "https://www.muscleandstrength.com/exercises/military-press.html",
+        exercise_url: "",
         video_url: null,
         instructions: "Brace your core, press overhead with control, and lower slowly.",
-        source: "user_provided_workout_video_table"
+        source: "manual_admin_sample"
       }
     ]);
-    toast({ title: "Sample import completed", description: "Use the SQL/CSV import template for the full 3000+ records." });
+    toast({ title: "Sample import completed", description: "Use wger imports for the reviewed exercise library." });
   }
 
   return (

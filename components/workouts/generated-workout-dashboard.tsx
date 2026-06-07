@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, CheckCircle2, Clock, Dumbbell, Eye, Loader2, RefreshCcw, Sparkles, Star } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock, Dumbbell, Eye, Loader2, MessageCircle, RefreshCcw, Sparkles, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -75,19 +75,21 @@ async function keepOnlyGeneratedPlan(userId: string, planId: string) {
     .from("user_workout_plans")
     .delete()
     .eq("user_id", userId)
-    .eq("source", "template_recommendation")
+    .eq("source", "generated_rules")
     .neq("id", planId);
 
   if (error) throw error;
 }
 
 export function GeneratedWorkoutDashboard() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { toast } = useToast();
   const [plans, setPlans] = useState<GeneratedWorkoutPlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
+  const [coachMessage, setCoachMessage] = useState("");
+  const [isCoachLoading, setIsCoachLoading] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
 
   async function loadPlans() {
@@ -141,6 +143,23 @@ export function GeneratedWorkoutDashboard() {
     }
   }
 
+  async function explainPlan() {
+    if (!selectedPlan) return;
+    setIsCoachLoading(true);
+    const response = await fetch("/api/ai/coach", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token ?? ""}`
+      },
+      body: JSON.stringify({ mode: "plan_explanation", context: selectedPlan })
+    });
+    const data = await response.json().catch(() => ({}));
+    setIsCoachLoading(false);
+    if (!response.ok) return toast({ title: "Coach unavailable", description: data.error ?? "Try again later." });
+    setCoachMessage(data.message ?? "");
+  }
+
   if (isLoading) {
     return (
       <Card>
@@ -182,7 +201,25 @@ export function GeneratedWorkoutDashboard() {
           <RefreshCcw className="h-4 w-4" />
           Refresh
         </Button>
+        <Button asChild variant="outline">
+          <Link href="/onboarding">
+            <Sparkles className="h-4 w-4" />
+            Regenerate
+          </Link>
+        </Button>
+        <Button variant="outline" onClick={explainPlan} disabled={!selectedPlan || isCoachLoading}>
+          <MessageCircle className="h-4 w-4" />
+          {isCoachLoading ? "Asking coach..." : "Coach explanation"}
+        </Button>
       </div>
+
+      {coachMessage ? (
+        <Card>
+          <CardContent className="pt-5">
+            <p className="text-sm leading-6 text-muted-foreground">{coachMessage}</p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <div className="grid content-start gap-4 md:grid-cols-2 xl:grid-cols-1">
