@@ -1,127 +1,255 @@
 "use client";
 
-import { useState } from "react";
-import { Barcode, Beef, Bike, Search, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Barcode, Bike, Camera, Save, Square } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toaster";
+import type { FoodLog, MealType } from "@/types";
+
+type DetectedBarcode = { rawValue?: string };
+type BarcodeDetectorInstance = { detect: (source: HTMLVideoElement) => Promise<DetectedBarcode[]> };
+type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => BarcodeDetectorInstance;
+type BarcodeWindow = Window & { BarcodeDetector?: BarcodeDetectorConstructor };
+
+type ExerciseActivity = {
+  id: string;
+  display_name: string;
+  category: string | null;
+  default_intensity: string | null;
+  met: number;
+};
+
+const mealTypes: MealType[] = ["Breakfast", "Lunch", "Snack", "Dinner"];
 
 function macroLine(food: any) {
   return `${food.calories ?? "?"} kcal | P ${food.protein ?? "?"}g | C ${food.carbs ?? "?"}g | F ${food.fat ?? "?"}g`;
 }
 
-export function ApiFoodTools() {
+export function ApiFoodTools({
+  selectedDate,
+  onFoodLogged
+}: {
+  selectedDate?: string;
+  onFoodLogged?: (log: FoodLog) => void;
+}) {
   const { session } = useAuth();
   const { toast } = useToast();
   const [barcode, setBarcode] = useState("");
   const [barcodeFood, setBarcodeFood] = useState<any>(null);
-  const [usdaQuery, setUsdaQuery] = useState("");
-  const [usdaFoods, setUsdaFoods] = useState<any[]>([]);
-  const [mealText, setMealText] = useState("");
-  const [mealResult, setMealResult] = useState<any>(null);
-  const [exerciseText, setExerciseText] = useState("");
-  const [exerciseResult, setExerciseResult] = useState<any>(null);
+  const [mealType, setMealType] = useState<MealType>("Breakfast");
+  const [quantity, setQuantity] = useState("1");
+  const [saveToLibrary, setSaveToLibrary] = useState(true);
+  const [addToLog, setAddToLog] = useState(true);
+  const [addToMealPlan, setAddToMealPlan] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannerMessage, setScannerMessage] = useState("");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const scanTimerRef = useRef<number | null>(null);
 
-  function headers() {
-    return { Authorization: `Bearer ${session?.access_token ?? ""}`, "Content-Type": "application/json" };
+  const [activities, setActivities] = useState<ExerciseActivity[]>([]);
+  const [activityId, setActivityId] = useState("");
+  const [minutes, setMinutes] = useState("30");
+  const [weightKg, setWeightKg] = useState("");
+  const [exerciseEstimate, setExerciseEstimate] = useState<any>(null);
+
+  function authHeaders(contentType = false) {
+    return {
+      Authorization: `Bearer ${session?.access_token ?? ""}`,
+      ...(contentType ? { "Content-Type": "application/json" } : {})
+    };
   }
 
-  async function lookupBarcode() {
-    const response = await fetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(barcode)}`, { headers: { Authorization: `Bearer ${session?.access_token ?? ""}` } });
+  async function lookupBarcode(nextBarcode = barcode) {
+    const cleanBarcode = nextBarcode.trim();
+    if (!cleanBarcode) return toast({ title: "Barcode required", description: "Scan or enter a barcode first." });
+    const response = await fetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(cleanBarcode)}`, { headers: authHeaders() });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return toast({ title: "Barcode lookup failed", description: data.error ?? "Try another barcode." });
+    setBarcode(cleanBarcode);
     setBarcodeFood(data.food);
+    toast({ title: "Barcode found", description: data.food?.name ?? cleanBarcode });
+  }
+
+  function stopScanner() {
+    if (scanTimerRef.current) window.clearInterval(scanTimerRef.current);
+    scanTimerRef.current = null;
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setIsScanning(false);
+  }
+
+  async function startScanner() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      return toast({ title: "Camera unavailable", description: "This browser cannot open the camera. Type the barcode manually." });
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      streamRef.current = stream;
+      setIsScanning(true);
+      setScannerMessage("");
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+
+      const Detector = (window as BarcodeWindow).BarcodeDetector;
+      if (!Detector) {
+        setScannerMessage("Camera is open. Type the barcode manually if this browser cannot detect it.");
+        return;
+      }
+
+      const detector = new Detector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
+      scanTimerRef.current = window.setInterval(async () => {
+        if (!videoRef.current) return;
+        const codes = await detector.detect(videoRef.current).catch(() => []);
+        const value = codes[0]?.rawValue?.trim();
+        if (!value) return;
+        stopScanner();
+        lookupBarcode(value).catch(() => undefined);
+      }, 650);
+    } catch (error) {
+      stopScanner();
+      toast({ title: "Camera permission failed", description: error instanceof Error ? error.message : "Allow camera access and try again." });
+    }
   }
 
   async function saveBarcodeFood() {
-    const response = await fetch("/api/food/open-food-facts", { method: "POST", headers: headers(), body: JSON.stringify({ barcode }) });
+    if (!barcodeFood) return toast({ title: "Lookup a barcode first", description: "Find the packaged food before saving it." });
+    if (!saveToLibrary && !addToLog && !addToMealPlan) {
+      return toast({ title: "Choose an action", description: "Save to foods, add to daily log, or add to meal plan." });
+    }
+
+    const response = await fetch("/api/food/open-food-facts", {
+      method: "POST",
+      headers: authHeaders(true),
+      body: JSON.stringify({
+        barcode,
+        quantity: Number(quantity),
+        mealType,
+        date: selectedDate,
+        saveToLibrary,
+        addToLog,
+        addToMealPlan
+      })
+    });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return toast({ title: "Could not save food", description: data.error ?? "Please try again." });
-    toast({ title: "Imported food saved", description: data.food?.name ?? barcodeFood?.name });
+    if (data.log) onFoodLogged?.(data.log as FoodLog);
+    toast({
+      title: "Food saved",
+      description: addToLog ? `${data.food?.name ?? barcodeFood.name} added to ${mealType}.` : data.libraryFood?.food_name ?? data.food?.name ?? barcodeFood.name
+    });
   }
 
-  async function searchUsda() {
-    const response = await fetch(`/api/food/usda/search?q=${encodeURIComponent(usdaQuery)}`, { headers: { Authorization: `Bearer ${session?.access_token ?? ""}` } });
+  async function loadActivities() {
+    const response = await fetch("/api/exercise-calories", { headers: authHeaders() });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) return toast({ title: "USDA unavailable", description: data.error ?? "Check configuration." });
-    setUsdaFoods(data.foods ?? []);
+    if (!response.ok) return toast({ title: "Exercise calories unavailable", description: data.error ?? "Run migration 016." });
+    const nextActivities = data.activities ?? [];
+    setActivities(nextActivities);
+    if (!activityId && nextActivities[0]?.id) setActivityId(nextActivities[0].id);
   }
 
-  async function saveUsda(fdcId: string) {
-    const response = await fetch("/api/food/usda/detail", { method: "POST", headers: headers(), body: JSON.stringify({ fdcId }) });
+  async function estimateExercise(save = false) {
+    const response = await fetch("/api/exercise-calories", {
+      method: "POST",
+      headers: authHeaders(true),
+      body: JSON.stringify({
+        activityId,
+        minutes: Number(minutes),
+        weightKg: weightKg ? Number(weightKg) : undefined,
+        save
+      })
+    });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) return toast({ title: "Could not save USDA food", description: data.error ?? "Please try again." });
-    toast({ title: "USDA food saved", description: data.food?.name ?? "Imported food" });
+    if (!response.ok) return toast({ title: "Could not estimate calories", description: data.error ?? "Please try again." });
+    setExerciseEstimate(data.estimate);
+    if (save) toast({ title: "Exercise calories saved", description: `${data.estimate.calories} kcal added to cardio history.` });
   }
 
-  async function parseMeal() {
-    const response = await fetch("/api/food/edamam/parse", { method: "POST", headers: headers(), body: JSON.stringify({ text: mealText }) });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) return toast({ title: "Meal parser unavailable", description: data.error ?? "Check Edamam settings." });
-    setMealResult(data.analysis);
-  }
-
-  async function parseExercise() {
-    const response = await fetch("/api/food/nutritionix/parse-exercise", { method: "POST", headers: headers(), body: JSON.stringify({ query: exerciseText, save: true }) });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) return toast({ title: "Exercise parser unavailable", description: data.error ?? "Check Nutritionix settings." });
-    setExerciseResult(data.result);
-    toast({ title: "Cardio estimate saved", description: "Review imported cardio activities in your progress data." });
-  }
+  useEffect(() => {
+    loadActivities().catch(() => undefined);
+    return stopScanner;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.access_token]);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Food and cardio imports</CardTitle>
+        <CardTitle>Barcode meals and exercise calories</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-md border p-3">
           <p className="mb-2 flex items-center gap-2 font-semibold"><Barcode className="h-4 w-4 text-primary" /> Barcode lookup</p>
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
             <Input value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder="Barcode" />
-            <Button onClick={lookupBarcode}>Lookup</Button>
+            <Button type="button" variant="outline" onClick={isScanning ? stopScanner : startScanner}>
+              {isScanning ? <Square className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+              {isScanning ? "Stop" : "Scan"}
+            </Button>
+            <Button type="button" onClick={() => lookupBarcode()}>Lookup</Button>
           </div>
+          {isScanning ? (
+            <div className="mt-3 overflow-hidden rounded-md border bg-black">
+              <video ref={videoRef} className="aspect-video w-full object-cover" muted playsInline />
+            </div>
+          ) : null}
+          {scannerMessage ? <p className="mt-2 text-sm text-muted-foreground">{scannerMessage}</p> : null}
           {barcodeFood ? (
             <div className="mt-3 rounded-md border bg-card p-3 text-sm">
               <p className="font-semibold">{barcodeFood.name}</p>
               <p className="text-muted-foreground">{barcodeFood.brand ?? "Unknown brand"} | {macroLine(barcodeFood)}</p>
-              <Button className="mt-3" size="sm" onClick={saveBarcodeFood}>Save imported food</Button>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <Input type="number" min="0.1" step="0.1" value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder="Qty" />
+                <Select value={mealType} onValueChange={(value) => setMealType(value as MealType)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {mealTypes.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button type="button" onClick={saveBarcodeFood}>
+                  <Save className="h-4 w-4" />
+                  Save
+                </Button>
+              </div>
+              <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                <label className="flex items-center gap-2"><input type="checkbox" checked={saveToLibrary} onChange={(event) => setSaveToLibrary(event.target.checked)} /> My foods</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={addToLog} onChange={(event) => setAddToLog(event.target.checked)} /> Daily log</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={addToMealPlan} onChange={(event) => setAddToMealPlan(event.target.checked)} /> Meal plan</label>
+              </div>
             </div>
           ) : null}
         </div>
-        <div className="rounded-md border p-3">
-          <p className="mb-2 flex items-center gap-2 font-semibold"><Search className="h-4 w-4 text-primary" /> USDA search</p>
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-            <Input value={usdaQuery} onChange={(event) => setUsdaQuery(event.target.value)} placeholder="Rice, eggs, chicken..." />
-            <Button onClick={searchUsda}>Search</Button>
-          </div>
-          <div className="mt-3 space-y-2">
-            {usdaFoods.slice(0, 4).map((food) => (
-              <div key={food.source_id} className="rounded-md border bg-card p-2 text-sm">
-                <p className="font-semibold">{food.name}</p>
-                <p className="text-muted-foreground">{macroLine(food)}</p>
-                <Button className="mt-2" size="sm" variant="outline" onClick={() => saveUsda(food.source_id)}>Save</Button>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="rounded-md border p-3">
-          <p className="mb-2 flex items-center gap-2 font-semibold"><Sparkles className="h-4 w-4 text-primary" /> Quick meal parser</p>
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-            <Input value={mealText} onChange={(event) => setMealText(event.target.value)} placeholder="2 eggs and 100g rice" />
-            <Button onClick={parseMeal}>Parse</Button>
-          </div>
-          {mealResult ? <p className="mt-3 rounded-md border bg-card p-3 text-sm text-muted-foreground">{Math.round(mealResult.calories ?? 0)} kcal estimated. Confirm before logging as a meal.</p> : null}
-        </div>
+
         <div className="rounded-md border p-3">
           <p className="mb-2 flex items-center gap-2 font-semibold"><Bike className="h-4 w-4 text-primary" /> Exercise calories</p>
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-            <Input value={exerciseText} onChange={(event) => setExerciseText(event.target.value)} placeholder="30 minutes running" />
-            <Button onClick={parseExercise}><Beef className="h-4 w-4" /> Estimate</Button>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Select value={activityId} onValueChange={setActivityId}>
+              <SelectTrigger><SelectValue placeholder="Activity" /></SelectTrigger>
+              <SelectContent>
+                {activities.map((activity) => (
+                  <SelectItem key={activity.id} value={activity.id}>{activity.display_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input type="number" min="1" value={minutes} onChange={(event) => setMinutes(event.target.value)} placeholder="Minutes" />
+            <Input type="number" min="1" value={weightKg} onChange={(event) => setWeightKg(event.target.value)} placeholder="Weight kg" />
+            <Button type="button" onClick={() => estimateExercise(false)}>Estimate</Button>
           </div>
-          {exerciseResult?.exercises?.length ? <p className="mt-3 rounded-md border bg-card p-3 text-sm text-muted-foreground">{Math.round(exerciseResult.exercises[0].nf_calories ?? 0)} kcal estimated and saved as cardio.</p> : null}
+          {exerciseEstimate ? (
+            <div className="mt-3 rounded-md border bg-card p-3 text-sm">
+              <p className="font-semibold">{exerciseEstimate.activity.display_name}: {exerciseEstimate.calories} kcal</p>
+              <p className="text-muted-foreground">{exerciseEstimate.minutes} min | {exerciseEstimate.weightKg} kg | MET {exerciseEstimate.activity.met}</p>
+              <Button className="mt-3" size="sm" variant="outline" onClick={() => estimateExercise(true)}>Save cardio estimate</Button>
+            </div>
+          ) : null}
         </div>
       </CardContent>
     </Card>
