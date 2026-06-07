@@ -33,13 +33,13 @@ export function generateWorkoutPlan(input: GeneratorInput, exercises: CleanExerc
   const weekdays = spreadWeekdays(split.length);
 
   if (exercises.length < Math.max(12, split.length * 3)) {
-    throw new Error("Not enough approved exercises are available. Import from wger, then approve more exercises before generating plans.");
+    throw new Error("Not enough active exercises are available. Import more exercises from wger before generating plans.");
   }
 
   const days = split.map((focus, dayIndex) => {
     const strengthItems = selectStrengthExercises(exercises, input, focus);
     if (strengthItems.length < 3) {
-      throw new Error(`Not enough approved exercises matched ${focus}. Approve more exercises for the user's equipment and level.`);
+      throw new Error(`Not enough active exercises matched ${focus}. Import more exercises for the user's equipment and level.`);
     }
     const strengthBlock: PlanBlock = {
       blockType: "strength",
@@ -72,7 +72,7 @@ export function generateWorkoutPlan(input: GeneratorInput, exercises: CleanExerc
     durationWeeks: Math.max(1, Math.min(16, input.desiredDurationWeeks || 4)),
     explanation: planExplanation(goal, experience, daysPerWeek),
     reasons: [
-      "Uses only approved Supabase exercises",
+      "Uses active Supabase exercises",
       "Includes warm-up, strength, cardio, and cool-down blocks",
       "Balances movement patterns across the week",
       "Avoids advanced selections for beginners"

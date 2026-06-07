@@ -46,7 +46,7 @@ function mockDelay<T>(value: T) {
   return Promise.resolve(value);
 }
 
-const workoutPageSize = 60;
+const workoutPageSize = 500;
 const skippedNotePrefix = "[skipped]";
 
 export type WorkoutFilters = {
@@ -328,7 +328,7 @@ function mapVideoToWorkout(video: ExerciseVideo): Workout {
   };
 }
 
-type ApprovedExerciseRow = {
+type ActiveExerciseRow = {
   id: string;
   name: string;
   source?: string | null;
@@ -345,7 +345,7 @@ type ApprovedExerciseRow = {
   is_global: boolean;
 };
 
-function mapApprovedExerciseToWorkout(exercise: ApprovedExerciseRow): Workout {
+function mapActiveExerciseToWorkout(exercise: ActiveExerciseRow): Workout {
   const equipment = exercise.equipment?.length ? exercise.equipment.join(", ") : "Varies";
   return {
     id: exercise.id,
@@ -1466,8 +1466,8 @@ export async function getWorkoutFilterOptions() {
 
   const workouts = ((workoutResult.data ?? []) as Workout[]).map(hydrateWorkoutMetadata);
   const videos = ((videoResult.data ?? []) as ExerciseVideo[]).map(mapVideoToWorkout);
-  const approvedExercises = exerciseResult.error ? [] : ((exerciseResult.data ?? []) as ApprovedExerciseRow[]).map(mapApprovedExerciseToWorkout);
-  const all = [...workouts, ...videos, ...approvedExercises];
+  const activeExercises = exerciseResult.error ? [] : ((exerciseResult.data ?? []) as ActiveExerciseRow[]).map(mapActiveExerciseToWorkout);
+  const all = [...workouts, ...videos, ...activeExercises];
 
   return {
     muscleCategories: uniqueSorted([...fallback.muscleCategories, ...all.map((item) => item.muscle_category ?? item.target_muscle)]),
@@ -1495,12 +1495,12 @@ export async function getWorkouts(
     return mockDelay(localMatches.slice(from, to + 1));
   }
 
-  let workoutRequest = supabase!.from("workouts").select("*").eq("is_global", true).order("name").limit(1200);
+  let workoutRequest = supabase!.from("workouts").select("*").eq("is_global", true).order("name").limit(5000);
   if (query) {
     workoutRequest = workoutRequest.or(`name.ilike.%${query}%,target_muscle.ilike.%${query}%,equipment.ilike.%${query}%`);
   }
 
-  let videoRequest = supabase!.from("exercise_videos").select("*").eq("is_global", true).order("exercise_name").limit(1200);
+  let videoRequest = supabase!.from("exercise_videos").select("*").eq("is_global", true).order("exercise_name").limit(5000);
   if (selectedCategory) videoRequest = videoRequest.eq("category", selectedCategory);
   if (query) videoRequest = videoRequest.ilike("exercise_name", `%${query}%`);
 
@@ -1510,7 +1510,7 @@ export async function getWorkouts(
     .eq("is_global", true)
     .eq("is_approved", true)
     .order("name")
-    .limit(1200);
+    .limit(5000);
   if (query) {
     exerciseRequest = exerciseRequest.or(`name.ilike.%${query}%,primary_muscle.ilike.%${query}%,mechanics.ilike.%${query}%,movement_pattern.ilike.%${query}%`);
   }
@@ -1526,10 +1526,10 @@ export async function getWorkouts(
 
   const directWorkouts = ((workoutResult.data ?? []) as Workout[]).map(hydrateWorkoutMetadata).filter((workout) => matchesWorkoutFilters(workout, query, filters));
   const videoWorkouts = ((videoResult.data ?? []) as ExerciseVideo[]).map(mapVideoToWorkout).filter((workout) => matchesWorkoutFilters(workout, query, filters));
-  const approvedExercises = exerciseResult.error
+  const activeExercises = exerciseResult.error
     ? []
-    : ((exerciseResult.data ?? []) as ApprovedExerciseRow[]).map(mapApprovedExerciseToWorkout).filter((workout) => matchesWorkoutFilters(workout, query, filters));
-  return dedupeWorkouts([...approvedExercises, ...localMatches, ...directWorkouts, ...videoWorkouts]).slice(from, to + 1);
+    : ((exerciseResult.data ?? []) as ActiveExerciseRow[]).map(mapActiveExerciseToWorkout).filter((workout) => matchesWorkoutFilters(workout, query, filters));
+  return dedupeWorkouts([...activeExercises, ...localMatches, ...directWorkouts, ...videoWorkouts]).slice(from, to + 1);
 }
 
 export async function getWorkout(id: string) {
@@ -1549,9 +1549,9 @@ export async function getWorkout(id: string) {
     .eq("is_approved", true)
     .maybeSingle();
   if (exerciseResult.error) {
-    console.warn("FitLife Hub could not load workout from approved exercises.", exerciseResult.error.message);
+    console.warn("FitLife Hub could not load workout from active exercises.", exerciseResult.error.message);
   }
-  if (exerciseResult.data) return mapApprovedExerciseToWorkout(exerciseResult.data as ApprovedExerciseRow);
+  if (exerciseResult.data) return mapActiveExerciseToWorkout(exerciseResult.data as ActiveExerciseRow);
 
   const videoResult = await supabase!.from("exercise_videos").select("*").eq("id", id).maybeSingle();
   if (videoResult.error) {

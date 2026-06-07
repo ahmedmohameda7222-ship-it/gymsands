@@ -157,5 +157,5 @@ export function dayRequirements(focus: string) {
 
 export function planExplanation(goal: WorkoutGoal, experience: ExperienceLevel, daysPerWeek: number) {
   const goalLabel = goal.replace("_", " ");
-  return `Built from your onboarding profile: ${goalLabel}, ${experience}, ${daysPerWeek} training days, available equipment, and approved exercise data. Each day includes warm-up, strength, cardio, and cool-down blocks.`;
+  return `Built from your onboarding profile: ${goalLabel}, ${experience}, ${daysPerWeek} training days, available equipment, and active exercise data. Each day includes warm-up, strength, cardio, and cool-down blocks.`;
 }

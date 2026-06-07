@@ -8,10 +8,10 @@ FitLife Hub is a private gym web app for workout logging, meal tracking, calorie
 - Tailwind CSS luxury wellness design tokens
 - Supabase Auth, database, RLS, and Storage
 - Egyptian food seed data
-- Clean exercise library based on reviewed wger imports
+- Clean exercise library based on active wger imports
 - Rule-based onboarding workout generation
 - Food, coach, email, wearable, health, and maps server routes
-- Admin review tools for users, foods, workouts, videos, API imports, exercise approvals, and API status
+- Admin tools for users, foods, workouts, videos, API imports, exercise removal, and API status
 
 ## Environment
 
@@ -60,8 +60,9 @@ Run SQL in this order:
 14. `supabase/migrations/012_default_plan_and_egyptian_kitchen.sql`
 15. `supabase/migrations/013_fitlife_hub_wellness_generated_plans.sql`
 16. `supabase/migrations/014_clean_exercise_library_and_api_integrations.sql`
-17. Register the first admin user.
-18. Run `supabase/seed/004_admin_setup_placeholder.sql` after editing the admin email if needed.
+17. `supabase/migrations/015_auto_activate_wger_exercises.sql`
+18. Register the first admin user.
+19. Run `supabase/seed/004_admin_setup_placeholder.sql` after editing the admin email if needed.
 
 For projects that already imported legacy exercise data, back up the database first, then review the cleanup SQL under `supabase/cleanup`.
 
@@ -71,10 +72,10 @@ For projects that already imported legacy exercise data, back up the database fi
 2. Sign in as an admin.
 3. Open Admin > API Imports.
 4. Import a page of wger exercises.
-5. Review imported source, source ID, source URL, license, and author fields.
-6. Approve exercises before they can appear in generated plans.
+5. New exercises become active immediately.
+6. Open Admin > Exercise Library and remove anything you do not want members to use.
 
-Imported exercises start with `is_approved = false`. The workout generator reads only approved global rows from `public.exercises`.
+The workout generator reads active global rows from `public.exercises`. Duplicate imports keep removed rows hidden.
 
 ## Full Plan Generation
 
@@ -84,7 +85,7 @@ After onboarding, `/api/workout-plan/generate` creates one complete active plan 
 - Experience filtering: beginner, intermediate, or advanced
 - Weekly split selection from 2 to 6 days
 - Warm-up block for every day
-- Strength block from approved Supabase exercises
+- Strength block from active Supabase exercises
 - Cardio block based on goal and experience
 - Cool-down block for every day
 - Scheduled sessions for completion tracking

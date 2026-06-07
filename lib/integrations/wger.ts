@@ -18,7 +18,7 @@ export type WgerExerciseImport = {
   instructions: string | null;
   image_url: string | null;
   video_url: string | null;
-  is_approved: false;
+  is_approved: true;
   is_global: true;
 };
 
@@ -79,7 +79,7 @@ export function normalizeWgerExercise(item: any): WgerExerciseImport | null {
     instructions: stripHtml(translation?.description),
     image_url: image?.image || null,
     video_url: video?.video || null,
-    is_approved: false,
+    is_approved: true,
     is_global: true
   };
 }
