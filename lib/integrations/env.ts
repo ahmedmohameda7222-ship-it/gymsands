@@ -8,14 +8,11 @@ export const serverEnv = {
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
   appUrl: publicEnv.appUrl,
   wgerApiKey: process.env.WGER_API_KEY || "",
-  geminiApiKey:
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
-    process.env.GOOGLE_GEMINI_API_KEY ||
-    process.env.GEMINI_KEY ||
-    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
-    "",
+  fitlifeMcpBaseUrl: process.env.FITLIFE_MCP_BASE_URL || `${publicEnv.appUrl}/api/mcp`,
+  fitlifeMcpTokenSecret: process.env.FITLIFE_MCP_TOKEN_SECRET || "",
+  fitlifeMcpOAuthClientId: process.env.FITLIFE_MCP_OAUTH_CLIENT_ID || "",
+  fitlifeMcpOAuthClientSecret: process.env.FITLIFE_MCP_OAUTH_CLIENT_SECRET || "",
+  fitlifeMcpAllowedOrigins: process.env.FITLIFE_MCP_ALLOWED_ORIGINS || "",
   resendApiKey: process.env.RESEND_API_KEY || "",
   resendFromEmail: process.env.RESEND_FROM_EMAIL || "",
   stravaClientId: process.env.STRAVA_CLIENT_ID || "",
@@ -70,12 +67,7 @@ export async function requireAdmin(request: Request): Promise<RouteContext | Nex
   const context = await requireUser(request);
   if (context instanceof NextResponse) return context;
 
-  const { data, error } = await context.supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", context.user.id)
-    .maybeSingle();
-
+  const { data, error } = await context.supabase.from("profiles").select("role").eq("id", context.user.id).maybeSingle();
   if (error) return jsonError(error.message, 400);
   if (data?.role !== "admin") return jsonError("Admin access is required for this action.", 403);
   return context;
@@ -85,7 +77,7 @@ export function configuredProviders() {
   return [
     { provider: "Open Food Facts", configured: true },
     { provider: "wger", configured: Boolean(serverEnv.wgerApiKey) },
-    { provider: "Gemini", configured: Boolean(serverEnv.geminiApiKey) },
+    { provider: "ChatGPT MCP Connector", configured: Boolean(serverEnv.fitlifeMcpBaseUrl && serverEnv.fitlifeMcpTokenSecret && serverEnv.supabaseServiceRoleKey) },
     { provider: "Resend", configured: Boolean(serverEnv.resendApiKey && serverEnv.resendFromEmail) },
     { provider: "Strava", configured: Boolean(serverEnv.stravaClientId && serverEnv.stravaClientSecret && serverEnv.stravaRedirectUri) },
     { provider: "Google Health", configured: Boolean(serverEnv.googleHealthClientId && serverEnv.googleHealthClientSecret && serverEnv.googleHealthRedirectUri) },
