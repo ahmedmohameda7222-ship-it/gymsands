@@ -280,7 +280,7 @@ export default function CaloriesPage() {
       />
 
       <div className="mt-4">
-        <ApiFoodTools />
+        <ApiFoodTools selectedDate={selectedDate} onFoodLogged={handleLogAdded} />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
