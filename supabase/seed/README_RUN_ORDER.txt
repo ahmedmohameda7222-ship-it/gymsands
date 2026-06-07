@@ -2,7 +2,7 @@ RUN ORDER IN SUPABASE SQL EDITOR
 
 Run migrations first, then seed only app-owned data.
 
-1. Run every file in ../migrations in numeric order through 015.
+1. Run every file in ../migrations in numeric order through 016.
 2. Run 001_egyptian_foods.sql.
 3. Run 002_sample_workouts_and_videos.sql only if you want the small manual demo set.
 4. Register your first user.

@@ -9,6 +9,8 @@ FitLife Hub is a private gym web app for workout logging, meal tracking, calorie
 - Supabase Auth, database, RLS, and Storage
 - Egyptian food seed data
 - Clean exercise library based on active wger imports
+- Camera barcode lookup with direct food logging
+- Local exercise calorie reference database
 - Rule-based onboarding workout generation
 - Food, coach, email, wearable, health, and maps server routes
 - Admin tools for users, foods, workouts, videos, API imports, exercise removal, and API status
@@ -21,12 +23,8 @@ All provider keys stay server-side:
 
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `WGER_API_KEY`
-- `USDA_API_KEY`
-- `EDAMAM_APP_ID`
-- `EDAMAM_APP_KEY`
-- `NUTRITIONIX_APP_ID`
-- `NUTRITIONIX_API_KEY`
-- `OPENAI_API_KEY`
+- `GEMINI_API_KEY`
+- `GEMINI_MODEL`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
 - `STRAVA_CLIENT_ID`
@@ -61,8 +59,9 @@ Run SQL in this order:
 15. `supabase/migrations/013_fitlife_hub_wellness_generated_plans.sql`
 16. `supabase/migrations/014_clean_exercise_library_and_api_integrations.sql`
 17. `supabase/migrations/015_auto_activate_wger_exercises.sql`
-18. Register the first admin user.
-19. Run `supabase/seed/004_admin_setup_placeholder.sql` after editing the admin email if needed.
+18. `supabase/migrations/016_exercise_calorie_reference.sql`
+19. Register the first admin user.
+20. Run `supabase/seed/004_admin_setup_placeholder.sql` after editing the admin email if needed.
 
 For projects that already imported legacy exercise data, back up the database first, then review the cleanup SQL under `supabase/cleanup`.
 
@@ -96,12 +95,10 @@ The route writes both `user_workout_plan_blocks` / `user_workout_plan_block_item
 
 Implemented server routes:
 
-- Open Food Facts barcode lookup
-- USDA food search and detail lookup
-- Edamam meal parsing
-- Nutritionix food and exercise parsing
+- Open Food Facts barcode lookup, user food saving, daily log adding, and meal plan adding
+- Local exercise calorie estimates from Supabase reference data
 - wger exercise import
-- OpenAI coach notes and summaries
+- Gemini coach notes and summaries
 - Resend email sending
 - Strava OAuth and activity import
 - Google Health OAuth-ready placeholder import
