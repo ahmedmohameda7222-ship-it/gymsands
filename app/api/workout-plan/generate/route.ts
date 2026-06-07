@@ -164,7 +164,7 @@ export async function POST(request: Request) {
     .eq("is_global", true)
     .limit(1000);
 
-  if (exerciseError) return jsonError(`${exerciseError.message}. Run migration 014 and approve imported wger exercises.`, 400);
+  if (exerciseError) return jsonError(`${exerciseError.message}. Run migrations through 015 and import wger exercises.`, 400);
   const exercises = toCleanExercises(exerciseRows ?? []);
 
   let generated;

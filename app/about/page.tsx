@@ -33,8 +33,8 @@ export default function AboutPage() {
             <CardContent className="pt-5">
               <h2 className="text-lg font-semibold">Data Sources</h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Exercise imports use wger as the approved external source. Imported exercises store source, source ID,
-                source URL, license, and license author metadata before admin approval. Food, wearable, coach, email,
+                Exercise imports use wger as the active external source. Imported exercises store source, source ID,
+                source URL, license, and license author metadata. Admins can remove exercises that should not appear. Food, wearable, coach, email,
                 and maps data belongs to its respective provider and is saved only when a user confirms or connects that feature.
               </p>
             </CardContent>

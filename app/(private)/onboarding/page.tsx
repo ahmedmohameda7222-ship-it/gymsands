@@ -210,7 +210,7 @@ export default function OnboardingPage() {
             <div className="rounded-lg border bg-card p-5">
               <h2 className="text-lg font-semibold">Ready for your plan</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                FitLife Hub will create one complete weekly plan with warm-up, strength, cardio, and cool-down blocks from approved exercises.
+                FitLife Hub will create one complete weekly plan with warm-up, strength, cardio, and cool-down blocks from active exercises.
               </p>
             </div>
           ) : null}

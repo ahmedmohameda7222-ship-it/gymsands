@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     return equipment.some((item) => candidateEquipment.includes(item.toLowerCase()));
   }) ?? candidates?.[0];
 
-  if (!replacement) return jsonError("No approved replacement exercise matched that muscle and equipment.", 404);
+  if (!replacement) return jsonError("No active replacement exercise matched that muscle and equipment.", 404);
 
   const update = await context.supabase
     .from("user_workout_plan_exercises")
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       target_muscle: replacement.primary_muscle ?? current.data.target_muscle,
       equipment: (replacement.equipment ?? []).join(", ") || current.data.equipment,
       instructions: replacement.instructions ?? null,
-      notes: `Replacement from approved exercise library`
+      notes: `Replacement from active exercise library`
     })
     .eq("id", planExerciseId);
   if (update.error) return jsonError(update.error.message, 400);
