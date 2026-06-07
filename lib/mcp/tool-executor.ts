@@ -57,16 +57,7 @@ function sumMacros(rows: Array<Record<string, unknown>>): MacroTotals {
     { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
   );
 } 
-return rows.reduce(
-    (total, row) => ({
-      calories: total.calories + num(row.calories),
-      protein_g: total.protein_g + num(row.protein_g),
-      carbs_g: total.carbs_g + num(row.carbs_g),
-      fat_g: total.fat_g + num(row.fat_g)
-    }),
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
-  );
-}
+
 
 function scaleFood(food: FoodCandidate, quantity: number) {
   return {
