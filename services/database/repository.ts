@@ -3,14 +3,12 @@
 import { supabase } from "@/lib/supabase/client";
 import { isUuid, todayIso } from "@/lib/utils";
 import { egyptianFoods } from "@/data/egyptian-foods";
-import muscleStrengthExercisesData from "@/data/muscle-strength-exercises.json";
 import { defaultExerciseInstructions, sampleExerciseVideos, sampleWorkouts } from "@/data/workouts";
 import type {
   BodyMeasurement,
   CustomMeal,
   DailyFitTask,
   DailyNutritionSummary,
-  ExerciseMetadata,
   ExerciseVideo,
   FitnessHabit,
   FoodItem,
@@ -50,7 +48,6 @@ function mockDelay<T>(value: T) {
 
 const workoutPageSize = 60;
 const skippedNotePrefix = "[skipped]";
-const muscleStrengthExercises = muscleStrengthExercisesData as ExerciseMetadata[];
 
 export type WorkoutFilters = {
   category?: string;
@@ -295,107 +292,36 @@ function localFoods(query = "") {
     }));
 }
 
-function findExerciseMetadata(name: string | null | undefined) {
-  const normalized = normalizeText(name);
-  return muscleStrengthExercises.find((exercise) => normalizeText(exercise.exercise_name) === normalized) ?? null;
-}
-
-function mapMetadataToWorkout(exercise: ExerciseMetadata): Workout {
-  const secondaryMuscles = splitList(exercise.secondary_muscles);
-  return {
-    id: exercise.id,
-    name: exercise.exercise_name,
-    category: exercise.mechanics || "Exercise",
-    target_muscle: exercise.muscle_category || "General",
-    equipment: exercise.equipment_required || "Varies",
-    difficulty: exercise.experience_level || "Beginner",
-    sets: 3,
-    reps: "8-12",
-    rest_seconds: 75,
-    instructions: defaultExerciseInstructions,
-    notes: exercise.exercise_url,
-    muscle_category: exercise.muscle_category,
-    equipment_required: exercise.equipment_required,
-    mechanics: exercise.mechanics,
-    force_type: exercise.force_type,
-    experience_level: exercise.experience_level,
-    secondary_muscles: secondaryMuscles,
-    exercise_url: exercise.exercise_url,
-    video_url: null,
-    is_global: true
-  };
-}
-
-function mapMetadataToVideo(exercise: ExerciseMetadata): ExerciseVideo {
-  return {
-    id: exercise.id,
-    exercise_name: exercise.exercise_name,
-    category_type: "Muscle Category",
-    category: exercise.muscle_category,
-    exercise_url: exercise.exercise_url,
-    video_url: null,
-    instructions: defaultExerciseInstructions,
-    source: "muscle_strength_exercise_metadata_csv",
-    muscle_category: exercise.muscle_category,
-    equipment_required: exercise.equipment_required,
-    mechanics: exercise.mechanics,
-    force_type: exercise.force_type,
-    experience_level: exercise.experience_level,
-    secondary_muscles: splitList(exercise.secondary_muscles),
-    is_global: true
-  };
-}
-
 function hydrateWorkoutMetadata(workout: Workout): Workout {
-  const metadata = findExerciseMetadata(workout.name);
-  if (!metadata) {
-    return {
-      ...workout,
-      muscle_category: workout.muscle_category ?? workout.target_muscle,
-      equipment_required: workout.equipment_required ?? workout.equipment,
-      experience_level: workout.experience_level ?? workout.difficulty,
-      exercise_url: workout.exercise_url ?? (looksLikeUrl(workout.notes) ? workout.notes : null),
-      secondary_muscles: workout.secondary_muscles ?? []
-    };
-  }
-
-  const secondaryMuscles = splitList(metadata.secondary_muscles);
   return {
     ...workout,
-    target_muscle: workout.target_muscle || metadata.muscle_category,
-    equipment: workout.equipment || metadata.equipment_required,
-    difficulty: workout.difficulty || metadata.experience_level,
-    notes: workout.notes ?? metadata.exercise_url,
-    muscle_category: workout.muscle_category ?? metadata.muscle_category,
-    equipment_required: workout.equipment_required ?? metadata.equipment_required,
-    mechanics: workout.mechanics ?? metadata.mechanics,
-    force_type: workout.force_type ?? metadata.force_type,
-    experience_level: workout.experience_level ?? metadata.experience_level,
-    secondary_muscles: workout.secondary_muscles ?? secondaryMuscles,
-    exercise_url: workout.exercise_url ?? metadata.exercise_url
+    muscle_category: workout.muscle_category ?? workout.target_muscle,
+    equipment_required: workout.equipment_required ?? workout.equipment,
+    experience_level: workout.experience_level ?? workout.difficulty,
+    exercise_url: workout.exercise_url ?? (looksLikeUrl(workout.notes) ? workout.notes : null),
+    secondary_muscles: workout.secondary_muscles ?? []
   };
 }
 
 function mapVideoToWorkout(video: ExerciseVideo): Workout {
-  const metadata = findExerciseMetadata(video.exercise_name);
   return {
     id: video.id,
     name: video.exercise_name,
-    category: metadata?.mechanics ?? video.category_type ?? "Exercise",
-    target_muscle: metadata?.muscle_category ?? video.muscle_category ?? video.category ?? "General",
-    equipment: metadata?.equipment_required ?? video.equipment_required ?? (video.category_type === "Equipment" ? video.category ?? "Varies" : "Varies"),
-    difficulty: metadata?.experience_level ?? video.experience_level ?? "Beginner",
+    category: video.category_type ?? "Exercise",
+    target_muscle: video.muscle_category ?? video.category ?? "General",
+    equipment: video.equipment_required ?? (video.category_type === "Equipment" ? video.category ?? "Varies" : "Varies"),
+    difficulty: video.experience_level ?? "Beginner",
     sets: 3,
     reps: "8-12",
     rest_seconds: 75,
     instructions: video.instructions || defaultExerciseInstructions,
     notes: video.exercise_url,
-    muscle_category: metadata?.muscle_category ?? video.muscle_category ?? video.category,
-    equipment_required: metadata?.equipment_required ?? video.equipment_required ?? null,
-    mechanics: metadata?.mechanics ?? video.mechanics ?? null,
-    force_type: metadata?.force_type ?? video.force_type ?? null,
-    experience_level: metadata?.experience_level ?? video.experience_level ?? "Beginner",
-    secondary_muscles: metadata ? splitList(metadata.secondary_muscles) : video.secondary_muscles ?? [],
+    muscle_category: video.muscle_category ?? video.category,
+    equipment_required: video.equipment_required ?? null,
+    mechanics: video.mechanics ?? null,
+    force_type: video.force_type ?? null,
+    experience_level: video.experience_level ?? "Beginner",
+    secondary_muscles: video.secondary_muscles ?? [],
     exercise_url: video.exercise_url,
     video_url: video.video_url,
     is_global: video.is_global
@@ -427,29 +353,24 @@ function localWorkoutCategories() {
     new Set([
       ...sampleWorkouts.map((workout) => workout.target_muscle),
       ...sampleExerciseVideos.map((video) => video.category).filter(Boolean),
-      ...muscleStrengthExercises.map((exercise) => exercise.muscle_category),
-      ...muscleStrengthExercises.map((exercise) => exercise.equipment_required)
+      ...sampleWorkouts.map((workout) => workout.equipment)
     ])
   ).sort() as string[];
 }
 
 function getLocalWorkoutFilterOptions(): WorkoutFilterOptions {
+  const localWorkouts = sampleWorkouts.map(hydrateWorkoutMetadata);
+  const localVideos = sampleExerciseVideos.map(mapVideoToWorkout);
+  const all = [...localWorkouts, ...localVideos];
   return {
-    muscleCategories: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.muscle_category)),
-    primaryMuscles: uniqueSorted([
-      ...muscleStrengthExercises.map((exercise) => exercise.muscle_category),
-      ...sampleWorkouts.map((workout) => workout.target_muscle)
-    ]),
-    equipmentRequired: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.equipment_required)),
-    mechanics: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.mechanics)),
-    exerciseTypes: uniqueSorted([
-      ...muscleStrengthExercises.map((exercise) => exercise.mechanics),
-      ...sampleWorkouts.map((workout) => workout.category),
-      ...sampleExerciseVideos.map((video) => video.category_type)
-    ]),
-    forceTypes: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.force_type)),
-    experienceLevels: uniqueSorted(muscleStrengthExercises.map((exercise) => exercise.experience_level)),
-    secondaryMuscles: uniqueSorted(muscleStrengthExercises.flatMap((exercise) => splitList(exercise.secondary_muscles)))
+    muscleCategories: uniqueSorted(all.map((exercise) => exercise.muscle_category ?? exercise.target_muscle)),
+    primaryMuscles: uniqueSorted(all.map((exercise) => exercise.target_muscle ?? exercise.muscle_category)),
+    equipmentRequired: uniqueSorted(all.map((exercise) => exercise.equipment_required ?? exercise.equipment)),
+    mechanics: uniqueSorted(all.map((exercise) => exercise.mechanics ?? exercise.category)),
+    exerciseTypes: uniqueSorted(all.map((exercise) => exercise.category ?? exercise.mechanics)),
+    forceTypes: uniqueSorted(all.map((exercise) => exercise.force_type)),
+    experienceLevels: uniqueSorted(all.map((exercise) => exercise.experience_level ?? exercise.difficulty)),
+    secondaryMuscles: uniqueSorted(all.flatMap((exercise) => exercise.secondary_muscles ?? []))
   };
 }
 
@@ -491,7 +412,6 @@ function matchesWorkoutFilters(workout: Workout, query = "", filters: WorkoutFil
 function localWorkouts(query = "", filters: WorkoutFilters = {}) {
   const normalized = normalizeText(query);
   const source = dedupeWorkouts([
-    ...muscleStrengthExercises.map(mapMetadataToWorkout),
     ...sampleWorkouts.map(hydrateWorkoutMetadata),
     ...sampleExerciseVideos.map(mapVideoToWorkout)
   ]);
@@ -1495,7 +1415,7 @@ export async function getWorkoutFilterOptions() {
 
   const workouts = ((workoutResult.data ?? []) as Workout[]).map(hydrateWorkoutMetadata);
   const videos = ((videoResult.data ?? []) as ExerciseVideo[]).map(mapVideoToWorkout);
-  const all = [...workouts, ...videos, ...muscleStrengthExercises.map(mapMetadataToWorkout)];
+  const all = [...workouts, ...videos];
 
   return {
     muscleCategories: uniqueSorted([...fallback.muscleCategories, ...all.map((item) => item.muscle_category ?? item.target_muscle)]),
@@ -1565,10 +1485,7 @@ export async function getWorkout(id: string) {
 }
 
 export async function getExerciseVideos(query = "") {
-  const localVideos = dedupeExerciseVideos([
-    ...muscleStrengthExercises.map(mapMetadataToVideo),
-    ...sampleExerciseVideos
-  ]).filter((video) => !query || normalizeText(video.exercise_name).includes(normalizeText(query)));
+  const localVideos = dedupeExerciseVideos(sampleExerciseVideos).filter((video) => !query || normalizeText(video.exercise_name).includes(normalizeText(query)));
   if (!supabase) return mockDelay(localVideos);
   let request = supabase!.from("exercise_videos").select("*").order("exercise_name").limit(100);
   if (query) request = request.ilike("exercise_name", `%${query}%`);
@@ -2035,7 +1952,7 @@ type RawWorkoutPlan = {
   is_active: boolean;
   is_default?: boolean | null;
   template_id?: string | null;
-  source?: "manual" | "template_recommendation";
+  source?: "manual" | "generated_rules" | "template_recommendation";
   match_score?: number | null;
   match_explanation?: string | null;
   match_reasons?: string[] | null;
@@ -2386,39 +2303,11 @@ export async function deleteUserWorkoutPlan(userId: string, planId: string) {
 }
 
 export async function getWorkoutTemplateWeekOptions() {
-  const fallback = { min: 1, max: 12, values: Array.from({ length: 12 }, (_, index) => index + 1) };
-  if (!supabase) return mockDelay(fallback);
-  const { data, error } = await supabase!
-    .from("workout_templates")
-    .select("program_duration_weeks")
-    .not("program_duration_weeks", "is", null)
-    .limit(1000);
-  if (error) {
-    console.warn("FitLife Hub could not load workout template week options.", error.message);
-    return fallback;
-  }
-  const values = Array.from(new Set((data ?? []).map((item) => Number(item.program_duration_weeks)).filter((value) => Number.isFinite(value) && value > 0))).sort((a, b) => a - b);
-  if (!values.length) return fallback;
-  return { min: values[0], max: values[values.length - 1], values };
+  return mockDelay({ min: 1, max: 16, values: [1, 2, 3, 4, 6, 8, 10, 12, 16] });
 }
 
 export async function getWorkoutTemplateDurationOptions() {
-  const fallback = { min: 20, max: 75, values: [20, 30, 45, 60, 75] };
-  if (!supabase) return mockDelay(fallback);
-  const { data, error } = await supabase!
-    .from("workout_templates")
-    .select("time_per_workout")
-    .not("time_per_workout", "is", null)
-    .limit(1000);
-  if (error) {
-    console.warn("FitLife Hub could not load workout duration options.", error.message);
-    return fallback;
-  }
-  const values = Array.from(
-    new Set((data ?? []).map((item) => parseDurationMinutes(item.time_per_workout)).filter((value): value is number => Boolean(value)))
-  ).sort((a, b) => a - b);
-  if (!values.length) return fallback;
-  return { min: values[0], max: values[values.length - 1], values };
+  return mockDelay({ min: 20, max: 90, values: [20, 30, 45, 60, 75, 90] });
 }
 
 export async function getGeneratedWorkoutPlan(userId: string) {
@@ -2427,11 +2316,11 @@ export async function getGeneratedWorkoutPlan(userId: string) {
   const { data, error } = await supabase!
     .from("user_workout_plans")
     .select(
-      "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes)),workout_templates(id,title,main_goal,workout_type,training_level,program_duration_weeks,days_per_week,time_per_workout,equipment_required,target_gender,workout_template_days(id,workout_template_id,day_index,day_title,workout_template_exercises(id,workout_template_day_id,exercise_order,exercise_name,sets,reps))),user_workout_sessions(id,user_id,user_workout_plan_id,workout_template_day_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes,user_exercise_logs(id,user_workout_session_id,workout_template_exercise_id,plan_exercise_id,exercise_order,exercise_name,planned_sets,planned_reps,weight_kg,reps,notes,completed,completed_at,created_at,updated_at))"
+      "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes)),user_workout_sessions(id,user_id,user_workout_plan_id,workout_template_day_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes,user_exercise_logs(id,user_workout_session_id,workout_template_exercise_id,plan_exercise_id,exercise_order,exercise_name,planned_sets,planned_reps,weight_kg,reps,notes,completed,completed_at,created_at,updated_at))"
     )
     .eq("user_id", userId)
     .eq("is_active", true)
-    .eq("source", "template_recommendation")
+    .eq("source", "generated_rules")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -2450,10 +2339,10 @@ export async function getGeneratedWorkoutPlans(userId: string) {
   const { data, error } = await supabase!
     .from("user_workout_plans")
     .select(
-      "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes)),workout_templates(id,title,main_goal,workout_type,training_level,program_duration_weeks,days_per_week,time_per_workout,equipment_required,target_gender,workout_template_days(id,workout_template_id,day_index,day_title,workout_template_exercises(id,workout_template_day_id,exercise_order,exercise_name,sets,reps)))"
+      "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))"
     )
     .eq("user_id", userId)
-    .eq("source", "template_recommendation")
+    .eq("source", "generated_rules")
     .order("match_score", { ascending: false })
     .order("created_at", { ascending: false });
 

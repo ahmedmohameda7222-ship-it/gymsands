@@ -15,8 +15,8 @@ export type OnboardingAnswers = {
   user_id: string;
   age_range: string;
   gender: string;
-  height_cm: number;
-  weight_kg: number;
+  height_cm: number | null;
+  weight_kg: number | null;
   goal: string;
   goals?: string[];
   training_cycle?: string | null;
@@ -387,7 +387,7 @@ export type UserWorkoutPlan = {
   is_active: boolean;
   is_default?: boolean;
   template_id?: string | null;
-  source?: "manual" | "template_recommendation";
+  source?: "manual" | "generated_rules" | "template_recommendation";
   match_score?: number | null;
   match_explanation?: string | null;
   match_reasons?: string[] | null;

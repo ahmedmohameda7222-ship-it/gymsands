@@ -1,9 +1,5 @@
--- S&S Gym materialize imported workout videos as browsable workouts.
--- Replace: supabase/seed/002_sample_workouts_and_videos.sql
--- Run AFTER 005_full_workout_video_import_placeholder.sql.
--- This file no longer inserts 8 sample workouts or 20 sample videos.
--- It converts the 3105 imported exercise_videos rows into rows visible in public.workouts.
--- Safe to re-run: it only inserts workouts that do not already exist for the same name + target_muscle.
+-- FitLife Hub manual demo workouts.
+-- Safe to re-run: inserts only app-owned starter rows that do not already exist.
 
 begin;
 
@@ -20,39 +16,12 @@ insert into public.workouts (
   notes,
   is_global
 )
-select
-  ev.exercise_name as name,
-  coalesce(ev.category_type, 'Exercise') as category,
-  coalesce(ev.category, 'General') as target_muscle,
-  case
-    when ev.category_type = 'Equipment' then coalesce(ev.category, 'Varies')
-    else 'Varies'
-  end as equipment,
-  'Beginner' as difficulty,
-  3 as sets,
-  '8-12' as reps,
-  75 as rest_seconds,
-  coalesce(
-    ev.instructions,
-    'Open the exercise link for the original demo/instructions. Warm up first, keep each rep controlled, use a pain-free range of motion, and stop if you feel sharp or serious pain.'
-  ) as instructions,
-  ev.exercise_url as notes,
-  true as is_global
-from public.exercise_videos ev
-where ev.is_global = true
-  and ev.source = 'muscleandstrength_full_import_3105'
-  and not exists (
-    select 1
-    from public.workouts w
-    where lower(w.name) = lower(ev.exercise_name)
-      and lower(w.target_muscle) = lower(coalesce(ev.category, 'General'))
-  );
-
-insert into public.workout_video_imports (status, imported_count, notes)
-values (
-  'completed',
-  (select count(*) from public.exercise_videos where source = 'muscleandstrength_full_import_3105'),
-  'Materialized 3105 Muscle & Strength exercise_videos rows as category-browsable workouts.'
-);
+values
+  ('Bodyweight Squat', 'Strength', 'Quads', 'Bodyweight', 'Beginner', 3, '10-15', 60, 'Stand tall, sit hips down and back, keep knees tracking over toes, then stand with control.', 'manual_demo', true),
+  ('Incline Push-Up', 'Strength', 'Chest', 'Bodyweight', 'Beginner', 3, '8-12', 60, 'Place hands on a bench, brace, lower chest toward the surface, then press back up smoothly.', 'manual_demo', true),
+  ('Dumbbell Romanian Deadlift', 'Strength', 'Hamstrings', 'Dumbbell', 'Beginner', 3, '8-12', 75, 'Hold dumbbells close, hinge from the hips, keep a neutral spine, then drive hips forward to stand.', 'manual_demo', true),
+  ('Seated Cable Row', 'Strength', 'Back', 'Cable', 'Beginner', 3, '10-12', 75, 'Sit tall, pull toward your lower ribs, pause briefly, then return with control.', 'manual_demo', true),
+  ('Plank', 'Core', 'Core', 'Bodyweight', 'Beginner', 3, '30-45 seconds', 60, 'Keep elbows under shoulders and hold a straight line while breathing steadily.', 'manual_demo', true)
+on conflict do nothing;
 
 commit;

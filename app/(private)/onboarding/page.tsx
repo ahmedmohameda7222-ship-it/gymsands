@@ -45,8 +45,8 @@ export default function OnboardingPage() {
   const [answers, setAnswers] = useState({
     age_range: "25-34",
     gender: "Prefer not to say",
-    height_cm: 175,
-    weight_kg: 75,
+    height_cm: null as number | null,
+    weight_kg: null as number | null,
     goal: "General wellness",
     goals: ["General wellness"],
     training_cycle: "Full Body",
@@ -210,7 +210,7 @@ export default function OnboardingPage() {
             <div className="rounded-lg border bg-card p-5">
               <h2 className="text-lg font-semibold">Ready for your plan</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                FitLife Hub will return all matching plans from the workout template library, sorted by best match first.
+                FitLife Hub will create one complete weekly plan with warm-up, strength, cardio, and cool-down blocks from approved exercises.
               </p>
             </div>
           ) : null}
@@ -281,7 +281,7 @@ function MultiChoice({ label, values, selected, onChange }: { label: string; val
   );
 }
 
-function NumberField({ label, value, suffix, onChange }: { label: string; value: number; suffix: string; onChange: (value: number) => void }) {
+function NumberField({ label, value, suffix, onChange }: { label: string; value: number | null; suffix: string; onChange: (value: number | null) => void }) {
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
@@ -289,8 +289,11 @@ function NumberField({ label, value, suffix, onChange }: { label: string; value:
         <Input
           type="text"
           inputMode="decimal"
-          value={value}
-          onChange={(event) => onChange(Math.max(0, Number(event.target.value) || 0))}
+          value={value ?? ""}
+          onChange={(event) => {
+            const nextValue = event.target.value.trim();
+            onChange(nextValue ? Math.max(0, Number(nextValue) || 0) : null);
+          }}
           placeholder={label}
         />
         <span className="flex h-11 items-center rounded-md border bg-card px-3 text-sm font-semibold text-muted-foreground">{suffix}</span>
@@ -312,7 +315,7 @@ function SliderField({ label, value, min, max, suffix, onChange }: { label: stri
         max={max}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="h-2 w-full cursor-pointer accent-[#d6b76a]"
+        className="h-2 w-full cursor-pointer accent-[#55603D]"
       />
     </div>
   );

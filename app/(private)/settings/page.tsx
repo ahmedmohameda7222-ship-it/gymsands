@@ -3,6 +3,7 @@ import { Settings } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConnectedApps } from "@/components/settings/connected-apps";
 
 export default function SettingsPage() {
   return (
@@ -22,6 +23,9 @@ export default function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+      <div className="mt-4">
+        <ConnectedApps />
+      </div>
     </>
   );
 }

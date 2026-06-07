@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { PageHeading } from "@/components/layout/page-heading";
 import { FoodBrowser } from "@/components/meals/food-browser";
 import { FoodLogList } from "@/components/meals/food-log-list";
+import { ApiFoodTools } from "@/components/meals/api-food-tools";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import {
@@ -50,10 +51,10 @@ function mixColor(start: [number, number, number], end: [number, number, number]
 }
 
 function calorieProgressColor(progressPercent: number) {
-  if (progressPercent <= 50) return "rgb(37, 99, 235)";
-  if (progressPercent <= 80) return mixColor([37, 99, 235], [245, 158, 11], (progressPercent - 50) / 30);
-  if (progressPercent <= 95) return mixColor([245, 158, 11], [239, 68, 68], (progressPercent - 80) / 15);
-  return "rgb(220, 38, 38)";
+  if (progressPercent <= 50) return "rgb(85, 96, 61)";
+  if (progressPercent <= 80) return mixColor([85, 96, 61], [212, 176, 106], (progressPercent - 50) / 30);
+  if (progressPercent <= 95) return mixColor([212, 176, 106], [184, 138, 74], (progressPercent - 80) / 15);
+  return "rgb(143, 59, 52)";
 }
 
 function addDays(date: Date, days: number) {
@@ -277,6 +278,10 @@ export default function CaloriesPage() {
         onSelectDate={setSelectedDate}
         onMoveWeek={moveWeek}
       />
+
+      <div className="mt-4">
+        <ApiFoodTools />
+      </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
         <div className="space-y-4">

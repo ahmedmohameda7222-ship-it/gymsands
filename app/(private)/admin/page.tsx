@@ -1,11 +1,14 @@
 import Link from "next/link";
-import { Soup, Users, Video, MessageSquare, Dumbbell, Settings } from "lucide-react";
+import { ActivitySquare, CloudDownload, Soup, Users, Video, MessageSquare, Dumbbell, Settings, ShieldCheck } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Card, CardContent } from "@/components/ui/card";
 
 const adminLinks = [
   { href: "/admin/users", label: "Manage Users", icon: Users, text: "View users, edit roles, and set custom welcome messages." },
   { href: "/admin/foods", label: "Manage Egyptian Foods", icon: Soup, text: "Add, edit, or review global food macros." },
+  { href: "/admin/exercises", label: "Exercise Library", icon: ActivitySquare, text: "Review, approve, reject, filter, and manually add exercises." },
+  { href: "/admin/api-imports", label: "API Imports", icon: CloudDownload, text: "Import wger exercises and review import batch history." },
+  { href: "/admin/api-status", label: "API Status", icon: ShieldCheck, text: "Check which provider integrations are configured." },
   { href: "/admin/workouts", label: "Manage Workouts", icon: Dumbbell, text: "Review global workout library and instructions." },
   { href: "/admin/videos", label: "Manage Workout Videos", icon: Video, text: "Add video sources and prepare 3000+ record imports." },
   { href: "/admin/welcome", label: "Manage Welcome Messages", icon: MessageSquare, text: "Set default and user-specific welcome popups." },
