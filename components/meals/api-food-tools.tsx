@@ -14,6 +14,7 @@ type DetectedBarcode = { rawValue?: string };
 type BarcodeDetectorInstance = { detect: (source: HTMLVideoElement) => Promise<DetectedBarcode[]> };
 type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => BarcodeDetectorInstance;
 type BarcodeWindow = Window & { BarcodeDetector?: BarcodeDetectorConstructor };
+type ScannerControls = { stop: () => void };
 
 type ExerciseActivity = {
   id: string;
@@ -67,6 +68,7 @@ export function ApiFoodTools({
   const [scannerMessage, setScannerMessage] = useState("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const zxingControlsRef = useRef<ScannerControls | null>(null);
   const scanTimerRef = useRef<number | null>(null);
 
   const [activities, setActivities] = useState<ExerciseActivity[]>([]);
@@ -85,6 +87,7 @@ export function ApiFoodTools({
   async function lookupBarcode(nextBarcode = barcode) {
     const cleanBarcode = nextBarcode.trim();
     if (!cleanBarcode) return toast({ title: "Barcode required", description: "Scan or enter a barcode first." });
+    setBarcode(cleanBarcode);
     const response = await fetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(cleanBarcode)}`, { headers: authHeaders() });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return toast({ title: "Barcode lookup failed", description: data.error ?? "Try another barcode." });
@@ -96,6 +99,8 @@ export function ApiFoodTools({
   function stopScanner() {
     if (scanTimerRef.current) window.clearInterval(scanTimerRef.current);
     scanTimerRef.current = null;
+    zxingControlsRef.current?.stop();
+    zxingControlsRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -121,45 +126,80 @@ export function ApiFoodTools({
     return waitForFrame(video);
   }
 
+  function handleDetectedBarcode(value: string) {
+    const cleanBarcode = value.trim();
+    if (!cleanBarcode) return;
+    setBarcode(cleanBarcode);
+    setScannerMessage(`Barcode detected: ${cleanBarcode}`);
+    stopScanner();
+    lookupBarcode(cleanBarcode).catch(() => undefined);
+  }
+
+  async function startNativeBarcodeDetector() {
+    const video = videoRef.current;
+    if (!video) throw new Error("Camera preview is not ready. Please tap Scan again.");
+
+    let stream = await openCameraStream(true);
+    streamRef.current = stream;
+    let hasFrame = await attachCameraStream(stream);
+
+    if (!hasFrame) {
+      stream.getTracks().forEach((track) => track.stop());
+      stream = await openCameraStream(false);
+      streamRef.current = stream;
+      hasFrame = await attachCameraStream(stream);
+    }
+
+    if (!hasFrame) throw new Error("The camera opened but did not send video frames. Try another browser or type the barcode manually.");
+
+    const Detector = (window as BarcodeWindow).BarcodeDetector;
+    if (!Detector) return false;
+
+    const detector = new Detector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "qr_code"] });
+    setScannerMessage("Camera ready. Point it at the barcode.");
+    scanTimerRef.current = window.setInterval(async () => {
+      if (!videoRef.current || videoRef.current.readyState < 2 || videoRef.current.videoWidth === 0) return;
+      const codes = await detector.detect(videoRef.current).catch(() => []);
+      const value = codes[0]?.rawValue?.trim();
+      if (!value) return;
+      handleDetectedBarcode(value);
+    }, 450);
+    return true;
+  }
+
+  async function startZxingScanner() {
+    const video = videoRef.current;
+    if (!video) throw new Error("Camera preview is not ready. Please tap Scan again.");
+
+    const { BrowserMultiFormatReader } = await import("@zxing/browser");
+    const reader = new BrowserMultiFormatReader();
+    setScannerMessage("Camera ready. Point it at the barcode.");
+    zxingControlsRef.current = await reader.decodeFromVideoDevice(undefined, video, (result) => {
+      const value = result?.getText()?.trim();
+      if (!value) return;
+      handleDetectedBarcode(value);
+    });
+  }
+
   async function startScanner() {
     if (!navigator.mediaDevices?.getUserMedia) {
       return toast({ title: "Camera unavailable", description: "This browser cannot open the camera. Type the barcode manually." });
     }
 
     try {
+      stopScanner();
+      setBarcodeFood(null);
       setIsScanning(true);
       setScannerMessage("Opening camera...");
       await nextAnimationFrame();
 
-      let stream = await openCameraStream(true);
-      streamRef.current = stream;
-      let hasFrame = await attachCameraStream(stream);
-
-      if (!hasFrame) {
-        stream.getTracks().forEach((track) => track.stop());
-        stream = await openCameraStream(false);
-        streamRef.current = stream;
-        hasFrame = await attachCameraStream(stream);
-      }
-
-      if (!hasFrame) throw new Error("The camera opened but did not send video frames. Try another browser or type the barcode manually.");
-      setScannerMessage("Camera ready. Point it at the barcode.");
-
-      const Detector = (window as BarcodeWindow).BarcodeDetector;
-      if (!Detector) {
-        setScannerMessage("Camera is open. Type the barcode manually if this browser cannot detect it.");
-        return;
-      }
-
-      const detector = new Detector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
-      scanTimerRef.current = window.setInterval(async () => {
-        if (!videoRef.current || videoRef.current.readyState < 2 || videoRef.current.videoWidth === 0) return;
-        const codes = await detector.detect(videoRef.current).catch(() => []);
-        const value = codes[0]?.rawValue?.trim();
-        if (!value) return;
+      const startedNative = await startNativeBarcodeDetector();
+      if (!startedNative) {
         stopScanner();
-        lookupBarcode(value).catch(() => undefined);
-      }, 650);
+        setIsScanning(true);
+        await nextAnimationFrame();
+        await startZxingScanner();
+      }
     } catch (error) {
       stopScanner();
       toast({ title: "Camera permission failed", description: error instanceof Error ? error.message : "Allow camera access and try again." });
