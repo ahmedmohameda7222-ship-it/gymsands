@@ -328,6 +328,49 @@ function mapVideoToWorkout(video: ExerciseVideo): Workout {
   };
 }
 
+type ApprovedExerciseRow = {
+  id: string;
+  name: string;
+  source?: string | null;
+  source_url?: string | null;
+  primary_muscle: string | null;
+  secondary_muscles: string[] | null;
+  equipment: string[] | null;
+  difficulty: string | null;
+  mechanics: string | null;
+  movement_pattern: string | null;
+  force_type: string | null;
+  instructions: string | null;
+  video_url: string | null;
+  is_global: boolean;
+};
+
+function mapApprovedExerciseToWorkout(exercise: ApprovedExerciseRow): Workout {
+  const equipment = exercise.equipment?.length ? exercise.equipment.join(", ") : "Varies";
+  return {
+    id: exercise.id,
+    name: exercise.name,
+    category: exercise.mechanics || exercise.movement_pattern || "Exercise",
+    target_muscle: exercise.primary_muscle || "General",
+    equipment,
+    difficulty: exercise.difficulty || "Beginner",
+    sets: 3,
+    reps: "8-12",
+    rest_seconds: 75,
+    instructions: exercise.instructions || defaultExerciseInstructions,
+    notes: exercise.source_url || (exercise.source ? `Source: ${exercise.source}` : null),
+    muscle_category: exercise.primary_muscle,
+    equipment_required: equipment,
+    mechanics: exercise.mechanics,
+    force_type: exercise.force_type,
+    experience_level: exercise.difficulty || "Beginner",
+    secondary_muscles: exercise.secondary_muscles ?? [],
+    exercise_url: exercise.source_url ?? null,
+    video_url: exercise.video_url,
+    is_global: exercise.is_global
+  };
+}
+
 function dedupeWorkouts(workouts: Workout[]) {
   const seen = new Set<string>();
   return workouts.filter((workout) => {
@@ -1365,9 +1408,10 @@ export async function getWorkoutCategories() {
   const fallback = localWorkoutCategories();
   if (!supabase) return mockDelay(fallback);
 
-  const [workoutResult, videoResult] = await Promise.all([
+  const [workoutResult, videoResult, exerciseResult] = await Promise.all([
     supabase!.from("workouts").select("*").eq("is_global", true).limit(5000),
-    supabase!.from("exercise_videos").select("*").eq("is_global", true).limit(5000)
+    supabase!.from("exercise_videos").select("*").eq("is_global", true).limit(5000),
+    supabase!.from("exercises").select("id,name,source,source_url,primary_muscle,secondary_muscles,equipment,difficulty,mechanics,movement_pattern,force_type,instructions,video_url,is_global").eq("is_global", true).eq("is_approved", true).limit(5000)
   ]);
 
   if (workoutResult.error || videoResult.error) {
@@ -1390,6 +1434,12 @@ export async function getWorkoutCategories() {
     if (video.equipment_required) categories.add(video.equipment_required);
     if (video.category) categories.add(video.category);
   });
+  if (!exerciseResult.error) {
+    exerciseResult.data?.forEach((exercise) => {
+      if (exercise.primary_muscle) categories.add(exercise.primary_muscle);
+      (exercise.equipment ?? []).forEach((item: string) => categories.add(item));
+    });
+  }
   fallback.forEach((value) => categories.add(value));
 
   const values = Array.from(categories).filter(Boolean).sort();
@@ -1400,9 +1450,10 @@ export async function getWorkoutFilterOptions() {
   const fallback = getLocalWorkoutFilterOptions();
   if (!supabase) return mockDelay(fallback);
 
-  const [workoutResult, videoResult] = await Promise.all([
+  const [workoutResult, videoResult, exerciseResult] = await Promise.all([
     supabase!.from("workouts").select("*").eq("is_global", true).limit(5000),
-    supabase!.from("exercise_videos").select("*").eq("is_global", true).limit(5000)
+    supabase!.from("exercise_videos").select("*").eq("is_global", true).limit(5000),
+    supabase!.from("exercises").select("id,name,source,source_url,primary_muscle,secondary_muscles,equipment,difficulty,mechanics,movement_pattern,force_type,instructions,video_url,is_global").eq("is_global", true).eq("is_approved", true).limit(5000)
   ]);
 
   if (workoutResult.error || videoResult.error) {
@@ -1415,7 +1466,8 @@ export async function getWorkoutFilterOptions() {
 
   const workouts = ((workoutResult.data ?? []) as Workout[]).map(hydrateWorkoutMetadata);
   const videos = ((videoResult.data ?? []) as ExerciseVideo[]).map(mapVideoToWorkout);
-  const all = [...workouts, ...videos];
+  const approvedExercises = exerciseResult.error ? [] : ((exerciseResult.data ?? []) as ApprovedExerciseRow[]).map(mapApprovedExerciseToWorkout);
+  const all = [...workouts, ...videos, ...approvedExercises];
 
   return {
     muscleCategories: uniqueSorted([...fallback.muscleCategories, ...all.map((item) => item.muscle_category ?? item.target_muscle)]),
@@ -1452,7 +1504,18 @@ export async function getWorkouts(
   if (selectedCategory) videoRequest = videoRequest.eq("category", selectedCategory);
   if (query) videoRequest = videoRequest.ilike("exercise_name", `%${query}%`);
 
-  const [workoutResult, videoResult] = await Promise.all([workoutRequest, videoRequest]);
+  let exerciseRequest = supabase!
+    .from("exercises")
+    .select("id,name,source,source_url,primary_muscle,secondary_muscles,equipment,difficulty,mechanics,movement_pattern,force_type,instructions,video_url,is_global")
+    .eq("is_global", true)
+    .eq("is_approved", true)
+    .order("name")
+    .limit(1200);
+  if (query) {
+    exerciseRequest = exerciseRequest.or(`name.ilike.%${query}%,primary_muscle.ilike.%${query}%,mechanics.ilike.%${query}%,movement_pattern.ilike.%${query}%`);
+  }
+
+  const [workoutResult, videoResult, exerciseResult] = await Promise.all([workoutRequest, videoRequest, exerciseRequest]);
   if (workoutResult.error || videoResult.error) {
     console.warn(
       "FitLife Hub could not load Supabase workouts, using local fallback.",
@@ -1463,7 +1526,10 @@ export async function getWorkouts(
 
   const directWorkouts = ((workoutResult.data ?? []) as Workout[]).map(hydrateWorkoutMetadata).filter((workout) => matchesWorkoutFilters(workout, query, filters));
   const videoWorkouts = ((videoResult.data ?? []) as ExerciseVideo[]).map(mapVideoToWorkout).filter((workout) => matchesWorkoutFilters(workout, query, filters));
-  return dedupeWorkouts([...localMatches, ...directWorkouts, ...videoWorkouts]).slice(from, to + 1);
+  const approvedExercises = exerciseResult.error
+    ? []
+    : ((exerciseResult.data ?? []) as ApprovedExerciseRow[]).map(mapApprovedExerciseToWorkout).filter((workout) => matchesWorkoutFilters(workout, query, filters));
+  return dedupeWorkouts([...approvedExercises, ...localMatches, ...directWorkouts, ...videoWorkouts]).slice(from, to + 1);
 }
 
 export async function getWorkout(id: string) {
@@ -1475,6 +1541,17 @@ export async function getWorkout(id: string) {
     console.warn("FitLife Hub could not load workout from workouts table.", workoutResult.error.message);
   }
   if (workoutResult.data) return hydrateWorkoutMetadata(workoutResult.data as Workout);
+
+  const exerciseResult = await supabase!
+    .from("exercises")
+    .select("id,name,source,source_url,primary_muscle,secondary_muscles,equipment,difficulty,mechanics,movement_pattern,force_type,instructions,video_url,is_global")
+    .eq("id", id)
+    .eq("is_approved", true)
+    .maybeSingle();
+  if (exerciseResult.error) {
+    console.warn("FitLife Hub could not load workout from approved exercises.", exerciseResult.error.message);
+  }
+  if (exerciseResult.data) return mapApprovedExerciseToWorkout(exerciseResult.data as ApprovedExerciseRow);
 
   const videoResult = await supabase!.from("exercise_videos").select("*").eq("id", id).maybeSingle();
   if (videoResult.error) {
