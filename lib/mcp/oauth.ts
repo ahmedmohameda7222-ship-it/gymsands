@@ -98,6 +98,23 @@ function metadataHeaders() {
   };
 }
 
+async function readTokenRequestForm(request: Request) {
+  const contentType = request.headers.get("content-type") ?? "";
+
+  if (contentType.includes("application/json")) {
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const form = new URLSearchParams();
+    for (const [key, value] of Object.entries(body)) {
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        form.set(key, String(value));
+      }
+    }
+    return form;
+  }
+
+  return new URLSearchParams(await request.text());
+}
+
 async function getConnectionForClientId(clientId: string) {
   if (!clientId.startsWith("fitlife_mcp_")) {
     return null;
@@ -184,7 +201,7 @@ export async function handleOAuthAuthorize(request: Request) {
   }
 
   if (!clientId) {
-    return oauthErrorRedirect(redirectUri, state, "invalid_client", "Use your FitLife one-time connection token as the OAuth Client ID.");
+    return oauthErrorRedirect(redirectUri, state, "invalid_client", "Use your FitLife connection token as the OAuth Client ID.");
   }
 
   try {
@@ -210,10 +227,7 @@ export async function handleOAuthAuthorize(request: Request) {
 }
 
 export async function handleOAuthToken(request: Request) {
-  const contentType = request.headers.get("content-type") ?? "";
-  const rawBody = await request.text();
-  const form = new URLSearchParams(contentType.includes("application/json") ? JSON.stringify(await request.json().catch(() => ({}))) : rawBody);
-
+  const form = await readTokenRequestForm(request);
   const grantType = form.get("grant_type");
   const code = form.get("code") ?? "";
   const redirectUri = form.get("redirect_uri") ?? "";
@@ -259,17 +273,14 @@ export async function handleOAuthToken(request: Request) {
   }
 }
 
-export async function handleOAuthRegister(request: Request) {
-  const origin = originFromRequest(request);
-
+export async function handleOAuthRegister() {
   return NextResponse.json(
     {
       client_id: "Paste your FitLife fitlife_mcp_ token here as OAuth Client ID",
       client_id_issued_at: Math.floor(Date.now() / 1000),
       token_endpoint_auth_method: "none",
       grant_types: ["authorization_code"],
-      response_types: ["code"],
-      redirect_uris: [`${origin}/api/oauth/callback-placeholder`]
+      response_types: ["code"]
     },
     { status: 201, headers: metadataHeaders() }
   );
