@@ -1,6 +1,23 @@
 import { configuredProviders } from "@/lib/integrations/env";
 import type { McpContext } from "@/lib/mcp/auth";
-import { asObject, cleanDate, cleanMealType, getArray, getBoolean, getNumber, getOptionalNumber, getOptionalString, getString, requireConfirmation, type JsonObject } from "@/lib/mcp/schemas";
+import {
+  asObject,
+  cleanDate,
+  cleanMealType,
+  getArray,
+  getNumber,
+  getOptionalNumber,
+  getOptionalString,
+  getString,
+  requireConfirmation,
+  type JsonObject
+} from "@/lib/mcp/schemas";
+
+export type McpToolResult = {
+  structuredContent: Record<string, unknown>;
+  content: Array<{ type: "text"; text: string }>;
+  isError?: boolean;
+};
 
 type FoodCandidate = {
   id: string;
@@ -11,13 +28,6 @@ type FoodCandidate = {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
-  category?: string | null;
-};
-
-export type McpToolResult = {
-  structuredContent: Record<string, unknown>;
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
 };
 
 function ok(structuredContent: Record<string, unknown>, message?: string): McpToolResult {
@@ -39,15 +49,14 @@ function dateDaysAgo(days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-type MacroTotals = {
-  calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
-};
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
 
-function sumMacros(rows: Array<Record<string, unknown>>): MacroTotals {
-  return rows.reduce<MacroTotals>(
+function sumMacros(rows: Array<Record<string, unknown>>) {
+  return rows.reduce(
     (total, row) => ({
       calories: total.calories + num(row.calories),
       protein_g: total.protein_g + num(row.protein_g),
@@ -56,8 +65,20 @@ function sumMacros(rows: Array<Record<string, unknown>>): MacroTotals {
     }),
     { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
   );
-} 
+}
 
+function normalizeFood(row: Record<string, unknown>, source: "global" | "user"): FoodCandidate {
+  return {
+    id: String(row.id),
+    source,
+    food_name: String(row.food_name ?? ""),
+    serving_size: String(row.serving_size ?? ""),
+    calories: num(row.calories),
+    protein_g: num(row.protein_g),
+    carbs_g: num(row.carbs_g),
+    fat_g: num(row.fat_g)
+  };
+}
 
 function scaleFood(food: FoodCandidate, quantity: number) {
   return {
@@ -78,24 +99,34 @@ async function findFood(ctx: McpContext, query: string, limit = 5): Promise<{ ex
   if (!cleanQuery) throw new Error("food_name is required.");
 
   const [globalFoods, userFoods] = await Promise.all([
-    ctx.supabase.from("food_items").select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,category").eq("is_global", true).ilike("food_name", `%${cleanQuery}%`).limit(limit),
-    ctx.supabase.from("user_food_items").select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,category").eq("user_id", ctx.userId).ilike("food_name", `%${cleanQuery}%`).limit(limit)
+    ctx.supabase
+      .from("food_items")
+      .select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g")
+      .eq("is_global", true)
+      .ilike("food_name", `%${cleanQuery}%`)
+      .limit(limit),
+    ctx.supabase
+      .from("user_food_items")
+      .select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g")
+      .eq("user_id", ctx.userId)
+      .ilike("food_name", `%${cleanQuery}%`)
+      .limit(limit)
   ]);
 
   if (globalFoods.error) throw new Error(globalFoods.error.message);
   if (userFoods.error) throw new Error(userFoods.error.message);
 
-  const candidates: FoodCandidate[] = [
-    ...((userFoods.data ?? []) as Array<Omit<FoodCandidate, "source">>).map((food) => ({ ...food, source: "user" as const })),
-    ...((globalFoods.data ?? []) as Array<Omit<FoodCandidate, "source">>).map((food) => ({ ...food, source: "global" as const }))
+  const candidates = [
+    ...((userFoods.data ?? []) as Array<Record<string, unknown>>).map((food) => normalizeFood(food, "user")),
+    ...((globalFoods.data ?? []) as Array<Record<string, unknown>>).map((food) => normalizeFood(food, "global"))
   ].slice(0, limit);
-  const normalized = cleanQuery.toLowerCase();
-  const exact = candidates.find((food) => food.food_name.toLowerCase() === normalized) ?? (candidates.length === 1 ? candidates[0] : undefined);
+
+  const exact = candidates.find((food) => food.food_name.toLowerCase() === cleanQuery.toLowerCase()) ?? (candidates.length === 1 ? candidates[0] : undefined);
   return { exact, candidates };
 }
 
 async function targets(ctx: McpContext) {
-  const { data, error } = await ctx.supabase.from("calorie_targets").select("daily_calories,protein_g,carbs_g,fat_g,water_ml").eq("user_id", ctx.userId).maybeSingle();
+  const { data, error } = await ctx.supabase.from("calorie_targets").select("*").eq("user_id", ctx.userId).maybeSingle();
   if (error) throw new Error(error.message);
   return data ?? { daily_calories: 2200, protein_g: 150, carbs_g: 250, fat_g: 70, water_ml: 2500 };
 }
@@ -103,7 +134,7 @@ async function targets(ctx: McpContext) {
 async function waterLogged(ctx: McpContext, date: string) {
   const { data, error } = await ctx.supabase.from("water_logs").select("amount_ml").eq("user_id", ctx.userId).eq("log_date", date);
   if (error) throw new Error(error.message);
-  return (data ?? []).reduce((sum, row) => sum + num(row.amount_ml), 0);
+  return ((data ?? []) as Array<Record<string, unknown>>).reduce((sum, row) => sum + num(row.amount_ml), 0);
 }
 
 async function caloriesForDate(ctx: McpContext, date: string) {
@@ -118,7 +149,7 @@ async function caloriesForDate(ctx: McpContext, date: string) {
     target: target.daily_calories,
     consumed: totals.calories,
     remaining: Math.max(0, num(target.daily_calories) - totals.calories),
-    macros: { protein_g: totals.protein_g, carbs_g: totals.carbs_g, fat_g: totals.fat_g, targets: target },
+    macros: { ...totals, targets: target },
     logs: logs.data ?? []
   };
 }
@@ -130,10 +161,165 @@ async function requirePlan(ctx: McpContext, planId: string) {
   return data as Record<string, unknown>;
 }
 
-async function planDayIds(ctx: McpContext, planId: string) {
-  const { data, error } = await ctx.supabase.from("user_workout_plan_days").select("id,day_name,day_number").eq("plan_id", planId);
+async function requireDay(ctx: McpContext, dayId: string) {
+  const { data, error } = await ctx.supabase.from("user_workout_plan_days").select("*").eq("id", dayId).maybeSingle();
   if (error) throw new Error(error.message);
-  return (data ?? []) as Array<Record<string, unknown>>;
+  if (!data) throw new Error("Workout plan day not found.");
+  await requirePlan(ctx, String(data.plan_id));
+  return data as Record<string, unknown>;
+}
+
+async function requireExercise(ctx: McpContext, exerciseId: string) {
+  const { data, error } = await ctx.supabase.from("user_workout_plan_exercises").select("*").eq("id", exerciseId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Plan exercise not found.");
+  await requireDay(ctx, String(data.plan_day_id));
+  return data as Record<string, unknown>;
+}
+
+async function getFullPlan(ctx: McpContext, planId: string) {
+  const plan = await requirePlan(ctx, planId);
+  const { data: days, error: daysError } = await ctx.supabase.from("user_workout_plan_days").select("*").eq("plan_id", planId).order("day_number", { ascending: true });
+  if (daysError) throw new Error(daysError.message);
+  const dayIds = (days ?? []).map((day) => String(day.id));
+  const exercises = dayIds.length ? await ctx.supabase.from("user_workout_plan_exercises").select("*").in("plan_day_id", dayIds).order("sort_order", { ascending: true }) : { data: [], error: null };
+  if (exercises.error) throw new Error(exercises.error.message);
+  return { plan, days: days ?? [], exercises: exercises.data ?? [] };
+}
+
+function exerciseRow(planDayId: string, input: JsonObject, blockType: string) {
+  const order = getOptionalNumber(input, "order_index") ?? getOptionalNumber(input, "sort_order") ?? 1;
+  return {
+    plan_day_id: planDayId,
+    workout_id: null,
+    source_workout_id: null,
+    exercise_name: getString(input, "exercise_name"),
+    category: getOptionalString(input, "block_type") ?? blockType,
+    block_type: getOptionalString(input, "block_type") ?? blockType,
+    target_muscle: getOptionalString(input, "target_muscle") ?? null,
+    equipment: getOptionalString(input, "equipment") ?? null,
+    sets: getOptionalNumber(input, "sets") ?? null,
+    reps: getOptionalString(input, "reps") ?? null,
+    weight: getOptionalString(input, "weight") ?? null,
+    rest_seconds: getOptionalNumber(input, "rest_seconds") ?? null,
+    tempo: getOptionalString(input, "tempo") ?? null,
+    instructions: getOptionalString(input, "instructions") ?? null,
+    sort_order: order,
+    order_index: order,
+    notes: getOptionalString(input, "notes") ?? null
+  };
+}
+
+async function insertBlock(ctx: McpContext, dayId: string, blockType: string, items: JsonObject[]) {
+  if (!items.length) return [];
+  await requireDay(ctx, dayId);
+  const rows = items.map((item, index) => exerciseRow(dayId, { order_index: index + 1, ...item }, blockType));
+  const { data, error } = await ctx.supabase.from("user_workout_plan_exercises").insert(rows).select("*");
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+function itemsFrom(day: JsonObject, names: string[]) {
+  for (const name of names) {
+    const items = getArray<JsonObject>(day, name);
+    if (items.length) return items;
+  }
+  return [];
+}
+
+async function saveChatGptPlan(ctx: McpContext, input: JsonObject) {
+  const days = getArray<JsonObject>(input, "days");
+  if (!days.length) return fail("missing_required_input", "Provide a full ChatGPT-created plan object with days.");
+
+  const activate = input.activate !== false;
+  if (activate) await ctx.supabase.from("user_workout_plans").update({ is_active: false, is_default: false }).eq("user_id", ctx.userId);
+
+  const { data: plan, error: planError } = await ctx.supabase
+    .from("user_workout_plans")
+    .insert({
+      user_id: ctx.userId,
+      name: getString(input, "name"),
+      goal: getOptionalString(input, "goal") ?? null,
+      description: getOptionalString(input, "description") ?? null,
+      is_active: activate,
+      is_default: activate,
+      source: "chatgpt",
+      chatgpt_source: true,
+      program_duration_weeks: getOptionalNumber(input, "duration_weeks") ?? getOptionalNumber(input, "desired_duration_weeks") ?? null,
+      days_per_week: getOptionalNumber(input, "days_per_week") ?? days.length,
+      session_duration_minutes: getOptionalNumber(input, "session_duration_minutes") ?? getOptionalNumber(input, "workout_duration_minutes") ?? null,
+      match_explanation: "Created by ChatGPT through FitLife MCP.",
+      match_reasons: ["chatgpt_created"]
+    })
+    .select("*")
+    .single();
+
+  if (planError || !plan) throw new Error(planError?.message ?? "Could not save workout plan.");
+
+  let savedDaysCount = 0;
+  let savedExercisesCount = 0;
+  const savedDayIds: string[] = [];
+
+  for (const day of days) {
+    const dayNumber = Math.max(1, getNumber(day, "day_number", savedDaysCount + 1));
+    const { data: savedDay, error: dayError } = await ctx.supabase
+      .from("user_workout_plan_days")
+      .insert({
+        plan_id: plan.id,
+        day_number: dayNumber,
+        day_name: getString(day, "day_name", `Day ${dayNumber}`),
+        focus: getOptionalString(day, "focus") ?? null,
+        weekday: getOptionalString(day, "weekday") ?? null,
+        session_duration_minutes: getOptionalNumber(day, "session_duration_minutes") ?? getOptionalNumber(input, "session_duration_minutes") ?? null,
+        notes: getOptionalString(day, "notes") ?? null
+      })
+      .select("*")
+      .single();
+
+    if (dayError || !savedDay) throw new Error(dayError?.message ?? "Could not save plan day.");
+    savedDayIds.push(savedDay.id);
+    savedDaysCount += 1;
+
+    for (const [block, items] of [
+      ["warmup", itemsFrom(day, ["warmup", "warm_up"])],
+      ["strength", itemsFrom(day, ["exercises", "strength", "main_workout"])],
+      ["cardio", itemsFrom(day, ["cardio", "cardio_finisher"])],
+      ["cooldown", itemsFrom(day, ["cooldown", "cool_down", "stretching"])]
+    ] as Array<[string, JsonObject[]]>) {
+      savedExercisesCount += (await insertBlock(ctx, savedDay.id, block, items)).length;
+    }
+  }
+
+  const durationWeeks = Math.max(1, getNumber(input, "duration_weeks", getNumber(input, "desired_duration_weeks", 1)));
+  const start = new Date(`${cleanDate(input.start_date ?? "today")}T00:00:00.000Z`);
+  if (activate) {
+    const rows = savedDayIds.flatMap((dayId, dayIndex) =>
+      Array.from({ length: durationWeeks }, (_, weekIndex) => ({
+        user_id: ctx.userId,
+        user_workout_plan_id: plan.id,
+        workout_template_day_id: null,
+        plan_day_id: dayId,
+        week_index: weekIndex + 1,
+        day_index: dayIndex + 1,
+        session_number: weekIndex * savedDayIds.length + dayIndex + 1,
+        scheduled_date: addDays(start, weekIndex * 7 + dayIndex).toISOString().slice(0, 10),
+        day_title: getString(days[dayIndex], "day_name", `Day ${dayIndex + 1}`),
+        status: "scheduled"
+      }))
+    );
+    if (rows.length) {
+      const { error } = await ctx.supabase.from("user_workout_sessions").insert(rows);
+      if (error) throw new Error(error.message);
+    }
+  }
+
+  return ok({ success: true, ok: true, plan_id: plan.id, saved_days_count: savedDaysCount, saved_exercises_count: savedExercisesCount });
+}
+
+async function upsertTarget(ctx: McpContext, patch: Record<string, unknown>) {
+  const { data, error } = await ctx.supabase.from("calorie_targets").upsert({ user_id: ctx.userId, ...patch }, { onConflict: "user_id" }).select("*").single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 function assertAdmin(ctx: McpContext) {
@@ -160,24 +346,79 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
 
       case "get_today_summary": {
         const today = cleanDate("today");
-        const [calories, water, mealPlan, workout, tasks, habits, sleep, supplements, prs] = await Promise.all([
+        const [calories, water, mealPlan, workout] = await Promise.all([
           caloriesForDate(ctx, today),
           waterLogged(ctx, today),
           ctx.supabase.from("user_meal_plan_items").select("*").eq("user_id", ctx.userId).eq("plan_date", today),
-          ctx.supabase.from("user_workout_sessions").select("*").eq("user_id", ctx.userId).eq("scheduled_date", today).maybeSingle(),
-          ctx.supabase.from("daily_fit_tasks").select("*").eq("user_id", ctx.userId).eq("task_date", today),
-          ctx.supabase.from("fitness_habits").select("*").eq("user_id", ctx.userId).eq("habit_date", today),
-          ctx.supabase.from("sleep_recovery_logs").select("*").eq("user_id", ctx.userId).eq("log_date", today).order("created_at", { ascending: false }).limit(1),
-          ctx.supabase.from("supplement_logs").select("*").eq("user_id", ctx.userId).eq("supplement_date", today),
-          ctx.supabase.from("personal_records").select("*").eq("user_id", ctx.userId).order("record_date", { ascending: false }).limit(5)
+          ctx.supabase.from("user_workout_sessions").select("*").eq("user_id", ctx.userId).eq("scheduled_date", today).maybeSingle()
         ]);
-        for (const result of [mealPlan, workout, tasks, habits, sleep, supplements, prs]) if (result.error) throw new Error(result.error.message);
-        return ok({ ok: true, date: today, calories, water_ml: water, meal_plan: mealPlan.data ?? [], workout: workout.data ?? null, daily_tasks: tasks.data ?? [], habits: habits.data ?? [], sleep_recovery: sleep.data ?? [], supplements: supplements.data ?? [], recent_prs: prs.data ?? [] });
+        if (mealPlan.error) throw new Error(mealPlan.error.message);
+        if (workout.error) throw new Error(workout.error.message);
+        return ok({ ok: true, date: today, calories, water_ml: water, meal_plan: mealPlan.data ?? [], workout: workout.data ?? null });
       }
 
       case "search_foods": {
         const { candidates } = await findFood(ctx, getString(input, "query"), Math.min(25, Math.max(1, getNumber(input, "limit", 10))));
         return ok({ ok: true, foods: candidates });
+      }
+
+      case "create_kitchen": {
+        const { data, error } = await ctx.supabase.from("food_kitchens").insert({ user_id: ctx.userId, name: getString(input, "name"), is_system: false }).select("*").single();
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, kitchen: data });
+      }
+
+      case "get_kitchens": {
+        const { data, error } = await ctx.supabase.from("food_kitchens").select("*").or(`user_id.eq.${ctx.userId},is_system.eq.true`).order("name", { ascending: true });
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, kitchens: data ?? [] });
+      }
+
+      case "update_kitchen": {
+        const { data, error } = await ctx.supabase.from("food_kitchens").update({ name: getString(input, "name") }).eq("id", getString(input, "kitchen_id")).eq("user_id", ctx.userId).eq("is_system", false).select("*").single();
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, kitchen: data });
+      }
+
+      case "delete_kitchen": {
+        const confirmation = requireConfirmation(input);
+        if (confirmation) return ok(confirmation);
+        const { error } = await ctx.supabase.from("food_kitchens").delete().eq("id", getString(input, "kitchen_id")).eq("user_id", ctx.userId).eq("is_system", false);
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, deleted_kitchen_id: getString(input, "kitchen_id") });
+      }
+
+      case "assign_food_to_kitchen": {
+        const { data, error } = await ctx.supabase.from("user_food_items").update({ kitchen_id: getString(input, "kitchen_id") }).eq("id", getString(input, "user_food_item_id")).eq("user_id", ctx.userId).select("*").single();
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, food: data });
+      }
+
+      case "get_foods_by_kitchen": {
+        const { data, error } = await ctx.supabase.from("user_food_items").select("*").eq("user_id", ctx.userId).eq("kitchen_id", getString(input, "kitchen_id")).order("food_name", { ascending: true });
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, foods: data ?? [] });
+      }
+
+      case "create_custom_food": {
+        const { data, error } = await ctx.supabase.from("user_food_items").insert({
+          user_id: ctx.userId,
+          food_name: getString(input, "food_name"),
+          serving_size: getString(input, "serving_size"),
+          calories: getNumber(input, "calories"),
+          protein_g: getNumber(input, "protein_g"),
+          carbs_g: getNumber(input, "carbs_g"),
+          fat_g: getNumber(input, "fat_g"),
+          category: getOptionalString(input, "category") ?? null,
+          cuisine: getOptionalString(input, "cuisine") ?? null,
+          kitchen_id: getOptionalString(input, "kitchen_id") ?? null,
+          fiber_g: getOptionalNumber(input, "fiber_g") ?? null,
+          sugar_g: getOptionalNumber(input, "sugar_g") ?? null,
+          sodium_mg: getOptionalNumber(input, "sodium_mg") ?? null,
+          notes: getOptionalString(input, "notes") ?? null
+        }).select("*").single();
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, food: data });
       }
 
       case "add_food_log": {
@@ -201,177 +442,136 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         return ok({ ok: true, saved_items: data ?? [], totals: sumMacros((data ?? []) as Array<Record<string, unknown>>) });
       }
 
-      case "create_custom_food": {
-        const { data, error } = await ctx.supabase.from("user_food_items").insert({ user_id: ctx.userId, food_name: getString(input, "food_name"), serving_size: getString(input, "serving_size"), calories: getNumber(input, "calories"), protein_g: getNumber(input, "protein_g"), carbs_g: getNumber(input, "carbs_g"), fat_g: getNumber(input, "fat_g"), category: getOptionalString(input, "category") ?? null, notes: getOptionalString(input, "notes") ?? null }).select("*").single();
+      case "get_food_logs_by_date": {
+        const date = cleanDate(input.date);
+        const { data, error } = await ctx.supabase.from("food_logs").select("*").eq("user_id", ctx.userId).eq("log_date", date).order("created_at", { ascending: true });
         if (error) throw new Error(error.message);
-        return ok({ ok: true, food: data });
+        return ok({ ok: true, date, logs: data ?? [] });
       }
 
-      case "create_custom_meal": {
-        const mealName = getString(input, "meal_name");
-        const items = getArray<JsonObject>(input, "items");
-        if (!items.length) return fail("missing_required_input", "items is required.");
-        const { data: meal, error: mealError } = await ctx.supabase.from("meals").insert({ user_id: ctx.userId, meal_name: mealName, meal_category: getOptionalString(input, "meal_category") ?? null, notes: getOptionalString(input, "notes") ?? null }).select("*").single();
-        if (mealError || !meal) throw new Error(mealError?.message ?? "Could not create meal.");
-        const mealItems = [];
-        for (const item of items) {
-          const match = await findFood(ctx, getString(item, "food_name"), 3);
-          if (!match.exact) return ok({ ok: false, status: "needs_clarification", item, candidates: match.candidates });
-          mealItems.push({ meal_id: meal.id, food_item_id: match.exact.source === "global" ? match.exact.id : null, user_food_item_id: match.exact.source === "user" ? match.exact.id : null, quantity: getNumber(item, "quantity", 1) });
+      case "update_food_log": {
+        const patch: Record<string, unknown> = {};
+        if (getOptionalString(input, "meal_type")) patch.meal_type = cleanMealType(input.meal_type);
+        for (const key of ["quantity", "calories", "protein_g", "carbs_g", "fat_g"]) {
+          const value = getOptionalNumber(input, key);
+          if (value !== undefined) patch[key] = value;
         }
-        const { data, error } = await ctx.supabase.from("meal_food_items").insert(mealItems).select("*");
+        if (getOptionalString(input, "notes") !== undefined) patch.notes = getOptionalString(input, "notes") ?? null;
+        const { data, error } = await ctx.supabase.from("food_logs").update(patch).eq("id", getString(input, "food_log_id")).eq("user_id", ctx.userId).select("*").single();
         if (error) throw new Error(error.message);
-        return ok({ ok: true, meal, items: data ?? [] });
+        return ok({ ok: true, log: data });
+      }
+
+      case "move_food_log_meal_type": {
+        const { data, error } = await ctx.supabase.from("food_logs").update({ meal_type: cleanMealType(input.meal_type) }).eq("id", getString(input, "food_log_id")).eq("user_id", ctx.userId).select("*").single();
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, log: data });
+      }
+
+      case "delete_food_log": {
+        const confirmation = requireConfirmation(input);
+        if (confirmation) return ok(confirmation);
+        const { error } = await ctx.supabase.from("food_logs").delete().eq("id", getString(input, "food_log_id")).eq("user_id", ctx.userId);
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, deleted_food_log_id: getString(input, "food_log_id") });
       }
 
       case "get_today_calories":
         return ok({ ok: true, ...(await caloriesForDate(ctx, cleanDate("today"))) });
 
-      case "delete_food_log": {
-        const confirmation = requireConfirmation(input);
-        if (confirmation) return ok(confirmation);
-        const id = getString(input, "food_log_id");
-        const { error } = await ctx.supabase.from("food_logs").delete().eq("id", id).eq("user_id", ctx.userId);
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, deleted_food_log_id: id });
-      }
-
       case "get_meal_plan": {
-        const start = cleanDate(input.start_date);
-        const end = cleanDate(input.end_date);
-        const { data, error } = await ctx.supabase.from("user_meal_plan_items").select("*").eq("user_id", ctx.userId).gte("plan_date", start).lte("plan_date", end).order("plan_date", { ascending: true });
+        const { data, error } = await ctx.supabase.from("user_meal_plan_items").select("*").eq("user_id", ctx.userId).gte("plan_date", cleanDate(input.start_date)).lte("plan_date", cleanDate(input.end_date)).order("plan_date", { ascending: true });
         if (error) throw new Error(error.message);
-        return ok({ ok: true, start_date: start, end_date: end, items: data ?? [] });
+        return ok({ ok: true, items: data ?? [] });
       }
 
-      case "create_meal_plan_item":
-      case "create_day_meal_plan":
-      case "create_week_meal_plan": {
-        const meals = toolName === "create_meal_plan_item" ? [input] : getArray<JsonObject>(input, "meals");
-        if (toolName === "create_week_meal_plan" && !getBoolean(input, "confirm")) return ok({ requires_confirmation: true, preview: input });
-        if (!meals.length) return fail("missing_required_input", "meals is required.");
-        const rows = [];
-        for (const meal of meals) {
-          const match = getOptionalString(meal, "food_item_id") ? undefined : await findFood(ctx, getString(meal, "food_name"), 5);
-          let food = match?.exact;
-          if (!food && getOptionalString(meal, "food_item_id")) {
-            const result = await ctx.supabase.from("food_items").select("id,food_name,serving_size,calories,protein_g,carbs_g,fat_g,category").eq("id", getString(meal, "food_item_id")).maybeSingle();
-            if (result.error) throw new Error(result.error.message);
-            if (result.data) food = { ...(result.data as Omit<FoodCandidate, "source">), source: "global" };
-          }
-          if (!food) return ok({ ok: false, status: "needs_clarification", item: meal, candidates: match?.candidates ?? [] });
-          rows.push({ user_id: ctx.userId, plan_date: cleanDate(meal.date ?? input.date ?? input.start_date), meal_type: cleanMealType(meal.meal_type), ...scaleFood(food, getNumber(meal, "quantity", 1)), status: "planned", notes: getOptionalString(meal, "notes") ?? null });
-        }
-        const { data, error } = await ctx.supabase.from("user_meal_plan_items").insert(rows).select("*");
+      case "create_custom_workout_plan":
+      case "save_chatgpt_workout_plan":
+      case "generate_workout_plan":
+        return saveChatGptPlan(ctx, input);
+
+      case "get_workout_plans": {
+        const { data, error } = await ctx.supabase.from("user_workout_plans").select("*").eq("user_id", ctx.userId).order("created_at", { ascending: false });
         if (error) throw new Error(error.message);
-        return ok({ ok: true, items: data ?? [], totals: sumMacros((data ?? []) as Array<Record<string, unknown>>) });
+        return ok({ ok: true, plans: data ?? [] });
       }
 
-      case "replace_meal_plan_item": {
-        const id = getString(input, "meal_plan_item_id");
-        const match = await findFood(ctx, getString(input, "food_name"), 5);
-        if (!match.exact) return ok({ ok: false, status: "needs_clarification", candidates: match.candidates });
-        const { data, error } = await ctx.supabase.from("user_meal_plan_items").update({ ...scaleFood(match.exact, getNumber(input, "quantity", 1)), notes: getOptionalString(input, "notes") ?? null }).eq("id", id).eq("user_id", ctx.userId).select("*").single();
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, item: data });
-      }
-
-      case "mark_meal_plan_item_done": {
-        const id = getString(input, "meal_plan_item_id");
-        const { data: item, error: itemError } = await ctx.supabase.from("user_meal_plan_items").select("*").eq("id", id).eq("user_id", ctx.userId).maybeSingle();
-        if (itemError) throw new Error(itemError.message);
-        if (!item) return fail("target_record_not_found", "Meal plan item not found.");
-        const { data: log, error: logError } = await ctx.supabase.from("food_logs").insert({ user_id: ctx.userId, log_date: item.plan_date, meal_type: item.meal_type, food_item_id: item.food_item_id, user_food_item_id: item.user_food_item_id, food_name: item.food_name, serving_size: item.serving_size, quantity: item.quantity, calories: item.calories, protein_g: item.protein_g, carbs_g: item.carbs_g, fat_g: item.fat_g, notes: item.notes }).select("*").single();
-        if (logError || !log) throw new Error(logError?.message ?? "Could not create food log.");
-        const update = await ctx.supabase.from("user_meal_plan_items").update({ status: "done", food_log_id: log.id, completed_at: new Date().toISOString() }).eq("id", id).eq("user_id", ctx.userId).select("*").single();
-        if (update.error) throw new Error(update.error.message);
-        return ok({ ok: true, item: update.data, food_log: log });
-      }
-
-      case "generate_shopping_list": {
-        const start = cleanDate(input.start_date);
-        const end = cleanDate(input.end_date);
-        const { data, error } = await ctx.supabase.from("user_meal_plan_items").select("food_name,quantity,serving_size,plan_date,meal_type").eq("user_id", ctx.userId).gte("plan_date", start).lte("plan_date", end);
-        if (error) throw new Error(error.message);
-        const grouped = new Map<string, Record<string, unknown>>();
-        for (const row of data ?? []) {
-          const key = String(row.food_name);
-          const existing = grouped.get(key) ?? { food_name: key, quantity: 0, serving_size: row.serving_size, uses: [] };
-          existing.quantity = num(existing.quantity) + num(row.quantity);
-          (existing.uses as Array<Record<string, unknown>>).push({ date: row.plan_date, meal_type: row.meal_type });
-          grouped.set(key, existing);
-        }
-        return ok({ ok: true, shopping_list: Array.from(grouped.values()) });
-      }
-
-      case "add_water_log": {
-        const date = cleanDate(input.date);
-        const amount = Math.round(getNumber(input, "amount_ml"));
-        if (amount <= 0) return fail("missing_required_input", "amount_ml must be positive.");
-        const { data, error } = await ctx.supabase.from("water_logs").insert({ user_id: ctx.userId, log_date: date, amount_ml: amount }).select("*").single();
-        if (error) throw new Error(error.message);
-        const target = await targets(ctx);
-        const logged = await waterLogged(ctx, date);
-        return ok({ ok: true, log: data, summary: { date, target_ml: target.water_ml, logged_ml: logged, remaining_ml: Math.max(0, num(target.water_ml) - logged), percentage: target.water_ml ? Math.round((logged / num(target.water_ml)) * 100) : 0 } });
-      }
-
-      case "get_water_summary": {
-        const date = cleanDate(input.date);
-        const target = await targets(ctx);
-        const logged = await waterLogged(ctx, date);
-        return ok({ ok: true, date, target_ml: target.water_ml, logged_ml: logged, remaining_ml: Math.max(0, num(target.water_ml) - logged), percentage: target.water_ml ? Math.round((logged / num(target.water_ml)) * 100) : 0 });
-      }
-
-      case "delete_water_log": {
-        const confirmation = requireConfirmation(input);
-        if (confirmation) return ok(confirmation);
-        const id = getString(input, "water_log_id");
-        const { error } = await ctx.supabase.from("water_logs").delete().eq("id", id).eq("user_id", ctx.userId);
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, deleted_water_log_id: id });
-      }
-
-      case "search_exercises": {
-        const query = getString(input, "query");
-        const { data, error } = await ctx.supabase.from("exercises").select("id,name,primary_muscle,equipment,difficulty,instructions").ilike("name", `%${query}%`).limit(20);
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, exercises: data ?? [] });
-      }
+      case "get_workout_plan_by_id":
+        return ok({ ok: true, ...(await getFullPlan(ctx, getString(input, "plan_id"))) });
 
       case "get_active_workout_plan": {
-        const { data: plan, error } = await ctx.supabase.from("user_workout_plans").select("*").eq("user_id", ctx.userId).eq("is_active", true).maybeSingle();
+        const { data, error } = await ctx.supabase.from("user_workout_plans").select("*").eq("user_id", ctx.userId).eq("is_active", true).maybeSingle();
         if (error) throw new Error(error.message);
-        if (!plan) return ok({ ok: true, plan: null, days: [], exercises: [] });
-        const days = await planDayIds(ctx, String(plan.id));
-        const ids = days.map((day) => String(day.id));
-        const exercises = ids.length ? await ctx.supabase.from("user_workout_plan_exercises").select("*").in("plan_day_id", ids).order("sort_order", { ascending: true }) : { data: [], error: null };
-        if (exercises.error) throw new Error(exercises.error.message);
-        return ok({ ok: true, plan, days, exercises: exercises.data ?? [] });
+        if (!data) return ok({ ok: true, plan: null, days: [], exercises: [] });
+        return ok({ ok: true, ...(await getFullPlan(ctx, String(data.id))) });
       }
 
-      case "generate_workout_plan":
-        return ok({ requires_confirmation: true, message: "This package wires the MCP tool and auth. Keep using the existing /api/workout-plan/generate logic for full plan persistence, or move that route body into this executor. Call without direct replacement until confirmed.", requested_plan: input });
-
-      case "replace_exercise": {
-        const planId = getString(input, "plan_id");
-        await requirePlan(ctx, planId);
-        const days = await planDayIds(ctx, planId);
-        const ids = days.map((day) => String(day.id));
-        const { data, error } = await ctx.supabase.from("user_workout_plan_exercises").update({ exercise_name: getString(input, "new_exercise_name"), notes: getOptionalString(input, "reason") ?? null }).in("plan_day_id", ids).ilike("exercise_name", getString(input, "old_exercise_name")).select("*");
+      case "create_workout_plan_day": {
+        await requirePlan(ctx, getString(input, "plan_id"));
+        const { data, error } = await ctx.supabase.from("user_workout_plan_days").insert({ plan_id: getString(input, "plan_id"), day_number: getNumber(input, "day_number"), day_name: getString(input, "day_name"), focus: getOptionalString(input, "focus") ?? null, weekday: getOptionalString(input, "weekday") ?? null, session_duration_minutes: getOptionalNumber(input, "session_duration_minutes") ?? null, notes: getOptionalString(input, "notes") ?? null }).select("*").single();
         if (error) throw new Error(error.message);
-        return ok({ ok: true, replaced_count: data?.length ?? 0, exercises: data ?? [] });
+        return ok({ ok: true, day: data });
+      }
+
+      case "update_workout_plan_day": {
+        await requireDay(ctx, getString(input, "plan_day_id"));
+        const patch: Record<string, unknown> = {};
+        for (const key of ["day_name", "focus", "weekday", "notes"]) if (getOptionalString(input, key) !== undefined) patch[key] = getOptionalString(input, key);
+        if (getOptionalNumber(input, "day_number") !== undefined) patch.day_number = getOptionalNumber(input, "day_number");
+        if (getOptionalNumber(input, "session_duration_minutes") !== undefined) patch.session_duration_minutes = getOptionalNumber(input, "session_duration_minutes");
+        const { data, error } = await ctx.supabase.from("user_workout_plan_days").update(patch).eq("id", getString(input, "plan_day_id")).select("*").single();
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, day: data });
+      }
+
+      case "delete_workout_plan_day": {
+        const confirmation = requireConfirmation(input);
+        if (confirmation) return ok(confirmation);
+        await requireDay(ctx, getString(input, "plan_day_id"));
+        const { error } = await ctx.supabase.from("user_workout_plan_days").delete().eq("id", getString(input, "plan_day_id"));
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, deleted_plan_day_id: getString(input, "plan_day_id") });
+      }
+
+      case "add_exercise_to_plan_day": {
+        await requireDay(ctx, getString(input, "plan_day_id"));
+        const { data, error } = await ctx.supabase.from("user_workout_plan_exercises").insert(exerciseRow(getString(input, "plan_day_id"), input, getOptionalString(input, "block_type") ?? "strength")).select("*").single();
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, exercise: data });
+      }
+
+      case "add_warmup_to_plan_day":
+      case "add_cardio_to_plan_day":
+      case "add_cooldown_to_plan_day": {
+        const block = toolName === "add_warmup_to_plan_day" ? "warmup" : toolName === "add_cardio_to_plan_day" ? "cardio" : "cooldown";
+        const items = await insertBlock(ctx, getString(input, "plan_day_id"), block, getArray<JsonObject>(input, "items"));
+        return ok({ ok: true, inserted_count: items.length, items });
       }
 
       case "add_cardio_to_plan": {
-        const planId = getString(input, "plan_id");
-        await requirePlan(ctx, planId);
-        const days = await planDayIds(ctx, planId);
-        const selected = getArray<string>(input, "days");
-        const targetDays = selected.length ? days.filter((day) => selected.includes(String(day.day_name)) || selected.includes(String(day.day_number))) : days;
-        const rows = targetDays.map((day, index) => ({ plan_day_id: day.id, workout_id: null, source_workout_id: null, exercise_name: `${getNumber(input, "duration_minutes", 15)} min cardio`, category: "cardio", target_muscle: "cardiorespiratory", equipment: "Any", sets: null, reps: `${getNumber(input, "duration_minutes", 15)} min`, rest_seconds: null, sort_order: 900 + index, notes: getString(input, "intensity", "moderate") }));
+        const full = await getFullPlan(ctx, getString(input, "plan_id"));
+        const rows = (full.days as Array<Record<string, unknown>>).map((day, index) => exerciseRow(String(day.id), { exercise_name: `${getNumber(input, "duration_minutes", 15)} min cardio`, reps: `${getNumber(input, "duration_minutes", 15)} min`, target_muscle: "cardiorespiratory", equipment: "Any", order_index: 900 + index, notes: getOptionalString(input, "intensity") ?? "moderate" }, "cardio"));
         const { data, error } = await ctx.supabase.from("user_workout_plan_exercises").insert(rows).select("*");
         if (error) throw new Error(error.message);
         return ok({ ok: true, inserted_count: data?.length ?? 0, items: data ?? [] });
+      }
+
+      case "update_plan_exercise": {
+        await requireExercise(ctx, getString(input, "plan_exercise_id"));
+        const patch = exerciseRow("unused", input, getOptionalString(input, "block_type") ?? "strength") as Record<string, unknown>;
+        delete patch.plan_day_id;
+        const { data, error } = await ctx.supabase.from("user_workout_plan_exercises").update(patch).eq("id", getString(input, "plan_exercise_id")).select("*").single();
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, exercise: data });
+      }
+
+      case "delete_plan_exercise": {
+        const confirmation = requireConfirmation(input);
+        if (confirmation) return ok(confirmation);
+        await requireExercise(ctx, getString(input, "plan_exercise_id"));
+        const { error } = await ctx.supabase.from("user_workout_plan_exercises").delete().eq("id", getString(input, "plan_exercise_id"));
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, deleted_plan_exercise_id: getString(input, "plan_exercise_id") });
       }
 
       case "activate_workout_plan": {
@@ -385,8 +585,25 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         return ok({ ok: true, active_plan: data });
       }
 
-      case "edit_workout_plan":
-        return ok({ requires_confirmation: true, message: "Use replace_exercise, add_cardio_to_plan, or activate_workout_plan for typed safe edits in this foundation.", requested_operations: getArray(input, "operations") });
+      case "delete_workout_plan": {
+        const confirmation = requireConfirmation(input);
+        if (confirmation) return ok(confirmation);
+        await requirePlan(ctx, getString(input, "plan_id"));
+        const { error } = await ctx.supabase.from("user_workout_plans").delete().eq("id", getString(input, "plan_id")).eq("user_id", ctx.userId);
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, deleted_plan_id: getString(input, "plan_id") });
+      }
+
+      case "search_exercises":
+        return ok({ ok: true, exercises: [], message: "No exercise library is required. ChatGPT can create exercise names directly in user plans." });
+
+      case "replace_exercise": {
+        const full = await getFullPlan(ctx, getString(input, "plan_id"));
+        const ids = (full.days as Array<Record<string, unknown>>).map((day) => String(day.id));
+        const { data, error } = await ctx.supabase.from("user_workout_plan_exercises").update({ exercise_name: getString(input, "new_exercise_name"), notes: getOptionalString(input, "reason") ?? null }).in("plan_day_id", ids).ilike("exercise_name", getString(input, "old_exercise_name")).select("*");
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, replaced_count: data?.length ?? 0, exercises: data ?? [] });
+      }
 
       case "get_today_workout": {
         const today = cleanDate("today");
@@ -412,16 +629,17 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         const exerciseName = getString(input, "exercise_name");
         const sets = getArray<JsonObject>(input, "sets");
         const generatedSession = await ctx.supabase.from("user_workout_sessions").select("id").eq("id", sessionId).eq("user_id", ctx.userId).maybeSingle();
+        if (generatedSession.error) throw new Error(generatedSession.error.message);
         if (generatedSession.data) {
           const rows = sets.map((set, index) => ({ user_workout_session_id: sessionId, exercise_order: getNumber(set, "set_number", index + 1), exercise_name: exerciseName, weight_kg: getOptionalNumber(set, "weight_kg") ?? null, reps: getOptionalNumber(set, "reps") ?? null, notes: getOptionalString(set, "notes") ?? null, completed: true, completed_at: new Date().toISOString() }));
           const { data, error } = await ctx.supabase.from("user_exercise_logs").upsert(rows, { onConflict: "user_workout_session_id,exercise_order" }).select("*");
           if (error) throw new Error(error.message);
-          return ok({ ok: true, logs: data ?? [], pr_candidate: rows.some((row) => row.weight_kg && row.reps) });
+          return ok({ ok: true, logs: data ?? [] });
         }
         const rows = sets.map((set) => ({ workout_session_id: sessionId, exercise_name: exerciseName, set_number: getNumber(set, "set_number", 1), weight_kg: getOptionalNumber(set, "weight_kg") ?? null, reps: getOptionalNumber(set, "reps") ?? null, notes: getOptionalString(set, "notes") ?? null, completed_at: new Date().toISOString() }));
         const { data, error } = await ctx.supabase.from("exercise_logs").insert(rows).select("*");
         if (error) throw new Error(error.message);
-        return ok({ ok: true, logs: data ?? [], pr_candidate: rows.some((row) => row.weight_kg && row.reps) });
+        return ok({ ok: true, logs: data ?? [] });
       }
 
       case "complete_workout": {
@@ -453,17 +671,30 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
       }
 
       case "add_personal_record": {
-        const exerciseName = getString(input, "exercise_name");
-        const weight = getOptionalNumber(input, "weight_kg") ?? null;
-        const reps = getOptionalNumber(input, "reps") ?? null;
-        const estimatedOneRepMax = weight && reps ? Number((weight * (1 + reps / 30)).toFixed(2)) : null;
-        const previous = await ctx.supabase.from("personal_records").select("weight_kg,reps").eq("user_id", ctx.userId).ilike("exercise_name", exerciseName).limit(20);
-        if (previous.error) throw new Error(previous.error.message);
-        const previousBest = Math.max(...(previous.data ?? []).map((record) => num(record.weight_kg) * (1 + num(record.reps) / 30)), 0);
-        const { data, error } = await ctx.supabase.from("personal_records").insert({ user_id: ctx.userId, exercise_name: exerciseName, record_type: getString(input, "record_type"), weight_kg: weight, reps, record_date: cleanDate(input.record_date), notes: getOptionalString(input, "notes") ?? null }).select("*").single();
+        const { data, error } = await ctx.supabase.from("personal_records").insert({ user_id: ctx.userId, exercise_name: getString(input, "exercise_name"), record_type: getString(input, "record_type"), weight_kg: getOptionalNumber(input, "weight_kg") ?? null, reps: getOptionalNumber(input, "reps") ?? null, record_date: cleanDate(input.record_date), notes: getOptionalString(input, "notes") ?? null }).select("*").single();
         if (error) throw new Error(error.message);
-        return ok({ ok: true, record: data, estimated_1rm_kg: estimatedOneRepMax, is_new_pr: estimatedOneRepMax ? estimatedOneRepMax > previousBest : true });
+        return ok({ ok: true, record: data });
       }
+
+      case "update_user_profile":
+      case "update_training_goal":
+      case "update_body_goal": {
+        const patch: Record<string, unknown> = {};
+        for (const key of ["full_name", "goal", "gender", "activity_level", "training_level", "body_goal"]) if (getOptionalString(input, key) !== undefined) patch[key] = getOptionalString(input, key);
+        for (const key of ["weight_kg", "target_weight_kg", "height_cm", "age"]) if (getOptionalNumber(input, key) !== undefined) patch[key] = key === "age" ? Math.round(getNumber(input, key)) : getOptionalNumber(input, key);
+        const { data, error } = await ctx.supabase.from("profiles").update(patch).eq("id", ctx.userId).select("*").single();
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, profile: data });
+      }
+
+      case "update_calorie_target": {
+        const patch: Record<string, unknown> = {};
+        for (const key of ["daily_calories", "protein_g", "carbs_g", "fat_g", "water_ml"]) if (getOptionalNumber(input, key) !== undefined) patch[key] = key === "daily_calories" || key === "water_ml" ? Math.round(getNumber(input, key)) : getOptionalNumber(input, key);
+        return ok({ ok: true, calorie_target: await upsertTarget(ctx, patch) });
+      }
+
+      case "update_water_target":
+        return ok({ ok: true, calorie_target: await upsertTarget(ctx, { water_ml: Math.round(getNumber(input, "water_ml")) }) });
 
       case "add_weight_entry": {
         const { data, error } = await ctx.supabase.from("progress_entries").insert({ user_id: ctx.userId, entry_date: cleanDate(input.date), body_weight_kg: getNumber(input, "weight_kg"), notes: getOptionalString(input, "notes") ?? null }).select("*").single();
@@ -471,142 +702,25 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         return ok({ ok: true, entry: data });
       }
 
-      case "add_body_measurement": {
-        const allowed = ["waist_cm", "hips_cm", "chest_cm", "neck_cm", "shoulders_cm", "left_arm_cm", "right_arm_cm", "left_thigh_cm", "right_thigh_cm", "glutes_cm", "calves_cm"];
-        const payload: Record<string, unknown> = { user_id: ctx.userId, measured_at: cleanDate(input.measured_at) };
-        for (const key of allowed) {
-          const value = getOptionalNumber(input, key);
-          if (value !== undefined) payload[key] = value;
-        }
-        const { data, error } = await ctx.supabase.from("body_measurements").insert(payload).select("*").single();
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, measurement: data });
-      }
-
       case "get_progress_summary": {
         const days = Math.max(1, Math.min(365, getNumber(input, "period_days", 30)));
         const since = dateDaysAgo(days);
-        const [progress, workouts, calories, prs, water, habits] = await Promise.all([
-          ctx.supabase.from("progress_entries").select("*").eq("user_id", ctx.userId).gte("entry_date", since).order("entry_date", { ascending: true }),
+        const [progress, workouts, calories] = await Promise.all([
+          ctx.supabase.from("progress_entries").select("*").eq("user_id", ctx.userId).gte("entry_date", since),
           ctx.supabase.from("user_workout_sessions").select("*").eq("user_id", ctx.userId).gte("scheduled_date", since),
-          ctx.supabase.from("food_logs").select("*").eq("user_id", ctx.userId).gte("log_date", since),
-          ctx.supabase.from("personal_records").select("*").eq("user_id", ctx.userId).gte("record_date", since),
-          ctx.supabase.from("water_logs").select("*").eq("user_id", ctx.userId).gte("log_date", since),
-          ctx.supabase.from("fitness_habits").select("*").eq("user_id", ctx.userId).gte("habit_date", since)
+          ctx.supabase.from("food_logs").select("*").eq("user_id", ctx.userId).gte("log_date", since)
         ]);
-        for (const result of [progress, workouts, calories, prs, water, habits]) if (result.error) throw new Error(result.error.message);
-        return ok({ ok: true, period_days: days, since, progress: progress.data ?? [], workout_adherence: workouts.data ?? [], calories: sumMacros((calories.data ?? []) as Array<Record<string, unknown>>), personal_records: prs.data ?? [], water_logs: water.data ?? [], habits: habits.data ?? [] });
-      }
-
-      case "get_daily_fit_tasks": {
-        const date = cleanDate(input.date);
-        const { data, error } = await ctx.supabase.from("daily_fit_tasks").select("*").eq("user_id", ctx.userId).eq("task_date", date);
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, date, tasks: data ?? [] });
-      }
-      case "create_daily_fit_task": {
-        const { data, error } = await ctx.supabase.from("daily_fit_tasks").insert({ user_id: ctx.userId, task_date: cleanDate(input.date), title: getString(input, "title"), notes: getOptionalString(input, "notes") ?? null }).select("*").single();
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, task: data });
-      }
-      case "mark_daily_fit_task_done": {
-        const { data, error } = await ctx.supabase.from("daily_fit_tasks").update({ completed: true }).eq("id", getString(input, "task_id")).eq("user_id", ctx.userId).select("*").single();
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, task: data });
-      }
-      case "mark_daily_fit_task_skipped": {
-        const { data, error } = await ctx.supabase.from("daily_fit_tasks").update({ completed: false, notes: getOptionalString(input, "reason") ?? "Skipped" }).eq("id", getString(input, "task_id")).eq("user_id", ctx.userId).select("*").single();
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, task: data });
-      }
-      case "get_habits": {
-        const date = cleanDate(input.date);
-        const { data, error } = await ctx.supabase.from("fitness_habits").select("*").eq("user_id", ctx.userId).eq("habit_date", date);
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, date, habits: data ?? [] });
-      }
-      case "mark_habit_done": {
-        const date = cleanDate(input.date);
-        const id = getOptionalString(input, "habit_id");
-        const name = getOptionalString(input, "name");
-        const request = id ? ctx.supabase.from("fitness_habits").update({ completed: true }).eq("id", id).eq("user_id", ctx.userId) : ctx.supabase.from("fitness_habits").insert({ user_id: ctx.userId, habit_date: date, name, completed: true });
-        const { data, error } = await request.select("*");
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, habit: data?.[0] ?? null });
-      }
-      case "create_habit": {
-        const { data, error } = await ctx.supabase.from("fitness_habits").insert({ user_id: ctx.userId, habit_date: cleanDate("today"), name: getString(input, "name"), notes: [getOptionalString(input, "notes"), getOptionalString(input, "schedule")].filter(Boolean).join(" | ") || null }).select("*").single();
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, habit: data });
-      }
-
-      case "add_sleep_recovery_log": {
-        const hours = getOptionalNumber(input, "hours_slept");
-        const recommendation = hours !== undefined && hours < 6 ? "Consider a lighter session and avoid training through serious pain. This is general fitness guidance, not medical advice." : "Track recovery and adjust intensity based on soreness and fatigue.";
-        const { data, error } = await ctx.supabase.from("sleep_recovery_logs").insert({ user_id: ctx.userId, log_date: cleanDate(input.date), hours_slept: hours ?? null, sleep_quality: getOptionalString(input, "sleep_quality") ?? null, recovery_level: getOptionalString(input, "recovery_level") ?? null, fatigue_level: getOptionalString(input, "fatigue_level") ?? null, soreness_level: getOptionalString(input, "soreness_level") ?? null, notes: [getOptionalString(input, "stress_level"), getOptionalString(input, "notes")].filter(Boolean).join(" | ") || null }).select("*").single();
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, log: data, recommendation });
-      }
-      case "get_sleep_recovery_summary": {
-        const days = Math.max(1, Math.min(90, getNumber(input, "period_days", 7)));
-        const { data, error } = await ctx.supabase.from("sleep_recovery_logs").select("*").eq("user_id", ctx.userId).gte("log_date", dateDaysAgo(days)).order("log_date", { ascending: false });
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, period_days: days, logs: data ?? [] });
-      }
-      case "get_today_supplements": {
-        const date = cleanDate(input.date);
-        const { data, error } = await ctx.supabase.from("supplement_logs").select("*").eq("user_id", ctx.userId).eq("supplement_date", date);
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, date, supplements: data ?? [] });
-      }
-      case "add_supplement_log": {
-        const { data, error } = await ctx.supabase.from("supplement_logs").insert({ user_id: ctx.userId, supplement_date: cleanDate(input.date), name: getString(input, "name"), dose: getOptionalString(input, "dose") ?? null, time: getOptionalString(input, "time") ?? null, reminder: getOptionalString(input, "reminder") ?? null, taken_today: false }).select("*").single();
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, supplement: data, safety: "Tracking only. FitLife does not provide medical dosage advice." });
-      }
-      case "mark_supplement_taken": {
-        const date = cleanDate(input.date);
-        const id = getOptionalString(input, "log_id");
-        const request = id ? ctx.supabase.from("supplement_logs").update({ taken_today: true }).eq("id", id).eq("user_id", ctx.userId) : ctx.supabase.from("supplement_logs").update({ taken_today: true }).eq("user_id", ctx.userId).eq("supplement_date", date).ilike("name", getString(input, "name"));
-        const { data, error } = await request.select("*");
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, supplements: data ?? [] });
+        for (const result of [progress, workouts, calories]) if (result.error) throw new Error(result.error.message);
+        return ok({ ok: true, period_days: days, progress: progress.data ?? [], workout_adherence: workouts.data ?? [], calories: sumMacros((calories.data ?? []) as Array<Record<string, unknown>>) });
       }
 
       case "admin_api_status":
         assertAdmin(ctx);
         return ok({ ok: true, providers: configuredProviders() });
-      case "admin_search_users": {
+
+      case "admin_create_global_workout_or_exercise":
         assertAdmin(ctx);
-        const query = getString(input, "query");
-        const { data, error } = await ctx.supabase.from("profiles").select("id,email,full_name,role,created_at").or(`email.ilike.%${query}%,full_name.ilike.%${query}%`).limit(20);
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, users: data ?? [] });
-      }
-      case "get_admin_user_summary": {
-        assertAdmin(ctx);
-        const targetUserId = getOptionalString(input, "user_id") ?? ctx.userId;
-        const [profile, calories, workouts, progress] = await Promise.all([
-          ctx.supabase.from("profiles").select("*").eq("id", targetUserId).maybeSingle(),
-          ctx.supabase.from("food_logs").select("*").eq("user_id", targetUserId).gte("log_date", dateDaysAgo(30)),
-          ctx.supabase.from("user_workout_sessions").select("*").eq("user_id", targetUserId).gte("scheduled_date", dateDaysAgo(30)),
-          ctx.supabase.from("progress_entries").select("*").eq("user_id", targetUserId).gte("entry_date", dateDaysAgo(30))
-        ]);
-        for (const result of [profile, calories, workouts, progress]) if (result.error) throw new Error(result.error.message);
-        return ok({ ok: true, profile: profile.data, meal_logging_summary: sumMacros((calories.data ?? []) as Array<Record<string, unknown>>), workout_history: workouts.data ?? [], progress: progress.data ?? [] });
-      }
-      case "admin_create_global_food": {
-        assertAdmin(ctx);
-        const { data, error } = await ctx.supabase.from("food_items").insert({ food_name: getString(input, "food_name"), serving_size: getString(input, "serving_size"), calories: getNumber(input, "calories"), protein_g: getNumber(input, "protein_g"), carbs_g: getNumber(input, "carbs_g"), fat_g: getNumber(input, "fat_g"), category: getOptionalString(input, "category") ?? null, cuisine: getOptionalString(input, "cuisine") ?? null, is_global: true, is_editable_by_user: false, source_type: "admin_created", created_by: ctx.userId }).select("*").single();
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, food: data });
-      }
-      case "admin_create_global_workout_or_exercise": {
-        assertAdmin(ctx);
-        const { data, error } = await ctx.supabase.from("workouts").insert({ name: getString(input, "name"), category: getString(input, "category"), target_muscle: getString(input, "target_muscle"), equipment: getString(input, "equipment"), difficulty: getString(input, "difficulty"), instructions: getString(input, "instructions"), is_global: true, created_by: ctx.userId }).select("*").single();
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, workout: data });
-      }
+        return ok({ ok: false, deprecated: true, message: "Global exercise libraries are deprecated for user plan creation. Use create_custom_workout_plan." });
 
       default:
         return fail("unknown_tool", `Unknown FitLife MCP tool: ${toolName}`);
