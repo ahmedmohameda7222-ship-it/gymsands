@@ -8,7 +8,14 @@ export const serverEnv = {
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
   appUrl: publicEnv.appUrl,
   wgerApiKey: process.env.WGER_API_KEY || "",
-  geminiApiKey: process.env.GEMINI_API_KEY || "",
+  geminiApiKey:
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+    process.env.GOOGLE_GEMINI_API_KEY ||
+    process.env.GEMINI_KEY ||
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+    "",
   resendApiKey: process.env.RESEND_API_KEY || "",
   resendFromEmail: process.env.RESEND_FROM_EMAIL || "",
   stravaClientId: process.env.STRAVA_CLIENT_ID || "",

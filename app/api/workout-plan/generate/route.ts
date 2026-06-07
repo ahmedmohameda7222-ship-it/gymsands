@@ -160,9 +160,8 @@ export async function POST(request: Request) {
   const { data: exerciseRows, error: exerciseError } = await context.supabase
     .from("exercises")
     .select("id,name,primary_muscle,secondary_muscles,equipment,difficulty,mechanics,movement_pattern,force_type,instructions")
-    .eq("is_approved", true)
     .eq("is_global", true)
-    .limit(1000);
+    .limit(5000);
 
   if (exerciseError) return jsonError(`${exerciseError.message}. Run migrations through 015 and import wger exercises.`, 400);
   const exercises = toCleanExercises(exerciseRows ?? []);

@@ -93,7 +93,9 @@ export function selectStrengthExercises(exercises: CleanExercise[], input: Gener
       difficultyAllowed(exercise, experience) &&
       !matchesLimitation(exercise, input.limitations)
   );
-  const pool = allowed.length >= 8 ? allowed : exercises.filter((exercise) => difficultyAllowed(exercise, experience));
+  const difficultyPool = exercises.filter((exercise) => difficultyAllowed(exercise, experience));
+  const safeFallbackPool = exercises.filter((exercise) => !matchesLimitation(exercise, input.limitations));
+  const pool = allowed.length >= 3 ? allowed : difficultyPool.length >= 3 ? difficultyPool : safeFallbackPool.length >= 3 ? safeFallbackPool : exercises;
   const used = new Set<string>();
   const count = targetExerciseCount(experience, focus);
   const requirements = dayRequirements(focus).slice(0, count);
@@ -122,6 +124,34 @@ export function selectStrengthExercises(exercises: CleanExercise[], input: Gener
       instructions: best.instructions
     });
   });
+
+  if (selected.length < 3) {
+    const minimumCount = Math.min(3, pool.length);
+    const fallbackRequirement = requirements[0] ?? { label: focus, pattern: focus, muscle: focus, compound: true };
+    const rankedFallbacks = pool
+      .filter((exercise) => !used.has(exercise.id))
+      .map((exercise) => ({ exercise, score: scoreExercise(exercise, fallbackRequirement, input) }))
+      .sort((a, b) => b.score - a.score);
+
+    const needed = Math.max(0, minimumCount - selected.length);
+    rankedFallbacks.slice(0, needed).forEach(({ exercise }, index) => {
+      used.add(exercise.id);
+      const prescription = strengthPrescription(goal, index === 0, experience);
+      selected.push({
+        exerciseId: exercise.id,
+        name: exercise.name,
+        sets: prescription.sets,
+        reps: prescription.reps,
+        restSeconds: prescription.restSeconds,
+        intensity: index === 0 ? "controlled working sets" : "smooth accessory work",
+        notes: exercise.primary_muscle || focus,
+        sortOrder: selected.length + 1,
+        primaryMuscle: exercise.primary_muscle,
+        equipment: exercise.equipment,
+        instructions: exercise.instructions
+      });
+    });
+  }
 
   return selected;
 }

@@ -32,14 +32,14 @@ export function generateWorkoutPlan(input: GeneratorInput, exercises: CleanExerc
   const split = splitForDays(daysPerWeek);
   const weekdays = spreadWeekdays(split.length);
 
-  if (exercises.length < Math.max(12, split.length * 3)) {
+  if (exercises.length < 3) {
     throw new Error("Not enough active exercises are available. Import more exercises from wger before generating plans.");
   }
 
   const days = split.map((focus, dayIndex) => {
     const strengthItems = selectStrengthExercises(exercises, input, focus);
     if (strengthItems.length < 3) {
-      throw new Error(`Not enough active exercises matched ${focus}. Import more exercises for the user's equipment and level.`);
+      throw new Error(`Not enough active exercises are available for ${focus}. Import more wger exercises, then try again.`);
     }
     const strengthBlock: PlanBlock = {
       blockType: "strength",

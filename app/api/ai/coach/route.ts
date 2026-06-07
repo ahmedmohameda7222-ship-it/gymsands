@@ -7,7 +7,7 @@ import { rateLimit } from "@/lib/integrations/rate-limit";
 export async function POST(request: Request) {
   const limited = rateLimit(request, "ai-coach", 12, 60_000);
   if (limited) return limited;
-  const missing = requireServerKeys("Gemini coach", [["GEMINI_API_KEY", serverEnv.geminiApiKey]]);
+  const missing = requireServerKeys("Gemini coach", [["GEMINI_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY", serverEnv.geminiApiKey]]);
   if (missing) return missing;
   const context = await requireUser(request);
   if (context instanceof NextResponse) return context;

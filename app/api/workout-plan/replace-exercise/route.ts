@@ -29,7 +29,6 @@ export async function POST(request: Request) {
   let requestQuery = context.supabase
     .from("exercises")
     .select("id,name,primary_muscle,equipment,difficulty,instructions")
-    .eq("is_approved", true)
     .eq("is_global", true)
     .neq("name", body.currentName ?? "");
 

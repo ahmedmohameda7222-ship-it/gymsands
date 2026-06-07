@@ -29,6 +29,24 @@ function macroLine(food: any) {
   return `${food.calories ?? "?"} kcal | P ${food.protein ?? "?"}g | C ${food.carbs ?? "?"}g | F ${food.fat ?? "?"}g`;
 }
 
+function waitForFrame(video: HTMLVideoElement) {
+  if (video.readyState >= 2 && video.videoWidth > 0) return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
+    const finish = () => {
+      video.removeEventListener("loadedmetadata", finish);
+      video.removeEventListener("canplay", finish);
+      resolve(video.readyState >= 2 && video.videoWidth > 0);
+    };
+    video.addEventListener("loadedmetadata", finish, { once: true });
+    video.addEventListener("canplay", finish, { once: true });
+    window.setTimeout(finish, 1200);
+  });
+}
+
+function nextAnimationFrame() {
+  return new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
 export function ApiFoodTools({
   selectedDate,
   onFoodLogged
@@ -84,20 +102,48 @@ export function ApiFoodTools({
     setIsScanning(false);
   }
 
+  async function openCameraStream(preferEnvironmentCamera: boolean) {
+    return navigator.mediaDevices.getUserMedia({
+      video: preferEnvironmentCamera
+        ? { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        : true,
+      audio: false
+    });
+  }
+
+  async function attachCameraStream(stream: MediaStream) {
+    const video = videoRef.current;
+    if (!video) throw new Error("Camera preview is not ready. Please tap Scan again.");
+    video.srcObject = stream;
+    video.muted = true;
+    video.playsInline = true;
+    await video.play();
+    return waitForFrame(video);
+  }
+
   async function startScanner() {
     if (!navigator.mediaDevices?.getUserMedia) {
       return toast({ title: "Camera unavailable", description: "This browser cannot open the camera. Type the barcode manually." });
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-      streamRef.current = stream;
       setIsScanning(true);
-      setScannerMessage("");
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+      setScannerMessage("Opening camera...");
+      await nextAnimationFrame();
+
+      let stream = await openCameraStream(true);
+      streamRef.current = stream;
+      let hasFrame = await attachCameraStream(stream);
+
+      if (!hasFrame) {
+        stream.getTracks().forEach((track) => track.stop());
+        stream = await openCameraStream(false);
+        streamRef.current = stream;
+        hasFrame = await attachCameraStream(stream);
       }
+
+      if (!hasFrame) throw new Error("The camera opened but did not send video frames. Try another browser or type the barcode manually.");
+      setScannerMessage("Camera ready. Point it at the barcode.");
 
       const Detector = (window as BarcodeWindow).BarcodeDetector;
       if (!Detector) {
@@ -107,7 +153,7 @@ export function ApiFoodTools({
 
       const detector = new Detector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
       scanTimerRef.current = window.setInterval(async () => {
-        if (!videoRef.current) return;
+        if (!videoRef.current || videoRef.current.readyState < 2 || videoRef.current.videoWidth === 0) return;
         const codes = await detector.detect(videoRef.current).catch(() => []);
         const value = codes[0]?.rawValue?.trim();
         if (!value) return;
@@ -196,11 +242,9 @@ export function ApiFoodTools({
             </Button>
             <Button type="button" onClick={() => lookupBarcode()}>Lookup</Button>
           </div>
-          {isScanning ? (
-            <div className="mt-3 overflow-hidden rounded-md border bg-black">
-              <video ref={videoRef} className="aspect-video w-full object-cover" muted playsInline />
-            </div>
-          ) : null}
+          <div className={`mt-3 overflow-hidden rounded-md border bg-black ${isScanning ? "" : "hidden"}`}>
+            <video ref={videoRef} className="aspect-video w-full object-cover" muted playsInline autoPlay />
+          </div>
           {scannerMessage ? <p className="mt-2 text-sm text-muted-foreground">{scannerMessage}</p> : null}
           {barcodeFood ? (
             <div className="mt-3 rounded-md border bg-card p-3 text-sm">
