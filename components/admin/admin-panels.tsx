@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { CheckCircle2, RefreshCcw, Save, Upload, XCircle } from "lucide-react";
+import { RefreshCcw, Save, Trash2, Upload } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -182,14 +182,14 @@ export function AdminExerciseLibraryPanel() {
   const { session } = useAuth();
   const { toast } = useToast();
   const [exercises, setExercises] = useState<ExerciseRow[]>([]);
-  const [filters, setFilters] = useState({ source: "all", approval: "all", muscle: "", equipment: "", difficulty: "" });
+  const [filters, setFilters] = useState({ source: "all", visibility: "active", muscle: "", equipment: "", difficulty: "" });
   const [form, setForm] = useState({ name: "", primary_muscle: "", equipment: "", difficulty: "Beginner", instructions: "" });
 
   async function loadExercises() {
     if (!supabase) return;
-    let request = supabase.from("exercises").select("id,source,source_id,source_url,license,license_author,name,primary_muscle,equipment,difficulty,is_approved,is_global").order("created_at", { ascending: false }).limit(100);
+    let request = supabase.from("exercises").select("id,source,source_id,source_url,license,license_author,name,primary_muscle,equipment,difficulty,is_approved,is_global").order("created_at", { ascending: false }).limit(2000);
     if (filters.source !== "all") request = request.eq("source", filters.source);
-    if (filters.approval !== "all") request = request.eq("is_approved", filters.approval === "approved");
+    if (filters.visibility !== "all") request = request.eq("is_global", filters.visibility === "active");
     if (filters.muscle) request = request.ilike("primary_muscle", `%${filters.muscle}%`);
     if (filters.difficulty) request = request.ilike("difficulty", `%${filters.difficulty}%`);
     const { data, error } = await request;
@@ -204,9 +204,10 @@ export function AdminExerciseLibraryPanel() {
   useEffect(() => {
     loadExercises();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.source, filters.approval]);
+  }, [filters.source, filters.visibility]);
 
-  async function review(id: string, action: "approve" | "reject") {
+  async function setExerciseVisibility(id: string, visible: boolean) {
+    const action = visible ? "approve" : "remove";
     const response = await fetch(`/api/exercises/${action}`, {
       method: "POST",
       headers: {
@@ -216,8 +217,8 @@ export function AdminExerciseLibraryPanel() {
       body: JSON.stringify({ id })
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) return toast({ title: "Review failed", description: data.error ?? "Please try again." });
-    toast({ title: action === "approve" ? "Exercise approved" : "Exercise rejected" });
+    if (!response.ok) return toast({ title: visible ? "Restore failed" : "Remove failed", description: data.error ?? "Please try again." });
+    toast({ title: visible ? "Exercise restored" : "Exercise removed" });
     loadExercises();
   }
 
@@ -237,7 +238,7 @@ export function AdminExerciseLibraryPanel() {
     });
     if (error) return toast({ title: "Could not add exercise", description: error.message });
     setForm({ name: "", primary_muscle: "", equipment: "", difficulty: "Beginner", instructions: "" });
-    toast({ title: "Manual exercise added", description: "It is approved and available to the generator." });
+    toast({ title: "Manual exercise added", description: "It is active and available to the generator." });
     loadExercises();
   }
 
@@ -246,7 +247,7 @@ export function AdminExerciseLibraryPanel() {
       <Card>
         <CardHeader>
           <CardTitle>Exercise filters</CardTitle>
-          <CardDescription>Review approved global exercises and imported wger rows.</CardDescription>
+          <CardDescription>Imported wger exercises are active immediately. Remove anything you do not want members to use.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-5">
           <Select value={filters.source} onValueChange={(source) => setFilters((current) => ({ ...current, source }))}>
@@ -257,12 +258,12 @@ export function AdminExerciseLibraryPanel() {
               <SelectItem value="manual">Manual</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={filters.approval} onValueChange={(approval) => setFilters((current) => ({ ...current, approval }))}>
+          <Select value={filters.visibility} onValueChange={(visibility) => setFilters((current) => ({ ...current, visibility }))}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="removed">Removed</SelectItem>
+              <SelectItem value="all">All visibility</SelectItem>
             </SelectContent>
           </Select>
           <Input placeholder="Muscle" value={filters.muscle} onChange={(event) => setFilters((current) => ({ ...current, muscle: event.target.value }))} />
@@ -295,22 +296,25 @@ export function AdminExerciseLibraryPanel() {
                     {exercise.source} | {exercise.primary_muscle ?? "General"} | {(exercise.equipment ?? []).join(", ") || "Varies"}
                   </p>
                 </div>
-                <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${exercise.is_approved ? "text-primary" : "text-muted-foreground"}`}>
-                  {exercise.is_approved ? "Approved" : "Pending"}
+                <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${exercise.is_global ? "text-primary" : "text-muted-foreground"}`}>
+                  {exercise.is_global ? "Active" : "Removed"}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
                 Source ID: {exercise.source_id ?? "manual"} | License: {exercise.license ?? "not supplied"} {exercise.license_author ? `by ${exercise.license_author}` : ""}
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => review(exercise.id, "approve")} disabled={exercise.is_approved}>
-                  <CheckCircle2 className="h-4 w-4" />
-                  Approve
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => review(exercise.id, "reject")}>
-                  <XCircle className="h-4 w-4" />
-                  Reject
-                </Button>
+                {exercise.is_global ? (
+                  <Button size="sm" variant="outline" onClick={() => setExerciseVisibility(exercise.id, false)}>
+                    <Trash2 className="h-4 w-4" />
+                    Remove
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={() => setExerciseVisibility(exercise.id, true)}>
+                    <RefreshCcw className="h-4 w-4" />
+                    Restore
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -323,7 +327,7 @@ export function AdminExerciseLibraryPanel() {
 export function AdminApiImportsPanel() {
   const { session } = useAuth();
   const { toast } = useToast();
-  const [limit, setLimit] = useState("50");
+  const [limit, setLimit] = useState("100");
   const [offset, setOffset] = useState("0");
   const [batches, setBatches] = useState<any[]>([]);
   const [isImporting, setIsImporting] = useState(false);
@@ -351,7 +355,7 @@ export function AdminApiImportsPanel() {
     const data = await response.json().catch(() => ({}));
     setIsImporting(false);
     if (!response.ok) return toast({ title: "wger import not completed", description: data.error ?? "Please check configuration." });
-    toast({ title: "wger import completed", description: `${data.importedCount} exercises imported for review.` });
+    toast({ title: "wger import completed", description: `${data.importedCount} fetched, ${data.activatedCount ?? data.importedCount} new exercises activated.` });
     loadBatches();
   }
 
@@ -360,10 +364,10 @@ export function AdminApiImportsPanel() {
       <Card>
         <CardHeader>
           <CardTitle>Import from wger</CardTitle>
-          <CardDescription>wger is the only exercise API import source. Imported rows require approval.</CardDescription>
+          <CardDescription>wger is the only exercise API import source. New rows become active immediately.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <TextField label="Limit" type="number" value={limit} onChange={setLimit} placeholder="50" />
+          <TextField label="Limit" type="number" value={limit} onChange={setLimit} placeholder="100" />
           <TextField label="Offset" type="number" value={offset} onChange={setOffset} placeholder="0" />
           <Button onClick={importWger} disabled={isImporting}>
             <Upload className="h-4 w-4" />
@@ -380,7 +384,7 @@ export function AdminApiImportsPanel() {
             <div key={batch.id} className="rounded-md border p-3">
               <p className="font-semibold">{batch.source} | {batch.status}</p>
               <p className="text-sm text-muted-foreground">
-                Imported {batch.imported_count ?? 0} | Approved {batch.approved_count ?? 0} | Rejected {batch.rejected_count ?? 0}
+                Fetched {batch.imported_count ?? 0} | New active {batch.approved_count ?? 0} | Removed {batch.rejected_count ?? 0}
               </p>
               {batch.error_message ? <p className="mt-1 text-sm text-destructive">{batch.error_message}</p> : null}
             </div>
@@ -458,7 +462,7 @@ export function AdminVideoPanel() {
         source: "manual_admin_sample"
       }
     ]);
-    toast({ title: "Sample import completed", description: "Use wger imports for the reviewed exercise library." });
+    toast({ title: "Sample import completed", description: "Use wger imports for the active exercise library." });
   }
 
   return (

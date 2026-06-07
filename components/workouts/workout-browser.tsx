@@ -11,7 +11,7 @@ import { getWorkoutFilterOptions, getWorkouts, type WorkoutFilterOptions, type W
 import { useToast } from "@/components/ui/toaster";
 import type { Workout } from "@/types";
 
-const pageSize = 60;
+const pageSize = 500;
 
 type FilterKey =
   | "muscleCategories"
