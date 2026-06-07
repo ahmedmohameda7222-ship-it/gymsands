@@ -3,26 +3,37 @@
 @tailwind utilities;
 
 :root {
-  --background: 220 49% 8%;
-  --foreground: 39 39% 93%;
-  --card: 222 46% 12%;
-  --card-foreground: 39 39% 93%;
-  --popover: 222 46% 12%;
-  --popover-foreground: 39 39% 93%;
-  --primary: 43 57% 63%;
-  --primary-foreground: 220 49% 8%;
-  --secondary: 136 20% 57%;
-  --secondary-foreground: 220 49% 8%;
-  --muted: 220 29% 21%;
-  --muted-foreground: 218 13% 70%;
-  --accent: 136 20% 57%;
-  --accent-foreground: 220 49% 8%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 39 39% 93%;
-  --border: 220 29% 21%;
-  --input: 220 29% 21%;
-  --ring: 43 57% 63%;
+  --background: 37 39% 94%;
+  --foreground: 30 30% 17%;
+  --card: 40 60% 97%;
+  --card-foreground: 30 30% 17%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 30 30% 17%;
+  --primary: 74 22% 31%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 40 55% 62%;
+  --secondary-foreground: 30 30% 17%;
+  --muted: 34 25% 88%;
+  --muted-foreground: 32 8% 50%;
+  --accent: 33 44% 51%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 4 52% 42%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 34 25% 80%;
+  --input: 34 25% 80%;
+  --ring: 74 22% 31%;
   --radius: 0.5rem;
+  --color-background: #F5F0E8;
+  --color-surface: #FFFFFF;
+  --color-card: #FBF8F2;
+  --color-primary: #55603D;
+  --color-primary-hover: #475234;
+  --color-secondary: #D4B06A;
+  --color-accent: #B88A4A;
+  --color-text-primary: #3A2C1F;
+  --color-text-secondary: #8A8177;
+  --color-border: #D8CDBF;
+  --color-success: #6F7450;
 }
 
 * {
@@ -35,10 +46,7 @@ html {
 
 body {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(214, 183, 106, 0.14), transparent 30rem),
-    radial-gradient(circle at 80% 12%, rgba(127, 166, 138, 0.12), transparent 28rem),
-    linear-gradient(180deg, #0b1220 0%, #0d1526 48%, #0b1220 100%);
+  background: #F5F0E8;
   color: hsl(var(--foreground));
 }
 
@@ -51,15 +59,11 @@ textarea {
 }
 
 .blue-surface {
-  background:
-    linear-gradient(135deg, rgba(11, 18, 32, 0.96), rgba(17, 26, 46, 0.94)),
-    linear-gradient(135deg, rgba(214, 183, 106, 0.16), rgba(127, 166, 138, 0.12));
+  background: linear-gradient(135deg, #FBF8F2, #FFFFFF);
 }
 
 .luxury-surface {
-  background:
-    linear-gradient(180deg, rgba(11, 18, 32, 0.7), rgba(11, 18, 32, 0.96)),
-    #0b1220;
+  background: linear-gradient(180deg, #FFFFFF, #FBF8F2);
 }
 
 .hero-slide {
@@ -101,7 +105,13 @@ textarea {
 .bg-slate-50,
 .bg-slate-100,
 .bg-blue-50 {
-  background-color: hsl(var(--card)) !important;
+  background-color: #FBF8F2 !important;
+}
+
+.bg-emerald-100,
+.bg-emerald-500,
+.bg-blue-500 {
+  background-color: #6F7450 !important;
 }
 
 .border-slate-200,

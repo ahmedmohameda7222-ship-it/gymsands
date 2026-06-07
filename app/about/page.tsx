@@ -16,7 +16,7 @@ export default function AboutPage() {
         </section>
         <section className="mt-10 grid gap-4 md:grid-cols-3">
           {[
-            ["Not commercial", "No pricing, checkout, subscriptions, billing, or public sales flow."],
+            ["Private workspace", "No public purchase flow or monetized access layer."],
             ["Member focused", "Each user keeps their own food logs, workouts, progress entries, and photos."],
             ["Safety first", "This app is for general fitness tracking only and is not medical advice."]
           ].map(([title, text]) => (
@@ -27,6 +27,18 @@ export default function AboutPage() {
               </CardContent>
             </Card>
           ))}
+        </section>
+        <section className="mt-10">
+          <Card>
+            <CardContent className="pt-5">
+              <h2 className="text-lg font-semibold">Data Sources</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Exercise imports use wger as the approved external source. Imported exercises store source, source ID,
+                source URL, license, and license author metadata before admin approval. Food, wearable, coach, email,
+                and maps data belongs to its respective provider and is saved only when a user confirms or connects that feature.
+              </p>
+            </CardContent>
+          </Card>
         </section>
       </main>
     </div>
