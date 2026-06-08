@@ -30,6 +30,13 @@ type FoodCandidate = {
   fat_g: number;
 };
 
+type MacroTotals = {
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+};
+
 function ok(structuredContent: Record<string, unknown>, message?: string): McpToolResult {
   return { structuredContent, content: [{ type: "text", text: message ?? JSON.stringify(structuredContent) }] };
 }
@@ -55,8 +62,8 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
-function sumMacros(rows: Array<Record<string, unknown>>) {
-  return rows.reduce(
+function sumMacros(rows: Array<Record<string, unknown>>): MacroTotals {
+  return rows.reduce<MacroTotals>(
     (total, row) => ({
       calories: total.calories + num(row.calories),
       protein_g: total.protein_g + num(row.protein_g),
@@ -192,7 +199,6 @@ function exerciseRow(planDayId: string, input: JsonObject, blockType: string) {
   return {
     plan_day_id: planDayId,
     workout_id: null,
-    source_workout_id: null,
     exercise_name: getString(input, "exercise_name"),
     category: getOptionalString(input, "block_type") ?? blockType,
     block_type: getOptionalString(input, "block_type") ?? blockType,
@@ -485,6 +491,14 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         return ok({ ok: true, items: data ?? [] });
       }
 
+      case "create_meal_plan_item":
+      case "create_day_meal_plan":
+      case "create_week_meal_plan":
+      case "replace_meal_plan_item":
+      case "mark_meal_plan_item_done":
+      case "generate_shopping_list":
+        return ok({ ok: false, requires_app_update: true, message: `${toolName} is advertised but not implemented in this compact executor revision.` });
+
       case "create_custom_workout_plan":
       case "save_chatgpt_workout_plan":
       case "generate_workout_plan":
@@ -702,6 +716,18 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         return ok({ ok: true, entry: data });
       }
 
+      case "add_body_measurement": {
+        const allowed = ["waist_cm", "hips_cm", "chest_cm", "neck_cm", "shoulders_cm", "left_arm_cm", "right_arm_cm", "left_thigh_cm", "right_thigh_cm", "glutes_cm", "calves_cm"];
+        const payload: Record<string, unknown> = { user_id: ctx.userId, measured_at: cleanDate(input.measured_at) };
+        for (const key of allowed) {
+          const value = getOptionalNumber(input, key);
+          if (value !== undefined) payload[key] = value;
+        }
+        const { data, error } = await ctx.supabase.from("body_measurements").insert(payload).select("*").single();
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, measurement: data });
+      }
+
       case "get_progress_summary": {
         const days = Math.max(1, Math.min(365, getNumber(input, "period_days", 30)));
         const since = dateDaysAgo(days);
@@ -714,13 +740,61 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         return ok({ ok: true, period_days: days, progress: progress.data ?? [], workout_adherence: workouts.data ?? [], calories: sumMacros((calories.data ?? []) as Array<Record<string, unknown>>) });
       }
 
+      case "add_water_log": {
+        const date = cleanDate(input.date);
+        const amount = Math.round(getNumber(input, "amount_ml"));
+        const { data, error } = await ctx.supabase.from("water_logs").insert({ user_id: ctx.userId, log_date: date, amount_ml: amount }).select("*").single();
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, log: data, logged_ml: await waterLogged(ctx, date) });
+      }
+
+      case "get_water_summary": {
+        const date = cleanDate(input.date);
+        const target = await targets(ctx);
+        const logged = await waterLogged(ctx, date);
+        return ok({ ok: true, date, target_ml: target.water_ml, logged_ml: logged, remaining_ml: Math.max(0, num(target.water_ml) - logged) });
+      }
+
+      case "delete_water_log": {
+        const confirmation = requireConfirmation(input);
+        if (confirmation) return ok(confirmation);
+        const { error } = await ctx.supabase.from("water_logs").delete().eq("id", getString(input, "water_log_id")).eq("user_id", ctx.userId);
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, deleted_water_log_id: getString(input, "water_log_id") });
+      }
+
+      case "get_daily_fit_tasks":
+      case "create_daily_fit_task":
+      case "mark_daily_fit_task_done":
+      case "mark_daily_fit_task_skipped":
+      case "get_habits":
+      case "mark_habit_done":
+      case "create_habit":
+      case "add_sleep_recovery_log":
+      case "get_sleep_recovery_summary":
+      case "get_today_supplements":
+      case "add_supplement_log":
+      case "mark_supplement_taken":
+      case "create_custom_meal":
+        return ok({ ok: false, requires_app_update: true, message: `${toolName} is advertised but not implemented in this compact executor revision.` });
+
       case "admin_api_status":
         assertAdmin(ctx);
         return ok({ ok: true, providers: configuredProviders() });
 
+      case "admin_search_users": {
+        assertAdmin(ctx);
+        const query = getString(input, "query");
+        const { data, error } = await ctx.supabase.from("profiles").select("id,email,full_name,role,created_at").or(`email.ilike.%${query}%,full_name.ilike.%${query}%`).limit(20);
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, users: data ?? [] });
+      }
+
+      case "get_admin_user_summary":
+      case "admin_create_global_food":
       case "admin_create_global_workout_or_exercise":
         assertAdmin(ctx);
-        return ok({ ok: false, deprecated: true, message: "Global exercise libraries are deprecated for user plan creation. Use create_custom_workout_plan." });
+        return ok({ ok: false, deprecated: true, message: `${toolName} is not enabled in the ChatGPT-created-plan workflow.` });
 
       default:
         return fail("unknown_tool", `Unknown FitLife MCP tool: ${toolName}`);
