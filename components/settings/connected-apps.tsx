@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, Bot, ExternalLink, MapPin, RefreshCcw, Smartphone, Watch } from "lucide-react";
+import { Activity, Bot, Copy, ExternalLink, MapPin, RefreshCcw, Smartphone, Watch } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toaster";
 import { env } from "@/lib/env";
 
+const fitlifeDescription = "ChatGPT creates workout plans, meal plans, food logs, weight logs, water logs, habits, and saves/tracks them in FitLife.";
+
 export function ConnectedApps() {
   const { session } = useAuth();
   const { toast } = useToast();
@@ -17,20 +19,27 @@ export function ConnectedApps() {
   const [routeText, setRouteText] = useState("");
   const [isBusy, setIsBusy] = useState<string | null>(null);
   const [isChatGptModalOpen, setIsChatGptModalOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const mcpServerUrl = env.fitlifeMcpServerUrl.trim();
+  const hasMcpServerUrl = Boolean(mcpServerUrl);
 
   function authHeaders() {
     return { Authorization: `Bearer ${session?.access_token ?? ""}`, "Content-Type": "application/json" };
   }
 
-  function continueToChatGpt() {
-    if (!env.chatgptConnectUrl) {
-      toast({
-        title: "ChatGPT connection link is not configured yet",
-        description: "Add NEXT_PUBLIC_CHATGPT_CONNECT_URL in your deployment environment."
-      });
+  async function copyMcpUrl() {
+    if (!hasMcpServerUrl) {
+      toast({ title: "Connector URL not configured", description: "Set NEXT_PUBLIC_FITLIFE_MCP_SERVER_URL in your deployment environment." });
       return;
     }
-    window.location.href = env.chatgptConnectUrl;
+    await navigator.clipboard.writeText(mcpServerUrl);
+    setCopied(true);
+    toast({ title: "Copied", description: "FitLife MCP Server URL copied." });
+    window.setTimeout(() => setCopied(false), 2000);
+  }
+
+  function openChatGpt() {
+    window.open("https://chatgpt.com", "_blank", "noopener,noreferrer");
   }
 
   async function connectStrava() {
@@ -76,38 +85,85 @@ export function ConnectedApps() {
       <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-primary" /> Connect to ChatGPT
+            <Bot className="h-5 w-5 text-primary" /> Connect FitLife to ChatGPT
           </CardTitle>
           <CardDescription>
-            ChatGPT creates workout plans and updates FitLife through the external MCP connector. FitLife stores and tracks the data.
+            ChatGPT can create workout plans and update FitLife through the FitLife MCP connector. FitLife stores, schedules, edits, and tracks the data.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          {!hasMcpServerUrl ? (
+            <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              Connector URL not configured. Set NEXT_PUBLIC_FITLIFE_MCP_SERVER_URL to your deployed FitLife MCP endpoint.
+            </p>
+          ) : null}
           <Button onClick={() => setIsChatGptModalOpen(true)}>
-            <ExternalLink className="h-4 w-4" /> Connect to ChatGPT
+            <ExternalLink className="h-4 w-4" /> {hasMcpServerUrl ? "Set up FitLife in ChatGPT" : "Connector URL not configured"}
           </Button>
         </CardContent>
       </Card>
 
       <Dialog open={isChatGptModalOpen} onOpenChange={setIsChatGptModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Enable ChatGPT Developer Mode first</DialogTitle>
+            <DialogTitle>Connect FitLife to ChatGPT</DialogTitle>
             <DialogDescription>
-              To connect FitLife to ChatGPT, Developer Mode must be enabled in ChatGPT first. FitLife cannot reliably detect that from the browser, so follow these steps before continuing.
+              FitLife cannot install the ChatGPT app automatically. ChatGPT requires the user to create/connect custom MCP apps from inside ChatGPT.
             </DialogDescription>
           </DialogHeader>
-          <ol className="ml-5 list-decimal space-y-2 text-sm text-muted-foreground">
-            <li>Open ChatGPT.</li>
-            <li>Go to Settings.</li>
-            <li>Go to Apps &amp; Connectors.</li>
-            <li>Open Advanced settings.</li>
-            <li>Enable Developer Mode.</li>
-            <li>Return to FitLife and click continue.</li>
-          </ol>
-          <div className="mt-5 flex flex-wrap justify-end gap-2">
-            <Button variant="outline" onClick={() => setIsChatGptModalOpen(false)}>Cancel</Button>
-            <Button onClick={continueToChatGpt}>I enabled Developer Mode, continue</Button>
+
+          {!hasMcpServerUrl ? (
+            <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              FitLife MCP server endpoint is not implemented yet or the connector URL is not configured. Build/deploy the MCP server first, then set FITLIFE_MCP_SERVER_URL.
+            </p>
+          ) : null}
+
+          <div className="space-y-4">
+            <div className="grid gap-3 rounded-md border p-4 text-sm md:grid-cols-[140px_1fr]">
+              <p className="font-semibold">Name:</p>
+              <p>FitLife</p>
+              <p className="font-semibold">Description:</p>
+              <p>{fitlifeDescription}</p>
+              <p className="font-semibold">Connection:</p>
+              <p>Server URL</p>
+              <p className="font-semibold">Server URL:</p>
+              <div className="space-y-2">
+                <Input readOnly value={mcpServerUrl || "Not configured"} className="font-mono text-xs" />
+                <Button type="button" variant="outline" onClick={copyMcpUrl} disabled={!hasMcpServerUrl}>
+                  <Copy className="h-4 w-4" /> {copied ? "Copied" : "Copy URL"}
+                </Button>
+              </div>
+              <p className="font-semibold">Authentication:</p>
+              <p>OAuth</p>
+            </div>
+
+            <div className="rounded-md border p-4">
+              <p className="font-semibold">Instructions</p>
+              <ol className="mt-3 ml-5 list-decimal space-y-2 text-sm text-muted-foreground">
+                <li>Click Open ChatGPT.</li>
+                <li>Go to Settings, Apps and Connectors, then Create.</li>
+                <li>In the New App modal, enter Name: FitLife.</li>
+                <li>Use the description shown above.</li>
+                <li>Set Connection to Server URL.</li>
+                <li>Copy the FitLife MCP URL into Server URL.</li>
+                <li>Set Authentication to OAuth.</li>
+                <li>Check I understand and want to continue.</li>
+                <li>Click Create.</li>
+                <li>Approve FitLife OAuth/login if asked.</li>
+                <li>Start a new chat and select FitLife as a tool.</li>
+              </ol>
+            </div>
+
+            <p className="rounded-md border p-3 text-sm text-muted-foreground">
+              If you do not see the Create button in ChatGPT, enable Developer Mode in ChatGPT: Settings, Apps and Connectors, Advanced settings.
+            </p>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsChatGptModalOpen(false)}>Close</Button>
+              <Button onClick={openChatGpt}>
+                <ExternalLink className="h-4 w-4" /> Open ChatGPT
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
