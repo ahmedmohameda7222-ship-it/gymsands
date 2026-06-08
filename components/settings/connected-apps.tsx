@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, Bot, Copy, ExternalLink, MapPin, RefreshCcw, Smartphone, Watch } from "lucide-react";
+import { Activity, Bot, Copy, ExternalLink, KeyRound, MapPin, RefreshCcw, Smartphone, Watch } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +19,9 @@ export function ConnectedApps() {
   const [routeText, setRouteText] = useState("");
   const [isBusy, setIsBusy] = useState<string | null>(null);
   const [isChatGptModalOpen, setIsChatGptModalOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedToken, setCopiedToken] = useState(false);
+  const [connectionToken, setConnectionToken] = useState("");
   const mcpServerUrl = env.fitlifeMcpServerUrl.trim();
   const hasMcpServerUrl = Boolean(mcpServerUrl);
 
@@ -27,15 +29,45 @@ export function ConnectedApps() {
     return { Authorization: `Bearer ${session?.access_token ?? ""}`, "Content-Type": "application/json" };
   }
 
+  async function copyText(value: string, type: "url" | "token") {
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
+    if (type === "url") {
+      setCopiedUrl(true);
+      window.setTimeout(() => setCopiedUrl(false), 2000);
+    } else {
+      setCopiedToken(true);
+      window.setTimeout(() => setCopiedToken(false), 2000);
+    }
+    toast({ title: "Copied", description: type === "url" ? "FitLife MCP Server URL copied." : "FitLife connection token copied." });
+  }
+
   async function copyMcpUrl() {
     if (!hasMcpServerUrl) {
       toast({ title: "Connector URL not configured", description: "Set NEXT_PUBLIC_FITLIFE_MCP_SERVER_URL in your deployment environment." });
       return;
     }
-    await navigator.clipboard.writeText(mcpServerUrl);
-    setCopied(true);
-    toast({ title: "Copied", description: "FitLife MCP Server URL copied." });
-    window.setTimeout(() => setCopied(false), 2000);
+    await copyText(mcpServerUrl, "url");
+  }
+
+  async function generateConnectionToken() {
+    if (!session?.access_token) {
+      toast({ title: "Sign in required", description: "Sign in to FitLife before generating a ChatGPT connection token." });
+      return;
+    }
+
+    setIsBusy("chatgpt-token");
+    const response = await fetch("/api/mcp/connections", { method: "POST", headers: authHeaders() });
+    const data = await response.json().catch(() => ({}));
+    setIsBusy(null);
+
+    if (!response.ok) {
+      toast({ title: "Could not create token", description: data.error ?? "Check MCP server configuration and Supabase tables." });
+      return;
+    }
+
+    setConnectionToken(data.token ?? "");
+    toast({ title: "Connection token created", description: "Copy it now. FitLife shows this token only once." });
   }
 
   function openChatGpt() {
@@ -119,7 +151,7 @@ export function ConnectedApps() {
           ) : null}
 
           <div className="space-y-4">
-            <div className="grid gap-3 rounded-md border p-4 text-sm md:grid-cols-[140px_1fr]">
+            <div className="grid gap-3 rounded-md border p-4 text-sm md:grid-cols-[150px_1fr]">
               <p className="font-semibold">Name:</p>
               <p>FitLife</p>
               <p className="font-semibold">Description:</p>
@@ -130,16 +162,30 @@ export function ConnectedApps() {
               <div className="space-y-2">
                 <Input readOnly value={mcpServerUrl || "Not configured"} className="font-mono text-xs" />
                 <Button type="button" variant="outline" onClick={copyMcpUrl} disabled={!hasMcpServerUrl}>
-                  <Copy className="h-4 w-4" /> {copied ? "Copied" : "Copy URL"}
+                  <Copy className="h-4 w-4" /> {copiedUrl ? "Copied" : "Copy URL"}
                 </Button>
               </div>
               <p className="font-semibold">Authentication:</p>
               <p>OAuth</p>
+              <p className="font-semibold">Access token:</p>
+              <div className="space-y-2">
+                <Input readOnly value={connectionToken || "Generate a user-specific token first"} className="font-mono text-xs" />
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={generateConnectionToken} disabled={isBusy === "chatgpt-token"}>
+                    <KeyRound className="h-4 w-4" /> Generate connection token
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => copyText(connectionToken, "token")} disabled={!connectionToken}>
+                    <Copy className="h-4 w-4" /> {copiedToken ? "Copied" : "Copy token"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">This token is specific to the signed-in FitLife user and is shown only once.</p>
+              </div>
             </div>
 
             <div className="rounded-md border p-4">
               <p className="font-semibold">Instructions</p>
               <ol className="mt-3 ml-5 list-decimal space-y-2 text-sm text-muted-foreground">
+                <li>Click Generate connection token and copy it.</li>
                 <li>Click Open ChatGPT.</li>
                 <li>Go to Settings, Apps and Connectors, then Create.</li>
                 <li>In the New App modal, enter Name: FitLife.</li>
@@ -147,6 +193,7 @@ export function ConnectedApps() {
                 <li>Set Connection to Server URL.</li>
                 <li>Copy the FitLife MCP URL into Server URL.</li>
                 <li>Set Authentication to OAuth.</li>
+                <li>If ChatGPT asks for OAuth Client ID or connection token, paste the FitLife token you generated.</li>
                 <li>Check I understand and want to continue.</li>
                 <li>Click Create.</li>
                 <li>Approve FitLife OAuth/login if asked.</li>
