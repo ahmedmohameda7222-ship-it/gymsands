@@ -21,7 +21,6 @@ import {
   Settings,
   Shield,
   Soup,
-  Sparkles,
   Trophy,
   User,
   Utensils,
@@ -38,7 +37,6 @@ const navGroups = [
     label: "Main",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: Home },
-      { href: "/my-workout/generated", label: "FitLife Hub", icon: Sparkles },
       { href: "/calories/weekly-overview", label: "Weekly Summary", icon: BarChart3 },
       { href: "/progress", label: "Progress Tracker", icon: BarChart3 }
     ]
