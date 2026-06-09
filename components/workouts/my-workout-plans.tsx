@@ -14,6 +14,14 @@ import { WorkoutPlanBuilder } from "@/components/workouts/workout-plan-builder";
 import { WorkoutCalendar } from "@/components/workouts/workout-calendar";
 import type { UserWorkoutPlan, WorkoutSession } from "@/types";
 
+type PlanSourceMeta = UserWorkoutPlan & { source?: string; chatgpt_source?: boolean };
+
+function isChatGptPlan(plan: UserWorkoutPlan | null) {
+  if (!plan) return false;
+  const meta = plan as PlanSourceMeta;
+  return meta.source === "chatgpt" || Boolean(meta.chatgpt_source);
+}
+
 function calendarDaysFromPlan(plan: UserWorkoutPlan) {
   return plan.days.map((day) => ({
     id: day.id,
@@ -154,7 +162,7 @@ export function MyWorkoutPlans() {
             <CardTitle className="flex flex-wrap items-center gap-2">
               Active plan
               <Badge>{activePlan.name}</Badge>
-              {activePlan.source === "chatgpt" || (activePlan as UserWorkoutPlan & { chatgpt_source?: boolean }).chatgpt_source ? <Badge variant="outline">ChatGPT</Badge> : null}
+              {isChatGptPlan(activePlan) ? <Badge variant="outline">ChatGPT</Badge> : null}
             </CardTitle>
             <p className="text-sm text-muted-foreground">Weekly calendar is loaded from the saved active plan days and exercises.</p>
           </CardHeader>
@@ -177,7 +185,7 @@ export function MyWorkoutPlans() {
         {plans.map((plan) => {
           const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
           const isDefault = plan.is_default ?? plan.is_active;
-          const isChatGpt = plan.source === "chatgpt" || Boolean((plan as UserWorkoutPlan & { chatgpt_source?: boolean }).chatgpt_source);
+          const isChatGpt = isChatGptPlan(plan);
           return (
             <Card key={plan.id}>
               <CardHeader>
