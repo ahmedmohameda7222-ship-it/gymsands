@@ -2,32 +2,59 @@
 
 import Link from "next/link";
 import { CalendarDays, Dumbbell, Plus, RefreshCcw, Star, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { deleteUserWorkoutPlan, getUserWorkoutPlans, setDefaultUserWorkoutPlan } from "@/services/database/repository";
+import { deleteUserWorkoutPlan, getWorkoutActivity, setDefaultUserWorkoutPlan } from "@/services/database/repository";
+import { getActiveWorkoutPlan, getAllUserWorkoutPlans, workoutsFromLoadedPlanDay } from "@/services/database/workout-plan-loader";
 import { WorkoutPlanBuilder } from "@/components/workouts/workout-plan-builder";
-import type { UserWorkoutPlan } from "@/types";
+import { WorkoutCalendar } from "@/components/workouts/workout-calendar";
+import type { UserWorkoutPlan, WorkoutSession } from "@/types";
+
+function calendarDaysFromPlan(plan: UserWorkoutPlan) {
+  return plan.days.map((day) => ({
+    id: day.id,
+    planId: day.plan_id,
+    dayName: day.day_name,
+    weekday: day.weekday,
+    notes: day.notes ?? "",
+    exercises: workoutsFromLoadedPlanDay(day)
+  }));
+}
 
 export function MyWorkoutPlans() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [plans, setPlans] = useState<UserWorkoutPlan[]>([]);
+  const [activePlan, setActivePlan] = useState<UserWorkoutPlan | null>(null);
+  const [activity, setActivity] = useState<WorkoutSession[]>([]);
+  const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [showBuilder, setShowBuilder] = useState(false);
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
 
   async function loadPlans() {
     if (!user?.id) {
+      setPlans([]);
+      setActivePlan(null);
+      setActivity([]);
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
-      setPlans(await getUserWorkoutPlans(user.id));
+      const [nextPlans, nextActivePlan, nextActivity] = await Promise.all([
+        getAllUserWorkoutPlans(user.id),
+        getActiveWorkoutPlan(user.id),
+        getWorkoutActivity(user.id)
+      ]);
+      setPlans(nextPlans);
+      setActivePlan(nextActivePlan);
+      setActivity(nextActivity);
+      setActiveDayIndex(0);
     } catch (error) {
       toast({ title: "Could not load Workout Plans", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
@@ -44,6 +71,7 @@ export function MyWorkoutPlans() {
     if (!user?.id || busyPlanId) return;
     setBusyPlanId(plan.id);
     const previousPlans = plans;
+    const previousActivePlan = activePlan;
     setPlans((current) =>
       current.map((item) => ({
         ...item,
@@ -51,11 +79,14 @@ export function MyWorkoutPlans() {
         is_default: item.id === plan.id
       }))
     );
+    setActivePlan(plan);
     try {
       await setDefaultUserWorkoutPlan(user.id, plan.id);
+      await loadPlans();
       toast({ title: "Default plan updated", description: `${plan.name} is now used for Today's Workout and Weekly Summary.` });
     } catch (error) {
       setPlans(previousPlans);
+      setActivePlan(previousActivePlan);
       toast({ title: "Could not set default plan", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
       setBusyPlanId(null);
@@ -68,18 +99,34 @@ export function MyWorkoutPlans() {
     if (!confirmed) return;
 
     const previousPlans = plans;
+    const previousActivePlan = activePlan;
     setBusyPlanId(plan.id);
     setPlans((current) => current.filter((item) => item.id !== plan.id));
+    if (activePlan?.id === plan.id) setActivePlan(null);
     try {
       await deleteUserWorkoutPlan(user.id, plan.id);
       await loadPlans();
       toast({ title: "Plan deleted", description: `${plan.name} was removed from Workout Plans.` });
     } catch (error) {
       setPlans(previousPlans);
+      setActivePlan(previousActivePlan);
       toast({ title: "Could not delete plan", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
       setBusyPlanId(null);
     }
+  }
+
+  const activeCalendarDays = useMemo(() => (activePlan ? calendarDaysFromPlan(activePlan) : []), [activePlan]);
+
+  function startToday() {
+    const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
+    const todayIndex = activeCalendarDays.findIndex((day) => day.weekday === today && day.exercises.length > 0);
+    if (todayIndex < 0) {
+      toast({ title: "No workout for today", description: activePlan ? `${activePlan.name} has no workout assigned today.` : "Choose an active workout plan first." });
+      return;
+    }
+    const day = activeCalendarDays[todayIndex];
+    if (day.id) window.location.href = `/workouts/session/day/${day.id}`;
   }
 
   return (
@@ -87,7 +134,7 @@ export function MyWorkoutPlans() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-950">Workout Plans</h2>
-          <p className="text-sm text-muted-foreground">Workout plans saved to your account.</p>
+          <p className="text-sm text-muted-foreground">Workout plans saved to your account, including ChatGPT-created plans.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={loadPlans} disabled={isLoading}>
@@ -101,6 +148,28 @@ export function MyWorkoutPlans() {
         </div>
       </div>
 
+      {activePlan ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-center gap-2">
+              Active plan
+              <Badge>{activePlan.name}</Badge>
+              {activePlan.source === "chatgpt" || (activePlan as UserWorkoutPlan & { chatgpt_source?: boolean }).chatgpt_source ? <Badge variant="outline">ChatGPT</Badge> : null}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">Weekly calendar is loaded from the saved active plan days and exercises.</p>
+          </CardHeader>
+          <CardContent>
+            <WorkoutCalendar
+              days={activeCalendarDays}
+              activity={activity}
+              activeDayIndex={activeDayIndex}
+              onSelectDay={setActiveDayIndex}
+              onStartToday={startToday}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
+
       {isLoading ? <p className="text-sm text-muted-foreground">Loading saved plans...</p> : null}
       {!isLoading && !plans.length ? <p className="rounded-md border bg-white p-4 text-sm text-muted-foreground">No custom plans yet.</p> : null}
 
@@ -108,12 +177,13 @@ export function MyWorkoutPlans() {
         {plans.map((plan) => {
           const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
           const isDefault = plan.is_default ?? plan.is_active;
+          const isChatGpt = plan.source === "chatgpt" || Boolean((plan as UserWorkoutPlan & { chatgpt_source?: boolean }).chatgpt_source);
           return (
             <Card key={plan.id}>
               <CardHeader>
                 <CardTitle className="flex items-start justify-between gap-3">
                   <span>{plan.name}</span>
-                  {isDefault ? <Badge>Default</Badge> : <Badge variant="outline">Saved</Badge>}
+                  {isDefault ? <Badge>Default</Badge> : isChatGpt ? <Badge variant="outline">ChatGPT</Badge> : <Badge variant="outline">Saved</Badge>}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
