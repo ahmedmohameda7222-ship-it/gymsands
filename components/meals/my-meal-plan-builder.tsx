@@ -305,7 +305,7 @@ function CompactCalendar({ month, selectedDate, plannedDates, onMonthChange, onS
     <div className="rounded-md border bg-white p-3">
       <div className="mb-3 flex items-center justify-between">
         <Button size="icon" variant="ghost" type="button" onClick={() => onMonthChange(addMonths(month, -1))}><ChevronLeft className="h-4 w-4" /></Button>
-        <p className="font-semibold">{new Date(`${month}T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</p>
+        <p className="font-semibold">{monthLabel(month)}</p>
         <Button size="icon" variant="ghost" type="button" onClick={() => onMonthChange(addMonths(month, 1))}><ChevronRight className="h-4 w-4" /></Button>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-muted-foreground">
@@ -402,13 +402,19 @@ function addItemToTotals(total: MacroTotals, item: Pick<MealPlanItem, "calories"
 function displayMealType(type: MealType) { return type === "Snack" ? "Snacks" : type; }
 function normalizeMealPlanItem(item: MealPlanItem): MealPlanItem { const now = new Date().toISOString(); return { ...item, id: String(item.id || crypto.randomUUID()), food_name: String(item.food_name || "Unnamed food"), serving_size: String(item.serving_size || "1 serving"), quantity: toNumber(item.quantity) || 1, calories: toNumber(item.calories), protein_g: toNumber(item.protein_g), carbs_g: toNumber(item.carbs_g), fat_g: toNumber(item.fat_g), meal_type: normalizeMealPlanType(item.meal_type), status: item.status === "done" ? "done" : "planned", created_at: item.created_at || now, updated_at: item.updated_at || now }; }
 function toNumber(value: unknown) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
-function todayIso() { return new Date().toISOString().slice(0, 10); }
+function todayIso() { return localDateToIso(new Date()); }
 function safeDate(value: string | null) { return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null; }
 function monthStart(date: string) { return `${date.slice(0, 7)}-01`; }
-function addDays(date: string, days: number) { const next = new Date(`${date}T00:00:00`); next.setDate(next.getDate() + days); return next.toISOString().slice(0, 10); }
-function addMonths(date: string, months: number) { const next = new Date(`${monthStart(date)}T00:00:00`); next.setMonth(next.getMonth() + months); return next.toISOString().slice(0, 10); }
-function calendarRangeStart(month: string) { const first = new Date(`${monthStart(month)}T00:00:00`); first.setDate(first.getDate() - first.getDay()); return first.toISOString().slice(0, 10); }
+function pad(value: number) { return String(value).padStart(2, "0"); }
+function localDateToIso(date: Date) { return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`; }
+function parseIsoDate(date: string) { const [year, month, day] = date.split("-").map(Number); return { year, month, day }; }
+function isoFromUtcDate(date: Date) { return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`; }
+function utcDate(date: string) { const { year, month, day } = parseIsoDate(date); return new Date(Date.UTC(year, month - 1, day)); }
+function addDays(date: string, days: number) { const { year, month, day } = parseIsoDate(date); return isoFromUtcDate(new Date(Date.UTC(year, month - 1, day + days))); }
+function addMonths(date: string, months: number) { const { year, month } = parseIsoDate(monthStart(date)); return isoFromUtcDate(new Date(Date.UTC(year, month - 1 + months, 1))); }
+function calendarRangeStart(month: string) { const first = utcDate(monthStart(month)); first.setUTCDate(first.getUTCDate() - first.getUTCDay()); return isoFromUtcDate(first); }
 function calendarRangeEnd(month: string) { return addDays(calendarRangeStart(month), 41); }
 function calendarDays(month: string) { const start = calendarRangeStart(month); return Array.from({ length: 42 }, (_, index) => addDays(start, index)); }
-function longDate(date: string) { return new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }); }
-function displayDate(date: string) { return new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
+function monthLabel(month: string) { return utcDate(monthStart(month)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }); }
+function longDate(date: string) { return utcDate(date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }); }
+function displayDate(date: string) { return utcDate(date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }); }
