@@ -2,7 +2,7 @@
 
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Edit3, PlusCircle, Save, Trash2, Utensils, X } from "lucide-react";
 import { Component, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,7 +66,6 @@ export function MyMealPlanBuilder() {
 
 function MyMealPlanBuilderInner() {
   const { user } = useAuth();
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [selectedDate, setSelectedDate] = useState(() => safeDate(searchParams.get("date")) ?? todayIso());
@@ -82,18 +81,10 @@ function MyMealPlanBuilderInner() {
   const [notice, setNotice] = useState<Notice | null>(null);
 
   useEffect(() => {
-    const dateParam = safeDate(searchParams.get("date"));
-    if (dateParam && dateParam !== selectedDate) {
-      setSelectedDate(dateParam);
-      setCalendarMonth(monthStart(dateParam));
-    }
-  }, [searchParams, selectedDate]);
-
-  useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("date", selectedDate);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
+    window.history.replaceState(null, "", `${pathname}?${params.toString()}`);
+  }, [pathname, searchParams, selectedDate]);
 
   useEffect(() => {
     let active = true;
