@@ -10,6 +10,7 @@ export type McpToolDefinition = {
 
 const isoDate = { type: "string", description: "ISO date YYYY-MM-DD, or today where supported." };
 const confirm = { type: "boolean", description: "Set true only after explicit user confirmation." };
+const mealTypeLower = { type: "string", enum: ["breakfast", "lunch", "dinner", "snack"] };
 
 function objectSchema(properties: Record<string, unknown>, required: string[] = []) {
   return { type: "object", properties, required, additionalProperties: false };
@@ -23,6 +24,17 @@ const foodInput = {
   food_name: { type: "string" },
   quantity: { type: "number" },
   serving_hint: { type: "string" }
+};
+
+const mealPlanFoodInput = {
+  food_name: { type: "string" },
+  quantity: { type: "number" },
+  serving_info: { type: "string" },
+  calories: { type: "number" },
+  protein: { type: "number" },
+  carbs: { type: "number" },
+  fat: { type: "number" },
+  notes: { type: "string" }
 };
 
 const planExerciseInput = {
@@ -90,12 +102,15 @@ export const mcpTools: McpToolDefinition[] = [
   { name: "get_today_calories", title: "Get today's calories", description: "Return calorie target, consumed, remaining, and macro breakdown.", inputSchema: emptyInputSchema, risk: "read" },
 
   { name: "get_meal_plan", title: "Get meal plan", description: "Return planned meals by date and meal type.", inputSchema: objectSchema({ start_date: isoDate, end_date: isoDate }, ["start_date", "end_date"]), risk: "read" },
-  { name: "create_meal_plan_item", title: "Create meal plan item", description: "Create one planned meal item from an existing FitLife food.", inputSchema: objectSchema({ date: isoDate, meal_type: { type: "string", enum: ["Breakfast", "Lunch", "Dinner", "Snack"] }, food_name: { type: "string" }, food_item_id: { type: "string" }, quantity: { type: "number" }, notes: { type: "string" } }, ["date", "meal_type", "quantity"]), risk: "low" },
-  { name: "create_day_meal_plan", title: "Create day meal plan", description: "Create breakfast/lunch/dinner/snack plan items for one date.", inputSchema: objectSchema({ date: isoDate, meals: arrayOf({ meal_type: { type: "string" }, food_name: { type: "string" }, quantity: { type: "number" }, notes: { type: "string" } }, ["meal_type", "food_name", "quantity"]) }, ["date", "meals"]), risk: "medium" },
-  { name: "create_week_meal_plan", title: "Create week meal plan", description: "Preview or create a 7-day meal plan. Without confirm:true it returns a preview.", inputSchema: objectSchema({ start_date: isoDate, meals: arrayOf({ date: isoDate, meal_type: { type: "string" }, food_name: { type: "string" }, quantity: { type: "number" }, notes: { type: "string" } }, ["date", "meal_type", "food_name", "quantity"]), confirm }, ["start_date"]), risk: "medium" },
-  { name: "replace_meal_plan_item", title: "Replace meal plan item", description: "Replace a user-owned meal plan item.", inputSchema: objectSchema({ meal_plan_item_id: { type: "string" }, food_name: { type: "string" }, quantity: { type: "number" }, notes: { type: "string" } }, ["meal_plan_item_id", "food_name"]), risk: "medium" },
-  { name: "mark_meal_plan_item_done", title: "Mark meal plan item done", description: "Convert a planned meal into a food log and mark it done.", inputSchema: objectSchema({ meal_plan_item_id: { type: "string" } }, ["meal_plan_item_id"]), risk: "low" },
-  { name: "generate_shopping_list", title: "Generate shopping list", description: "Generate a grouped shopping list from planned meals.", inputSchema: objectSchema({ start_date: isoDate, end_date: isoDate }, ["start_date", "end_date"]), risk: "read" },
+  { name: "get_meal_plan_for_date", title: "Get meal plan for date", description: "Return one date's planned meals grouped by breakfast, lunch, dinner, and snack.", inputSchema: objectSchema({ date: isoDate }, ["date"]), risk: "read" },
+  { name: "get_meal_plan_for_week", title: "Get meal plan for week", description: "Return 7 days of planned meals grouped by date and meal type.", inputSchema: objectSchema({ start_date: isoDate }, ["start_date"]), risk: "read" },
+  { name: "create_meal_plan_item", title: "Create meal plan item", description: "Create one planned meal item from direct food name and macro values. Does not require an existing food item and does not log eaten food.", inputSchema: objectSchema({ date: isoDate, meal_type: mealTypeLower, ...mealPlanFoodInput }, ["date", "meal_type", "food_name"]), risk: "low" },
+  { name: "create_day_meal_plan", title: "Create day meal plan", description: "Create breakfast/lunch/dinner/snack planned meals for one date from direct macro values.", inputSchema: objectSchema({ date: isoDate, breakfast: arrayOf(mealPlanFoodInput, ["food_name"]), lunch: arrayOf(mealPlanFoodInput, ["food_name"]), dinner: arrayOf(mealPlanFoodInput, ["food_name"]), snack: arrayOf(mealPlanFoodInput, ["food_name"]) }, ["date"]), risk: "medium" },
+  { name: "create_week_meal_plan", title: "Create week meal plan", description: "Create planned meals for multiple dates from direct macro values. Does not mark meals eaten.", inputSchema: objectSchema({ start_date: isoDate, days: arrayOf({ date: isoDate, meals: objectSchema({ breakfast: arrayOf(mealPlanFoodInput, ["food_name"]), lunch: arrayOf(mealPlanFoodInput, ["food_name"]), dinner: arrayOf(mealPlanFoodInput, ["food_name"]), snack: arrayOf(mealPlanFoodInput, ["food_name"]) }) }, ["date"]) }, ["start_date", "days"]), risk: "medium" },
+  { name: "update_meal_plan_item", title: "Update meal plan item", description: "Update a planned meal item owned by the current user without touching food logs unless it is later marked done.", inputSchema: objectSchema({ meal_plan_item_id: { type: "string" }, date: isoDate, meal_type: mealTypeLower, ...mealPlanFoodInput }, ["meal_plan_item_id"]), risk: "medium" },
+  { name: "replace_meal_plan_item", title: "Replace meal plan item", description: "Compatibility alias for update_meal_plan_item.", inputSchema: objectSchema({ meal_plan_item_id: { type: "string" }, date: isoDate, meal_type: mealTypeLower, ...mealPlanFoodInput }, ["meal_plan_item_id"]), risk: "medium" },
+  { name: "delete_meal_plan_item", title: "Delete meal plan item", description: "Delete a planned meal item only. If it was already completed, the linked food log is kept to avoid hiding eaten calories.", inputSchema: objectSchema({ meal_plan_item_id: { type: "string" } }, ["meal_plan_item_id"]), risk: "medium" },
+  { name: "mark_meal_plan_item_done", title: "Mark meal plan item done", description: "Mark a planned meal done and create one linked food log. Repeated calls do not duplicate calories.", inputSchema: objectSchema({ meal_plan_item_id: { type: "string" } }, ["meal_plan_item_id"]), risk: "low" },
 
   { name: "add_water_log", title: "Add water log", description: "Add hydration in milliliters.", inputSchema: objectSchema({ amount_ml: { type: "number" }, date: isoDate }, ["amount_ml"]), risk: "low" },
   { name: "get_water_summary", title: "Get water summary", description: "Return water target, logged amount, remaining amount, and percentage.", inputSchema: objectSchema({ date: isoDate }), risk: "read" },
