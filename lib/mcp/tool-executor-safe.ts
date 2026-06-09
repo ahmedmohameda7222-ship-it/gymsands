@@ -2,6 +2,15 @@ import type { McpContext } from "@/lib/mcp/auth";
 import { cleanDate } from "@/lib/mcp/schemas";
 import { executeMcpTool as executeOriginalMcpTool, type McpToolResult } from "@/lib/mcp/tool-executor";
 
+type MacroTotals = {
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+};
+
+type DbRow = Record<string, unknown>;
+
 function ok(structuredContent: Record<string, unknown>, message?: string): McpToolResult {
   return { structuredContent, content: [{ type: "text", text: message ?? JSON.stringify(structuredContent) }] };
 }
@@ -11,8 +20,8 @@ function num(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function sumMacros(rows: Array<Record<string, unknown>>) {
-  return rows.reduce(
+function sumMacros(rows: DbRow[]): MacroTotals {
+  return rows.reduce<MacroTotals>(
     (total, row) => ({
       calories: total.calories + num(row.calories),
       protein_g: total.protein_g + num(row.protein_g),
@@ -23,7 +32,7 @@ function sumMacros(rows: Array<Record<string, unknown>>) {
   );
 }
 
-async function calorieTargets(ctx: McpContext) {
+async function calorieTargets(ctx: McpContext): Promise<DbRow> {
   const { data, error } = await ctx.supabase
     .from("calorie_targets")
     .select("*")
@@ -32,7 +41,7 @@ async function calorieTargets(ctx: McpContext) {
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return data ?? { daily_calories: 2200, protein_g: 150, carbs_g: 250, fat_g: 70, water_ml: 2500 };
+  return (data as DbRow | null) ?? { daily_calories: 2200, protein_g: 150, carbs_g: 250, fat_g: 70, water_ml: 2500 };
 }
 
 async function caloriesForDate(ctx: McpContext, date: string) {
@@ -41,12 +50,13 @@ async function caloriesForDate(ctx: McpContext, date: string) {
     ctx.supabase.from("food_logs").select("*").eq("user_id", ctx.userId).eq("log_date", date)
   ]);
   if (logs.error) throw new Error(logs.error.message);
-  const totals = sumMacros((logs.data ?? []) as Array<Record<string, unknown>>);
+  const totals = sumMacros((logs.data ?? []) as DbRow[]);
+  const dailyTarget = num(target.daily_calories, 2200);
   return {
     date,
-    target: target.daily_calories,
+    target: dailyTarget,
     consumed: totals.calories,
-    remaining: Math.max(0, num(target.daily_calories) - totals.calories),
+    remaining: Math.max(0, dailyTarget - totals.calories),
     macros: { ...totals, targets: target },
     logs: logs.data ?? []
   };
@@ -55,7 +65,7 @@ async function caloriesForDate(ctx: McpContext, date: string) {
 async function waterLogged(ctx: McpContext, date: string) {
   const { data, error } = await ctx.supabase.from("water_logs").select("amount_ml").eq("user_id", ctx.userId).eq("log_date", date);
   if (error) throw new Error(error.message);
-  return ((data ?? []) as Array<Record<string, unknown>>).reduce((sum, row) => sum + num(row.amount_ml), 0);
+  return ((data ?? []) as DbRow[]).reduce<number>((sum, row) => sum + num(row.amount_ml), 0);
 }
 
 async function getFullPlan(ctx: McpContext, planId: string) {
@@ -76,13 +86,13 @@ async function getFullPlan(ctx: McpContext, planId: string) {
     .order("day_number", { ascending: true });
   if (daysError) throw new Error(daysError.message);
 
-  const dayIds = (days ?? []).map((day) => String(day.id));
-  const exercises = dayIds.length
+  const dayIds = ((days ?? []) as DbRow[]).map((day) => String(day.id));
+  const exercisesResult = dayIds.length
     ? await ctx.supabase.from("user_workout_plan_exercises").select("*").in("plan_day_id", dayIds).order("sort_order", { ascending: true })
     : { data: [], error: null };
-  if (exercises.error) throw new Error(exercises.error.message);
+  if (exercisesResult.error) throw new Error(exercisesResult.error.message);
 
-  return { plan: planResult.data, days: days ?? [], exercises: exercises.data ?? [] };
+  return { plan: planResult.data, days: days ?? [], exercises: exercisesResult.data ?? [] };
 }
 
 async function getSafeActivePlan(ctx: McpContext) {
@@ -96,7 +106,7 @@ async function getSafeActivePlan(ctx: McpContext) {
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return data as Record<string, unknown> | null;
+  return (data as DbRow | null) ?? null;
 }
 
 async function getSafeTodayWorkout(ctx: McpContext, date: string) {
@@ -114,17 +124,18 @@ async function getSafeTodayWorkout(ctx: McpContext, date: string) {
   const { data, error } = await request.maybeSingle();
   if (error) throw new Error(error.message);
 
-  let workoutDay: Record<string, unknown> | null = null;
+  const workout = (data as DbRow | null) ?? null;
+  let workoutDay: DbRow | null = null;
   let exercises: unknown[] = [];
-  if (data?.plan_day_id) {
+  if (workout?.plan_day_id) {
     const dayResult = await ctx.supabase
       .from("user_workout_plan_days")
       .select("*")
-      .eq("id", String(data.plan_day_id))
+      .eq("id", String(workout.plan_day_id))
       .limit(1)
       .maybeSingle();
     if (dayResult.error) throw new Error(dayResult.error.message);
-    workoutDay = (dayResult.data as Record<string, unknown> | null) ?? null;
+    workoutDay = (dayResult.data as DbRow | null) ?? null;
     if (workoutDay?.id) {
       const exerciseResult = await ctx.supabase
         .from("user_workout_plan_exercises")
@@ -136,7 +147,7 @@ async function getSafeTodayWorkout(ctx: McpContext, date: string) {
     }
   }
 
-  return { active_plan: activePlan, workout: data ?? null, workout_day: workoutDay, exercises };
+  return { active_plan: activePlan, workout, workout_day: workoutDay, exercises };
 }
 
 export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput: unknown): Promise<McpToolResult> {
