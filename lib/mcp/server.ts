@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticateMcpRequest, type McpContext } from "@/lib/mcp/auth";
-import { executeMcpTool, type McpToolResult } from "@/lib/mcp/tool-executor";
+import { executeMcpTool, type McpToolResult } from "@/lib/mcp/tool-executor-safe";
 import { mcpTools } from "@/lib/mcp/tools";
 import { serverEnv } from "@/lib/integrations/env";
 
