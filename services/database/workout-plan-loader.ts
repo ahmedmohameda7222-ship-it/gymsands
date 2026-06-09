@@ -42,7 +42,7 @@ function num(value: unknown, fallback: number | null = null) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function array(value: unknown) {
+function array(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
@@ -106,7 +106,7 @@ function normalizeExercise(row: RawPlanExercise, index: number): UserWorkoutPlan
 
 function normalizeDay(row: RawPlanDay): UserWorkoutPlanDay {
   const exercises = array(row.user_workout_plan_exercises)
-    .map((exercise, index) => normalizeExercise(exercise as RawPlanExercise, index))
+    .map((exercise, index) => normalizeExercise(exercise as unknown as RawPlanExercise, index))
     .sort((a, b) => ((a as UserWorkoutPlanExercise & { order_index?: number }).order_index ?? a.sort_order) - ((b as UserWorkoutPlanExercise & { order_index?: number }).order_index ?? b.sort_order));
 
   return {
@@ -123,7 +123,7 @@ function normalizeDay(row: RawPlanDay): UserWorkoutPlanDay {
 function normalizePlan(row: RawWorkoutPlan): UserWorkoutPlan {
   const source = nullableText(row.source) ?? (row.chatgpt_source ? "chatgpt" : "manual");
   const days = array(row.user_workout_plan_days)
-    .map((day) => normalizeDay(day as RawPlanDay))
+    .map((day) => normalizeDay(day as unknown as RawPlanDay))
     .sort((a, b) => a.day_number - b.day_number);
 
   return {
@@ -155,7 +155,8 @@ async function queryPlans(userId: string, select: string) {
     .order("created_at", { ascending: false });
 
   if (error) return { plans: null, error };
-  return { plans: sortPlans(((data ?? []) as RawWorkoutPlan[]).map(normalizePlan)), error: null };
+  const rawPlans = (data ?? []) as unknown as RawWorkoutPlan[];
+  return { plans: sortPlans(rawPlans.map(normalizePlan)), error: null };
 }
 
 export async function getAllUserWorkoutPlans(userId: string) {
@@ -234,23 +235,27 @@ async function getAllUserWorkoutPlansFromDay(dayId: string): Promise<WorkoutPlan
     return null;
   }
 
+  const dayRecord = dayRow as unknown as RawPlanDay;
+  const planId = text(dayRecord.plan_id);
+  if (!planId) return null;
+
   const { data: planRow, error: planError } = await supabase!
     .from("user_workout_plans")
     .select(fullPlanSelect)
-    .eq("id", String(dayRow.plan_id))
+    .eq("id", planId)
     .limit(1)
     .maybeSingle();
 
-  let plan = planRow ? normalizePlan(planRow as RawWorkoutPlan) : null;
+  let plan = planRow ? normalizePlan(planRow as unknown as RawWorkoutPlan) : null;
   if (planError && isCompatibilityError(planError)) {
     const compatible = await supabase!
       .from("user_workout_plans")
       .select(compatPlanSelect)
-      .eq("id", String(dayRow.plan_id))
+      .eq("id", planId)
       .limit(1)
       .maybeSingle();
     if (compatible.error) return null;
-    plan = compatible.data ? normalizePlan(compatible.data as RawWorkoutPlan) : null;
+    plan = compatible.data ? normalizePlan(compatible.data as unknown as RawWorkoutPlan) : null;
   } else if (planError) {
     console.warn("FitLife could not load workout day plan.", planError.message);
     return null;
