@@ -1,25 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarDays, Dumbbell, Plus, RefreshCcw, Star, Trash2 } from "lucide-react";
+import { CalendarDays, Dumbbell, Plus, RefreshCcw, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { deleteUserWorkoutPlan, getWorkoutActivity, setDefaultUserWorkoutPlan } from "@/services/database/repository";
+import { getWorkoutActivity, setDefaultUserWorkoutPlan } from "@/services/database/repository";
 import { getActiveWorkoutPlan, getAllUserWorkoutPlans, workoutsFromLoadedPlanDay } from "@/services/database/workout-plan-loader";
 import { WorkoutPlanBuilder } from "@/components/workouts/workout-plan-builder";
 import { WorkoutCalendar } from "@/components/workouts/workout-calendar";
 import type { UserWorkoutPlan, WorkoutSession } from "@/types";
 
-type PlanSourceMeta = UserWorkoutPlan & { source?: string; chatgpt_source?: boolean };
+type PlanMeta = Omit<UserWorkoutPlan, "source"> & { source?: string; chatgpt_source?: boolean };
 
 function isChatGptPlan(plan: UserWorkoutPlan | null) {
-  if (!plan) return false;
-  const meta = plan as PlanSourceMeta;
-  return meta.source === "chatgpt" || Boolean(meta.chatgpt_source);
+  const meta = plan as PlanMeta | null;
+  return Boolean(meta && (meta.source === "chatgpt" || meta.chatgpt_source));
 }
 
 function calendarDaysFromPlan(plan: UserWorkoutPlan) {
@@ -78,47 +77,12 @@ export function MyWorkoutPlans() {
   async function setDefaultPlan(plan: UserWorkoutPlan) {
     if (!user?.id || busyPlanId) return;
     setBusyPlanId(plan.id);
-    const previousPlans = plans;
-    const previousActivePlan = activePlan;
-    setPlans((current) =>
-      current.map((item) => ({
-        ...item,
-        is_active: item.id === plan.id,
-        is_default: item.id === plan.id
-      }))
-    );
-    setActivePlan(plan);
     try {
       await setDefaultUserWorkoutPlan(user.id, plan.id);
       await loadPlans();
-      toast({ title: "Default plan updated", description: `${plan.name} is now used for Today's Workout and Weekly Summary.` });
+      toast({ title: "Default plan updated", description: `${plan.name} is now active.` });
     } catch (error) {
-      setPlans(previousPlans);
-      setActivePlan(previousActivePlan);
       toast({ title: "Could not set default plan", description: error instanceof Error ? error.message : "Please try again." });
-    } finally {
-      setBusyPlanId(null);
-    }
-  }
-
-  async function deletePlan(plan: UserWorkoutPlan) {
-    if (!user?.id || busyPlanId) return;
-    const confirmed = window.confirm(`Delete "${plan.name}"? This removes the plan only from your account.`);
-    if (!confirmed) return;
-
-    const previousPlans = plans;
-    const previousActivePlan = activePlan;
-    setBusyPlanId(plan.id);
-    setPlans((current) => current.filter((item) => item.id !== plan.id));
-    if (activePlan?.id === plan.id) setActivePlan(null);
-    try {
-      await deleteUserWorkoutPlan(user.id, plan.id);
-      await loadPlans();
-      toast({ title: "Plan deleted", description: `${plan.name} was removed from Workout Plans.` });
-    } catch (error) {
-      setPlans(previousPlans);
-      setActivePlan(previousActivePlan);
-      toast({ title: "Could not delete plan", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
       setBusyPlanId(null);
     }
@@ -146,12 +110,10 @@ export function MyWorkoutPlans() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={loadPlans} disabled={isLoading}>
-            <RefreshCcw className="h-4 w-4" />
-            Refresh
+            <RefreshCcw className="h-4 w-4" /> Refresh
           </Button>
           <Button onClick={() => setShowBuilder((current) => !current)}>
-            <Plus className="h-4 w-4" />
-            {showBuilder ? "Close Builder" : "Add New Workout Plan"}
+            <Plus className="h-4 w-4" /> {showBuilder ? "Close Builder" : "Add New Workout Plan"}
           </Button>
         </div>
       </div>
@@ -160,20 +122,13 @@ export function MyWorkoutPlans() {
         <Card>
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center gap-2">
-              Active plan
-              <Badge>{activePlan.name}</Badge>
+              Active plan <Badge>{activePlan.name}</Badge>
               {isChatGptPlan(activePlan) ? <Badge variant="outline">ChatGPT</Badge> : null}
             </CardTitle>
             <p className="text-sm text-muted-foreground">Weekly calendar is loaded from the saved active plan days and exercises.</p>
           </CardHeader>
           <CardContent>
-            <WorkoutCalendar
-              days={activeCalendarDays}
-              activity={activity}
-              activeDayIndex={activeDayIndex}
-              onSelectDay={setActiveDayIndex}
-              onStartToday={startToday}
-            />
+            <WorkoutCalendar days={activeCalendarDays} activity={activity} activeDayIndex={activeDayIndex} onSelectDay={setActiveDayIndex} onStartToday={startToday} />
           </CardContent>
         </Card>
       ) : null}
@@ -185,36 +140,26 @@ export function MyWorkoutPlans() {
         {plans.map((plan) => {
           const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
           const isDefault = plan.is_default ?? plan.is_active;
-          const isChatGpt = isChatGptPlan(plan);
           return (
             <Card key={plan.id}>
               <CardHeader>
                 <CardTitle className="flex items-start justify-between gap-3">
                   <span>{plan.name}</span>
-                  {isDefault ? <Badge>Default</Badge> : isChatGpt ? <Badge variant="outline">ChatGPT</Badge> : <Badge variant="outline">Saved</Badge>}
+                  {isDefault ? <Badge>Default</Badge> : isChatGptPlan(plan) ? <Badge variant="outline">ChatGPT</Badge> : <Badge variant="outline">Saved</Badge>}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <PlanMetric icon={CalendarDays} label="Days" value={plan.days.length} />
-                  <PlanMetric icon={Dumbbell} label="Exercises" value={exerciseCount} />
+                  <div className="rounded-md bg-slate-50 p-3"><CalendarDays className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-xl font-bold text-slate-950">{plan.days.length}</p><p className="text-xs text-muted-foreground">Days</p></div>
+                  <div className="rounded-md bg-slate-50 p-3"><Dumbbell className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-xl font-bold text-slate-950">{exerciseCount}</p><p className="text-xs text-muted-foreground">Exercises</p></div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {plan.days.slice(0, 4).map((day) => (
-                    <Badge key={day.id} variant="outline">{day.weekday ?? day.day_name}</Badge>
-                  ))}
+                  {plan.days.slice(0, 4).map((day) => <Badge key={day.id} variant="outline">{day.weekday ?? day.day_name}</Badge>)}
                 </div>
                 <div className="grid gap-2">
-                  <Button asChild className="w-full">
-                    <Link href={`/my-workout/plans/${plan.id}`}>Open Plan</Link>
-                  </Button>
+                  <Button asChild className="w-full"><Link href={`/my-workout/plans/${plan.id}`}>Open Plan</Link></Button>
                   <Button type="button" variant={isDefault ? "secondary" : "outline"} className="w-full" onClick={() => setDefaultPlan(plan)} disabled={isDefault || busyPlanId === plan.id}>
-                    <Star className="h-4 w-4" />
-                    {isDefault ? "Default Plan" : "Set as Default Plan"}
-                  </Button>
-                  <Button type="button" variant="destructive" className="w-full" onClick={() => deletePlan(plan)} disabled={busyPlanId === plan.id}>
-                    <Trash2 className="h-4 w-4" />
-                    Delete Plan
+                    <Star className="h-4 w-4" /> {isDefault ? "Default Plan" : "Set as Default Plan"}
                   </Button>
                 </div>
               </CardContent>
@@ -224,26 +169,6 @@ export function MyWorkoutPlans() {
       </div>
 
       {showBuilder ? <WorkoutPlanBuilder loadActivePlan={false} onSaved={loadPlans} /> : null}
-    </div>
-  );
-}
-
-function PlanMetric({
-  icon: Icon,
-  label,
-  value
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string | number;
-}) {
-  return (
-    <div className="rounded-md bg-slate-50 p-3">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Icon className="h-4 w-4" />
-        <span>{label}</span>
-      </div>
-      <p className="mt-1 text-xl font-bold text-slate-950">{value}</p>
     </div>
   );
 }
