@@ -1,67 +1,73 @@
-# FitLife ChatGPT MCP Implementation Notes
+# FitLife Hub implementation notes
 
-Direct GitHub writes were blocked by the connector safety layer, so this zip is a copy-ready implementation package.
+This repository is the source of truth for the FitLife Hub responsive web app.
 
-## Copy into repo root
+## Product boundary
 
-Copy all folders/files into `ahmedmohameda7222-ship-it/gymsands`, preserving paths.
+FitLife Hub does not generate workout or meal plans internally. Users create plans with ChatGPT or another external tool, then import/save them into FitLife Hub. FitLife Hub stores, schedules, edits, and tracks imported plans.
 
-Files that should replace existing files:
+## Current primary private routes
 
-- `.env.example`
-- `lib/integrations/env.ts`
-- `components/settings/connected-apps.tsx`
+- `/dashboard` — Today dashboard.
+- `/my-workout/plans` — imported and manual workout plans.
+- `/my-workout/plans/[id]` — saved plan details and editing.
+- `/workouts` — exercise library.
+- `/workouts/session/[id]` — single-exercise workout logger.
+- `/workouts/session/day/[dayId]` — saved plan day workout logger.
+- `/workout-history` — workout history.
+- `/calories` — food log, water, calories, macros, and food search/logging.
+- `/my-meal-plan` — meal planning.
+- `/calories/custom-food-meal` — custom kitchens, foods, and meals.
+- `/calories/weekly-overview` — nutrition summary.
+- `/progress` — weight, measurements, and progress photos.
+- `/personal-records` — personal records.
+- `/wellness` — wellness hub.
+- `/hydration`, `/habits`, `/sleep-recovery`, `/supplements`, `/daily-fit-tasks` — wellness subflows.
+- `/settings` — connected apps and ChatGPT import setup.
+- `/profile` — profile and goal settings.
+- `/admin/*` — admin-only tools.
 
-Files to add:
+The old `/meals` route was removed. Food logging lives in `/calories`; custom kitchen/food/meal management lives in `/calories/custom-food-meal`.
+
+## ChatGPT import / MCP
+
+Implemented MCP-related routes and modules:
 
 - `app/api/mcp/route.ts`
-- `app/api/chatgpt-connection/route.ts`
-- `app/.well-known/oauth-protected-resource/route.ts`
 - `lib/mcp/auth.ts`
 - `lib/mcp/server.ts`
 - `lib/mcp/tools.ts`
 - `lib/mcp/tool-executor.ts`
 - `lib/mcp/schemas.ts`
 - `lib/server/supabase-admin.ts`
-- `supabase/migrations/014_chatgpt_mcp_connections.sql`
 - `docs/chatgpt-mcp.md`
 
-Also merge `README_CHATGPT_MCP_SECTION.md` into your existing `README.md`.
+ChatGPT saves workout and meal plan data through the MCP tool executor. There is no `/api/workout-plan/generate` route and no in-app workout-plan generation path.
 
-## Run migration
+## Supabase migrations
 
-Run this in Supabase SQL editor:
+Use the canonical migration order in `README.md`. The previously colliding `014_*` migration names have been normalized so that:
 
-```text
-supabase/migrations/014_chatgpt_mcp_connections.sql
-```
+- `014_clean_exercise_library_and_api_integrations.sql` remains migration 014.
+- `015_chatgpt_mcp_connections.sql` contains ChatGPT/MCP connection tables.
+- `016_auto_activate_wger_exercises.sql` contains wger activation cleanup.
+- `017_exercise_calorie_reference.sql` contains the exercise calorie reference data.
 
-## Set env vars
+## Removed internal generator modules
 
-```env
-SUPABASE_SERVICE_ROLE_KEY=
-FITLIFE_MCP_BASE_URL=https://your-domain.com/api/mcp
-FITLIFE_MCP_TOKEN_SECRET=long-random-secret
-FITLIFE_MCP_ALLOWED_ORIGINS=https://chatgpt.com,https://chat.openai.com
-```
+The old rule-based workout generator modules were removed because FitLife Hub no longer generates workout plans internally:
 
-Remove Gemini env vars from deployment settings if present:
+- `lib/workouts/generator.ts`
+- `lib/workouts/cardio-generator.ts`
+- `lib/workouts/cooldown-generator.ts`
+- `lib/workouts/exercise-selection.ts`
+- `lib/workouts/generator-rules.ts`
+- `lib/workouts/warmup-generator.ts`
 
-```env
-GEMINI_API_KEY
-GEMINI_MODEL
-```
-
-## Validate
+## Validation commands
 
 ```bash
 npm run lint
 npm run typecheck
 npm run build
 ```
-
-## Notes
-
-- `generate_workout_plan` is wired as a safe preview in the MCP executor because your app already has full persistence in `/api/workout-plan/generate`. For complete one-call generation from MCP, move that route's save logic into `lib/mcp/tool-executor.ts` or extract it to a shared server action.
-- All non-admin tools derive `user_id` from the authenticated connection, never from model input.
-- Admin tools check `profile.role === "admin"`.
