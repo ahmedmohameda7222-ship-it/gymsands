@@ -23,7 +23,7 @@ import {
   upsertUserFood,
   type CustomMealInput,
   type UserFoodInput
-} from "@/services/database/repository";
+} from "@/services/database/nutrition";
 import type { CustomMeal, FoodItem, FoodKitchen, FoodLog, FoodSubcategory, MealType, UserFoodItem } from "@/types";
 
 const mealTypes: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];

@@ -15,7 +15,6 @@ import type {
   FoodKitchen,
   FoodLog,
   FoodSubcategory,
-  GeneratedWorkoutPlan,
   MealItem,
   MealPlanItem,
   MealType,
@@ -35,7 +34,6 @@ import type {
   Weekday,
   WelcomeSettings,
   Workout,
-  WorkoutTemplate,
   WorkoutPlanDaySession,
   WorkoutSession,
   WorkoutSessionSummary
@@ -232,12 +230,12 @@ function normalizeWorkoutSession(session: WorkoutSession): WorkoutSession {
   return session;
 }
 
-function generatedSessionDate(session: UserWorkoutSession) {
+function scheduledSessionDate(session: UserWorkoutSession) {
   return session.completed_at || session.skipped_at || session.started_at || `${session.scheduled_date}T00:00:00.000Z`;
 }
 
-function mapGeneratedSessionToWorkoutSession(session: UserWorkoutSession): WorkoutSession {
-  const date = generatedSessionDate(session);
+function mapScheduledSessionToWorkoutSession(session: UserWorkoutSession): WorkoutSession {
+  const date = scheduledSessionDate(session);
   return {
     id: session.id,
     user_id: session.user_id,
@@ -1944,11 +1942,11 @@ export async function getWorkoutHistory(userId: string) {
   }
   if (error) {
     console.warn("FitLife Hub could not load workout history.", error.message);
-    return getGeneratedWorkoutActivity(userId, 20);
+    return getScheduledWorkoutActivity(userId, 20);
   }
   const legacyHistory = ((data ?? []) as WorkoutSession[]).map(normalizeWorkoutSession);
-  const generatedHistory = await getGeneratedWorkoutActivity(userId, 20);
-  return [...legacyHistory, ...generatedHistory]
+  const scheduledHistory = await getScheduledWorkoutActivity(userId, 20);
+  return [...legacyHistory, ...scheduledHistory]
     .sort((a, b) => sessionDateForSort(b).getTime() - sessionDateForSort(a).getTime())
     .slice(0, 20);
 }
@@ -1997,12 +1995,12 @@ export async function getWorkoutActivity(userId: string, limit = 180) {
 
   if (error) {
     console.warn("FitLife Hub could not load workout activity.", error.message);
-    return getGeneratedWorkoutActivity(userId, limit);
+    return getScheduledWorkoutActivity(userId, limit);
   }
 
   const legacyActivity = ((data ?? []) as WorkoutSession[]).map(normalizeWorkoutSession);
-  const generatedActivity = await getGeneratedWorkoutActivity(userId, limit);
-  return [...legacyActivity, ...generatedActivity]
+  const scheduledActivity = await getScheduledWorkoutActivity(userId, limit);
+  return [...legacyActivity, ...scheduledActivity]
     .sort((a, b) => sessionDateForSort(b).getTime() - sessionDateForSort(a).getTime())
     .slice(0, limit);
 }
@@ -2065,7 +2063,7 @@ type RawWorkoutPlan = {
   is_active: boolean;
   is_default?: boolean | null;
   template_id?: string | null;
-  source?: "manual" | "generated_rules" | "template_recommendation";
+  source?: UserWorkoutPlan["source"];
   match_score?: number | null;
   match_explanation?: string | null;
   match_reasons?: string[] | null;
@@ -2076,38 +2074,7 @@ type RawWorkoutPlan = {
   user_workout_plan_days?: RawPlanDay[] | null;
 };
 
-type RawTemplateExercise = {
-  id: string;
-  workout_template_day_id?: string;
-  exercise_order: number;
-  exercise_name: string;
-  sets: string | null;
-  reps: string | null;
-};
-
-type RawTemplateDay = {
-  id: string;
-  workout_template_id?: string;
-  day_index: number;
-  day_title: string;
-  workout_template_exercises?: RawTemplateExercise[] | null;
-};
-
-type RawTemplate = {
-  id: string;
-  title: string;
-  main_goal: string;
-  workout_type: string | null;
-  training_level: string;
-  program_duration_weeks: number;
-  days_per_week: number;
-  time_per_workout: string | null;
-  equipment_required: string[] | null;
-  target_gender: string | null;
-  workout_template_days?: RawTemplateDay[] | null;
-};
-
-type RawGeneratedSession = {
+type RawScheduledSession = {
   id: string;
   user_id: string;
   user_workout_plan_id: string;
@@ -2125,11 +2092,6 @@ type RawGeneratedSession = {
   duration_minutes: number | null;
   notes: string | null;
   user_exercise_logs?: UserExerciseLog[] | null;
-};
-
-type RawGeneratedPlan = RawWorkoutPlan & {
-  workout_templates?: RawTemplate | RawTemplate[] | null;
-  user_workout_sessions?: RawGeneratedSession[] | null;
 };
 
 function mapPlanExerciseToWorkout(exercise: RawPlanExercise): Workout {
@@ -2182,42 +2144,7 @@ function normalizeWorkoutPlan(plan: RawWorkoutPlan): UserWorkoutPlan {
   };
 }
 
-function normalizeWorkoutTemplate(template: RawTemplate | RawTemplate[] | null | undefined): WorkoutTemplate | null {
-  const row = Array.isArray(template) ? template[0] : template;
-  if (!row) return null;
-  return {
-    id: row.id,
-    title: row.title,
-    main_goal: row.main_goal,
-    workout_type: row.workout_type,
-    training_level: row.training_level,
-    program_duration_weeks: row.program_duration_weeks,
-    days_per_week: row.days_per_week,
-    time_per_workout: row.time_per_workout,
-    equipment_required: row.equipment_required ?? [],
-    target_gender: row.target_gender,
-    days: (row.workout_template_days ?? [])
-      .map((day) => ({
-        id: day.id,
-        workout_template_id: day.workout_template_id ?? row.id,
-        day_index: day.day_index,
-        day_title: day.day_title,
-        exercises: (day.workout_template_exercises ?? [])
-          .map((exercise) => ({
-            id: exercise.id,
-            workout_template_day_id: exercise.workout_template_day_id ?? day.id,
-            exercise_order: exercise.exercise_order,
-            exercise_name: exercise.exercise_name,
-            sets: exercise.sets,
-            reps: exercise.reps
-          }))
-          .sort((a, b) => a.exercise_order - b.exercise_order)
-      }))
-      .sort((a, b) => a.day_index - b.day_index)
-  };
-}
-
-function normalizeGeneratedSession(session: RawGeneratedSession): UserWorkoutSession {
+function normalizeScheduledSession(session: RawScheduledSession): UserWorkoutSession {
   return {
     id: session.id,
     user_id: session.user_id,
@@ -2236,19 +2163,6 @@ function normalizeGeneratedSession(session: RawGeneratedSession): UserWorkoutSes
     duration_minutes: session.duration_minutes,
     notes: session.notes,
     logs: [...(session.user_exercise_logs ?? [])].sort((a, b) => a.exercise_order - b.exercise_order)
-  };
-}
-
-function normalizeGeneratedWorkoutPlan(plan: RawGeneratedPlan): GeneratedWorkoutPlan {
-  return {
-    ...normalizeWorkoutPlan(plan),
-    template: normalizeWorkoutTemplate(plan.workout_templates),
-    sessions: (plan.user_workout_sessions ?? [])
-      .map(normalizeGeneratedSession)
-      .sort((a, b) => {
-        const dateSort = a.scheduled_date.localeCompare(b.scheduled_date);
-        return dateSort || a.session_number - b.session_number;
-      })
   };
 }
 
@@ -2308,7 +2222,7 @@ export async function getUserWorkoutPlans(userId: string) {
     .from("user_workout_plans")
     .select(selectWithSource)
     .eq("user_id", userId)
-    .or("source.is.null,source.eq.manual")
+    .or("source.is.null,source.eq.manual,source.eq.chatgpt,source.eq.imported")
     .order("created_at", { ascending: false });
   let data: unknown = result.data;
   let error = result.error;
@@ -2318,7 +2232,7 @@ export async function getUserWorkoutPlans(userId: string) {
       .from("user_workout_plans")
       .select(selectLegacy)
       .eq("user_id", userId)
-      .or("source.is.null,source.eq.manual")
+      .or("source.is.null,source.eq.manual,source.eq.chatgpt,source.eq.imported")
       .order("created_at", { ascending: false });
     data = legacy.data as unknown;
     error = legacy.error;
@@ -2415,149 +2329,15 @@ export async function deleteUserWorkoutPlan(userId: string, planId: string) {
   return true;
 }
 
-export async function getWorkoutTemplateWeekOptions() {
+export async function getWorkoutPlanWeekOptions() {
   return mockDelay({ min: 1, max: 16, values: [1, 2, 3, 4, 6, 8, 10, 12, 16] });
 }
 
-export async function getWorkoutTemplateDurationOptions() {
+export async function getWorkoutPlanDurationOptions() {
   return mockDelay({ min: 20, max: 90, values: [20, 30, 45, 60, 75, 90] });
 }
 
-export async function getGeneratedWorkoutPlan(userId: string) {
-  if (!canUseUserData(userId)) return mockDelay<GeneratedWorkoutPlan | null>(null);
-
-  const { data, error } = await supabase!
-    .from("user_workout_plans")
-    .select(
-      "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes)),user_workout_sessions(id,user_id,user_workout_plan_id,workout_template_day_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes,user_exercise_logs(id,user_workout_session_id,workout_template_exercise_id,plan_exercise_id,exercise_order,exercise_name,planned_sets,planned_reps,weight_kg,reps,notes,completed,completed_at,created_at,updated_at))"
-    )
-    .eq("user_id", userId)
-    .eq("is_active", true)
-    .eq("source", "generated_rules")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load the active workout plan.", error.message);
-    return null;
-  }
-
-  return data ? normalizeGeneratedWorkoutPlan(data as unknown as RawGeneratedPlan) : null;
-}
-
-export async function getGeneratedWorkoutPlans(userId: string) {
-  if (!canUseUserData(userId)) return mockDelay<GeneratedWorkoutPlan[]>([]);
-
-  const { data, error } = await supabase!
-    .from("user_workout_plans")
-    .select(
-      "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))"
-    )
-    .eq("user_id", userId)
-    .eq("source", "generated_rules")
-    .order("match_score", { ascending: false })
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load imported workout plans.", error.message);
-    return [];
-  }
-
-  return ((data ?? []) as unknown as RawGeneratedPlan[]).map((plan) =>
-    normalizeGeneratedWorkoutPlan({ ...plan, user_workout_sessions: plan.user_workout_sessions ?? [] })
-  );
-}
-
-export type GeneratedExerciseLogInput = {
-  workoutTemplateExerciseId?: string | null;
-  planExerciseId?: string | null;
-  exerciseOrder: number;
-  exerciseName: string;
-  plannedSets?: string | null;
-  plannedReps?: string | null;
-  weightKg?: number | null;
-  reps?: number | null;
-  notes?: string | null;
-  completed: boolean;
-};
-
-export async function completeGeneratedWorkoutSession({
-  userId,
-  sessionId,
-  logs,
-  notes,
-  durationMinutes,
-  startedAt
-}: {
-  userId: string;
-  sessionId: string;
-  logs: GeneratedExerciseLogInput[];
-  notes?: string;
-  durationMinutes?: number;
-  startedAt?: string;
-}) {
-  if (!canUseUserData(userId) || !isUuid(sessionId)) return mockDelay(true);
-
-  const deleteResult = await supabase!.from("user_exercise_logs").delete().eq("user_workout_session_id", sessionId);
-  if (deleteResult.error) throw deleteResult.error;
-
-  const completedAt = new Date().toISOString();
-  const rows = logs.map((log) => ({
-    user_workout_session_id: sessionId,
-    workout_template_exercise_id: log.workoutTemplateExerciseId ?? null,
-    plan_exercise_id: log.planExerciseId ?? null,
-    exercise_order: log.exerciseOrder,
-    exercise_name: log.exerciseName,
-    planned_sets: log.plannedSets ?? null,
-    planned_reps: log.plannedReps ?? null,
-    weight_kg: log.weightKg ?? null,
-    reps: log.reps ?? null,
-    notes: log.notes ?? null,
-    completed: log.completed,
-    completed_at: log.completed ? completedAt : null
-  }));
-
-  if (rows.length) {
-    const { error: logsError } = await supabase!.from("user_exercise_logs").insert(rows);
-    if (logsError) throw logsError;
-  }
-
-  const { error: sessionError } = await supabase!
-    .from("user_workout_sessions")
-    .update({
-      status: "completed",
-      started_at: startedAt ?? completedAt,
-      completed_at: completedAt,
-      duration_minutes: Math.max(0, durationMinutes ?? 0),
-      notes: notes || null
-    })
-    .eq("id", sessionId)
-    .eq("user_id", userId);
-
-  if (sessionError) throw sessionError;
-  return true;
-}
-
-export async function skipGeneratedWorkoutSession(userId: string, sessionId: string, notes = "") {
-  if (!canUseUserData(userId) || !isUuid(sessionId)) return mockDelay(true);
-  const skippedAt = new Date().toISOString();
-  const { error } = await supabase!
-    .from("user_workout_sessions")
-    .update({
-      status: "skipped",
-      skipped_at: skippedAt,
-      duration_minutes: 0,
-      notes: notes || null
-    })
-    .eq("id", sessionId)
-    .eq("user_id", userId);
-
-  if (error) throw error;
-  return true;
-}
-
-export async function getGeneratedWorkoutHistory(userId: string, limit = 100) {
+export async function getScheduledWorkoutHistory(userId: string, limit = 100) {
   if (!canUseUserData(userId)) return mockDelay<UserWorkoutSession[]>([]);
   const { data, error } = await supabase!
     .from("user_workout_sessions")
@@ -2574,10 +2354,10 @@ export async function getGeneratedWorkoutHistory(userId: string, limit = 100) {
     return [];
   }
 
-  return ((data ?? []) as unknown as RawGeneratedSession[]).map(normalizeGeneratedSession);
+  return ((data ?? []) as unknown as RawScheduledSession[]).map(normalizeScheduledSession);
 }
 
-export async function getGeneratedWorkoutActivity(userId: string, limit = 180) {
+export async function getScheduledWorkoutActivity(userId: string, limit = 180) {
   if (!canUseUserData(userId)) return mockDelay<WorkoutSession[]>([]);
   const { data, error } = await supabase!
     .from("user_workout_sessions")
@@ -2592,7 +2372,7 @@ export async function getGeneratedWorkoutActivity(userId: string, limit = 180) {
     return [];
   }
 
-  return ((data ?? []) as unknown as RawGeneratedSession[]).map((session) => mapGeneratedSessionToWorkoutSession(normalizeGeneratedSession(session)));
+  return ((data ?? []) as unknown as RawScheduledSession[]).map((session) => mapScheduledSessionToWorkoutSession(normalizeScheduledSession(session)));
 }
 
 export async function getUserWorkoutPlanDay(dayId: string) {

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { FoodLog } from "@/types";
-import { deleteFoodLog } from "@/services/database/repository";
+import { deleteFoodLog } from "@/services/database/nutrition";
 import { useToast } from "@/components/ui/toaster";
 
 export function FoodLogList({ logs = [], onDeleted, title = "Today's food log" }: { logs?: FoodLog[]; onDeleted?: (id: string) => void; title?: string }) {

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Archive, CalendarDays, Copy, Dumbbell, Edit3, Plus, RefreshCcw, Save, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +9,9 @@ import { CardGridSkeleton, EmptyState, ErrorState } from "@/components/ui/state-
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError, logRecoverableError, technicalErrorDetails } from "@/lib/error-formatting";
-import { getWorkoutActivity, setDefaultUserWorkoutPlan } from "@/services/database/repository";
+import Link from "next/link";
+import { setDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
+import { getWorkoutActivity } from "@/services/database/workout-sessions";
 import { archiveWorkoutPlan, duplicateWorkoutPlan, getActiveWorkoutPlan, getAllUserWorkoutPlans, updateWorkoutPlanMetadata, workoutsFromLoadedPlanDay } from "@/services/database/workout-plan-loader";
 import { WorkoutPlanBuilder } from "@/components/workouts/workout-plan-builder";
 import { WorkoutCalendar } from "@/components/workouts/workout-calendar";

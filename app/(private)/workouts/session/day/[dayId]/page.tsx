@@ -7,7 +7,7 @@ import { WorkoutDaySession } from "@/components/workouts/workout-day-session";
 import { CardSkeleton, EmptyState, ErrorState } from "@/components/ui/state-views";
 import { useToast } from "@/components/ui/toaster";
 import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
-import { getUserWorkoutPlanDay } from "@/services/database/repository";
+import { getUserWorkoutPlanDay } from "@/services/database/workout-plans";
 import type { WorkoutPlanDaySession } from "@/types";
 
 export default function WorkoutDaySessionPage() {

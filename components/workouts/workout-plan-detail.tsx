@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Pencil, Play, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -9,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { createUserWorkoutPlanDay, getCurrentWeekday, getUserWorkoutPlan, getWorkoutActivity, weekDays, workoutsFromPlanDay } from "@/services/database/repository";
+import Link from "next/link";
+import { createUserWorkoutPlanDay, getCurrentWeekday, getUserWorkoutPlan, weekDays, workoutsFromPlanDay } from "@/services/database/workout-plans";
+import { getWorkoutActivity } from "@/services/database/workout-sessions";
 import { WorkoutCalendar, type WeeklyPlanDay } from "@/components/workouts/workout-calendar";
 import type { UserWorkoutPlan, WorkoutSession } from "@/types";
 

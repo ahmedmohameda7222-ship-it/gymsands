@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { updateProfile } from "@/services/database/repository";
+import { updateProfile } from "@/services/database/profile";
 
 export default function ProfilePage() {
   const { profile, refreshProfile } = useAuth();

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ExternalLink, Heart, Play, RotateCcw, Save, TrendingUp } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -13,7 +12,9 @@ import { PageHeading } from "@/components/layout/page-heading";
 import { ExerciseVideoPlayer } from "@/components/workouts/video-player";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { getExerciseVideos, getUserExerciseVideo, getWorkout, getWorkoutHistoryDetailed, getWorkouts, resetUserExerciseVideo, upsertUserExerciseVideo } from "@/services/database/repository";
+import Link from "next/link";
+import { getExerciseVideos, getUserExerciseVideo, getWorkout, getWorkouts, resetUserExerciseVideo, upsertUserExerciseVideo } from "@/services/database/workout-library";
+import { getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
 import { getCustomExercise, getCustomExercises, getFavoriteExerciseIds, setFavoriteExercise } from "@/services/workouts/exercise-library-store";
 import { findExerciseVideo } from "@/services/workouts/video-matching";
 import type { ExerciseLog, ExerciseVideo, Workout, WorkoutSessionSummary } from "@/types";

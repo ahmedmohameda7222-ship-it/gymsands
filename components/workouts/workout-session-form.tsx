@@ -11,7 +11,7 @@ import { MobileStickyActions, MobileStickyActionsSpacer } from "@/components/lay
 import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
-import { completeWorkoutSession, saveWorkoutSetLogs, startWorkoutSession } from "@/services/database/repository";
+import { completeWorkoutSession, saveWorkoutSetLogs, startWorkoutSession } from "@/services/database/workout-sessions";
 import type { Workout, WorkoutSession } from "@/types";
 
 type SetLog = {

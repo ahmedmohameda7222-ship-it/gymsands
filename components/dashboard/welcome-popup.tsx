@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { getWelcomeSettings } from "@/services/database/repository";
+import { getWelcomeSettings } from "@/services/database/settings";
 import { useAuth } from "@/components/auth/auth-provider";
 
 export function WelcomePopup() {

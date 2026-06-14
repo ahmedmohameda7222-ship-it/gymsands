@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
 import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
-import { addProgressEntry } from "@/services/database/repository";
+import { addProgressEntry } from "@/services/database/progress";
 import { todayIso } from "@/lib/utils";
 import type { ProgressEntry } from "@/types";
 

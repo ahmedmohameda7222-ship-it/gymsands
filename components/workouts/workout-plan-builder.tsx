@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { CalendarCheck, Dumbbell, ExternalLink, Pencil, Play, Plus, RotateCcw, Save, Search, SkipForward, SlidersHorizontal, Trash2, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
@@ -14,19 +13,16 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { WorkoutCalendar, type WeeklyPlanDay } from "@/components/workouts/workout-calendar";
 import { clearStoredValue, workoutStorageKey } from "@/lib/workout-persistence";
+import Link from "next/link";
+import { getWorkoutFilterOptions, getWorkouts, type WorkoutFilterOptions, type WorkoutFilters } from "@/services/database/workout-library";
 import {
   createUserWorkoutPlan,
   getActiveUserWorkoutPlan,
   getCurrentWeekday,
-  getWorkoutActivity,
-  getWorkoutFilterOptions,
-  getWorkouts,
-  skipWorkoutDay,
   weekDays,
-  workoutsFromPlanDay,
-  type WorkoutFilterOptions,
-  type WorkoutFilters
-} from "@/services/database/repository";
+  workoutsFromPlanDay
+} from "@/services/database/workout-plans";
+import { getWorkoutActivity, skipWorkoutDay } from "@/services/database/workout-sessions";
 import type { Weekday, Workout, WorkoutSession } from "@/types";
 
 const defaultDays: WeeklyPlanDay[] = [

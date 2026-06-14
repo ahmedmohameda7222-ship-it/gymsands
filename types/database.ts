@@ -307,7 +307,7 @@ export type WorkoutTemplate = {
   days: WorkoutTemplateDay[];
 };
 
-export type GeneratedWorkoutSessionStatus = "scheduled" | "started" | "completed" | "skipped";
+export type ScheduledWorkoutSessionStatus = "scheduled" | "started" | "completed" | "skipped";
 
 export type UserExerciseLog = {
   id: string;
@@ -338,7 +338,7 @@ export type UserWorkoutSession = {
   session_number: number;
   scheduled_date: string;
   day_title: string;
-  status: GeneratedWorkoutSessionStatus;
+  status: ScheduledWorkoutSessionStatus;
   started_at: string | null;
   completed_at: string | null;
   skipped_at: string | null;
@@ -388,7 +388,7 @@ export type UserWorkoutPlan = {
   is_active: boolean;
   is_default?: boolean;
   template_id?: string | null;
-  source?: "manual" | "chatgpt" | "imported" | "generated_rules" | "template_recommendation";
+  source?: "manual" | "chatgpt" | "imported";
   goal?: string | null;
   description?: string | null;
   chatgpt_source?: boolean;
@@ -402,11 +402,6 @@ export type UserWorkoutPlan = {
   created_at: string;
   updated_at: string;
   days: UserWorkoutPlanDay[];
-};
-
-export type GeneratedWorkoutPlan = UserWorkoutPlan & {
-  template: WorkoutTemplate | null;
-  sessions: UserWorkoutSession[];
 };
 
 export type DailyFitTask = {

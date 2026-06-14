@@ -644,9 +644,9 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         const sessionId = getString(input, "workout_session_id");
         const exerciseName = getString(input, "exercise_name");
         const sets = getArray<JsonObject>(input, "sets");
-        const generatedSession = await ctx.supabase.from("user_workout_sessions").select("id").eq("id", sessionId).eq("user_id", ctx.userId).maybeSingle();
-        if (generatedSession.error) throw new Error(generatedSession.error.message);
-        if (generatedSession.data) {
+        const scheduledSession = await ctx.supabase.from("user_workout_sessions").select("id").eq("id", sessionId).eq("user_id", ctx.userId).maybeSingle();
+        if (scheduledSession.error) throw new Error(scheduledSession.error.message);
+        if (scheduledSession.data) {
           const rows = sets.map((set, index) => ({ user_workout_session_id: sessionId, exercise_order: getNumber(set, "set_number", index + 1), exercise_name: exerciseName, weight_kg: getOptionalNumber(set, "weight_kg") ?? null, reps: getOptionalNumber(set, "reps") ?? null, notes: getOptionalString(set, "notes") ?? null, completed: true, completed_at: new Date().toISOString() }));
           const { data, error } = await ctx.supabase.from("user_exercise_logs").upsert(rows, { onConflict: "user_workout_session_id,exercise_order" }).select("*");
           if (error) throw new Error(error.message);
@@ -661,9 +661,9 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
       case "complete_workout": {
         const sessionId = getString(input, "workout_session_id");
         const update = { status: "completed", completed_at: new Date().toISOString(), duration_minutes: getOptionalNumber(input, "duration_minutes") ?? null, notes: getOptionalString(input, "notes") ?? null };
-        const generated = await ctx.supabase.from("user_workout_sessions").update(update).eq("id", sessionId).eq("user_id", ctx.userId).select("*").maybeSingle();
-        if (generated.error) throw new Error(generated.error.message);
-        if (generated.data) return ok({ ok: true, session: generated.data });
+        const scheduledUpdate = await ctx.supabase.from("user_workout_sessions").update(update).eq("id", sessionId).eq("user_id", ctx.userId).select("*").maybeSingle();
+        if (scheduledUpdate.error) throw new Error(scheduledUpdate.error.message);
+        if (scheduledUpdate.data) return ok({ ok: true, session: scheduledUpdate.data });
         const { data, error } = await ctx.supabase.from("workout_sessions").update(update).eq("id", sessionId).eq("user_id", ctx.userId).select("*").single();
         if (error) throw new Error(error.message);
         return ok({ ok: true, session: data });

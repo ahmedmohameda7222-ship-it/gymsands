@@ -10,27 +10,29 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { todayIso } from "@/lib/utils";
+import { getNutritionWeek } from "@/services/database/nutrition";
+import {
+  deletePersonalRecord,
+  getPersonalRecords,
+  upsertPersonalRecord,
+  type PersonalRecordInput
+} from "@/services/database/progress";
 import {
   deleteDailyFitTask,
   deleteFitnessHabit,
-  deletePersonalRecord,
   deleteSleepRecoveryLog,
   deleteSupplementLog,
   getDailyFitTasks,
   getFitnessHabits,
-  getNutritionWeek,
-  getPersonalRecords,
   getSupplementLogs,
-  getWorkoutActivity,
   upsertDailyFitTask,
   upsertFitnessHabit,
-  upsertPersonalRecord,
   upsertSupplementLog,
   type DailyFitTaskInput,
   type FitnessHabitInput,
-  type PersonalRecordInput,
   type SupplementLogInput
-} from "@/services/database/repository";
+} from "@/services/database/wellness";
+import { getWorkoutActivity } from "@/services/database/workout-sessions";
 import {
   buildDailyChecklist,
   calculateReadiness,

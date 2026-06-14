@@ -16,10 +16,10 @@ import {
   adminUpdateWelcomeSettings,
   adminUpsertExerciseVideo,
   adminUpsertGlobalFood,
-  adminUpsertWelcomeMessage,
-  getGlobalFoods,
-  getWorkouts
-} from "@/services/database/repository";
+  adminUpsertWelcomeMessage
+} from "@/services/database/admin";
+import { getGlobalFoods } from "@/services/database/nutrition";
+import { getWorkouts } from "@/services/database/workout-library";
 import type { FoodItem, Workout } from "@/types";
 import { supabase } from "@/lib/supabase/client";
 

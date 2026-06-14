@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { Weekday, Workout, WorkoutSession } from "@/types";
-import { getCurrentWeekday, weekDays } from "@/services/database/repository";
+import { getCurrentWeekday, weekDays } from "@/services/database/workout-plans";
 
 export type WeeklyPlanDay = {
   id?: string;

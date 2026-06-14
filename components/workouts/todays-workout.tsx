@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { CalendarCheck, CheckCircle2, ExternalLink, Play, Utensils } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { getCurrentWeekday, getDefaultUserWorkoutPlan, getTodayMealPlanItems, markMealPlanItemDone, workoutsFromPlanDay } from "@/services/database/repository";
+import Link from "next/link";
+import { getTodayMealPlanItems, markMealPlanItemDone } from "@/services/database/nutrition";
+import { getCurrentWeekday, getDefaultUserWorkoutPlan, workoutsFromPlanDay } from "@/services/database/workout-plans";
 import type { MealPlanItem, UserWorkoutPlan, Workout } from "@/types";
 
 function isLink(value: string | null | undefined) {

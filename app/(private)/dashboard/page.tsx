@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Activity, CalendarCheck, CheckCircle2, Droplets, Dumbbell, Flame, Plus, Scale, Soup, Utensils } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -14,21 +13,19 @@ import { WelcomePopup } from "@/components/dashboard/welcome-popup";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
+import Link from "next/link";
 import {
   addWaterLog,
   getCalorieTargets,
-  getCurrentWeekday,
-  getDefaultUserWorkoutPlan,
-  getOpenWorkoutDaySession,
-  getProgressEntries,
-  getSleepRecoveryLogs,
-  getSupplementLogs,
   getTodayFoodLogs,
   getTodayMealPlanItems,
   getWaterLogs,
-  getWorkoutHistory,
   markMealPlanItemDone
-} from "@/services/database/repository";
+} from "@/services/database/nutrition";
+import { getProgressEntries } from "@/services/database/progress";
+import { getSleepRecoveryLogs, getSupplementLogs } from "@/services/database/wellness";
+import { getCurrentWeekday, getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
+import { getOpenWorkoutDaySession, getWorkoutHistory } from "@/services/database/workout-sessions";
 import { percent, remainingMacros, sumFoodLogs } from "@/services/nutrition/calculations";
 import type { SavedTargets } from "@/services/nutrition/targets";
 import { todayIso } from "@/lib/utils";

@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { getNutritionWeek, getPersonalRecords, getProgressEntries, getWorkoutActivity } from "@/services/database/repository";
+import { getNutritionWeek } from "@/services/database/nutrition";
+import { getPersonalRecords, getProgressEntries } from "@/services/database/progress";
+import { getWorkoutActivity } from "@/services/database/workout-sessions";
 import { getFitnessHabitHistory, getSleepRecoveryHistory } from "@/services/wellness/wellness-data";
 import {
   addDays,

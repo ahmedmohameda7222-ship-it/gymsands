@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { getWorkoutTemplateDurationOptions, getWorkoutTemplateWeekOptions, saveOnboarding } from "@/services/database/repository";
+import { saveOnboarding } from "@/services/database/profile";
+import { getWorkoutPlanDurationOptions, getWorkoutPlanWeekOptions } from "@/services/database/workout-plans";
 
 const steps = ["Basic info", "Goals", "Training", "Nutrition", "Finish"];
 const goalOptions = [
@@ -65,7 +66,7 @@ export default function OnboardingPage() {
   const [durationOptions, setDurationOptions] = useState<number[]>([20, 30, 45, 60, 75]);
 
   useEffect(() => {
-    Promise.all([getWorkoutTemplateWeekOptions(), getWorkoutTemplateDurationOptions()]).then(([weekData, durationData]) => {
+    Promise.all([getWorkoutPlanWeekOptions(), getWorkoutPlanDurationOptions()]).then(([weekData, durationData]) => {
       setWeekOptions(weekData.values);
       setDurationOptions(durationData.values);
       setAnswers((current) => {

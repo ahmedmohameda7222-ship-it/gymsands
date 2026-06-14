@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { getGeneratedWorkoutHistory, getWorkoutHistoryDetailed } from "@/services/database/repository";
+import { getScheduledWorkoutHistory, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
 import { cn } from "@/lib/utils";
 import type { ExerciseLog, UserWorkoutSession, WorkoutSessionSummary } from "@/types";
 
@@ -61,7 +61,7 @@ export function WorkoutHistory() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
-  const [generatedHistory, setGeneratedHistory] = useState<UserWorkoutSession[]>([]);
+  const [scheduledHistory, setScheduledHistory] = useState<UserWorkoutSession[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [weekFilter, setWeekFilter] = useState(toIsoWeekInput(new Date()));
@@ -71,11 +71,11 @@ export function WorkoutHistory() {
     if (!user) return;
     let active = true;
     setIsLoading(true);
-    Promise.all([getWorkoutHistoryDetailed(user.id), getGeneratedWorkoutHistory(user.id)])
-      .then(([legacyItems, generatedItems]) => {
+    Promise.all([getWorkoutHistoryDetailed(user.id), getScheduledWorkoutHistory(user.id)])
+      .then(([legacyItems, scheduledItems]) => {
         if (!active) return;
         setHistory(legacyItems);
-        setGeneratedHistory(generatedItems);
+        setScheduledHistory(scheduledItems);
       })
       .catch((error) => {
         if (!active) return;
@@ -91,7 +91,7 @@ export function WorkoutHistory() {
   }, [toast, user]);
 
   const filteredHistory = useMemo(() => {
-    const items = [...history.map(normalizeLegacyHistory), ...generatedHistory.map(normalizeGeneratedHistory)].sort(
+    const items = [...history.map(normalizeLegacyHistory), ...scheduledHistory.map(normalizeScheduledHistory)].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
     return items.filter((session) => {
@@ -100,9 +100,9 @@ export function WorkoutHistory() {
       if (filterMode === "month") return date.toISOString().slice(0, 7) === monthFilter;
       return true;
     });
-  }, [filterMode, generatedHistory, history, monthFilter, weekFilter]);
+  }, [filterMode, scheduledHistory, history, monthFilter, weekFilter]);
 
-  const totalHistoryCount = history.length + generatedHistory.length;
+  const totalHistoryCount = history.length + scheduledHistory.length;
 
   return (
     <Card>
@@ -236,7 +236,7 @@ function normalizeLegacyHistory(session: WorkoutSessionSummary): HistoryItem {
   };
 }
 
-function normalizeGeneratedHistory(session: UserWorkoutSession): HistoryItem {
+function normalizeScheduledHistory(session: UserWorkoutSession): HistoryItem {
   return {
     id: session.id,
     title: session.day_title,

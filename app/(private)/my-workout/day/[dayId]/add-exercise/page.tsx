@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { WorkoutDayAddExercise } from "@/components/workouts/workout-day-add-exercise";
 import { useToast } from "@/components/ui/toaster";
-import { getUserWorkoutPlanDay } from "@/services/database/repository";
+import { getUserWorkoutPlanDay } from "@/services/database/workout-plans";
 import type { WorkoutPlanDaySession } from "@/types";
 
 export default function AddExerciseToWorkoutDayPage() {

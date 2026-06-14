@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { BarChart3, ChefHat, ChevronLeft, ChevronRight, Copy, Droplets, Plus, Save, Settings2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +13,7 @@ import { FoodLogList } from "@/components/meals/food-log-list";
 import { ApiFoodTools } from "@/components/meals/api-food-tools";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import Link from "next/link";
 import {
   addWaterLog,
   copyYesterdaysMeals,
@@ -23,7 +23,7 @@ import {
   getTodayFoodLogs,
   getWaterLogs,
   upsertCalorieTargets
-} from "@/services/database/repository";
+} from "@/services/database/nutrition";
 import { percent, sumFoodLogs } from "@/services/nutrition/calculations";
 import { estimateTdee, type SavedTargets } from "@/services/nutrition/targets";
 import { todayIso } from "@/lib/utils";

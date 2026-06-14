@@ -5,7 +5,7 @@ import { Dumbbell, TrendingUp, Trophy } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toaster";
-import { getPersonalRecords } from "@/services/database/repository";
+import { getPersonalRecords } from "@/services/database/progress";
 import type { PersonalRecord } from "@/types";
 
 export function PersonalRecordsInsights() {

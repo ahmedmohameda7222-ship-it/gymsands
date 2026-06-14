@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { AlertTriangle, Barcode, BookOpen, CheckCircle2, Clock, Heart, PlusCircle, RotateCcw, Save, Search, Trash2, Utensils, Zap } from "lucide-react";
 import { Component, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/components/auth/auth-provider";
+import Link from "next/link";
 import {
   addCustomMealToLog,
   addCustomMealToMealPlan,
@@ -18,7 +18,7 @@ import {
   getCustomMeals,
   getFoodKitchens,
   getFoodLibrary
-} from "@/services/database/repository";
+} from "@/services/database/nutrition";
 import {
   deleteRecipe,
   favoriteKeyForFood,

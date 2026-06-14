@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ArrowDown, ArrowLeft, ArrowUp, ExternalLink, Pencil, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -13,11 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { clearStoredValue, readStoredJson, storeJson, workoutStorageKey } from "@/lib/workout-persistence";
+import Link from "next/link";
 import {
   updateUserWorkoutPlanDay,
   weekDays,
   workoutsFromPlanDay
-} from "@/services/database/repository";
+} from "@/services/database/workout-plans";
 import type { Weekday, Workout, WorkoutPlanDaySession } from "@/types";
 
 type EditorDraft = {

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { WorkoutDayEditor } from "@/components/workouts/workout-day-editor";
 import { useToast } from "@/components/ui/toaster";
-import { getUserWorkoutPlanDay } from "@/services/database/repository";
+import { getUserWorkoutPlanDay } from "@/services/database/workout-plans";
 import type { WorkoutPlanDaySession } from "@/types";
 
 export default function WorkoutDayEditorPage() {

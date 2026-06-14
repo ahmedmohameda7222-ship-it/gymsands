@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ArrowLeft, Check, ExternalLink, Plus, RotateCcw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -11,13 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { readStoredJson, storeJson, workoutStorageKey } from "@/lib/workout-persistence";
-import {
-  getWorkoutFilterOptions,
-  getWorkouts,
-  workoutsFromPlanDay,
-  type WorkoutFilterOptions,
-  type WorkoutFilters
-} from "@/services/database/repository";
+import Link from "next/link";
+import { getWorkoutFilterOptions, getWorkouts, type WorkoutFilterOptions, type WorkoutFilters } from "@/services/database/workout-library";
+import { workoutsFromPlanDay } from "@/services/database/workout-plans";
 import type { Weekday, Workout, WorkoutPlanDaySession } from "@/types";
 
 type EditorDraft = {
