@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CheckCircle2, Clock, ExternalLink, RotateCcw, Save, TimerReset } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { ArrowLeft, CheckCircle2, Clock, ExternalLink, RotateCcw, Save, Sparkles, TimerReset, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,10 +12,12 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
-import { completeWorkoutSession, getOrStartWorkoutDaySession, getWorkoutSessionLogs, saveWorkoutSetLogs, updateWorkoutSessionDuration } from "@/services/database/repository";
-import type { ExerciseLog, UserWorkoutPlanExercise, WorkoutPlanDaySession, WorkoutSession } from "@/types";
+import { completeWorkoutSession, getOrStartWorkoutDaySession, getWorkoutHistoryDetailed, getWorkoutSessionLogs, saveWorkoutSetLogs, updateWorkoutSessionDuration } from "@/services/database/repository";
+import type { ExerciseLog, UserWorkoutPlanExercise, WorkoutPlanDaySession, WorkoutSession, WorkoutSessionSummary } from "@/types";
 
 const defaultInstructions = "Use controlled form, keep the target muscle engaged, avoid rushing the eccentric part, and stop if the movement feels painful.";
+
+type SetType = "normal" | "warmup" | "working" | "failure" | "drop";
 
 type SetState = {
   setNumber: number;
@@ -25,13 +26,40 @@ type SetState = {
   notes: string;
   rpe: string;
   rir: string;
-  setType: "warmup" | "working" | "failure" | "drop";
+  setType: SetType;
   completedAt: string | null;
 };
 
 type ExerciseState = {
   exercise: UserWorkoutPlanExercise;
   sets: SetState[];
+};
+
+type PreviousPerformance = {
+  lastWeightKg: number | null;
+  lastReps: number | null;
+  lastBestSet: string | null;
+  lastPerformedAt: string | null;
+};
+
+type SessionSetSummary = {
+  exerciseName: string;
+  reps: number;
+  weightKg: number;
+  setType: SetType;
+  plannedReps: string | null;
+  completedAt: string | null;
+};
+
+type WorkoutSummary = {
+  durationMinutes: number;
+  totalVolume: number;
+  completedSets: number;
+  completedExercises: number;
+  skippedExercises: string[];
+  prs: string[];
+  suggestions: string[];
+  notes: string;
 };
 
 function firstNumber(value: string | null | undefined) {
@@ -72,6 +100,51 @@ function toNumberOrNull(value: string) {
   return Number.isFinite(next) ? next : null;
 }
 
+function normalizeExerciseName(value: string) {
+  return value.toLowerCase().replace(/^[a-z]\d\s*[:.)-]\s*/i, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function estimateOneRepMax(weightKg: number, reps: number) {
+  if (weightKg <= 0 || reps <= 0) return 0;
+  return Math.round(weightKg * (1 + reps / 30) * 10) / 10;
+}
+
+function round(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function parseRepRangeTop(value: string | null | undefined) {
+  const numbers = value?.match(/\d+/g)?.map(Number).filter((item) => Number.isFinite(item) && item > 0) ?? [];
+  return numbers.length ? Math.max(...numbers) : null;
+}
+
+function parseSetNote(raw: string | null | undefined): Pick<SetState, "notes" | "rpe" | "rir" | "setType"> {
+  const segments = (raw ?? "").split("|").map((item) => item.trim()).filter(Boolean);
+  let rpe = "";
+  let rir = "";
+  let setType: SetType = "working";
+  const notes: string[] = [];
+
+  segments.forEach((segment) => {
+    const lower = segment.toLowerCase();
+    if (lower.startsWith("rpe:")) rpe = segment.slice(4).trim();
+    else if (lower.startsWith("rir:")) rir = segment.slice(4).trim();
+    else if (lower.startsWith("type:")) setType = normalizeSetType(segment.slice(5));
+    else notes.push(segment);
+  });
+
+  return { notes: notes.join(" | "), rpe, rir, setType };
+}
+
+function normalizeSetType(value: string): SetType {
+  const clean = value.trim().toLowerCase().replace(/\s+/g, "");
+  if (clean === "warmup" || clean === "warm-up") return "warmup";
+  if (clean === "dropset" || clean === "drop") return "drop";
+  if (clean === "failure") return "failure";
+  if (clean === "normal") return "normal";
+  return "working";
+}
+
 function hydrateStates(baseStates: ExerciseState[], logs: ExerciseLog[]) {
   if (!logs.length) return baseStates;
   return baseStates.map((item) => ({
@@ -83,24 +156,148 @@ function hydrateStates(baseStates: ExerciseState[], logs: ExerciseLog[]) {
           ((entry.plan_exercise_id && entry.plan_exercise_id === item.exercise.id) || entry.exercise_name === item.exercise.exercise_name)
       );
       if (!log) return set;
+      const parsed = parseSetNote(log.notes);
       return {
         ...set,
         reps: log.reps === null || log.reps === undefined ? set.reps : String(log.reps),
         weightKg: log.weight_kg === null || log.weight_kg === undefined ? "" : String(log.weight_kg),
-        notes: log.notes ?? "",
-        rpe: set.rpe,
-        rir: set.rir,
-        setType: set.setType,
+        notes: parsed.notes,
+        rpe: parsed.rpe,
+        rir: parsed.rir,
+        setType: parsed.setType,
         completedAt: log.completed_at ?? log.created_at ?? new Date().toISOString()
       };
     })
   }));
 }
 
+function supersetLabel(exercise: UserWorkoutPlanExercise) {
+  const nameMatch = exercise.exercise_name.match(/^\s*([A-Z]\d)\s*[:.)-]\s*/);
+  if (nameMatch?.[1]) return nameMatch[1].toUpperCase();
+  const notesMatch = exercise.notes?.match(/(?:superset|group)\s*[:=]\s*([A-Z]\d)|\[([A-Z]\d)\]/i);
+  return (notesMatch?.[1] ?? notesMatch?.[2] ?? "").toUpperCase() || null;
+}
+
+function buildSessionSets(states: ExerciseState[]): SessionSetSummary[] {
+  return states.flatMap((item) => item.sets
+    .filter((set) => set.completedAt)
+    .map((set) => ({
+      exerciseName: item.exercise.exercise_name,
+      reps: toNumberOrNull(set.reps) ?? 0,
+      weightKg: toNumberOrNull(set.weightKg) ?? 0,
+      setType: set.setType,
+      plannedReps: item.exercise.reps,
+      completedAt: set.completedAt
+    }))
+  );
+}
+
+function historicalSets(history: WorkoutSessionSummary[], exerciseName?: string) {
+  const normalizedName = exerciseName ? normalizeExerciseName(exerciseName) : null;
+  return history.flatMap((session) =>
+    (session.exercise_logs ?? [])
+      .filter((log) => !normalizedName || normalizeExerciseName(log.exercise_name) === normalizedName)
+      .filter((log) => Number(log.reps ?? 0) > 0 || Number(log.weight_kg ?? 0) > 0)
+      .map((log) => ({
+        exerciseName: log.exercise_name,
+        reps: Number(log.reps ?? 0),
+        weightKg: Number(log.weight_kg ?? 0),
+        sessionDate: session.completed_at || session.started_at,
+        volume: Number(log.reps ?? 0) * Number(log.weight_kg ?? 0),
+        estimatedOneRepMax: estimateOneRepMax(Number(log.weight_kg ?? 0), Number(log.reps ?? 0))
+      }))
+  );
+}
+
+function previousPerformance(history: WorkoutSessionSummary[], exerciseName: string): PreviousPerformance | null {
+  const normalizedName = normalizeExerciseName(exerciseName);
+  const matchingSession = history.find((session) => (session.exercise_logs ?? []).some((log) => normalizeExerciseName(log.exercise_name) === normalizedName));
+  if (!matchingSession) return null;
+  const matchingLogs = (matchingSession.exercise_logs ?? []).filter((log) => normalizeExerciseName(log.exercise_name) === normalizedName);
+  const latestLog = [...matchingLogs].reverse().find((log) => log.reps || log.weight_kg) ?? matchingLogs[0];
+  const best = [...matchingLogs].sort((a, b) => (Number(b.weight_kg ?? 0) * Number(b.reps ?? 0)) - (Number(a.weight_kg ?? 0) * Number(a.reps ?? 0)))[0];
+  return {
+    lastWeightKg: latestLog?.weight_kg ?? null,
+    lastReps: latestLog?.reps ?? null,
+    lastBestSet: best ? `${best.weight_kg ?? 0} kg x ${best.reps ?? 0}` : null,
+    lastPerformedAt: matchingSession.completed_at || matchingSession.started_at
+  };
+}
+
+function buildProgressiveSuggestion(item: ExerciseState) {
+  const topReps = parseRepRangeTop(item.exercise.reps);
+  const completed = item.sets.filter((set) => set.completedAt);
+  const workingSets = completed.filter((set) => set.setType === "working" || set.setType === "normal" || set.setType === "failure");
+  if (!completed.length) return `${item.exercise.exercise_name}: no completed sets. Treat this as skipped or incomplete.`;
+  if (!topReps || !workingSets.length) return `${item.exercise.exercise_name}: logged ${completed.length}/${item.sets.length} sets. Repeat and compare next time.`;
+  const allTop = workingSets.every((set) => (toNumberOrNull(set.reps) ?? 0) >= topReps);
+  if (allTop) return `${item.exercise.exercise_name}: all working sets reached the top of the rep target. Consider increasing weight next time.`;
+  return `${item.exercise.exercise_name}: some working sets missed the top reps. Repeat the same weight next time.`;
+}
+
+function buildPrs(states: ExerciseState[], history: WorkoutSessionSummary[]) {
+  const currentByExercise = new Map<string, SessionSetSummary[]>();
+  buildSessionSets(states).forEach((set) => {
+    const key = normalizeExerciseName(set.exerciseName);
+    currentByExercise.set(key, [...(currentByExercise.get(key) ?? []), set]);
+  });
+
+  const prs: string[] = [];
+  currentByExercise.forEach((sets, key) => {
+    const exerciseName = sets[0]?.exerciseName ?? key;
+    const previous = historicalSets(history, exerciseName);
+    const prevMaxWeight = Math.max(0, ...previous.map((set) => set.weightKg));
+    const prevMaxReps = Math.max(0, ...previous.map((set) => set.reps));
+    const prevMaxOneRep = Math.max(0, ...previous.map((set) => set.estimatedOneRepMax));
+    const currentMaxWeight = Math.max(0, ...sets.map((set) => set.weightKg));
+    const currentMaxReps = Math.max(0, ...sets.map((set) => set.reps));
+    const currentMaxOneRep = Math.max(0, ...sets.map((set) => estimateOneRepMax(set.weightKg, set.reps)));
+    const currentVolume = sets.reduce((sum, set) => sum + set.weightKg * set.reps, 0);
+    const previousSessionVolumes = new Map<string, number>();
+    history.forEach((session) => {
+      const volume = (session.exercise_logs ?? [])
+        .filter((log) => normalizeExerciseName(log.exercise_name) === key)
+        .reduce((sum, log) => sum + Number(log.weight_kg ?? 0) * Number(log.reps ?? 0), 0);
+      if (volume > 0) previousSessionVolumes.set(session.id, volume);
+    });
+    const prevMaxVolume = Math.max(0, ...Array.from(previousSessionVolumes.values()));
+
+    if (currentMaxWeight > 0 && currentMaxWeight > prevMaxWeight) prs.push(`${exerciseName}: highest weight PR ${currentMaxWeight} kg`);
+    if (currentMaxReps > 0 && currentMaxReps > prevMaxReps) prs.push(`${exerciseName}: max reps PR ${currentMaxReps} reps`);
+    if (currentMaxOneRep > 0 && currentMaxOneRep > prevMaxOneRep) prs.push(`${exerciseName}: estimated 1RM PR ${round(currentMaxOneRep)} kg`);
+    if (currentVolume > 0 && currentVolume > prevMaxVolume) prs.push(`${exerciseName}: volume PR ${round(currentVolume)} kg`);
+  });
+  return prs;
+}
+
+function buildSummary(states: ExerciseState[], history: WorkoutSessionSummary[], durationMinutes: number, notes: string): WorkoutSummary {
+  const sessionSets = buildSessionSets(states);
+  const completedExercises = states.filter((item) => item.sets.some((set) => set.completedAt)).length;
+  const skippedExercises = states.filter((item) => !item.sets.some((set) => set.completedAt)).map((item) => item.exercise.exercise_name);
+  return {
+    durationMinutes,
+    totalVolume: round(sessionSets.reduce((sum, set) => sum + set.weightKg * set.reps, 0)),
+    completedSets: sessionSets.length,
+    completedExercises,
+    skippedExercises,
+    prs: buildPrs(states, history),
+    suggestions: states.map(buildProgressiveSuggestion),
+    notes
+  };
+}
+
+function setNote(set: SetState) {
+  const metadata = [
+    set.setType !== "working" ? `type:${set.setType}` : null,
+    set.rpe ? `RPE:${set.rpe}` : null,
+    set.rir ? `RIR:${set.rir}` : null
+  ].filter(Boolean);
+  return [set.notes, ...metadata].filter(Boolean).join(" | ") || null;
+}
+
 export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const router = useRouter();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [startedAtMs, setStartedAtMs] = useState(() => Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -113,6 +310,8 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isStarting, setIsStarting] = useState(true);
+  const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
+  const [completedSummary, setCompletedSummary] = useState<WorkoutSummary | null>(null);
   const workoutTimerKey = useMemo(() => workoutStorageKey(["workout-day-session", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const restTimerKey = useMemo(() => workoutStorageKey(["workout-day-rest-timer", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const [timerEndsAtMs, setTimerEndsAtMs] = useState<number | null>(null);
@@ -137,8 +336,11 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         setStartedAtMs(nextStartedAt);
         storeTimestamp(workoutTimerKey, nextStartedAt);
         setSessionNotes(nextSession.notes ?? "");
-        const existingLogs = await getWorkoutSessionLogs(nextSession.id);
-        if (active) setExerciseStates((current) => hydrateStates(current, existingLogs));
+        const [existingLogs, workoutHistory] = await Promise.all([getWorkoutSessionLogs(nextSession.id), getWorkoutHistoryDetailed(user.id, 100)]);
+        if (active) {
+          setExerciseStates((current) => hydrateStates(current, existingLogs));
+          setHistory(workoutHistory.filter((item) => item.id !== nextSession.id));
+        }
       })
       .catch((error) => {
         toast({ title: "Could not start workout session", description: error instanceof Error ? error.message : "Please try again." });
@@ -205,6 +407,9 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const currentCustomVideoUrl = activeExercise?.exercise.custom_video_url || null;
   const currentInstructions = activeExercise?.exercise.instructions || defaultInstructions;
   const durationMinutes = Math.max(1, Math.ceil(elapsedSeconds / 60));
+  const activePreviousPerformance = activeExercise ? previousPerformance(history, activeExercise.exercise.exercise_name) : null;
+  const liveSuggestions = exerciseStates.map(buildProgressiveSuggestion);
+  const previewPrs = buildPrs(exerciseStates, history);
 
   function buildLogRows(states = exerciseStates) {
     return states.flatMap((item, exerciseIndex) =>
@@ -333,12 +538,13 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     if (isSaving) return;
     try {
       setIsSaving(true);
+      const summary = buildSummary(exerciseStates, history, durationMinutes, sessionNotes);
       await saveWorkoutSetLogs(session.id, buildLogRows());
       await completeWorkoutSession(session.id, sessionNotes, durationMinutes);
       clearStoredValue(workoutTimerKey);
       clearStoredValue(restTimerKey);
+      setCompletedSummary(summary);
       toast({ title: "Workout saved", description: `${day.day_name} was added to your workout history.` });
-      router.push("/my-workout/plans");
     } catch (error) {
       toast({ title: "Could not save workout", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
@@ -368,7 +574,9 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-28 lg:pb-4">
+      {completedSummary ? <WorkoutSummaryCard summary={completedSummary} /> : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="outline">
           <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to plan</Link>
@@ -377,6 +585,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
           <Badge>{day.weekday ?? "Workout day"}</Badge>
           <Badge variant="outline">{completedSets}/{totalSets} sets done</Badge>
           <Badge variant="outline">{formatTime(elapsedSeconds)}</Badge>
+          {isTimerRunning ? <Badge variant="success">Rest {formatTime(timerLeft)}</Badge> : null}
           {isStarting ? <Badge variant="outline">Saving session...</Badge> : null}
           <Button variant="outline" size="sm" onClick={resetWorkoutTimer}>
             <TimerReset className="h-4 w-4" />
@@ -388,7 +597,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
       <Card>
         <CardHeader>
           <CardTitle>{day.day_name}</CardTitle>
-          <p className="text-sm text-muted-foreground">Log each set as you train. Your progress stays visible as the workout moves forward.</p>
+          <p className="text-sm text-muted-foreground">Log each set as you train. Previous performance and PR checks use real saved workout history only.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <Progress value={progress} />
@@ -398,6 +607,8 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               const active = index === activeExerciseIndex;
               const guideUrl = item.exercise.exercise_url || (item.exercise.notes?.startsWith("http") ? item.exercise.notes : null);
               const customVideoUrl = item.exercise.custom_video_url || null;
+              const group = supersetLabel(item.exercise);
+              const previous = previousPerformance(history, item.exercise.exercise_name);
               return (
                 <div
                   key={item.exercise.id}
@@ -419,37 +630,23 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                   }}
                   className={`rounded-md border p-3 text-left transition ${active ? "border-primary bg-blue-50" : "bg-white hover:border-primary"}`}
                 >
-                  <p className="truncate text-sm font-semibold">{index + 1}. {item.exercise.exercise_name}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate text-sm font-semibold">{index + 1}. {item.exercise.exercise_name}</p>
+                    {group ? <Badge variant="navy">{group}</Badge> : null}
+                  </div>
                   <p className="mt-1 text-xs text-muted-foreground">{done}/{item.sets.length} sets</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{previous ? `Last: ${previous.lastWeightKg ?? 0} kg x ${previous.lastReps ?? 0}` : "No previous data"}</p>
                   <div className="mt-3 grid gap-2">
                     {guideUrl ? (
-                      <a
-                        href={guideUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(event) => event.stopPropagation()}
-                        className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border bg-white px-2 text-xs font-semibold text-foreground transition hover:bg-secondary"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        Open Exercise Guide
+                      <a href={guideUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border bg-white px-2 text-xs font-semibold text-foreground transition hover:bg-secondary">
+                        <ExternalLink className="h-3.5 w-3.5" /> Open Exercise Guide
                       </a>
-                    ) : (
-                      <span className="inline-flex min-h-9 items-center justify-center rounded-md border px-2 text-xs font-semibold text-muted-foreground">No guide added</span>
-                    )}
+                    ) : <span className="inline-flex min-h-9 items-center justify-center rounded-md border px-2 text-xs font-semibold text-muted-foreground">No guide added</span>}
                     {customVideoUrl ? (
-                      <a
-                        href={customVideoUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(event) => event.stopPropagation()}
-                        className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border bg-white px-2 text-xs font-semibold text-foreground transition hover:bg-secondary"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        Open Custom Video
+                      <a href={customVideoUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border bg-white px-2 text-xs font-semibold text-foreground transition hover:bg-secondary">
+                        <ExternalLink className="h-3.5 w-3.5" /> Open Custom Video
                       </a>
-                    ) : (
-                      <span className="inline-flex min-h-9 items-center justify-center rounded-md border px-2 text-xs font-semibold text-muted-foreground">No custom video</span>
-                    )}
+                    ) : <span className="inline-flex min-h-9 items-center justify-center rounded-md border px-2 text-xs font-semibold text-muted-foreground">No custom video</span>}
                   </div>
                 </div>
               );
@@ -461,7 +658,10 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
       <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
         <Card>
           <CardHeader>
-            <CardTitle>{activeExercise.exercise.exercise_name}</CardTitle>
+            <CardTitle className="flex flex-wrap items-center gap-2">
+              {activeExercise.exercise.exercise_name}
+              {supersetLabel(activeExercise.exercise) ? <Badge variant="navy">Superset {supersetLabel(activeExercise.exercise)}</Badge> : null}
+            </CardTitle>
             <div className="flex flex-wrap gap-2 pt-2">
               <Badge variant="outline">Planned {activeExercise.exercise.sets ?? activeExercise.sets.length} sets</Badge>
               <Badge variant="outline">Reps {activeExercise.exercise.reps ?? "custom"}</Badge>
@@ -473,30 +673,21 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               {currentInstructions}
               <div className="mt-3 flex flex-wrap gap-2">
                 {currentGuideUrl ? (
-                <Button asChild variant="outline" size="sm">
-                  <a href={currentGuideUrl} target="_blank" rel="noreferrer">
-                    <ExternalLink className="h-4 w-4" />
-                    Open Exercise Guide
-                  </a>
-                </Button>
-              ) : (
-                <Button type="button" variant="outline" size="sm" disabled>
-                  No guide added
-                </Button>
-              )}
+                  <Button asChild variant="outline" size="sm"><a href={currentGuideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open Exercise Guide</a></Button>
+                ) : <Button type="button" variant="outline" size="sm" disabled>No guide added</Button>}
                 {currentCustomVideoUrl ? (
-                  <Button asChild variant="outline" size="sm">
-                    <a href={currentCustomVideoUrl} target="_blank" rel="noreferrer">
-                      <ExternalLink className="h-4 w-4" />
-                      Open Custom Video
-                    </a>
-                  </Button>
-                ) : (
-                  <Button type="button" variant="outline" size="sm" disabled>
-                    No custom video
-                  </Button>
-                )}
+                  <Button asChild variant="outline" size="sm"><a href={currentCustomVideoUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open Custom Video</a></Button>
+                ) : <Button type="button" variant="outline" size="sm" disabled>No custom video</Button>}
               </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <InfoBox title="Previous performance" lines={activePreviousPerformance ? [
+                `Last used: ${activePreviousPerformance.lastWeightKg ?? 0} kg x ${activePreviousPerformance.lastReps ?? 0}`,
+                `Last best set: ${activePreviousPerformance.lastBestSet ?? "No previous data"}`,
+                `Last performed: ${activePreviousPerformance.lastPerformedAt ? activePreviousPerformance.lastPerformedAt.slice(0, 10) : "No previous data"}`
+              ] : ["No previous data"]} />
+              <InfoBox title="Overload guidance" lines={[buildProgressiveSuggestion(activeExercise)]} />
             </div>
 
             <div className="space-y-3">
@@ -506,104 +697,66 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                     <p className="font-semibold">Set {set.setNumber}</p>
                     {set.completedAt ? <Badge variant="success">Done</Badge> : <Badge variant="outline">Open</Badge>}
                   </div>
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                    <div className="space-y-1">
-                      <Label>Actual reps</Label>
-                      <Input value={set.reps} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { reps: event.target.value })} inputMode="numeric" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Weight kg</Label>
-                      <Input value={set.weightKg} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { weightKg: event.target.value })} inputMode="decimal" placeholder="0" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>RPE</Label>
-                      <Input value={set.rpe} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>RIR</Label>
-                      <Input value={set.rir} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" />
-                    </div>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <div className="space-y-1"><Label>Actual reps</Label><Input className="h-12 text-lg" value={set.reps} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { reps: event.target.value })} inputMode="numeric" /></div>
+                    <div className="space-y-1"><Label>Weight kg</Label><Input className="h-12 text-lg" value={set.weightKg} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { weightKg: event.target.value })} inputMode="decimal" placeholder="0" /></div>
+                    <div className="space-y-1"><Label>RPE</Label><Input className="h-12" value={set.rpe} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" /></div>
+                    <div className="space-y-1"><Label>RIR</Label><Input className="h-12" value={set.rir} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" /></div>
                     <div className="space-y-1">
                       <Label>Set type</Label>
-                      <select
-                        value={set.setType}
-                        onChange={(event) => updateSet(activeExerciseIndex, setIndex, { setType: event.target.value as SetState["setType"] })}
-                        className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
+                      <select value={set.setType} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-12 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <option value="normal">Normal</option>
                         <option value="warmup">Warm-up</option>
                         <option value="working">Working</option>
                         <option value="failure">Failure</option>
                         <option value="drop">Drop set</option>
                       </select>
                     </div>
-                    <div className="space-y-1 lg:col-span-5">
-                      <Label>Notes</Label>
-                      <Input value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional" />
-                    </div>
+                    <div className="space-y-1 lg:col-span-5"><Label>Notes</Label><Input className="h-12" value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional" /></div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Button size="sm" onClick={() => finishSet(activeExerciseIndex, setIndex)} disabled={Boolean(set.completedAt)}>
-                      <CheckCircle2 className="h-4 w-4" />
-                      Finish Set
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => restartSet(activeExerciseIndex, setIndex)} disabled={!set.completedAt}>
-                      <RotateCcw className="h-4 w-4" />
-                      Reopen
-                    </Button>
+                    <Button size="sm" onClick={() => finishSet(activeExerciseIndex, setIndex)} disabled={Boolean(set.completedAt)}><CheckCircle2 className="h-4 w-4" /> Finish Set</Button>
+                    <Button size="sm" variant="outline" onClick={() => restartSet(activeExerciseIndex, setIndex)} disabled={!set.completedAt}><RotateCcw className="h-4 w-4" /> Reopen</Button>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={finishCurrentSet} disabled={!activeSet || Boolean(activeSet.completedAt)}>
-                <CheckCircle2 className="h-4 w-4" />
-                Finish this set
-              </Button>
-              <Button variant="outline" onClick={restartCurrentSet} disabled={!activeSet?.completedAt}>
-                <RotateCcw className="h-4 w-4" />
-                Reopen set
-              </Button>
+            <div className="sticky bottom-3 z-20 rounded-xl border bg-white/95 p-3 shadow-lg backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button className="min-h-12" onClick={finishCurrentSet} disabled={!activeSet || Boolean(activeSet.completedAt)}><CheckCircle2 className="h-4 w-4" /> Finish current set</Button>
+                <Button className="min-h-12" variant="outline" onClick={restartCurrentSet} disabled={!activeSet?.completedAt}><RotateCcw className="h-4 w-4" /> Reopen set</Button>
+              </div>
+              {isTimerRunning ? <p className="mt-2 text-center text-sm font-semibold text-primary">Rest timer: {formatTime(timerLeft)}</p> : null}
             </div>
           </CardContent>
         </Card>
 
         <div className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><TimerReset className="h-5 w-5" /> Rest timer</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><TimerReset className="h-5 w-5" /> Rest timer</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <div className="space-y-2">
-                <Label>Timer seconds</Label>
-                <Input type="number" min="0" value={timerSeconds} onChange={(event) => setTimerSeconds(Math.max(0, Number(event.target.value) || 0))} />
-              </div>
-              <div className="rounded-md bg-navy-950 p-5 text-center text-white">
-                <Clock className="mx-auto h-6 w-6" />
-                <p className="mt-2 text-4xl font-bold">{formatTime(timerLeft)}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={() => startRestTimer(timerSeconds)}>Start timer</Button>
-                <Button variant="outline" onClick={stopRestTimer}>Stop</Button>
-              </div>
+              <div className="space-y-2"><Label>Timer seconds</Label><Input type="number" min="0" value={timerSeconds} onChange={(event) => setTimerSeconds(Math.max(0, Number(event.target.value) || 0))} /></div>
+              <div className="rounded-md bg-navy-950 p-5 text-center text-white"><Clock className="mx-auto h-6 w-6" /><p className="mt-2 text-4xl font-bold">{formatTime(timerLeft)}</p></div>
+              <div className="grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => startRestTimer(timerSeconds)}>Start timer</Button><Button variant="outline" onClick={stopRestTimer}>Stop</Button></div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Finish workout</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Live workout summary</CardTitle></CardHeader>
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <p>Total volume: {round(buildSessionSets(exerciseStates).reduce((sum, set) => sum + set.weightKg * set.reps, 0))} kg</p>
+              <p>Exercises completed: {exerciseStates.filter((item) => item.sets.some((set) => set.completedAt)).length}/{exerciseStates.length}</p>
+              {previewPrs.length ? <p className="font-semibold text-primary"><Trophy className="mr-1 inline h-4 w-4" /> {previewPrs.length} possible PR{previewPrs.length === 1 ? "" : "s"}</p> : <p>No PRs detected yet.</p>}
+              <ul className="space-y-1">{liveSuggestions.slice(0, 4).map((suggestion) => <li key={suggestion}>• {suggestion}</li>)}</ul>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>Finish workout</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <textarea
-                value={sessionNotes}
-                onChange={(event) => setSessionNotes(event.target.value)}
-                placeholder="How did this workout feel?"
-                className="min-h-24 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-              <Button className="w-full" onClick={completeSession} disabled={isSaving || !session}>
-                <Save className="h-4 w-4" />
-                {isSaving ? "Saving..." : isFinished ? "Finish workout" : "Finish and save partial workout"}
-              </Button>
+              <textarea value={sessionNotes} onChange={(event) => setSessionNotes(event.target.value)} placeholder="How did this workout feel?" className="min-h-24 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              <Button className="w-full" onClick={completeSession} disabled={isSaving || !session}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : isFinished ? "Finish workout" : "Finish and save partial workout"}</Button>
               <p className="text-xs text-muted-foreground">Time spent: {formatTime(elapsedSeconds)}. Completed sets are already saved while the session is open.</p>
             </CardContent>
           </Card>
@@ -613,11 +766,27 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   );
 }
 
-function setNote(set: SetState) {
-  const metadata = [
-    set.setType !== "working" ? `type:${set.setType}` : null,
-    set.rpe ? `RPE:${set.rpe}` : null,
-    set.rir ? `RIR:${set.rir}` : null
-  ].filter(Boolean);
-  return [set.notes, ...metadata].filter(Boolean).join(" | ") || null;
+function InfoBox({ title, lines }: { title: string; lines: string[] }) {
+  return <div className="rounded-md border p-3"><p className="font-semibold">{title}</p><div className="mt-2 space-y-1 text-sm text-muted-foreground">{lines.map((line) => <p key={line}>{line}</p>)}</div></div>;
+}
+
+function WorkoutSummaryCard({ summary }: { summary: WorkoutSummary }) {
+  return (
+    <Card className="border-primary bg-blue-50">
+      <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> Workout summary saved</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-4">
+          <InfoBox title="Duration" lines={[`${summary.durationMinutes} min`]} />
+          <InfoBox title="Volume" lines={[`${summary.totalVolume} kg`]} />
+          <InfoBox title="Sets" lines={[`${summary.completedSets} completed`]} />
+          <InfoBox title="Exercises" lines={[`${summary.completedExercises} completed`, summary.skippedExercises.length ? `${summary.skippedExercises.length} skipped` : "None skipped"]} />
+        </div>
+        <InfoBox title="PRs achieved" lines={summary.prs.length ? summary.prs : ["No new PRs detected from this workout."]} />
+        <InfoBox title="Progressive overload guidance" lines={summary.suggestions} />
+        {summary.skippedExercises.length ? <InfoBox title="Skipped or incomplete exercises" lines={summary.skippedExercises} /> : null}
+        {summary.notes ? <InfoBox title="Session notes" lines={[summary.notes]} /> : null}
+        <Button asChild><Link href="/my-workout/plans">Back to Workout Plans</Link></Button>
+      </CardContent>
+    </Card>
+  );
 }
