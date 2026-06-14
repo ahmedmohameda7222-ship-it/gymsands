@@ -279,9 +279,7 @@ async function saveChatGptPlan(ctx: McpContext, input: JsonObject) {
       chatgpt_source: true,
       program_duration_weeks: getOptionalNumber(input, "duration_weeks") ?? getOptionalNumber(input, "desired_duration_weeks") ?? null,
       days_per_week: getOptionalNumber(input, "days_per_week") ?? days.length,
-      session_duration_minutes: getOptionalNumber(input, "session_duration_minutes") ?? getOptionalNumber(input, "workout_duration_minutes") ?? null,
-      match_explanation: "Created by ChatGPT through FitLife MCP.",
-      match_reasons: ["chatgpt_created"]
+      session_duration_minutes: getOptionalNumber(input, "session_duration_minutes") ?? getOptionalNumber(input, "workout_duration_minutes") ?? null
     })
     .select("*")
     .single();
@@ -329,7 +327,6 @@ async function saveChatGptPlan(ctx: McpContext, input: JsonObject) {
       Array.from({ length: durationWeeks }, (_, weekIndex) => ({
         user_id: ctx.userId,
         user_workout_plan_id: plan.id,
-        workout_template_day_id: null,
         plan_day_id: dayId,
         week_index: weekIndex + 1,
         day_index: dayIndex + 1,
@@ -369,7 +366,7 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
       case "get_user_profile": {
         const [profile, onboarding, target] = await Promise.all([
           ctx.supabase.from("profiles").select("*").eq("id", ctx.userId).maybeSingle(),
-          ctx.supabase.from("user_onboarding").select("*").eq("user_id", ctx.userId).maybeSingle(),
+          ctx.supabase.from("onboarding_answers").select("*").eq("user_id", ctx.userId).maybeSingle(),
           ctx.supabase.from("calorie_targets").select("*").eq("user_id", ctx.userId).maybeSingle()
         ]);
         for (const result of [profile, onboarding, target]) if (result.error) throw new Error(result.error.message);

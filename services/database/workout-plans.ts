@@ -28,10 +28,8 @@ function isMissingTemplateSchemaError(error: { message?: string; code?: string }
   return (
     error?.code === "PGRST204" ||
     error?.code === "42P01" ||
-    message.includes("workout_templates") ||
     message.includes("user_workout_sessions") ||
     message.includes("user_exercise_logs") ||
-    message.includes("template_id") ||
     message.includes("source") ||
     message.includes("source_workout_id") ||
     message.includes("instructions") ||
@@ -96,11 +94,7 @@ type RawWorkoutPlan = {
   name: string;
   is_active: boolean;
   is_default?: boolean | null;
-  template_id?: string | null;
   source?: UserWorkoutPlan["source"];
-  match_score?: number | null;
-  match_explanation?: string | null;
-  match_reasons?: string[] | null;
   program_duration_weeks?: number | null;
   days_per_week?: number | null;
   created_at: string;
@@ -135,11 +129,7 @@ function normalizeWorkoutPlan(plan: RawWorkoutPlan): UserWorkoutPlan {
     name: plan.name,
     is_active: plan.is_active,
     is_default: plan.is_default ?? plan.is_active,
-    template_id: plan.template_id ?? null,
     source: plan.source ?? "manual",
-    match_score: plan.match_score ?? null,
-    match_explanation: plan.match_explanation ?? null,
-    match_reasons: plan.match_reasons ?? [],
     program_duration_weeks: plan.program_duration_weeks ?? null,
     days_per_week: plan.days_per_week ?? null,
     created_at: plan.created_at,
@@ -162,7 +152,7 @@ export async function getActiveUserWorkoutPlan(userId: string) {
   if (!canUseUserData(userId)) return mockDelay<UserWorkoutPlan | null>(null);
 
   const selectWithSource =
-    "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
+    "id,user_id,name,is_active,is_default,source,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
   const selectLegacy =
     "id,user_id,name,is_active,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
 
@@ -206,9 +196,9 @@ export async function getUserWorkoutPlans(userId: string) {
   if (!canUseUserData(userId)) return mockDelay<UserWorkoutPlan[]>([]);
 
   const selectWithSource =
-    "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
+    "id,user_id,name,is_active,is_default,source,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
   const selectLegacy =
-    "id,user_id,name,is_active,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
+    "id,user_id,name,is_active,source,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
 
   const result = await supabase!
     .from("user_workout_plans")
@@ -241,9 +231,9 @@ export async function getUserWorkoutPlans(userId: string) {
 export async function getUserWorkoutPlan(userId: string, planId: string) {
   if (!canUseUserData(userId) || !isUuid(planId)) return mockDelay<UserWorkoutPlan | null>(null);
   const selectWithSource =
-    "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
+    "id,user_id,name,is_active,is_default,source,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
   const selectLegacy =
-    "id,user_id,name,is_active,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
+    "id,user_id,name,is_active,source,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
   const result = await supabase!
     .from("user_workout_plans")
     .select(selectWithSource)

@@ -72,7 +72,7 @@ Run SQL in this canonical order. Some legacy files share numeric prefixes; do no
 8. `supabase/migrations/006_workout_session_tracking.sql`
 9. `supabase/migrations/007_meal_plan_and_persistent_sessions.sql`
 10. `supabase/migrations/008_workout_history_skip_status.sql`
-11. `supabase/migrations/009_workout_template_recommendations.sql`
+11. `supabase/migrations/009_imported_workout_session_tracking.sql`
 12. `supabase/migrations/010_exercise_metadata_and_order.sql`
 13. `supabase/migrations/011_user_nutrition_and_video_persistence.sql`
 14. `supabase/migrations/012_default_plan_and_egyptian_kitchen.sql`
@@ -93,6 +93,8 @@ Run SQL in this canonical order. Some legacy files share numeric prefixes; do no
 29. Run `supabase/seed/004_admin_setup_placeholder.sql` after editing the admin email if needed.
 
 For projects that already imported legacy exercise data, back up the database first, then review the cleanup SQL under `supabase/cleanup`.
+
+FitLife Hub does not generate workout plans internally. Do not add or run workout-template recommendation seeds; plans should be imported from ChatGPT or created manually by the user.
 
 See `docs/reliability-audit-2026-06-14.md` for migration-collision notes, local-storage audit findings, and recommended account-level persistence tables.
 

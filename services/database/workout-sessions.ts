@@ -79,10 +79,8 @@ function isMissingTemplateSchemaError(error: { message?: string; code?: string }
   return (
     error?.code === "PGRST204" ||
     error?.code === "42P01" ||
-    message.includes("workout_templates") ||
     message.includes("user_workout_sessions") ||
     message.includes("user_exercise_logs") ||
-    message.includes("template_id") ||
     message.includes("source") ||
     message.includes("source_workout_id") ||
     message.includes("instructions") ||
@@ -139,7 +137,6 @@ type RawScheduledSession = {
   id: string;
   user_id: string;
   user_workout_plan_id: string;
-  workout_template_day_id: string | null;
   plan_day_id: string | null;
   week_index: number;
   day_index: number;
@@ -160,7 +157,6 @@ function normalizeScheduledSession(session: RawScheduledSession): UserWorkoutSes
     id: session.id,
     user_id: session.user_id,
     user_workout_plan_id: session.user_workout_plan_id,
-    workout_template_day_id: session.workout_template_day_id,
     plan_day_id: session.plan_day_id,
     week_index: session.week_index,
     day_index: session.day_index,
@@ -613,7 +609,7 @@ export async function getScheduledWorkoutHistory(userId: string, limit = 100) {
   const { data, error } = await supabase!
     .from("user_workout_sessions")
     .select(
-      "id,user_id,user_workout_plan_id,workout_template_day_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes,user_exercise_logs(id,user_workout_session_id,workout_template_exercise_id,plan_exercise_id,exercise_order,exercise_name,planned_sets,planned_reps,weight_kg,reps,notes,completed,completed_at,created_at,updated_at)"
+      "id,user_id,user_workout_plan_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes,user_exercise_logs(id,user_workout_session_id,plan_exercise_id,exercise_order,exercise_name,planned_sets,planned_reps,weight_kg,reps,notes,completed,completed_at,created_at,updated_at)"
     )
     .eq("user_id", userId)
     .eq("status", "completed")
@@ -632,7 +628,7 @@ export async function getScheduledWorkoutActivity(userId: string, limit = 180) {
   if (!canUseUserData(userId)) return mockDelay<WorkoutSession[]>([]);
   const { data, error } = await supabase!
     .from("user_workout_sessions")
-    .select("id,user_id,user_workout_plan_id,workout_template_day_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes")
+    .select("id,user_id,user_workout_plan_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes")
     .eq("user_id", userId)
     .in("status", ["completed", "skipped"])
     .order("scheduled_date", { ascending: false })

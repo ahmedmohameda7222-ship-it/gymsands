@@ -285,43 +285,11 @@ export type WorkoutSessionSummary = WorkoutSession & {
   exercise_logs: ExerciseLog[];
 };
 
-export type WorkoutTemplateExercise = {
-  id: string;
-  workout_template_day_id: string;
-  exercise_order: number;
-  exercise_name: string;
-  sets: string | null;
-  reps: string | null;
-};
-
-export type WorkoutTemplateDay = {
-  id: string;
-  workout_template_id: string;
-  day_index: number;
-  day_title: string;
-  exercises: WorkoutTemplateExercise[];
-};
-
-export type WorkoutTemplate = {
-  id: string;
-  title: string;
-  main_goal: string;
-  workout_type: string | null;
-  training_level: string;
-  program_duration_weeks: number;
-  days_per_week: number;
-  time_per_workout: string | null;
-  equipment_required: string[];
-  target_gender: string | null;
-  days: WorkoutTemplateDay[];
-};
-
 export type ScheduledWorkoutSessionStatus = "scheduled" | "started" | "completed" | "skipped";
 
 export type UserExerciseLog = {
   id: string;
   user_workout_session_id: string;
-  workout_template_exercise_id: string | null;
   plan_exercise_id: string | null;
   exercise_order: number;
   exercise_name: string;
@@ -340,7 +308,6 @@ export type UserWorkoutSession = {
   id: string;
   user_id: string;
   user_workout_plan_id: string;
-  workout_template_day_id: string | null;
   plan_day_id: string | null;
   week_index: number;
   day_index: number;
@@ -396,16 +363,12 @@ export type UserWorkoutPlan = {
   name: string;
   is_active: boolean;
   is_default?: boolean;
-  template_id?: string | null;
   source?: "manual" | "chatgpt" | "imported";
   goal?: string | null;
   description?: string | null;
   chatgpt_source?: boolean;
   session_duration_minutes?: number | null;
   archived_at?: string | null;
-  match_score?: number | null;
-  match_explanation?: string | null;
-  match_reasons?: string[] | null;
   program_duration_weeks?: number | null;
   days_per_week?: number | null;
   created_at: string;
