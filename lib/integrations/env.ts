@@ -14,17 +14,7 @@ export const serverEnv = {
   fitlifeMcpOAuthClientSecret: process.env.FITLIFE_MCP_OAUTH_CLIENT_SECRET || "",
   fitlifeMcpAllowedOrigins: process.env.FITLIFE_MCP_ALLOWED_ORIGINS || "",
   resendApiKey: process.env.RESEND_API_KEY || "",
-  resendFromEmail: process.env.RESEND_FROM_EMAIL || "",
-  stravaClientId: process.env.STRAVA_CLIENT_ID || "",
-  stravaClientSecret: process.env.STRAVA_CLIENT_SECRET || "",
-  stravaRedirectUri: process.env.STRAVA_REDIRECT_URI || "",
-  googleHealthClientId: process.env.GOOGLE_HEALTH_CLIENT_ID || "",
-  googleHealthClientSecret: process.env.GOOGLE_HEALTH_CLIENT_SECRET || "",
-  googleHealthRedirectUri: process.env.GOOGLE_HEALTH_REDIRECT_URI || "",
-  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "",
-  gymAddress: process.env.GYM_ADDRESS || "",
-  gymLat: process.env.GYM_LAT || "",
-  gymLng: process.env.GYM_LNG || ""
+  resendFromEmail: process.env.RESEND_FROM_EMAIL || ""
 };
 
 export type RouteContext = {
@@ -78,9 +68,6 @@ export function configuredProviders() {
     { provider: "Open Food Facts", configured: true },
     { provider: "wger", configured: Boolean(serverEnv.wgerApiKey) },
     { provider: "ChatGPT MCP Connector", configured: Boolean(serverEnv.fitlifeMcpBaseUrl && serverEnv.fitlifeMcpTokenSecret && serverEnv.supabaseServiceRoleKey) },
-    { provider: "Resend", configured: Boolean(serverEnv.resendApiKey && serverEnv.resendFromEmail) },
-    { provider: "Strava", configured: Boolean(serverEnv.stravaClientId && serverEnv.stravaClientSecret && serverEnv.stravaRedirectUri) },
-    { provider: "Google Health", configured: Boolean(serverEnv.googleHealthClientId && serverEnv.googleHealthClientSecret && serverEnv.googleHealthRedirectUri) },
-    { provider: "Google Maps", configured: Boolean(serverEnv.googleMapsApiKey && (serverEnv.gymAddress || (serverEnv.gymLat && serverEnv.gymLng))) }
+    { provider: "Resend", configured: Boolean(serverEnv.resendApiKey && serverEnv.resendFromEmail) }
   ];
 }

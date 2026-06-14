@@ -55,14 +55,6 @@ Server-side provider keys:
 - `WGER_API_KEY`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
-- `STRAVA_CLIENT_ID`
-- `STRAVA_CLIENT_SECRET`
-- `STRAVA_REDIRECT_URI`
-- `GOOGLE_HEALTH_CLIENT_ID`
-- `GOOGLE_HEALTH_CLIENT_SECRET`
-- `GOOGLE_HEALTH_REDIRECT_URI`
-- `GOOGLE_MAPS_API_KEY`
-- `GYM_ADDRESS` or `GYM_LAT` and `GYM_LNG`
 
 If a provider key is blank, its API route should return a clear JSON response instead of failing silently.
 
@@ -139,11 +131,6 @@ Implemented server routes include:
 - Local exercise calorie estimates from Supabase reference data
 - wger exercise import
 - Resend email sending
-- Strava OAuth and activity import
-- Google Health web OAuth import path, requiring configured credentials and approved scopes
-- Google Maps Routes distance/time lookup
-
-Health Connect is Android-native and is documented in-app as future Android support only.
 
 ## Local development
 

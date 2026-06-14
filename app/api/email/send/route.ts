@@ -3,6 +3,9 @@ import { jsonError, requireServerKeys, requireUser, serverEnv } from "@/lib/inte
 import { sendResendEmail } from "@/lib/integrations/resend";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 
+const maxSubjectLength = 120;
+const maxHtmlLength = 20_000;
+
 export async function POST(request: Request) {
   const limited = rateLimit(request, "email-send", 10, 60_000);
   if (limited) return limited;
@@ -18,8 +21,20 @@ export async function POST(request: Request) {
   const to = String(body.to ?? context.user.email ?? "").trim();
   const subject = String(body.subject ?? "FitLife Hub").trim();
   const html = String(body.html ?? body.message ?? "").trim();
-  const emailType = String(body.emailType ?? "member_message");
+  const emailType = String(body.emailType ?? "member_message").replace(/[^a-z0-9_-]/gi, "").slice(0, 64) || "member_message";
   if (!to || !subject || !html) return jsonError("to, subject, and html/message are required.");
+  if (subject.length > maxSubjectLength) return jsonError(`Subject must be ${maxSubjectLength} characters or fewer.`);
+  if (html.length > maxHtmlLength) return jsonError(`Email content must be ${maxHtmlLength} characters or fewer.`);
+
+  const userEmail = context.user.email?.trim().toLowerCase();
+  const requestedEmail = to.toLowerCase();
+  if (requestedEmail !== userEmail) {
+    const { data, error } = await context.supabase.from("profiles").select("role").eq("id", context.user.id).maybeSingle();
+    if (error) return jsonError(error.message, 400);
+    if (data?.role !== "admin") {
+      return jsonError("Only admins can send FitLife email to another address.", 403);
+    }
+  }
 
   try {
     const result = await sendResendEmail({ apiKey: serverEnv.resendApiKey, from: serverEnv.resendFromEmail, to, subject, html });
