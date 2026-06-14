@@ -12,9 +12,14 @@ type JsonRpcRequest = {
 };
 
 function corsHeaders(request?: Request) {
-  const allowed = serverEnv.fitlifeMcpAllowedOrigins.split(",").map((origin) => origin.trim()).filter(Boolean);
+  const allowed = Array.from(
+    new Set([
+      ...serverEnv.fitlifeMcpAllowedOrigins.split(",").map((origin) => origin.trim()).filter(Boolean),
+      serverEnv.appUrl
+    ].filter(Boolean))
+  );
   const requestOrigin = request?.headers.get("origin") ?? "";
-  const origin = requestOrigin && allowed.includes(requestOrigin) ? requestOrigin : allowed[0] || serverEnv.appUrl || "null";
+  const origin = requestOrigin ? (allowed.includes(requestOrigin) ? requestOrigin : "null") : allowed[0] || "null";
 
   return {
     "Access-Control-Allow-Origin": origin,

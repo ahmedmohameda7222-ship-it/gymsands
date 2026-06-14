@@ -89,12 +89,16 @@ export default function OnboardingPage() {
   }, []);
 
   async function finish() {
+    if (!user?.id) {
+      toast({ title: "Sign in required", description: "Please sign in before saving profile setup." });
+      return;
+    }
     setIsSaving(true);
     try {
       await saveOnboarding({
         ...answers,
         goal: answers.goals.join(", "),
-        user_id: user?.id ?? "mock-user"
+        user_id: user.id
       });
       toast({
         title: "Profile saved",

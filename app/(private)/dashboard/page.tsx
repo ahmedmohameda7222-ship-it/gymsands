@@ -13,26 +13,24 @@ import { WelcomePopup } from "@/components/dashboard/welcome-popup";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import {
+  addWaterLog,
   getCalorieTargets,
   getCurrentWeekday,
   getDefaultUserWorkoutPlan,
+  getOpenWorkoutDaySession,
   getProgressEntries,
+  getSleepRecoveryLogs,
+  getSupplementLogs,
   getTodayFoodLogs,
   getTodayMealPlanItems,
   getWaterLogs,
-  getWorkoutHistory
+  getWorkoutHistory,
+  markMealPlanItemDone
 } from "@/services/database/repository";
-import { defaultTargets, percent, remainingMacros, sumFoodLogs } from "@/services/nutrition/calculations";
+import { percent, remainingMacros, sumFoodLogs } from "@/services/nutrition/calculations";
+import { targetOrSetupDefault, type SavedTargets } from "@/services/nutrition/targets";
 import { todayIso } from "@/lib/utils";
-import type { FoodLog, MealPlanItem, ProgressEntry, UserWorkoutPlan, WaterLog, WorkoutSession } from "@/types";
-
-type Targets = {
-  daily_calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
-  water_ml: number;
-};
+import type { FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryLog, SupplementLog, UserWorkoutPlan, WaterLog, WorkoutSession } from "@/types";
 
 export default function DashboardPage() {
   const { user, profile } = useAuth();
@@ -43,13 +41,10 @@ export default function DashboardPage() {
   const [progressEntries, setProgressEntries] = useState<ProgressEntry[]>([]);
   const [mealPlanItems, setMealPlanItems] = useState<MealPlanItem[]>([]);
   const [activePlan, setActivePlan] = useState<UserWorkoutPlan | null>(null);
-  const [targets, setTargets] = useState<Targets>({
-    daily_calories: defaultTargets.calories,
-    protein_g: defaultTargets.protein_g,
-    carbs_g: defaultTargets.carbs_g,
-    fat_g: defaultTargets.fat_g,
-    water_ml: 2500
-  });
+  const [openSessionId, setOpenSessionId] = useState<string | null>(null);
+  const [supplements, setSupplements] = useState<SupplementLog[]>([]);
+  const [sleepLogs, setSleepLogs] = useState<SleepRecoveryLog[]>([]);
+  const [targets, setTargets] = useState<SavedTargets | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -64,9 +59,11 @@ export default function DashboardPage() {
       getProgressEntries(user.id),
       getTodayMealPlanItems(user.id),
       getDefaultUserWorkoutPlan(user.id),
-      getCalorieTargets(user.id)
+      getCalorieTargets(user.id),
+      getSupplementLogs(user.id),
+      getSleepRecoveryLogs(user.id, 7)
     ])
-      .then(([foodLogs, workoutHistory, dailyWater, progress, plannedMeals, plan, calorieTargets]) => {
+      .then(async ([foodLogs, workoutHistory, dailyWater, progress, plannedMeals, plan, calorieTargets, supplementLogs, recoveryLogs]) => {
         if (!active) return;
         setLogs(foodLogs);
         setHistory(workoutHistory);
@@ -74,13 +71,12 @@ export default function DashboardPage() {
         setProgressEntries(progress);
         setMealPlanItems(plannedMeals);
         setActivePlan(plan);
-        setTargets({
-          daily_calories: Number(calorieTargets.daily_calories ?? defaultTargets.calories),
-          protein_g: Number(calorieTargets.protein_g ?? defaultTargets.protein_g),
-          carbs_g: Number(calorieTargets.carbs_g ?? defaultTargets.carbs_g),
-          fat_g: Number(calorieTargets.fat_g ?? defaultTargets.fat_g),
-          water_ml: Number(calorieTargets.water_ml ?? 2500)
-        });
+        setTargets(calorieTargets);
+        setSupplements(supplementLogs);
+        setSleepLogs(recoveryLogs);
+        const todayDay = plan?.days.find((day) => day.weekday === getCurrentWeekday() && day.exercises.length > 0) ?? null;
+        const open = todayDay ? await getOpenWorkoutDaySession(user.id, todayDay.id) : null;
+        if (active) setOpenSessionId(open?.id ?? null);
       })
       .catch((error) =>
         toast({
@@ -98,13 +94,15 @@ export default function DashboardPage() {
   }, [toast, user]);
 
   const totals = useMemo(() => sumFoodLogs(logs), [logs]);
+  const hasTargets = Boolean(targets);
+  const displayTargets = targetOrSetupDefault(targets);
   const remaining = remainingMacros(
     {
-      calories: targets.daily_calories,
-      protein_g: targets.protein_g,
-      carbs_g: targets.carbs_g,
-      fat_g: targets.fat_g,
-      water_ml: targets.water_ml
+      calories: displayTargets.daily_calories,
+      protein_g: displayTargets.protein_g,
+      carbs_g: displayTargets.carbs_g,
+      fat_g: displayTargets.fat_g,
+      water_ml: displayTargets.water_ml
     },
     totals
   );
@@ -112,10 +110,34 @@ export default function DashboardPage() {
   const latestProgress = progressEntries.at(-1) ?? null;
   const today = getCurrentWeekday();
   const todayPlanDay = activePlan?.days.find((day) => day.weekday === today && day.exercises.length > 0) ?? null;
+  const todaySleepLog = sleepLogs.find((log) => log.log_date === todayIso()) ?? null;
+  const supplementsTaken = supplements.length > 0 && supplements.every((item) => item.taken_today);
   const plannedMealsCount = mealPlanItems.length;
   const doneMealsCount = mealPlanItems.filter((item) => item.status === "done").length;
   const waterLiters = Math.round((waterTotalMl / 1000) * 10) / 10;
-  const waterTargetLiters = Math.round((targets.water_ml / 1000) * 10) / 10;
+  const waterTargetLiters = Math.round((displayTargets.water_ml / 1000) * 10) / 10;
+
+  async function quickMarkMealDone(item: MealPlanItem) {
+    if (!user?.id) return;
+    try {
+      const result = await markMealPlanItemDone(item);
+      setMealPlanItems((current) => current.map((meal) => (meal.id === result.item.id ? result.item : meal)));
+      if (result.log) setLogs((current) => [result.log as FoodLog, ...current]);
+      toast({ title: result.already_done ? "Meal already done" : "Meal marked done", description: result.already_done ? "No duplicate food log was created." : `${item.food_name} was added to Food Log.` });
+    } catch (error) {
+      toast({ title: "Could not mark meal done", description: error instanceof Error ? error.message : "Please try again." });
+    }
+  }
+
+  async function quickAddWater(amountMl: number) {
+    if (!user?.id) return;
+    try {
+      const log = await addWaterLog(user.id, todayIso(), amountMl);
+      setWaterLogs((current) => [log, ...current]);
+    } catch (error) {
+      toast({ title: "Could not add water", description: error instanceof Error ? error.message : "Please try again." });
+    }
+  }
 
   return (
     <>
@@ -139,10 +161,28 @@ export default function DashboardPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Flame} label="Calories eaten" value={`${totals.calories} kcal`} detail={`${remaining.calories} kcal remaining`} progress={percent(totals.calories, targets.daily_calories)} />
-        <MetricCard icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={`${remaining.protein_g}g remaining`} progress={percent(totals.protein_g, targets.protein_g)} />
-        <MetricCard icon={Droplets} label="Water intake" value={waterTotalMl ? `${waterLiters} L` : "No water logged"} detail={`Target ${waterTargetLiters} L today`} progress={percent(waterTotalMl, targets.water_ml)} />
-        <MetricCard icon={Scale} label="Current weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No progress entry"} detail={latestProgress ? `Latest entry ${latestProgress.entry_date}` : "Add your first progress entry"} progress={0} />
+        <MetricCard
+          icon={Flame}
+          label="Calories eaten"
+          value={`${totals.calories} kcal`}
+          detail={hasTargets ? `${remaining.calories} kcal remaining` : "No calorie target set"}
+          progress={hasTargets ? percent(totals.calories, displayTargets.daily_calories) : undefined}
+        />
+        <MetricCard
+          icon={Soup}
+          label="Protein"
+          value={`${totals.protein_g}g`}
+          detail={hasTargets ? `${remaining.protein_g}g remaining` : "Set protein target"}
+          progress={hasTargets ? percent(totals.protein_g, displayTargets.protein_g) : undefined}
+        />
+        <MetricCard
+          icon={Droplets}
+          label="Water intake"
+          value={waterTotalMl ? `${waterLiters} L` : "No water logged"}
+          detail={hasTargets ? `Target ${waterTargetLiters} L today` : "Set water target"}
+          progress={hasTargets ? percent(waterTotalMl, displayTargets.water_ml) : undefined}
+        />
+        <MetricCard icon={Scale} label="Current weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No progress entry"} detail={latestProgress ? `Latest entry ${latestProgress.entry_date}` : "Add your first progress entry"} />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
@@ -163,7 +203,7 @@ export default function DashboardPage() {
                   <Button asChild className="mt-3" size="sm">
                     <Link href={todayPlanDay ? `/workouts/session/day/${todayPlanDay.id}` : `/my-workout/plans/${activePlan.id}`}>
                       <Dumbbell className="h-4 w-4" />
-                      {todayPlanDay ? "Start Today's Workout" : "View Active Plan"}
+                      {openSessionId ? "Resume Workout" : todayPlanDay ? "Start Today's Workout" : "View Active Plan"}
                     </Link>
                   </Button>
                 </>
@@ -181,13 +221,18 @@ export default function DashboardPage() {
             <div className="rounded-md border p-3">
               <p className="text-sm font-semibold text-muted-foreground">Meals</p>
               <p className="mt-1 font-semibold">{doneMealsCount}/{plannedMealsCount} planned meals done</p>
-              <p className="text-sm text-muted-foreground">Planned meals only count after they are marked done.</p>
-              <Button asChild className="mt-3" size="sm" variant="outline">
-                <Link href="/my-meal-plan">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Manage Meal Plan
-                </Link>
-              </Button>
+                  <p className="text-sm text-muted-foreground">{plannedMealsCount ? "Planned meals only count after they are marked done." : "No meals planned for today."}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {mealPlanItems.filter((item) => item.status !== "done").slice(0, 2).map((item) => (
+                  <Button key={item.id} type="button" size="sm" onClick={() => quickMarkMealDone(item)}>
+                    <CheckCircle2 className="h-4 w-4" />
+                    Mark {item.meal_type} done
+                  </Button>
+                ))}
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/my-meal-plan">Manage Meal Plan</Link>
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -234,15 +279,37 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Water quick add</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {[250, 500, 750, 1000].map((amount) => (
+            <Button key={amount} type="button" variant="outline" onClick={() => quickAddWater(amount)}>
+              <Droplets className="h-4 w-4" />
+              +{amount === 1000 ? "1 L" : `${amount} ml`}
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
+
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Macros today</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <MacroLine label="Protein" value={totals.protein_g} target={targets.protein_g} />
-            <MacroLine label="Carbs" value={totals.carbs_g} target={targets.carbs_g} />
-            <MacroLine label="Fat" value={totals.fat_g} target={targets.fat_g} />
+            {hasTargets ? (
+              <>
+                <MacroLine label="Protein" value={totals.protein_g} target={displayTargets.protein_g} />
+                <MacroLine label="Carbs" value={totals.carbs_g} target={displayTargets.carbs_g} />
+                <MacroLine label="Fat" value={totals.fat_g} target={displayTargets.fat_g} />
+              </>
+            ) : (
+              <div className="rounded-md border p-3 text-sm text-muted-foreground">
+                No calorie or macro targets set. Open Calories/Macros or Profile & Goals to save your targets.
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -252,8 +319,10 @@ export default function DashboardPage() {
           <CardContent className="grid gap-2 text-sm">
             <ChecklistLine label="Workout" done={Boolean(history.find((session) => session.status === "completed" && session.started_at?.slice(0, 10) === todayIso()))} emptyLabel={todayPlanDay ? "Not completed yet" : "Rest day or no active plan"} />
             <ChecklistLine label="Meals" done={plannedMealsCount > 0 && doneMealsCount === plannedMealsCount} emptyLabel={plannedMealsCount ? `${plannedMealsCount - doneMealsCount} planned meals left` : "No meals planned"} />
-            <ChecklistLine label="Protein" done={totals.protein_g >= targets.protein_g} emptyLabel={`${remaining.protein_g}g remaining`} />
-            <ChecklistLine label="Water" done={waterTotalMl >= targets.water_ml} emptyLabel={waterTotalMl ? `${Math.max(0, targets.water_ml - waterTotalMl)} ml remaining` : "No water logged today"} />
+            <ChecklistLine label="Protein" done={hasTargets && totals.protein_g >= displayTargets.protein_g} emptyLabel={hasTargets ? `${remaining.protein_g}g remaining` : "Set protein target"} />
+            <ChecklistLine label="Water" done={hasTargets && waterTotalMl >= displayTargets.water_ml} emptyLabel={hasTargets ? (waterTotalMl ? `${Math.max(0, displayTargets.water_ml - waterTotalMl)} ml remaining` : "No water logged today") : "Set water target"} />
+            <ChecklistLine label="Supplements" done={supplementsTaken} emptyLabel={supplements.length ? "Supplements still open" : "No supplements scheduled"} />
+            <ChecklistLine label="Sleep/recovery" done={Boolean(todaySleepLog)} emptyLabel="No sleep/recovery log today" />
             <ChecklistLine label="Progress" done={Boolean(latestProgress?.entry_date === todayIso())} emptyLabel="No progress entry today" />
           </CardContent>
         </Card>

@@ -40,12 +40,13 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const [isSaving, setIsSaving] = useState(false);
   const [startedAtMs, setStartedAtMs] = useState(() => Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const timerKey = useMemo(() => workoutStorageKey(["single-workout-session", user?.id ?? "mock-user", workout.id]), [user?.id, workout.id]);
+  const timerKey = useMemo(() => workoutStorageKey(["single-workout-session", user?.id ?? "anonymous", workout.id]), [user?.id, workout.id]);
   const guideUrl = workout.exercise_url || (isLink(workout.notes) ? workout.notes : null);
   const customVideoUrl = workout.custom_video_url || null;
 
   useEffect(() => {
-    startWorkoutSession(user?.id ?? "mock-user", workout)
+    if (!user?.id) return;
+    startWorkoutSession(user.id, workout)
       .then((nextSession) => {
         setSession(nextSession);
         const parsedStartedAt = Date.parse(nextSession.started_at);
@@ -60,7 +61,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
           description: error instanceof Error ? error.message : "You can still log this workout on screen."
         })
       );
-  }, [timerKey, toast, user, workout]);
+  }, [timerKey, toast, user?.id, workout]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -73,6 +74,10 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
 
   async function complete() {
     if (isSaving) return;
+    if (!user?.id) {
+      toast({ title: "Sign in required", description: "Please sign in before saving workouts." });
+      return;
+    }
     try {
       setIsSaving(true);
       if (session) {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarDays, Dumbbell, Plus, RefreshCcw, Star } from "lucide-react";
+import { Archive, CalendarDays, Copy, Dumbbell, Edit3, Plus, RefreshCcw, Save, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { getWorkoutActivity, setDefaultUserWorkoutPlan } from "@/services/database/repository";
-import { getActiveWorkoutPlan, getAllUserWorkoutPlans, workoutsFromLoadedPlanDay } from "@/services/database/workout-plan-loader";
+import { archiveWorkoutPlan, duplicateWorkoutPlan, getActiveWorkoutPlan, getAllUserWorkoutPlans, updateWorkoutPlanMetadata, workoutsFromLoadedPlanDay } from "@/services/database/workout-plan-loader";
 import { WorkoutPlanBuilder } from "@/components/workouts/workout-plan-builder";
 import { WorkoutCalendar } from "@/components/workouts/workout-calendar";
+import { Input } from "@/components/ui/input";
 import type { UserWorkoutPlan, WorkoutSession } from "@/types";
 
 type PlanMeta = Omit<UserWorkoutPlan, "source"> & { source?: string; chatgpt_source?: boolean };
@@ -42,6 +43,8 @@ export function MyWorkoutPlans() {
   const [isLoading, setIsLoading] = useState(true);
   const [showBuilder, setShowBuilder] = useState(false);
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
 
   async function loadPlans() {
     if (!user?.id) {
@@ -89,6 +92,8 @@ export function MyWorkoutPlans() {
   }
 
   const activeCalendarDays = useMemo(() => (activePlan ? calendarDaysFromPlan(activePlan) : []), [activePlan]);
+  const availablePlans = plans.filter((plan) => !plan.archived_at);
+  const archivedPlans = plans.filter((plan) => plan.archived_at);
 
   function startToday() {
     const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
@@ -99,6 +104,49 @@ export function MyWorkoutPlans() {
     }
     const day = activeCalendarDays[todayIndex];
     if (day.id) window.location.href = `/workouts/session/day/${day.id}`;
+  }
+
+  async function duplicatePlan(plan: UserWorkoutPlan) {
+    if (!user?.id || busyPlanId) return;
+    setBusyPlanId(plan.id);
+    try {
+      await duplicateWorkoutPlan(user.id, plan.id);
+      await loadPlans();
+      toast({ title: "Plan duplicated", description: `${plan.name} copy was saved as inactive.` });
+    } catch (error) {
+      toast({ title: "Could not duplicate plan", description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      setBusyPlanId(null);
+    }
+  }
+
+  async function archivePlan(plan: UserWorkoutPlan) {
+    if (!user?.id || busyPlanId) return;
+    setBusyPlanId(plan.id);
+    try {
+      await archiveWorkoutPlan(user.id, plan.id);
+      await loadPlans();
+      toast({ title: "Plan archived", description: `${plan.name} is hidden from active planning. Workout history is kept.` });
+    } catch (error) {
+      toast({ title: "Could not archive plan", description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      setBusyPlanId(null);
+    }
+  }
+
+  async function saveMetadata(plan: UserWorkoutPlan) {
+    if (!user?.id || !editName.trim()) return;
+    setBusyPlanId(plan.id);
+    try {
+      await updateWorkoutPlanMetadata(user.id, plan.id, { name: editName });
+      setEditingPlanId(null);
+      await loadPlans();
+      toast({ title: "Plan updated", description: "Workout plan metadata was saved." });
+    } catch (error) {
+      toast({ title: "Could not update plan", description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      setBusyPlanId(null);
+    }
   }
 
   return (
@@ -136,23 +184,33 @@ export function MyWorkoutPlans() {
       {isLoading ? <p className="text-sm text-muted-foreground">Loading saved plans...</p> : null}
       {!isLoading && !plans.length ? (
         <p className="rounded-md border bg-white p-4 text-sm text-muted-foreground">
-          No workout plans yet. Create a plan with ChatGPT and export it to FitLife Hub, or use the manual builder.
+          No workout plans yet. Import a plan from ChatGPT or create one manually.
         </p>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {plans.map((plan) => {
+        {availablePlans.map((plan) => {
           const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
           const isDefault = plan.is_default ?? plan.is_active;
+          const sourceLabel = sourceBadge(plan);
+          const warnings = planWarnings(plan);
           return (
             <Card key={plan.id}>
               <CardHeader>
                 <CardTitle className="flex items-start justify-between gap-3">
                   <span>{plan.name}</span>
-                  {isDefault ? <Badge>Default</Badge> : isChatGptPlan(plan) ? <Badge variant="outline">ChatGPT</Badge> : <Badge variant="outline">Saved</Badge>}
+                  {isDefault ? <Badge>Default</Badge> : <Badge variant="outline">{sourceLabel}</Badge>}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {editingPlanId === plan.id ? (
+                  <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <Input value={editName} onChange={(event) => setEditName(event.target.value)} />
+                    <Button onClick={() => saveMetadata(plan)} disabled={busyPlanId === plan.id}>
+                      <Save className="h-4 w-4" /> Save
+                    </Button>
+                  </div>
+                ) : null}
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="rounded-md bg-slate-50 p-3"><CalendarDays className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-xl font-bold text-slate-950">{plan.days.length}</p><p className="text-xs text-muted-foreground">Days</p></div>
                   <div className="rounded-md bg-slate-50 p-3"><Dumbbell className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-xl font-bold text-slate-950">{exerciseCount}</p><p className="text-xs text-muted-foreground">Exercises</p></div>
@@ -160,11 +218,28 @@ export function MyWorkoutPlans() {
                 <div className="flex flex-wrap gap-2">
                   {plan.days.slice(0, 4).map((day) => <Badge key={day.id} variant="outline">{day.weekday ?? day.day_name}</Badge>)}
                 </div>
+                {warnings.length ? (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                    <p className="font-semibold">Validation warnings</p>
+                    <p className="mt-1">{warnings.join(" | ")}</p>
+                  </div>
+                ) : null}
                 <div className="grid gap-2">
                   <Button asChild className="w-full"><Link href={`/my-workout/plans/${plan.id}`}>Open Plan</Link></Button>
                   <Button type="button" variant={isDefault ? "secondary" : "outline"} className="w-full" onClick={() => setDefaultPlan(plan)} disabled={isDefault || busyPlanId === plan.id}>
                     <Star className="h-4 w-4" /> {isDefault ? "Default Plan" : "Set as Default Plan"}
                   </Button>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => { setEditingPlanId(plan.id); setEditName(plan.name); }}>
+                      <Edit3 className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => duplicatePlan(plan)} disabled={busyPlanId === plan.id}>
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => archivePlan(plan)} disabled={busyPlanId === plan.id}>
+                      <Archive className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -172,7 +247,44 @@ export function MyWorkoutPlans() {
         })}
       </div>
 
+      {archivedPlans.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Archived plans</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {archivedPlans.map((plan) => (
+              <div key={plan.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                <div>
+                  <p className="font-semibold">{plan.name}</p>
+                  <p className="text-muted-foreground">{plan.archived_at ? new Date(plan.archived_at).toLocaleDateString() : "Archived"}</p>
+                </div>
+                <Button asChild variant="outline" size="sm"><Link href={`/my-workout/plans/${plan.id}`}>View</Link></Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
       {showBuilder ? <WorkoutPlanBuilder loadActivePlan={false} onSaved={loadPlans} /> : null}
     </div>
   );
+}
+
+function sourceBadge(plan: UserWorkoutPlan) {
+  if (isChatGptPlan(plan) || plan.source === "chatgpt" || plan.source === "imported") return "Imported";
+  if (plan.source === "manual") return "Manual";
+  return "Saved";
+}
+
+function planWarnings(plan: UserWorkoutPlan) {
+  const warnings: string[] = [];
+  if (!plan.days.length) warnings.push("missing days");
+  if (!plan.days.some((day) => day.exercises.length)) warnings.push("missing exercises");
+  if (!plan.days_per_week) warnings.push("no days/week");
+  if (!plan.program_duration_weeks) warnings.push("no duration");
+  const weekdays = plan.days.map((day) => day.weekday).filter(Boolean);
+  if (new Set(weekdays).size !== weekdays.length) warnings.push("duplicate weekdays");
+  if (plan.days.some((day) => day.exercises.some((exercise) => !exercise.sets || !exercise.reps))) warnings.push("missing sets/reps");
+  return warnings;
 }

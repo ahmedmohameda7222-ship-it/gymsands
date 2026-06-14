@@ -35,6 +35,11 @@ export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntr
   const [isSaving, setIsSaving] = useState(false);
 
   async function save() {
+    if (!user?.id) {
+      toast({ title: "Sign in required", description: "Please sign in before saving progress entries." });
+      return;
+    }
+
     try {
       setIsSaving(true);
       const extraMeasurements = Object.fromEntries(
@@ -47,7 +52,7 @@ export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntr
       const waistValue = Number(waist);
       const entry = await addProgressEntry(
         {
-          user_id: user?.id ?? "mock-user",
+          user_id: user.id,
           entry_date: todayIso(),
           body_weight_kg: weight && Number.isFinite(bodyWeight) ? bodyWeight : null,
           waist_cm: waist && Number.isFinite(waistValue) ? waistValue : null,

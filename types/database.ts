@@ -139,6 +139,7 @@ export type WaterLog = {
 export type DailyNutritionSummary = {
   date: string;
   planned_calories: number;
+  has_targets?: boolean;
   calories: number;
   protein_g: number;
   carbs_g: number;
@@ -387,7 +388,12 @@ export type UserWorkoutPlan = {
   is_active: boolean;
   is_default?: boolean;
   template_id?: string | null;
-  source?: "manual" | "generated_rules" | "template_recommendation";
+  source?: "manual" | "chatgpt" | "imported" | "generated_rules" | "template_recommendation";
+  goal?: string | null;
+  description?: string | null;
+  chatgpt_source?: boolean;
+  session_duration_minutes?: number | null;
+  archived_at?: string | null;
   match_score?: number | null;
   match_explanation?: string | null;
   match_reasons?: string[] | null;

@@ -34,8 +34,16 @@ export default function ProgressPage() {
   }, [toast, user]);
 
   const latest = entries.at(-1);
+  const first = entries[0];
+  const previous = entries.length > 1 ? entries.at(-2) : null;
+  const weightDelta = latest?.body_weight_kg && first?.body_weight_kg ? round(latest.body_weight_kg - first.body_weight_kg) : null;
+  const latestWaist = latest?.measurements?.waist_cm ?? latest?.waist_cm ?? null;
+  const firstWaist = first?.measurements?.waist_cm ?? first?.waist_cm ?? null;
+  const waistDelta = latestWaist && firstWaist ? round(latestWaist - firstWaist) : null;
   const completedCount = workoutActivity.filter((session) => session.status === "completed").length;
   const skippedCount = workoutActivity.filter((session) => session.status === "skipped").length;
+  const totalWorkoutCount = completedCount + skippedCount;
+  const completionRate = totalWorkoutCount ? Math.round((completedCount / totalWorkoutCount) * 100) : undefined;
 
   return (
     <>
@@ -45,11 +53,22 @@ export default function ProgressPage() {
         action={<ProgressEntryModal onSaved={(entry) => setEntries((current) => [...current, entry])} />}
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Scale} label="Body weight" value={latest?.body_weight_kg ? `${latest.body_weight_kg} kg` : "No entry"} detail="Latest progress entry" progress={latest ? 65 : 0} />
-        <MetricCard icon={Ruler} label="Waist" value={(latest?.measurements?.waist_cm ?? latest?.waist_cm) ? `${latest?.measurements?.waist_cm ?? latest?.waist_cm} cm` : "No entry"} detail="Latest measurement" progress={latest ? 55 : 0} />
-        <MetricCard icon={CalendarCheck} label="Completed" value={`${completedCount}`} detail="Workout days finished" progress={Math.min(100, completedCount * 10)} />
-        <MetricCard icon={SkipForward} label="Skipped" value={`${skippedCount}`} detail="Workout days skipped" progress={Math.min(100, skippedCount * 10)} />
+        <MetricCard icon={Scale} label="Body weight" value={latest?.body_weight_kg ? `${latest.body_weight_kg} kg` : "No entry"} detail={weightDelta === null ? "No trend yet" : `${formatDelta(weightDelta)} kg from first entry`} />
+        <MetricCard icon={Ruler} label="Waist" value={latestWaist ? `${latestWaist} cm` : "No entry"} detail={waistDelta === null ? "No measurement trend yet" : `${formatDelta(waistDelta)} cm from first entry`} />
+        <MetricCard icon={CalendarCheck} label="Completed" value={`${completedCount}`} detail="Workout days finished" progress={completionRate} />
+        <MetricCard icon={SkipForward} label="Skipped" value={`${skippedCount}`} detail="Workout days skipped" progress={totalWorkoutCount ? Math.round((skippedCount / totalWorkoutCount) * 100) : undefined} />
       </div>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Weekly progress report</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Insight text={entries.length ? `${entries.length} progress entr${entries.length === 1 ? "y" : "ies"} saved.` : "No progress entries yet. Add your first weight or measurement."} />
+          <Insight text={completionRate === undefined ? "No workout consistency data yet." : `You completed ${completedCount}/${totalWorkoutCount} tracked workouts.`} />
+          <Insight text={previous?.body_weight_kg && latest?.body_weight_kg ? `Last weight change: ${formatDelta(round(latest.body_weight_kg - previous.body_weight_kg))} kg.` : "Add at least two weight entries to see weight velocity."} />
+          <Insight text={waistDelta === null ? "Add waist measurements to see waist trend." : `Waist trend: ${formatDelta(waistDelta)} cm.`} />
+        </CardContent>
+      </Card>
       <div className="mt-4">
         <ProgressCharts entries={entries} workoutActivity={workoutActivity} />
       </div>
@@ -104,4 +123,16 @@ function MeasurementList({ entry }: { entry: ProgressEntry }) {
       ))}
     </div>
   );
+}
+
+function Insight({ text }: { text: string }) {
+  return <div className="rounded-md border bg-slate-50 p-3 text-sm text-muted-foreground">{text}</div>;
+}
+
+function round(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function formatDelta(value: number) {
+  return `${value > 0 ? "+" : ""}${value}`;
 }

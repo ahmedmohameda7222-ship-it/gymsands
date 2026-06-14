@@ -271,10 +271,14 @@ export function WorkoutPlanBuilder({
   }
 
   async function savePlan() {
+    if (!user?.id) {
+      toast({ title: "Sign in required", description: "Please sign in before saving workout plans." });
+      return;
+    }
     setIsSaving(true);
     try {
       await createUserWorkoutPlan({
-        userId: user?.id ?? "mock-user",
+        userId: user.id,
         planName,
         days
       });
@@ -353,8 +357,9 @@ export function WorkoutPlanBuilder({
 
     try {
       setIsSkipping(true);
-      const skipped = await skipWorkoutDay(user?.id ?? "mock-user", { ...todaysDay, id: todaysDay.id });
-      clearStoredValue(workoutStorageKey(["workout-day-session", user?.id ?? "mock-user", todaysDay.id]));
+      if (!user?.id) throw new Error("Please sign in before skipping workouts.");
+      const skipped = await skipWorkoutDay(user.id, { ...todaysDay, id: todaysDay.id });
+      clearStoredValue(workoutStorageKey(["workout-day-session", user.id, todaysDay.id]));
       setActivity((current) => [
         skipped,
         ...current.filter((session) => !(session.plan_day_id === skipped.plan_day_id && isCurrentWeekSession(session)))

@@ -12,6 +12,15 @@ import { env } from "@/lib/env";
 
 const fitlifeDescription = "ChatGPT creates workout and meal plans. FitLife stores, schedules, edits, and tracks the imported data.";
 
+type ChatGptConnection = {
+  id: string;
+  scopes: string[];
+  is_active: boolean;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+};
+
 export function ConnectedApps() {
   const { session } = useAuth();
   const { toast } = useToast();
@@ -22,11 +31,19 @@ export function ConnectedApps() {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
   const [connectionToken, setConnectionToken] = useState("");
+  const [connections, setConnections] = useState<ChatGptConnection[]>([]);
   const mcpServerUrl = env.fitlifeMcpServerUrl.trim();
   const hasMcpServerUrl = Boolean(mcpServerUrl);
 
   function authHeaders() {
     return { Authorization: `Bearer ${session?.access_token ?? ""}`, "Content-Type": "application/json" };
+  }
+
+  async function loadConnections() {
+    if (!session?.access_token) return;
+    const response = await fetch("/api/mcp/connections", { headers: authHeaders() });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) setConnections(data.connections ?? []);
   }
 
   async function copyText(value: string, type: "url" | "token") {
@@ -67,6 +84,7 @@ export function ConnectedApps() {
     }
 
     setConnectionToken(data.token ?? "");
+    await loadConnections();
     toast({ title: "Connection token created", description: "Copy it now. FitLife shows this token only once." });
   }
 
@@ -87,6 +105,7 @@ export function ConnectedApps() {
     }
 
     setConnectionToken("");
+    await loadConnections();
     toast({ title: "Connection revoked", description: "Active ChatGPT connection tokens were revoked for this account." });
   }
 
@@ -150,7 +169,7 @@ export function ConnectedApps() {
             </p>
           ) : null}
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setIsChatGptModalOpen(true)}>
+            <Button onClick={() => { setIsChatGptModalOpen(true); void loadConnections(); }}>
               <ExternalLink className="h-4 w-4" /> {hasMcpServerUrl ? "Set up ChatGPT import" : "Connector URL not configured"}
             </Button>
             <Button variant="outline" onClick={revokeConnectionToken} disabled={isBusy === "chatgpt-revoke"}>
@@ -225,6 +244,30 @@ export function ConnectedApps() {
             <p className="rounded-md border p-3 text-sm text-muted-foreground">
               FitLife is a responsive web app. Browser-supported features are used here; no Google Play or App Store behavior is assumed.
             </p>
+
+            <div className="rounded-md border p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold">Recent connections</p>
+                <Button type="button" variant="outline" size="sm" onClick={loadConnections}>
+                  <RefreshCcw className="h-4 w-4" /> Refresh
+                </Button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {connections.map((connection) => (
+                  <div key={connection.id} className="rounded-md bg-muted p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium">{connection.is_active && !connection.revoked_at ? "Active token" : "Revoked token"}</span>
+                      <span className="text-xs text-muted-foreground">{new Date(connection.created_at).toLocaleString()}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Last used: {connection.last_used_at ? new Date(connection.last_used_at).toLocaleString() : "Never"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">Scopes: {connection.scopes.join(", ") || "No scopes"}</p>
+                  </div>
+                ))}
+                {!connections.length ? <p className="text-sm text-muted-foreground">No previous ChatGPT connections yet.</p> : null}
+              </div>
+            </div>
 
             <div className="flex flex-wrap justify-end gap-2">
               <Button variant="outline" onClick={() => setIsChatGptModalOpen(false)}>Close</Button>

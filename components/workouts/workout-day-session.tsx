@@ -23,6 +23,9 @@ type SetState = {
   reps: string;
   weightKg: string;
   notes: string;
+  rpe: string;
+  rir: string;
+  setType: "warmup" | "working" | "failure" | "drop";
   completedAt: string | null;
 };
 
@@ -49,6 +52,9 @@ function makeExerciseState(exercise: UserWorkoutPlanExercise): ExerciseState {
       reps: firstNumber(exercise.reps),
       weightKg: "",
       notes: "",
+      rpe: "",
+      rir: "",
+      setType: index === 0 && count > 2 ? "warmup" : "working",
       completedAt: null
     }))
   };
@@ -82,6 +88,9 @@ function hydrateStates(baseStates: ExerciseState[], logs: ExerciseLog[]) {
         reps: log.reps === null || log.reps === undefined ? set.reps : String(log.reps),
         weightKg: log.weight_kg === null || log.weight_kg === undefined ? "" : String(log.weight_kg),
         notes: log.notes ?? "",
+        rpe: set.rpe,
+        rir: set.rir,
+        setType: set.setType,
         completedAt: log.completed_at ?? log.created_at ?? new Date().toISOString()
       };
     })
@@ -104,13 +113,21 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isStarting, setIsStarting] = useState(true);
-  const workoutTimerKey = useMemo(() => workoutStorageKey(["workout-day-session", user?.id ?? "mock-user", day.id]), [day.id, user?.id]);
-  const restTimerKey = useMemo(() => workoutStorageKey(["workout-day-rest-timer", user?.id ?? "mock-user", day.id]), [day.id, user?.id]);
+  const workoutTimerKey = useMemo(() => workoutStorageKey(["workout-day-session", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
+  const restTimerKey = useMemo(() => workoutStorageKey(["workout-day-rest-timer", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const [timerEndsAtMs, setTimerEndsAtMs] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
-    getOrStartWorkoutDaySession(user?.id ?? "mock-user", day)
+    if (!user?.id) {
+      setIsStarting(false);
+      toast({ title: "Sign in required", description: "Please sign in before starting a workout." });
+      return () => {
+        active = false;
+      };
+    }
+
+    getOrStartWorkoutDaySession(user.id, day)
       .then(async (nextSession) => {
         if (!active) return;
         setSession(nextSession);
@@ -132,7 +149,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     return () => {
       active = false;
     };
-  }, [day, toast, user, workoutTimerKey]);
+  }, [day, toast, user?.id, workoutTimerKey]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -204,7 +221,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
           setNumber: set.setNumber,
           reps: toNumberOrNull(set.reps),
           weightKg: toNumberOrNull(set.weightKg),
-          notes: set.notes || null,
+          notes: setNote(set),
           completedAt: set.completedAt
         }))
     );
@@ -489,7 +506,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                     <p className="font-semibold">Set {set.setNumber}</p>
                     {set.completedAt ? <Badge variant="success">Done</Badge> : <Badge variant="outline">Open</Badge>}
                   </div>
-                  <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                     <div className="space-y-1">
                       <Label>Actual reps</Label>
                       <Input value={set.reps} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { reps: event.target.value })} inputMode="numeric" />
@@ -499,6 +516,27 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                       <Input value={set.weightKg} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { weightKg: event.target.value })} inputMode="decimal" placeholder="0" />
                     </div>
                     <div className="space-y-1">
+                      <Label>RPE</Label>
+                      <Input value={set.rpe} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>RIR</Label>
+                      <Input value={set.rir} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Set type</Label>
+                      <select
+                        value={set.setType}
+                        onChange={(event) => updateSet(activeExerciseIndex, setIndex, { setType: event.target.value as SetState["setType"] })}
+                        className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <option value="warmup">Warm-up</option>
+                        <option value="working">Working</option>
+                        <option value="failure">Failure</option>
+                        <option value="drop">Drop set</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1 lg:col-span-5">
                       <Label>Notes</Label>
                       <Input value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional" />
                     </div>
@@ -573,4 +611,13 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
       </div>
     </div>
   );
+}
+
+function setNote(set: SetState) {
+  const metadata = [
+    set.setType !== "working" ? `type:${set.setType}` : null,
+    set.rpe ? `RPE:${set.rpe}` : null,
+    set.rir ? `RIR:${set.rir}` : null
+  ].filter(Boolean);
+  return [set.notes, ...metadata].filter(Boolean).join(" | ") || null;
 }

@@ -205,40 +205,65 @@ async function markMealPlanItemDone(ctx: McpContext, input: JsonObject) {
   if (!item) throw new Error("Meal plan item not found.");
   const row = item as DbRow;
   if (row.status === "done" || row.food_log_id) return ok({ ok: true, item: row, already_done: true, food_log_created: false });
+  const completedAt = new Date().toISOString();
+  const claimed = await ctx.supabase
+    .from("user_meal_plan_items")
+    .update({ status: "done", completed_at: completedAt })
+    .eq("id", id)
+    .eq("user_id", ctx.userId)
+    .is("food_log_id", null)
+    .neq("status", "done")
+    .select("*")
+    .maybeSingle();
+  if (claimed.error) throw new Error(claimed.error.message);
+  if (!claimed.data) {
+    const reread = await ctx.supabase.from("user_meal_plan_items").select("*").eq("id", id).eq("user_id", ctx.userId).maybeSingle();
+    if (reread.error) throw new Error(reread.error.message);
+    return ok({ ok: true, item: reread.data ?? row, already_done: true, food_log_created: false });
+  }
+  const claimedRow = claimed.data as DbRow;
   const logPayload = {
     user_id: ctx.userId,
-    food_item_id: row.food_item_id ?? null,
-    user_food_item_id: row.user_food_item_id ?? null,
-    log_date: row.plan_date,
-    meal_type: row.meal_type,
-    food_name: row.food_name,
-    serving_size: row.serving_size ?? "1 serving",
-    quantity: row.quantity ?? 1,
-    calories: row.calories ?? 0,
-    protein_g: row.protein_g ?? 0,
-    carbs_g: row.carbs_g ?? 0,
-    fat_g: row.fat_g ?? 0,
-    notes: row.notes ?? null
+    food_item_id: claimedRow.food_item_id ?? null,
+    user_food_item_id: claimedRow.user_food_item_id ?? null,
+    log_date: claimedRow.plan_date,
+    meal_type: claimedRow.meal_type,
+    food_name: claimedRow.food_name,
+    serving_size: claimedRow.serving_size ?? "1 serving",
+    quantity: claimedRow.quantity ?? 1,
+    calories: claimedRow.calories ?? 0,
+    protein_g: claimedRow.protein_g ?? 0,
+    carbs_g: claimedRow.carbs_g ?? 0,
+    fat_g: claimedRow.fat_g ?? 0,
+    notes: claimedRow.notes ?? null
   };
   const inserted = await ctx.supabase.from("food_logs").insert(logPayload).select("*").single();
   if (inserted.error) throw new Error(inserted.error.message);
-  const updated = await ctx.supabase.from("user_meal_plan_items").update({ status: "done", food_log_id: inserted.data.id, completed_at: new Date().toISOString() }).eq("id", id).eq("user_id", ctx.userId).select("*").single();
+  const updated = await ctx.supabase.from("user_meal_plan_items").update({ food_log_id: inserted.data.id, completed_at: completedAt }).eq("id", id).eq("user_id", ctx.userId).select("*").single();
   if (updated.error) throw new Error(updated.error.message);
   return ok({ ok: true, item: updated.data, food_log: inserted.data, food_log_created: true });
 }
 
-async function calorieTargets(ctx: McpContext): Promise<DbRow> {
+async function calorieTargets(ctx: McpContext): Promise<DbRow | null> {
   const { data, error } = await ctx.supabase.from("calorie_targets").select("*").eq("user_id", ctx.userId).order("updated_at", { ascending: false }).limit(1).maybeSingle();
   if (error) throw new Error(error.message);
-  return (data as DbRow | null) ?? { daily_calories: 2200, protein_g: 150, carbs_g: 250, fat_g: 70, water_ml: 2500 };
+  return (data as DbRow | null) ?? null;
 }
 
 async function caloriesForDate(ctx: McpContext, date: string) {
   const [target, logs] = await Promise.all([calorieTargets(ctx), ctx.supabase.from("food_logs").select("*").eq("user_id", ctx.userId).eq("log_date", date)]);
   if (logs.error) throw new Error(logs.error.message);
   const totals = sumMacros((logs.data ?? []) as DbRow[]);
-  const dailyTarget = num(target.daily_calories, 2200);
-  return { date, target: dailyTarget, consumed: totals.calories, remaining: Math.max(0, dailyTarget - totals.calories), macros: { ...totals, targets: target }, logs: logs.data ?? [] };
+  const dailyTarget = target ? num(target.daily_calories, 0) : null;
+  return {
+    date,
+    target: dailyTarget,
+    consumed: totals.calories,
+    remaining: dailyTarget === null ? null : Math.max(0, dailyTarget - totals.calories),
+    needs_target_setup: dailyTarget === null,
+    macros: { ...totals, targets: target },
+    logs: logs.data ?? []
+  };
 }
 
 async function waterLogged(ctx: McpContext, date: string) {

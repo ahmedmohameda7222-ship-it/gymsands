@@ -36,14 +36,13 @@ const navGroups = [
   {
     label: "Today",
     items: [
-      { href: "/dashboard", label: "Today", icon: Home },
-      { href: "/today-workout", label: "Today's Workout", icon: CalendarClock },
-      { href: "/calories/weekly-overview", label: "Weekly Report", icon: BarChart3 }
+      { href: "/dashboard", label: "Today", icon: Home }
     ]
   },
   {
     label: "Workouts",
     items: [
+      { href: "/today-workout", label: "Today's Workout", icon: CalendarClock },
       { href: "/my-workout/plans", label: "Workout Plans", icon: CalendarCheck },
       { href: "/workout-history", label: "Workout History", icon: History },
       { href: "/workouts", label: "Exercise Library", icon: Dumbbell },
@@ -54,9 +53,17 @@ const navGroups = [
     label: "Food",
     items: [
       { href: "/my-meal-plan", label: "Meal Plan", icon: ClipboardList },
-      { href: "/calories", label: "Food Log & Macros", icon: Utensils },
-      { href: "/meals", label: "Food Search", icon: Soup },
-      { href: "/calories/custom-food-meal", label: "Food Builder", icon: ChefHat }
+      { href: "/calories", label: "Food Log", icon: Utensils },
+      { href: "/calories", label: "Calories/Macros", icon: Soup },
+      { href: "/calories/custom-food-meal", label: "Food Builder", icon: ChefHat },
+      { href: "/calories/weekly-overview", label: "Weekly Nutrition Summary", icon: BarChart3 }
+    ]
+  },
+  {
+    label: "Progress",
+    items: [
+      { href: "/progress", label: "Progress", icon: BarChart3 },
+      { href: "/calories/weekly-overview", label: "Weekly Fitness Report", icon: CalendarCheck }
     ]
   },
   {
@@ -70,17 +77,28 @@ const navGroups = [
     ]
   },
   {
-    label: "Progress & Settings",
+    label: "Settings",
     items: [
-      { href: "/progress", label: "Progress", icon: BarChart3 },
       { href: "/profile", label: "Profile & Goals", icon: User },
-      { href: "/settings", label: "Connected Apps & Settings", icon: Settings }
+      { href: "/settings", label: "Connected Apps", icon: Settings },
+      { href: "/settings", label: "ChatGPT Import Setup", icon: ClipboardList },
+      { href: "/settings", label: "Account Settings", icon: User }
     ]
   }
 ];
 
+const mobilePrimaryItems = [
+  { href: "/dashboard", label: "Today", icon: Home },
+  { href: "/my-workout/plans", label: "Workouts", icon: Dumbbell },
+  { href: "/calories", label: "Food", icon: Utensils },
+  { href: "/progress", label: "Progress", icon: BarChart3 },
+  { href: "/daily-fit-tasks", label: "Wellness", icon: CheckSquare },
+  { href: "/settings", label: "Settings", icon: Settings }
+];
+
 const adminItems = [
   { href: "/admin", label: "Admin", icon: Shield },
+  { href: "/admin/audit", label: "Audit & Quality", icon: ClipboardList },
   { href: "/admin/foods", label: "Foods", icon: Soup },
   { href: "/admin/workouts", label: "Workouts", icon: Weight },
   { href: "/admin/settings", label: "Settings", icon: Settings }
@@ -102,7 +120,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
               <div className="space-y-1">
                 {group.items.map((item) => (
-                  <SidebarLink key={item.href} item={item} active={pathname === item.href || pathname.startsWith(`${item.href}/`)} />
+                  <SidebarLink key={`${item.href}-${item.label}`} item={item} active={pathname === item.href || pathname.startsWith(`${item.href}/`)} />
                 ))}
               </div>
             </div>
@@ -143,7 +161,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="lg:ml-72">
+      <main className="pb-20 lg:ml-72 lg:pb-0">
         <motion.div
           key={pathname}
           initial={{ opacity: 0, y: 8 }}
@@ -154,7 +172,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </motion.div>
       </main>
+      <MobilePrimaryNav pathname={pathname} />
     </div>
+  );
+}
+
+function MobilePrimaryNav({ pathname }: { pathname: string }) {
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t bg-card/95 px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 shadow-luxe backdrop-blur lg:hidden">
+      {mobilePrimaryItems.map((item) => {
+        const Icon = item.icon;
+        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              "flex min-h-14 flex-col items-center justify-center gap-1 rounded-md px-1 text-[11px] font-medium transition",
+              active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-primary"
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            <span className="truncate">{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -187,7 +230,7 @@ function MobileMenu({
                   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                   const Icon = item.icon;
                   return (
-                    <DialogClose key={item.href} asChild>
+                    <DialogClose key={`${item.href}-${item.label}`} asChild>
                       <Link
                         href={item.href}
                         className={cn(

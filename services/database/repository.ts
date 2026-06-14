@@ -41,6 +41,7 @@ import type {
   WorkoutSessionSummary
 } from "@/types";
 import { scaleFoodMacros, sumFoodLogs } from "@/services/nutrition/calculations";
+import { normalizeSavedTargets, type SavedTargets } from "@/services/nutrition/targets";
 
 function mockDelay<T>(value: T) {
   return Promise.resolve(value);
@@ -244,7 +245,7 @@ function mapGeneratedSessionToWorkoutSession(session: UserWorkoutSession): Worko
     plan_id: session.user_workout_plan_id,
     plan_day_id: session.plan_day_id,
     workout_day_name: session.day_title,
-    workout_category: "Generated plan",
+    workout_category: "Imported plan",
     workout_name: session.day_title,
     started_at: session.started_at || date,
     completed_at: session.completed_at,
@@ -529,8 +530,7 @@ export async function getGlobalFoods(
 }
 
 export async function getCalorieTargets(userId: string) {
-  const fallback = { daily_calories: 2200, protein_g: 150, carbs_g: 250, fat_g: 70, water_ml: 2500 };
-  if (!canUseUserData(userId)) return mockDelay(fallback);
+  if (!canUseUserData(userId)) return mockDelay<SavedTargets | null>(null);
 
   const { data, error } = await supabase!
     .from("calorie_targets")
@@ -540,10 +540,10 @@ export async function getCalorieTargets(userId: string) {
 
   if (error) {
     console.warn("FitLife Hub could not load calorie targets.", error.message);
-    return fallback;
+    return null;
   }
 
-  return data ?? fallback;
+  return normalizeSavedTargets(data as Partial<SavedTargets> | null);
 }
 
 export async function upsertCalorieTargets({
@@ -948,7 +948,8 @@ export async function getNutritionWeek(userId: string, weekStart: string) {
     const totals = sumFoodLogs(dayLogs);
     return {
       date,
-      planned_calories: toNumber(targets.daily_calories, 2200),
+      planned_calories: toNumber(targets?.daily_calories, 0),
+      has_targets: Boolean(targets),
       calories: totals.calories,
       protein_g: totals.protein_g,
       carbs_g: totals.carbs_g,
@@ -1246,53 +1247,88 @@ export async function addFoodToMealPlan({
 }
 
 export async function markMealPlanItemDone(item: MealPlanItem) {
-  if (item.status === "done") return { item, log: null as FoodLog | null };
-
-  const logPayload = {
-    user_id: item.user_id,
-    food_item_id: item.food_item_id,
-    user_food_item_id: item.user_food_item_id,
-    log_date: item.plan_date,
-    meal_type: item.meal_type,
-    food_name: item.food_name,
-    serving_size: item.serving_size,
-    quantity: item.quantity,
-    calories: item.calories,
-    protein_g: item.protein_g,
-    carbs_g: item.carbs_g,
-    fat_g: item.fat_g,
-    notes: item.notes
-  };
-
-  if (!supabase) {
-    const log = { ...logPayload, id: crypto.randomUUID() } as FoodLog;
+  if (!canUseUserData(item.user_id)) {
     return {
-      item: { ...item, status: "done", food_log_id: log.id, completed_at: new Date().toISOString() } as MealPlanItem,
-      log
+      item: {
+        ...item,
+        status: "done",
+        food_log_id: item.food_log_id ?? crypto.randomUUID(),
+        completed_at: item.completed_at ?? new Date().toISOString()
+      } as MealPlanItem,
+      log: null as FoodLog | null,
+      already_done: item.status === "done" || Boolean(item.food_log_id)
     };
   }
+
+  const latestResult = await supabase!
+    .from("user_meal_plan_items")
+    .select("*")
+    .eq("id", item.id)
+    .eq("user_id", item.user_id)
+    .maybeSingle();
+  if (latestResult.error) throw latestResult.error;
+  if (!latestResult.data) throw new Error("Meal plan item not found.");
+
+  const latest = latestResult.data as MealPlanItem;
+  if (latest.status === "done" || latest.food_log_id) return { item: latest, log: null as FoodLog | null, already_done: true };
+
+  const completedAt = new Date().toISOString();
+  const claimed = await supabase!
+    .from("user_meal_plan_items")
+    .update({ status: "done", completed_at: completedAt })
+    .eq("id", latest.id)
+    .eq("user_id", latest.user_id)
+    .is("food_log_id", null)
+    .neq("status", "done")
+    .select("*")
+    .maybeSingle();
+  if (claimed.error) throw claimed.error;
+  if (!claimed.data) {
+    const reread = await supabase!
+      .from("user_meal_plan_items")
+      .select("*")
+      .eq("id", latest.id)
+      .eq("user_id", latest.user_id)
+      .maybeSingle();
+    if (reread.error) throw reread.error;
+    return { item: (reread.data as MealPlanItem | null) ?? latest, log: null as FoodLog | null, already_done: true };
+  }
+
+  const claimedItem = claimed.data as MealPlanItem;
+
+  const logPayload = {
+    user_id: claimedItem.user_id,
+    food_item_id: claimedItem.food_item_id,
+    user_food_item_id: claimedItem.user_food_item_id,
+    log_date: claimedItem.plan_date,
+    meal_type: claimedItem.meal_type,
+    food_name: claimedItem.food_name,
+    serving_size: claimedItem.serving_size,
+    quantity: claimedItem.quantity,
+    calories: claimedItem.calories,
+    protein_g: claimedItem.protein_g,
+    carbs_g: claimedItem.carbs_g,
+    fat_g: claimedItem.fat_g,
+    notes: claimedItem.notes
+  };
 
   const inserted = await supabase!.from("food_logs").insert(logPayload).select("*").single();
   if (inserted.error) throw inserted.error;
 
   const updated = await supabase!
     .from("user_meal_plan_items")
-    .update({ status: "done", food_log_id: inserted.data.id, completed_at: new Date().toISOString() })
-    .eq("id", item.id)
+    .update({ food_log_id: inserted.data.id, completed_at: completedAt })
+    .eq("id", claimedItem.id)
+    .eq("user_id", claimedItem.user_id)
     .select("*")
     .single();
 
   if (updated.error) throw updated.error;
-  return { item: updated.data as MealPlanItem, log: inserted.data as FoodLog };
+  return { item: updated.data as MealPlanItem, log: inserted.data as FoodLog, already_done: false };
 }
 
 export async function deleteMealPlanItem(item: MealPlanItem) {
   if (!canUseUserData(item.user_id)) return mockDelay(true);
-
-  if (item.food_log_id) {
-    const logDelete = await supabase!.from("food_logs").delete().eq("id", item.food_log_id).eq("user_id", item.user_id);
-    if (logDelete.error) throw logDelete.error;
-  }
 
   const { error } = await supabase!.from("user_meal_plan_items").delete().eq("id", item.id);
   if (error) throw error;
@@ -2403,7 +2439,7 @@ export async function getGeneratedWorkoutPlan(userId: string) {
     .maybeSingle();
 
   if (error) {
-    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load the generated workout plan.", error.message);
+    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load the active workout plan.", error.message);
     return null;
   }
 
@@ -2424,7 +2460,7 @@ export async function getGeneratedWorkoutPlans(userId: string) {
     .order("created_at", { ascending: false });
 
   if (error) {
-    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load generated workout plans.", error.message);
+    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load imported workout plans.", error.message);
     return [];
   }
 
@@ -2534,7 +2570,7 @@ export async function getGeneratedWorkoutHistory(userId: string, limit = 100) {
     .limit(limit);
 
   if (error) {
-    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load generated workout history.", error.message);
+    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load workout history.", error.message);
     return [];
   }
 
@@ -2552,7 +2588,7 @@ export async function getGeneratedWorkoutActivity(userId: string, limit = 180) {
     .limit(limit);
 
   if (error) {
-    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load generated workout activity.", error.message);
+    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load workout activity.", error.message);
     return [];
   }
 
@@ -3234,11 +3270,7 @@ export async function adminUpsertWelcomeMessage(payload: {
 }
 
 export async function adminListUsers() {
-  if (!supabase) {
-    return mockDelay([
-      { id: "mock-user", email: "member@ssgym.test", full_name: "FitLife Hub Member", role: "admin" }
-    ]);
-  }
+  if (!supabase) return mockDelay([]);
   const { data, error } = await supabase!.from("profiles").select("id,email,full_name,role,created_at").order("created_at", { ascending: false });
   if (error) {
     console.warn("FitLife Hub could not load admin users.", error.message);

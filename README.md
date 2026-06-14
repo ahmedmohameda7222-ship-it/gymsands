@@ -120,7 +120,7 @@ Implemented server routes include:
 - wger exercise import
 - Resend email sending
 - Strava OAuth and activity import
-- Google Health OAuth-ready placeholder import
+- Google Health web OAuth import path, requiring configured credentials and approved scopes
 - Google Maps Routes distance/time lookup
 
 Health Connect is Android-native and is documented in-app as future Android support only.

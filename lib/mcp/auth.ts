@@ -61,7 +61,7 @@ export function unauthorizedMcpResponse(request: Request, message = "FitLife Cha
   );
 }
 
-function rateLimit(connectionId: string) {
+function inMemoryRateLimit(connectionId: string) {
   const now = Date.now();
   const current = rateLimitBuckets.get(connectionId);
   if (!current || current.resetAt <= now) {
@@ -71,6 +71,47 @@ function rateLimit(connectionId: string) {
   current.count += 1;
   if (current.count > MAX_REQUESTS_PER_MINUTE) {
     return `Rate limit exceeded. Try again after ${Math.ceil((current.resetAt - now) / 1000)} seconds.`;
+  }
+  return null;
+}
+
+async function rateLimit(supabase: SupabaseClient, connectionId: string) {
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  const resetIso = new Date(now + 60_000).toISOString();
+
+  const existing = await supabase
+    .from("mcp_rate_limits")
+    .select("connection_id,request_count,window_start,reset_at")
+    .eq("connection_id", connectionId)
+    .maybeSingle();
+
+  if (existing.error) {
+    return inMemoryRateLimit(connectionId);
+  }
+
+  const row = existing.data as { request_count?: number | null; reset_at?: string | null } | null;
+  const resetAt = row?.reset_at ? Date.parse(row.reset_at) : 0;
+  if (!row || !Number.isFinite(resetAt) || resetAt <= now) {
+    const upsert = await supabase.from("mcp_rate_limits").upsert({
+      connection_id: connectionId,
+      request_count: 1,
+      window_start: nowIso,
+      reset_at: resetIso,
+      updated_at: nowIso
+    });
+    return upsert.error ? inMemoryRateLimit(connectionId) : null;
+  }
+
+  const nextCount = Number(row.request_count ?? 0) + 1;
+  const update = await supabase
+    .from("mcp_rate_limits")
+    .update({ request_count: nextCount, updated_at: nowIso })
+    .eq("connection_id", connectionId);
+  if (update.error) return inMemoryRateLimit(connectionId);
+
+  if (nextCount > MAX_REQUESTS_PER_MINUTE) {
+    return `Rate limit exceeded. Try again after ${Math.ceil((resetAt - now) / 1000)} seconds.`;
   }
   return null;
 }
@@ -102,7 +143,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
     return unauthorizedMcpResponse(request, "ChatGPT connection token is invalid or revoked.");
   }
 
-  const limitError = rateLimit(connection.id);
+  const limitError = await rateLimit(supabase, connection.id);
   if (limitError) return NextResponse.json({ error: limitError }, { status: 429 });
 
   const { data: profile, error: profileError } = await supabase

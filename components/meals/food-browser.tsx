@@ -17,7 +17,7 @@ import {
   getFoodKitchens,
   getFoodLibrary
 } from "@/services/database/repository";
-import { defaultTargets, remainingMacros, scaleFoodMacros, validateFoodLogInput } from "@/services/nutrition/calculations";
+import { scaleFoodMacros, validateFoodLogInput } from "@/services/nutrition/calculations";
 import { egyptianFoods, nutritionDisclaimer } from "@/data/egyptian-foods";
 import type { CustomMeal, FoodItem, FoodKitchen, FoodLog, FoodSubcategory, MealPlanItem, MealType } from "@/types";
 
@@ -134,7 +134,7 @@ function FoodBrowserInner({
     let active = true;
     setIsLoadingKitchenData(true);
     Promise.all([
-      getFoodKitchens(user?.id ?? "mock-user"),
+      getFoodKitchens(user?.id ?? ""),
       user?.id ? getCustomMeals(user.id) : Promise.resolve<CustomMeal[]>([])
     ])
       .then(([kitchenData, meals]) => {
@@ -184,7 +184,7 @@ function FoodBrowserInner({
     setIsLoadingFoods(true);
     setNotice(null);
 
-    getFoodLibrary(user?.id ?? "mock-user", debouncedQuery, {
+    getFoodLibrary(user?.id ?? "", debouncedQuery, {
       kitchen: selectedKitchen?.name,
       kitchenId: selectedKitchen?.id,
       subcategoryId: selectedSubcategory?.id,
@@ -274,16 +274,10 @@ function FoodBrowserInner({
       const log = await addGlobalFoodToToday({ userId: user.id, food, quantity, mealType, date: logDate });
       setLogs((current) => [log, ...current]);
       onLogAdded?.(log);
-      const remaining = remainingMacros(defaultTargets, {
-        calories: totals.calories + macros.calories,
-        protein_g: totals.protein_g + macros.protein_g,
-        carbs_g: totals.carbs_g + macros.carbs_g,
-        fat_g: totals.fat_g + macros.fat_g
-      });
       setNotice({
         type: "success",
         title: "Added to today's calories",
-        description: `${mealType}: +${macros.calories} kcal. Remaining target: ${remaining.calories} kcal.`
+        description: `${mealType}: +${macros.calories} kcal logged.`
       });
     } catch (error) {
       setNotice({

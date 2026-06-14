@@ -3,7 +3,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { env, hasSupabaseEnv } from "@/lib/env";
 
-const rememberPreferenceKey = "ss-gym-remember-session";
+const rememberPreferenceKey = "fitlife-hub-remember-session";
 
 function getBrowserStorage(): Storage | undefined {
   if (typeof window === "undefined") return undefined;

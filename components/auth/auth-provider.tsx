@@ -35,7 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const loadProfile = useCallback(async (userId: string, email?: string | null) => {
-    if (!supabase || mockAuthEnabled) {
+    if (mockAuthEnabled) {
       setProfile({
         id: "mock-user",
         email: "member@fitlife.test",
@@ -45,6 +45,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       });
+      return;
+    }
+
+    if (!supabase) {
+      console.warn("FitLife Hub Supabase configuration is missing. Mock auth is disabled.");
+      setProfile(null);
       return;
     }
 
@@ -91,9 +97,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function boot() {
       try {
-        if (!supabase || mockAuthEnabled) {
+        if (mockAuthEnabled) {
           setSession({ user: mockUser } as Session);
           await loadProfile("mock-user");
+          return;
+        }
+
+        if (!supabase) {
+          console.warn("FitLife Hub Supabase configuration is missing. Sign in is disabled until it is configured.");
+          setSession(null);
+          setProfile(null);
           return;
         }
 

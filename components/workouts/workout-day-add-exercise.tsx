@@ -97,8 +97,8 @@ function selectedList(value: string) {
 export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const draftKey = useMemo(() => workoutStorageKey(["workout-day-draft", user?.id ?? "mock-user", day.id]), [day.id, user?.id]);
-  const filterKey = useMemo(() => workoutStorageKey(["workout-day-add-filter", user?.id ?? "mock-user", day.id]), [day.id, user?.id]);
+  const draftKey = useMemo(() => workoutStorageKey(["workout-day-draft", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
+  const filterKey = useMemo(() => workoutStorageKey(["workout-day-add-filter", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const [draft, setDraft] = useState<EditorDraft>(() => draftFromDay(day));
   const [filters, setFilters] = useState<AddFilterState>(emptyFilterState);
   const [filterOptions, setFilterOptions] = useState<WorkoutFilterOptions>(emptyOptions);

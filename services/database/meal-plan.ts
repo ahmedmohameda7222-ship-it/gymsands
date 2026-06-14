@@ -233,20 +233,44 @@ export async function markDirectMealPlanItemDone(item: MealPlanItem) {
     return { item: latest, log: null as FoodLog | null, already_done: true };
   }
 
+  const completedAt = new Date().toISOString();
+  const claimed = await supabase!
+    .from("user_meal_plan_items")
+    .update({ status: "done", completed_at: completedAt })
+    .eq("id", latest.id)
+    .eq("user_id", latest.user_id)
+    .is("food_log_id", null)
+    .neq("status", "done")
+    .select("*")
+    .maybeSingle();
+  if (claimed.error) throw claimed.error;
+  if (!claimed.data) {
+    const reread = await supabase!
+      .from("user_meal_plan_items")
+      .select("*")
+      .eq("id", latest.id)
+      .eq("user_id", latest.user_id)
+      .maybeSingle();
+    if (reread.error) throw reread.error;
+    return { item: normalizeMealPlanItem((reread.data ?? latestResult.data) as unknown as Record<string, unknown>), log: null as FoodLog | null, already_done: true };
+  }
+
+  const claimedItem = normalizeMealPlanItem(claimed.data as unknown as Record<string, unknown>);
+
   const logPayload = {
-    user_id: latest.user_id,
-    food_item_id: latest.food_item_id,
-    user_food_item_id: latest.user_food_item_id,
-    log_date: latest.plan_date,
-    meal_type: latest.meal_type,
-    food_name: latest.food_name,
-    serving_size: latest.serving_size,
-    quantity: latest.quantity,
-    calories: latest.calories,
-    protein_g: latest.protein_g,
-    carbs_g: latest.carbs_g,
-    fat_g: latest.fat_g,
-    notes: latest.notes
+    user_id: claimedItem.user_id,
+    food_item_id: claimedItem.food_item_id,
+    user_food_item_id: claimedItem.user_food_item_id,
+    log_date: claimedItem.plan_date,
+    meal_type: claimedItem.meal_type,
+    food_name: claimedItem.food_name,
+    serving_size: claimedItem.serving_size,
+    quantity: claimedItem.quantity,
+    calories: claimedItem.calories,
+    protein_g: claimedItem.protein_g,
+    carbs_g: claimedItem.carbs_g,
+    fat_g: claimedItem.fat_g,
+    notes: claimedItem.notes
   };
 
   const inserted = await supabase!.from("food_logs").insert(logPayload).select("*").single();
@@ -254,9 +278,9 @@ export async function markDirectMealPlanItemDone(item: MealPlanItem) {
 
   const updated = await supabase!
     .from("user_meal_plan_items")
-    .update({ status: "done", food_log_id: inserted.data.id, completed_at: new Date().toISOString() })
-    .eq("id", latest.id)
-    .eq("user_id", latest.user_id)
+    .update({ food_log_id: inserted.data.id, completed_at: completedAt })
+    .eq("id", claimedItem.id)
+    .eq("user_id", claimedItem.user_id)
     .select("*")
     .single();
   if (updated.error) throw updated.error;

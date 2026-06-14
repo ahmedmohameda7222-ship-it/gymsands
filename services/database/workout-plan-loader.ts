@@ -6,10 +6,10 @@ import { isUuid } from "@/lib/utils";
 import type { UserWorkoutPlan, UserWorkoutPlanDay, UserWorkoutPlanExercise, Weekday, Workout, WorkoutPlanDaySession } from "@/types";
 
 const fullPlanSelect =
-  "id,user_id,name,is_active,is_default,template_id,source,chatgpt_source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,session_duration_minutes,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,session_duration_minutes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,weight,rest_seconds,tempo,instructions,exercise_url,video_url,custom_video_url,block_type,sort_order,order_index,notes))";
+  "id,user_id,name,is_active,is_default,template_id,source,goal,description,chatgpt_source,archived_at,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,session_duration_minutes,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,session_duration_minutes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,weight,rest_seconds,tempo,instructions,exercise_url,video_url,custom_video_url,block_type,sort_order,order_index,notes))";
 
 const compatPlanSelect =
-  "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
+  "id,user_id,name,is_active,is_default,template_id,source,goal,description,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
 
 const legacyPlanSelect =
   "id,user_id,name,is_active,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
@@ -60,6 +60,8 @@ function isCompatibilityError(error: { code?: string; message?: string } | null 
     message.includes("schema cache") ||
     message.includes("column") ||
     message.includes("chatgpt_source") ||
+    message.includes("archived_at") ||
+    message.includes("description") ||
     message.includes("session_duration_minutes") ||
     message.includes("block_type") ||
     message.includes("weight") ||
@@ -134,6 +136,9 @@ function normalizePlan(row: RawWorkoutPlan): UserWorkoutPlan {
     is_default: typeof row.is_default === "boolean" ? row.is_default : bool(row.is_active),
     template_id: nullableText(row.template_id),
     source: source as UserWorkoutPlan["source"],
+    goal: nullableText(row.goal),
+    description: nullableText(row.description),
+    archived_at: nullableText(row.archived_at),
     match_score: num(row.match_score),
     match_explanation: nullableText(row.match_explanation),
     match_reasons: Array.isArray(row.match_reasons) ? (row.match_reasons as string[]) : [],
@@ -176,7 +181,8 @@ export async function getAllUserWorkoutPlans(userId: string) {
 
 export async function getActiveWorkoutPlan(userId: string) {
   const plans = await getAllUserWorkoutPlans(userId);
-  return plans.find((plan) => plan.is_active) ?? plans.find((plan) => plan.is_default) ?? null;
+  const availablePlans = plans.filter((plan) => !plan.archived_at);
+  return availablePlans.find((plan) => plan.is_active) ?? availablePlans.find((plan) => plan.is_default) ?? null;
 }
 
 export async function getWorkoutPlanById(userId: string, planId: string) {
@@ -214,6 +220,93 @@ export function workoutFromLoadedPlanExercise(exercise: UserWorkoutPlanExercise)
 
 export function workoutsFromLoadedPlanDay(day: UserWorkoutPlan["days"][number] | null | undefined): Workout[] {
   return (day?.exercises ?? []).map(workoutFromLoadedPlanExercise);
+}
+
+export async function archiveWorkoutPlan(userId: string, planId: string) {
+  if (!supabase || !isUuid(userId) || !isUuid(planId)) return true;
+  const update = await supabase!
+    .from("user_workout_plans")
+    .update({ archived_at: new Date().toISOString(), is_active: false, is_default: false })
+    .eq("id", planId)
+    .eq("user_id", userId);
+  if (update.error && isCompatibilityError(update.error)) {
+    const fallback = await supabase!.from("user_workout_plans").update({ is_active: false }).eq("id", planId).eq("user_id", userId);
+    if (fallback.error) throw fallback.error;
+    return true;
+  }
+  if (update.error) throw update.error;
+  return true;
+}
+
+export async function updateWorkoutPlanMetadata(userId: string, planId: string, patch: { name?: string; goal?: string | null; description?: string | null }) {
+  if (!supabase || !isUuid(userId) || !isUuid(planId)) return true;
+  const payload = {
+    ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+    ...(patch.goal !== undefined ? { goal: patch.goal?.trim() || null } : {}),
+    ...(patch.description !== undefined ? { description: patch.description?.trim() || null } : {})
+  };
+  if (!Object.keys(payload).length) return true;
+  const update = await supabase!.from("user_workout_plans").update(payload).eq("id", planId).eq("user_id", userId);
+  if (update.error && isCompatibilityError(update.error)) {
+    const fallbackPayload = "name" in payload ? { name: payload.name } : {};
+    if (!Object.keys(fallbackPayload).length) return true;
+    const fallback = await supabase!.from("user_workout_plans").update(fallbackPayload).eq("id", planId).eq("user_id", userId);
+    if (fallback.error) throw fallback.error;
+    return true;
+  }
+  if (update.error) throw update.error;
+  return true;
+}
+
+export async function duplicateWorkoutPlan(userId: string, planId: string) {
+  if (!supabase || !isUuid(userId) || !isUuid(planId)) return null;
+  const plan = await getWorkoutPlanById(userId, planId);
+  if (!plan) throw new Error("Workout plan not found.");
+
+  const insert = await supabase!
+    .from("user_workout_plans")
+    .insert({
+      user_id: userId,
+      name: `${plan.name} copy`,
+      is_active: false,
+      is_default: false,
+      source: plan.source ?? "manual",
+      goal: plan.goal ?? null,
+      description: plan.description ?? null,
+      chatgpt_source: Boolean(plan.chatgpt_source || plan.source === "chatgpt" || plan.source === "imported"),
+      program_duration_weeks: plan.program_duration_weeks ?? null,
+      days_per_week: plan.days_per_week ?? null,
+      session_duration_minutes: plan.session_duration_minutes ?? null
+    })
+    .select("id")
+    .single();
+  if (insert.error) throw insert.error;
+
+  for (const day of plan.days) {
+    const dayInsert = await supabase!
+      .from("user_workout_plan_days")
+      .insert({
+        plan_id: insert.data.id,
+        day_number: day.day_number,
+        day_name: day.day_name,
+        weekday: day.weekday,
+        notes: day.notes
+      })
+      .select("id")
+      .single();
+    if (dayInsert.error) throw dayInsert.error;
+    if (!day.exercises.length) continue;
+    const rows = day.exercises.map((exercise, index) => exerciseInsertRow(dayInsert.data.id, workoutFromLoadedPlanExercise(exercise), index));
+    const fullInsert = await supabase!.from("user_workout_plan_exercises").insert(rows);
+    if (fullInsert.error && isCompatibilityError(fullInsert.error)) {
+      const compatible = await supabase!.from("user_workout_plan_exercises").insert(rows.map(compatibleExerciseRow));
+      if (compatible.error) throw compatible.error;
+    } else if (fullInsert.error) {
+      throw fullInsert.error;
+    }
+  }
+
+  return insert.data.id as string;
 }
 
 export async function getWorkoutPlanDayById(dayId: string) {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, ChefHat, ChevronLeft, ChevronRight, Copy, Droplets, Plus, Save, Trash2 } from "lucide-react";
+import { BarChart3, ChefHat, ChevronLeft, ChevronRight, Copy, Droplets, Plus, Save, Settings2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,24 +25,9 @@ import {
   upsertCalorieTargets
 } from "@/services/database/repository";
 import { percent, sumFoodLogs } from "@/services/nutrition/calculations";
+import { estimateTdee, targetOrSetupDefault, type SavedTargets } from "@/services/nutrition/targets";
 import { todayIso } from "@/lib/utils";
 import type { DailyNutritionSummary, FoodLog, WaterLog } from "@/types";
-
-type Targets = {
-  daily_calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
-  water_ml: number;
-};
-
-const fallbackTargets: Targets = {
-  daily_calories: 2200,
-  protein_g: 150,
-  carbs_g: 250,
-  fat_g: 70,
-  water_ml: 2500
-};
 
 function mixColor(start: [number, number, number], end: [number, number, number], amount: number) {
   const clamped = Math.min(1, Math.max(0, amount));
@@ -85,10 +70,19 @@ export default function CaloriesPage() {
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [weekData, setWeekData] = useState<DailyNutritionSummary[]>([]);
   const [waterLogs, setWaterLogs] = useState<WaterLog[]>([]);
-  const [targets, setTargets] = useState<Targets>(fallbackTargets);
+  const [targets, setTargets] = useState<SavedTargets | null>(null);
   const [targetForm, setTargetForm] = useState({ dailyCalories: "2200", proteinG: "150", carbsG: "250", fatG: "70", waterMl: "2500" });
   const [customWaterMl, setCustomWaterMl] = useState("250");
   const [isSavingTargets, setIsSavingTargets] = useState(false);
+  const [showTargetEditor, setShowTargetEditor] = useState(false);
+  const [wizard, setWizard] = useState({
+    age: "",
+    heightCm: "",
+    weightKg: "",
+    sex: "male" as "female" | "male",
+    activityLevel: "moderate" as "sedentary" | "light" | "moderate" | "very_active",
+    goal: "maintenance" as "fat_loss" | "maintenance" | "muscle_gain" | "recomposition"
+  });
 
   const weekStart = useMemo(() => startOfWeek(selectedDate), [selectedDate]);
 
@@ -113,14 +107,8 @@ export default function CaloriesPage() {
       toast({ title: "Could not load calorie tracker", description: error instanceof Error ? error.message : "Please refresh and try again." })
     );
     getCalorieTargets(user.id).then((savedTargets) => {
-      const normalized = {
-        daily_calories: Number(savedTargets.daily_calories),
-        protein_g: Number(savedTargets.protein_g),
-        carbs_g: Number(savedTargets.carbs_g),
-        fat_g: Number(savedTargets.fat_g),
-        water_ml: Number(savedTargets.water_ml ?? 2500)
-      };
-      setTargets(normalized);
+      const normalized = targetOrSetupDefault(savedTargets);
+      setTargets(savedTargets);
       setTargetForm({
         dailyCalories: String(normalized.daily_calories),
         proteinG: String(normalized.protein_g),
@@ -141,10 +129,13 @@ export default function CaloriesPage() {
 
   const totals = useMemo(() => sumFoodLogs(logs), [logs]);
   const waterTotal = useMemo(() => waterLogs.reduce((sum, log) => sum + Number(log.amount_ml), 0), [waterLogs]);
+  const hasTargets = Boolean(targets);
+  const displayTargets = targetOrSetupDefault(targets);
 
   async function copyYesterday() {
+    if (!user?.id) return toast({ title: "Sign in required", description: "Please sign in before copying meals." });
     try {
-      const copied = await copyYesterdaysMeals(user?.id ?? "mock-user");
+      const copied = await copyYesterdaysMeals(user.id);
       if (selectedDate === todayIso()) setLogs((current) => [...copied, ...current]);
       await loadWeek();
       toast({ title: "Yesterday copied", description: `${copied.length} food items added to today.` });
@@ -154,6 +145,7 @@ export default function CaloriesPage() {
   }
 
   async function saveTargets() {
+    if (!user?.id) return toast({ title: "Sign in required", description: "Please sign in before saving targets." });
     const dailyCalories = Number(targetForm.dailyCalories);
     const proteinG = Number(targetForm.proteinG);
     const carbsG = Number(targetForm.carbsG);
@@ -167,7 +159,7 @@ export default function CaloriesPage() {
     setIsSavingTargets(true);
     try {
       const saved = await upsertCalorieTargets({
-        userId: user?.id ?? "mock-user",
+        userId: user.id,
         dailyCalories,
         proteinG,
         carbsG,
@@ -182,6 +174,7 @@ export default function CaloriesPage() {
         water_ml: Number(saved.water_ml ?? waterMl)
       };
       setTargets(normalized);
+      setShowTargetEditor(false);
       await loadWeek();
       toast({ title: "Targets saved", description: `${normalized.daily_calories} kcal target is active.` });
     } catch (error) {
@@ -192,8 +185,9 @@ export default function CaloriesPage() {
   }
 
   async function addWater(amountMl: number) {
+    if (!user?.id) return toast({ title: "Sign in required", description: "Please sign in before logging water." });
     try {
-      const log = await addWaterLog(user?.id ?? "mock-user", selectedDate, amountMl);
+      const log = await addWaterLog(user.id, selectedDate, amountMl);
       setWaterLogs((current) => [log, ...current]);
       await loadWeek();
     } catch (error) {
@@ -202,8 +196,9 @@ export default function CaloriesPage() {
   }
 
   async function removeWater(log: WaterLog) {
+    if (!user?.id) return toast({ title: "Sign in required", description: "Please sign in before deleting water logs." });
     try {
-      await deleteWaterLog(user?.id ?? "mock-user", log.id);
+      await deleteWaterLog(user.id, log.id);
       setWaterLogs((current) => current.filter((item) => item.id !== log.id));
       await loadWeek();
     } catch (error) {
@@ -218,6 +213,25 @@ export default function CaloriesPage() {
   function handleLogAdded(log: FoodLog) {
     if (log.log_date === selectedDate) setLogs((current) => [log, ...current]);
     loadWeek().catch(() => undefined);
+  }
+
+  function calculateTargetsFromWizard() {
+    const age = Number(wizard.age);
+    const heightCm = Number(wizard.heightCm);
+    const weightKg = Number(wizard.weightKg);
+    if (!age || !heightCm || !weightKg) {
+      toast({ title: "Complete target setup", description: "Enter age, height, and weight before estimating targets." });
+      return;
+    }
+    const estimate = estimateTdee({ ...wizard, age, heightCm, weightKg });
+    setTargetForm({
+      dailyCalories: String(estimate.daily_calories),
+      proteinG: String(estimate.protein_g),
+      carbsG: String(estimate.carbs_g),
+      fatG: String(estimate.fat_g),
+      waterMl: String(estimate.water_ml)
+    });
+    toast({ title: "Targets estimated", description: `Estimated maintenance is ${estimate.maintenance_calories} kcal. Review and save to use these targets.` });
   }
 
   return (
@@ -248,27 +262,62 @@ export default function CaloriesPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <TrackerCard label="Calories" value={totals.calories} target={targets.daily_calories} unit="kcal" />
-        <TrackerCard label="Protein" value={totals.protein_g} target={targets.protein_g} unit="g" />
-        <TrackerCard label="Carbs" value={totals.carbs_g} target={targets.carbs_g} unit="g" />
-        <TrackerCard label="Fat" value={totals.fat_g} target={targets.fat_g} unit="g" />
-        <TrackerCard label="Water" value={Math.round(waterTotal / 1000 * 10) / 10} target={Math.round(targets.water_ml / 1000 * 10) / 10} unit="L" />
+        <TrackerCard label="Calories" value={totals.calories} target={displayTargets.daily_calories} unit="kcal" hasTarget={hasTargets} />
+        <TrackerCard label="Protein" value={totals.protein_g} target={displayTargets.protein_g} unit="g" hasTarget={hasTargets} />
+        <TrackerCard label="Carbs" value={totals.carbs_g} target={displayTargets.carbs_g} unit="g" hasTarget={hasTargets} />
+        <TrackerCard label="Fat" value={totals.fat_g} target={displayTargets.fat_g} unit="g" hasTarget={hasTargets} />
+        <TrackerCard label="Water" value={Math.round(waterTotal / 1000 * 10) / 10} target={Math.round(displayTargets.water_ml / 1000 * 10) / 10} unit="L" hasTarget={hasTargets} />
       </div>
 
       <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Daily target</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-6">
-          <TargetField label="Calories" value={targetForm.dailyCalories} onChange={(dailyCalories) => setTargetForm((current) => ({ ...current, dailyCalories }))} />
-          <TargetField label="Protein g" value={targetForm.proteinG} onChange={(proteinG) => setTargetForm((current) => ({ ...current, proteinG }))} />
-          <TargetField label="Carbs g" value={targetForm.carbsG} onChange={(carbsG) => setTargetForm((current) => ({ ...current, carbsG }))} />
-          <TargetField label="Fat g" value={targetForm.fatG} onChange={(fatG) => setTargetForm((current) => ({ ...current, fatG }))} />
-          <TargetField label="Water ml" value={targetForm.waterMl} onChange={(waterMl) => setTargetForm((current) => ({ ...current, waterMl }))} />
-          <Button className="self-end" onClick={saveTargets} disabled={isSavingTargets}>
-            <Save className="h-4 w-4" />
-            {isSavingTargets ? "Saving..." : "Save target"}
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Daily target</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {hasTargets ? "Targets are saved for calorie, macro, and water reporting." : "No targets saved yet. Set targets to unlock remaining macros and weekly adherence."}
+            </p>
+          </div>
+          <Button variant={showTargetEditor || !hasTargets ? "default" : "outline"} onClick={() => setShowTargetEditor((current) => !current)}>
+            <Settings2 className="h-4 w-4" />
+            {showTargetEditor || !hasTargets ? "Hide target setup" : "Edit targets"}
           </Button>
+        </CardHeader>
+        <CardContent>
+          {showTargetEditor || !hasTargets ? (
+            <div className="grid gap-3 md:grid-cols-6">
+              <div className="rounded-md border bg-muted/40 p-3 md:col-span-6">
+                <p className="font-semibold">Goal-based target setup</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-6">
+                  <TargetField label="Age" value={wizard.age} onChange={(age) => setWizard((current) => ({ ...current, age }))} />
+                  <TargetField label="Height cm" value={wizard.heightCm} onChange={(heightCm) => setWizard((current) => ({ ...current, heightCm }))} />
+                  <TargetField label="Weight kg" value={wizard.weightKg} onChange={(weightKg) => setWizard((current) => ({ ...current, weightKg }))} />
+                  <SelectField label="Sex" value={wizard.sex} values={["male", "female"]} onChange={(sex) => setWizard((current) => ({ ...current, sex: sex as "male" | "female" }))} />
+                  <SelectField label="Activity" value={wizard.activityLevel} values={["sedentary", "light", "moderate", "very_active"]} onChange={(activityLevel) => setWizard((current) => ({ ...current, activityLevel: activityLevel as typeof current.activityLevel }))} />
+                  <SelectField label="Goal" value={wizard.goal} values={["fat_loss", "maintenance", "muscle_gain", "recomposition"]} onChange={(goal) => setWizard((current) => ({ ...current, goal: goal as typeof current.goal }))} />
+                  <Button className="md:col-span-6" type="button" variant="outline" onClick={calculateTargetsFromWizard}>
+                    Estimate targets
+                  </Button>
+                </div>
+              </div>
+              <TargetField label="Calories" value={targetForm.dailyCalories} onChange={(dailyCalories) => setTargetForm((current) => ({ ...current, dailyCalories }))} />
+              <TargetField label="Protein g" value={targetForm.proteinG} onChange={(proteinG) => setTargetForm((current) => ({ ...current, proteinG }))} />
+              <TargetField label="Carbs g" value={targetForm.carbsG} onChange={(carbsG) => setTargetForm((current) => ({ ...current, carbsG }))} />
+              <TargetField label="Fat g" value={targetForm.fatG} onChange={(fatG) => setTargetForm((current) => ({ ...current, fatG }))} />
+              <TargetField label="Water ml" value={targetForm.waterMl} onChange={(waterMl) => setTargetForm((current) => ({ ...current, waterMl }))} />
+              <Button className="self-end" onClick={saveTargets} disabled={isSavingTargets}>
+                <Save className="h-4 w-4" />
+                {isSavingTargets ? "Saving..." : "Save target"}
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-3 text-sm md:grid-cols-5">
+              <SavedTarget label="Calories" value={`${displayTargets.daily_calories} kcal`} />
+              <SavedTarget label="Protein" value={`${displayTargets.protein_g}g`} />
+              <SavedTarget label="Carbs" value={`${displayTargets.carbs_g}g`} />
+              <SavedTarget label="Fat" value={`${displayTargets.fat_g}g`} />
+              <SavedTarget label="Water" value={`${displayTargets.water_ml} ml`} />
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -287,7 +336,7 @@ export default function CaloriesPage() {
         <div className="space-y-4">
           <WaterCard
             waterTotal={waterTotal}
-            waterGoal={targets.water_ml}
+            waterGoal={displayTargets.water_ml}
             customWaterMl={customWaterMl}
             setCustomWaterMl={setCustomWaterMl}
             waterLogs={waterLogs}
@@ -324,7 +373,7 @@ function TargetField({ label, value, onChange }: { label: string; value: string;
   );
 }
 
-function TrackerCard({ label, value, target, unit }: { label: string; value: number; target: number; unit: string }) {
+function TrackerCard({ label, value, target, unit, hasTarget }: { label: string; value: number; target: number; unit: string; hasTarget: boolean }) {
   const progressValue = percent(value, target);
   const isCalories = label.toLowerCase() === "calories";
   return (
@@ -332,14 +381,40 @@ function TrackerCard({ label, value, target, unit }: { label: string; value: num
       <CardContent className="pt-5">
         <p className="text-sm text-muted-foreground">{label}</p>
         <p className="mt-2 text-2xl font-bold">{value}{unit}</p>
-        <p className="mt-1 text-sm text-muted-foreground">Target {target}{unit}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{hasTarget ? `Target ${target}${unit}` : "No target set"}</p>
         <Progress
-          value={progressValue}
+          value={hasTarget ? progressValue : 0}
           className="mt-4"
           indicatorStyle={isCalories ? { background: calorieProgressColor(progressValue) } : undefined}
         />
       </CardContent>
     </Card>
+  );
+}
+
+function SelectField({ label, value, values, onChange }: { label: string; value: string; values: string[]; onChange: (value: string) => void }) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {values.map((item) => (
+          <option key={item} value={item}>{item.replace("_", " ")}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function SavedTarget({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border p-3">
+      <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p>
+      <p className="mt-1 font-semibold">{value}</p>
+    </div>
   );
 }
 
@@ -373,10 +448,12 @@ function WeeklyTracker({
               className={`rounded-md border p-3 text-left transition hover:border-primary hover:bg-blue-50 ${day.date === selectedDate ? "border-primary bg-blue-50" : "bg-white"}`}
             >
               <p className="font-semibold">{formatDay(day.date)}</p>
-              <p className="mt-2 text-sm text-muted-foreground">{day.calories} / {day.planned_calories} kcal</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {day.has_targets ? `${day.calories} / ${day.planned_calories} kcal` : `${day.calories} kcal logged`}
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">P {day.protein_g}g | C {day.carbs_g}g | F {day.fat_g}g</p>
               <p className="mt-1 text-xs text-muted-foreground">Water {day.water_ml} ml</p>
-              <Progress value={percent(day.calories, day.planned_calories)} className="mt-3" />
+              <Progress value={day.has_targets ? percent(day.calories, day.planned_calories) : 0} className="mt-3" />
             </button>
           ))}
         </div>

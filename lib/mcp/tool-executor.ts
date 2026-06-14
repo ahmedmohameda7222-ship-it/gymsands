@@ -135,7 +135,7 @@ async function findFood(ctx: McpContext, query: string, limit = 5): Promise<{ ex
 async function targets(ctx: McpContext) {
   const { data, error } = await ctx.supabase.from("calorie_targets").select("*").eq("user_id", ctx.userId).maybeSingle();
   if (error) throw new Error(error.message);
-  return data ?? { daily_calories: 2200, protein_g: 150, carbs_g: 250, fat_g: 70, water_ml: 2500 };
+  return data ?? null;
 }
 
 async function waterLogged(ctx: McpContext, date: string) {
@@ -151,11 +151,13 @@ async function caloriesForDate(ctx: McpContext, date: string) {
   ]);
   if (logs.error) throw new Error(logs.error.message);
   const totals = sumMacros((logs.data ?? []) as Array<Record<string, unknown>>);
+  const dailyTarget = target ? num(target.daily_calories) : null;
   return {
     date,
-    target: target.daily_calories,
+    target: dailyTarget,
     consumed: totals.calories,
-    remaining: Math.max(0, num(target.daily_calories) - totals.calories),
+    remaining: dailyTarget === null ? null : Math.max(0, dailyTarget - totals.calories),
+    needs_target_setup: dailyTarget === null,
     macros: { ...totals, targets: target },
     logs: logs.data ?? []
   };
@@ -752,7 +754,8 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         const date = cleanDate(input.date);
         const target = await targets(ctx);
         const logged = await waterLogged(ctx, date);
-        return ok({ ok: true, date, target_ml: target.water_ml, logged_ml: logged, remaining_ml: Math.max(0, num(target.water_ml) - logged) });
+        const targetMl = target ? num(target.water_ml) : null;
+        return ok({ ok: true, date, target_ml: targetMl, logged_ml: logged, remaining_ml: targetMl === null ? null : Math.max(0, targetMl - logged), needs_target_setup: targetMl === null });
       }
 
       case "delete_water_log": {

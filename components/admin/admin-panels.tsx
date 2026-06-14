@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { RefreshCcw, Save, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, RefreshCcw, Save, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -429,6 +429,129 @@ export function AdminApiStatusPanel() {
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+export function AdminAuditPanel() {
+  const { session } = useAuth();
+  const { toast } = useToast();
+  const [adminLogs, setAdminLogs] = useState<any[]>([]);
+  const [mcpLogs, setMcpLogs] = useState<any[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+
+  async function loadAuditLogs() {
+    const response = await fetch("/api/admin/audit-logs", {
+      headers: { Authorization: `Bearer ${session?.access_token ?? ""}` }
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return toast({ title: "Could not load audit logs", description: data.error ?? "Please try again." });
+    setAdminLogs(data.admin_logs ?? []);
+    setMcpLogs(data.mcp_logs ?? []);
+    setWarnings(data.warnings ?? []);
+  }
+
+  useEffect(() => {
+    if (session?.access_token) loadAuditLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.access_token]);
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-primary" /> Admin audit logs</CardTitle>
+          <CardDescription>Who changed what, when the audit table is available.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button variant="outline" onClick={loadAuditLogs}><RefreshCcw className="h-4 w-4" /> Refresh</Button>
+          {warnings.map((warning) => <p key={warning} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{warning}</p>)}
+          {adminLogs.map((log) => (
+            <div key={log.id} className="rounded-md border p-3 text-sm">
+              <p className="font-semibold">{log.action}</p>
+              <p className="text-muted-foreground">{log.entity_table ?? "entity"} {log.entity_id ?? ""} | {new Date(log.created_at).toLocaleString()}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Admin: {log.admin_user_id}</p>
+            </div>
+          ))}
+          {!adminLogs.length ? <p className="text-sm text-muted-foreground">No admin audit rows found yet.</p> : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>MCP audit logs</CardTitle>
+          <CardDescription>Successful, denied, and failed ChatGPT connector tool calls.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {mcpLogs.map((log) => (
+            <div key={log.id} className="rounded-md border p-3 text-sm">
+              <p className="font-semibold">{log.tool_name} | {log.status}</p>
+              <p className="text-muted-foreground">{new Date(log.created_at).toLocaleString()} | User {log.user_id}</p>
+              {log.error_message ? <p className="mt-1 text-destructive">{log.error_message}</p> : null}
+            </div>
+          ))}
+          {!mcpLogs.length ? <p className="text-sm text-muted-foreground">No MCP audit rows found yet.</p> : null}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export function AdminQualityPanel() {
+  const { session } = useAuth();
+  const { toast } = useToast();
+  const [quality, setQuality] = useState({
+    foodsMissingMacros: 0,
+    missingExerciseVideos: 0,
+    duplicateFoods: 0,
+    failedImports: 0
+  });
+
+  async function loadQuality() {
+    if (!session?.access_token) return;
+    const response = await fetch("/api/admin/quality", {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      toast({ title: "Quality data unavailable", description: data.error ?? "Please try again." });
+      return;
+    }
+    if (data.warnings?.length) toast({ title: "Quality data incomplete", description: data.warnings.join(" ") });
+    setQuality({
+      foodsMissingMacros: data.foods_missing_macros ?? 0,
+      missingExerciseVideos: data.missing_exercise_videos ?? 0,
+      duplicateFoods: data.duplicate_food_names ?? 0,
+      failedImports: data.failed_import_rows ?? 0
+    });
+  }
+
+  useEffect(() => {
+    if (session?.access_token) loadQuality();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.access_token]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-primary" /> Content quality dashboard</CardTitle>
+        <CardDescription>Counts are based on real rows available to the admin account.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <QualityMetric label="Foods missing macros" value={quality.foodsMissingMacros} />
+        <QualityMetric label="Missing exercise videos" value={quality.missingExerciseVideos} />
+        <QualityMetric label="Duplicate food names" value={quality.duplicateFoods} />
+        <QualityMetric label="Failed import rows" value={quality.failedImports} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function QualityMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border p-3">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-2 text-2xl font-bold">{value}</p>
+    </div>
   );
 }
 

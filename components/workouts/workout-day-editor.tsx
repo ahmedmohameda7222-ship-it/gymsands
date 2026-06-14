@@ -53,7 +53,7 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-  const draftKey = useMemo(() => workoutStorageKey(["workout-day-draft", user?.id ?? "mock-user", day.id]), [day.id, user?.id]);
+  const draftKey = useMemo(() => workoutStorageKey(["workout-day-draft", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const [draft, setDraft] = useState<EditorDraft>(() => draftFromDay(day));
   const [isHydrated, setIsHydrated] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
