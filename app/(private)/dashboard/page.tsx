@@ -103,7 +103,8 @@ export default function DashboardPage() {
       calories: targets.daily_calories,
       protein_g: targets.protein_g,
       carbs_g: targets.carbs_g,
-      fat_g: targets.fat_g
+      fat_g: targets.fat_g,
+      water_ml: targets.water_ml
     },
     totals
   );
