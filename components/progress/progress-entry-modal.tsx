@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
+import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
 import { addProgressEntry } from "@/services/database/repository";
 import { todayIso } from "@/lib/utils";
 import type { ProgressEntry } from "@/types";
@@ -24,7 +25,13 @@ const measurementFields = [
   ["calves_cm", "Calves cm", "Calves measurement, e.g. 38"],
   ["neck_cm", "Neck cm", "Neck measurement, e.g. 38"],
   ["body_fat_percent", "Manual body fat %", "Optional manual estimate, e.g. 22"]
-];
+] as const;
+
+function invalidPositiveNumber(value: string) {
+  if (!value.trim()) return false;
+  const parsed = Number(value);
+  return !Number.isFinite(parsed) || parsed < 0;
+}
 
 export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntry) => void }) {
   const { user } = useAuth();
@@ -35,11 +42,21 @@ export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntr
   const [waist, setWaist] = useState("");
   const [notes, setNotes] = useState("");
   const [measurements, setMeasurements] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   async function save() {
+    setFormError("");
     if (!user?.id) {
       toast({ title: "Sign in required", description: "Please sign in before saving progress entries." });
+      return;
+    }
+    if (!entryDate) {
+      setFormError("Choose a date before saving this progress entry.");
+      return;
+    }
+    if (invalidPositiveNumber(weight) || invalidPositiveNumber(waist) || Object.values(measurements).some(invalidPositiveNumber)) {
+      setFormError("Measurements must be positive numbers. Empty optional fields are allowed.");
       return;
     }
 
@@ -72,8 +89,12 @@ export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntr
       setWaist("");
       setNotes("");
       setMeasurements({});
+      setFormError("");
     } catch (error) {
-      toast({ title: "Could not save progress", description: error instanceof Error ? error.message : "Please try again." });
+      logRecoverableError("progress-entry.save", error);
+      const message = userSafeError(error, "Progress could not be saved. Your typed values are still here, so you can retry.");
+      setFormError(message);
+      toast({ title: "Could not save progress", description: message });
     } finally {
       setIsSaving(false);
     }
@@ -92,23 +113,24 @@ export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntr
           <DialogTitle>Add progress entry</DialogTitle>
           <DialogDescription>Track body weight and real body measurements. Progress photos are managed privately on the Progress page.</DialogDescription>
         </DialogHeader>
+        {formError ? <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{formError}</p> : null}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="progress-date">Date</Label>
-            <Input id="progress-date" type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} />
+            <Input id="progress-date" type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} aria-invalid={!entryDate} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="progress-weight">Body weight kg</Label>
-            <Input id="progress-weight" type="number" step="0.1" min="0" value={weight} onChange={(event) => setWeight(event.target.value)} placeholder="Weight in kg, e.g. 72.5" />
+            <Input id="progress-weight" type="number" step="0.1" min="0" value={weight} onChange={(event) => setWeight(event.target.value)} placeholder="Weight in kg, e.g. 72.5" aria-invalid={invalidPositiveNumber(weight)} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="progress-waist">Waist cm</Label>
-            <Input id="progress-waist" type="number" step="0.1" min="0" value={waist} onChange={(event) => setWaist(event.target.value)} placeholder="Waist in cm, e.g. 82" />
+            <Input id="progress-waist" type="number" step="0.1" min="0" value={waist} onChange={(event) => setWaist(event.target.value)} placeholder="Waist in cm, e.g. 82" aria-invalid={invalidPositiveNumber(waist)} />
           </div>
           {measurementFields.map(([id, label, placeholder]) => (
             <div key={id} className="space-y-2">
               <Label htmlFor={id}>{label}</Label>
-              <Input id={id} type="number" min="0" step="0.1" value={measurements[id] ?? ""} onChange={(event) => setMeasurements((current) => ({ ...current, [id]: event.target.value }))} placeholder={placeholder} />
+              <Input id={id} type="number" min="0" step="0.1" value={measurements[id] ?? ""} onChange={(event) => setMeasurements((current) => ({ ...current, [id]: event.target.value }))} placeholder={placeholder} aria-invalid={invalidPositiveNumber(measurements[id] ?? "")} />
             </div>
           ))}
           <div className="space-y-2 sm:col-span-2">
