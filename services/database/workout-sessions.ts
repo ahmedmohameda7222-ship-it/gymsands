@@ -13,6 +13,6 @@ export {
   startWorkoutDaySession,
   startWorkoutSession,
   updateWorkoutSessionDuration
-} from "./repository";
+} from "./legacy-repository";
 
-export type { WorkoutSetLogInput } from "./repository";
+export type { WorkoutSetLogInput } from "./legacy-repository";

@@ -1,1 +1,1 @@
-export { getOnboarding, saveOnboarding, updateProfile } from "./repository";
+export { getOnboarding, saveOnboarding, updateProfile } from "./legacy-repository";

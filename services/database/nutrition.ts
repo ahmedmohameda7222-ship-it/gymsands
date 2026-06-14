@@ -34,6 +34,6 @@ export {
   upsertCalorieTargets,
   upsertCustomMeal,
   upsertUserFood
-} from "./repository";
+} from "./legacy-repository";
 
-export type { CustomMealInput, UserFoodInput } from "./repository";
+export type { CustomMealInput, UserFoodInput } from "./legacy-repository";

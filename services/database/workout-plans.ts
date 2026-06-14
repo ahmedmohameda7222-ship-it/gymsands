@@ -14,6 +14,6 @@ export {
   updateUserWorkoutPlanDay,
   weekDays,
   workoutsFromPlanDay
-} from "./repository";
+} from "./legacy-repository";
 
-export type { WorkoutPlanDayInput } from "./repository";
+export type { WorkoutPlanDayInput } from "./legacy-repository";

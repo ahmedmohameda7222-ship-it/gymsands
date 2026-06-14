@@ -7,6 +7,6 @@ export {
   getWorkouts,
   resetUserExerciseVideo,
   upsertUserExerciseVideo
-} from "./repository";
+} from "./legacy-repository";
 
-export type { WorkoutFilterOptions, WorkoutFilters } from "./repository";
+export type { WorkoutFilterOptions, WorkoutFilters } from "./legacy-repository";

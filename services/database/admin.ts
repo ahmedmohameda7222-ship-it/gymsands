@@ -7,4 +7,4 @@ export {
   adminUpsertGlobalFood,
   adminUpsertWelcomeMessage,
   adminUpsertWorkout
-} from "./repository";
+} from "./legacy-repository";

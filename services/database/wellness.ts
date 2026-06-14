@@ -11,6 +11,6 @@ export {
   upsertFitnessHabit,
   upsertSleepRecoveryLog,
   upsertSupplementLog
-} from "./repository";
+} from "./legacy-repository";
 
-export type { DailyFitTaskInput, FitnessHabitInput, SleepRecoveryInput, SupplementLogInput } from "./repository";
+export type { DailyFitTaskInput, FitnessHabitInput, SleepRecoveryInput, SupplementLogInput } from "./legacy-repository";

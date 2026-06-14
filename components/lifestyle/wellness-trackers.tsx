@@ -67,30 +67,28 @@ export function WellnessDashboard() {
   const [reminders, setReminders] = useState<BrowserReminder[]>([]);
   const [notificationState, setNotificationState] = useState("unchecked");
 
-  async function load() {
-    if (!user?.id) return;
-    const weekStart = startOfWeek(today);
-    const [todayHabits, todaySupplements, sleepHistory, weekNutrition, workoutActivity] = await Promise.all([
-      getFitnessHabits(user.id, today),
-      getSupplementLogs(user.id, today),
-      getSleepRecoveryHistory(user.id, 14),
-      getNutritionWeek(user.id, weekStart),
-      getWorkoutActivity(user.id)
-    ]);
-    setHabits(todayHabits);
-    setSupplements(todaySupplements);
-    setSleepLogs(sleepHistory);
-    setNutrition(weekNutrition.find((day) => day.date === today) ?? null);
-    setWorkouts(workoutActivity);
-    setReminders(getBrowserReminders(user.id));
-    if (typeof window !== "undefined" && "Notification" in window) setNotificationState(Notification.permission);
-    else setNotificationState("unsupported");
-  }
-
   useEffect(() => {
+    async function load() {
+      if (!user?.id) return;
+      const weekStart = startOfWeek(today);
+      const [todayHabits, todaySupplements, sleepHistory, weekNutrition, workoutActivity] = await Promise.all([
+        getFitnessHabits(user.id, today),
+        getSupplementLogs(user.id, today),
+        getSleepRecoveryHistory(user.id, 14),
+        getNutritionWeek(user.id, weekStart),
+        getWorkoutActivity(user.id)
+      ]);
+      setHabits(todayHabits);
+      setSupplements(todaySupplements);
+      setSleepLogs(sleepHistory);
+      setNutrition(weekNutrition.find((day) => day.date === today) ?? null);
+      setWorkouts(workoutActivity);
+      setReminders(getBrowserReminders(user.id));
+      if (typeof window !== "undefined" && "Notification" in window) setNotificationState(Notification.permission);
+      else setNotificationState("unsupported");
+    }
     load().catch((error) => toast({ title: "Could not load wellness dashboard", description: error instanceof Error ? error.message : "Please try again." }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [toast, user?.id]);
 
   const checklist = buildDailyChecklist({ nutrition, habits, supplements, sleep: sleepLogs, workoutActivity: workouts });
   const readiness = calculateReadiness(sleepLogs);
@@ -139,12 +137,13 @@ export function DailyFitTasksTracker() {
   const [items, setItems] = useState<DailyFitTask[]>([]);
   const [draft, setDraft] = useState({ id: "", title: "", notes: "" });
 
-  async function load() {
-    if (!user?.id) return;
-    setItems(await getDailyFitTasks(user.id, today));
-  }
-
-  useEffect(() => { load().catch((error) => toast({ title: "Could not load tasks", description: error instanceof Error ? error.message : "Please try again." })); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user?.id]);
+  useEffect(() => {
+    async function load() {
+      if (!user?.id) return;
+      setItems(await getDailyFitTasks(user.id, today));
+    }
+    load().catch((error) => toast({ title: "Could not load tasks", description: error instanceof Error ? error.message : "Please try again." }));
+  }, [toast, user?.id]);
 
   async function saveTask(title = draft.title, notes = draft.notes) {
     if (!user?.id) return;
@@ -168,14 +167,15 @@ export function HabitsTracker() {
   const [history, setHistory] = useState<FitnessHabit[]>([]);
   const [draft, setDraft] = useState({ id: "", name: "", notes: "" });
 
-  async function load() {
-    if (!user?.id) return;
-    const [todayItems, historical] = await Promise.all([getFitnessHabits(user.id, today), getFitnessHabitHistory(user.id, 30)]);
-    setItems(todayItems);
-    setHistory(historical);
-  }
-
-  useEffect(() => { load().catch((error) => toast({ title: "Could not load habits", description: error instanceof Error ? error.message : "Please try again." })); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user?.id]);
+  useEffect(() => {
+    async function load() {
+      if (!user?.id) return;
+      const [todayItems, historical] = await Promise.all([getFitnessHabits(user.id, today), getFitnessHabitHistory(user.id, 30)]);
+      setItems(todayItems);
+      setHistory(historical);
+    }
+    load().catch((error) => toast({ title: "Could not load habits", description: error instanceof Error ? error.message : "Please try again." }));
+  }, [toast, user?.id]);
 
   async function saveHabit(name = draft.name, notes = draft.notes) {
     if (!user?.id) return;
@@ -206,14 +206,15 @@ export function SupplementsTracker() {
   const [history, setHistory] = useState<SupplementLog[]>([]);
   const [draft, setDraft] = useState({ id: "", name: "", dose: "", time: "", reminder: "" });
 
-  async function load() {
-    if (!user?.id) return;
-    const [todayItems, historical] = await Promise.all([getSupplementLogs(user.id, today), getSupplementHistory(user.id, 30)]);
-    setItems(todayItems);
-    setHistory(historical);
-  }
-
-  useEffect(() => { load().catch((error) => toast({ title: "Could not load supplements", description: error instanceof Error ? error.message : "Please try again." })); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user?.id]);
+  useEffect(() => {
+    async function load() {
+      if (!user?.id) return;
+      const [todayItems, historical] = await Promise.all([getSupplementLogs(user.id, today), getSupplementHistory(user.id, 30)]);
+      setItems(todayItems);
+      setHistory(historical);
+    }
+    load().catch((error) => toast({ title: "Could not load supplements", description: error instanceof Error ? error.message : "Please try again." }));
+  }, [toast, user?.id]);
 
   async function saveSupplement() { if (!user?.id) return; const payload: SupplementLogInput = { id: draft.id || undefined, user_id: user.id, supplement_date: today, name: draft.name, dose: draft.dose, time: draft.time, reminder: draft.reminder, taken_today: items.find((item) => item.id === draft.id)?.taken_today ?? false }; const saved = await upsertSupplementLog(payload); setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""))); setHistory((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); setDraft({ id: "", name: "", dose: "", time: "", reminder: "" }); }
   async function toggleSupplement(item: SupplementLog) { const saved = await upsertSupplementLog({ ...item, taken_today: !item.taken_today }); setItems((current) => current.map((supplement) => supplement.id === saved.id ? saved : supplement)); setHistory((current) => [saved, ...current.filter((supplement) => supplement.id !== saved.id)]); }
@@ -230,8 +231,10 @@ export function SleepRecoveryTracker() {
   const [items, setItems] = useState<EnhancedSleepRecoveryLog[]>([]);
   const [draft, setDraft] = useState({ id: "", hours_slept: "", sleep_quality: "", bedtime: "", wake_time: "", recovery_level: "", fatigue_level: "", soreness_level: "", stress_level: "", notes: "" });
 
-  async function load() { if (!user?.id) return; setItems(await getSleepRecoveryHistory(user.id, 30)); }
-  useEffect(() => { load().catch((error) => toast({ title: "Could not load recovery logs", description: error instanceof Error ? error.message : "Please try again." })); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user?.id]);
+  useEffect(() => {
+    async function load() { if (!user?.id) return; setItems(await getSleepRecoveryHistory(user.id, 30)); }
+    load().catch((error) => toast({ title: "Could not load recovery logs", description: error instanceof Error ? error.message : "Please try again." }));
+  }, [toast, user?.id]);
 
   async function saveLog() {
     if (!user?.id) return;
@@ -253,8 +256,10 @@ export function PersonalRecordsTracker() {
   const [items, setItems] = useState<PersonalRecord[]>([]);
   const [draft, setDraft] = useState({ id: "", exercise_name: "", record_type: "Max weight", weight_kg: "", reps: "", record_date: today, notes: "" });
 
-  async function load() { if (!user?.id) return; setItems(await getPersonalRecords(user.id)); }
-  useEffect(() => { load().catch((error) => toast({ title: "Could not load records", description: error instanceof Error ? error.message : "Please try again." })); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user?.id]);
+  useEffect(() => {
+    async function load() { if (!user?.id) return; setItems(await getPersonalRecords(user.id)); }
+    load().catch((error) => toast({ title: "Could not load records", description: error instanceof Error ? error.message : "Please try again." }));
+  }, [toast, user?.id]);
   async function saveRecord() { if (!user?.id) return; const payload: PersonalRecordInput = { id: draft.id || undefined, user_id: user.id, exercise_name: draft.exercise_name, record_type: draft.record_type, weight_kg: draft.weight_kg ? Number(draft.weight_kg) : null, reps: draft.reps ? Number(draft.reps) : null, record_date: draft.record_date || today, notes: draft.notes }; const saved = await upsertPersonalRecord(payload); setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort((a, b) => a.exercise_name.localeCompare(b.exercise_name) || b.record_date.localeCompare(a.record_date))); setDraft({ id: "", exercise_name: "", record_type: "Max weight", weight_kg: "", reps: "", record_date: today, notes: "" }); }
   async function removeRecord(item: PersonalRecord) { if (!user?.id) return; await deletePersonalRecord(user.id, item.id); setItems((current) => current.filter((record) => record.id !== item.id)); }
   return <TrackerShell title="Personal Records" description="Track best lifts, reps, and custom exercise milestones."><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4"><Field label="Exercise name" value={draft.exercise_name} onChange={(exercise_name) => setDraft((current) => ({ ...current, exercise_name }))} /><SelectField label="Record type" value={draft.record_type} values={recordTypes} onChange={(record_type) => setDraft((current) => ({ ...current, record_type }))} /><Field label="Weight kg" type="number" value={draft.weight_kg} onChange={(weight_kg) => setDraft((current) => ({ ...current, weight_kg }))} /><Field label="Reps" type="number" value={draft.reps} onChange={(reps) => setDraft((current) => ({ ...current, reps }))} /><Field label="Date" type="date" value={draft.record_date} onChange={(record_date) => setDraft((current) => ({ ...current, record_date }))} /><Field label="Notes" value={draft.notes} onChange={(notes) => setDraft((current) => ({ ...current, notes }))} /><Button className="self-end" onClick={saveRecord} disabled={!draft.exercise_name.trim()}><Save className="h-4 w-4" />Save Record</Button></div><ItemGrid>{items.map((item) => <ActionCard key={item.id} title={`${item.exercise_name} | ${item.record_type}`} detail={[item.weight_kg ? `${item.weight_kg} kg` : null, item.reps ? `${item.reps} reps` : null, item.record_date, item.notes].filter(Boolean).join(" | ")} onEdit={() => setDraft({ id: item.id, exercise_name: item.exercise_name, record_type: item.record_type, weight_kg: item.weight_kg === null ? "" : String(item.weight_kg), reps: item.reps === null ? "" : String(item.reps), record_date: item.record_date, notes: item.notes ?? "" })} onDelete={() => removeRecord(item)} />)}</ItemGrid></TrackerShell>;

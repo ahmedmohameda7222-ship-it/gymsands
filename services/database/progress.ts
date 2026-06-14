@@ -4,6 +4,6 @@ export {
   getPersonalRecords,
   getProgressEntries,
   upsertPersonalRecord
-} from "./repository";
+} from "./legacy-repository";
 
-export type { PersonalRecordInput } from "./repository";
+export type { PersonalRecordInput } from "./legacy-repository";

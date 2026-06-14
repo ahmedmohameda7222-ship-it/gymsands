@@ -2,4 +2,4 @@ export {
   adminUpdateWelcomeSettings,
   adminUpsertWelcomeMessage,
   getWelcomeSettings
-} from "./repository";
+} from "./legacy-repository";

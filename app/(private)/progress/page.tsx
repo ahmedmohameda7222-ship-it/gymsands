@@ -61,27 +61,26 @@ export default function ProgressPage() {
 
   const currentWeekStart = useMemo(() => startOfWeek(todayIso()), []);
 
-  async function loadProgress() {
-    if (!user?.id) return;
-    const [progressEntries, activity, weekData, progressPhotos] = await Promise.all([
-      getProgressEntries(user.id),
-      getWorkoutActivity(user.id),
-      getNutritionWeek(user.id, currentWeekStart),
-      getProgressPhotos(user.id).catch((error) => {
-        console.warn("FitLife Hub could not load private progress photos.", error instanceof Error ? error.message : error);
-        return [] as ProgressPhoto[];
-      })
-    ]);
-    setEntries(progressEntries);
-    setWorkoutActivity(activity);
-    setNutritionWeek(weekData);
-    setPhotos(progressPhotos);
-  }
-
   useEffect(() => {
+    async function loadProgress() {
+      if (!user?.id) return;
+      const [progressEntries, activity, weekData, progressPhotos] = await Promise.all([
+        getProgressEntries(user.id),
+        getWorkoutActivity(user.id),
+        getNutritionWeek(user.id, currentWeekStart),
+        getProgressPhotos(user.id).catch((error) => {
+          console.warn("FitLife Hub could not load private progress photos.", error instanceof Error ? error.message : error);
+          return [] as ProgressPhoto[];
+        })
+      ]);
+      setEntries(progressEntries);
+      setWorkoutActivity(activity);
+      setNutritionWeek(weekData);
+      setPhotos(progressPhotos);
+    }
+
     loadProgress().catch((error) => toast({ title: "Could not load progress", description: error instanceof Error ? error.message : "Please refresh and try again." }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toast, user?.id]);
+  }, [currentWeekStart, toast, user?.id]);
 
   useEffect(() => {
     const storedGoal = window.localStorage.getItem(GOAL_WEIGHT_STORAGE_KEY);
@@ -333,7 +332,7 @@ function ProgressPhotoManager({ userId, photos, setPhotos }: { userId: string | 
 }
 
 function PhotoCard({ photo, onDelete }: { photo: ProgressPhoto; onDelete: (photo: ProgressPhoto) => void }) {
-  return <div className="rounded-md border p-2"><div className="aspect-[3/4] overflow-hidden rounded-md bg-slate-100">{photo.signed_url ? <img src={photo.signed_url} alt={`${photo.photo_type} progress ${photo.taken_on}`} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Signed URL unavailable</div>}</div><div className="mt-2 flex items-center justify-between gap-2"><div><p className="font-semibold capitalize">{photo.photo_type}</p><p className="text-xs text-muted-foreground">{photo.taken_on}</p></div><Button size="icon" variant="ghost" onClick={() => onDelete(photo)}><Trash2 className="h-4 w-4" /></Button></div></div>;
+  return <div className="rounded-md border p-2"><ProgressPhotoImage url={photo.signed_url} label={`${photo.photo_type} progress ${photo.taken_on}`} unavailableLabel="Signed URL unavailable" /><div className="mt-2 flex items-center justify-between gap-2"><div><p className="font-semibold capitalize">{photo.photo_type}</p><p className="text-xs text-muted-foreground">{photo.taken_on}</p></div><Button size="icon" variant="ghost" onClick={() => onDelete(photo)}><Trash2 className="h-4 w-4" /></Button></div></div>;
 }
 
 function PhotoSelect({ label, value, photos, onChange }: { label: string; value: string; photos: ProgressPhoto[]; onChange: (value: string) => void }) {
@@ -341,7 +340,22 @@ function PhotoSelect({ label, value, photos, onChange }: { label: string; value:
 }
 
 function ComparisonPhoto({ label, photo }: { label: string; photo: ProgressPhoto }) {
-  return <div className="rounded-md border p-3"><p className="mb-2 font-semibold">{label}: {photo.taken_on} ({photo.photo_type})</p><div className="aspect-[3/4] overflow-hidden rounded-md bg-slate-100">{photo.signed_url ? <img src={photo.signed_url} alt={`${label} progress ${photo.taken_on}`} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Photo unavailable</div>}</div></div>;
+  return <div className="rounded-md border p-3"><p className="mb-2 font-semibold">{label}: {photo.taken_on} ({photo.photo_type})</p><ProgressPhotoImage url={photo.signed_url} label={`${label} progress ${photo.taken_on}`} unavailableLabel="Photo unavailable" /></div>;
+}
+
+function ProgressPhotoImage({ url, label, unavailableLabel }: { url: string | null; label: string; unavailableLabel: string }) {
+  return url ? (
+    <div
+      role="img"
+      aria-label={label}
+      className="aspect-[3/4] rounded-md bg-slate-100 bg-cover bg-center"
+      style={{ backgroundImage: `url("${url}")` }}
+    />
+  ) : (
+    <div className="flex aspect-[3/4] items-center justify-center rounded-md bg-slate-100 text-sm text-muted-foreground">
+      {unavailableLabel}
+    </div>
+  );
 }
 
 function EditProgressCard({ draft, setDraft, onSave, onCancel }: { draft: EditDraft; setDraft: Dispatch<SetStateAction<EditDraft | null>>; onSave: () => void; onCancel: () => void }) {
