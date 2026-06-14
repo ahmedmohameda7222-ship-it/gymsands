@@ -61,6 +61,20 @@ export function unauthorizedMcpResponse(request: Request, message = "FitLife Cha
   );
 }
 
+function serviceUnavailable(message: string, details?: unknown) {
+  return NextResponse.json(
+    process.env.NODE_ENV === "development" && details ? { error: message, details } : { error: message },
+    { status: 503 }
+  );
+}
+
+function badMcpRequest(message: string, details?: unknown) {
+  return NextResponse.json(
+    process.env.NODE_ENV === "development" && details ? { error: message, details } : { error: message },
+    { status: 400 }
+  );
+}
+
 function inMemoryRateLimit(connectionId: string) {
   const now = Date.now();
   const current = rateLimitBuckets.get(connectionId);
@@ -121,14 +135,14 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
   if (!token) return unauthorizedMcpResponse(request);
 
   if (!serverEnv.supabaseServiceRoleKey) {
-    return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY is required for FitLife MCP." }, { status: 503 });
+    return serviceUnavailable("Supabase service role is required for FitLife MCP.");
   }
 
   let tokenHash = "";
   try {
     tokenHash = hashConnectionToken(token);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid MCP token configuration." }, { status: 503 });
+    return serviceUnavailable("FitLife MCP token configuration is incomplete.", error);
   }
 
   const supabase = createSupabaseAdminClient();
@@ -138,7 +152,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
     .eq("token_hash", tokenHash)
     .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) return badMcpRequest("Could not verify the ChatGPT connection token.", error);
   if (!connection || !connection.is_active || connection.revoked_at) {
     return unauthorizedMcpResponse(request, "ChatGPT connection token is invalid or revoked.");
   }
@@ -152,7 +166,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
     .eq("id", connection.user_id)
     .maybeSingle();
 
-  if (profileError) return NextResponse.json({ error: profileError.message }, { status: 400 });
+  if (profileError) return badMcpRequest("Could not load the linked FitLife profile.", profileError);
   if (!profile) return unauthorizedMcpResponse(request, "Linked FitLife profile was not found.", 403);
 
   await supabase.from("chatgpt_connections").update({ last_used_at: new Date().toISOString() }).eq("id", connection.id);
