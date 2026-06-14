@@ -552,14 +552,14 @@ export async function upsertCalorieTargets({
   proteinG,
   carbsG,
   fatG,
-  waterMl = 2500
+  waterMl
 }: {
   userId: string;
   dailyCalories: number;
   proteinG: number;
   carbsG: number;
   fatG: number;
-  waterMl?: number;
+  waterMl: number;
 }) {
   const payload = {
     user_id: userId,

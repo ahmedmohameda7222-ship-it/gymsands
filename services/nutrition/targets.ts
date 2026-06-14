@@ -6,35 +6,23 @@ export type SavedTargets = {
   water_ml: number;
 };
 
-export const targetSetupDefaults: SavedTargets = {
-  daily_calories: 2200,
-  protein_g: 150,
-  carbs_g: 250,
-  fat_g: 70,
-  water_ml: 2500
-};
-
 export function normalizeSavedTargets(value: Partial<SavedTargets> | null | undefined): SavedTargets | null {
   if (!value) return null;
   const dailyCalories = positiveNumber(value.daily_calories);
   const protein = nonNegativeNumber(value.protein_g);
   const carbs = nonNegativeNumber(value.carbs_g);
   const fat = nonNegativeNumber(value.fat_g);
-  const water = positiveNumber(value.water_ml);
+  const water = nonNegativeNumber(value.water_ml);
 
   if (!dailyCalories && !protein && !carbs && !fat && !water) return null;
 
   return {
-    daily_calories: dailyCalories || targetSetupDefaults.daily_calories,
+    daily_calories: dailyCalories,
     protein_g: protein,
     carbs_g: carbs,
     fat_g: fat,
-    water_ml: water || targetSetupDefaults.water_ml
+    water_ml: water
   };
-}
-
-export function targetOrSetupDefault(value: SavedTargets | null): SavedTargets {
-  return value ?? targetSetupDefaults;
 }
 
 export function estimateTdee({

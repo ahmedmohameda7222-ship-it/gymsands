@@ -104,6 +104,7 @@ export function WeeklyOverviewPage() {
 
   const statuses = weekData.map((day) => ({ date: day.date, ...statusForDay(defaultPlan, day.date, activity) }));
   const weeklyTotal = weekData.reduce((sum, day) => sum + day.calories, 0);
+  const hasTargets = weekData.some((day) => day.has_targets);
   const weeklyTarget = weekData.reduce((sum, day) => sum + day.planned_calories, 0);
   const trainedDays = statuses.filter((status) => status.trained).length;
   const skippedDays = statuses.filter((status) => status.skipped).length;
@@ -130,7 +131,7 @@ export function WeeklyOverviewPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <OverviewMetric label="Weekly total" value={`${weeklyTotal} kcal`} detail={`${weeklyTarget} kcal planned`} />
+        <OverviewMetric label="Weekly total" value={`${weeklyTotal} kcal`} detail={hasTargets ? `${weeklyTarget} kcal target` : "No calorie target set"} />
         <OverviewMetric label="Daily average" value={`${Math.round(weeklyTotal / 7)} kcal`} detail={`${loggedDays}/7 days logged`} />
         <OverviewMetric label="Trained days" value={trainedDays} detail="Workout completed or logged" />
         <OverviewMetric label="Skipped days" value={skippedDays} detail={defaultPlan ? "Expected from default plan" : "No default plan selected"} />
@@ -147,9 +148,9 @@ export function WeeklyOverviewPage() {
           <div>
             <div className="mb-2 flex items-center justify-between text-sm">
               <span className="font-semibold">Weekly progress</span>
-              <span className="text-muted-foreground">{weeklyTotal} / {weeklyTarget} kcal</span>
+              <span className="text-muted-foreground">{hasTargets ? `${weeklyTotal} / ${weeklyTarget} kcal` : `${weeklyTotal} kcal logged`}</span>
             </div>
-            <Progress value={percent(weeklyTotal, weeklyTarget)} />
+            {hasTargets ? <Progress value={percent(weeklyTotal, weeklyTarget)} /> : <p className="rounded-md border p-3 text-sm text-muted-foreground">Set calorie targets to unlock weekly adherence.</p>}
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
             {weekData.map((day) => {
@@ -160,9 +161,9 @@ export function WeeklyOverviewPage() {
                     <p className="font-semibold">{formatDay(day.date)}</p>
                     <Badge variant={status?.tone ?? "outline"}>{status?.label ?? "Unknown"}</Badge>
                   </div>
-                  <p className="mt-2 text-sm text-muted-foreground">{day.calories} / {day.planned_calories} kcal</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{day.has_targets ? `${day.calories} / ${day.planned_calories} kcal` : `${day.calories} kcal logged`}</p>
                   <p className="mt-1 text-xs text-muted-foreground">P {day.protein_g}g | C {day.carbs_g}g | F {day.fat_g}g</p>
-                  <Progress value={percent(day.calories, day.planned_calories)} className="mt-3" />
+                  {day.has_targets ? <Progress value={percent(day.calories, day.planned_calories)} className="mt-3" /> : null}
                 </div>
               );
             })}

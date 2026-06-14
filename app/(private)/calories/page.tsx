@@ -25,7 +25,7 @@ import {
   upsertCalorieTargets
 } from "@/services/database/repository";
 import { percent, sumFoodLogs } from "@/services/nutrition/calculations";
-import { estimateTdee, targetOrSetupDefault, type SavedTargets } from "@/services/nutrition/targets";
+import { estimateTdee, type SavedTargets } from "@/services/nutrition/targets";
 import { todayIso } from "@/lib/utils";
 import type { DailyNutritionSummary, FoodLog, WaterLog } from "@/types";
 
@@ -71,7 +71,7 @@ export default function CaloriesPage() {
   const [weekData, setWeekData] = useState<DailyNutritionSummary[]>([]);
   const [waterLogs, setWaterLogs] = useState<WaterLog[]>([]);
   const [targets, setTargets] = useState<SavedTargets | null>(null);
-  const [targetForm, setTargetForm] = useState({ dailyCalories: "2200", proteinG: "150", carbsG: "250", fatG: "70", waterMl: "2500" });
+  const [targetForm, setTargetForm] = useState({ dailyCalories: "", proteinG: "", carbsG: "", fatG: "", waterMl: "" });
   const [customWaterMl, setCustomWaterMl] = useState("250");
   const [isSavingTargets, setIsSavingTargets] = useState(false);
   const [showTargetEditor, setShowTargetEditor] = useState(false);
@@ -107,14 +107,13 @@ export default function CaloriesPage() {
       toast({ title: "Could not load calorie tracker", description: error instanceof Error ? error.message : "Please refresh and try again." })
     );
     getCalorieTargets(user.id).then((savedTargets) => {
-      const normalized = targetOrSetupDefault(savedTargets);
       setTargets(savedTargets);
       setTargetForm({
-        dailyCalories: String(normalized.daily_calories),
-        proteinG: String(normalized.protein_g),
-        carbsG: String(normalized.carbs_g),
-        fatG: String(normalized.fat_g),
-        waterMl: String(normalized.water_ml)
+        dailyCalories: savedTargets?.daily_calories ? String(savedTargets.daily_calories) : "",
+        proteinG: savedTargets?.protein_g ? String(savedTargets.protein_g) : "",
+        carbsG: savedTargets?.carbs_g ? String(savedTargets.carbs_g) : "",
+        fatG: savedTargets?.fat_g ? String(savedTargets.fat_g) : "",
+        waterMl: savedTargets?.water_ml ? String(savedTargets.water_ml) : ""
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,7 +129,8 @@ export default function CaloriesPage() {
   const totals = useMemo(() => sumFoodLogs(logs), [logs]);
   const waterTotal = useMemo(() => waterLogs.reduce((sum, log) => sum + Number(log.amount_ml), 0), [waterLogs]);
   const hasTargets = Boolean(targets);
-  const displayTargets = targetOrSetupDefault(targets);
+  const emptyTargets = { daily_calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, water_ml: 0 };
+  const displayTargets = targets ?? emptyTargets;
 
   async function copyYesterday() {
     if (!user?.id) return toast({ title: "Sign in required", description: "Please sign in before copying meals." });
@@ -154,6 +154,9 @@ export default function CaloriesPage() {
 
     if (!dailyCalories || dailyCalories < 500) {
       return toast({ title: "Check daily calories", description: "Enter a realistic daily target, e.g. 1800 or 2200 kcal." });
+    }
+    if (!waterMl || waterMl < 250) {
+      return toast({ title: "Check water target", description: "Enter a daily water target in milliliters." });
     }
 
     setIsSavingTargets(true);
@@ -262,11 +265,11 @@ export default function CaloriesPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <TrackerCard label="Calories" value={totals.calories} target={displayTargets.daily_calories} unit="kcal" hasTarget={hasTargets} />
-        <TrackerCard label="Protein" value={totals.protein_g} target={displayTargets.protein_g} unit="g" hasTarget={hasTargets} />
-        <TrackerCard label="Carbs" value={totals.carbs_g} target={displayTargets.carbs_g} unit="g" hasTarget={hasTargets} />
-        <TrackerCard label="Fat" value={totals.fat_g} target={displayTargets.fat_g} unit="g" hasTarget={hasTargets} />
-        <TrackerCard label="Water" value={Math.round(waterTotal / 1000 * 10) / 10} target={Math.round(displayTargets.water_ml / 1000 * 10) / 10} unit="L" hasTarget={hasTargets} />
+        <TrackerCard label="Calories" value={totals.calories} target={displayTargets.daily_calories} unit="kcal" hasTarget={Boolean(targets?.daily_calories)} />
+        <TrackerCard label="Protein" value={totals.protein_g} target={displayTargets.protein_g} unit="g" hasTarget={Boolean(targets?.protein_g)} />
+        <TrackerCard label="Carbs" value={totals.carbs_g} target={displayTargets.carbs_g} unit="g" hasTarget={Boolean(targets?.carbs_g)} />
+        <TrackerCard label="Fat" value={totals.fat_g} target={displayTargets.fat_g} unit="g" hasTarget={Boolean(targets?.fat_g)} />
+        <TrackerCard label="Water" value={Math.round(waterTotal / 1000 * 10) / 10} target={Math.round(displayTargets.water_ml / 1000 * 10) / 10} unit="L" hasTarget={Boolean(targets?.water_ml)} />
       </div>
 
       <Card className="mt-4">

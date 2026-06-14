@@ -108,7 +108,7 @@ export function ChatGptWorkoutPlans() {
             <Bot className="h-5 w-5 text-primary" /> ChatGPT-created plans
           </CardTitle>
           <CardDescription>
-            FitLife no longer generates workout plans. Create plans in ChatGPT; FitLife stores, schedules, displays, and tracks them.
+            FitLife does not create workout plans internally. Create plans in ChatGPT; FitLife stores, schedules, displays, and tracks them.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -121,7 +121,7 @@ export function ChatGptWorkoutPlans() {
       {!plans.length && !isLoading ? (
         <Card>
           <CardContent className="pt-6 text-sm text-muted-foreground">
-            No saved workout plans yet. In ChatGPT, ask: “Using FitLife, create and save a 4-day Push Pull Legs Upper workout plan.”
+            No saved workout plans yet. In ChatGPT, ask: "Using FitLife, create and save a 4-day Push Pull Legs Upper workout plan."
           </CardContent>
         </Card>
       ) : null}
@@ -150,13 +150,15 @@ export function ChatGptWorkoutPlans() {
                   const dayExercises = exercises.filter((exercise) => exercise.plan_day_id === day.id);
                   return (
                     <div key={day.id} className="rounded-md border bg-card p-3">
-                      <p className="font-semibold">Day {day.day_number}: {day.day_name}</p>
+                      <p className="font-semibold">
+                        Day {day.day_number}: {day.day_name}
+                      </p>
                       {day.focus ? <p className="text-sm text-muted-foreground">{day.focus}</p> : null}
                       <div className="mt-3 space-y-2">
                         {dayExercises.map((exercise) => (
                           <div key={exercise.id} className="rounded-md bg-background p-2 text-sm">
                             <span className="font-medium">{exercise.exercise_name}</span>
-                            <span className="text-muted-foreground"> — {[exercise.block_type || exercise.category, exercise.sets ? `${exercise.sets} sets` : null, exercise.reps, exercise.equipment].filter(Boolean).join(" · ")}</span>
+                            <span className="text-muted-foreground"> - {[exercise.block_type || exercise.category, exercise.sets ? `${exercise.sets} sets` : null, exercise.reps, exercise.equipment].filter(Boolean).join(" / ")}</span>
                           </div>
                         ))}
                         {!dayExercises.length ? <p className="text-sm text-muted-foreground">No exercises saved for this day.</p> : null}

@@ -28,7 +28,7 @@ import {
   markMealPlanItemDone
 } from "@/services/database/repository";
 import { percent, remainingMacros, sumFoodLogs } from "@/services/nutrition/calculations";
-import { targetOrSetupDefault, type SavedTargets } from "@/services/nutrition/targets";
+import type { SavedTargets } from "@/services/nutrition/targets";
 import { todayIso } from "@/lib/utils";
 import type { FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryLog, SupplementLog, UserWorkoutPlan, WaterLog, WorkoutSession } from "@/types";
 
@@ -95,17 +95,7 @@ export default function DashboardPage() {
 
   const totals = useMemo(() => sumFoodLogs(logs), [logs]);
   const hasTargets = Boolean(targets);
-  const displayTargets = targetOrSetupDefault(targets);
-  const remaining = remainingMacros(
-    {
-      calories: displayTargets.daily_calories,
-      protein_g: displayTargets.protein_g,
-      carbs_g: displayTargets.carbs_g,
-      fat_g: displayTargets.fat_g,
-      water_ml: displayTargets.water_ml
-    },
-    totals
-  );
+  const remaining = targets ? remainingMacros({ calories: targets.daily_calories, protein_g: targets.protein_g, carbs_g: targets.carbs_g, fat_g: targets.fat_g, water_ml: targets.water_ml }, totals) : { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
   const waterTotalMl = useMemo(() => waterLogs.reduce((sum, log) => sum + Number(log.amount_ml), 0), [waterLogs]);
   const latestProgress = progressEntries.at(-1) ?? null;
   const today = getCurrentWeekday();
@@ -115,7 +105,7 @@ export default function DashboardPage() {
   const plannedMealsCount = mealPlanItems.length;
   const doneMealsCount = mealPlanItems.filter((item) => item.status === "done").length;
   const waterLiters = Math.round((waterTotalMl / 1000) * 10) / 10;
-  const waterTargetLiters = Math.round((displayTargets.water_ml / 1000) * 10) / 10;
+  const waterTargetLiters = Math.round(((targets?.water_ml ?? 0) / 1000) * 10) / 10;
 
   async function quickMarkMealDone(item: MealPlanItem) {
     if (!user?.id) return;
@@ -166,21 +156,21 @@ export default function DashboardPage() {
           label="Calories eaten"
           value={`${totals.calories} kcal`}
           detail={hasTargets ? `${remaining.calories} kcal remaining` : "No calorie target set"}
-          progress={hasTargets ? percent(totals.calories, displayTargets.daily_calories) : undefined}
+          progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined}
         />
         <MetricCard
           icon={Soup}
           label="Protein"
           value={`${totals.protein_g}g`}
           detail={hasTargets ? `${remaining.protein_g}g remaining` : "Set protein target"}
-          progress={hasTargets ? percent(totals.protein_g, displayTargets.protein_g) : undefined}
+          progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined}
         />
         <MetricCard
           icon={Droplets}
           label="Water intake"
           value={waterTotalMl ? `${waterLiters} L` : "No water logged"}
-          detail={hasTargets ? `Target ${waterTargetLiters} L today` : "Set water target"}
-          progress={hasTargets ? percent(waterTotalMl, displayTargets.water_ml) : undefined}
+          detail={targets?.water_ml ? `Target ${waterTargetLiters} L today` : "Set water target"}
+          progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined}
         />
         <MetricCard icon={Scale} label="Current weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No progress entry"} detail={latestProgress ? `Latest entry ${latestProgress.entry_date}` : "Add your first progress entry"} />
       </div>
@@ -299,11 +289,11 @@ export default function DashboardPage() {
             <CardTitle>Macros today</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {hasTargets ? (
+            {targets ? (
               <>
-                <MacroLine label="Protein" value={totals.protein_g} target={displayTargets.protein_g} />
-                <MacroLine label="Carbs" value={totals.carbs_g} target={displayTargets.carbs_g} />
-                <MacroLine label="Fat" value={totals.fat_g} target={displayTargets.fat_g} />
+                <MacroLine label="Protein" value={totals.protein_g} target={targets.protein_g} />
+                <MacroLine label="Carbs" value={totals.carbs_g} target={targets.carbs_g} />
+                <MacroLine label="Fat" value={totals.fat_g} target={targets.fat_g} />
               </>
             ) : (
               <div className="rounded-md border p-3 text-sm text-muted-foreground">
@@ -319,8 +309,8 @@ export default function DashboardPage() {
           <CardContent className="grid gap-2 text-sm">
             <ChecklistLine label="Workout" done={Boolean(history.find((session) => session.status === "completed" && session.started_at?.slice(0, 10) === todayIso()))} emptyLabel={todayPlanDay ? "Not completed yet" : "Rest day or no active plan"} />
             <ChecklistLine label="Meals" done={plannedMealsCount > 0 && doneMealsCount === plannedMealsCount} emptyLabel={plannedMealsCount ? `${plannedMealsCount - doneMealsCount} planned meals left` : "No meals planned"} />
-            <ChecklistLine label="Protein" done={hasTargets && totals.protein_g >= displayTargets.protein_g} emptyLabel={hasTargets ? `${remaining.protein_g}g remaining` : "Set protein target"} />
-            <ChecklistLine label="Water" done={hasTargets && waterTotalMl >= displayTargets.water_ml} emptyLabel={hasTargets ? (waterTotalMl ? `${Math.max(0, displayTargets.water_ml - waterTotalMl)} ml remaining` : "No water logged today") : "Set water target"} />
+            <ChecklistLine label="Protein" done={Boolean(targets?.protein_g && totals.protein_g >= targets.protein_g)} emptyLabel={targets?.protein_g ? `${remaining.protein_g}g remaining` : "Set protein target"} />
+            <ChecklistLine label="Water" done={Boolean(targets?.water_ml && waterTotalMl >= targets.water_ml)} emptyLabel={targets?.water_ml ? (waterTotalMl ? `${Math.max(0, targets.water_ml - waterTotalMl)} ml remaining` : "No water logged today") : "Set water target"} />
             <ChecklistLine label="Supplements" done={supplementsTaken} emptyLabel={supplements.length ? "Supplements still open" : "No supplements scheduled"} />
             <ChecklistLine label="Sleep/recovery" done={Boolean(todaySleepLog)} emptyLabel="No sleep/recovery log today" />
             <ChecklistLine label="Progress" done={Boolean(latestProgress?.entry_date === todayIso())} emptyLabel="No progress entry today" />

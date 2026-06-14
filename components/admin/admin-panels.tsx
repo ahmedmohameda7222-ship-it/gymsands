@@ -238,7 +238,7 @@ export function AdminExerciseLibraryPanel() {
     });
     if (error) return toast({ title: "Could not add exercise", description: error.message });
     setForm({ name: "", primary_muscle: "", equipment: "", difficulty: "Beginner", instructions: "" });
-    toast({ title: "Manual exercise added", description: "It is active and available to the generator." });
+    toast({ title: "Manual exercise added", description: "It is active and available for exercise search and imported plan editing." });
     loadExercises();
   }
 

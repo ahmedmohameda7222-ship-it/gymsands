@@ -11,14 +11,6 @@ export type MacroTargets = MacroTotals & {
   water_ml: number;
 };
 
-export const defaultTargets: MacroTargets = {
-  calories: 2200,
-  protein_g: 150,
-  carbs_g: 250,
-  fat_g: 70,
-  water_ml: 2500
-};
-
 export function scaleFoodMacros(food: Pick<FoodItem, "calories" | "protein_g" | "carbs_g" | "fat_g">, quantity: number) {
   const safeQuantity = Math.max(0, quantity);
   return {
