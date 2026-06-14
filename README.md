@@ -60,7 +60,7 @@ If a provider key is blank, its API route should return a clear JSON response in
 
 ## Supabase setup
 
-Run SQL in this canonical order:
+Run SQL in this canonical order. Some legacy files share numeric prefixes; do not rename migrations that may already be applied in production. Use this documented order, then create future migrations with a unique new prefix after the latest applied migration.
 
 1. `supabase/migrations/001_initial_schema.sql`
 2. `supabase/migrations/002_policy_refresh.sql`
@@ -78,13 +78,25 @@ Run SQL in this canonical order:
 14. `supabase/migrations/012_default_plan_and_egyptian_kitchen.sql`
 15. `supabase/migrations/013_fitlife_hub_wellness_generated_plans.sql`
 16. `supabase/migrations/014_clean_exercise_library_and_api_integrations.sql`
-17. `supabase/migrations/015_chatgpt_mcp_connections.sql`
-18. `supabase/migrations/016_auto_activate_wger_exercises.sql`
-19. `supabase/migrations/017_exercise_calorie_reference.sql`
-20. Register the first admin user.
-21. Run `supabase/seed/004_admin_setup_placeholder.sql` after editing the admin email if needed.
+17. `supabase/migrations/015_chatgpt_manual_workout_food_profile_tools.sql`
+18. `supabase/migrations/015_chatgpt_mcp_connections.sql`
+19. `supabase/migrations/015_seed_600_exercise_library_workouts.sql`
+20. `supabase/migrations/016_auto_activate_wger_exercises.sql`
+21. `supabase/migrations/016_seed_real_600_exercise_library.sql`
+22. `supabase/migrations/017_add_force_type_secondary_muscles_to_library.sql`
+23. `supabase/migrations/017_exercise_calorie_reference.sql`
+24. `supabase/migrations/017_onboarding_duration_and_barcode.sql`
+25. `supabase/migrations/018_fitlife_security_archive_reporting.sql`
+26. `supabase/migrations/019_progress_photos_measurements.sql`
+27. `supabase/migrations/020_wellness_sleep_recovery_fields.sql`
+28. Register the first admin user.
+29. Run `supabase/seed/004_admin_setup_placeholder.sql` after editing the admin email if needed.
 
 For projects that already imported legacy exercise data, back up the database first, then review the cleanup SQL under `supabase/cleanup`.
+
+See `docs/reliability-audit-2026-06-14.md` for migration-collision notes, local-storage audit findings, and recommended account-level persistence tables.
+
+See `docs/professional-feature-roadmap-2026-06-14.md` for the phased product roadmap, recommended information architecture, Phase 1 slice, and follow-up prompts for Phase 2-4.
 
 ## Current route structure
 
@@ -100,8 +112,9 @@ Primary private routes:
 - `/calories/weekly-overview` — nutrition summary
 - `/progress` — progress tracking
 - `/personal-records` — PR tracking
-- `/wellness` — wellness hub, with hydration, habits, sleep/recovery, supplements, and daily tasks available from there
-- `/settings` — connected apps and ChatGPT import setup
+- `/hydration` — account-backed daily water tracker
+- `/wellness` — wellness hub, with habits, sleep/recovery, supplements, and daily tasks available from there
+- `/settings` — connected apps and ChatGPT import setup, with advanced connection details hidden by default
 
 The old `/meals` page was removed because food logging already lives under `/calories` and custom food/meal management lives under `/calories/custom-food-meal`.
 

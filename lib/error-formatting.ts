@@ -24,7 +24,7 @@ export function rawErrorMessage(error: unknown) {
 export function userSafeError(error: unknown, fallback = "Please try again. Your typed input has been kept.") {
   const raw = rawErrorMessage(error);
   if (!raw) return fallback;
-  if (isMigrationError(error)) return "This feature needs the latest database migration before it can load.";
+  if (isMigrationError(error)) return "Something went wrong while loading this data. Please try again. If this keeps happening, contact support.";
   if (authHints.some((hint) => raw.toLowerCase().includes(hint.toLowerCase()))) return "Your session or permissions need to be refreshed. Sign in again or retry.";
   if (/network|fetch|timeout|failed to fetch/i.test(raw)) return "Network request failed. Check your connection and retry.";
   if (/duplicate|unique/i.test(raw)) return "This looks like a duplicate entry. Review the item before saving again.";

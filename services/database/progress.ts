@@ -50,6 +50,152 @@ export async function upsertPersonalRecord(input: PersonalRecordInput) {
   return data as PersonalRecord;
 }
 
+type AutoPrSet = {
+  exercise_name?: string | null;
+  exerciseName?: string | null;
+  set_number?: number | null;
+  reps: number | null;
+  weight_kg?: number | null;
+  weightKg?: number | null;
+};
+
+type PrCandidate = {
+  exerciseName: string;
+  recordType: "Max weight" | "Max reps" | "Estimated 1RM" | "Best volume";
+  weightKg: number | null;
+  reps: number | null;
+  score: number;
+  notes: string;
+};
+
+function estimateOneRepMax(weightKg: number, reps: number) {
+  return Math.round(weightKg * (1 + reps / 30) * 10) / 10;
+}
+
+function numeric(value: number | null | undefined) {
+  return Number.isFinite(value) ? Number(value) : null;
+}
+
+function buildPersonalRecordCandidates(logs: AutoPrSet[]) {
+  const byExercise = logs.reduce<Record<string, AutoPrSet[]>>((groups, log) => {
+    const exerciseName = (log.exercise_name ?? log.exerciseName ?? "").trim();
+    if (!exerciseName) return groups;
+    groups[exerciseName] = [...(groups[exerciseName] ?? []), log];
+    return groups;
+  }, {});
+
+  const candidates: PrCandidate[] = [];
+  Object.entries(byExercise).forEach(([exerciseName, exerciseLogs]) => {
+    const sets = exerciseLogs
+      .map((log) => ({
+        reps: numeric(log.reps),
+        weightKg: numeric(log.weight_kg ?? log.weightKg)
+      }))
+      .filter((set) => set.reps !== null || set.weightKg !== null);
+
+    const weightedSets = sets.filter((set): set is { reps: number | null; weightKg: number } => set.weightKg !== null);
+    const repSets = sets.filter((set): set is { reps: number; weightKg: number | null } => set.reps !== null);
+
+    const maxWeight = [...weightedSets].sort((a, b) => b.weightKg - a.weightKg)[0] ?? null;
+    if (maxWeight) {
+      candidates.push({
+        exerciseName,
+        recordType: "Max weight",
+        weightKg: maxWeight.weightKg,
+        reps: maxWeight.reps,
+        score: maxWeight.weightKg,
+        notes: "Auto-detected from a saved workout session."
+      });
+    }
+
+    const maxReps = [...repSets].sort((a, b) => b.reps - a.reps)[0] ?? null;
+    if (maxReps) {
+      candidates.push({
+        exerciseName,
+        recordType: "Max reps",
+        weightKg: maxReps.weightKg,
+        reps: maxReps.reps,
+        score: maxReps.reps,
+        notes: "Auto-detected from a saved workout session."
+      });
+    }
+
+    const oneRepMax = weightedSets
+      .filter((set): set is { reps: number; weightKg: number } => set.reps !== null && set.reps > 0)
+      .map((set) => ({ ...set, estimate: estimateOneRepMax(set.weightKg, set.reps) }))
+      .sort((a, b) => b.estimate - a.estimate)[0] ?? null;
+    if (oneRepMax) {
+      candidates.push({
+        exerciseName,
+        recordType: "Estimated 1RM",
+        weightKg: oneRepMax.estimate,
+        reps: oneRepMax.reps,
+        score: oneRepMax.estimate,
+        notes: `Auto-detected from ${oneRepMax.weightKg} kg x ${oneRepMax.reps}.`
+      });
+    }
+
+    const volume = weightedSets.reduce((sum, set) => sum + set.weightKg * Math.max(0, set.reps ?? 0), 0);
+    if (volume > 0) {
+      const roundedVolume = Math.round(volume * 10) / 10;
+      candidates.push({
+        exerciseName,
+        recordType: "Best volume",
+        weightKg: roundedVolume,
+        reps: null,
+        score: roundedVolume,
+        notes: "Auto-detected total session volume in kg."
+      });
+    }
+  });
+
+  return candidates;
+}
+
+function existingRecordScore(record: PersonalRecord) {
+  if (record.record_type === "Max reps") return numeric(record.reps) ?? 0;
+  return numeric(record.weight_kg) ?? 0;
+}
+
+export async function autoDetectPersonalRecordsFromExerciseLogs(userId: string, logs: AutoPrSet[], recordDate: string) {
+  if (!canUseUserData(userId) || !logs.length) return [];
+  const candidates = buildPersonalRecordCandidates(logs);
+  if (!candidates.length) return [];
+
+  const exerciseNames = Array.from(new Set(candidates.map((candidate) => candidate.exerciseName)));
+  const recordTypes = Array.from(new Set(candidates.map((candidate) => candidate.recordType)));
+  const { data, error } = await supabase!
+    .from("personal_records")
+    .select("*")
+    .eq("user_id", userId)
+    .in("exercise_name", exerciseNames)
+    .in("record_type", recordTypes);
+  if (error) throw error;
+
+  const existingBest = new Map<string, number>();
+  ((data ?? []) as PersonalRecord[]).forEach((record) => {
+    const key = `${record.exercise_name.toLowerCase()}::${record.record_type}`;
+    existingBest.set(key, Math.max(existingBest.get(key) ?? 0, existingRecordScore(record)));
+  });
+
+  const inserts = candidates
+    .filter((candidate) => candidate.score > (existingBest.get(`${candidate.exerciseName.toLowerCase()}::${candidate.recordType}`) ?? 0))
+    .map((candidate) => ({
+      user_id: userId,
+      exercise_name: candidate.exerciseName,
+      record_type: candidate.recordType,
+      weight_kg: candidate.weightKg,
+      reps: candidate.reps,
+      record_date: recordDate,
+      notes: candidate.notes
+    }));
+
+  if (!inserts.length) return [];
+  const inserted = await supabase!.from("personal_records").insert(inserts).select("*");
+  if (inserted.error) throw inserted.error;
+  return (inserted.data ?? []) as PersonalRecord[];
+}
+
 export async function deletePersonalRecord(userId: string, id: string) {
   if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
   const { error } = await supabase!.from("personal_records").delete().eq("user_id", userId).eq("id", id);

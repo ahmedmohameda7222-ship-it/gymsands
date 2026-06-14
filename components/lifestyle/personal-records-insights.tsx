@@ -49,15 +49,12 @@ function InsightCard({ icon: Icon, label, value, detail }: { icon: typeof Trophy
 }
 
 function buildRecordInsights(records: PersonalRecord[]) {
-  const weighted = records.filter((record) => typeof record.weight_kg === "number") as Array<PersonalRecord & { weight_kg: number }>;
+  const weighted = records.filter((record) => record.record_type === "Max weight" && typeof record.weight_kg === "number") as Array<PersonalRecord & { weight_kg: number }>;
   const bestWeight = weighted.sort((a, b) => b.weight_kg - a.weight_kg)[0] ?? null;
-  const bestOneRepMax = weighted
+  const bestOneRepMax = records
+    .filter((record) => record.record_type === "Estimated 1RM" && typeof record.weight_kg === "number")
     .filter((record): record is PersonalRecord & { weight_kg: number; reps: number } => typeof record.reps === "number" && record.reps > 0)
-    .map((record) => ({ ...record, estimate: estimateOneRepMax(record.weight_kg, record.reps) }))
+    .map((record) => ({ ...record, estimate: record.weight_kg }))
     .sort((a, b) => b.estimate - a.estimate)[0] ?? null;
   return { bestWeight, bestOneRepMax };
-}
-
-function estimateOneRepMax(weightKg: number, reps: number) {
-  return Math.round(weightKg * (1 + reps / 30) * 10) / 10;
 }

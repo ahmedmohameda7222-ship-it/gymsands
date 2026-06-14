@@ -312,7 +312,7 @@ function ProgressPhotoManager({ userId, photos, setPhotos }: { userId: string | 
       setFile(null);
       toast({ title: "Progress photo uploaded", description: `${photoType} photo saved privately for ${photoDate}.` });
     } catch (error) {
-      toast({ title: "Could not upload progress photo", description: error instanceof Error ? error.message : "Apply migration 019 and try again." });
+      toast({ title: "Could not upload progress photo", description: error instanceof Error ? error.message : "Please try again later." });
     } finally {
       setIsUploading(false);
     }
@@ -334,7 +334,7 @@ function ProgressPhotoManager({ userId, photos, setPhotos }: { userId: string | 
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Camera className="h-5 w-5" /> Private progress photos</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">Upload real front, side, and back photos. Files are stored in a private Supabase Storage bucket with owner-only RLS after migration 019 is applied.</p>
+          <p className="text-sm text-muted-foreground">Upload real front, side, and back photos. Files are stored privately for your account when photo storage is available.</p>
           <div className="grid gap-3 sm:grid-cols-[1fr_140px_130px_auto]">
             <div className="space-y-2"><Label>Photo file</Label><Input type="file" accept="image/*" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></div>
             <div className="space-y-2"><Label>Type</Label><select value={photoType} onChange={(event) => setPhotoType(event.target.value as ProgressPhotoType)} className="h-10 w-full rounded-md border bg-white px-3 text-sm">{photoTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></div>

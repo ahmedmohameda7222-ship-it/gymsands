@@ -2,6 +2,7 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
+import { autoDetectPersonalRecordsFromExerciseLogs } from "@/services/database/progress";
 import type {
   ExerciseLog,
   UserExerciseLog,
@@ -21,6 +22,12 @@ const skippedNotePrefix = "[skipped]";
 
 function canUseUserData(userId: string | null | undefined) {
   return Boolean(supabase && isUuid(userId));
+}
+
+function requireWorkoutPersistence(userIdOrSessionId: string | null | undefined, label: string) {
+  if (!supabase || !isUuid(userIdOrSessionId)) {
+    throw new Error(`${label} could not be saved. Please refresh, sign in again, and try once more.`);
+  }
 }
 
 function summarizeWorkoutCategory(
@@ -196,7 +203,7 @@ export async function startWorkoutSession(userId: string, workout: Workout) {
     notes: null,
     status: "started"
   };
-  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: `mock-${crypto.randomUUID()}` } as WorkoutSession);
+  requireWorkoutPersistence(userId, "Workout session");
   let { data, error } = await supabase!.from("workout_sessions").insert(payload).select("*").single();
   if (error && isSchemaCompatibilityError(error)) {
     const { workout_category: _category, ...compatiblePayload } = payload;
@@ -206,7 +213,7 @@ export async function startWorkoutSession(userId: string, workout: Workout) {
   }
   if (error) {
     console.warn("FitLife Hub could not start a Supabase workout session.", error.message);
-    return { ...payload, id: crypto.randomUUID() } as WorkoutSession;
+    throw error;
   }
   return normalizeWorkoutSession(data as WorkoutSession);
 }
@@ -226,7 +233,7 @@ export async function startWorkoutDaySession(userId: string, day: WorkoutPlanDay
     notes: null,
     status: "started"
   };
-  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: `mock-${crypto.randomUUID()}` } as WorkoutSession);
+  requireWorkoutPersistence(userId, "Workout session");
   let { data, error } = await supabase!.from("workout_sessions").insert(payload).select("*").single();
   if (error && isSchemaCompatibilityError(error)) {
     const { workout_category: _category, ...compatiblePayload } = payload;
@@ -312,10 +319,7 @@ export type WorkoutSetLogInput = {
 };
 
 export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogInput[]) {
-  if (!supabase || !isUuid(sessionId)) return mockDelay(true);
-  const deleteResult = await supabase!.from("exercise_logs").delete().eq("workout_session_id", sessionId);
-  if (deleteResult.error) throw deleteResult.error;
-
+  requireWorkoutPersistence(sessionId, "Workout sets");
   const rows = logs.map((log) => ({
     workout_session_id: sessionId,
     plan_exercise_id: log.planExerciseId ?? null,
@@ -333,17 +337,81 @@ export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogI
   }));
 
   if (!rows.length) return true;
-  let { error } = await supabase!.from("exercise_logs").insert(rows);
+  const existingResult = await supabase!
+    .from("exercise_logs")
+    .select("id,exercise_name,set_number")
+    .eq("workout_session_id", sessionId);
+  if (existingResult.error) throw existingResult.error;
+
+  const existingByKey = new Map(
+    ((existingResult.data ?? []) as Array<{ id: string; exercise_name: string; set_number: number }>).map((log) => [
+      `${log.exercise_name.toLowerCase()}::${log.set_number}`,
+      log.id
+    ])
+  );
+
+  const inserts = rows.filter((row) => !existingByKey.has(`${row.exercise_name.toLowerCase()}::${row.set_number}`));
+  const updates = rows
+    .map((row) => ({ row, id: existingByKey.get(`${row.exercise_name.toLowerCase()}::${row.set_number}`) }))
+    .filter((item): item is { row: typeof rows[number]; id: string } => Boolean(item.id));
+
+  let error = null as { message?: string; code?: string } | null;
+  if (inserts.length) {
+    const insertResult = await supabase!.from("exercise_logs").insert(inserts);
+    error = insertResult.error;
+  }
   if (error && isSchemaCompatibilityError(error)) {
-    const compatibleRows = rows.map(({ exercise_category: _category, exercise_order: _order, ...row }) => row);
+    const compatibleRows = inserts.map(({ exercise_category: _category, exercise_order: _order, ...row }) => row);
     error = (await supabase!.from("exercise_logs").insert(compatibleRows)).error;
   }
   if (error) throw error;
+
+  for (const { row, id } of updates) {
+    const updateResult = await supabase!
+      .from("exercise_logs")
+      .update({
+        plan_exercise_id: row.plan_exercise_id,
+        exercise_order: row.exercise_order,
+        exercise_category: row.exercise_category,
+        planned_sets: row.planned_sets,
+        planned_reps: row.planned_reps,
+        planned_rest_seconds: row.planned_rest_seconds,
+        reps: row.reps,
+        weight_kg: row.weight_kg,
+        notes: row.notes,
+        completed_at: row.completed_at
+      })
+      .eq("id", id)
+      .eq("workout_session_id", sessionId);
+    if (updateResult.error && isSchemaCompatibilityError(updateResult.error)) {
+      const compatibleUpdate = await supabase!
+        .from("exercise_logs")
+        .update({
+          plan_exercise_id: row.plan_exercise_id,
+          planned_sets: row.planned_sets,
+          planned_reps: row.planned_reps,
+          planned_rest_seconds: row.planned_rest_seconds,
+          reps: row.reps,
+          weight_kg: row.weight_kg,
+          notes: row.notes,
+          completed_at: row.completed_at
+        })
+        .eq("id", id)
+        .eq("workout_session_id", sessionId);
+      if (compatibleUpdate.error) throw compatibleUpdate.error;
+    } else if (updateResult.error) {
+      throw updateResult.error;
+    }
+  }
+
+  const sessionResult = await supabase!.from("workout_sessions").select("user_id").eq("id", sessionId).single();
+  if (sessionResult.error) throw sessionResult.error;
+  await autoDetectPersonalRecordsFromExerciseLogs(sessionResult.data.user_id, rows, new Date().toISOString().slice(0, 10));
   return true;
 }
 
 export async function completeWorkoutSession(sessionId: string, notes: string, durationMinutes: number) {
-  if (!supabase || !isUuid(sessionId)) return mockDelay(true);
+  requireWorkoutPersistence(sessionId, "Workout session");
   const { error } = await supabase!
     .from("workout_sessions")
     .update({ status: "completed", completed_at: new Date().toISOString(), notes, duration_minutes: durationMinutes })

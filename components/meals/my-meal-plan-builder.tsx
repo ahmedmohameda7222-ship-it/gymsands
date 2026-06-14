@@ -62,7 +62,7 @@ class MealPlanBoundary extends Component<{ children: ReactNode }, { message: str
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="space-y-3 pt-5 text-sm text-amber-950">
             <div className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> My Meal Plan could not load</div>
-            <p>The page stayed open, but one meal-plan widget crashed. Try again after redeploying the fixed files.</p>
+            <p>The page stayed open, but one meal-plan widget could not load. Please try again.</p>
             <p className="break-words text-xs text-amber-800">{this.state.message}</p>
             <Button variant="outline" size="sm" onClick={() => this.setState({ message: null })}>Try again</Button>
           </CardContent>

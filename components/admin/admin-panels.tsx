@@ -76,22 +76,33 @@ export function AdminFoodPanel() {
     category: ""
   });
 
+  async function loadFoods() {
+    const items = await getGlobalFoods("");
+    setFoods(items.slice(0, 12));
+  }
+
   useEffect(() => {
-    getGlobalFoods("").then((items) => setFoods(items.slice(0, 12)));
+    void loadFoods();
   }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await adminUpsertGlobalFood({
-      ...form,
-      calories: Number(form.calories),
-      protein_g: Number(form.protein_g),
-      carbs_g: Number(form.carbs_g),
-      fat_g: Number(form.fat_g),
-      source_type: "admin_created",
-      cuisine: "Egyptian"
-    });
-    toast({ title: "Global food saved", description: "Members can log portions but cannot edit base macros." });
+    try {
+      await adminUpsertGlobalFood({
+        ...form,
+        calories: Number(form.calories),
+        protein_g: Number(form.protein_g),
+        carbs_g: Number(form.carbs_g),
+        fat_g: Number(form.fat_g),
+        source_type: "admin_created",
+        cuisine: "Egyptian"
+      });
+      await loadFoods();
+      toast({ title: "Global food saved", description: "The preview list has been refreshed." });
+    } catch (error) {
+      console.warn("FitLife Hub could not save admin food.", error);
+      toast({ title: "Could not save food", description: "Please review the food details and try again." });
+    }
   }
 
   return (
@@ -121,7 +132,12 @@ export function AdminFoodPanel() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Current global foods</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>Current global foods</CardTitle>
+            <Button type="button" variant="outline" size="sm" onClick={loadFoods}>
+              <RefreshCcw className="h-4 w-4" /> Refresh
+            </Button>
+          </div>
           <CardDescription>Preview of seeded Egyptian foods.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

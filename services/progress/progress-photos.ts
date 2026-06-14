@@ -23,7 +23,10 @@ function safeFileName(name: string) {
 }
 
 function requireStorage(userId: string) {
-  if (!supabase || !isUuid(userId)) throw new Error("Progress photo storage is not configured. Apply migration 019 and check Supabase env settings.");
+  if (!supabase || !isUuid(userId)) {
+    console.warn("Progress photo storage is unavailable. Check Supabase storage configuration and progress photo tables.");
+    throw new Error("Progress photo storage is not available right now. Please try again later.");
+  }
   return supabase;
 }
 

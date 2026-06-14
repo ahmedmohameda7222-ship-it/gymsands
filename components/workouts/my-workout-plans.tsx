@@ -220,10 +220,10 @@ export function MyWorkoutPlans() {
         <EmptyState
           title="No workout plans yet"
           description="Import a workout plan from ChatGPT to start scheduling and tracking real saved exercises. The app will not show fake workout data here."
-          actionLabel="Set up ChatGPT import"
-          actionHref="/settings"
-          secondaryLabel="Create manual plan"
-          secondaryHref="/my-workout/plans"
+          actionLabel="Create manual plan"
+          onAction={() => setShowBuilder(true)}
+          secondaryLabel="Set up ChatGPT import"
+          secondaryHref="/settings"
         />
       ) : null}
 
