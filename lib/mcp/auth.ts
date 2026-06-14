@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { serverEnv } from "@/lib/integrations/env";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
+import { MCP_FULL_ACCESS_SCOPES } from "@/lib/mcp/scopes";
 
 export type McpProfile = {
   id: string;
@@ -175,7 +176,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
     supabase,
     userId: connection.user_id,
     connectionId: connection.id,
-    scopes: Array.isArray(connection.scopes) ? connection.scopes : [],
+    scopes: MCP_FULL_ACCESS_SCOPES,
     profile: profile as McpProfile
   };
 }

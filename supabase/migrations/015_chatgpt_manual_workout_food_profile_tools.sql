@@ -32,7 +32,7 @@ alter table public.user_workout_plans
 
 alter table public.user_workout_plans
   add constraint user_workout_plans_source_check
-  check (source in ('manual', 'chatgpt', 'imported', 'template_recommendation', 'generated_rules'));
+  check (source in ('manual', 'chatgpt', 'imported'));
 
 alter table public.user_workout_plan_days
   add column if not exists focus text;

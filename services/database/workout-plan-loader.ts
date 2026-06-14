@@ -6,10 +6,10 @@ import { isUuid } from "@/lib/utils";
 import type { UserWorkoutPlan, UserWorkoutPlanDay, UserWorkoutPlanExercise, Weekday, Workout, WorkoutPlanDaySession } from "@/types";
 
 const fullPlanSelect =
-  "id,user_id,name,is_active,is_default,template_id,source,goal,description,chatgpt_source,archived_at,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,session_duration_minutes,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,session_duration_minutes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,weight,rest_seconds,tempo,instructions,exercise_url,video_url,custom_video_url,block_type,sort_order,order_index,notes))";
+  "id,user_id,name,is_active,is_default,source,goal,description,chatgpt_source,archived_at,program_duration_weeks,days_per_week,session_duration_minutes,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,session_duration_minutes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,weight,rest_seconds,tempo,instructions,exercise_url,video_url,custom_video_url,block_type,sort_order,order_index,notes))";
 
 const compatPlanSelect =
-  "id,user_id,name,is_active,is_default,template_id,source,goal,description,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
+  "id,user_id,name,is_active,is_default,source,goal,description,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
 
 const legacyPlanSelect =
   "id,user_id,name,is_active,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes))";
@@ -134,14 +134,10 @@ function normalizePlan(row: RawWorkoutPlan): UserWorkoutPlan {
     name: text(row.name, "Workout plan"),
     is_active: bool(row.is_active),
     is_default: typeof row.is_default === "boolean" ? row.is_default : bool(row.is_active),
-    template_id: nullableText(row.template_id),
     source: source as UserWorkoutPlan["source"],
     goal: nullableText(row.goal),
     description: nullableText(row.description),
     archived_at: nullableText(row.archived_at),
-    match_score: num(row.match_score),
-    match_explanation: nullableText(row.match_explanation),
-    match_reasons: Array.isArray(row.match_reasons) ? (row.match_reasons as string[]) : [],
     program_duration_weeks: num(row.program_duration_weeks),
     days_per_week: num(row.days_per_week, days.length),
     created_at: text(row.created_at, new Date().toISOString()),

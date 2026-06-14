@@ -140,10 +140,6 @@ create table if not exists public.email_logs (
 alter table public.user_workout_plans
   add column if not exists is_default boolean not null default false,
   add column if not exists source text not null default 'manual',
-  add column if not exists match_score int,
-  add column if not exists match_explanation text,
-  add column if not exists match_reasons text[] not null default '{}',
-  add column if not exists generated_from_onboarding_id uuid references public.user_onboarding(id) on delete set null,
   add column if not exists program_duration_weeks int,
   add column if not exists days_per_week int;
 
@@ -152,7 +148,7 @@ alter table public.user_workout_plans
 
 alter table public.user_workout_plans
   add constraint user_workout_plans_source_check
-  check (source in ('manual', 'generated_rules', 'template_recommendation'));
+  check (source in ('manual', 'chatgpt', 'imported'));
 
 alter table public.user_workout_plan_days
   add column if not exists weekday text;

@@ -22,24 +22,6 @@ alter table public.onboarding_answers
 alter table public.onboarding_answers
   add column if not exists max_workout_duration_minutes int;
 
-alter table public.user_onboarding
-  add column if not exists goals text[] not null default '{}';
-
-alter table public.user_onboarding
-  add column if not exists training_cycle text;
-
-alter table public.user_onboarding
-  add column if not exists min_workout_duration_minutes int;
-
-alter table public.user_onboarding
-  add column if not exists max_workout_duration_minutes int;
-
-alter table public.user_onboarding
-  add column if not exists height_cm numeric(8,2);
-
-alter table public.user_onboarding
-  add column if not exists weight_kg numeric(8,2);
-
 alter table public.user_workout_plan_exercises
   add column if not exists exercise_url text;
 
