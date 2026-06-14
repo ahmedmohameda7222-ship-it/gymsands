@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createConnectionToken, hashConnectionToken } from "@/lib/mcp/auth";
-import { MCP_DEFAULT_SCOPES, normalizeMcpScopes } from "@/lib/mcp/scopes";
+import { MCP_FULL_ACCESS_SCOPES } from "@/lib/mcp/scopes";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { requireServerKeys, requireUser, serverEnv } from "@/lib/integrations/env";
 
@@ -42,8 +42,6 @@ export async function POST(request: Request) {
   const token = createConnectionToken();
   const tokenHash = hashConnectionToken(token);
   const supabase = createSupabaseAdminClient();
-  const body = (await request.json().catch(() => ({}))) as { scopes?: unknown };
-  const scopes = normalizeMcpScopes(body.scopes, MCP_DEFAULT_SCOPES);
 
   await supabase
     .from("chatgpt_connections")
@@ -57,7 +55,7 @@ export async function POST(request: Request) {
     .insert({
       user_id: context.user.id,
       token_hash: tokenHash,
-      scopes,
+      scopes: MCP_FULL_ACCESS_SCOPES,
       is_active: true
     })
     .select("id,scopes,is_active,created_at")

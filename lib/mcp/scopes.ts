@@ -22,14 +22,9 @@ export const MCP_SUPPORTED_SCOPES = [
   MCP_SCOPES.all
 ];
 
-export const MCP_DEFAULT_SCOPES = [
-  MCP_SCOPES.profileRead,
-  MCP_SCOPES.summaryRead,
-  MCP_SCOPES.nutritionWrite,
-  MCP_SCOPES.trainingWrite,
-  MCP_SCOPES.progressWrite,
-  MCP_SCOPES.wellnessWrite
-];
+export const MCP_FULL_ACCESS_SCOPES = MCP_SUPPORTED_SCOPES;
+
+export const MCP_DEFAULT_SCOPES = MCP_FULL_ACCESS_SCOPES;
 
 const supportedScopeSet = new Set<string>(MCP_SUPPORTED_SCOPES);
 

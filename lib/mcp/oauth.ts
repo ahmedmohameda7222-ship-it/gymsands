@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { serverEnv } from "@/lib/integrations/env";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { hashConnectionToken } from "@/lib/mcp/auth";
-import { MCP_DEFAULT_SCOPES, MCP_SUPPORTED_SCOPES, normalizeMcpScopes } from "@/lib/mcp/scopes";
+import { MCP_DEFAULT_SCOPES, MCP_FULL_ACCESS_SCOPES, MCP_SUPPORTED_SCOPES, normalizeMcpScopes } from "@/lib/mcp/scopes";
 
 type AuthorizationCodePayload = {
   clientHash: string;
@@ -203,10 +203,7 @@ export async function handleOAuthAuthorize(request: Request) {
       return oauthErrorRedirect(redirectUri, state, "access_denied", "FitLife connection token is invalid or revoked.");
     }
 
-    const connectionScopes = Array.isArray(connection.scopes) ? connection.scopes : MCP_DEFAULT_SCOPES;
-    const scope = normalizeMcpScopes(requestedScope, connectionScopes)
-      .filter((item) => connectionScopes.includes(item))
-      .join(" ");
+    const scope = normalizeMcpScopes(requestedScope, MCP_FULL_ACCESS_SCOPES).join(" ");
 
     const code = createAuthorizationCode({
       clientHash: connection.tokenHash,
@@ -259,7 +256,7 @@ export async function handleOAuthToken(request: Request) {
         access_token: clientId,
         token_type: "Bearer",
         expires_in: 60 * 60 * 24 * 30,
-        scope: payload.scope || MCP_DEFAULT_SCOPES.join(" ")
+        scope: payload.scope || MCP_FULL_ACCESS_SCOPES.join(" ")
       },
       { headers: metadataHeaders() }
     );
