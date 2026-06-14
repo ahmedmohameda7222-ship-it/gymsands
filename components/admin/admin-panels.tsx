@@ -76,15 +76,18 @@ export function AdminFoodPanel() {
     fat_g: "",
     category: ""
   });
+  const [search, setSearch] = useState("");
 
   async function loadFoods() {
-    const items = await getGlobalFoods("");
-    setFoods(items.slice(0, 12));
+    const items = await getGlobalFoods(search);
+    setFoods(items.slice(0, 50));
   }
 
   useEffect(() => {
-    void loadFoods();
-  }, []);
+    const timeout = setTimeout(() => { void loadFoods(); }, 300);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -144,11 +147,19 @@ export function AdminFoodPanel() {
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle>Current global foods</CardTitle>
-            <Button type="button" variant="outline" size="sm" onClick={loadFoods}>
-              <RefreshCcw className="h-4 w-4" /> Refresh
-            </Button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <TextField 
+                label="Search"
+                value={search} 
+                onChange={setSearch} 
+                placeholder="Search Egyptian foods..." 
+              />
+              <Button type="button" variant="outline" onClick={loadFoods}>
+                <RefreshCcw className="h-4 w-4" /> Refresh
+              </Button>
+            </div>
           </div>
-          <CardDescription>Preview of seeded Egyptian foods.</CardDescription>
+          <CardDescription>Preview of seeded Egyptian foods. Showing up to 50 items.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {foods.map((food) => (

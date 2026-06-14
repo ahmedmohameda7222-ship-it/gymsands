@@ -1040,16 +1040,17 @@ export async function deleteFoodLog(id: string) {
   return true;
 }
 
-export async function copyYesterdaysMeals(userId: string) {
+export async function copyYesterdaysMeals(userId: string, targetDate = todayIso()) {
   if (!canUseUserData(userId)) throw new Error("User session invalid");
-  const yesterday = new Date();
+  const yesterday = new Date(targetDate);
   yesterday.setDate(yesterday.getDate() - 1);
-  const { data, error } = await supabase!.from("food_logs").select("*").eq("user_id", userId).eq("log_date", yesterday.toISOString().slice(0, 10));
+  const sourceDate = yesterday.toISOString().slice(0, 10);
+  const { data, error } = await supabase!.from("food_logs").select("*").eq("user_id", userId).eq("log_date", sourceDate);
   if (error) {
     console.warn("FitLife Hub could not copy yesterday's meals.", error.message);
     return [];
   }
-  const copies = (data ?? []).map(({ id: _id, created_at: _created, ...log }) => ({ ...log, log_date: todayIso() }));
+  const copies = (data ?? []).map(({ id: _id, created_at: _created, ...log }) => ({ ...log, log_date: targetDate }));
   if (!copies.length) return [];
   const inserted = await supabase!.from("food_logs").insert(copies).select("*");
   if (inserted.error) throw inserted.error;

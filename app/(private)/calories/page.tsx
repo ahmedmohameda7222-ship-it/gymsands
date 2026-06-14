@@ -71,6 +71,8 @@ export default function CaloriesPage() {
   const [weekData, setWeekData] = useState<DailyNutritionSummary[]>([]);
   const [waterLogs, setWaterLogs] = useState<WaterLog[]>([]);
   const [targets, setTargets] = useState<SavedTargets | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [targetForm, setTargetForm] = useState({ dailyCalories: "", proteinG: "", carbsG: "", fatG: "", waterMl: "" });
   const [customWaterMl, setCustomWaterMl] = useState("250");
   const [isSavingTargets, setIsSavingTargets] = useState(false);
@@ -103,21 +105,27 @@ export default function CaloriesPage() {
 
   useEffect(() => {
     if (!user) return;
-    loadDay().catch((error) =>
-      toast({ title: "Could not load calorie tracker", description: error instanceof Error ? error.message : "Please refresh and try again." })
-    );
-    getCalorieTargets(user.id).then((savedTargets) => {
-      setTargets(savedTargets);
-      setTargetForm({
-        dailyCalories: savedTargets?.daily_calories ? String(savedTargets.daily_calories) : "",
-        proteinG: savedTargets?.protein_g ? String(savedTargets.protein_g) : "",
-        carbsG: savedTargets?.carbs_g ? String(savedTargets.carbs_g) : "",
-        fatG: savedTargets?.fat_g ? String(savedTargets.fat_g) : "",
-        waterMl: savedTargets?.water_ml ? String(savedTargets.water_ml) : ""
-      });
+    setIsLoading(true);
+    setLoadError("");
+    Promise.all([
+      loadDay(),
+      getCalorieTargets(user.id).then((savedTargets) => {
+        setTargets(savedTargets);
+        setTargetForm({
+          dailyCalories: savedTargets?.daily_calories ? String(savedTargets.daily_calories) : "",
+          proteinG: savedTargets?.protein_g ? String(savedTargets.protein_g) : "",
+          carbsG: savedTargets?.carbs_g ? String(savedTargets.carbs_g) : "",
+          fatG: savedTargets?.fat_g ? String(savedTargets.fat_g) : "",
+          waterMl: savedTargets?.water_ml ? String(savedTargets.water_ml) : ""
+        });
+      })
+    ]).catch((error) => {
+      setLoadError(error instanceof Error ? error.message : "Could not load calorie tracker.");
+    }).finally(() => {
+      setIsLoading(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, toast, user?.id]);
+  }, [selectedDate, user?.id]);
 
   useEffect(() => {
     loadWeek().catch((error) =>
@@ -135,10 +143,10 @@ export default function CaloriesPage() {
   async function copyYesterday() {
     if (!user?.id) return toast({ title: "Sign in required", description: "Please sign in before copying meals." });
     try {
-      const copied = await copyYesterdaysMeals(user.id);
+      const copied = await copyYesterdaysMeals(user.id, selectedDate);
       if (selectedDate === todayIso()) setLogs((current) => [...copied, ...current]);
-      await loadWeek();
-      toast({ title: "Yesterday copied", description: `${copied.length} food items added to today.` });
+      else await loadWeek();
+      toast({ title: "Yesterday copied", description: `${copied.length} food items added to ${formatDay(selectedDate)}.` });
     } catch (error) {
       toast({ title: "Could not copy yesterday", description: error instanceof Error ? error.message : "Please try again." });
     }
@@ -237,11 +245,25 @@ export default function CaloriesPage() {
     toast({ title: "Targets estimated", description: `Estimated maintenance is ${estimate.maintenance_calories} kcal. Review and save to use these targets.` });
   }
 
+  if (isLoading) {
+    return <div className="flex h-32 items-center justify-center"><p className="text-muted-foreground animate-pulse">Loading daily trackers...</p></div>;
+  }
+
+  if (loadError) {
+    return (
+      <div className="rounded-lg border border-destructive bg-destructive/10 p-6 text-center text-destructive m-4">
+        <p className="font-semibold">Failed to load calories</p>
+        <p className="text-sm mt-1">{loadError}</p>
+        <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>Retry</Button>
+      </div>
+    );
+  }
+
   return (
     <>
       <PageHeading
         title="Calorie Tracker"
-        description="Track daily food, macros, and water intake."
+        description={`Track daily food, macros, and water intake for ${formatDay(selectedDate)}.`}
         action={
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">
@@ -258,7 +280,7 @@ export default function CaloriesPage() {
             </Button>
             <Button variant="outline" onClick={copyYesterday}>
               <Copy className="h-4 w-4" />
-              Copy yesterday
+              Copy previous day
             </Button>
           </div>
         }
@@ -502,7 +524,7 @@ function FastFoodFlowCard({
     {
       icon: Copy,
       label: "Repeat routine",
-      detail: hasFoodLogs ? `Use recent ${selectedDateLabel} logs as reference.` : "Copy yesterday when the day is similar.",
+      detail: hasFoodLogs ? `Use recent ${selectedDateLabel} logs as reference.` : "Copy from the day before when similar.",
       onClick: onCopyYesterday
     },
     {
