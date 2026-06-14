@@ -176,14 +176,14 @@ export function MyWorkoutPlans() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-950">Workout Plans</h2>
-          <p className="text-sm text-muted-foreground">Track ChatGPT-exported workout plans and manual plans saved to your account.</p>
+          <p className="text-sm text-muted-foreground">Imported plans are recommended. Manual tools are for backup, repair, and small edits.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={loadPlans} disabled={isLoading}>
             <RefreshCcw className="h-4 w-4" /> Refresh
           </Button>
-          <Button onClick={() => setShowBuilder((current) => !current)}>
-            <Plus className="h-4 w-4" /> {showBuilder ? "Close Builder" : "Manual Plan Builder"}
+          <Button variant="outline" onClick={() => setShowBuilder((current) => !current)}>
+            <Plus className="h-4 w-4" /> {showBuilder ? "Close manual fallback" : "Manual backup / edit plan"}
           </Button>
         </div>
       </div>
@@ -220,10 +220,8 @@ export function MyWorkoutPlans() {
         <EmptyState
           title="No workout plans yet"
           description="Import a workout plan from ChatGPT to start scheduling and tracking real saved exercises. The app will not show fake workout data here."
-          actionLabel="Create manual plan"
-          onAction={() => setShowBuilder(true)}
-          secondaryLabel="Set up ChatGPT import"
-          secondaryHref="/settings"
+          actionLabel="Set up ChatGPT import"
+          actionHref="/settings"
         />
       ) : null}
 
@@ -302,7 +300,19 @@ export function MyWorkoutPlans() {
         </Card>
       ) : null}
 
-      {showBuilder ? <WorkoutPlanBuilder loadActivePlan={false} onSaved={loadPlans} /> : null}
+      <div id="manual-fallback">
+        {showBuilder ? (
+          <section className="space-y-3 rounded-md border p-4">
+            <div>
+              <h3 className="text-lg font-semibold">Manual backup / edit plan</h3>
+              <p className="text-sm text-muted-foreground">
+                Use this only when you need to repair an imported plan or enter a plan you already approved elsewhere.
+              </p>
+            </div>
+            <WorkoutPlanBuilder loadActivePlan={false} onSaved={loadPlans} />
+          </section>
+        ) : null}
+      </div>
     </div>
   );
 }

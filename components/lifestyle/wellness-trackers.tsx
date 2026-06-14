@@ -89,7 +89,7 @@ export function WellnessDashboard() {
       else setNotificationState("unsupported");
     }
     load().catch((error) => toast({ title: "Could not load wellness dashboard", description: error instanceof Error ? error.message : "Please try again." }));
-  }, [toast, user?.id]);
+  }, [toast, today, user?.id]);
 
   const checklist = buildDailyChecklist({ nutrition, habits, supplements, sleep: sleepLogs, workoutActivity: workouts });
   const readiness = calculateReadiness(sleepLogs);

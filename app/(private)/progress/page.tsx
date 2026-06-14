@@ -225,6 +225,20 @@ export default function ProgressPage() {
     <>
       <PageHeading title="Progress Tracker" description="Track body weight, measurements, private progress photos, workout consistency, and real trend insights." action={<ProgressEntryModal onSaved={(entry) => setEntries((current) => [...current, entry])} />} />
 
+      {!entries.length ? (
+        <Card className="mb-4 border-dashed">
+          <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-lg font-semibold">Add your first progress entry</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Start with body weight, waist, or a progress photo. Trends appear only after real saved entries exist.
+              </p>
+            </div>
+            <ProgressEntryModal onSaved={(entry) => setEntries((current) => [...current, entry])} />
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={Scale} label="Body weight" value={latestWeightEntry ? `${latestWeightEntry.body_weight_kg} kg` : "No entry"} detail={weightDelta === null ? "No trend yet" : `${formatDelta(weightDelta)} kg from first entry`} />
         <MetricCard icon={TrendingUp} label="7-day average" value={sevenDayAverage === null ? "Not enough data" : `${sevenDayAverage} kg`} detail="Average from real weight entries only" />
@@ -255,13 +269,13 @@ export default function ProgressPage() {
         <Card>
           <CardHeader><CardTitle>Body-fat estimate</CardTitle></CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">This is not medical analysis. Manual body-fat % is shown when saved. The optional estimate uses the Relative Fat Mass formula with height, sex, and latest waist measurement.</p>
+            <p className="text-sm text-muted-foreground">Body-fat estimate is calculated from your saved measurements and should be treated as a rough fitness estimate, not medical data. Manual body-fat % is shown when saved. The optional estimate uses the Relative Fat Mass formula with height, sex, and latest waist measurement.</p>
             <div className="grid gap-3 sm:grid-cols-[1fr_160px_auto]">
               <div className="space-y-2"><Label>Height cm for estimate</Label><Input type="number" value={estimateSettings.heightCm} onChange={(event) => setEstimateSettings((current) => ({ ...current, heightCm: event.target.value }))} placeholder="Example: 175" /></div>
               <div className="space-y-2"><Label>Sex for formula</Label><select value={estimateSettings.sex} onChange={(event) => setEstimateSettings((current) => ({ ...current, sex: event.target.value as "male" | "female" }))} className="h-10 w-full rounded-md border bg-white px-3 text-sm"><option value="male">male</option><option value="female">female</option></select></div>
               <Button className="self-end" variant="outline" onClick={saveEstimateSettings}>Save settings</Button>
             </div>
-            <div className="rounded-md border bg-slate-50 p-3"><p className="font-semibold">{bodyFatEstimate.value}</p><p className="mt-1 text-sm text-muted-foreground">{bodyFatEstimate.detail}</p></div>
+            <div className="rounded-md border bg-muted/40 p-3"><p className="font-semibold">{bodyFatEstimate.value}</p><p className="mt-1 text-sm text-muted-foreground">{bodyFatEstimate.detail}</p></div>
           </CardContent>
         </Card>
 
@@ -406,7 +420,7 @@ function ProgressPhotoImage({ url, label, unavailableLabel }: { url: string | nu
 }
 
 function EditProgressCard({ draft, setDraft, onSave, onCancel }: { draft: EditDraft; setDraft: Dispatch<SetStateAction<EditDraft | null>>; onSave: () => void; onCancel: () => void }) {
-  return <Card className="mt-4 border-primary/40 bg-blue-50"><CardHeader><CardTitle>Edit progress entry</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Field label="Date" type="date" value={draft.entryDate} onChange={(value) => setDraft((current) => current ? { ...current, entryDate: value } : current)} /><Field label="Body weight kg" value={draft.bodyWeightKg} onChange={(value) => setDraft((current) => current ? { ...current, bodyWeightKg: value } : current)} /><Field label="Waist cm" value={draft.waistCm} onChange={(value) => setDraft((current) => current ? { ...current, waistCm: value } : current)} /><Field label="Notes" value={draft.notes} onChange={(value) => setDraft((current) => current ? { ...current, notes: value } : current)} />{editableMeasurementFields.map(([key, label]) => <Field key={String(key)} label={label} value={draft.measurements[String(key)] ?? ""} onChange={(value) => setDraft((current) => current ? { ...current, measurements: { ...current.measurements, [String(key)]: value } } : current)} />)}<div className="flex gap-2 sm:col-span-2 lg:col-span-4"><Button onClick={onSave}>Save changes</Button><Button variant="outline" onClick={onCancel}>Cancel</Button></div></CardContent></Card>;
+  return <Card className="mt-4 border-primary/40 bg-primary/5"><CardHeader><CardTitle>Edit progress entry</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Field label="Date" type="date" value={draft.entryDate} onChange={(value) => setDraft((current) => current ? { ...current, entryDate: value } : current)} /><Field label="Body weight kg" value={draft.bodyWeightKg} onChange={(value) => setDraft((current) => current ? { ...current, bodyWeightKg: value } : current)} /><Field label="Waist cm" value={draft.waistCm} onChange={(value) => setDraft((current) => current ? { ...current, waistCm: value } : current)} /><Field label="Notes" value={draft.notes} onChange={(value) => setDraft((current) => current ? { ...current, notes: value } : current)} />{editableMeasurementFields.map(([key, label]) => <Field key={String(key)} label={label} value={draft.measurements[String(key)] ?? ""} onChange={(value) => setDraft((current) => current ? { ...current, measurements: { ...current.measurements, [String(key)]: value } } : current)} />)}<div className="flex gap-2 sm:col-span-2 lg:col-span-4"><Button onClick={onSave}>Save changes</Button><Button variant="outline" onClick={onCancel}>Cancel</Button></div></CardContent></Card>;
 }
 
 function Field({ label, value, onChange, type = "number" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
