@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MobileStickyActions, MobileStickyActionsSpacer } from "@/components/layout/mobile-sticky-actions";
 import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
@@ -121,126 +122,147 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Log workout results</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">
-          <p>{workout.instructions || "Use controlled form and stop if the movement feels painful."}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {guideUrl ? (
-              <Button asChild variant="outline" size="sm">
-                <a href={guideUrl} target="_blank" rel="noreferrer">
-                  <ExternalLink className="h-4 w-4" />
-                  Open Exercise Guide
-                </a>
-              </Button>
-            ) : (
-              <Button type="button" variant="outline" size="sm" disabled>
-                No guide added
-              </Button>
-            )}
-            {customVideoUrl ? (
-              <Button asChild variant="outline" size="sm">
-                <a href={customVideoUrl} target="_blank" rel="noreferrer">
-                  <ExternalLink className="h-4 w-4" />
-                  Open Custom Video
-                </a>
-              </Button>
-            ) : (
-              <Button type="button" variant="outline" size="sm" disabled>
-                No custom video
-              </Button>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-slate-50 p-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-            <Clock className="h-4 w-4 text-primary" />
-            Time spent: {formatTime(elapsedSeconds)}
-          </div>
-          <Button type="button" variant="outline" size="sm" onClick={resetWorkoutTimer}>
-            <TimerReset className="h-4 w-4" />
-            Reset workout timer
-          </Button>
-        </div>
-        {sets.map((set, index) => (
-          <div key={index} className="rounded-md border p-3">
-            <p className="mb-3 text-sm font-semibold">Set {index + 1}</p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor={`reps-${index}`}>Reps</Label>
-                <Input
-                  id={`reps-${index}`}
-                  type="number"
-                  min="0"
-                  value={set.reps}
-                  onChange={(event) =>
-                    setSets((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, reps: Number(event.target.value) } : item)))
-                  }
-                  placeholder="Reps completed, e.g. 10"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor={`weight-${index}`}>Weight kg</Label>
-                <Input
-                  id={`weight-${index}`}
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={set.weight}
-                  onChange={(event) =>
-                    setSets((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, weight: Number(event.target.value) } : item)))
-                  }
-                  placeholder="Weight used, e.g. 40"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor={`set-note-${index}`}>Set note</Label>
-                <Input
-                  id={`set-note-${index}`}
-                  value={set.notes}
-                  onChange={(event) =>
-                    setSets((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, notes: event.target.value } : item)))
-                  }
-                  placeholder="Set note, e.g. smooth reps"
-                />
-              </div>
+    <div className="space-y-4 pb-24 lg:pb-0">
+      <Card>
+        <CardHeader>
+          <CardTitle>Log workout results</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+            <p>{workout.instructions || "Use controlled form and stop if the movement feels painful."}</p>
+            <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap">
+              {guideUrl ? (
+                <Button asChild variant="outline" size="sm">
+                  <a href={guideUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-4 w-4" />
+                    Open Exercise Guide
+                  </a>
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" size="sm" disabled>
+                  No guide added
+                </Button>
+              )}
+              {customVideoUrl ? (
+                <Button asChild variant="outline" size="sm">
+                  <a href={customVideoUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-4 w-4" />
+                    Open Custom Video
+                  </a>
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" size="sm" disabled>
+                  No custom video
+                </Button>
+              )}
             </div>
           </div>
-        ))}
-        <Button variant="outline" onClick={() => setSets((current) => [...current, { reps: 10, weight: 0, notes: "" }])}>
-          <Plus className="h-4 w-4" />
-          Add set
-        </Button>
-        <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
-          <div className="space-y-2">
-            <Label htmlFor="duration">Duration minutes</Label>
-            <Input
-              id="duration"
-              type="number"
-              min="1"
-              value={duration}
-              onChange={(event) => setDuration(Number(event.target.value))}
-              placeholder="Workout duration, e.g. 45"
-            />
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-slate-50 p-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+              <Clock className="h-4 w-4 text-primary" />
+              Time spent: {formatTime(elapsedSeconds)}
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={resetWorkoutTimer}>
+              <TimerReset className="h-4 w-4" />
+              Reset workout timer
+            </Button>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="workout-notes">Workout notes</Label>
-            <Input
-              id="workout-notes"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Workout note, e.g. felt strong today"
-            />
+          {sets.map((set, index) => (
+            <div key={index} className="rounded-xl border bg-card p-4">
+              <p className="mb-3 text-base font-semibold">Set {index + 1}</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor={`reps-${index}`}>Reps</Label>
+                  <Input
+                    id={`reps-${index}`}
+                    className="h-14 text-2xl font-semibold"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    value={set.reps}
+                    onChange={(event) =>
+                      setSets((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, reps: Number(event.target.value) } : item)))
+                    }
+                    placeholder="10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`weight-${index}`}>Weight kg</Label>
+                  <Input
+                    id={`weight-${index}`}
+                    className="h-14 text-2xl font-semibold"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.5"
+                    value={set.weight}
+                    onChange={(event) =>
+                      setSets((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, weight: Number(event.target.value) } : item)))
+                    }
+                    placeholder="40"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`set-note-${index}`}>Set note</Label>
+                  <Input
+                    id={`set-note-${index}`}
+                    className="h-12"
+                    value={set.notes}
+                    onChange={(event) =>
+                      setSets((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, notes: event.target.value } : item)))
+                    }
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+          <Button className="w-full sm:w-auto" variant="outline" onClick={() => setSets((current) => [...current, { reps: 10, weight: 0, notes: "" }])}>
+            <Plus className="h-4 w-4" />
+            Add set
+          </Button>
+          <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
+            <div className="space-y-2">
+              <Label htmlFor="duration">Duration minutes</Label>
+              <Input
+                id="duration"
+                type="number"
+                min="1"
+                value={duration}
+                onChange={(event) => setDuration(Number(event.target.value))}
+                placeholder="Workout duration, e.g. 45"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="workout-notes">Workout notes</Label>
+              <Input
+                id="workout-notes"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Workout note, e.g. felt strong today"
+              />
+            </div>
           </div>
+          <Button className="hidden w-full lg:inline-flex" onClick={complete} disabled={isSaving}>
+            <CheckCircle2 className="h-4 w-4" />
+            {isSaving ? "Saving workout..." : "Mark workout completed"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <MobileStickyActions>
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1 text-sm">
+            <p className="font-semibold text-foreground">{formatTime(elapsedSeconds)}</p>
+            <p className="truncate text-xs text-muted-foreground">{sets.length} set{sets.length === 1 ? "" : "s"} ready to save</p>
+          </div>
+          <Button className="min-h-12 flex-1" onClick={complete} disabled={isSaving}>
+            <CheckCircle2 className="h-4 w-4" />
+            {isSaving ? "Saving..." : "Finish"}
+          </Button>
         </div>
-        <Button className="w-full" onClick={complete} disabled={isSaving}>
-          <CheckCircle2 className="h-4 w-4" />
-          {isSaving ? "Saving workout..." : "Mark workout completed"}
-        </Button>
-      </CardContent>
-    </Card>
+      </MobileStickyActions>
+      <MobileStickyActionsSpacer />
+    </div>
   );
 }
