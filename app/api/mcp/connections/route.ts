@@ -7,10 +7,12 @@ export const runtime = "nodejs";
 
 const DEFAULT_SCOPES = [
   "fitlife.profile.read",
+  "fitlife.profile.write",
   "fitlife.summary.read",
   "fitlife.nutrition.write",
   "fitlife.training.write",
-  "fitlife.progress.write"
+  "fitlife.progress.write",
+  "fitlife.wellness.write"
 ];
 
 function requireMcpConnectionConfig() {
