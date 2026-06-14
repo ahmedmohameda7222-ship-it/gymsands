@@ -11,7 +11,7 @@ const heroImages = [
 ];
 
 const features = [
-  { icon: Dumbbell, title: "Workout plans", text: "Generated and custom plans with active default selection." },
+  { icon: Dumbbell, title: "Workout plans", text: "Track ChatGPT-exported plans and manually edited plans with active default selection." },
   { icon: Activity, title: "Exercise library", text: "Filter exercises by muscle, equipment, mechanics, level, and force type." },
   { icon: Soup, title: "Meal planning", text: "Plan meals, build custom foods, and track daily nutrition." },
   { icon: Utensils, title: "Calorie tracking", text: "Calories, macros, water, and weekly summaries in one flow." },
@@ -40,7 +40,7 @@ export default function LandingPage() {
               <p className="text-sm font-semibold uppercase tracking-wide text-primary">Luxury wellness dashboard</p>
               <h1 className="mt-4 text-5xl font-bold tracking-normal sm:text-7xl">FitLife Hub</h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-[#f4efe6]/85">
-                A calm premium space for generated workout plans, exercise guidance, meal planning, calorie tracking, recovery, habits, supplements, and personal records.
+                A calm premium space for ChatGPT-exported workout plans, exercise guidance, meal planning, calorie tracking, recovery, habits, supplements, and personal records.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Button asChild size="lg">
@@ -51,7 +51,7 @@ export default function LandingPage() {
                 </Button>
               </div>
               <div className="mt-8 flex flex-wrap gap-2">
-                {["Workout plans", "Generated plans", "Exercise library", "Meal planning", "Progress tracking", "Sleep & recovery", "Habits", "Supplements", "Personal records"].map((item) => (
+                {["ChatGPT plan export", "Workout tracking", "Exercise library", "Meal planning", "Progress tracking", "Sleep & recovery", "Habits", "Supplements", "Personal records"].map((item) => (
                   <span key={item} className="rounded-md border border-primary/25 bg-card/50 px-3 py-1 text-sm text-[#f4efe6]/85 backdrop-blur">
                     {item}
                   </span>
