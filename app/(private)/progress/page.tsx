@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CalendarCheck, Ruler, Scale, SkipForward, Target, TrendingDown, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { CalendarCheck, Camera, Edit3, ImageIcon, Ruler, Scale, SkipForward, Target, Trash2, TrendingDown, TrendingUp, Upload } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { ProgressEntryModal } from "@/components/progress/progress-entry-modal";
@@ -12,36 +12,84 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { getProgressEntries, getWorkoutActivity } from "@/services/database/repository";
-import type { ProgressEntry, WorkoutSession } from "@/types";
+import { getNutritionWeek, getProgressEntries, getWorkoutActivity } from "@/services/database/repository";
+import { deleteProgressEntryWithMeasurements, updateProgressEntryWithMeasurements } from "@/services/progress/progress-measurements";
+import { deleteProgressPhoto, getProgressPhotos, uploadProgressPhoto, type ProgressPhoto, type ProgressPhotoType } from "@/services/progress/progress-photos";
+import type { BodyMeasurement, DailyNutritionSummary, ProgressEntry, WorkoutSession } from "@/types";
 
 const GOAL_WEIGHT_STORAGE_KEY = "fitlife_goal_weight_kg";
+const BODY_FAT_SETTINGS_KEY = "fitlife_body_fat_estimate_settings";
+const photoTypes: ProgressPhotoType[] = ["front", "side", "back"];
+const editableMeasurementFields: Array<[keyof BodyMeasurement, string]> = [
+  ["hips_cm", "Hips cm"],
+  ["chest_cm", "Chest cm"],
+  ["shoulders_cm", "Shoulders cm"],
+  ["left_arm_cm", "Left arm cm"],
+  ["right_arm_cm", "Right arm cm"],
+  ["left_thigh_cm", "Left thigh cm"],
+  ["right_thigh_cm", "Right thigh cm"],
+  ["glutes_cm", "Glutes / hips cm"],
+  ["calves_cm", "Calves cm"],
+  ["neck_cm", "Neck cm"],
+  ["body_fat_percent", "Manual body fat %"]
+];
+
+type EditDraft = {
+  entryDate: string;
+  bodyWeightKg: string;
+  waistCm: string;
+  notes: string;
+  measurements: Record<string, string>;
+};
 
 export default function ProgressPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [entries, setEntries] = useState<ProgressEntry[]>([]);
   const [workoutActivity, setWorkoutActivity] = useState<WorkoutSession[]>([]);
+  const [nutritionWeek, setNutritionWeek] = useState<DailyNutritionSummary[]>([]);
+  const [photos, setPhotos] = useState<ProgressPhoto[]>([]);
   const [goalWeight, setGoalWeight] = useState("");
+  const [editingEntry, setEditingEntry] = useState<ProgressEntry | null>(null);
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+  const [estimateSettings, setEstimateSettings] = useState({ heightCm: "", sex: "male" as "male" | "female" });
+
+  const currentWeekStart = useMemo(() => startOfWeek(todayIso()), []);
+
+  async function loadProgress() {
+    if (!user?.id) return;
+    const [progressEntries, activity, weekData, progressPhotos] = await Promise.all([
+      getProgressEntries(user.id),
+      getWorkoutActivity(user.id),
+      getNutritionWeek(user.id, currentWeekStart),
+      getProgressPhotos(user.id).catch((error) => {
+        console.warn("FitLife Hub could not load private progress photos.", error instanceof Error ? error.message : error);
+        return [] as ProgressPhoto[];
+      })
+    ]);
+    setEntries(progressEntries);
+    setWorkoutActivity(activity);
+    setNutritionWeek(weekData);
+    setPhotos(progressPhotos);
+  }
 
   useEffect(() => {
-    if (!user) return;
-    Promise.all([getProgressEntries(user.id), getWorkoutActivity(user.id)])
-      .then(([progressEntries, activity]) => {
-        setEntries(progressEntries);
-        setWorkoutActivity(activity);
-      })
-      .catch((error) =>
-        toast({
-          title: "Could not load progress",
-          description: error instanceof Error ? error.message : "Please refresh and try again."
-        })
-      );
-  }, [toast, user]);
+    loadProgress().catch((error) => toast({ title: "Could not load progress", description: error instanceof Error ? error.message : "Please refresh and try again." }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toast, user?.id]);
 
   useEffect(() => {
     const storedGoal = window.localStorage.getItem(GOAL_WEIGHT_STORAGE_KEY);
     if (storedGoal) setGoalWeight(storedGoal);
+    const storedEstimate = window.localStorage.getItem(BODY_FAT_SETTINGS_KEY);
+    if (storedEstimate) {
+      try {
+        const parsed = JSON.parse(storedEstimate) as { heightCm?: string; sex?: "male" | "female" };
+        setEstimateSettings({ heightCm: parsed.heightCm ?? "", sex: parsed.sex === "female" ? "female" : "male" });
+      } catch {
+        // Ignore invalid browser-local settings.
+      }
+    }
   }, []);
 
   const sortedEntries = [...entries].sort((a, b) => a.entry_date.localeCompare(b.entry_date));
@@ -51,6 +99,7 @@ export default function ProgressPage() {
   const previousWeightEntry = weightEntries.length > 1 ? weightEntries.at(-2) ?? null : null;
   const latest = sortedEntries.at(-1);
   const first = sortedEntries[0];
+  const latestMeasurement = latest?.measurements ?? null;
   const weightDelta = latestWeightEntry && firstWeightEntry ? round(latestWeightEntry.body_weight_kg - firstWeightEntry.body_weight_kg) : null;
   const latestWaist = latest?.measurements?.waist_cm ?? latest?.waist_cm ?? null;
   const firstWaist = first?.measurements?.waist_cm ?? first?.waist_cm ?? null;
@@ -64,7 +113,10 @@ export default function ProgressPage() {
   const latestWeightChange = previousWeightEntry && latestWeightEntry ? round(latestWeightEntry.body_weight_kg - previousWeightEntry.body_weight_kg) : null;
   const numericGoalWeight = Number(goalWeight);
   const targetDateEstimate = estimateTargetDate(weightEntries, numericGoalWeight);
-  const consistencyScore = calculateConsistencyScore({ entries: sortedEntries, completedCount, skippedCount });
+  const weeklyInsights = buildWeeklyInsights({ nutritionWeek, workoutActivity, entries: sortedEntries });
+  const consistencyScore = weeklyInsights.consistencyScore ?? calculateConsistencyScore({ entries: sortedEntries, completedCount, skippedCount });
+  const bodyFatEstimate = buildBodyFatEstimate({ latestMeasurement, latestWaist, heightCm: Number(estimateSettings.heightCm), sex: estimateSettings.sex });
+  const measurementTrends = buildMeasurementTrends(sortedEntries);
 
   function saveGoalWeight() {
     if (!numericGoalWeight || numericGoalWeight < 25 || numericGoalWeight > 300) {
@@ -75,13 +127,57 @@ export default function ProgressPage() {
     toast({ title: "Goal weight saved", description: "The goal is saved in this browser until profile-level goal storage is added." });
   }
 
+  function saveEstimateSettings() {
+    window.localStorage.setItem(BODY_FAT_SETTINGS_KEY, JSON.stringify(estimateSettings));
+    toast({ title: "Estimate settings saved", description: "Used only for the clearly labeled body-fat estimate." });
+  }
+
+  function startEdit(entry: ProgressEntry) {
+    const measurement = entry.measurements;
+    setEditingEntry(entry);
+    setEditDraft({
+      entryDate: entry.entry_date,
+      bodyWeightKg: entry.body_weight_kg === null || entry.body_weight_kg === undefined ? "" : String(entry.body_weight_kg),
+      waistCm: (measurement?.waist_cm ?? entry.waist_cm) === null || (measurement?.waist_cm ?? entry.waist_cm) === undefined ? "" : String(measurement?.waist_cm ?? entry.waist_cm),
+      notes: entry.notes ?? "",
+      measurements: Object.fromEntries(editableMeasurementFields.map(([key]) => [key, measurement?.[key] === null || measurement?.[key] === undefined ? "" : String(measurement?.[key])]))
+    });
+  }
+
+  async function saveEdit() {
+    if (!user?.id || !editingEntry || !editDraft) return;
+    try {
+      const updated = await updateProgressEntryWithMeasurements(user.id, editingEntry.id, {
+        entryDate: editDraft.entryDate,
+        bodyWeightKg: numberOrNull(editDraft.bodyWeightKg),
+        waistCm: numberOrNull(editDraft.waistCm),
+        notes: editDraft.notes.trim() || null,
+        measurements: Object.fromEntries(Object.entries(editDraft.measurements).map(([key, value]) => [key, numberOrNull(value)])) as Partial<BodyMeasurement>
+      });
+      setEntries((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
+      setEditingEntry(null);
+      setEditDraft(null);
+      toast({ title: "Progress entry updated", description: "The entry and linked measurements were updated." });
+    } catch (error) {
+      toast({ title: "Could not update progress", description: error instanceof Error ? error.message : "Please try again." });
+    }
+  }
+
+  async function deleteEntry(entry: ProgressEntry) {
+    if (!user?.id) return;
+    if (!window.confirm(`Delete progress entry from ${entry.entry_date}? Progress photos are managed separately.`)) return;
+    try {
+      await deleteProgressEntryWithMeasurements(user.id, entry.id);
+      setEntries((current) => current.filter((item) => item.id !== entry.id));
+      toast({ title: "Progress entry deleted", description: "Measurement data linked to this entry was removed." });
+    } catch (error) {
+      toast({ title: "Could not delete progress entry", description: error instanceof Error ? error.message : "Please try again." });
+    }
+  }
+
   return (
     <>
-      <PageHeading
-        title="Progress Tracker"
-        description="Track body weight, measurements, workout consistency, and real trend insights."
-        action={<ProgressEntryModal onSaved={(entry) => setEntries((current) => [...current, entry])} />}
-      />
+      <PageHeading title="Progress Tracker" description="Track body weight, measurements, private progress photos, workout consistency, and real trend insights." action={<ProgressEntryModal onSaved={(entry) => setEntries((current) => [...current, entry])} />} />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={Scale} label="Body weight" value={latestWeightEntry ? `${latestWeightEntry.body_weight_kg} kg` : "No entry"} detail={weightDelta === null ? "No trend yet" : `${formatDelta(weightDelta)} kg from first entry`} />
         <MetricCard icon={TrendingUp} label="7-day average" value={sevenDayAverage === null ? "Not enough data" : `${sevenDayAverage} kg`} detail="Average from real weight entries only" />
@@ -90,55 +186,71 @@ export default function ProgressPage() {
       </div>
 
       <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Goal line</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Goal line</CardTitle></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-[1fr_auto]">
-          <div className="space-y-2">
-            <Label>Goal weight, kg</Label>
-            <Input type="number" value={goalWeight} onChange={(event) => setGoalWeight(event.target.value)} placeholder="Example: 78" />
-            <p className="text-xs text-muted-foreground">Saved locally in this browser. No fake goal is shown when this is empty.</p>
-          </div>
+          <div className="space-y-2"><Label>Goal weight, kg</Label><Input type="number" value={goalWeight} onChange={(event) => setGoalWeight(event.target.value)} placeholder="Example: 78" /><p className="text-xs text-muted-foreground">Saved locally in this browser. No fake goal is shown when this is empty.</p></div>
           <Button className="self-end" onClick={saveGoalWeight}>Save goal</Button>
         </CardContent>
       </Card>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={Ruler} label="Waist" value={latestWaist ? `${latestWaist} cm` : "No entry"} detail={waistDelta === null ? "No measurement trend yet" : `${formatDelta(waistDelta)} cm from first entry`} />
-        <MetricCard icon={CalendarCheck} label="Completed" value={`${completedCount}`} detail="Workout days finished" progress={completionRate} />
-        <MetricCard icon={SkipForward} label="Skipped" value={`${skippedCount}`} detail="Workout days skipped" progress={totalWorkoutCount ? Math.round((skippedCount / totalWorkoutCount) * 100) : undefined} />
-        <MetricCard icon={Target} label="Consistency" value={`${consistencyScore}%`} detail="Based on progress entries and workout completion" progress={consistencyScore} />
+        <MetricCard icon={CalendarCheck} label="Completed this week" value={weeklyInsights.completedWorkouts === null ? "Not enough data" : `${weeklyInsights.completedWorkouts}`} detail="Completed workout sessions in current week" progress={weeklyInsights.weekWorkoutCompletionRate ?? undefined} />
+        <MetricCard icon={SkipForward} label="Skipped this week" value={weeklyInsights.skippedWorkouts === null ? "Not enough data" : `${weeklyInsights.skippedWorkouts}`} detail="Skipped workout sessions in current week" progress={weeklyInsights.weekWorkoutTotal ? Math.round((weeklyInsights.skippedWorkouts ?? 0) / weeklyInsights.weekWorkoutTotal * 100) : undefined} />
+        <MetricCard icon={Target} label="Consistency" value={`${consistencyScore}%`} detail="Based on current week logs, workouts, water, and progress entries" progress={consistencyScore} />
+      </div>
+
+      <ProgressPhotoManager userId={user?.id ?? null} photos={photos} setPhotos={setPhotos} />
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <Card>
+          <CardHeader><CardTitle>Body-fat estimate</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">This is not medical analysis. Manual body-fat % is shown when saved. The optional estimate uses the Relative Fat Mass formula with height, sex, and latest waist measurement.</p>
+            <div className="grid gap-3 sm:grid-cols-[1fr_160px_auto]">
+              <div className="space-y-2"><Label>Height cm for estimate</Label><Input type="number" value={estimateSettings.heightCm} onChange={(event) => setEstimateSettings((current) => ({ ...current, heightCm: event.target.value }))} placeholder="Example: 175" /></div>
+              <div className="space-y-2"><Label>Sex for formula</Label><select value={estimateSettings.sex} onChange={(event) => setEstimateSettings((current) => ({ ...current, sex: event.target.value as "male" | "female" }))} className="h-10 w-full rounded-md border bg-white px-3 text-sm"><option value="male">male</option><option value="female">female</option></select></div>
+              <Button className="self-end" variant="outline" onClick={saveEstimateSettings}>Save settings</Button>
+            </div>
+            <div className="rounded-md border bg-slate-50 p-3"><p className="font-semibold">{bodyFatEstimate.value}</p><p className="mt-1 text-sm text-muted-foreground">{bodyFatEstimate.detail}</p></div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Measurement trends</CardTitle></CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {measurementTrends.map((trend) => <TrendCard key={trend.label} trend={trend} />)}
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Weekly progress insights</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Weekly progress insights</CardTitle></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Insight text={entries.length ? `${entries.length} progress entr${entries.length === 1 ? "y" : "ies"} saved.` : "No progress entries yet. Add your first weight or measurement."} />
-          <Insight text={completionRate === undefined ? "No workout consistency data yet." : `You completed ${completedCount}/${totalWorkoutCount} tracked workouts.`} />
+          <Insight text={weeklyInsights.completedWorkouts === null ? "Not enough workout data for this week." : `This week: ${weeklyInsights.completedWorkouts} completed and ${weeklyInsights.skippedWorkouts} skipped workouts.`} />
+          <Insight text={weeklyInsights.averageCalories === null ? "Not enough calorie data this week." : `Average calories this week: ${weeklyInsights.averageCalories} kcal.`} />
+          <Insight text={weeklyInsights.averageProtein === null ? "Not enough protein data this week." : `Average protein this week: ${weeklyInsights.averageProtein} g.`} />
+          <Insight text={weeklyInsights.waterAverage === null ? "Not enough water data this week." : `Average water this week: ${weeklyInsights.waterAverage} ml.`} />
           <Insight text={latestWeightChange === null ? "Add at least two weight entries to see weight velocity." : `Last weight change: ${formatDelta(latestWeightChange)} kg.`} />
           <Insight text={sevenDayAverage === null || thirtyDayAverage === null ? "Not enough data yet for a reliable 7/30-day weight trend." : `7-day average is ${formatDelta(round(sevenDayAverage - thirtyDayAverage))} kg vs 30-day average.`} />
           <Insight text={waistDelta === null ? "Add waist measurements to see waist trend." : `Waist trend: ${formatDelta(waistDelta)} cm.`} />
-          <Insight text={targetDateEstimate} />
-          <Insight text={consistencyScore < 50 ? "Consistency is still low. Add more logs and complete planned workouts." : `Consistency score is ${consistencyScore}%.`} />
-          <Insight text={numericGoalWeight ? "Goal line is active for this browser session." : "Set a goal weight to show a target line estimate."} />
         </CardContent>
       </Card>
-      <div className="mt-4">
-        <ProgressCharts entries={entries} workoutActivity={workoutActivity} />
-      </div>
+
+      <div className="mt-4"><ProgressCharts entries={entries} workoutActivity={workoutActivity} /></div>
+
+      {editingEntry && editDraft ? <EditProgressCard draft={editDraft} setDraft={setEditDraft} onCancel={() => { setEditingEntry(null); setEditDraft(null); }} onSave={saveEdit} /> : null}
+
       <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Progress history</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Progress history</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           {sortedEntries.map((entry) => (
             <div key={entry.id} className="rounded-md border p-3">
-              <p className="font-semibold">{entry.entry_date}</p>
-              <p className="text-sm text-muted-foreground">
-                {entry.body_weight_kg ? `${entry.body_weight_kg} kg` : "No weight"} | {(entry.measurements?.waist_cm ?? entry.waist_cm) ? `${entry.measurements?.waist_cm ?? entry.waist_cm} cm waist` : "No waist"}
-              </p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div><p className="font-semibold">{entry.entry_date}</p><p className="text-sm text-muted-foreground">{entry.body_weight_kg ? `${entry.body_weight_kg} kg` : "No weight"} | {(entry.measurements?.waist_cm ?? entry.waist_cm) ? `${entry.measurements?.waist_cm ?? entry.waist_cm} cm waist` : "No waist"}</p></div>
+                <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => startEdit(entry)}><Edit3 className="h-4 w-4" /> Edit</Button><Button size="sm" variant="outline" onClick={() => deleteEntry(entry)}><Trash2 className="h-4 w-4" /> Delete</Button></div>
+              </div>
               <MeasurementList entry={entry} />
               {entry.notes ? <p className="mt-2 text-sm text-slate-600">{entry.notes}</p> : null}
             </div>
@@ -150,85 +262,131 @@ export default function ProgressPage() {
   );
 }
 
-function MeasurementList({ entry }: { entry: ProgressEntry }) {
-  const measurement = entry.measurements;
-  if (!measurement) return null;
-  const allValues: Array<[string, number | null | undefined]> = [
-    ["Hips", measurement.hips_cm],
-    ["Chest", measurement.chest_cm],
-    ["Bust", measurement.bust_cm],
-    ["Underbust", measurement.underbust_cm],
-    ["Neck", measurement.neck_cm],
-    ["Shoulders", measurement.shoulders_cm],
-    ["Left arm", measurement.left_arm_cm],
-    ["Right arm", measurement.right_arm_cm],
-    ["Left thigh", measurement.left_thigh_cm],
-    ["Right thigh", measurement.right_thigh_cm],
-    ["Glutes", measurement.glutes_cm],
-    ["Calves", measurement.calves_cm]
-  ];
-  const values = allValues.filter((item): item is [string, number] => item[1] !== null && item[1] !== undefined);
+function ProgressPhotoManager({ userId, photos, setPhotos }: { userId: string | null; photos: ProgressPhoto[]; setPhotos: Dispatch<SetStateAction<ProgressPhoto[]>> }) {
+  const { toast } = useToast();
+  const [photoType, setPhotoType] = useState<ProgressPhotoType>("front");
+  const [photoDate, setPhotoDate] = useState(todayIso());
+  const [file, setFile] = useState<File | null>(null);
+  const [beforeId, setBeforeId] = useState("");
+  const [afterId, setAfterId] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const beforePhoto = photos.find((photo) => photo.id === beforeId) ?? photos.at(-1) ?? null;
+  const afterPhoto = photos.find((photo) => photo.id === afterId) ?? photos[0] ?? null;
 
-  if (!values.length) return null;
+  async function upload() {
+    if (!userId) return toast({ title: "Sign in required", description: "Please sign in before uploading progress photos." });
+    if (!file) return toast({ title: "Choose a photo", description: "Select a front, side, or back photo first." });
+    try {
+      setIsUploading(true);
+      const saved = await uploadProgressPhoto({ userId, type: photoType, takenOn: photoDate, file });
+      setPhotos((current) => [saved, ...current]);
+      setFile(null);
+      toast({ title: "Progress photo uploaded", description: `${photoType} photo saved privately for ${photoDate}.` });
+    } catch (error) {
+      toast({ title: "Could not upload progress photo", description: error instanceof Error ? error.message : "Apply migration 019 and try again." });
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  async function remove(photo: ProgressPhoto) {
+    if (!window.confirm(`Delete ${photo.photo_type} photo from ${photo.taken_on}?`)) return;
+    try {
+      await deleteProgressPhoto(photo);
+      setPhotos((current) => current.filter((item) => item.id !== photo.id));
+      toast({ title: "Progress photo deleted", description: "Private photo metadata and storage object were removed." });
+    } catch (error) {
+      toast({ title: "Could not delete progress photo", description: error instanceof Error ? error.message : "Please try again." });
+    }
+  }
+
   return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {values.map(([label, value]) => (
-        <span key={label} className="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
-          {label}: {value} cm
-        </span>
-      ))}
+    <div className="mt-4 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Camera className="h-5 w-5" /> Private progress photos</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">Upload real front, side, and back photos. Files are stored in a private Supabase Storage bucket with owner-only RLS after migration 019 is applied.</p>
+          <div className="grid gap-3 sm:grid-cols-[1fr_140px_130px_auto]">
+            <div className="space-y-2"><Label>Photo file</Label><Input type="file" accept="image/*" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></div>
+            <div className="space-y-2"><Label>Type</Label><select value={photoType} onChange={(event) => setPhotoType(event.target.value as ProgressPhotoType)} className="h-10 w-full rounded-md border bg-white px-3 text-sm">{photoTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></div>
+            <div className="space-y-2"><Label>Date</Label><Input type="date" value={photoDate} onChange={(event) => setPhotoDate(event.target.value)} /></div>
+            <Button className="self-end" onClick={upload} disabled={isUploading}><Upload className="h-4 w-4" /> {isUploading ? "Uploading" : "Upload"}</Button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {photos.map((photo) => <PhotoCard key={photo.id} photo={photo} onDelete={remove} />)}
+            {!photos.length ? <p className="text-sm text-muted-foreground">No progress photos uploaded yet.</p> : null}
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><ImageIcon className="h-5 w-5" /> Before / after comparison</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2"><PhotoSelect label="Before" value={beforeId} photos={photos} onChange={setBeforeId} /><PhotoSelect label="After" value={afterId} photos={photos} onChange={setAfterId} /></div>
+          {beforePhoto && afterPhoto ? <div className="grid gap-3 sm:grid-cols-2"><ComparisonPhoto label="Before" photo={beforePhoto} /><ComparisonPhoto label="After" photo={afterPhoto} /></div> : <p className="text-sm text-muted-foreground">Upload at least two photos or choose two dates/photos to compare.</p>}
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function Insight({ text }: { text: string }) {
-  return <div className="rounded-md border bg-slate-50 p-3 text-sm text-muted-foreground">{text}</div>;
+function PhotoCard({ photo, onDelete }: { photo: ProgressPhoto; onDelete: (photo: ProgressPhoto) => void }) {
+  return <div className="rounded-md border p-2"><div className="aspect-[3/4] overflow-hidden rounded-md bg-slate-100">{photo.signed_url ? <img src={photo.signed_url} alt={`${photo.photo_type} progress ${photo.taken_on}`} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Signed URL unavailable</div>}</div><div className="mt-2 flex items-center justify-between gap-2"><div><p className="font-semibold capitalize">{photo.photo_type}</p><p className="text-xs text-muted-foreground">{photo.taken_on}</p></div><Button size="icon" variant="ghost" onClick={() => onDelete(photo)}><Trash2 className="h-4 w-4" /></Button></div></div>;
 }
 
-function averageWeight(entries: Array<ProgressEntry & { body_weight_kg: number }>, days: number) {
-  const latest = entries.at(-1);
-  if (!latest) return null;
-  const cutoff = new Date(latest.entry_date);
-  cutoff.setDate(cutoff.getDate() - days + 1);
-  const values = entries.filter((entry) => new Date(entry.entry_date) >= cutoff).map((entry) => entry.body_weight_kg);
+function PhotoSelect({ label, value, photos, onChange }: { label: string; value: string; photos: ProgressPhoto[]; onChange: (value: string) => void }) {
+  return <div className="space-y-2"><Label>{label}</Label><select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full rounded-md border bg-white px-3 text-sm"><option value="">Auto-select</option>{photos.map((photo) => <option key={photo.id} value={photo.id}>{photo.taken_on} — {photo.photo_type}</option>)}</select></div>;
+}
+
+function ComparisonPhoto({ label, photo }: { label: string; photo: ProgressPhoto }) {
+  return <div className="rounded-md border p-3"><p className="mb-2 font-semibold">{label}: {photo.taken_on} ({photo.photo_type})</p><div className="aspect-[3/4] overflow-hidden rounded-md bg-slate-100">{photo.signed_url ? <img src={photo.signed_url} alt={`${label} progress ${photo.taken_on}`} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Photo unavailable</div>}</div></div>;
+}
+
+function EditProgressCard({ draft, setDraft, onSave, onCancel }: { draft: EditDraft; setDraft: Dispatch<SetStateAction<EditDraft | null>>; onSave: () => void; onCancel: () => void }) {
+  return <Card className="mt-4 border-primary/40 bg-blue-50"><CardHeader><CardTitle>Edit progress entry</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Field label="Date" type="date" value={draft.entryDate} onChange={(value) => setDraft((current) => current ? { ...current, entryDate: value } : current)} /><Field label="Body weight kg" value={draft.bodyWeightKg} onChange={(value) => setDraft((current) => current ? { ...current, bodyWeightKg: value } : current)} /><Field label="Waist cm" value={draft.waistCm} onChange={(value) => setDraft((current) => current ? { ...current, waistCm: value } : current)} /><Field label="Notes" value={draft.notes} onChange={(value) => setDraft((current) => current ? { ...current, notes: value } : current)} />{editableMeasurementFields.map(([key, label]) => <Field key={String(key)} label={label} value={draft.measurements[String(key)] ?? ""} onChange={(value) => setDraft((current) => current ? { ...current, measurements: { ...current.measurements, [String(key)]: value } } : current)} />)}<div className="flex gap-2 sm:col-span-2 lg:col-span-4"><Button onClick={onSave}>Save changes</Button><Button variant="outline" onClick={onCancel}>Cancel</Button></div></CardContent></Card>;
+}
+
+function Field({ label, value, onChange, type = "number" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+  return <div className="space-y-2"><Label>{label}</Label><Input type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.1" : undefined} value={value} onChange={(event) => onChange(event.target.value)} /></div>;
+}
+
+function TrendCard({ trend }: { trend: { label: string; latest: number | null; delta: number | null; unit: string } }) {
+  return <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{trend.label}</p><p className="mt-1 font-semibold">{trend.latest === null ? "No data" : `${trend.latest}${trend.unit}`}</p><p className="mt-1 text-xs text-muted-foreground">{trend.delta === null ? "No trend yet" : `${formatDelta(trend.delta)}${trend.unit} from first entry`}</p></div>;
+}
+
+function MeasurementList({ entry }: { entry: ProgressEntry }) {
+  const measurement = entry.measurements;
+  if (!measurement) return null;
+  const allValues: Array<[string, number | null | undefined, string]> = [
+    ["Waist", measurement.waist_cm ?? entry.waist_cm, "cm"],
+    ["Hips", measurement.hips_cm, "cm"],
+    ["Chest", measurement.chest_cm, "cm"],
+    ["Shoulders", measurement.shoulders_cm, "cm"],
+    ["Left arm", measurement.left_arm_cm, "cm"],
+    ["Right arm", measurement.right_arm_cm, "cm"],
+    ["Left thigh", measurement.left_thigh_cm, "cm"],
+    ["Right thigh", measurement.right_thigh_cm, "cm"],
+    ["Glutes", measurement.glutes_cm, "cm"],
+    ["Calves", measurement.calves_cm, "cm"],
+    ["Neck", measurement.neck_cm, "cm"],
+    ["Body fat", measurement.body_fat_percent, "%"]
+  ];
+  const values = allValues.filter((item): item is [string, number, string] => item[1] !== null && item[1] !== undefined);
   if (!values.length) return null;
-  return round(values.reduce((sum, value) => sum + value, 0) / values.length);
+  return <div className="mt-2 flex flex-wrap gap-2">{values.map(([label, value, unit]) => <span key={label} className="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">{label}: {value}{unit}</span>)}</div>;
 }
 
-function estimateTargetDate(entries: Array<ProgressEntry & { body_weight_kg: number }>, goalWeight: number) {
-  if (!goalWeight) return "No goal weight set.";
-  if (entries.length < 2) return "Not enough data yet to estimate a target date.";
-  const first = entries[0];
-  const latest = entries.at(-1)!;
-  const elapsedDays = Math.max(1, daysBetween(first.entry_date, latest.entry_date));
-  const dailyChange = (latest.body_weight_kg - first.body_weight_kg) / elapsedDays;
-  const remainingKg = goalWeight - latest.body_weight_kg;
-  if (Math.abs(dailyChange) < 0.01) return "Weight trend is too flat to estimate a target date yet.";
-  if ((remainingKg < 0 && dailyChange >= 0) || (remainingKg > 0 && dailyChange <= 0)) return "Current trend is moving away from the goal.";
-  const daysToGoal = Math.ceil(Math.abs(remainingKg / dailyChange));
-  if (!Number.isFinite(daysToGoal) || daysToGoal > 730) return "Not enough reliable trend data for an estimated date.";
-  const estimate = new Date(latest.entry_date);
-  estimate.setDate(estimate.getDate() + daysToGoal);
-  return `Estimated target date: ${estimate.toISOString().slice(0, 10)}.`;
-}
-
-function calculateConsistencyScore({ entries, completedCount, skippedCount }: { entries: ProgressEntry[]; completedCount: number; skippedCount: number }) {
-  const progressScore = Math.min(40, entries.length * 8);
-  const totalWorkouts = completedCount + skippedCount;
-  const workoutScore = totalWorkouts ? Math.round((completedCount / totalWorkouts) * 60) : 0;
-  return Math.min(100, progressScore + workoutScore);
-}
-
-function daysBetween(start: string, end: string) {
-  const startDate = new Date(start).getTime();
-  const endDate = new Date(end).getTime();
-  return Math.round((endDate - startDate) / (1000 * 60 * 60 * 24));
-}
-
-function round(value: number) {
-  return Math.round(value * 10) / 10;
-}
-
-function formatDelta(value: number) {
-  return `${value > 0 ? "+" : ""}${value}`;
-}
+function Insight({ text }: { text: string }) { return <div className="rounded-md border bg-slate-50 p-3 text-sm text-muted-foreground">{text}</div>; }
+function averageWeight(entries: Array<ProgressEntry & { body_weight_kg: number }>, days: number) { const latest = entries.at(-1); if (!latest) return null; const cutoff = new Date(latest.entry_date); cutoff.setDate(cutoff.getDate() - days + 1); const values = entries.filter((entry) => new Date(entry.entry_date) >= cutoff).map((entry) => entry.body_weight_kg); if (!values.length) return null; return round(values.reduce((sum, value) => sum + value, 0) / values.length); }
+function estimateTargetDate(entries: Array<ProgressEntry & { body_weight_kg: number }>, goalWeight: number) { if (!goalWeight) return "No goal weight set."; if (entries.length < 2) return "Not enough data yet to estimate a target date."; const first = entries[0]; const latest = entries.at(-1)!; const elapsedDays = Math.max(1, daysBetween(first.entry_date, latest.entry_date)); const dailyChange = (latest.body_weight_kg - first.body_weight_kg) / elapsedDays; const remainingKg = goalWeight - latest.body_weight_kg; if (Math.abs(dailyChange) < 0.01) return "Weight trend is too flat to estimate a target date yet."; if ((remainingKg < 0 && dailyChange >= 0) || (remainingKg > 0 && dailyChange <= 0)) return "Current trend is moving away from the goal."; const daysToGoal = Math.ceil(Math.abs(remainingKg / dailyChange)); if (!Number.isFinite(daysToGoal) || daysToGoal > 730) return "Not enough reliable trend data for an estimated date."; const estimate = new Date(latest.entry_date); estimate.setDate(estimate.getDate() + daysToGoal); return `Estimated target date: ${estimate.toISOString().slice(0, 10)}.`; }
+function calculateConsistencyScore({ entries, completedCount, skippedCount }: { entries: ProgressEntry[]; completedCount: number; skippedCount: number }) { const progressScore = Math.min(40, entries.length * 8); const totalWorkouts = completedCount + skippedCount; const workoutScore = totalWorkouts ? Math.round((completedCount / totalWorkouts) * 60) : 0; return Math.min(100, progressScore + workoutScore); }
+function buildWeeklyInsights({ nutritionWeek, workoutActivity, entries }: { nutritionWeek: DailyNutritionSummary[]; workoutActivity: WorkoutSession[]; entries: ProgressEntry[] }) { const start = startOfWeek(todayIso()); const end = addDays(start, 6); const weekSessions = workoutActivity.filter((session) => { const date = (session.completed_at ?? session.skipped_at ?? session.started_at)?.slice(0, 10); return Boolean(date && date >= start && date <= end); }); const completedWorkouts = weekSessions.filter((session) => session.status === "completed").length; const skippedWorkouts = weekSessions.filter((session) => session.status === "skipped").length; const daysWithLogs = nutritionWeek.filter((day) => day.logs?.length); const waterDays = nutritionWeek.filter((day) => Number(day.water_ml) > 0); const currentWeekProgressEntries = entries.filter((entry) => entry.entry_date >= start && entry.entry_date <= end).length; const calories = daysWithLogs.length ? Math.round(daysWithLogs.reduce((sum, day) => sum + Number(day.calories), 0) / daysWithLogs.length) : null; const protein = daysWithLogs.length ? Math.round(daysWithLogs.reduce((sum, day) => sum + Number(day.protein_g), 0) / daysWithLogs.length) : null; const water = waterDays.length ? Math.round(waterDays.reduce((sum, day) => sum + Number(day.water_ml), 0) / waterDays.length) : null; const workoutTotal = completedWorkouts + skippedWorkouts; const workoutCompletionRate = workoutTotal ? Math.round(completedWorkouts / workoutTotal * 100) : null; const consistencyScore = Math.min(100, (workoutCompletionRate ?? 0) * 0.5 + Math.min(25, daysWithLogs.length * 4) + Math.min(15, waterDays.length * 3) + Math.min(10, currentWeekProgressEntries * 5)); return { completedWorkouts: workoutTotal ? completedWorkouts : null, skippedWorkouts: workoutTotal ? skippedWorkouts : null, weekWorkoutTotal: workoutTotal, weekWorkoutCompletionRate: workoutCompletionRate, averageCalories: calories, averageProtein: protein, waterAverage: water, consistencyScore: Math.round(consistencyScore) }; }
+function buildMeasurementTrends(entries: ProgressEntry[]) { const defs: Array<{ key: keyof BodyMeasurement; label: string; unit: string; combine?: (measurement: BodyMeasurement) => number | null }> = [ { key: "waist_cm", label: "Waist", unit: "cm" }, { key: "chest_cm", label: "Chest", unit: "cm" }, { key: "left_arm_cm", label: "Arms avg", unit: "cm", combine: (m) => averageNumbers([m.left_arm_cm, m.right_arm_cm]) }, { key: "left_thigh_cm", label: "Thighs avg", unit: "cm", combine: (m) => averageNumbers([m.left_thigh_cm, m.right_thigh_cm]) }, { key: "hips_cm", label: "Hips", unit: "cm" }, { key: "shoulders_cm", label: "Shoulders", unit: "cm" }, { key: "calves_cm", label: "Calves", unit: "cm" }, { key: "body_fat_percent", label: "Manual body fat", unit: "%" } ]; return defs.map((def) => { const values = entries.map((entry) => entry.measurements).filter(Boolean).map((measurement) => def.combine ? def.combine(measurement as BodyMeasurement) : Number((measurement as BodyMeasurement)[def.key])).filter((value): value is number => Number.isFinite(value) && value > 0); const first = values[0] ?? null; const latest = values.at(-1) ?? null; return { label: def.label, latest: latest === null ? null : round(latest), delta: latest !== null && first !== null ? round(latest - first) : null, unit: def.unit }; }); }
+function buildBodyFatEstimate({ latestMeasurement, latestWaist, heightCm, sex }: { latestMeasurement: BodyMeasurement | null; latestWaist: number | null; heightCm: number; sex: "male" | "female" }) { if (latestMeasurement?.body_fat_percent) return { value: `${latestMeasurement.body_fat_percent}% manual`, detail: "Manual body-fat entry from your latest saved measurement. Not a medical measurement." }; if (!latestWaist || !heightCm) return { value: "Not enough measurement data", detail: "Needs latest waist measurement and height to calculate a simple Relative Fat Mass estimate." }; const estimate = sex === "female" ? 76 - 20 * (heightCm / latestWaist) : 64 - 20 * (heightCm / latestWaist); if (!Number.isFinite(estimate) || estimate < 3 || estimate > 70) return { value: "Not enough measurement data", detail: "The inputs do not produce a usable estimate. Check waist and height values." }; return { value: `${round(estimate)}% estimated`, detail: `Relative Fat Mass estimate using height ${heightCm} cm, waist ${latestWaist} cm, and sex ${sex}. Not medically accurate.` }; }
+function averageNumbers(values: Array<number | null | undefined>) { const filtered = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value)); return filtered.length ? filtered.reduce((sum, value) => sum + value, 0) / filtered.length : null; }
+function numberOrNull(value: string) { if (!value.trim()) return null; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : null; }
+function todayIso() { return new Date().toISOString().slice(0, 10); }
+function startOfWeek(value: string) { const date = new Date(`${value}T00:00:00`); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() - date.getDay()); return date.toISOString().slice(0, 10); }
+function addDays(value: string, days: number) { const date = new Date(`${value}T00:00:00`); date.setDate(date.getDate() + days); return date.toISOString().slice(0, 10); }
+function daysBetween(start: string, end: string) { return Math.round((new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24)); }
+function round(value: number) { return Math.round(value * 10) / 10; }
+function formatDelta(value: number) { return `${value > 0 ? "+" : ""}${value}`; }
