@@ -10,6 +10,11 @@ export function WelcomePopup() {
   const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("Welcome back to FitLife Hub. Ready for today?");
+  const [nowMs] = useState(() => Date.now());
+  const createdAtMs = profile?.created_at ? Date.parse(profile.created_at) : Number.NaN;
+  const isNewProfile = Number.isFinite(createdAtMs) && nowMs - createdAtMs < 24 * 60 * 60 * 1000;
+  const title = isNewProfile ? "Welcome to FitLife Hub" : `Welcome back, ${profile?.full_name || "FitLife Hub member"}`;
+  const displayMessage = isNewProfile ? "Start with the setup checklist, then import your first workout or meal plan when you are ready." : message;
 
   useEffect(() => {
     async function load() {
@@ -35,8 +40,8 @@ export function WelcomePopup() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Welcome back, {profile?.full_name || "FitLife Hub member"}</DialogTitle>
-          <DialogDescription>{message}</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{displayMessage}</DialogDescription>
         </DialogHeader>
         <Button onClick={() => setOpen(false)}>Start today</Button>
       </DialogContent>

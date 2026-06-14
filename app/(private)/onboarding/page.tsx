@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { saveOnboarding } from "@/services/database/profile";
+import { getOnboarding, saveOnboarding } from "@/services/database/profile";
 import { getWorkoutPlanDurationOptions, getWorkoutPlanWeekOptions } from "@/services/database/workout-plans";
 
 const steps = ["Basic info", "Goals", "Training", "Nutrition", "Finish"];
@@ -37,31 +37,33 @@ const trainingCycles = [
   "Wellness / Mobility"
 ];
 
+const defaultAnswers = {
+  age_range: "25-34",
+  gender: "Prefer not to say",
+  height_cm: null as number | null,
+  weight_kg: null as number | null,
+  goal: "General wellness",
+  goals: ["General wellness"],
+  training_cycle: "Full Body",
+  training_level: "Beginner",
+  training_place: "Gym",
+  training_days_per_week: 3,
+  workout_duration_minutes: 45,
+  min_workout_duration_minutes: 30,
+  max_workout_duration_minutes: 60,
+  desired_duration_weeks: 4,
+  available_equipment: ["Full gym"],
+  nutrition_preferences: ["Egyptian food preferred"],
+  allergies_limitations: ""
+};
+
 export default function OnboardingPage() {
   const { user } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
-  const [answers, setAnswers] = useState({
-    age_range: "25-34",
-    gender: "Prefer not to say",
-    height_cm: null as number | null,
-    weight_kg: null as number | null,
-    goal: "General wellness",
-    goals: ["General wellness"],
-    training_cycle: "Full Body",
-    training_level: "Beginner",
-    training_place: "Gym",
-    training_days_per_week: 3,
-    workout_duration_minutes: 45,
-    min_workout_duration_minutes: 30,
-    max_workout_duration_minutes: 60,
-    desired_duration_weeks: 4,
-    available_equipment: ["Full gym"],
-    nutrition_preferences: ["Egyptian food preferred"],
-    allergies_limitations: ""
-  });
+  const [answers, setAnswers] = useState(defaultAnswers);
   const [weekOptions, setWeekOptions] = useState<number[]>([1, 2, 3, 4]);
   const [durationOptions, setDurationOptions] = useState<number[]>([20, 30, 45, 60, 75]);
 
@@ -89,6 +91,28 @@ export default function OnboardingPage() {
     });
   }, []);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    getOnboarding(user.id)
+      .then((saved) => {
+        if (!saved) return;
+        const goals = saved.goals?.length ? saved.goals : saved.goal ? saved.goal.split(",").map((goal) => goal.trim()).filter(Boolean) : defaultAnswers.goals;
+        setAnswers((current) => ({
+          ...current,
+          ...saved,
+          goals: goals.length ? goals : defaultAnswers.goals,
+          training_cycle: saved.training_cycle || current.training_cycle,
+          available_equipment: saved.available_equipment?.length ? saved.available_equipment : current.available_equipment,
+          nutrition_preferences: saved.nutrition_preferences?.length ? saved.nutrition_preferences : current.nutrition_preferences,
+          allergies_limitations: saved.allergies_limitations ?? ""
+        }));
+      })
+      .catch((error) => {
+        console.warn("FitLife Hub could not load saved onboarding answers.", error);
+        toast({ title: "Could not load saved setup", description: "You can still review and save this setup again." });
+      });
+  }, [toast, user?.id]);
+
   async function finish() {
     if (!user?.id) {
       toast({ title: "Sign in required", description: "Please sign in before saving profile setup." });
@@ -115,7 +139,7 @@ export default function OnboardingPage() {
 
   return (
     <>
-      <PageHeading title="FitLife Hub Onboarding" description="Save your training and nutrition profile so ChatGPT-exported plans fit your goals, equipment, and schedule." />
+      <PageHeading title="Profile Setup" description="Review or update your training and nutrition profile so imported plans fit your goals, equipment, and schedule." />
       <Card className="mx-auto max-w-3xl">
         <CardHeader>
           <div className="flex items-center justify-between gap-3">

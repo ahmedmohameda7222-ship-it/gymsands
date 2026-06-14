@@ -113,6 +113,17 @@ export default function DashboardPage() {
   const waterTargetLiters = Math.round(((targets?.water_ml ?? 0) / 1000) * 10) / 10;
   const hasAnyTodayData = logs.length > 0 || history.length > 0 || waterLogs.length > 0 || progressEntries.length > 0 || mealPlanItems.length > 0 || Boolean(activePlan) || supplements.length > 0 || sleepLogs.length > 0 || Boolean(targets);
   const completedToday = Boolean(history.find((session) => session.status === "completed" && session.started_at?.slice(0, 10) === todayIso()));
+  const hasStartedWorkout = Boolean(openSessionId || history.length);
+  const setupChecklist = [
+    { label: "Finish profile", done: Boolean(profile?.full_name), href: "/profile", action: "Edit profile" },
+    { label: "Set calorie and water targets", done: hasTargets, href: "/calories", action: "Set targets" },
+    { label: "Import workout plan", done: Boolean(activePlan), href: "/my-workout/plans", action: "Import plan" },
+    { label: "Log first meal", done: logs.length > 0, href: "/calories", action: "Log meal" },
+    { label: "Add first progress entry", done: progressEntries.length > 0, href: "/progress", action: "Add progress" },
+    { label: "Start first workout", done: hasStartedWorkout, href: todayPlanDay ? `/workouts/session/day/${todayPlanDay.id}` : "/my-workout/plans", action: "Start workout" }
+  ];
+  const nextSetupItem = setupChecklist.find((item) => !item.done) ?? null;
+  const setupCompletedCount = setupChecklist.filter((item) => item.done).length;
   const dashboardCoaching = buildDashboardCoaching({
     hasTargets,
     targets,
@@ -192,7 +203,7 @@ export default function DashboardPage() {
           actionLabel="Log food"
           actionHref="/calories"
           secondaryLabel="Import workout plan"
-          secondaryHref="/settings"
+          secondaryHref="/my-workout/plans"
           className="mb-4"
         />
       ) : null}
@@ -223,6 +234,42 @@ export default function DashboardPage() {
               ))}
             </CardContent>
           </Card>
+
+          {setupCompletedCount < setupChecklist.length ? (
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-primary" />
+                  Start here
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/40 p-3">
+                  <div>
+                    <p className="font-semibold">{nextSetupItem ? `Next: ${nextSetupItem.label}` : "Setup complete"}</p>
+                    <p className="text-sm text-muted-foreground">{setupCompletedCount}/{setupChecklist.length} setup steps complete from real saved account data.</p>
+                  </div>
+                  {nextSetupItem ? (
+                    <Button asChild>
+                      <Link href={nextSetupItem.href}>{nextSetupItem.action}</Link>
+                    </Button>
+                  ) : null}
+                </div>
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {setupChecklist.map((item) => (
+                    <Link
+                      key={item.label}
+                      href={item.href}
+                      className="flex min-h-14 items-center justify-between gap-3 rounded-md border p-3 text-sm font-medium transition hover:border-primary hover:bg-muted"
+                    >
+                      <span>{item.label}</span>
+                      <span className={item.done ? "text-primary" : "text-muted-foreground"}>{item.done ? "Done" : item.action}</span>
+                    </Link>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
             <Card>
@@ -259,9 +306,9 @@ export default function DashboardPage() {
             <Card>
               <CardHeader><CardTitle>Quick actions</CardTitle></CardHeader>
               <CardContent className="grid gap-2 sm:grid-cols-2">
-                <Button asChild variant="outline"><Link href="/settings"><Activity className="h-4 w-4" />Import from ChatGPT</Link></Button>
+                <Button asChild variant="outline"><Link href="/my-workout/plans"><Activity className="h-4 w-4" />Import Workout Plan</Link></Button>
+                <Button asChild variant="outline"><Link href="/my-meal-plan"><Soup className="h-4 w-4" />Import Meal Plan</Link></Button>
                 <Button asChild variant="outline"><Link href="/calories"><Utensils className="h-4 w-4" />Log Food</Link></Button>
-                <Button asChild variant="outline"><Link href="/calories">Calories/Macros</Link></Button>
                 <Button asChild variant="outline"><Link href="/progress"><Scale className="h-4 w-4" />Add Progress</Link></Button>
                 <Button asChild variant="outline"><Link href="/hydration"><Droplets className="h-4 w-4" />Add Water</Link></Button>
                 <Button asChild variant="outline"><Link href="/workouts"><Dumbbell className="h-4 w-4" />Exercise Library</Link></Button>

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { MobileStickyActions, MobileStickyActionsSpacer } from "@/components/layout/mobile-sticky-actions";
 import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
+import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
 import { completeWorkoutSession, saveWorkoutSetLogs, startWorkoutSession } from "@/services/database/workout-sessions";
 import type { Workout, WorkoutSession } from "@/types";
@@ -39,6 +40,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const [notes, setNotes] = useState("");
   const [sets, setSets] = useState<SetLog[]>([{ reps: 10, weight: 0, notes: "" }]);
   const [isSaving, setIsSaving] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const [startedAtMs, setStartedAtMs] = useState(() => Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerKey = useMemo(() => workoutStorageKey(["single-workout-session", user?.id ?? "anonymous", workout.id]), [user?.id, workout.id]);
@@ -50,18 +52,22 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
     startWorkoutSession(user.id, workout)
       .then((nextSession) => {
         setSession(nextSession);
+        setSessionError(null);
         const parsedStartedAt = Date.parse(nextSession.started_at);
         const storedStartedAt = readStoredTimestamp(timerKey);
         const nextStartedAt = storedStartedAt ?? (Number.isFinite(parsedStartedAt) ? parsedStartedAt : Date.now());
         setStartedAtMs(nextStartedAt);
         storeTimestamp(timerKey, nextStartedAt);
       })
-      .catch((error) =>
+      .catch((error) => {
+        logRecoverableError("workout-session.start", error);
+        const message = userSafeError(error, "This workout could not connect to your account. Please refresh and try again.");
+        setSessionError(message);
         toast({
-          title: "Workout opened without cloud session",
-          description: error instanceof Error ? error.message : "You can still log this workout on screen."
-        })
-      );
+          title: "Workout was not connected",
+          description: message
+        });
+      });
   }, [timerKey, toast, user?.id, workout]);
 
   useEffect(() => {
@@ -79,34 +85,37 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
       toast({ title: "Sign in required", description: "Please sign in before saving workouts." });
       return;
     }
+    if (!session?.id) {
+      toast({ title: "Workout is not ready to save", description: sessionError ?? "Please refresh this workout and try again." });
+      return;
+    }
     try {
       setIsSaving(true);
-      if (session) {
-        await saveWorkoutSetLogs(
-          session.id,
-          sets.map((set, index) => ({
-            exerciseName: workout.name,
-            exerciseCategory: workout.category || workout.target_muscle,
-            exerciseOrder: 1,
-            plannedSets: workout.sets ?? sets.length,
-            plannedReps: workout.reps,
-            plannedRestSeconds: workout.rest_seconds,
-            setNumber: index + 1,
-            reps: Number.isFinite(set.reps) ? set.reps : null,
-            weightKg: Number.isFinite(set.weight) ? set.weight : null,
-            notes: set.notes || null,
-            completedAt: new Date().toISOString()
-          }))
-        );
-        await completeWorkoutSession(session.id, notes, duration);
-      }
+      await saveWorkoutSetLogs(
+        session.id,
+        sets.map((set, index) => ({
+          exerciseName: workout.name,
+          exerciseCategory: workout.category || workout.target_muscle,
+          exerciseOrder: 1,
+          plannedSets: workout.sets ?? sets.length,
+          plannedReps: workout.reps,
+          plannedRestSeconds: workout.rest_seconds,
+          setNumber: index + 1,
+          reps: Number.isFinite(set.reps) ? set.reps : null,
+          weightKg: Number.isFinite(set.weight) ? set.weight : null,
+          notes: set.notes || null,
+          completedAt: new Date().toISOString()
+        }))
+      );
+      await completeWorkoutSession(session.id, notes, duration);
       clearStoredValue(timerKey);
       toast({ title: "Workout completed", description: `${workout.name} was saved to your FitLife Hub history.` });
       router.push("/workout-history");
     } catch (error) {
+      logRecoverableError("workout-session.complete", error);
       toast({
         title: "Could not save workout",
-        description: error instanceof Error ? error.message : "Please try again."
+        description: userSafeError(error, "Your set entries are still on screen. Please try saving again.")
       });
     } finally {
       setIsSaving(false);
@@ -157,6 +166,11 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
               )}
             </div>
           </div>
+          {sessionError ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              {sessionError}
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-slate-50 p-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
               <Clock className="h-4 w-4 text-primary" />
@@ -243,7 +257,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
               />
             </div>
           </div>
-          <Button className="hidden w-full lg:inline-flex" onClick={complete} disabled={isSaving}>
+          <Button className="hidden w-full lg:inline-flex" onClick={complete} disabled={isSaving || Boolean(sessionError) || !session}>
             <CheckCircle2 className="h-4 w-4" />
             {isSaving ? "Saving workout..." : "Mark workout completed"}
           </Button>
@@ -256,7 +270,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
             <p className="font-semibold text-foreground">{formatTime(elapsedSeconds)}</p>
             <p className="truncate text-xs text-muted-foreground">{sets.length} set{sets.length === 1 ? "" : "s"} ready to save</p>
           </div>
-          <Button className="min-h-12 flex-1" onClick={complete} disabled={isSaving}>
+          <Button className="min-h-12 flex-1" onClick={complete} disabled={isSaving || Boolean(sessionError) || !session}>
             <CheckCircle2 className="h-4 w-4" />
             {isSaving ? "Saving..." : "Finish"}
           </Button>

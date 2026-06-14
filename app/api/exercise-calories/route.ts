@@ -51,7 +51,10 @@ export async function GET(request: Request) {
   }
 
   const { data, error } = await requestQuery;
-  if (error) return jsonError(`${error.message}. Run migration 016 to enable exercise calorie estimates.`, 400);
+  if (error) {
+    console.warn("Exercise calorie reference failed to load.", error.message);
+    return jsonError("Something went wrong while loading exercise calorie estimates. Please try again.", 400);
+  }
 
   const activities = ((data ?? []) as ExerciseCalorieReference[]).filter((item) => {
     if (!query) return true;
@@ -82,7 +85,10 @@ export async function POST(request: Request) {
     .eq("is_active", true)
     .maybeSingle();
 
-  if (error) return jsonError(`${error.message}. Run migration 016 to enable exercise calorie estimates.`, 400);
+  if (error) {
+    console.warn("Exercise calorie estimate failed to load.", error.message);
+    return jsonError("Something went wrong while loading this activity. Please try again.", 400);
+  }
   if (!activity) return jsonError("Activity was not found.", 404);
 
   const calories = caloriesFromMet(Number(activity.met), weightKg, minutes);
@@ -110,7 +116,10 @@ export async function POST(request: Request) {
       })
       .select("*")
       .single();
-    if (saveError) return jsonError(saveError.message, 400);
+    if (saveError) {
+      console.warn("Exercise calorie estimate could not be saved.", saveError.message);
+      return jsonError("Something went wrong while saving this activity. Please try again.", 400);
+    }
     saved = data;
   }
 
