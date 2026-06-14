@@ -19,7 +19,7 @@ FitLife Hub does not generate workout or meal plans inside the app. Users create
 - ChatGPT/FitLife connector URL support
 - Workout plan storage and tracking
 - Manual workout plan builder for advanced editing
-- Exercise library based on active wger imports
+- Exercise library based on the real 600-exercise SQL seed
 - Workout session tracking with set logs
 - Meal planning and daily food logging
 - Egyptian food seed data
@@ -52,7 +52,6 @@ Public browser variables:
 Server-side provider keys:
 
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `WGER_API_KEY`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
 
@@ -80,18 +79,17 @@ Run SQL in this canonical order. Some legacy files share numeric prefixes; do no
 16. `supabase/migrations/014_clean_exercise_library_and_api_integrations.sql`
 17. `supabase/migrations/015_chatgpt_manual_workout_food_profile_tools.sql`
 18. `supabase/migrations/015_chatgpt_mcp_connections.sql`
-19. `supabase/migrations/015_seed_600_exercise_library_workouts.sql`
-20. `supabase/migrations/016_auto_activate_wger_exercises.sql`
-21. `supabase/migrations/016_seed_real_600_exercise_library.sql`
-22. `supabase/migrations/017_add_force_type_secondary_muscles_to_library.sql`
-23. `supabase/migrations/017_exercise_calorie_reference.sql`
-24. `supabase/migrations/017_onboarding_duration_and_barcode.sql`
-25. `supabase/migrations/018_fitlife_security_archive_reporting.sql`
-26. `supabase/migrations/019_progress_photos_measurements.sql`
-27. `supabase/migrations/020_wellness_sleep_recovery_fields.sql`
-28. `supabase/migrations/021_chatgpt_mcp_full_access_scopes.sql`
-29. Register the first admin user.
-30. Run `supabase/seed/004_admin_setup_placeholder.sql` after editing the admin email if needed.
+19. `supabase/migrations/016_seed_real_600_exercise_library.sql`
+20. `supabase/migrations/017_add_force_type_secondary_muscles_to_library.sql`
+21. `supabase/migrations/017_exercise_calorie_reference.sql`
+22. `supabase/migrations/017_onboarding_duration_and_barcode.sql`
+23. `supabase/migrations/018_fitlife_security_archive_reporting.sql`
+24. `supabase/migrations/019_progress_photos_measurements.sql`
+25. `supabase/migrations/020_wellness_sleep_recovery_fields.sql`
+26. `supabase/migrations/021_chatgpt_mcp_full_access_scopes.sql`
+27. `supabase/migrations/021_cloud_sync_persistence.sql`
+28. Register the first admin user.
+29. Run `supabase/seed/004_admin_setup_placeholder.sql` after editing the admin email if needed.
 
 For projects that already imported legacy exercise data, back up the database first, then review the cleanup SQL under `supabase/cleanup`.
 
@@ -128,16 +126,11 @@ The old `/meals` page was removed because food logging already lives under `/cal
 3. FitLife Hub saves the plan to the user's account.
 4. User tracks sessions, sets, reps, weights, skipped days, planned meals, completed meals, calories, and progress.
 
-## wger exercise import
+## Exercise library
 
-1. Configure `WGER_API_KEY`.
-2. Sign in as an admin.
-3. Open Admin > API Imports.
-4. Import a page of wger exercises.
-5. New exercises become active immediately after running the canonical migrations.
-6. Open Admin > Exercise Library and remove anything you do not want members to use.
+Exercise data comes from `supabase/migrations/016_seed_real_600_exercise_library.sql`.
 
-Duplicate imports keep removed rows hidden.
+Do not run the retired duplicate seed or wger activation migrations. For a new Supabase database, the canonical order above is the source of truth.
 
 ## Provider routes
 
@@ -145,7 +138,6 @@ Implemented server routes include:
 
 - Open Food Facts barcode lookup, user food saving, daily log adding, and meal plan adding
 - Local exercise calorie estimates from Supabase reference data
-- wger exercise import
 - Resend email sending
 
 ## Local development

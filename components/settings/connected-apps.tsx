@@ -11,9 +11,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toaster";
 import { env } from "@/lib/env";
-import { MCP_DEFAULT_SCOPES, MCP_SCOPES } from "@/lib/mcp/scopes";
 
-const fitlifeDescription = "ChatGPT creates workout and meal plans. FitLife stores, schedules, edits, and tracks the imported data.";
+const fitlifeDescription = "ChatGPT creates the plan externally. FitLife stores, schedules, edits, and tracks the approved imported plan.";
 
 const importPrompts = [
   {
@@ -39,15 +38,6 @@ type ChatGptConnection = {
   revoked_at: string | null;
 };
 
-const scopeOptions = [
-  { value: MCP_SCOPES.summaryRead, label: "Summary", detail: "Read dashboard summaries and status." },
-  { value: MCP_SCOPES.nutritionWrite, label: "Nutrition", detail: "Log food, water, meals, and targets." },
-  { value: MCP_SCOPES.trainingWrite, label: "Training", detail: "Save imported plans and log workouts." },
-  { value: MCP_SCOPES.progressWrite, label: "Progress", detail: "Save weight, measurements, goals, and PRs." },
-  { value: MCP_SCOPES.wellnessWrite, label: "Wellness", detail: "Manage habits, tasks, recovery, and supplements." },
-  { value: MCP_SCOPES.profileWrite, label: "Profile", detail: "Update account-level fitness profile fields." }
-];
-
 export function ConnectedApps() {
   const { session } = useAuth();
   const { toast } = useToast();
@@ -57,7 +47,6 @@ export function ConnectedApps() {
   const [copiedToken, setCopiedToken] = useState(false);
   const [connectionToken, setConnectionToken] = useState("");
   const [connections, setConnections] = useState<ChatGptConnection[]>([]);
-  const [selectedScopes, setSelectedScopes] = useState<string[]>(MCP_DEFAULT_SCOPES);
   const [showAdvancedSetup, setShowAdvancedSetup] = useState(false);
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
   const mcpServerUrl = env.fitlifeMcpServerUrl.trim();
@@ -111,8 +100,7 @@ export function ConnectedApps() {
     setIsBusy("chatgpt-token");
     const response = await fetch("/api/mcp/connections", {
       method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({ scopes: selectedScopes })
+      headers: authHeaders()
     });
     const data = await response.json().catch(() => ({}));
     setIsBusy(null);
@@ -152,13 +140,6 @@ export function ConnectedApps() {
     window.open("https://chatgpt.com", "_blank", "noopener,noreferrer");
   }
 
-  function toggleScope(scope: string) {
-    setSelectedScopes((current) => {
-      const next = current.includes(scope) ? current.filter((item) => item !== scope) : [...current, scope];
-      return Array.from(new Set([MCP_SCOPES.profileRead, ...next]));
-    });
-  }
-
   return (
     <div className="grid gap-4">
       <Card>
@@ -167,7 +148,7 @@ export function ConnectedApps() {
             <Bot className="h-5 w-5 text-primary" /> Import from ChatGPT
           </CardTitle>
           <CardDescription>
-            ChatGPT creates the plan. FitLife stores, schedules, edits, and tracks the imported workout or meal plan.
+            {fitlifeDescription}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -206,7 +187,7 @@ export function ConnectedApps() {
             <div className="rounded-md border p-4">
               <p className="font-semibold">Simple import wizard</p>
               <ol className="mt-3 ml-5 list-decimal space-y-2 text-sm text-muted-foreground">
-                <li>Generate a FitLife connection code and copy it.</li>
+                <li>Generate a full-access FitLife connection code and copy it.</li>
                 <li>Open ChatGPT and connect FitLife Hub when ChatGPT asks for an app or connector.</li>
                 <li>Paste one starter prompt below, review the plan in ChatGPT, then approve the import into FitLife Hub.</li>
               </ol>
@@ -288,24 +269,11 @@ export function ConnectedApps() {
                   <p className="font-semibold">Authentication:</p>
                   <p>Use the FitLife connection code if ChatGPT asks for authentication.</p>
                   <p className="font-semibold">Allowed access:</p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {scopeOptions.map((option) => {
-                      const checked = selectedScopes.includes(option.value);
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => toggleScope(option.value)}
-                          className={`rounded-md border p-3 text-left transition ${checked ? "border-primary bg-primary/10" : "bg-card hover:border-primary"}`}
-                        >
-                          <span className="flex items-center justify-between gap-2">
-                            <span className="font-semibold">{option.label}</span>
-                            <Badge variant={checked ? "default" : "outline"}>{checked ? "Allowed" : "Off"}</Badge>
-                          </span>
-                          <span className="mt-1 block text-xs text-muted-foreground">{option.detail}</span>
-                        </button>
-                      );
-                    })}
+                  <div className="rounded-md border bg-muted/40 p-3">
+                    <p className="text-sm font-semibold">Full FitLife account access through ChatGPT MCP</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      ChatGPT can use every FitLife MCP tool for this account after connection: profile, dashboard summaries, nutrition, meal plans, training plans, workout logs, progress, wellness, and admin tools when the linked FitLife user is an admin.
+                    </p>
                   </div>
                 </div>
               ) : null}

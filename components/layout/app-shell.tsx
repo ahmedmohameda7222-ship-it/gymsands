@@ -83,7 +83,8 @@ const mobilePrimaryItems: NavItem[] = [
   { href: "/my-workout/plans", label: "Train", icon: Dumbbell, activePaths: ["/today-workout", "/my-workout", "/workouts", "/workout-history", "/personal-records"] },
   { href: "/calories", label: "Eat", icon: Utensils, activePaths: ["/calories", "/my-meal-plan"] },
   { href: "/progress", label: "Progress", icon: BarChart3, activePaths: ["/progress"] },
-  { href: "/settings", label: "More", icon: Settings, activePaths: ["/settings", "/profile", "/wellness", "/hydration", "/habits", "/sleep-recovery", "/supplements", "/daily-fit-tasks"] }
+  { href: "/wellness", label: "Wellness", icon: CheckSquare, activePaths: ["/wellness", "/hydration", "/habits", "/sleep-recovery", "/supplements", "/daily-fit-tasks"] },
+  { href: "/settings", label: "More", icon: Settings, activePaths: ["/settings", "/profile"] }
 ];
 
 const adminItems: NavItem[] = [
@@ -168,7 +169,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function MobilePrimaryNav({ pathname }: { pathname: string }) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-card/95 px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 shadow-luxe backdrop-blur lg:hidden" aria-label="Primary mobile navigation">
+    <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t bg-card/95 px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 shadow-luxe backdrop-blur lg:hidden" aria-label="Primary mobile navigation">
       {mobilePrimaryItems.map((item) => {
         const Icon = item.icon;
         const active = isActivePath(pathname, item);

@@ -21,6 +21,7 @@ const emptyDraft = { id: "", title: "", notes: "" };
 
 export function DailyFitTasksPageClient() {
   const { user } = useAuth();
+  const userId = user?.id;
   const { toast } = useToast();
   const today = useTodayDate();
   const [items, setItems] = useState<DailyFitTask[]>([]);
@@ -30,7 +31,7 @@ export function DailyFitTasksPageClient() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadTasks = useCallback(async () => {
-    if (!user?.id) {
+    if (!userId) {
       setItems([]);
       setLoadError(null);
       setIsLoading(false);
@@ -40,7 +41,7 @@ export function DailyFitTasksPageClient() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const tasks = await getDailyFitTasks(user.id, today);
+      const tasks = await getDailyFitTasks(userId, today);
       setItems(tasks);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not load daily fit tasks.";
@@ -49,7 +50,7 @@ export function DailyFitTasksPageClient() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast, today, user?.id]);
+  }, [toast, today, userId]);
 
   useEffect(() => {
     void loadTasks();

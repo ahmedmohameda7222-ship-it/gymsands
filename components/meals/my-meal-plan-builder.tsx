@@ -42,6 +42,7 @@ type Notice = { type: "success" | "error" | "info"; title: string; description?:
 type Draft = { foodName: string; mealType: MealType; quantity: string; servingInfo: string; calories: string; protein: string; carbs: string; fat: string; notes: string };
 type BatchDraft = { name: string; portions: string; servingSize: string; calories: string; protein: string; carbs: string; fat: string; notes: string; mealType: MealType };
 type SwapState = { item: MealPlanItem; templateId: string } | null;
+type BulkDoneConfirm = { label: string; items: MealPlanItem[] } | null;
 
 const mealTypes: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
 const emptyDraft: Draft = { foodName: "", mealType: "Breakfast", quantity: "1", servingInfo: "1 serving", calories: "0", protein: "0", carbs: "0", fat: "0", notes: "" };
@@ -102,6 +103,7 @@ function MyMealPlanBuilderInner() {
   const [batchDraft, setBatchDraft] = useState<BatchDraft>(emptyBatchDraft);
   const [selectedBatchId, setSelectedBatchId] = useState("");
   const [swapState, setSwapState] = useState<SwapState>(null);
+  const [bulkDoneConfirm, setBulkDoneConfirm] = useState<BulkDoneConfirm>(null);
   const [checkedShoppingKeys, setCheckedShoppingKeys] = useState<string[]>([]);
 
   const selectedWeekStart = useMemo(() => weekStart(selectedDate), [selectedDate]);
@@ -247,18 +249,23 @@ function MyMealPlanBuilderInner() {
   async function markManyDone(targets: MealPlanItem[], label: string) {
     const plannedTargets = targets.filter((item) => item.status !== "done");
     if (!plannedTargets.length) return setNotice({ type: "info", title: `${label} already done`, description: "No duplicate food logs were created." });
-    if (!window.confirm(`Mark ${plannedTargets.length} planned item(s) done for ${label}? This will add them to food logs once.`)) return;
+    setBulkDoneConfirm({ label, items: plannedTargets });
+  }
+
+  async function confirmBulkDone() {
+    if (!bulkDoneConfirm) return;
     try {
       setIsUpdatingId("bulk-done");
       const updated: MealPlanItem[] = [];
-      for (const item of plannedTargets) {
+      for (const item of bulkDoneConfirm.items) {
         const result = await markDirectMealPlanItemDone(item);
         updated.push(normalizeMealPlanItem(result.item));
       }
       upsertLocalItems(updated);
-      setNotice({ type: "success", title: `${label} marked done`, description: `${updated.length} real planned item(s) were processed idempotently.` });
+      setNotice({ type: "success", title: `${bulkDoneConfirm.label} marked done`, description: `${updated.length} real planned item(s) were processed idempotently.` });
+      setBulkDoneConfirm(null);
     } catch (error) {
-      setNotice({ type: "error", title: `Could not mark ${label} done`, description: error instanceof Error ? error.message : "Please try again." });
+      setNotice({ type: "error", title: `Could not mark ${bulkDoneConfirm.label} done`, description: error instanceof Error ? error.message : "Please try again." });
     } finally {
       setIsUpdatingId(null);
     }
@@ -435,6 +442,28 @@ function MyMealPlanBuilderInner() {
       </div>
 
       <Card>
+        <CardContent className="grid gap-4 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div>
+            <p className="text-lg font-semibold">How meal planning works</p>
+            <div className="mt-3 grid gap-2 text-sm text-muted-foreground md:grid-cols-3">
+              <p className="rounded-md border p-3">Planned meals do not count in calories.</p>
+              <p className="rounded-md border p-3">Meals count only after Mark done creates a real food log once.</p>
+              <p className="rounded-md border p-3">Templates, batch meals, and shopping list are for weekly prep.</p>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+            <Button type="button" onClick={() => setShowAddForm(true)}>
+              <PlusCircle className="h-4 w-4" />
+              Add planned meal
+            </Button>
+            <Button asChild variant="outline">
+              <a href="#shopping-list">Shopping list</a>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader><CardTitle className="flex items-center gap-2 text-base"><CalendarDays className="h-5 w-5" /> Meal calendar</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -474,9 +503,32 @@ function MyMealPlanBuilderInner() {
         onAddBatch={addBatchPortionToDate}
       />
 
-      <ShoppingListPanel items={shoppingList} onToggle={toggleShoppingCheck} onPrint={printShoppingList} />
+      <div id="shopping-list">
+        <ShoppingListPanel items={shoppingList} onToggle={toggleShoppingCheck} onPrint={printShoppingList} />
+      </div>
 
       {swapState ? <SwapConfirmPanel item={swapState.item} templates={templates} templateId={swapState.templateId} onTemplateChange={(templateId) => setSwapState({ item: swapState.item, templateId })} diff={swapDiff} onConfirm={confirmSwap} onCancel={() => setSwapState(null)} /> : null}
+      {bulkDoneConfirm ? (
+        <Card className="border-primary/40 bg-primary/5">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold">Mark {bulkDoneConfirm.label} done?</p>
+              <p className="text-sm text-muted-foreground">
+                This will create food logs once for {bulkDoneConfirm.items.length} planned item(s). Duplicate logs are prevented by meal-plan status.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button type="button" onClick={confirmBulkDone} disabled={isUpdatingId === "bulk-done"}>
+                <CheckCircle2 className="h-4 w-4" />
+                Confirm
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setBulkDoneConfirm(null)}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="text-lg font-semibold">{displayDate(selectedDate)} meals</h2><p className="text-sm text-muted-foreground">Breakfast, lunch, dinner, and snacks for the selected date.</p></div>
@@ -586,7 +638,7 @@ function ShoppingListPanel({ items, onToggle, onPrint }: { items: ShoppingListIt
 
 function SwapConfirmPanel({ item, templates, templateId, onTemplateChange, diff, onConfirm, onCancel }: { item: MealPlanItem; templates: MealTemplate[]; templateId: string; onTemplateChange: (id: string) => void; diff: MacroTotals | null; onConfirm: () => void; onCancel: () => void }) {
   return (
-    <Card className="border-primary/40 bg-blue-50">
+    <Card className="border-primary/40 bg-primary/5">
       <CardHeader><CardTitle className="text-base">Confirm meal swap for {item.food_name}</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         <select value={templateId} onChange={(event) => onTemplateChange(event.target.value)} className="h-10 w-full rounded-md border bg-white px-3 text-sm"><option value="">Choose replacement template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select>
@@ -631,7 +683,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
 }
 
 function NoticeBox({ notice, onClose }: { notice: Notice; onClose: () => void }) {
-  const styles = notice.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-950" : notice.type === "error" ? "border-red-200 bg-red-50 text-red-950" : "border-primary/40 bg-blue-50 text-foreground";
+  const styles = notice.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-950" : notice.type === "error" ? "border-red-200 bg-red-50 text-red-950" : "border-primary/40 bg-primary/5 text-foreground";
   return <div className={`rounded-md border p-4 text-sm ${styles}`}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{notice.title}</p>{notice.description ? <p className="mt-1 break-words opacity-90">{notice.description}</p> : null}</div><button type="button" onClick={onClose} className="text-xs font-semibold underline">close</button></div></div>;
 }
 

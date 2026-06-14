@@ -34,7 +34,7 @@ import { useTodayDate } from "@/lib/hooks/use-today-date";
 import type { FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryLog, SupplementLog, UserWorkoutPlan, WaterLog, WorkoutSession } from "@/types";
 
 export default function DashboardPage() {
-  const { user, profile } = useAuth();
+  const { user, profile, session } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [logs, setLogs] = useState<FoodLog[]>([]);
@@ -47,6 +47,7 @@ export default function DashboardPage() {
   const [supplements, setSupplements] = useState<SupplementLog[]>([]);
   const [sleepLogs, setSleepLogs] = useState<SleepRecoveryLog[]>([]);
   const [targets, setTargets] = useState<SavedTargets | null>(null);
+  const [chatGptConnected, setChatGptConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
@@ -92,6 +93,17 @@ export default function DashboardPage() {
       const todayDay = plan?.days.find((day) => day.weekday === getCurrentWeekday() && day.exercises.length > 0) ?? null;
       const open = todayDay ? await getOpenWorkoutDaySession(user.id, todayDay.id) : null;
       setOpenSessionId(open?.id ?? null);
+      if (session?.access_token) {
+        fetch("/api/mcp/connections", { headers: { Authorization: `Bearer ${session.access_token}` } })
+          .then((response) => response.ok ? response.json() : null)
+          .then((data) => {
+            const connections = Array.isArray(data?.connections) ? data.connections : [];
+            setChatGptConnected(connections.some((connection: { is_active?: boolean; revoked_at?: string | null }) => connection.is_active && !connection.revoked_at));
+          })
+          .catch(() => setChatGptConnected(false));
+      } else {
+        setChatGptConnected(false);
+      }
     } catch (error) {
       logRecoverableError("dashboard.load", error);
       const message = userSafeError(error, "Today's overview could not be loaded. Retry to reload your real saved data.");
@@ -127,8 +139,9 @@ export default function DashboardPage() {
   const setupChecklist = [
     { label: "Finish profile", done: Boolean(profile?.full_name), href: "/profile", action: "Edit profile" },
     { label: "Set calorie and water targets", done: hasTargets, href: "/calories", action: "Set targets" },
+    { label: "Connect ChatGPT import", done: chatGptConnected, href: "/settings", action: "Connect ChatGPT" },
     { label: "Import workout plan", done: Boolean(activePlan), href: "/my-workout/plans", action: "Import plan" },
-    { label: "Log first meal", done: logs.length > 0, href: "/calories", action: "Log meal" },
+    { label: "Add meal plan or log first meal", done: mealPlanItems.length > 0 || logs.length > 0, href: "/my-meal-plan", action: "Plan meal" },
     { label: "Add first progress entry", done: progressEntries.length > 0, href: "/progress", action: "Add progress" },
     { label: "Start first workout", done: hasStartedWorkout, href: todayPlanDay ? `/workouts/session/day/${todayPlanDay.id}` : "/my-workout/plans", action: "Start workout" }
   ];
