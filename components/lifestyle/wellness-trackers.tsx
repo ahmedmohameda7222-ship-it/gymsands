@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { todayIso } from "@/lib/utils";
+import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { getNutritionWeek } from "@/services/database/nutrition";
 import {
   deletePersonalRecord,
@@ -59,7 +59,7 @@ const ratingOptions = ["1", "2", "3", "4", "5"];
 export function WellnessDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const today = useMemo(() => todayIso(), []);
+  const today = useTodayDate();
   const [habits, setHabits] = useState<FitnessHabit[]>([]);
   const [supplements, setSupplements] = useState<SupplementLog[]>([]);
   const [sleepLogs, setSleepLogs] = useState<EnhancedSleepRecoveryLog[]>([]);
@@ -134,7 +134,8 @@ export function WellnessDashboard() {
 
 export function DailyFitTasksTracker() {
   const { user } = useAuth();
-  const today = useMemo(() => todayIso(), []);
+  const { toast } = useToast();
+  const today = useTodayDate();
   const [items, setItems] = useState<DailyFitTask[]>([]);
   const [draft, setDraft] = useState({ id: "", title: "", notes: "" });
 
@@ -143,8 +144,8 @@ export function DailyFitTasksTracker() {
       if (!user?.id) return;
       setItems(await getDailyFitTasks(user.id, today));
     }
-    load().catch((error) => console.error(error));
-  }, [user?.id, today]);
+    load().catch((error) => toast({ title: "Could not load daily fit tasks", description: error instanceof Error ? error.message : "Please try again." }));
+  }, [toast, user?.id, today]);
 
   async function saveTask(title = draft.title, notes = draft.notes) {
     if (!user?.id) return;
@@ -163,7 +164,7 @@ export function DailyFitTasksTracker() {
 export function HabitsTracker() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const today = useMemo(() => todayIso(), []);
+  const today = useTodayDate();
   const [items, setItems] = useState<FitnessHabit[]>([]);
   const [history, setHistory] = useState<FitnessHabit[]>([]);
   const [draft, setDraft] = useState({ id: "", name: "", notes: "" });
@@ -203,7 +204,7 @@ function HabitStreakCard({ name, records }: { name: string; records: Array<{ dat
 export function SupplementsTracker() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const today = useMemo(() => todayIso(), []);
+  const today = useTodayDate();
   const [items, setItems] = useState<SupplementLog[]>([]);
   const [history, setHistory] = useState<SupplementLog[]>([]);
   const [draft, setDraft] = useState({ id: "", name: "", dose: "", time: "", reminder: "" });
@@ -230,7 +231,7 @@ export function SupplementsTracker() {
 export function SleepRecoveryTracker() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const today = useMemo(() => todayIso(), []);
+  const today = useTodayDate();
   const [items, setItems] = useState<EnhancedSleepRecoveryLog[]>([]);
   const [draft, setDraft] = useState({ id: "", hours_slept: "", sleep_quality: "", bedtime: "", wake_time: "", recovery_level: "", fatigue_level: "", soreness_level: "", stress_level: "", notes: "" });
 
@@ -256,7 +257,7 @@ export function SleepRecoveryTracker() {
 export function PersonalRecordsTracker() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const today = useMemo(() => todayIso(), []);
+  const today = useTodayDate();
   const [items, setItems] = useState<PersonalRecord[]>([]);
   const [draft, setDraft] = useState({ id: "", exercise_name: "", record_type: "Max weight", weight_kg: "", reps: "", record_date: today, notes: "" });
 

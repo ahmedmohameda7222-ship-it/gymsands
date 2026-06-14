@@ -537,17 +537,24 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   async function finishSet(exerciseIndex: number, setIndex: number) {
     const targetSet = exerciseStates[exerciseIndex]?.sets[setIndex];
     if (!targetSet || targetSet.completedAt) return;
+    if (isSaving) return;
+    
+    setIsSaving(true);
     const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: new Date().toISOString() });
     setExerciseStates(nextStates);
+    
     const hasNextSet = completedSets + 1 < totalSets;
     if (hasNextSet) {
       startRestTimer(exerciseStates[exerciseIndex]?.exercise.rest_seconds ?? timerSeconds);
       moveToNextSet(nextStates, exerciseIndex, setIndex);
     }
+    
     try {
       await persistProgress(nextStates);
     } catch (error) {
-      toast({ title: "Set saved", description: error instanceof Error ? error.message : "Try finishing the workout again if it does not appear in history." });
+      toast({ title: "Could not save set", description: error instanceof Error ? error.message : "Try finishing the workout again if it does not appear in history." });
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -558,12 +565,18 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   async function restartSet(exerciseIndex: number, setIndex: number) {
     const targetSet = exerciseStates[exerciseIndex]?.sets[setIndex];
     if (!targetSet) return;
+    if (isSaving) return;
+    
+    setIsSaving(true);
     const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: null });
     setExerciseStates(nextStates);
+    
     try {
       await persistProgress(nextStates);
     } catch {
       toast({ title: "Could not update this set", description: "Try again in a moment." });
+    } finally {
+      setIsSaving(false);
     }
   }
 

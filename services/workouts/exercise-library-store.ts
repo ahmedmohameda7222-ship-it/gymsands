@@ -38,6 +38,7 @@ function normalizeList(value: string) {
 }
 
 function readJson<T>(key: string, fallback: T): T {
+  // TODO(migration): Move exercise favorites and custom exercises to Supabase
   if (!canUseBrowserStorage()) return fallback;
   try {
     const raw = window.localStorage.getItem(key);

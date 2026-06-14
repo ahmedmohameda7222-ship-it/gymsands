@@ -1,5 +1,6 @@
 "use client";
 
+import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { CalendarDays, ChevronLeft, ChevronRight, Download, Printer, Trophy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +24,6 @@ import {
   reportMetrics,
   reportToCsv,
   startOfWeek,
-  todayIso,
   type AggregatedReport,
   type ReportMetric,
   type ReportRange
@@ -35,8 +35,9 @@ type Mode = "weekly" | "monthly";
 export function ReportingDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const today = useTodayDate();
   const [mode, setMode] = useState<Mode>("weekly");
-  const [selectedDate, setSelectedDate] = useState(todayIso());
+  const [selectedDate, setSelectedDate] = useState(today);
   const [report, setReport] = useState<AggregatedReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -117,7 +118,7 @@ export function ReportingDashboard() {
             <Button variant={mode === "weekly" ? "default" : "outline"} onClick={() => setMode("weekly")}>Weekly</Button>
             <Button variant={mode === "monthly" ? "default" : "outline"} onClick={() => setMode("monthly")}>Monthly</Button>
             <Button variant="outline" onClick={() => movePeriod(-1)}><ChevronLeft className="h-4 w-4" /> Previous</Button>
-            <Button variant="outline" onClick={() => setSelectedDate(todayIso())}>Current</Button>
+            <Button variant="outline" onClick={() => setSelectedDate(today)}>Current</Button>
             <Button variant="outline" onClick={() => movePeriod(1)}>Next <ChevronRight className="h-4 w-4" /></Button>
           </div>
         </CardContent>

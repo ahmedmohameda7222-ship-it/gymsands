@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth/auth-provider";
+import { useTodayDate } from "@/lib/hooks/use-today-date";
 import {
   createDirectMealPlanItem,
   deleteDirectMealPlanItem,
@@ -81,7 +82,8 @@ function MyMealPlanBuilderInner() {
   const { user } = useAuth();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [selectedDate, setSelectedDate] = useState(() => safeDate(searchParams.get("date")) ?? todayIso());
+  const today = useTodayDate();
+  const [selectedDate, setSelectedDate] = useState(() => safeDate(searchParams.get("date")) ?? today);
   const [calendarMonth, setCalendarMonth] = useState(() => monthStart(selectedDate));
   const [plannedDates, setPlannedDates] = useState<string[]>([]);
   const [items, setItems] = useState<MealPlanItem[]>([]);
@@ -439,7 +441,7 @@ function MyMealPlanBuilderInner() {
             <div><h2 className="text-lg font-semibold">Meal Plan for {longDate(selectedDate)}</h2><p className="text-sm text-muted-foreground">Planned food counts only after you press Mark done.</p></div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" type="button" onClick={() => changeDate(addDays(selectedDate, -1))}><ChevronLeft className="h-4 w-4" /> Previous Day</Button>
-              <Button variant="outline" type="button" onClick={() => changeDate(todayIso())}>Today</Button>
+              <Button variant="outline" type="button" onClick={() => changeDate(today)}>Today</Button>
               <Button variant="outline" type="button" onClick={() => changeDate(addDays(selectedDate, 1))}>Next Day <ChevronRight className="h-4 w-4" /></Button>
             </div>
           </div>
@@ -641,7 +643,6 @@ function draftFromItem(item: MealPlanItem): Draft { return { foodName: item.food
 function mergeItems(current: MealPlanItem[], nextItems: MealPlanItem[]) { const map = new Map(current.map((item) => [item.id, item])); nextItems.forEach((item) => map.set(item.id, item)); return Array.from(map.values()).sort((a, b) => a.plan_date.localeCompare(b.plan_date) || a.created_at.localeCompare(b.created_at)); }
 function formatDiff(value: number) { return `${value > 0 ? "+" : ""}${value}`; }
 function toNumber(value: unknown) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
-function todayIso() { return localDateToIso(new Date()); }
 function safeDate(value: string | null) { return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null; }
 function monthStart(date: string) { return `${date.slice(0, 7)}-01`; }
 function pad(value: number) { return String(value).padStart(2, "0"); }
@@ -662,5 +663,5 @@ function displayDate(date: string) { return utcDate(date).toLocaleDateString("en
 function CompactCalendar({ month, selectedDate, plannedDates, onMonthChange, onSelectDate }: { month: string; selectedDate: string; plannedDates: string[]; onMonthChange: (date: string) => void; onSelectDate: (date: string) => void }) {
   const days = calendarDays(month);
   const planned = new Set(plannedDates);
-  return <div className="rounded-md border bg-white p-3"><div className="mb-3 flex items-center justify-between"><Button size="icon" variant="ghost" type="button" onClick={() => onMonthChange(addMonths(month, -1))}><ChevronLeft className="h-4 w-4" /></Button><p className="font-semibold">{monthLabel(month)}</p><Button size="icon" variant="ghost" type="button" onClick={() => onMonthChange(addMonths(month, 1))}><ChevronRight className="h-4 w-4" /></Button></div><div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-muted-foreground">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div><div className="mt-2 grid grid-cols-7 gap-1">{days.map((day) => { const isCurrentMonth = day.slice(0, 7) === month.slice(0, 7); const isSelected = day === selectedDate; const isToday = day === todayIso(); const hasPlan = planned.has(day); return <button key={day} type="button" onClick={() => onSelectDate(day)} className={`relative rounded-md border px-1 py-2 text-sm transition ${isSelected ? "border-primary bg-primary text-primary-foreground" : isToday ? "border-primary/60 bg-primary/10" : "border-transparent hover:bg-muted"} ${isCurrentMonth ? "" : "opacity-40"}`}>{Number(day.slice(-2))}{hasPlan ? <span className={`absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${isSelected ? "bg-primary-foreground" : "bg-primary"}`} /> : null}</button>; })}</div></div>;
+  return <div className="rounded-md border bg-white p-3"><div className="mb-3 flex items-center justify-between"><Button size="icon" variant="ghost" type="button" onClick={() => onMonthChange(addMonths(month, -1))}><ChevronLeft className="h-4 w-4" /></Button><p className="font-semibold">{monthLabel(month)}</p><Button size="icon" variant="ghost" type="button" onClick={() => onMonthChange(addMonths(month, 1))}><ChevronRight className="h-4 w-4" /></Button></div><div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-muted-foreground">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div><div className="mt-2 grid grid-cols-7 gap-1">{days.map((day) => { const isCurrentMonth = day.slice(0, 7) === month.slice(0, 7); const isSelected = day === selectedDate; const isToday = day === localDateToIso(new Date()); const hasPlan = planned.has(day); return <button key={day} type="button" onClick={() => onSelectDate(day)} className={`relative rounded-md border px-1 py-2 text-sm transition ${isSelected ? "border-primary bg-primary text-primary-foreground" : isToday ? "border-primary/60 bg-primary/10" : "border-transparent hover:bg-muted"} ${isCurrentMonth ? "" : "opacity-40"}`}>{Number(day.slice(-2))}{hasPlan ? <span className={`absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${isSelected ? "bg-primary-foreground" : "bg-primary"}`} /> : null}</button>; })}</div></div>;
 }

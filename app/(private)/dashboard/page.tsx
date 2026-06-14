@@ -30,7 +30,7 @@ import { getCurrentWeekday, getDefaultUserWorkoutPlan } from "@/services/databas
 import { getOpenWorkoutDaySession, getWorkoutHistory } from "@/services/database/workout-sessions";
 import { percent, remainingMacros, sumFoodLogs } from "@/services/nutrition/calculations";
 import type { SavedTargets } from "@/services/nutrition/targets";
-import { todayIso } from "@/lib/utils";
+import { useTodayDate } from "@/lib/hooks/use-today-date";
 import type { FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryLog, SupplementLog, UserWorkoutPlan, WaterLog, WorkoutSession } from "@/types";
 
 export default function DashboardPage() {
@@ -50,6 +50,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
+  const today = useTodayDate();
 
   async function loadDashboard() {
     if (!user?.id) {
@@ -64,7 +65,7 @@ export default function DashboardPage() {
       const [foodLogs, workoutHistory, dailyWater, progress, plannedMeals, plan, calorieTargets, supplementLogs, recoveryLogs, onboarding] = await Promise.all([
         getTodayFoodLogs(user.id),
         getWorkoutHistory(user.id),
-        getWaterLogs(user.id, todayIso()),
+        getWaterLogs(user.id, today),
         getProgressEntries(user.id),
         getTodayMealPlanItems(user.id),
         getDefaultUserWorkoutPlan(user.id),
@@ -112,16 +113,16 @@ export default function DashboardPage() {
   const remaining = targets ? remainingMacros({ calories: targets.daily_calories, protein_g: targets.protein_g, carbs_g: targets.carbs_g, fat_g: targets.fat_g, water_ml: targets.water_ml }, totals) : { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
   const waterTotalMl = useMemo(() => waterLogs.reduce((sum, log) => sum + Number(log.amount_ml), 0), [waterLogs]);
   const latestProgress = progressEntries.at(-1) ?? null;
-  const today = getCurrentWeekday();
-  const todayPlanDay = activePlan?.days.find((day) => day.weekday === today && day.exercises.length > 0) ?? null;
-  const todaySleepLog = sleepLogs.find((log) => log.log_date === todayIso()) ?? null;
+  const currentWeekday = getCurrentWeekday();
+  const todayPlanDay = activePlan?.days.find((day) => day.weekday === currentWeekday && day.exercises.length > 0) ?? null;
+  const todaySleepLog = sleepLogs.find((log) => log.log_date === today) ?? null;
   const supplementsTaken = supplements.length > 0 && supplements.every((item) => item.taken_today);
   const plannedMealsCount = mealPlanItems.length;
   const doneMealsCount = mealPlanItems.filter((item) => item.status === "done").length;
   const waterLiters = Math.round((waterTotalMl / 1000) * 10) / 10;
   const waterTargetLiters = Math.round(((targets?.water_ml ?? 0) / 1000) * 10) / 10;
   const hasAnyTodayData = logs.length > 0 || history.length > 0 || waterLogs.length > 0 || progressEntries.length > 0 || mealPlanItems.length > 0 || Boolean(activePlan) || supplements.length > 0 || sleepLogs.length > 0 || Boolean(targets);
-  const completedToday = Boolean(history.find((session) => session.status === "completed" && session.started_at?.slice(0, 10) === todayIso()));
+  const completedToday = Boolean(history.find((session) => session.status === "completed" && session.started_at?.slice(0, 10) === today));
   const hasStartedWorkout = Boolean(openSessionId || history.length);
   const setupChecklist = [
     { label: "Finish profile", done: Boolean(profile?.full_name), href: "/profile", action: "Edit profile" },
@@ -138,7 +139,7 @@ export default function DashboardPage() {
     Boolean(targets?.protein_g && totals.protein_g >= targets.protein_g),
     Boolean(targets?.water_ml && waterTotalMl >= targets.water_ml),
     completedToday,
-    Boolean(latestProgress?.entry_date === todayIso() || todaySleepLog)
+    Boolean(latestProgress?.entry_date === today || todaySleepLog)
   ];
   const todayScore = Math.round((todayScoreChecks.filter(Boolean).length / todayScoreChecks.length) * 100);
   const trainingStreak = countCompletedTrainingStreak(history);
@@ -159,7 +160,8 @@ export default function DashboardPage() {
     todayPlanDay: Boolean(todayPlanDay),
     completedToday,
     latestProgressDate: latestProgress?.entry_date ?? null,
-    sleepLoggedToday: Boolean(todaySleepLog)
+    sleepLoggedToday: Boolean(todaySleepLog),
+    todayIso: today
   });
 
   async function quickMarkMealDone(item: MealPlanItem) {
@@ -178,7 +180,7 @@ export default function DashboardPage() {
   async function quickAddWater(amountMl: number) {
     if (!user?.id) return;
     try {
-      const log = await addWaterLog(user.id, todayIso(), amountMl);
+      const log = await addWaterLog(user.id, today, amountMl);
       setWaterLogs((current) => [log, ...current]);
     } catch (error) {
       logRecoverableError("dashboard.water", error);
@@ -314,7 +316,7 @@ export default function DashboardPage() {
                   <p className="text-sm font-semibold text-muted-foreground">Workout</p>
                   {activePlan ? (
                     <>
-                      <p className="mt-1 font-semibold">{todayPlanDay ? todayPlanDay.day_name : `${today} rest day`}</p>
+                      <p className="mt-1 font-semibold">{todayPlanDay ? todayPlanDay.day_name : `${currentWeekday} rest day`}</p>
                       <p className="text-sm text-muted-foreground">{activePlan.name}</p>
                       <Button asChild className="mt-3" size="sm"><Link href={todayPlanDay ? `/workouts/session/day/${todayPlanDay.id}` : `/my-workout/plans/${activePlan.id}`}><Dumbbell className="h-4 w-4" />{openSessionId ? "Resume Workout" : todayPlanDay ? "Start Today's Workout" : "View Active Plan"}</Link></Button>
                     </>
@@ -374,7 +376,7 @@ export default function DashboardPage() {
                 <ChecklistLine label="Water" done={Boolean(targets?.water_ml && waterTotalMl >= targets.water_ml)} emptyLabel={targets?.water_ml ? (waterTotalMl ? `${Math.max(0, targets.water_ml - waterTotalMl)} ml remaining` : "No water logged today") : "Set water target"} />
                 <ChecklistLine label="Supplements" done={supplementsTaken} emptyLabel={supplements.length ? "Supplements still open" : "No supplements scheduled"} />
                 <ChecklistLine label="Sleep/recovery" done={Boolean(todaySleepLog)} emptyLabel="No sleep/recovery log today" />
-                <ChecklistLine label="Progress" done={Boolean(latestProgress?.entry_date === todayIso())} emptyLabel="No progress entry today" />
+                <ChecklistLine label="Progress" done={Boolean(latestProgress?.entry_date === today)} emptyLabel="No progress entry today" />
               </CardContent>
             </Card>
           </div>
@@ -416,7 +418,8 @@ function buildDashboardCoaching({
   todayPlanDay,
   completedToday,
   latestProgressDate,
-  sleepLoggedToday
+  sleepLoggedToday,
+  todayIso
 }: {
   hasTargets: boolean;
   targets: SavedTargets | null;
@@ -429,6 +432,7 @@ function buildDashboardCoaching({
   completedToday: boolean;
   latestProgressDate: string | null;
   sleepLoggedToday: boolean;
+  todayIso: string;
 }) {
   const waterRemaining = Math.max(0, (targets?.water_ml ?? 0) - waterTotalMl);
   const foodAction = !hasTargets
@@ -458,7 +462,7 @@ function buildDashboardCoaching({
     },
     {
       label: "Tracking quality",
-      value: `${[plannedMealsCount > 0 && doneMealsCount === plannedMealsCount, completedToday, latestProgressDate === todayIso(), sleepLoggedToday].filter(Boolean).length}/4 closed`,
+      value: `${[plannedMealsCount > 0 && doneMealsCount === plannedMealsCount, completedToday, latestProgressDate === todayIso, sleepLoggedToday].filter(Boolean).length}/4 closed`,
       detail: "Meals, workout, progress, and recovery give the cleanest weekly insight."
     }
   ];

@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
 import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
 import { addProgressEntry } from "@/services/database/progress";
-import { todayIso } from "@/lib/utils";
+import { useTodayDate } from "@/lib/hooks/use-today-date";
 import type { ProgressEntry } from "@/types";
 
 const measurementFields = [
@@ -36,8 +36,9 @@ function invalidPositiveNumber(value: string) {
 export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntry) => void }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const today = useTodayDate();
   const [open, setOpen] = useState(false);
-  const [entryDate, setEntryDate] = useState(todayIso());
+  const [entryDate, setEntryDate] = useState(today);
   const [weight, setWeight] = useState("");
   const [waist, setWaist] = useState("");
   const [notes, setNotes] = useState("");
@@ -84,7 +85,7 @@ export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntr
       onSaved?.(entry);
       toast({ title: "Progress entry saved", description: "Your real progress data has been updated." });
       setOpen(false);
-      setEntryDate(todayIso());
+      setEntryDate(today);
       setWeight("");
       setWaist("");
       setNotes("");

@@ -26,7 +26,8 @@ import {
 } from "@/services/database/nutrition";
 import { percent, sumFoodLogs } from "@/services/nutrition/calculations";
 import { estimateTdee, type SavedTargets } from "@/services/nutrition/targets";
-import { todayIso } from "@/lib/utils";
+import { useTodayDate } from "@/lib/hooks/use-today-date";
+
 import type { DailyNutritionSummary, FoodLog, WaterLog } from "@/types";
 
 function mixColor(start: [number, number, number], end: [number, number, number], amount: number) {
@@ -66,7 +67,8 @@ function formatDay(value: string) {
 export default function CaloriesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [selectedDate, setSelectedDate] = useState(todayIso());
+  const today = useTodayDate();
+  const [selectedDate, setSelectedDate] = useState(today);
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [weekData, setWeekData] = useState<DailyNutritionSummary[]>([]);
   const [waterLogs, setWaterLogs] = useState<WaterLog[]>([]);
@@ -144,8 +146,8 @@ export default function CaloriesPage() {
     if (!user?.id) return toast({ title: "Sign in required", description: "Please sign in before copying meals." });
     try {
       const copied = await copyYesterdaysMeals(user.id, selectedDate);
-      if (selectedDate === todayIso()) setLogs((current) => [...copied, ...current]);
-      else await loadWeek();
+      await loadDay();
+      await loadWeek();
       toast({ title: "Yesterday copied", description: `${copied.length} food items added to ${formatDay(selectedDate)}.` });
     } catch (error) {
       toast({ title: "Could not copy yesterday", description: error instanceof Error ? error.message : "Please try again." });
@@ -160,11 +162,14 @@ export default function CaloriesPage() {
     const fatG = Number(targetForm.fatG);
     const waterMl = Number(targetForm.waterMl);
 
-    if (!dailyCalories || dailyCalories < 500) {
+    if (Number.isNaN(dailyCalories) || dailyCalories < 500 || dailyCalories > 15000) {
       return toast({ title: "Check daily calories", description: "Enter a realistic daily target, e.g. 1800 or 2200 kcal." });
     }
-    if (!waterMl || waterMl < 250) {
-      return toast({ title: "Check water target", description: "Enter a daily water target in milliliters." });
+    if (Number.isNaN(proteinG) || proteinG < 0 || proteinG > 1000 || Number.isNaN(carbsG) || carbsG < 0 || carbsG > 2000 || Number.isNaN(fatG) || fatG < 0 || fatG > 1000) {
+      return toast({ title: "Check macros", description: "Enter realistic macro targets (0 or higher)." });
+    }
+    if (Number.isNaN(waterMl) || waterMl < 250 || waterMl > 20000) {
+      return toast({ title: "Check water target", description: "Enter a realistic daily water target in milliliters." });
     }
 
     setIsSavingTargets(true);

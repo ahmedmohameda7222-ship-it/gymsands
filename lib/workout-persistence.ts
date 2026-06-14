@@ -3,7 +3,8 @@ export function workoutStorageKey(parts: Array<string | null | undefined>) {
 }
 
 export function readStoredTimestamp(key: string) {
-  if (typeof window === "undefined") return null;
+  // TODO(migration): Evaluate if workout timer state needs Supabase persistence
+  if (typeof window === "undefined" || !window.localStorage) return null;
   const value = window.localStorage.getItem(key);
   if (!value) return null;
   const parsed = Date.parse(value);

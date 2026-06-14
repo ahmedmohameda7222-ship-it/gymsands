@@ -13,6 +13,8 @@ export type QuickAddInput = {
   mealType: MealType;
   calories: number;
   proteinG: number;
+  carbsG?: number;
+  fatG?: number;
   notes?: string | null;
 };
 
@@ -50,6 +52,7 @@ function canUseStorage() {
 }
 
 function readJson<T>(key: string, fallback: T): T {
+  // TODO(migration): Move favorite foods and recipes to Supabase
   if (!canUseStorage()) return fallback;
   try {
     const raw = window.localStorage.getItem(key);
@@ -141,20 +144,22 @@ export async function logFoodFromPreviousLog(userId: string, source: FoodLog, da
 export async function quickAddManualFoodLog(input: QuickAddInput) {
   const calories = Math.max(0, toNumber(input.calories));
   const proteinG = Math.max(0, toNumber(input.proteinG));
-  if (calories <= 0 && proteinG <= 0) throw new Error("Enter calories or protein before quick adding.");
+  const carbsG = Math.max(0, toNumber(input.carbsG ?? 0));
+  const fatG = Math.max(0, toNumber(input.fatG ?? 0));
+  if (calories <= 0 && proteinG <= 0 && carbsG <= 0 && fatG <= 0) throw new Error("Enter calories or macros before quick adding.");
   const payload = {
     user_id: input.userId,
     food_item_id: null,
     user_food_item_id: null,
     log_date: input.date ?? todayIso(),
     meal_type: normalizeMealType(input.mealType),
-    food_name: proteinG > 0 && calories <= 0 ? "Quick add protein" : "Quick add calories",
+    food_name: "Quick manual entry",
     serving_size: "manual quick entry",
     quantity: 1,
     calories,
     protein_g: proteinG,
-    carbs_g: 0,
-    fat_g: 0,
+    carbs_g: carbsG,
+    fat_g: fatG,
     notes: ["Quick/manual entry. Estimated, not verified nutrition data.", input.notes?.trim()].filter(Boolean).join(" ")
   };
   if (!canUseUserData(input.userId)) return { ...payload, id: crypto.randomUUID() } as FoodLog;

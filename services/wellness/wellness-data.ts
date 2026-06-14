@@ -40,6 +40,7 @@ function canUseStorage() {
 }
 
 function readJson<T>(key: string, fallback: T): T {
+  // TODO(migration): Move wellness history to Supabase
   if (!canUseStorage()) return fallback;
   try {
     const raw = window.localStorage.getItem(key);

@@ -61,6 +61,7 @@ function canStore() {
 }
 
 function readJson<T>(key: string, fallback: T): T {
+  // TODO(migration): Move meal plan templates and batches to Supabase
   if (!canStore()) return fallback;
   try {
     const raw = window.localStorage.getItem(key);

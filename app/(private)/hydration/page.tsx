@@ -12,7 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { EmptyState, ErrorState } from "@/components/ui/state-views";
 import { useToast } from "@/components/ui/toaster";
 import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
-import { todayIso } from "@/lib/utils";
+import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { addWaterLog, deleteWaterLog, getCalorieTargets, getNutritionWeek, getWaterLogs } from "@/services/database/nutrition";
 import type { DailyNutritionSummary, WaterLog } from "@/types";
 
@@ -44,7 +44,7 @@ export default function HydrationPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
-  const date = todayIso();
+  const date = useTodayDate();
   const totalMl = useMemo(() => logs.reduce((sum, log) => sum + Number(log.amount_ml), 0), [logs]);
   const target = targetMl ?? 0;
   const progress = target ? Math.min(100, Math.round((totalMl / target) * 100)) : 0;
