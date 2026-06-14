@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Loader2, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,7 +37,7 @@ const trainingCycles = [
 ];
 
 export default function OnboardingPage() {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(0);
@@ -91,34 +91,18 @@ export default function OnboardingPage() {
   async function finish() {
     setIsSaving(true);
     try {
-      if (!session?.access_token) {
-        await saveOnboarding({
-          ...answers,
-          goal: answers.goals.join(", "),
-          user_id: user?.id ?? "mock-user"
-        });
-        toast({ title: "Onboarding saved", description: "Your setup is ready." });
-        router.push("/my-workout/generated");
-        return;
-      }
-
-      const response = await fetch("/api/workout-plan/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({ answers })
+      await saveOnboarding({
+        ...answers,
+        goal: answers.goals.join(", "),
+        user_id: user?.id ?? "mock-user"
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Could not generate your workout plan.");
       toast({
-        title: "Generated plans ready",
-        description: data.plans?.length ? `${data.plans.length} matched plans are ready to compare.` : "Your matched plans are ready."
+        title: "Profile saved",
+        description: "Create your plan in ChatGPT, then export it to FitLife Hub for tracking."
       });
-      router.push("/my-workout/generated");
+      router.push("/my-workout/plans");
     } catch (error) {
-      toast({ title: "Could not finish onboarding", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not save profile", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
       setIsSaving(false);
     }
@@ -126,7 +110,7 @@ export default function OnboardingPage() {
 
   return (
     <>
-      <PageHeading title="FitLife Hub Onboarding" description="Build a profile so generated workout plans can be matched by goal, cycle, equipment, and schedule." />
+      <PageHeading title="FitLife Hub Onboarding" description="Save your training and nutrition profile so ChatGPT-exported plans fit your goals, equipment, and schedule." />
       <Card className="mx-auto max-w-3xl">
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
@@ -156,7 +140,7 @@ export default function OnboardingPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <ChoiceGroup label="Training level" value={answers.training_level} values={["Beginner", "Intermediate", "Advanced"]} onChange={(training_level) => setAnswers((current) => ({ ...current, training_level }))} />
               <ChoiceGroup label="Training place" value={answers.training_place} values={["Gym", "Home", "Both"]} onChange={(training_place) => setAnswers((current) => ({ ...current, training_place }))} />
-              <ChoiceGroup label="Training cycle" value={answers.training_cycle} values={trainingCycles} onChange={(training_cycle) => setAnswers((current) => ({ ...current, training_cycle }))} />
+              <ChoiceGroup label="Preferred split" value={answers.training_cycle} values={trainingCycles} onChange={(training_cycle) => setAnswers((current) => ({ ...current, training_cycle }))} />
               <ChoiceGroup label="Training availability" value={`${answers.training_days_per_week} days/week`} values={["2 days/week", "3 days/week", "4 days/week", "5 days/week", "6 days/week"]} onChange={(value) => setAnswers((current) => ({ ...current, training_days_per_week: Number(value[0]) }))} />
               <ChoiceGroup label="Minimum duration" value={`${answers.min_workout_duration_minutes} minutes`} values={durationOptions.map((duration) => `${duration} minutes`)} onChange={(value) => {
                 const min = Number(value.split(" ")[0]);
@@ -201,16 +185,16 @@ export default function OnboardingPage() {
                   id="limitations"
                   value={answers.allergies_limitations}
                   onChange={(event) => setAnswers((current) => ({ ...current, allergies_limitations: event.target.value }))}
-                  placeholder="Optional allergies or limitations, e.g. knee pain or peanut allergy"
+                  placeholder="Optional allergies or limitations, e.g. lower-back weakness or peanut allergy"
                 />
               </div>
             </div>
           ) : null}
           {step === 4 ? (
             <div className="rounded-lg border bg-card p-5">
-              <h2 className="text-lg font-semibold">Ready for your plan</h2>
+              <h2 className="text-lg font-semibold">Profile ready</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                FitLife Hub will create one complete weekly plan with warm-up, strength, cardio, and cool-down blocks from active exercises.
+                FitLife Hub will not generate plans internally. Use ChatGPT to create your workout or meal plan, then export it to FitLife Hub for storage, editing, and tracking.
               </p>
             </div>
           ) : null}
@@ -227,8 +211,8 @@ export default function OnboardingPage() {
               </Button>
             ) : (
               <Button onClick={finish} disabled={isSaving}>
-                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {isSaving ? "Creating plan..." : "Generate my plan"}
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {isSaving ? "Saving profile..." : "Save profile"}
               </Button>
             )}
           </div>
@@ -298,25 +282,6 @@ function NumberField({ label, value, suffix, onChange }: { label: string; value:
         />
         <span className="flex h-11 items-center rounded-md border bg-card px-3 text-sm font-semibold text-muted-foreground">{suffix}</span>
       </div>
-    </div>
-  );
-}
-
-function SliderField({ label, value, min, max, suffix, onChange }: { label: string; value: number; min: number; max: number; suffix: string; onChange: (value: number) => void }) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label>{label}</Label>
-        <span className="text-sm font-semibold text-primary">{value} {suffix}</span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="h-2 w-full cursor-pointer accent-[#55603D]"
-      />
     </div>
   );
 }
