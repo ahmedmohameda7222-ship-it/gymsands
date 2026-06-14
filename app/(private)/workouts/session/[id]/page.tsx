@@ -7,6 +7,7 @@ import { WorkoutSessionForm } from "@/components/workouts/workout-session-form";
 import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
 import { getUserExerciseVideo, getWorkout } from "@/services/database/repository";
+import { getCustomExercise } from "@/services/workouts/exercise-library-store";
 import type { Workout } from "@/types";
 
 export default function WorkoutSessionPage() {
@@ -21,15 +22,12 @@ export default function WorkoutSessionPage() {
 
     async function loadWorkout() {
       try {
-        const nextWorkout = await getWorkout(params.id);
-        const customVideo = user?.id ? await getUserExerciseVideo(user.id, nextWorkout.id) : null;
+        const customExercise = getCustomExercise(user?.id, params.id);
+        const nextWorkout = customExercise ?? await getWorkout(params.id);
+        const customVideo = user?.id && !customExercise ? await getUserExerciseVideo(user.id, nextWorkout.id) : null;
         if (!active) return;
         const hydratedWorkout = customVideo?.custom_video_url
-          ? {
-            ...nextWorkout,
-            video_url: customVideo.custom_video_url,
-            custom_video_url: customVideo.custom_video_url
-          }
+          ? { ...nextWorkout, video_url: customVideo.custom_video_url, custom_video_url: customVideo.custom_video_url }
           : nextWorkout;
         setWorkout(hydratedWorkout);
         setLoadError("");
