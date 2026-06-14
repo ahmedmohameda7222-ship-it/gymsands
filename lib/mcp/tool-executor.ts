@@ -201,7 +201,7 @@ function exerciseRow(planDayId: string, input: JsonObject, blockType: string) {
   return {
     plan_day_id: planDayId,
     workout_id: null,
-    exercise_name: getString(input, "exercise_name"),
+    exercise_name: getOptionalString(input, "exercise_name") ?? getOptionalString(input, "name") ?? getString(input, "title"),
     category: getOptionalString(input, "block_type") ?? blockType,
     block_type: getOptionalString(input, "block_type") ?? blockType,
     target_muscle: getOptionalString(input, "target_muscle") ?? null,
@@ -235,9 +235,33 @@ function itemsFrom(day: JsonObject, names: string[]) {
   return [];
 }
 
+function planDayItems(day: JsonObject) {
+  return [
+    ...itemsFrom(day, ["warmup", "warm_up"]),
+    ...itemsFrom(day, ["exercises", "strength", "main_workout"]),
+    ...itemsFrom(day, ["cardio", "cardio_finisher"]),
+    ...itemsFrom(day, ["cooldown", "cool_down", "stretching"])
+  ];
+}
+
+function importedExerciseName(item: JsonObject) {
+  return getOptionalString(item, "exercise_name") ?? getOptionalString(item, "name") ?? getOptionalString(item, "title") ?? "";
+}
+
+function validateChatGptPlanInput(days: JsonObject[]) {
+  const allItems = days.flatMap(planDayItems);
+  const itemCount = allItems.length;
+  const unnamedCount = allItems.filter((item) => importedExerciseName(item).trim().length === 0).length;
+  if (!itemCount) return "The imported plan has days but no workout blocks. Add warmup, exercises, cardio, or cooldown items before saving.";
+  if (unnamedCount) return `The imported plan has ${unnamedCount} workout item${unnamedCount === 1 ? "" : "s"} without an exercise name. Add exercise_name, name, or title before saving.`;
+  return null;
+}
+
 async function saveChatGptPlan(ctx: McpContext, input: JsonObject) {
   const days = getArray<JsonObject>(input, "days");
   if (!days.length) return fail("missing_required_input", "Provide a full ChatGPT-created plan object with days.");
+  const validationError = validateChatGptPlanInput(days);
+  if (validationError) return fail("invalid_workout_plan", validationError);
 
   const activate = input.activate !== false;
   if (activate) await ctx.supabase.from("user_workout_plans").update({ is_active: false, is_default: false }).eq("user_id", ctx.userId);

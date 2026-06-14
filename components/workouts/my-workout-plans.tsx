@@ -13,6 +13,7 @@ import Link from "next/link";
 import { setDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
 import { getWorkoutActivity } from "@/services/database/workout-sessions";
 import { archiveWorkoutPlan, duplicateWorkoutPlan, getActiveWorkoutPlan, getAllUserWorkoutPlans, updateWorkoutPlanMetadata, workoutsFromLoadedPlanDay } from "@/services/database/workout-plan-loader";
+import { analyzeImportedWorkoutPlan, type ImportedPlanQuality } from "@/services/workouts/imported-plan-quality";
 import { WorkoutPlanBuilder } from "@/components/workouts/workout-plan-builder";
 import { WorkoutCalendar } from "@/components/workouts/workout-calendar";
 import { Input } from "@/components/ui/input";
@@ -232,7 +233,7 @@ export function MyWorkoutPlans() {
             const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
             const isDefault = plan.is_default ?? plan.is_active;
             const sourceLabel = sourceBadge(plan);
-            const warnings = planWarnings(plan);
+            const quality = analyzeImportedWorkoutPlan(plan);
             return (
               <Card key={plan.id}>
                 <CardHeader>
@@ -254,15 +255,10 @@ export function MyWorkoutPlans() {
                     <div className="rounded-md bg-slate-50 p-3"><CalendarDays className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-xl font-bold text-slate-950">{plan.days.length}</p><p className="text-xs text-muted-foreground">Days</p></div>
                     <div className="rounded-md bg-slate-50 p-3"><Dumbbell className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-xl font-bold text-slate-950">{exerciseCount}</p><p className="text-xs text-muted-foreground">Exercises</p></div>
                   </div>
+                  <PlanQualityPanel quality={quality} />
                   <div className="flex flex-wrap gap-2">
                     {plan.days.slice(0, 4).map((day) => <Badge key={day.id} variant="outline">{day.weekday ?? day.day_name}</Badge>)}
                   </div>
-                  {warnings.length ? (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-                      <p className="font-semibold">Validation warnings</p>
-                      <p className="mt-1">{warnings.join(" | ")}</p>
-                    </div>
-                  ) : null}
                   <div className="grid gap-2">
                     <Button asChild className="w-full"><Link href={`/my-workout/plans/${plan.id}`}>Open Plan</Link></Button>
                     <Button type="button" variant={isDefault ? "secondary" : "outline"} className="w-full" onClick={() => setDefaultPlan(plan)} disabled={isDefault || busyPlanId === plan.id}>
@@ -317,14 +313,23 @@ function sourceBadge(plan: UserWorkoutPlan) {
   return "Saved";
 }
 
-function planWarnings(plan: UserWorkoutPlan) {
-  const warnings: string[] = [];
-  if (!plan.days.length) warnings.push("missing days");
-  if (!plan.days.some((day) => day.exercises.length)) warnings.push("missing exercises");
-  if (!plan.days_per_week) warnings.push("no days/week");
-  if (!plan.program_duration_weeks) warnings.push("no duration");
-  const weekdays = plan.days.map((day) => day.weekday).filter(Boolean);
-  if (new Set(weekdays).size !== weekdays.length) warnings.push("duplicate weekdays");
-  if (plan.days.some((day) => day.exercises.some((exercise) => !exercise.sets || !exercise.reps))) warnings.push("missing sets/reps");
-  return warnings;
+function PlanQualityPanel({ quality }: { quality: ImportedPlanQuality }) {
+  const tone = quality.status === "ready" ? "border-emerald-200 bg-emerald-50 text-emerald-950" : quality.status === "blocked" ? "border-red-200 bg-red-50 text-red-950" : "border-amber-200 bg-amber-50 text-amber-950";
+  const label = quality.status === "ready" ? "Ready" : quality.status === "blocked" ? "Blocked" : "Needs review";
+  return (
+    <div className={`rounded-md border p-3 text-sm ${tone}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-semibold">Import readiness</p>
+        <Badge variant={quality.status === "ready" ? "success" : "outline"}>{quality.score}/100 {label}</Badge>
+      </div>
+      {quality.blockers.length ? <p className="mt-2">{quality.blockers.join(" ")}</p> : null}
+      {quality.warnings.length ? <p className="mt-2">{quality.warnings.slice(0, 3).join(" ")}</p> : null}
+      {quality.repairTips.length ? (
+        <ul className="mt-2 list-disc space-y-1 pl-4">
+          {quality.repairTips.slice(0, 2).map((tip) => <li key={tip}>{tip}</li>)}
+        </ul>
+      ) : null}
+      {quality.duplicateExercises.length ? <p className="mt-2 text-xs">Duplicates: {quality.duplicateExercises.slice(0, 4).join(", ")}</p> : null}
+    </div>
+  );
 }

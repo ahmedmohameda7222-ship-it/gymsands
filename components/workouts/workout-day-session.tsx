@@ -42,6 +42,12 @@ type PreviousPerformance = {
   lastPerformedAt: string | null;
 };
 
+type PreviousSet = {
+  reps: number | null;
+  weightKg: number | null;
+  performedAt: string | null;
+};
+
 type SessionSetSummary = {
   exerciseName: string;
   reps: number;
@@ -222,6 +228,25 @@ function previousPerformance(history: WorkoutSessionSummary[], exerciseName: str
     lastBestSet: best ? `${best.weight_kg ?? 0} kg x ${best.reps ?? 0}` : null,
     lastPerformedAt: matchingSession.completed_at || matchingSession.started_at
   };
+}
+
+function previousSetForExercise(history: WorkoutSessionSummary[], exerciseName: string, setNumber: number): PreviousSet | null {
+  const normalizedName = normalizeExerciseName(exerciseName);
+  for (const session of history) {
+    const matchingLogs = (session.exercise_logs ?? [])
+      .filter((log) => normalizeExerciseName(log.exercise_name) === normalizedName)
+      .filter((log) => Number(log.reps ?? 0) > 0 || Number(log.weight_kg ?? 0) > 0);
+    if (!matchingLogs.length) continue;
+    const exactSet = matchingLogs.find((log) => log.set_number === setNumber);
+    const fallbackSet = [...matchingLogs].sort((a, b) => (Number(b.weight_kg ?? 0) * Number(b.reps ?? 0)) - (Number(a.weight_kg ?? 0) * Number(a.reps ?? 0)))[0];
+    const match = exactSet ?? fallbackSet;
+    return {
+      reps: match.reps ?? null,
+      weightKg: match.weight_kg ?? null,
+      performedAt: session.completed_at || session.started_at
+    };
+  }
+  return null;
 }
 
 function buildProgressiveSuggestion(item: ExerciseState) {
@@ -440,6 +465,22 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
           : item
       )
     );
+  }
+
+  function applyPreviousSet(exerciseIndex: number, setIndex: number) {
+    const item = exerciseStates[exerciseIndex];
+    const targetSet = item?.sets[setIndex];
+    if (!item || !targetSet) return;
+    const previous = previousSetForExercise(history, item.exercise.exercise_name, targetSet.setNumber);
+    if (!previous) {
+      toast({ title: "No previous set found", description: "Log this exercise once and it will be available next time." });
+      return;
+    }
+    updateSet(exerciseIndex, setIndex, {
+      reps: previous.reps === null ? targetSet.reps : String(previous.reps),
+      weightKg: previous.weightKg === null ? targetSet.weightKg : String(previous.weightKg)
+    });
+    toast({ title: "Previous set applied", description: previous.performedAt ? `Copied from ${previous.performedAt.slice(0, 10)}.` : "Copied from your saved workout history." });
   }
 
   function statesWithSetPatch(exerciseIndex: number, setIndex: number, patch: Partial<SetState>) {
@@ -691,35 +732,40 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
             </div>
 
             <div className="space-y-3">
-              {activeExercise.sets.map((set, setIndex) => (
-                <div key={set.setNumber} className={`rounded-md border p-3 ${set.completedAt ? "border-emerald-300 bg-emerald-50" : setIndex === activeSetIndex ? "border-primary bg-blue-50" : "bg-white"}`}>
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <p className="font-semibold">Set {set.setNumber}</p>
-                    {set.completedAt ? <Badge variant="success">Done</Badge> : <Badge variant="outline">Open</Badge>}
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                    <div className="space-y-1"><Label>Actual reps</Label><Input className="h-12 text-lg" value={set.reps} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { reps: event.target.value })} inputMode="numeric" /></div>
-                    <div className="space-y-1"><Label>Weight kg</Label><Input className="h-12 text-lg" value={set.weightKg} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { weightKg: event.target.value })} inputMode="decimal" placeholder="0" /></div>
-                    <div className="space-y-1"><Label>RPE</Label><Input className="h-12" value={set.rpe} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" /></div>
-                    <div className="space-y-1"><Label>RIR</Label><Input className="h-12" value={set.rir} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" /></div>
-                    <div className="space-y-1">
-                      <Label>Set type</Label>
-                      <select value={set.setType} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-12 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                        <option value="normal">Normal</option>
-                        <option value="warmup">Warm-up</option>
-                        <option value="working">Working</option>
-                        <option value="failure">Failure</option>
-                        <option value="drop">Drop set</option>
-                      </select>
+              {activeExercise.sets.map((set, setIndex) => {
+                const previousSet = previousSetForExercise(history, activeExercise.exercise.exercise_name, set.setNumber);
+                return (
+                  <div key={set.setNumber} className={`rounded-md border p-3 ${set.completedAt ? "border-emerald-300 bg-emerald-50" : setIndex === activeSetIndex ? "border-primary bg-blue-50" : "bg-white"}`}>
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <p className="font-semibold">Set {set.setNumber}</p>
+                      {set.completedAt ? <Badge variant="success">Done</Badge> : <Badge variant="outline">Open</Badge>}
                     </div>
-                    <div className="space-y-1 lg:col-span-5"><Label>Notes</Label><Input className="h-12" value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional" /></div>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                      <div className="space-y-1"><Label>Actual reps</Label><Input className="h-12 text-lg" value={set.reps} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { reps: event.target.value })} inputMode="numeric" /></div>
+                      <div className="space-y-1"><Label>Weight kg</Label><Input className="h-12 text-lg" value={set.weightKg} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { weightKg: event.target.value })} inputMode="decimal" placeholder="0" /></div>
+                      <div className="space-y-1"><Label>RPE</Label><Input className="h-12" value={set.rpe} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" /></div>
+                      <div className="space-y-1"><Label>RIR</Label><Input className="h-12" value={set.rir} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" /></div>
+                      <div className="space-y-1">
+                        <Label>Set type</Label>
+                        <select value={set.setType} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-12 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                          <option value="normal">Normal</option>
+                          <option value="warmup">Warm-up</option>
+                          <option value="working">Working</option>
+                          <option value="failure">Failure</option>
+                          <option value="drop">Drop set</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1 lg:col-span-5"><Label>Notes</Label><Input className="h-12" value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional" /></div>
+                    </div>
+                    {previousSet ? <p className="mt-2 text-xs text-muted-foreground">Previous set: {previousSet.weightKg ?? 0} kg x {previousSet.reps ?? 0}{previousSet.performedAt ? ` on ${previousSet.performedAt.slice(0, 10)}` : ""}</p> : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={() => applyPreviousSet(activeExerciseIndex, setIndex)} disabled={Boolean(set.completedAt) || !previousSet}><Sparkles className="h-4 w-4" /> Use previous</Button>
+                      <Button size="sm" onClick={() => finishSet(activeExerciseIndex, setIndex)} disabled={Boolean(set.completedAt)}><CheckCircle2 className="h-4 w-4" /> Finish Set</Button>
+                      <Button size="sm" variant="outline" onClick={() => restartSet(activeExerciseIndex, setIndex)} disabled={!set.completedAt}><RotateCcw className="h-4 w-4" /> Reopen</Button>
+                    </div>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button size="sm" onClick={() => finishSet(activeExerciseIndex, setIndex)} disabled={Boolean(set.completedAt)}><CheckCircle2 className="h-4 w-4" /> Finish Set</Button>
-                    <Button size="sm" variant="outline" onClick={() => restartSet(activeExerciseIndex, setIndex)} disabled={!set.completedAt}><RotateCcw className="h-4 w-4" /> Reopen</Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="sticky bottom-3 z-20 rounded-xl border bg-white/95 p-3 shadow-lg backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">

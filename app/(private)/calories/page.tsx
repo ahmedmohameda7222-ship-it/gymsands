@@ -331,6 +331,15 @@ export default function CaloriesPage() {
         onMoveWeek={moveWeek}
       />
 
+      <NutritionCoachCard
+        weekData={weekData}
+        targets={displayTargets}
+        totals={totals}
+        waterTotal={waterTotal}
+      />
+
+      <WeeklyOverview weekData={weekData} waterGoalMl={displayTargets.water_ml} />
+
       <div className="mt-4">
         <ApiFoodTools selectedDate={selectedDate} onFoodLogged={handleLogAdded} />
       </div>
@@ -463,6 +472,79 @@ function WeeklyTracker({
       </CardContent>
     </Card>
   );
+}
+
+function NutritionCoachCard({
+  weekData,
+  targets,
+  totals,
+  waterTotal
+}: {
+  weekData: DailyNutritionSummary[];
+  targets: SavedTargets;
+  totals: ReturnType<typeof sumFoodLogs>;
+  waterTotal: number;
+}) {
+  const insights = buildNutritionInsights({ weekData, targets, totals, waterTotal });
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle>Nutrition coaching</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {insights.map((insight) => (
+          <div key={insight.label} className="rounded-md border bg-slate-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{insight.label}</p>
+            <p className="mt-1 font-semibold text-slate-950">{insight.value}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{insight.detail}</p>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function buildNutritionInsights({
+  weekData,
+  targets,
+  totals,
+  waterTotal
+}: {
+  weekData: DailyNutritionSummary[];
+  targets: SavedTargets;
+  totals: ReturnType<typeof sumFoodLogs>;
+  waterTotal: number;
+}) {
+  const loggedDays = weekData.filter((day) => day.logs.length > 0);
+  const averageCalories = loggedDays.length ? Math.round(loggedDays.reduce((sum, day) => sum + day.calories, 0) / loggedDays.length) : 0;
+  const averageProtein = loggedDays.length ? Math.round(loggedDays.reduce((sum, day) => sum + day.protein_g, 0) / loggedDays.length) : 0;
+  const caloriesRemaining = targets.daily_calories - totals.calories;
+  const proteinRemaining = targets.protein_g - totals.protein_g;
+  const waterRemaining = targets.water_ml - waterTotal;
+  const bestDay = loggedDays.slice().sort((a, b) => Math.abs(a.calories - a.planned_calories) - Math.abs(b.calories - b.planned_calories))[0];
+
+  return [
+    {
+      label: "Today",
+      value: caloriesRemaining >= 0 ? `${caloriesRemaining} kcal left` : `${Math.abs(caloriesRemaining)} kcal over`,
+      detail: targets.daily_calories ? "Use this to adjust the next meal instead of guessing." : "Set calorie targets to unlock daily guidance."
+    },
+    {
+      label: "Protein",
+      value: proteinRemaining > 0 ? `${proteinRemaining}g left` : "Target hit",
+      detail: proteinRemaining > 0 ? "Prioritize lean protein in the next meal." : "Keep the remaining meals balanced."
+    },
+    {
+      label: "Weekly average",
+      value: loggedDays.length ? `${averageCalories} kcal / ${averageProtein}g protein` : "No logged days",
+      detail: `${loggedDays.length}/7 days have food logs this week.`
+    },
+    {
+      label: "Next action",
+      value: waterRemaining > 0 ? `Drink ${waterRemaining} ml` : bestDay ? `Repeat ${formatDay(bestDay.date)}` : "Log first meal",
+      detail: waterRemaining > 0 ? "Water is the simplest habit to close today." : "Repeat the day closest to your target."
+    }
+  ];
 }
 
 function WeeklyOverview({ weekData, waterGoalMl }: { weekData: DailyNutritionSummary[]; waterGoalMl: number }) {
