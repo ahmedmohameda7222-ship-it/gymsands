@@ -23,11 +23,36 @@ export async function adminUpdateUserRole(userId: string, role: "member" | "admi
   return true;
 }
 
+function requiredText(value: unknown, label: string) {
+  const text = String(value ?? "").trim();
+  if (!text) throw new Error(`${label} is required.`);
+  return text;
+}
+
+function requiredNonNegativeNumber(value: unknown, label: string) {
+  const numeric = typeof value === "number" ? value : Number(String(value ?? "").trim());
+  if (!Number.isFinite(numeric)) throw new Error(`${label} must be a valid number.`);
+  if (numeric < 0) throw new Error(`${label} cannot be negative.`);
+  return numeric;
+}
+
 export async function adminUpsertGlobalFood(food: Partial<FoodItem>) {
   if (!supabase) throw new Error("Database not connected");
+
+  const cleanFood = {
+    ...food,
+    food_name: requiredText(food.food_name, "Food name"),
+    serving_size: requiredText(food.serving_size, "Serving size"),
+    category: requiredText(food.category, "Category"),
+    calories: requiredNonNegativeNumber(food.calories, "Calories"),
+    protein_g: requiredNonNegativeNumber(food.protein_g, "Protein"),
+    carbs_g: requiredNonNegativeNumber(food.carbs_g, "Carbs"),
+    fat_g: requiredNonNegativeNumber(food.fat_g, "Fat")
+  };
+
   const { data, error } = await supabase!
     .from("food_items")
-    .upsert({ ...food, is_global: true, is_editable_by_user: false, cuisine: food.cuisine ?? "Egyptian" })
+    .upsert({ ...cleanFood, is_global: true, is_editable_by_user: false, cuisine: cleanFood.cuisine ?? "Egyptian" })
     .select("*")
     .single();
   if (error) throw error;
