@@ -1,16 +1,152 @@
-export {
-  deleteDailyFitTask,
-  deleteFitnessHabit,
-  deleteSleepRecoveryLog,
-  deleteSupplementLog,
-  getDailyFitTasks,
-  getFitnessHabits,
-  getSleepRecoveryLogs,
-  getSupplementLogs,
-  upsertDailyFitTask,
-  upsertFitnessHabit,
-  upsertSleepRecoveryLog,
-  upsertSupplementLog
-} from "./legacy-repository";
+"use client";
 
-export type { DailyFitTaskInput, FitnessHabitInput, SleepRecoveryInput, SupplementLogInput } from "./legacy-repository";
+import { supabase } from "@/lib/supabase/client";
+import { isUuid, todayIso } from "@/lib/utils";
+import type { DailyFitTask, FitnessHabit, SleepRecoveryLog, SupplementLog } from "@/types";
+
+function mockDelay<T>(value: T) {
+  return Promise.resolve(value);
+}
+
+function canUseUserData(userId: string | null | undefined) {
+  return Boolean(supabase && isUuid(userId));
+}
+
+function mockStamped<T extends { user_id: string }>(payload: T) {
+  const now = new Date().toISOString();
+  return { id: crypto.randomUUID(), created_at: now, updated_at: now, ...payload };
+}
+
+export type DailyFitTaskInput = Omit<DailyFitTask, "id" | "created_at" | "updated_at"> & { id?: string };
+export type FitnessHabitInput = Omit<FitnessHabit, "id" | "created_at" | "updated_at"> & { id?: string };
+export type SleepRecoveryInput = Omit<SleepRecoveryLog, "id" | "created_at" | "updated_at"> & { id?: string };
+export type SupplementLogInput = Omit<SupplementLog, "id" | "created_at" | "updated_at"> & { id?: string };
+
+export async function getDailyFitTasks(userId: string, date = todayIso()) {
+  if (!canUseUserData(userId)) return mockDelay<DailyFitTask[]>([]);
+  const { data, error } = await supabase!
+    .from("daily_fit_tasks")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("task_date", date)
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.warn("FitLife Hub could not load daily fit tasks.", error.message);
+    return [];
+  }
+  return (data ?? []) as DailyFitTask[];
+}
+
+export async function upsertDailyFitTask(input: DailyFitTaskInput) {
+  const payload = { ...input, title: input.title.trim(), notes: input.notes?.trim() || null };
+  if (!payload.title) throw new Error("Task title is required.");
+  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as DailyFitTask);
+  const { data, error } = await supabase!.from("daily_fit_tasks").upsert(payload).select("*").single();
+  if (error) throw error;
+  return data as DailyFitTask;
+}
+
+export async function deleteDailyFitTask(userId: string, id: string) {
+  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  const { error } = await supabase!.from("daily_fit_tasks").delete().eq("user_id", userId).eq("id", id);
+  if (error) throw error;
+  return true;
+}
+
+export async function getFitnessHabits(userId: string, date = todayIso()) {
+  if (!canUseUserData(userId)) return mockDelay<FitnessHabit[]>([]);
+  const { data, error } = await supabase!
+    .from("fitness_habits")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("habit_date", date)
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.warn("FitLife Hub could not load fitness habits.", error.message);
+    return [];
+  }
+  return (data ?? []) as FitnessHabit[];
+}
+
+export async function upsertFitnessHabit(input: FitnessHabitInput) {
+  const payload = { ...input, name: input.name.trim(), notes: input.notes?.trim() || null };
+  if (!payload.name) throw new Error("Habit name is required.");
+  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as FitnessHabit);
+  const { data, error } = await supabase!.from("fitness_habits").upsert(payload).select("*").single();
+  if (error) throw error;
+  return data as FitnessHabit;
+}
+
+export async function deleteFitnessHabit(userId: string, id: string) {
+  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  const { error } = await supabase!.from("fitness_habits").delete().eq("user_id", userId).eq("id", id);
+  if (error) throw error;
+  return true;
+}
+
+export async function getSleepRecoveryLogs(userId: string, limit = 30) {
+  if (!canUseUserData(userId)) return mockDelay<SleepRecoveryLog[]>([]);
+  const { data, error } = await supabase!
+    .from("sleep_recovery_logs")
+    .select("*")
+    .eq("user_id", userId)
+    .order("log_date", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.warn("FitLife Hub could not load sleep and recovery logs.", error.message);
+    return [];
+  }
+  return (data ?? []) as SleepRecoveryLog[];
+}
+
+export async function upsertSleepRecoveryLog(input: SleepRecoveryInput) {
+  const payload = { ...input, notes: input.notes?.trim() || null };
+  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as SleepRecoveryLog);
+  const { data, error } = await supabase!.from("sleep_recovery_logs").upsert(payload).select("*").single();
+  if (error) throw error;
+  return data as SleepRecoveryLog;
+}
+
+export async function deleteSleepRecoveryLog(userId: string, id: string) {
+  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  const { error } = await supabase!.from("sleep_recovery_logs").delete().eq("user_id", userId).eq("id", id);
+  if (error) throw error;
+  return true;
+}
+
+export async function getSupplementLogs(userId: string, date = todayIso()) {
+  if (!canUseUserData(userId)) return mockDelay<SupplementLog[]>([]);
+  const { data, error } = await supabase!
+    .from("supplement_logs")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("supplement_date", date)
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.warn("FitLife Hub could not load supplements.", error.message);
+    return [];
+  }
+  return (data ?? []) as SupplementLog[];
+}
+
+export async function upsertSupplementLog(input: SupplementLogInput) {
+  const payload = {
+    ...input,
+    name: input.name.trim(),
+    dose: input.dose?.trim() || null,
+    time: input.time?.trim() || null,
+    reminder: input.reminder?.trim() || null
+  };
+  if (!payload.name) throw new Error("Supplement name is required.");
+  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as SupplementLog);
+  const { data, error } = await supabase!.from("supplement_logs").upsert(payload).select("*").single();
+  if (error) throw error;
+  return data as SupplementLog;
+}
+
+export async function deleteSupplementLog(userId: string, id: string) {
+  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  const { error } = await supabase!.from("supplement_logs").delete().eq("user_id", userId).eq("id", id);
+  if (error) throw error;
+  return true;
+}

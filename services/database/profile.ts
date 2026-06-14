@@ -1,8 +1,6 @@
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
-import type { Profile } from "@/types";
-
-export { getOnboarding, saveOnboarding } from "./legacy-repository";
+import type { OnboardingAnswers, Profile } from "@/types";
 
 type ProfilePatch = {
   fullName?: string;
@@ -51,4 +49,42 @@ export async function updateProfile(userId: string, patch: ProfilePatch) {
 
   if (error) throw error;
   return data as Profile;
+}
+
+export async function saveOnboarding(answers: OnboardingAnswers) {
+  if (!canUseUserData(answers.user_id)) return answers;
+  let { data, error } = await supabase!.from("onboarding_answers").upsert(answers, { onConflict: "user_id" }).select("*").single();
+  if (
+    error &&
+    (
+      error.message.toLowerCase().includes("available_equipment") ||
+      error.message.toLowerCase().includes("desired_duration_weeks") ||
+      error.message.toLowerCase().includes("goals") ||
+      error.message.toLowerCase().includes("training_cycle") ||
+      error.message.toLowerCase().includes("min_workout_duration_minutes") ||
+      error.message.toLowerCase().includes("max_workout_duration_minutes")
+    )
+  ) {
+    const {
+      available_equipment: _availableEquipment,
+      desired_duration_weeks: _desiredDurationWeeks,
+      goals: _goals,
+      training_cycle: _trainingCycle,
+      min_workout_duration_minutes: _minWorkoutDuration,
+      max_workout_duration_minutes: _maxWorkoutDuration,
+      ...compatibleAnswers
+    } = answers;
+    const compatible = await supabase!.from("onboarding_answers").upsert(compatibleAnswers, { onConflict: "user_id" }).select("*").single();
+    data = compatible.data;
+    error = compatible.error;
+  }
+  if (error) throw error;
+  return data as OnboardingAnswers;
+}
+
+export async function getOnboarding(userId: string) {
+  if (!canUseUserData(userId)) return null;
+  const { data, error } = await supabase!.from("onboarding_answers").select("*").eq("user_id", userId).maybeSingle();
+  if (error) throw error;
+  return data as OnboardingAnswers | null;
 }
