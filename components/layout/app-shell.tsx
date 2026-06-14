@@ -5,15 +5,18 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   BarChart3,
+  BedDouble,
   CalendarCheck,
   ChefHat,
   CheckSquare,
   ClipboardList,
+  Droplets,
   Dumbbell,
   History,
   Home,
   LogOut,
   Menu,
+  Pill,
   Settings,
   Shield,
   Soup,
@@ -61,7 +64,17 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { href: "/personal-records", label: "Personal Records", icon: Trophy }
     ]
   },
-  { label: "Wellness", items: [{ href: "/wellness", label: "Wellness", icon: CheckSquare, activePaths: ["/wellness", "/hydration", "/habits", "/sleep-recovery", "/supplements", "/daily-fit-tasks"] }] },
+  {
+    label: "Wellness",
+    items: [
+      { href: "/wellness", label: "Wellness Dashboard", icon: CheckSquare },
+      { href: "/hydration", label: "Hydration", icon: Droplets },
+      { href: "/habits", label: "Habits", icon: CalendarCheck },
+      { href: "/sleep-recovery", label: "Sleep & Recovery", icon: BedDouble },
+      { href: "/supplements", label: "Supplements", icon: Pill },
+      { href: "/daily-fit-tasks", label: "Daily Fit Tasks", icon: CheckSquare }
+    ]
+  },
   { label: "Settings", items: [{ href: "/settings", label: "Settings", icon: Settings, activePaths: ["/settings", "/profile"] }] }
 ];
 
