@@ -17,22 +17,28 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const isProduction = process.env.NODE_ENV === "production";
+const mockAuthEnabled = env.useMockAuth && !isProduction;
 
 const mockUser = {
   id: "mock-user",
-  email: "member@ssgym.test"
+  email: "member@fitlife.test"
 } as User;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  if (env.useMockAuth && isProduction) {
+    throw new Error("NEXT_PUBLIC_USE_MOCK_AUTH is not allowed in production. Disable it and use Supabase auth.");
+  }
+
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadProfile = useCallback(async (userId: string, email?: string | null) => {
-    if (!supabase || env.useMockAuth) {
+    if (!supabase || mockAuthEnabled) {
       setProfile({
         id: "mock-user",
-        email: "member@ssgym.test",
+        email: "member@fitlife.test",
         full_name: "FitLife Hub Member",
         role: "admin",
         avatar_url: null,
@@ -85,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function boot() {
       try {
-        if (!supabase || env.useMockAuth) {
+        if (!supabase || mockAuthEnabled) {
           setSession({ user: mockUser } as Session);
           await loadProfile("mock-user");
           return;
@@ -105,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     boot();
 
-    if (!supabase || env.useMockAuth) return () => undefined;
+    if (!supabase || mockAuthEnabled) return () => undefined;
 
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
       setSession(nextSession);
