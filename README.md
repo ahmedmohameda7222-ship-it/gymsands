@@ -1,30 +1,58 @@
 # FitLife Hub
 
-FitLife Hub is a private gym web app for workout logging, meal tracking, calorie targets, progress, onboarding, and admin-managed wellness operations.
+FitLife Hub is a private fitness dashboard for storing, editing, and tracking workout plans, meal plans, calories, hydration, progress, habits, recovery, supplements, and personal records.
+
+FitLife Hub does not generate workout or meal plans inside the app. Users create plans with ChatGPT, then export them to FitLife Hub for tracking.
+
+## Product model
+
+- ChatGPT creates personalized workout and meal plans.
+- FitLife Hub stores exported plans.
+- FitLife Hub lets users edit saved plans after import.
+- FitLife Hub tracks workout completion, skipped days, sets, reps, weight, notes, duration, meals, macros, water, and progress.
 
 ## Included
 
 - Next.js App Router, React, and TypeScript
 - Tailwind CSS luxury wellness design tokens
 - Supabase Auth, database, RLS, and Storage
+- ChatGPT/FitLife connector URL support
+- Workout plan storage and tracking
+- Manual workout plan builder for advanced editing
+- Exercise library based on active wger imports
+- Workout session tracking with set logs
+- Meal planning and daily food logging
 - Egyptian food seed data
-- Clean exercise library based on active wger imports
+- Custom food, kitchen, and meal builder
 - Camera barcode lookup with direct food logging
 - Local exercise calorie reference database
-- Rule-based onboarding workout generation
-- Food, coach, email, wearable, health, and maps server routes
-- Admin tools for users, foods, workouts, videos, API imports, exercise removal, and API status
+- Hydration, habits, daily tasks, sleep/recovery, supplements, personal records, and progress tracking
+- Admin tools for users, foods, exercises, workouts, videos, API imports, exercise removal, API status, welcome messages, and settings
+
+## Not included
+
+- Internal workout plan generation
+- Internal meal plan generation
+- Gemini-based plan generation
+- Billing, checkout, subscriptions, or payment flows
 
 ## Environment
 
-Copy `.env.example` and configure only the providers you use. Public browser variables are limited to `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL`, and `NEXT_PUBLIC_USE_MOCK_AUTH`.
+Copy `.env.example` and configure only the providers you use.
 
-All provider keys stay server-side:
+Public browser variables:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_USE_MOCK_AUTH`
+- `NEXT_PUBLIC_CHATGPT_CONNECT_URL`
+- `NEXT_PUBLIC_FITLIFE_MCP_SERVER_URL`
+
+Server-side provider keys:
 
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `WGER_API_KEY`
-- `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `GOOGLE_GENERATIVE_AI_API_KEY`
-- `GEMINI_MODEL`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
 - `STRAVA_CLIENT_ID`
@@ -36,9 +64,9 @@ All provider keys stay server-side:
 - `GOOGLE_MAPS_API_KEY`
 - `GYM_ADDRESS` or `GYM_LAT` and `GYM_LNG`
 
-If a provider key is blank, its API route returns a clear `503` JSON response.
+If a provider key is blank, its API route should return a clear JSON response instead of failing silently.
 
-## Supabase Setup
+## Supabase setup
 
 Run SQL in this order:
 
@@ -65,7 +93,14 @@ Run SQL in this order:
 
 For projects that already imported legacy exercise data, back up the database first, then review the cleanup SQL under `supabase/cleanup`.
 
-## wger Exercise Import
+## ChatGPT plan export workflow
+
+1. User creates a workout or meal plan with ChatGPT.
+2. ChatGPT exports the structured plan to FitLife Hub through the connector.
+3. FitLife Hub saves the plan to the user's account.
+4. User tracks sessions, sets, reps, weights, skipped days, planned meals, completed meals, calories, and progress.
+
+## wger exercise import
 
 1. Configure `WGER_API_KEY`.
 2. Sign in as an admin.
@@ -74,31 +109,15 @@ For projects that already imported legacy exercise data, back up the database fi
 5. New exercises become active immediately.
 6. Open Admin > Exercise Library and remove anything you do not want members to use.
 
-The workout generator reads active global rows from `public.exercises`. Duplicate imports keep removed rows hidden.
+Duplicate imports keep removed rows hidden.
 
-## Full Plan Generation
+## Provider routes
 
-After onboarding, `/api/workout-plan/generate` creates one complete active plan from deterministic rules:
-
-- Goal normalization: muscle gain, fat loss, strength, or general fitness
-- Experience filtering: beginner, intermediate, or advanced
-- Weekly split selection from 2 to 6 days
-- Warm-up block for every day
-- Strength block from active Supabase exercises
-- Cardio block based on goal and experience
-- Cool-down block for every day
-- Scheduled sessions for completion tracking
-
-The route writes both `user_workout_plan_blocks` / `user_workout_plan_block_items` and compatible `user_workout_plan_exercises` rows.
-
-## Provider Routes
-
-Implemented server routes:
+Implemented server routes include:
 
 - Open Food Facts barcode lookup, user food saving, daily log adding, and meal plan adding
 - Local exercise calorie estimates from Supabase reference data
 - wger exercise import
-- Gemini coach notes and summaries
 - Resend email sending
 - Strava OAuth and activity import
 - Google Health OAuth-ready placeholder import
@@ -106,12 +125,13 @@ Implemented server routes:
 
 Health Connect is Android-native and is documented in-app as future Android support only.
 
-## Local Development
+## Local development
 
 ```bash
 npm install
 npm run build
 npm run lint
+npm run typecheck
 ```
 
 ## Safety
