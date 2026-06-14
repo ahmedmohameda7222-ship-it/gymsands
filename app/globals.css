@@ -50,12 +50,19 @@ body {
   color: hsl(var(--foreground));
 }
 
+:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
 button,
 a,
 input,
 select,
-textarea {
+textarea,
+[role="button"] {
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .blue-surface {
@@ -123,10 +130,35 @@ textarea {
   scrollbar-width: thin;
 }
 
+.mobile-card-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@supports (height: 100dvh) {
+  .min-h-screen {
+    min-height: 100dvh;
+  }
+}
+
 @media (max-width: 640px) {
   input,
   select,
   textarea {
+    min-height: 44px;
     font-size: 16px;
+  }
+
+  button,
+  [role="button"] {
+    min-height: 44px;
+  }
+
+  label {
+    line-height: 1.35;
+  }
+
+  table {
+    min-width: 640px;
   }
 }
