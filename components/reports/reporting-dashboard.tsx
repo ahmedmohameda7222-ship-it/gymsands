@@ -16,12 +16,10 @@ import {
   buildWeekRange,
   datesInRange,
   downloadCsv,
-  endOfMonth,
   formatDelta,
   printableReportHtml,
   reportMetrics,
   reportToCsv,
-  startOfMonth,
   startOfWeek,
   todayIso,
   type AggregatedReport,
@@ -56,8 +54,8 @@ export function ReportingDashboard() {
           getNutritionForRange(user.id, range),
           getWorkoutActivity(user.id, 500),
           getProgressEntries(user.id),
-          getFitnessHabitHistory(user.id, daysInRange(range)),
-          getSleepRecoveryHistory(user.id, 120),
+          getFitnessHabitHistory(user.id, 450),
+          getSleepRecoveryHistory(user.id, 450),
           getPersonalRecords(user.id, 500)
         ]);
         if (!active) return;
@@ -210,8 +208,4 @@ function dedupeNutritionDays(days: DailyNutritionSummary[]) {
   const map = new Map<string, DailyNutritionSummary>();
   days.forEach((day) => map.set(day.date, day));
   return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function daysInRange(range: ReportRange) {
-  return datesInRange(range.start, range.end).length + 7;
 }
