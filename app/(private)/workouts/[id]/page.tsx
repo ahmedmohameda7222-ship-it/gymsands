@@ -70,7 +70,9 @@ function buildExerciseHistory(logs: Array<ExerciseLog & { sessionDate: string }>
 }
 
 function sameText(a: string | null | undefined, b: string | null | undefined) {
-  return normalizeExerciseName(a ?? "") === normalizeExerciseName(b ?? "");
+  const left = normalizeExerciseName(a ?? "");
+  const right = normalizeExerciseName(b ?? "");
+  return Boolean(left && right && left === right);
 }
 
 export default function WorkoutDetailsPage() {
@@ -262,6 +264,6 @@ function TextPanel({ title, text }: { title: string; text: string | null | undef
   return <div className="rounded-md bg-slate-50 p-3"><p className="text-sm font-semibold text-slate-950">{title}</p><p className="mt-2 leading-7 text-slate-700">{text || "Not saved for this exercise yet."}</p></div>;
 }
 
-function Detail({ label, value }: { label: string; value: string | null | undefined }) {
+function Detail({ label, value }: { label: string | null | undefined; value: string | null | undefined }) {
   return <div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p><p className="mt-1 text-sm font-medium text-slate-950">{value || "N/A"}</p></div>;
 }
