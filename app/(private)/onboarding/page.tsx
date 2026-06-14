@@ -196,11 +196,23 @@ export default function OnboardingPage() {
             </div>
           ) : null}
           {step === 4 ? (
-            <div className="rounded-lg border bg-card p-5">
-              <h2 className="text-lg font-semibold">Profile ready</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                FitLife Hub will not generate plans internally. Use ChatGPT to create your workout or meal plan, then export it to FitLife Hub for storage, editing, and tracking.
-              </p>
+            <div className="space-y-3">
+              <div className="rounded-lg border bg-card p-5">
+                <h2 className="text-lg font-semibold">Profile ready</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  FitLife Hub will not generate plans internally. Use ChatGPT to create your workout or meal plan, then export it to FitLife Hub for storage, editing, and tracking.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  "Import or build one workout plan",
+                  "Set calorie, macro, and water targets",
+                  "Log one normal eating day",
+                  "Add first weight or measurement"
+                ].map((item) => (
+                  <div key={item} className="rounded-md border bg-muted/40 p-3 text-sm font-medium">{item}</div>
+                ))}
+              </div>
             </div>
           ) : null}
 

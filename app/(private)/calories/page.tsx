@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, ChefHat, ChevronLeft, ChevronRight, Copy, Droplets, Plus, Save, Settings2, Trash2 } from "lucide-react";
+import { BarChart3, ChefHat, ChevronLeft, ChevronRight, Copy, Droplets, PackageSearch, Plus, Save, Settings2, Star, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -272,7 +272,7 @@ export default function CaloriesPage() {
         <TrackerCard label="Water" value={Math.round(waterTotal / 1000 * 10) / 10} target={Math.round(displayTargets.water_ml / 1000 * 10) / 10} unit="L" hasTarget={Boolean(targets?.water_ml)} />
       </div>
 
-      <Card className="mt-4">
+      <Card id="daily-targets" className="mt-4 scroll-mt-24">
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
           <div>
             <CardTitle>Daily target</CardTitle>
@@ -331,6 +331,13 @@ export default function CaloriesPage() {
         onMoveWeek={moveWeek}
       />
 
+      <FastFoodFlowCard
+        selectedDateLabel={formatDay(selectedDate)}
+        hasFoodLogs={logs.length > 0}
+        hasTargets={hasTargets}
+        onCopyYesterday={copyYesterday}
+      />
+
       <NutritionCoachCard
         weekData={weekData}
         targets={displayTargets}
@@ -340,7 +347,7 @@ export default function CaloriesPage() {
 
       <WeeklyOverview weekData={weekData} waterGoalMl={displayTargets.water_ml} />
 
-      <div className="mt-4">
+      <div id="barcode-tools" className="mt-4 scroll-mt-24">
         <ApiFoodTools selectedDate={selectedDate} onFoodLogged={handleLogAdded} />
       </div>
 
@@ -469,6 +476,76 @@ function WeeklyTracker({
             </button>
           ))}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function FastFoodFlowCard({
+  selectedDateLabel,
+  hasFoodLogs,
+  hasTargets,
+  onCopyYesterday
+}: {
+  selectedDateLabel: string;
+  hasFoodLogs: boolean;
+  hasTargets: boolean;
+  onCopyYesterday: () => void;
+}) {
+  const steps = [
+    {
+      icon: PackageSearch,
+      label: "Packaged food",
+      detail: "Scan or type a barcode with Open Food Facts.",
+      href: "#barcode-tools"
+    },
+    {
+      icon: Copy,
+      label: "Repeat routine",
+      detail: hasFoodLogs ? `Use recent ${selectedDateLabel} logs as reference.` : "Copy yesterday when the day is similar.",
+      onClick: onCopyYesterday
+    },
+    {
+      icon: ChefHat,
+      label: "Custom meal",
+      detail: "Save meals you eat often instead of rebuilding them.",
+      href: "/calories/custom-food-meal"
+    },
+    {
+      icon: Star,
+      label: "Targets",
+      detail: hasTargets ? "Targets are active for remaining macros." : "Set targets to unlock remaining macros.",
+      href: "#daily-targets"
+    }
+  ];
+
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle>Fast food logging</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {steps.map((step) => {
+          const Icon = step.icon;
+          const content = (
+            <>
+              <span className="flex items-center gap-2 font-semibold">
+                <Icon className="h-4 w-4 text-primary" />
+                {step.label}
+              </span>
+              <span className="mt-1 block text-sm text-muted-foreground">{step.detail}</span>
+            </>
+          );
+          return step.href ? (
+            <Link key={step.label} href={step.href} className="rounded-md border bg-muted/40 p-3 transition hover:border-primary">
+              {content}
+            </Link>
+          ) : (
+            <button key={step.label} type="button" onClick={step.onClick} className="rounded-md border bg-muted/40 p-3 text-left transition hover:border-primary">
+              {content}
+            </button>
+          );
+        })}
       </CardContent>
     </Card>
   );

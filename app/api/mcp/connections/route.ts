@@ -1,19 +1,10 @@
 import { NextResponse } from "next/server";
 import { createConnectionToken, hashConnectionToken } from "@/lib/mcp/auth";
+import { MCP_DEFAULT_SCOPES, normalizeMcpScopes } from "@/lib/mcp/scopes";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { requireServerKeys, requireUser, serverEnv } from "@/lib/integrations/env";
 
 export const runtime = "nodejs";
-
-const DEFAULT_SCOPES = [
-  "fitlife.profile.read",
-  "fitlife.profile.write",
-  "fitlife.summary.read",
-  "fitlife.nutrition.write",
-  "fitlife.training.write",
-  "fitlife.progress.write",
-  "fitlife.wellness.write"
-];
 
 function requireMcpConnectionConfig() {
   return requireServerKeys("FitLife MCP", [
@@ -51,6 +42,8 @@ export async function POST(request: Request) {
   const token = createConnectionToken();
   const tokenHash = hashConnectionToken(token);
   const supabase = createSupabaseAdminClient();
+  const body = (await request.json().catch(() => ({}))) as { scopes?: unknown };
+  const scopes = normalizeMcpScopes(body.scopes, MCP_DEFAULT_SCOPES);
 
   await supabase
     .from("chatgpt_connections")
@@ -64,7 +57,7 @@ export async function POST(request: Request) {
     .insert({
       user_id: context.user.id,
       token_hash: tokenHash,
-      scopes: DEFAULT_SCOPES,
+      scopes,
       is_active: true
     })
     .select("id,scopes,is_active,created_at")

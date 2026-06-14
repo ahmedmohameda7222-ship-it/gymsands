@@ -4,11 +4,13 @@ import { useState } from "react";
 import { Bot, Copy, ExternalLink, KeyRound, RefreshCcw } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toaster";
 import { env } from "@/lib/env";
+import { MCP_DEFAULT_SCOPES, MCP_SCOPES } from "@/lib/mcp/scopes";
 
 const fitlifeDescription = "ChatGPT creates workout and meal plans. FitLife stores, schedules, edits, and tracks the imported data.";
 
@@ -21,6 +23,15 @@ type ChatGptConnection = {
   revoked_at: string | null;
 };
 
+const scopeOptions = [
+  { value: MCP_SCOPES.summaryRead, label: "Summary", detail: "Read dashboard summaries and status." },
+  { value: MCP_SCOPES.nutritionWrite, label: "Nutrition", detail: "Log food, water, meals, and targets." },
+  { value: MCP_SCOPES.trainingWrite, label: "Training", detail: "Save imported plans and log workouts." },
+  { value: MCP_SCOPES.progressWrite, label: "Progress", detail: "Save weight, measurements, goals, and PRs." },
+  { value: MCP_SCOPES.wellnessWrite, label: "Wellness", detail: "Manage habits, tasks, recovery, and supplements." },
+  { value: MCP_SCOPES.profileWrite, label: "Profile", detail: "Update account-level fitness profile fields." }
+];
+
 export function ConnectedApps() {
   const { session } = useAuth();
   const { toast } = useToast();
@@ -30,6 +41,7 @@ export function ConnectedApps() {
   const [copiedToken, setCopiedToken] = useState(false);
   const [connectionToken, setConnectionToken] = useState("");
   const [connections, setConnections] = useState<ChatGptConnection[]>([]);
+  const [selectedScopes, setSelectedScopes] = useState<string[]>(MCP_DEFAULT_SCOPES);
   const mcpServerUrl = env.fitlifeMcpServerUrl.trim();
   const hasMcpServerUrl = Boolean(mcpServerUrl);
 
@@ -72,7 +84,11 @@ export function ConnectedApps() {
     }
 
     setIsBusy("chatgpt-token");
-    const response = await fetch("/api/mcp/connections", { method: "POST", headers: authHeaders() });
+    const response = await fetch("/api/mcp/connections", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ scopes: selectedScopes })
+    });
     const data = await response.json().catch(() => ({}));
     setIsBusy(null);
 
@@ -109,6 +125,13 @@ export function ConnectedApps() {
 
   function openChatGpt() {
     window.open("https://chatgpt.com", "_blank", "noopener,noreferrer");
+  }
+
+  function toggleScope(scope: string) {
+    setSelectedScopes((current) => {
+      const next = current.includes(scope) ? current.filter((item) => item !== scope) : [...current, scope];
+      return Array.from(new Set([MCP_SCOPES.profileRead, ...next]));
+    });
   }
 
   return (
@@ -183,6 +206,26 @@ export function ConnectedApps() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">This token is specific to the signed-in FitLife user and is shown only once.</p>
+              </div>
+              <p className="font-semibold">Allowed access:</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {scopeOptions.map((option) => {
+                  const checked = selectedScopes.includes(option.value);
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => toggleScope(option.value)}
+                      className={`rounded-md border p-3 text-left transition ${checked ? "border-primary bg-primary/10" : "bg-card hover:border-primary"}`}
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="font-semibold">{option.label}</span>
+                        <Badge variant={checked ? "default" : "outline"}>{checked ? "Allowed" : "Off"}</Badge>
+                      </span>
+                      <span className="mt-1 block text-xs text-muted-foreground">{option.detail}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

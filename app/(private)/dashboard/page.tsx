@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, CalendarCheck, CheckCircle2, Droplets, Dumbbell, Flame, Plus, Scale, Soup, Utensils } from "lucide-react";
+import { Activity, CalendarCheck, CheckCircle2, Compass, Droplets, Dumbbell, Flame, Plus, Scale, Soup, Utensils } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -112,6 +112,20 @@ export default function DashboardPage() {
   const waterLiters = Math.round((waterTotalMl / 1000) * 10) / 10;
   const waterTargetLiters = Math.round(((targets?.water_ml ?? 0) / 1000) * 10) / 10;
   const hasAnyTodayData = logs.length > 0 || history.length > 0 || waterLogs.length > 0 || progressEntries.length > 0 || mealPlanItems.length > 0 || Boolean(activePlan) || supplements.length > 0 || sleepLogs.length > 0 || Boolean(targets);
+  const completedToday = Boolean(history.find((session) => session.status === "completed" && session.started_at?.slice(0, 10) === todayIso()));
+  const dashboardCoaching = buildDashboardCoaching({
+    hasTargets,
+    targets,
+    totals,
+    remaining,
+    waterTotalMl,
+    plannedMealsCount,
+    doneMealsCount,
+    todayPlanDay: Boolean(todayPlanDay),
+    completedToday,
+    latestProgressDate: latestProgress?.entry_date ?? null,
+    sleepLoggedToday: Boolean(todaySleepLog)
+  });
 
   async function quickMarkMealDone(item: MealPlanItem) {
     if (!user?.id) return;
@@ -192,6 +206,24 @@ export default function DashboardPage() {
             <MetricCard icon={Scale} label="Current weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No progress entry"} detail={latestProgress ? `Latest entry ${latestProgress.entry_date}` : "Add your first progress entry"} />
           </div>
 
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Compass className="h-5 w-5 text-primary" />
+                Today's coaching
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {dashboardCoaching.map((item) => (
+                <div key={item.label} className="rounded-md border bg-muted/40 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{item.label}</p>
+                  <p className="mt-1 font-semibold">{item.value}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{item.detail}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
           <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
             <Card>
               <CardHeader><CardTitle className="flex items-center gap-2"><CalendarCheck className="h-5 w-5 text-primary" />Today's plan</CardTitle></CardHeader>
@@ -254,7 +286,7 @@ export default function DashboardPage() {
             <Card>
               <CardHeader><CardTitle>Daily checklist</CardTitle></CardHeader>
               <CardContent className="grid gap-2 text-sm">
-                <ChecklistLine label="Workout" done={Boolean(history.find((session) => session.status === "completed" && session.started_at?.slice(0, 10) === todayIso()))} emptyLabel={todayPlanDay ? "Not completed yet" : "Rest day or no active plan"} />
+                <ChecklistLine label="Workout" done={completedToday} emptyLabel={todayPlanDay ? "Not completed yet" : "Rest day or no active plan"} />
                 <ChecklistLine label="Meals" done={plannedMealsCount > 0 && doneMealsCount === plannedMealsCount} emptyLabel={plannedMealsCount ? `${plannedMealsCount - doneMealsCount} planned meals left` : "No meals planned"} />
                 <ChecklistLine label="Protein" done={Boolean(targets?.protein_g && totals.protein_g >= targets.protein_g)} emptyLabel={targets?.protein_g ? `${remaining.protein_g}g remaining` : "Set protein target"} />
                 <ChecklistLine label="Water" done={Boolean(targets?.water_ml && waterTotalMl >= targets.water_ml)} emptyLabel={targets?.water_ml ? (waterTotalMl ? `${Math.max(0, targets.water_ml - waterTotalMl)} ml remaining` : "No water logged today") : "Set water target"} />
@@ -289,6 +321,65 @@ export default function DashboardPage() {
       ) : null}
     </>
   );
+}
+
+function buildDashboardCoaching({
+  hasTargets,
+  targets,
+  totals,
+  remaining,
+  waterTotalMl,
+  plannedMealsCount,
+  doneMealsCount,
+  todayPlanDay,
+  completedToday,
+  latestProgressDate,
+  sleepLoggedToday
+}: {
+  hasTargets: boolean;
+  targets: SavedTargets | null;
+  totals: ReturnType<typeof sumFoodLogs>;
+  remaining: { calories: number; protein_g: number; carbs_g: number; fat_g: number };
+  waterTotalMl: number;
+  plannedMealsCount: number;
+  doneMealsCount: number;
+  todayPlanDay: boolean;
+  completedToday: boolean;
+  latestProgressDate: string | null;
+  sleepLoggedToday: boolean;
+}) {
+  const waterRemaining = Math.max(0, (targets?.water_ml ?? 0) - waterTotalMl);
+  const foodAction = !hasTargets
+    ? { value: "Set targets", detail: "Calories, protein, and water guidance unlock after targets are saved." }
+    : totals.calories === 0
+      ? { value: "Log first meal", detail: "Start with the meal you already ate, then adjust the rest of the day." }
+      : remaining.protein_g > 0
+        ? { value: `${remaining.protein_g}g protein left`, detail: "Make the next meal protein-first before chasing calories." }
+        : { value: "Protein covered", detail: remaining.calories >= 0 ? `${remaining.calories} kcal left for flexible meals.` : `${Math.abs(remaining.calories)} kcal over target.` };
+
+  const trainingAction = completedToday
+    ? { value: "Workout done", detail: "Check PRs or add notes while the session is still fresh." }
+    : todayPlanDay
+      ? { value: "Start today's lift", detail: "Use previous-set autofill and save partial work if needed." }
+      : { value: "No lift scheduled", detail: "Use today for recovery, mobility, or plan review." };
+
+  return [
+    { label: "Next food move", ...foodAction },
+    {
+      label: "Training",
+      ...trainingAction
+    },
+    {
+      label: "Hydration",
+      value: targets?.water_ml ? (waterRemaining ? `${waterRemaining} ml left` : "Water target hit") : "Set water target",
+      detail: waterRemaining ? "Use quick add instead of waiting until the end of the day." : "Keep the habit consistent tomorrow."
+    },
+    {
+      label: "Tracking quality",
+      value: `${[plannedMealsCount > 0 && doneMealsCount === plannedMealsCount, completedToday, latestProgressDate === todayIso(), sleepLoggedToday].filter(Boolean).length}/4 closed`,
+      detail: "Meals, workout, progress, and recovery give the cleanest weekly insight."
+    }
+  ];
 }
 
 function MacroLine({ label, value, target }: { label: string; value: number; target: number }) {

@@ -6,6 +6,15 @@ export type Profile = {
   full_name: string | null;
   role: UserRole;
   avatar_url: string | null;
+  goal?: string | null;
+  weight_kg?: number | null;
+  target_weight_kg?: number | null;
+  height_cm?: number | null;
+  age?: number | null;
+  gender?: string | null;
+  activity_level?: string | null;
+  training_level?: string | null;
+  body_goal?: string | null;
   created_at: string;
   updated_at: string;
 };

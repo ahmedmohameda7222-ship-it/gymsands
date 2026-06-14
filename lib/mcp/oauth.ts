@@ -3,14 +3,7 @@ import { NextResponse } from "next/server";
 import { serverEnv } from "@/lib/integrations/env";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { hashConnectionToken } from "@/lib/mcp/auth";
-
-const DEFAULT_SCOPES = [
-  "fitlife.profile.read",
-  "fitlife.summary.read",
-  "fitlife.nutrition.write",
-  "fitlife.training.write",
-  "fitlife.progress.write"
-];
+import { MCP_DEFAULT_SCOPES, MCP_SUPPORTED_SCOPES, normalizeMcpScopes } from "@/lib/mcp/scopes";
 
 type AuthorizationCodePayload = {
   clientHash: string;
@@ -161,7 +154,7 @@ export function oauthAuthorizationServerMetadata(request: Request) {
       grant_types_supported: ["authorization_code"],
       token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
       code_challenge_methods_supported: ["S256", "plain"],
-      scopes_supported: DEFAULT_SCOPES,
+      scopes_supported: MCP_SUPPORTED_SCOPES,
       registration_endpoint: `${origin}/api/oauth/register`
     },
     { headers: metadataHeaders() }
@@ -176,7 +169,7 @@ export function oauthProtectedResourceMetadata(request: Request) {
     {
       resource,
       authorization_servers: [origin],
-      scopes_supported: DEFAULT_SCOPES,
+      scopes_supported: MCP_SUPPORTED_SCOPES,
       bearer_methods_supported: ["header"],
       resource_documentation: `${origin}/docs/chatgpt-mcp`
     },
@@ -190,7 +183,7 @@ export async function handleOAuthAuthorize(request: Request) {
   const clientId = url.searchParams.get("client_id")?.trim() ?? "";
   const redirectUri = url.searchParams.get("redirect_uri")?.trim() ?? "";
   const state = url.searchParams.get("state");
-  const scope = url.searchParams.get("scope") || DEFAULT_SCOPES.join(" ");
+  const requestedScope = url.searchParams.get("scope") || MCP_DEFAULT_SCOPES.join(" ");
 
   if (!redirectUri || !isAllowedRedirectUri(redirectUri)) {
     return NextResponse.json({ error: "invalid_redirect_uri", error_description: "ChatGPT OAuth callback URL is required." }, { status: 400 });
@@ -209,6 +202,11 @@ export async function handleOAuthAuthorize(request: Request) {
     if (!connection) {
       return oauthErrorRedirect(redirectUri, state, "access_denied", "FitLife connection token is invalid or revoked.");
     }
+
+    const connectionScopes = Array.isArray(connection.scopes) ? connection.scopes : MCP_DEFAULT_SCOPES;
+    const scope = normalizeMcpScopes(requestedScope, connectionScopes)
+      .filter((item) => connectionScopes.includes(item))
+      .join(" ");
 
     const code = createAuthorizationCode({
       clientHash: connection.tokenHash,
@@ -261,7 +259,7 @@ export async function handleOAuthToken(request: Request) {
         access_token: clientId,
         token_type: "Bearer",
         expires_in: 60 * 60 * 24 * 30,
-        scope: payload.scope || DEFAULT_SCOPES.join(" ")
+        scope: payload.scope || MCP_DEFAULT_SCOPES.join(" ")
       },
       { headers: metadataHeaders() }
     );

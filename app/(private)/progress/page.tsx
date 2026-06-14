@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { getNutritionWeek } from "@/services/database/nutrition";
+import { updateProfile } from "@/services/database/profile";
 import { getProgressEntries } from "@/services/database/progress";
 import { getWorkoutActivity } from "@/services/database/workout-sessions";
 import { deleteProgressEntryWithMeasurements, updateProgressEntryWithMeasurements } from "@/services/progress/progress-measurements";
@@ -50,7 +51,7 @@ type WeeklyInsights = ReturnType<typeof buildWeeklyInsights>;
 type ProgressFeedback = { label: string; value: string; detail: string };
 
 export default function ProgressPage() {
-  const { user } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [entries, setEntries] = useState<ProgressEntry[]>([]);
   const [workoutActivity, setWorkoutActivity] = useState<WorkoutSession[]>([]);
@@ -86,7 +87,11 @@ export default function ProgressPage() {
 
   useEffect(() => {
     const storedGoal = window.localStorage.getItem(GOAL_WEIGHT_STORAGE_KEY);
-    if (storedGoal) setGoalWeight(storedGoal);
+    if (profile?.target_weight_kg) {
+      setGoalWeight(String(profile.target_weight_kg));
+    } else if (storedGoal) {
+      setGoalWeight(storedGoal);
+    }
     const storedEstimate = window.localStorage.getItem(BODY_FAT_SETTINGS_KEY);
     if (storedEstimate) {
       try {
@@ -96,7 +101,7 @@ export default function ProgressPage() {
         // Ignore invalid browser-local settings.
       }
     }
-  }, []);
+  }, [profile?.target_weight_kg]);
 
   const sortedEntries = [...entries].sort((a, b) => a.entry_date.localeCompare(b.entry_date));
   const weightEntries = sortedEntries.filter(hasBodyWeight);
@@ -129,13 +134,24 @@ export default function ProgressPage() {
     measurementTrends
   });
 
-  function saveGoalWeight() {
+  async function saveGoalWeight() {
     if (!numericGoalWeight || numericGoalWeight < 25 || numericGoalWeight > 300) {
       toast({ title: "Check goal weight", description: "Enter a realistic goal weight in kilograms." });
       return;
     }
-    window.localStorage.setItem(GOAL_WEIGHT_STORAGE_KEY, String(numericGoalWeight));
-    toast({ title: "Goal weight saved", description: "The goal is saved in this browser until profile-level goal storage is added." });
+    try {
+      if (!profile?.id) throw new Error("Profile is still loading.");
+      await updateProfile(profile.id, { targetWeightKg: numericGoalWeight });
+      window.localStorage.removeItem(GOAL_WEIGHT_STORAGE_KEY);
+      await refreshProfile();
+      toast({ title: "Goal weight saved", description: "The goal is synced to your FitLife profile." });
+    } catch (error) {
+      window.localStorage.setItem(GOAL_WEIGHT_STORAGE_KEY, String(numericGoalWeight));
+      toast({
+        title: "Goal saved on this device",
+        description: error instanceof Error ? `${error.message} The local fallback was kept.` : "Profile sync failed, so the local fallback was kept."
+      });
+    }
   }
 
   function saveEstimateSettings() {
@@ -200,7 +216,7 @@ export default function ProgressPage() {
       <Card className="mt-4">
         <CardHeader><CardTitle>Goal line</CardTitle></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-[1fr_auto]">
-          <div className="space-y-2"><Label>Goal weight, kg</Label><Input type="number" value={goalWeight} onChange={(event) => setGoalWeight(event.target.value)} placeholder="Example: 78" /><p className="text-xs text-muted-foreground">Saved locally in this browser. No fake goal is shown when this is empty.</p></div>
+          <div className="space-y-2"><Label>Goal weight, kg</Label><Input type="number" value={goalWeight} onChange={(event) => setGoalWeight(event.target.value)} placeholder="Example: 78" /><p className="text-xs text-muted-foreground">Saved to your profile when Supabase is available. A browser-local fallback is kept only if sync fails.</p></div>
           <Button className="self-end" onClick={saveGoalWeight}>Save goal</Button>
         </CardContent>
       </Card>

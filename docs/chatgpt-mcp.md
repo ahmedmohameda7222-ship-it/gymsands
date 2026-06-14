@@ -9,9 +9,9 @@ Example ChatGPT messages:
 - "I ate 2 boiled eggs for breakfast today."
 - "I drank 750ml water."
 - "I benched 80kg for 6 reps."
-- "Create a 4-day muscle gain workout plan."
+- "Save this 4-day muscle gain workout plan to FitLife."
 
-ChatGPT calls the FitLife MCP endpoint. FitLife authenticates the linked connection, maps it to the correct Supabase user, validates typed tool input, writes only through safe server-side actions, and stores the result in Supabase.
+ChatGPT creates or edits the plan externally, then calls the FitLife MCP endpoint to save, schedule, and track the exact user-approved data. FitLife authenticates the linked connection, maps it to the correct Supabase user, validates typed tool input, writes only through safe server-side actions, and stores the result in Supabase.
 
 ## What this does not do
 
@@ -19,6 +19,7 @@ ChatGPT calls the FitLife MCP endpoint. FitLife authenticates the linked connect
 - It does not use Gemini.
 - It does not require `GEMINI_API_KEY`.
 - It does not require `OPENAI_API_KEY`.
+- It does not generate workout plans inside FitLife.
 - It does not let ChatGPT run SQL.
 - It does not expose Supabase service-role keys to the browser.
 
@@ -36,7 +37,7 @@ lib/mcp/tools.ts
 lib/mcp/tool-executor.ts
 lib/mcp/schemas.ts
 lib/server/supabase-admin.ts
-supabase/migrations/014_chatgpt_mcp_connections.sql
+supabase/migrations/015_chatgpt_mcp_connections.sql
 components/settings/connected-apps.tsx
 ```
 
@@ -87,7 +88,7 @@ Use a long random value for `FITLIFE_MCP_TOKEN_SECRET`. Do not expose it in fron
 Run:
 
 ```sql
-supabase/migrations/014_chatgpt_mcp_connections.sql
+supabase/migrations/015_chatgpt_mcp_connections.sql
 ```
 
 This creates:
@@ -111,7 +112,7 @@ Tool groups:
 - Food/calories: `search_foods`, `add_food_log`, `create_custom_food`, `create_custom_meal`, `get_today_calories`, `delete_food_log`
 - Meal plan: `get_meal_plan`, `create_meal_plan_item`, `create_day_meal_plan`, `create_week_meal_plan`, `replace_meal_plan_item`, `mark_meal_plan_item_done`, `generate_shopping_list`
 - Hydration: `add_water_log`, `get_water_summary`, `delete_water_log`
-- Workout plan: `search_exercises`, `get_active_workout_plan`, `generate_workout_plan`, `edit_workout_plan`, `replace_exercise`, `add_cardio_to_plan`, `activate_workout_plan`
+- Workout plan: `create_custom_workout_plan`, `save_chatgpt_workout_plan`, `get_workout_plans`, `get_workout_plan_by_id`, `get_active_workout_plan`, `create_workout_plan_day`, `update_workout_plan_day`, `delete_workout_plan_day`, `add_exercise_to_plan_day`, `add_warmup_to_plan_day`, `add_cardio_to_plan_day`, `add_cooldown_to_plan_day`, `update_plan_exercise`, `delete_plan_exercise`, `activate_workout_plan`, `delete_workout_plan`
 - Workout logging: `get_today_workout`, `start_workout`, `log_exercise_sets`, `complete_workout`, `skip_workout`
 - PRs: `get_personal_records`, `add_personal_record`
 - Progress: `add_weight_entry`, `add_body_measurement`, `get_progress_summary`
@@ -135,6 +136,8 @@ High-risk tools require `confirm: true`:
 Admin tools require `profile.role = admin`.
 
 Supplement tools are tracking-only. Sleep/recovery tools return general fitness guidance only, not medical advice.
+
+`generate_workout_plan` remains as a deprecated compatibility alias for older connector prompts. It does not generate a plan in FitLife; it saves a complete plan object that ChatGPT or another external tool already produced.
 
 ## Manual local test
 

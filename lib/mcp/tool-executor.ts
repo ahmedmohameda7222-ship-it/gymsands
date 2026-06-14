@@ -517,14 +517,6 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         return ok({ ok: true, items: data ?? [] });
       }
 
-      case "create_meal_plan_item":
-      case "create_day_meal_plan":
-      case "create_week_meal_plan":
-      case "replace_meal_plan_item":
-      case "mark_meal_plan_item_done":
-      case "generate_shopping_list":
-        return ok({ ok: false, requires_app_update: true, message: `${toolName} is advertised but not implemented in this compact executor revision.` });
-
       case "create_custom_workout_plan":
       case "save_chatgpt_workout_plan":
       case "generate_workout_plan":
@@ -789,21 +781,6 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         if (error) throw new Error(error.message);
         return ok({ ok: true, deleted_water_log_id: getString(input, "water_log_id") });
       }
-
-      case "get_daily_fit_tasks":
-      case "create_daily_fit_task":
-      case "mark_daily_fit_task_done":
-      case "mark_daily_fit_task_skipped":
-      case "get_habits":
-      case "mark_habit_done":
-      case "create_habit":
-      case "add_sleep_recovery_log":
-      case "get_sleep_recovery_summary":
-      case "get_today_supplements":
-      case "add_supplement_log":
-      case "mark_supplement_taken":
-      case "create_custom_meal":
-        return ok({ ok: false, requires_app_update: true, message: `${toolName} is advertised but not implemented in this compact executor revision.` });
 
       case "admin_api_status":
         assertAdmin(ctx);

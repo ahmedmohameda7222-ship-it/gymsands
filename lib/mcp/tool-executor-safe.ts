@@ -162,6 +162,234 @@ async function getMealPlanForWeek(ctx: McpContext, input: JsonObject) {
   return ok({ ok: true, start_date: startDate, end_date: endDate, days: Object.fromEntries(grouped) });
 }
 
+async function generateShoppingList(ctx: McpContext, input: JsonObject) {
+  const startDate = cleanDate(input.start_date ?? "today");
+  const endDate = cleanDate(input.end_date ?? startDate);
+  const { data, error } = await ctx.supabase
+    .from("user_meal_plan_items")
+    .select("food_name,serving_size,quantity,calories,protein_g,carbs_g,fat_g,plan_date,meal_type")
+    .eq("user_id", ctx.userId)
+    .gte("plan_date", startDate)
+    .lte("plan_date", endDate)
+    .order("food_name", { ascending: true });
+  if (error) throw new Error(error.message);
+
+  const grouped = new Map<string, DbRow & { dates: string[]; meals: string[] }>();
+  ((data ?? []) as DbRow[]).forEach((item) => {
+    const foodName = String(item.food_name ?? "Planned food").trim();
+    const servingSize = String(item.serving_size ?? "serving").trim();
+    const key = `${foodName.toLowerCase()}|${servingSize.toLowerCase()}`;
+    const current = grouped.get(key) ?? {
+      food_name: foodName,
+      serving_size: servingSize,
+      quantity: 0,
+      calories: 0,
+      protein_g: 0,
+      carbs_g: 0,
+      fat_g: 0,
+      dates: [],
+      meals: []
+    };
+    current.quantity = num(current.quantity) + num(item.quantity, 1);
+    current.calories = num(current.calories) + num(item.calories);
+    current.protein_g = num(current.protein_g) + num(item.protein_g);
+    current.carbs_g = num(current.carbs_g) + num(item.carbs_g);
+    current.fat_g = num(current.fat_g) + num(item.fat_g);
+    current.dates = Array.from(new Set([...current.dates, String(item.plan_date ?? "")].filter(Boolean)));
+    current.meals = Array.from(new Set([...current.meals, String(item.meal_type ?? "")].filter(Boolean)));
+    grouped.set(key, current);
+  });
+
+  const items = Array.from(grouped.values()).map((item) => ({
+    ...item,
+    quantity: Number(num(item.quantity).toFixed(2)),
+    calories: Math.round(num(item.calories)),
+    protein_g: Number(num(item.protein_g).toFixed(1)),
+    carbs_g: Number(num(item.carbs_g).toFixed(1)),
+    fat_g: Number(num(item.fat_g).toFixed(1))
+  }));
+
+  return ok({
+    ok: true,
+    start_date: startDate,
+    end_date: endDate,
+    item_count: items.length,
+    shopping_list: items
+  });
+}
+
+async function createCustomMeal(ctx: McpContext, input: JsonObject) {
+  const mealName = getString(input, "meal_name");
+  const items = getArray<JsonObject>(input, "items");
+  if (!items.length) return fail("missing_required_input", "Provide at least one custom meal item.");
+
+  const { data: meal, error: mealError } = await ctx.supabase
+    .from("custom_meals")
+    .insert({
+      user_id: ctx.userId,
+      meal_name: mealName,
+      meal_category: getOptionalString(input, "meal_category") ?? null,
+      notes: getOptionalString(input, "notes") ?? null,
+      is_favorite: Boolean(input.is_favorite)
+    })
+    .select("*")
+    .single();
+  if (mealError) throw new Error(mealError.message);
+
+  const rows = items.map((item) => {
+    const foodName = getString(item, "food_name");
+    return {
+      meal_id: meal.id,
+      food_item_id: null,
+      user_food_item_id: null,
+      food_name: foodName,
+      serving_size: getOptionalString(item, "serving_hint") ?? getOptionalString(item, "serving_size") ?? "1 serving",
+      quantity: positive(item.quantity ?? 1),
+      calories: nonNegative(item.calories, "calories"),
+      protein_g: nonNegative(readMacro(item, "protein"), "protein"),
+      carbs_g: nonNegative(readMacro(item, "carbs"), "carbs"),
+      fat_g: nonNegative(readMacro(item, "fat"), "fat")
+    };
+  });
+  const { data: mealItems, error: itemsError } = await ctx.supabase.from("custom_meal_items").insert(rows).select("*");
+  if (itemsError) throw new Error(itemsError.message);
+  return ok({ ok: true, meal, items: mealItems ?? [] });
+}
+
+async function getDailyFitTasks(ctx: McpContext, input: JsonObject) {
+  const date = cleanDate(input.date ?? "today");
+  const { data, error } = await ctx.supabase.from("daily_fit_tasks").select("*").eq("user_id", ctx.userId).eq("task_date", date).order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, date, tasks: data ?? [] });
+}
+
+async function createDailyFitTask(ctx: McpContext, input: JsonObject) {
+  const { data, error } = await ctx.supabase
+    .from("daily_fit_tasks")
+    .insert({
+      user_id: ctx.userId,
+      task_date: cleanDate(input.date ?? "today"),
+      title: getString(input, "title"),
+      notes: getOptionalString(input, "notes") ?? null,
+      completed: false
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, task: data });
+}
+
+async function markDailyFitTask(ctx: McpContext, input: JsonObject, completed: boolean) {
+  const id = getString(input, "task_id");
+  const reason = getOptionalString(input, "reason");
+  const patch: DbRow = { completed };
+  if (!completed && reason) patch.notes = reason;
+  const { data, error } = await ctx.supabase.from("daily_fit_tasks").update(patch).eq("id", id).eq("user_id", ctx.userId).select("*").single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, task: data });
+}
+
+async function getHabits(ctx: McpContext, input: JsonObject) {
+  const date = cleanDate(input.date ?? "today");
+  const { data, error } = await ctx.supabase.from("fitness_habits").select("*").eq("user_id", ctx.userId).eq("habit_date", date).order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, date, habits: data ?? [] });
+}
+
+async function createHabit(ctx: McpContext, input: JsonObject) {
+  const { data, error } = await ctx.supabase
+    .from("fitness_habits")
+    .insert({
+      user_id: ctx.userId,
+      habit_date: cleanDate(input.date ?? "today"),
+      name: getString(input, "name"),
+      notes: getOptionalString(input, "notes") ?? getOptionalString(input, "schedule") ?? null,
+      completed: false
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, habit: data });
+}
+
+async function markHabitDone(ctx: McpContext, input: JsonObject) {
+  const id = getOptionalString(input, "habit_id");
+  let request = ctx.supabase.from("fitness_habits").update({ completed: true }).eq("user_id", ctx.userId);
+  if (id) request = request.eq("id", id);
+  else request = request.eq("name", getString(input, "name")).eq("habit_date", cleanDate(input.date ?? "today"));
+  const { data, error } = await request.select("*").single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, habit: data });
+}
+
+async function addSleepRecoveryLog(ctx: McpContext, input: JsonObject) {
+  const { data, error } = await ctx.supabase
+    .from("sleep_recovery_logs")
+    .insert({
+      user_id: ctx.userId,
+      log_date: cleanDate(input.date ?? input.log_date ?? "today"),
+      hours_slept: getOptionalNumber(input, "hours_slept") ?? null,
+      sleep_quality: getOptionalString(input, "sleep_quality") ?? null,
+      recovery_level: getOptionalString(input, "recovery_level") ?? null,
+      fatigue_level: getOptionalString(input, "fatigue_level") ?? null,
+      soreness_level: getOptionalString(input, "soreness_level") ?? null,
+      stress_level: getOptionalString(input, "stress_level") ?? null,
+      notes: getOptionalString(input, "notes") ?? null
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, log: data, guidance: "General fitness tracking only. Do not treat this as medical advice." });
+}
+
+async function getSleepRecoverySummary(ctx: McpContext, input: JsonObject) {
+  const periodDays = Math.max(1, Math.round(num(input.period_days, 7)));
+  const since = new Date();
+  since.setDate(since.getDate() - periodDays + 1);
+  const sinceDate = since.toISOString().slice(0, 10);
+  const { data, error } = await ctx.supabase.from("sleep_recovery_logs").select("*").eq("user_id", ctx.userId).gte("log_date", sinceDate).order("log_date", { ascending: false });
+  if (error) throw new Error(error.message);
+  const logs = (data ?? []) as DbRow[];
+  const sleepValues = logs.map((log) => num(log.hours_slept, NaN)).filter(Number.isFinite);
+  const averageSleep = sleepValues.length ? Number((sleepValues.reduce((sum, value) => sum + value, 0) / sleepValues.length).toFixed(1)) : null;
+  return ok({ ok: true, period_days: periodDays, since: sinceDate, average_sleep_hours: averageSleep, logs });
+}
+
+async function getTodaySupplements(ctx: McpContext, input: JsonObject) {
+  const date = cleanDate(input.date ?? "today");
+  const { data, error } = await ctx.supabase.from("supplement_logs").select("*").eq("user_id", ctx.userId).eq("supplement_date", date).order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, date, supplements: data ?? [] });
+}
+
+async function addSupplementLog(ctx: McpContext, input: JsonObject) {
+  const { data, error } = await ctx.supabase
+    .from("supplement_logs")
+    .insert({
+      user_id: ctx.userId,
+      supplement_date: cleanDate(input.date ?? "today"),
+      name: getString(input, "name"),
+      dose: getOptionalString(input, "dose") ?? null,
+      time: getOptionalString(input, "time") ?? null,
+      reminder: getOptionalString(input, "reminder") ?? null,
+      taken_today: Boolean(input.taken_today)
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, supplement: data });
+}
+
+async function markSupplementTaken(ctx: McpContext, input: JsonObject) {
+  const id = getOptionalString(input, "log_id");
+  let request = ctx.supabase.from("supplement_logs").update({ taken_today: true }).eq("user_id", ctx.userId);
+  if (id) request = request.eq("id", id);
+  else request = request.eq("name", getString(input, "name")).eq("supplement_date", cleanDate(input.date ?? "today"));
+  const { data, error } = await request.select("*").single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, supplement: data });
+}
+
 async function updateMealPlanItem(ctx: McpContext, input: JsonObject) {
   const id = getString(input, "meal_plan_item_id");
   if (!id) throw new Error("meal_plan_item_id is required.");
@@ -319,9 +547,23 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
   if (toolName === "create_week_meal_plan") return insertPlannedMeals(ctx, weekMealItems(input), toolName);
   if (toolName === "get_meal_plan_for_date") return getMealPlanForDate(ctx, input.date ?? input.plan_date ?? input.planned_date ?? "today");
   if (toolName === "get_meal_plan_for_week") return getMealPlanForWeek(ctx, input);
+  if (toolName === "generate_shopping_list") return generateShoppingList(ctx, input);
   if (toolName === "update_meal_plan_item" || toolName === "replace_meal_plan_item") return updateMealPlanItem(ctx, input);
   if (toolName === "delete_meal_plan_item") return deleteMealPlanItem(ctx, input);
   if (toolName === "mark_meal_plan_item_done") return markMealPlanItemDone(ctx, input);
+  if (toolName === "create_custom_meal") return createCustomMeal(ctx, input);
+  if (toolName === "get_daily_fit_tasks") return getDailyFitTasks(ctx, input);
+  if (toolName === "create_daily_fit_task") return createDailyFitTask(ctx, input);
+  if (toolName === "mark_daily_fit_task_done") return markDailyFitTask(ctx, input, true);
+  if (toolName === "mark_daily_fit_task_skipped") return markDailyFitTask(ctx, input, false);
+  if (toolName === "get_habits") return getHabits(ctx, input);
+  if (toolName === "create_habit") return createHabit(ctx, input);
+  if (toolName === "mark_habit_done") return markHabitDone(ctx, input);
+  if (toolName === "add_sleep_recovery_log") return addSleepRecoveryLog(ctx, input);
+  if (toolName === "get_sleep_recovery_summary") return getSleepRecoverySummary(ctx, input);
+  if (toolName === "get_today_supplements") return getTodaySupplements(ctx, input);
+  if (toolName === "add_supplement_log") return addSupplementLog(ctx, input);
+  if (toolName === "mark_supplement_taken") return markSupplementTaken(ctx, input);
   if (toolName === "get_active_workout_plan") {
     const activePlan = await getSafeActivePlan(ctx);
     if (!activePlan?.id) return ok({ ok: true, plan: null, days: [], exercises: [] });
