@@ -106,14 +106,14 @@ export function MyWorkoutPlans() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-950">Workout Plans</h2>
-          <p className="text-sm text-muted-foreground">Workout plans saved to your account, including ChatGPT-created plans.</p>
+          <p className="text-sm text-muted-foreground">Track ChatGPT-exported workout plans and manual plans saved to your account.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={loadPlans} disabled={isLoading}>
             <RefreshCcw className="h-4 w-4" /> Refresh
           </Button>
           <Button onClick={() => setShowBuilder((current) => !current)}>
-            <Plus className="h-4 w-4" /> {showBuilder ? "Close Builder" : "Add New Workout Plan"}
+            <Plus className="h-4 w-4" /> {showBuilder ? "Close Builder" : "Manual Plan Builder"}
           </Button>
         </div>
       </div>
@@ -134,7 +134,11 @@ export function MyWorkoutPlans() {
       ) : null}
 
       {isLoading ? <p className="text-sm text-muted-foreground">Loading saved plans...</p> : null}
-      {!isLoading && !plans.length ? <p className="rounded-md border bg-white p-4 text-sm text-muted-foreground">No custom plans yet.</p> : null}
+      {!isLoading && !plans.length ? (
+        <p className="rounded-md border bg-white p-4 text-sm text-muted-foreground">
+          No workout plans yet. Create a plan with ChatGPT and export it to FitLife Hub, or use the manual builder.
+        </p>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {plans.map((plan) => {
