@@ -173,9 +173,11 @@ export default function WorkoutDetailsPage() {
   }
 
   function toggleFavorite() {
-    const next = setFavoriteExercise(user?.id, workout.id, !favorite);
+    const currentWorkout = workout;
+    if (!currentWorkout) return;
+    const next = setFavoriteExercise(user?.id, currentWorkout.id, !favorite);
     setFavoriteIds(next);
-    toast({ title: !favorite ? "Exercise favorited" : "Exercise unfavorited", description: workout.name });
+    toast({ title: !favorite ? "Exercise favorited" : "Exercise unfavorited", description: currentWorkout.name });
   }
 
   return (
