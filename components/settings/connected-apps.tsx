@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toaster";
 import { env } from "@/lib/env";
 
-const fitlifeDescription = "ChatGPT creates workout plans, meal plans, food logs, weight logs, water logs, habits, and saves/tracks them in FitLife.";
+const fitlifeDescription = "ChatGPT creates workout and meal plans. FitLife stores, schedules, edits, and tracks the imported data.";
 
 export function ConnectedApps() {
   const { session } = useAuth();
@@ -70,6 +70,26 @@ export function ConnectedApps() {
     toast({ title: "Connection token created", description: "Copy it now. FitLife shows this token only once." });
   }
 
+  async function revokeConnectionToken() {
+    if (!session?.access_token) {
+      toast({ title: "Sign in required", description: "Sign in to FitLife before revoking a ChatGPT connection." });
+      return;
+    }
+
+    setIsBusy("chatgpt-revoke");
+    const response = await fetch("/api/mcp/connections", { method: "DELETE", headers: authHeaders() });
+    const data = await response.json().catch(() => ({}));
+    setIsBusy(null);
+
+    if (!response.ok) {
+      toast({ title: "Could not revoke token", description: data.error ?? "Please try again." });
+      return;
+    }
+
+    setConnectionToken("");
+    toast({ title: "Connection revoked", description: "Active ChatGPT connection tokens were revoked for this account." });
+  }
+
   function openChatGpt() {
     window.open("https://chatgpt.com", "_blank", "noopener,noreferrer");
   }
@@ -117,10 +137,10 @@ export function ConnectedApps() {
       <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-primary" /> Connect FitLife to ChatGPT
+            <Bot className="h-5 w-5 text-primary" /> Import from ChatGPT
           </CardTitle>
           <CardDescription>
-            ChatGPT can create workout plans and update FitLife through the FitLife MCP connector. FitLife stores, schedules, edits, and tracks the data.
+            ChatGPT creates the plan. FitLife stores, schedules, edits, and tracks it through a token-based MCP web connector.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -129,9 +149,14 @@ export function ConnectedApps() {
               Connector URL not configured. Set NEXT_PUBLIC_FITLIFE_MCP_SERVER_URL to your deployed FitLife MCP endpoint.
             </p>
           ) : null}
-          <Button onClick={() => setIsChatGptModalOpen(true)}>
-            <ExternalLink className="h-4 w-4" /> {hasMcpServerUrl ? "Set up FitLife in ChatGPT" : "Connector URL not configured"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setIsChatGptModalOpen(true)}>
+              <ExternalLink className="h-4 w-4" /> {hasMcpServerUrl ? "Set up ChatGPT import" : "Connector URL not configured"}
+            </Button>
+            <Button variant="outline" onClick={revokeConnectionToken} disabled={isBusy === "chatgpt-revoke"}>
+              Revoke active connection
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -140,24 +165,24 @@ export function ConnectedApps() {
           <DialogHeader>
             <DialogTitle>Connect FitLife to ChatGPT</DialogTitle>
             <DialogDescription>
-              FitLife cannot install the ChatGPT app automatically. ChatGPT requires the user to create/connect custom MCP apps from inside ChatGPT.
+              FitLife cannot install or control ChatGPT automatically. Use this web connector setup from inside ChatGPT.
             </DialogDescription>
           </DialogHeader>
 
           {!hasMcpServerUrl ? (
             <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-              FitLife MCP server endpoint is not implemented yet or the connector URL is not configured. Build/deploy the MCP server first, then set FITLIFE_MCP_SERVER_URL.
+              FitLife MCP server endpoint is not configured. Deploy the MCP endpoint, then set NEXT_PUBLIC_FITLIFE_MCP_SERVER_URL.
             </p>
           ) : null}
 
           <div className="space-y-4">
-            <div className="grid gap-3 rounded-md border p-4 text-sm md:grid-cols-[150px_1fr]">
+            <div className="grid gap-3 rounded-md border p-4 text-sm md:grid-cols-[170px_1fr]">
               <p className="font-semibold">Name:</p>
-              <p>FitLife</p>
+              <p>FitLife Hub</p>
               <p className="font-semibold">Description:</p>
               <p>{fitlifeDescription}</p>
               <p className="font-semibold">Connection:</p>
-              <p>Server URL</p>
+              <p>Server URL / MCP web connector</p>
               <p className="font-semibold">Server URL:</p>
               <div className="space-y-2">
                 <Input readOnly value={mcpServerUrl || "Not configured"} className="font-mono text-xs" />
@@ -166,7 +191,7 @@ export function ConnectedApps() {
                 </Button>
               </div>
               <p className="font-semibold">Authentication:</p>
-              <p>OAuth</p>
+              <p>Bearer token generated by FitLife. This is not a native mobile app login and not a Google Play/App Store integration.</p>
               <p className="font-semibold">Access token:</p>
               <div className="space-y-2">
                 <Input readOnly value={connectionToken || "Generate a user-specific token first"} className="font-mono text-xs" />
@@ -186,23 +211,19 @@ export function ConnectedApps() {
               <p className="font-semibold">Instructions</p>
               <ol className="mt-3 ml-5 list-decimal space-y-2 text-sm text-muted-foreground">
                 <li>Click Generate connection token and copy it.</li>
-                <li>Click Open ChatGPT.</li>
-                <li>Go to Settings, Apps and Connectors, then Create.</li>
-                <li>In the New App modal, enter Name: FitLife.</li>
-                <li>Use the description shown above.</li>
-                <li>Set Connection to Server URL.</li>
-                <li>Copy the FitLife MCP URL into Server URL.</li>
-                <li>Set Authentication to OAuth.</li>
-                <li>If ChatGPT asks for OAuth Client ID or connection token, paste the FitLife token you generated.</li>
-                <li>Check I understand and want to continue.</li>
-                <li>Click Create.</li>
-                <li>Approve FitLife OAuth/login if asked.</li>
-                <li>Start a new chat and select FitLife as a tool.</li>
+                <li>Open ChatGPT in the browser.</li>
+                <li>Go to Settings, Apps and Connectors, then create a new connector if your ChatGPT plan supports it.</li>
+                <li>Enter the FitLife Hub name and description shown above.</li>
+                <li>Set the connection to Server URL / MCP if ChatGPT asks for the transport type.</li>
+                <li>Paste the FitLife MCP URL into Server URL.</li>
+                <li>Use bearer-token authentication if ChatGPT asks for authentication.</li>
+                <li>Paste the FitLife token you generated.</li>
+                <li>Create/approve the connector, then start a new chat and select FitLife as a tool.</li>
               </ol>
             </div>
 
             <p className="rounded-md border p-3 text-sm text-muted-foreground">
-              If you do not see the Create button in ChatGPT, enable Developer Mode in ChatGPT: Settings, Apps and Connectors, Advanced settings.
+              FitLife is a responsive web app. Browser-supported features are used here; no Google Play or App Store behavior is assumed.
             </p>
 
             <div className="flex flex-wrap justify-end gap-2">
@@ -217,13 +238,13 @@ export function ConnectedApps() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Watch className="h-5 w-5 text-primary" /> Connected Apps</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Watch className="h-5 w-5 text-primary" /> Connected Web Services</CardTitle>
           <CardDescription>Cardio imports stay private to your account.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="rounded-md border p-3"><p className="font-semibold">Strava</p><p className="mt-1 text-sm text-muted-foreground">Connect and import completed cardio activities.</p><div className="mt-3 flex flex-wrap gap-2"><Button onClick={connectStrava} disabled={isBusy === "strava"}><Activity className="h-4 w-4" /> Connect</Button><Button variant="outline" onClick={importStrava} disabled={isBusy === "strava-import"}><RefreshCcw className="h-4 w-4" /> Import</Button></div></div>
-          <div className="rounded-md border p-3"><p className="font-semibold">Google Health</p><p className="mt-1 text-sm text-muted-foreground">OAuth-ready. Import is feature-gated until API scopes are approved.</p><Button className="mt-3" variant="outline" onClick={connectGoogleHealth} disabled={isBusy === "google-health"}>Connect placeholder</Button></div>
-          <div className="rounded-md border p-3"><p className="font-semibold">Health Connect</p><p className="mt-1 text-sm text-muted-foreground">Health Connect is available only in the future Android app.</p></div>
+          <div className="rounded-md border p-3"><p className="font-semibold">Google Health</p><p className="mt-1 text-sm text-muted-foreground">Planned web integration. Requires configured web OAuth credentials and approved scopes.</p><Button className="mt-3" variant="outline" onClick={connectGoogleHealth} disabled={isBusy === "google-health"}>Connect when configured</Button></div>
+          <div className="rounded-md border p-3"><p className="font-semibold">Health Connect</p><p className="mt-1 text-sm text-muted-foreground">Not available in this web app today. Use browser-supported imports first.</p></div>
         </CardContent>
       </Card>
       <Card>
