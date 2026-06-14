@@ -4,10 +4,6 @@ import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
 import type { WelcomeSettings } from "@/types";
 
-function mockDelay<T>(value: T) {
-  return Promise.resolve(value);
-}
-
 function canUseUserData(userId: string | null | undefined) {
   return Boolean(supabase && isUuid(userId));
 }
@@ -49,7 +45,7 @@ export async function adminUpsertWelcomeMessage(payload: {
   popup_enabled: boolean;
   show_frequency: "every_login" | "once_per_day";
 }) {
-  if (!supabase) return mockDelay(payload);
+  if (!supabase) throw new Error("Database not connected");
   const { data, error } = await supabase!
     .from("user_welcome_messages")
     .upsert({ ...payload, is_active: true }, { onConflict: "user_id" })
@@ -60,7 +56,7 @@ export async function adminUpsertWelcomeMessage(payload: {
 }
 
 export async function adminUpdateWelcomeSettings(settings: WelcomeSettings) {
-  if (!supabase) return mockDelay(settings);
+  if (!supabase) throw new Error("Database not connected");
   const { data, error } = await supabase!
     .from("admin_settings")
     .upsert({ key: "welcome_settings", value: settings }, { onConflict: "key" })

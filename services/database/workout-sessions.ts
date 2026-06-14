@@ -14,10 +14,6 @@ import type {
   WorkoutSessionSummary
 } from "@/types";
 
-function mockDelay<T>(value: T) {
-  return Promise.resolve(value);
-}
-
 const skippedNotePrefix = "[skipped]";
 
 function canUseUserData(userId: string | null | undefined) {
@@ -249,7 +245,7 @@ export async function startWorkoutDaySession(userId: string, day: WorkoutPlanDay
 }
 
 export async function getOpenWorkoutDaySession(userId: string, planDayId: string) {
-  if (!canUseUserData(userId)) return mockDelay<WorkoutSession | null>(null);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("workout_sessions")
     .select("*")
@@ -275,7 +271,7 @@ export async function getOrStartWorkoutDaySession(userId: string, day: WorkoutPl
 }
 
 export async function getWorkoutSessionLogs(sessionId: string) {
-  if (!supabase || !isUuid(sessionId)) return mockDelay<ExerciseLog[]>([]);
+  if (!supabase || !isUuid(sessionId)) throw new Error("Database not connected");
   const { data, error } = await supabase!
     .from("exercise_logs")
     .select("*")
@@ -291,7 +287,7 @@ export async function getWorkoutSessionLogs(sessionId: string) {
 }
 
 export async function updateWorkoutSessionDuration(sessionId: string, durationMinutes: number) {
-  if (!supabase || !isUuid(sessionId)) return mockDelay(true);
+  if (!supabase) throw new Error("Database not connected");
   const { error } = await supabase!
     .from("workout_sessions")
     .update({ duration_minutes: Math.max(0, durationMinutes) })
@@ -430,24 +426,7 @@ export async function skipWorkoutDay(userId: string, day: SkipWorkoutDayInput, n
   const planId = skipDayPlanId(day);
   const workoutName = day.weekday ? `${dayName} - ${day.weekday}` : dayName;
 
-  if (!canUseUserData(userId)) {
-    return mockDelay({
-      id: `mock-${crypto.randomUUID()}`,
-      user_id: userId,
-      workout_id: null,
-      plan_id: planId,
-      plan_day_id: day.id,
-      workout_day_name: dayName,
-      workout_category: summarizeWorkoutCategory(day),
-      workout_name: workoutName,
-      started_at: skippedAt,
-      completed_at: skippedAt,
-      skipped_at: skippedAt,
-      duration_minutes: 0,
-      notes: notes || null,
-      status: "skipped"
-    } as WorkoutSession);
-  }
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   if (existing) {
     let { data, error } = await supabase!
@@ -524,7 +503,7 @@ export async function skipWorkoutDay(userId: string, day: SkipWorkoutDayInput, n
 }
 
 export async function getWorkoutHistory(userId: string) {
-  if (!canUseUserData(userId)) return mockDelay<WorkoutSession[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   let { data, error } = await supabase!
     .from("workout_sessions")
     .select("*")
@@ -555,7 +534,7 @@ export async function getWorkoutHistory(userId: string) {
 }
 
 export async function getWorkoutHistoryDetailed(userId: string, limit = 100) {
-  if (!canUseUserData(userId)) return mockDelay<WorkoutSessionSummary[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("workout_sessions")
     .select("*, exercise_logs(*)")
@@ -576,7 +555,7 @@ export async function getWorkoutHistoryDetailed(userId: string, limit = 100) {
 }
 
 export async function getWorkoutActivity(userId: string, limit = 180) {
-  if (!canUseUserData(userId)) return mockDelay<WorkoutSession[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   let { data, error } = await supabase!
     .from("workout_sessions")
     .select("*")
@@ -609,7 +588,7 @@ export async function getWorkoutActivity(userId: string, limit = 180) {
 }
 
 export async function getScheduledWorkoutHistory(userId: string, limit = 100) {
-  if (!canUseUserData(userId)) return mockDelay<UserWorkoutSession[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("user_workout_sessions")
     .select(
@@ -629,7 +608,7 @@ export async function getScheduledWorkoutHistory(userId: string, limit = 100) {
 }
 
 export async function getScheduledWorkoutActivity(userId: string, limit = 180) {
-  if (!canUseUserData(userId)) return mockDelay<WorkoutSession[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("user_workout_sessions")
     .select("id,user_id,user_workout_plan_id,workout_template_day_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes")

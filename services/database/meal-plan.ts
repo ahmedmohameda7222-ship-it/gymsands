@@ -33,10 +33,6 @@ type MealPlanPatch = Partial<{
   notes: string | null;
 }>;
 
-function mockDelay<T>(value: T) {
-  return Promise.resolve(value);
-}
-
 function canUseUserData(userId: string | null | undefined) {
   return Boolean(supabase && userId && isUuid(userId));
 }
@@ -125,7 +121,7 @@ function validateDirectMeal(input: DirectMealInput) {
 
 export async function getMealPlanItemsForDate(userId: string, date: string) {
   const safeDate = normalizeDate(date);
-  if (!canUseUserData(userId)) return mockDelay<MealPlanItem[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   const { data, error } = await supabase!
     .from("user_meal_plan_items")
@@ -141,7 +137,7 @@ export async function getMealPlanItemsForDate(userId: string, date: string) {
 export async function getMealPlanItemsForRange(userId: string, startDate: string, endDate: string) {
   const start = normalizeDate(startDate);
   const end = normalizeDate(endDate);
-  if (!canUseUserData(userId)) return mockDelay<MealPlanItem[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   const { data, error } = await supabase!
     .from("user_meal_plan_items")
@@ -163,9 +159,7 @@ export async function getMealPlanDatesWithItems(userId: string, startDate: strin
 
 export async function createDirectMealPlanItem(input: DirectMealInput) {
   const payload = validateDirectMeal(input);
-  if (!canUseUserData(input.userId)) {
-    return mockDelay({ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as MealPlanItem);
-  }
+  if (!canUseUserData(input.userId)) throw new Error("User session invalid");
 
   const { data, error } = await supabase!.from("user_meal_plan_items").insert(payload).select("*").single();
   if (error) throw error;
@@ -196,7 +190,7 @@ export async function updateDirectMealPlanItem(userId: string, itemId: string, p
 
   if (!Object.keys(payload).length) throw new Error("No meal plan changes provided.");
 
-  if (!canUseUserData(userId)) return mockDelay({ id: itemId, user_id: userId, ...payload } as MealPlanItem);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   const { data, error } = await supabase!
     .from("user_meal_plan_items")
@@ -289,7 +283,7 @@ export async function markDirectMealPlanItemDone(item: MealPlanItem) {
 }
 
 export async function deleteDirectMealPlanItem(item: MealPlanItem) {
-  if (!canUseUserData(item.user_id)) return mockDelay(true);
+  if (!canUseUserData(item.user_id)) throw new Error("User session invalid");
   const { error } = await supabase!.from("user_meal_plan_items").delete().eq("id", item.id).eq("user_id", item.user_id);
   if (error) throw error;
   return true;

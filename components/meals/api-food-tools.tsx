@@ -237,7 +237,7 @@ export function ApiFoodTools({
   async function loadActivities() {
     const response = await fetch("/api/exercise-calories", { headers: authHeaders() });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) return toast({ title: "Exercise calories unavailable", description: data.error ?? "Run migration 016." });
+    if (!response.ok) return toast({ title: "Exercise calories unavailable", description: data.error ?? "Please try again later." });
     const nextActivities = data.activities ?? [];
     setActivities(nextActivities);
     if (!activityId && nextActivities[0]?.id) setActivityId(nextActivities[0].id);

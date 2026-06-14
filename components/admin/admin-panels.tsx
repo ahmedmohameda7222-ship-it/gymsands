@@ -67,6 +67,7 @@ export function AdminFoodPanel() {
   const { toast } = useToast();
   const [foods, setFoods] = useState<FoodItem[]>([]);
   const [form, setForm] = useState({
+    id: "",
     food_name: "",
     serving_size: "",
     calories: "",
@@ -89,6 +90,7 @@ export function AdminFoodPanel() {
     event.preventDefault();
     try {
       await adminUpsertGlobalFood({
+        ...(form.id ? { id: form.id } : {}),
         ...form,
         calories: Number(form.calories),
         protein_g: Number(form.protein_g),
@@ -98,6 +100,7 @@ export function AdminFoodPanel() {
         cuisine: "Egyptian"
       });
       await loadFoods();
+      setForm({ id: "", food_name: "", serving_size: "", calories: "", protein_g: "", carbs_g: "", fat_g: "", category: "" });
       toast({ title: "Global food saved", description: "The preview list has been refreshed." });
     } catch (error) {
       console.warn("FitLife Hub could not save admin food.", error);
@@ -123,10 +126,17 @@ export function AdminFoodPanel() {
             <div className="sm:col-span-2">
               <TextField label="Category" value={form.category} onChange={(category) => setForm((current) => ({ ...current, category }))} placeholder="Category, e.g. Stew" />
             </div>
-            <Button className="sm:col-span-2">
-              <Save className="h-4 w-4" />
-              Save global food
-            </Button>
+            <div className="sm:col-span-2 flex gap-2">
+              <Button type="submit" className="flex-1">
+                <Save className="h-4 w-4" />
+                {form.id ? "Update global food" : "Save global food"}
+              </Button>
+              {form.id ? (
+                <Button type="button" variant="outline" onClick={() => setForm({ id: "", food_name: "", serving_size: "", calories: "", protein_g: "", carbs_g: "", fat_g: "", category: "" })}>
+                  Cancel
+                </Button>
+              ) : null}
+            </div>
           </form>
         </CardContent>
       </Card>
@@ -142,11 +152,29 @@ export function AdminFoodPanel() {
         </CardHeader>
         <CardContent className="space-y-3">
           {foods.map((food) => (
-            <div key={food.id} className="rounded-md border p-3">
-              <p className="font-semibold">{food.food_name}</p>
-              <p className="text-sm text-muted-foreground">
-                {food.calories} kcal | {food.protein_g}g protein | {food.carbs_g}g carbs | {food.fat_g}g fat
-              </p>
+            <div key={food.id} className="flex items-start justify-between rounded-md border p-3">
+              <div>
+                <p className="font-semibold">{food.food_name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {food.calories} kcal | {food.protein_g}g protein | {food.carbs_g}g carbs | {food.fat_g}g fat
+                </p>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setForm({
+                  id: food.id,
+                  food_name: food.food_name ?? "",
+                  serving_size: food.serving_size ?? "",
+                  calories: food.calories?.toString() ?? "",
+                  protein_g: food.protein_g?.toString() ?? "",
+                  carbs_g: food.carbs_g?.toString() ?? "",
+                  fat_g: food.fat_g?.toString() ?? "",
+                  category: food.category ?? ""
+                })}
+              >
+                Edit
+              </Button>
             </div>
           ))}
         </CardContent>

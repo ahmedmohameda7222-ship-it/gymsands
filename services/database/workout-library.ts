@@ -50,10 +50,6 @@ type ActiveExerciseRow = {
   is_global: boolean;
 };
 
-function mockDelay<T>(value: T) {
-  return Promise.resolve(value);
-}
-
 function canUseUserData(userId: string | null | undefined) {
   return Boolean(supabase && isUuid(userId));
 }
@@ -232,7 +228,7 @@ function localWorkouts(query = "", filters: WorkoutFilters = {}) {
 
 export async function getWorkoutCategories() {
   const fallback = localWorkoutCategories();
-  if (!supabase) return mockDelay(fallback);
+  if (!supabase) throw new Error("Database not connected");
 
   const [workoutResult, videoResult, exerciseResult] = await Promise.all([
     supabase!.from("workouts").select("*").eq("is_global", true).limit(5000),
@@ -274,7 +270,7 @@ export async function getWorkoutCategories() {
 
 export async function getWorkoutFilterOptions() {
   const fallback = getLocalWorkoutFilterOptions();
-  if (!supabase) return mockDelay(fallback);
+  if (!supabase) throw new Error("Database not connected");
 
   const [workoutResult, videoResult, exerciseResult] = await Promise.all([
     supabase!.from("workouts").select("*").eq("is_global", true).limit(5000),
@@ -313,7 +309,7 @@ export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page
   const from = page * workoutPageSize;
   const to = from + workoutPageSize - 1;
 
-  if (!supabase) return mockDelay(localMatches.slice(from, to + 1));
+  if (!supabase) throw new Error("Database not connected");
 
   let workoutRequest = supabase!.from("workouts").select("*").eq("is_global", true).order("name").limit(5000);
   if (query) workoutRequest = workoutRequest.or(`name.ilike.%${query}%,target_muscle.ilike.%${query}%,equipment.ilike.%${query}%`);
@@ -350,7 +346,7 @@ export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page
 
 export async function getWorkout(id: string) {
   const local = localWorkouts("").find((workout) => workout.id === id) ?? sampleWorkouts.map(hydrateWorkoutMetadata)[0];
-  if (!supabase || !isUuid(id)) return mockDelay(local);
+  if (!supabase) throw new Error("Database not connected");
 
   const workoutResult = await supabase!.from("workouts").select("*").eq("id", id).maybeSingle();
   if (workoutResult.error) console.warn("FitLife Hub could not load workout from workouts table.", workoutResult.error.message);
@@ -375,7 +371,7 @@ export async function getWorkout(id: string) {
 
 export async function getExerciseVideos(query = "") {
   const localVideos = dedupeExerciseVideos(sampleExerciseVideos).filter((video) => !query || normalizeText(video.exercise_name).includes(normalizeText(query)));
-  if (!supabase) return mockDelay(localVideos);
+  if (!supabase) throw new Error("Database not connected");
   let request = supabase!.from("exercise_videos").select("*").order("exercise_name").limit(100);
   if (query) request = request.ilike("exercise_name", `%${query}%`);
   const { data, error } = await request;
@@ -387,7 +383,7 @@ export async function getExerciseVideos(query = "") {
 }
 
 export async function getUserExerciseVideo(userId: string, exerciseId: string) {
-  if (!canUseUserData(userId) || !exerciseId) return mockDelay<UserExerciseVideo | null>(null);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("user_exercise_videos")
     .select("*")
@@ -405,7 +401,7 @@ export async function upsertUserExerciseVideo(userId: string, exerciseId: string
   const cleanUrl = customVideoUrl.trim();
   if (!/^https?:\/\/[^\s]+$/i.test(cleanUrl)) throw new Error("Enter a valid http or https video URL.");
   const payload = { user_id: userId, exercise_id: exerciseId, custom_video_url: cleanUrl };
-  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as UserExerciseVideo);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("user_exercise_videos")
     .upsert(payload, { onConflict: "user_id,exercise_id" })
@@ -416,7 +412,7 @@ export async function upsertUserExerciseVideo(userId: string, exerciseId: string
 }
 
 export async function resetUserExerciseVideo(userId: string, exerciseId: string) {
-  if (!canUseUserData(userId)) return mockDelay(true);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { error } = await supabase!
     .from("user_exercise_videos")
     .delete()

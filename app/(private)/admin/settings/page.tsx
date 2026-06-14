@@ -1,10 +1,10 @@
 import { PageHeading } from "@/components/layout/page-heading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default function AdminSettingsPage() {
+export default function AdminReadinessPage() {
   return (
     <>
-      <PageHeading title="Admin Settings" description="Review app privacy and member experience settings." />
+      <PageHeading title="Admin Readiness" description="Review app privacy and member experience settings." />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>

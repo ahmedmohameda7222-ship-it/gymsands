@@ -18,9 +18,14 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">Profile settings live with your account details.</p>
-          <Button asChild>
-            <Link href="/profile">Open Profile</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button asChild>
+              <Link href="/profile">Open Profile</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/onboarding?edit=true">Edit fitness profile</Link>
+            </Button>
+          </div>
         </CardContent>
       </Card>
       <div className="mt-4">

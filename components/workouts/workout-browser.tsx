@@ -175,8 +175,13 @@ export function WorkoutBrowser() {
   }, []);
 
   useEffect(() => {
-    setFavoriteIds(getFavoriteExerciseIds(user?.id));
-    setCustomExercises(getCustomExercises(user?.id));
+    let active = true;
+    Promise.all([getFavoriteExerciseIds(user?.id), getCustomExercises(user?.id)]).then(([favorites, custom]) => {
+      if (!active) return;
+      setFavoriteIds(favorites);
+      setCustomExercises(custom);
+    });
+    return () => { active = false; };
   }, [user?.id]);
 
   useEffect(() => {
@@ -267,16 +272,16 @@ export function WorkoutBrowser() {
     if (typeof window !== "undefined") window.localStorage.removeItem(filterStorageKey);
   }
 
-  function toggleFavorite(workout: Workout) {
+  async function toggleFavorite(workout: Workout) {
     const nextFavorite = !favoriteIds.includes(workout.id);
-    const nextIds = setFavoriteExercise(user?.id, workout.id, nextFavorite);
+    const nextIds = await setFavoriteExercise(user?.id, workout.id, nextFavorite);
     setFavoriteIds(nextIds);
     toast({ title: nextFavorite ? "Exercise favorited" : "Exercise unfavorited", description: `${workout.name} is ${nextFavorite ? "saved to" : "removed from"} your favorites.` });
   }
 
-  function createCustomExercise() {
+  async function createCustomExercise() {
     try {
-      const saved = saveCustomExercise(user?.id, customDraft);
+      const saved = await saveCustomExercise(user?.id, customDraft);
       setCustomExercises((current) => [saved, ...current]);
       setCustomDraft(emptyCustomExercise);
       setShowCustomForm(false);

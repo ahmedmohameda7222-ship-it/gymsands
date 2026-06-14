@@ -4,10 +4,6 @@ import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
 import type { BodyMeasurement, PersonalRecord, ProgressEntry } from "@/types";
 
-function mockDelay<T>(value: T) {
-  return Promise.resolve(value);
-}
-
 function canUseUserData(userId: string | null | undefined) {
   return Boolean(supabase && isUuid(userId));
 }
@@ -20,7 +16,7 @@ function mockStamped<T extends { user_id: string }>(payload: T) {
 export type PersonalRecordInput = Omit<PersonalRecord, "id" | "created_at" | "updated_at"> & { id?: string };
 
 export async function getPersonalRecords(userId: string, limit = 100) {
-  if (!canUseUserData(userId)) return mockDelay<PersonalRecord[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("personal_records")
     .select("*")
@@ -44,7 +40,7 @@ export async function upsertPersonalRecord(input: PersonalRecordInput) {
   };
   if (!payload.exercise_name) throw new Error("Exercise name is required.");
   if (!payload.record_type) throw new Error("Record type is required.");
-  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as PersonalRecord);
+  if (!canUseUserData(payload.user_id)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("personal_records").upsert(payload).select("*").single();
   if (error) throw error;
   return data as PersonalRecord;
@@ -197,14 +193,14 @@ export async function autoDetectPersonalRecordsFromExerciseLogs(userId: string, 
 }
 
 export async function deletePersonalRecord(userId: string, id: string) {
-  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { error } = await supabase!.from("personal_records").delete().eq("user_id", userId).eq("id", id);
   if (error) throw error;
   return true;
 }
 
 export async function getProgressEntries(userId: string) {
-  if (!canUseUserData(userId)) return mockDelay<ProgressEntry[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("progress_entries")
     .select("*")
@@ -245,23 +241,7 @@ export async function addProgressEntry(
   photos?: File[],
   measurements?: Record<string, number | null>
 ) {
-  if (!canUseUserData(entry.user_id)) {
-    return mockDelay({
-      ...entry,
-      id: crypto.randomUUID(),
-      measurements: measurements
-        ? ({
-            id: crypto.randomUUID(),
-            user_id: entry.user_id,
-            progress_entry_id: null,
-            measured_at: entry.entry_date,
-            waist_cm: entry.waist_cm,
-            created_at: new Date().toISOString(),
-            ...measurements
-          } as BodyMeasurement)
-        : null
-    } as ProgressEntry);
-  }
+  if (!canUseUserData(entry.user_id)) throw new Error("User session invalid");
   const client = supabase!;
   const { data, error } = await client.from("progress_entries").insert(entry).select("*").single();
   if (error) throw error;

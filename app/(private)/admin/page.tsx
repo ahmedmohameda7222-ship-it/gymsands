@@ -13,7 +13,7 @@ const adminLinks = [
   { href: "/admin/workouts", label: "Manage Workouts", icon: Dumbbell, text: "Review global workout library and instructions." },
   { href: "/admin/videos", label: "Manage Workout Videos", icon: Video, text: "Add video sources and prepare 3000+ record imports." },
   { href: "/admin/welcome", label: "Manage Welcome Messages", icon: MessageSquare, text: "Set default and user-specific welcome popups." },
-  { href: "/admin/settings", label: "Admin Settings", icon: Settings, text: "Configure FitLife Hub admin-level settings." }
+  { href: "/admin/settings", label: "Admin Readiness", icon: Settings, text: "Configure FitLife Hub admin-level settings." }
 ];
 
 export default function AdminDashboardPage() {

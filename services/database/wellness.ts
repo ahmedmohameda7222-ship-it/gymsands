@@ -4,10 +4,6 @@ import { supabase } from "@/lib/supabase/client";
 import { isUuid, todayIso } from "@/lib/utils";
 import type { DailyFitTask, FitnessHabit, SleepRecoveryLog, SupplementLog } from "@/types";
 
-function mockDelay<T>(value: T) {
-  return Promise.resolve(value);
-}
-
 function canUseUserData(userId: string | null | undefined) {
   return Boolean(supabase && isUuid(userId));
 }
@@ -23,7 +19,7 @@ export type SleepRecoveryInput = Omit<SleepRecoveryLog, "id" | "created_at" | "u
 export type SupplementLogInput = Omit<SupplementLog, "id" | "created_at" | "updated_at"> & { id?: string };
 
 export async function getDailyFitTasks(userId: string, date = todayIso()) {
-  if (!canUseUserData(userId)) return mockDelay<DailyFitTask[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("daily_fit_tasks")
     .select("*")
@@ -40,21 +36,21 @@ export async function getDailyFitTasks(userId: string, date = todayIso()) {
 export async function upsertDailyFitTask(input: DailyFitTaskInput) {
   const payload = { ...input, title: input.title.trim(), notes: input.notes?.trim() || null };
   if (!payload.title) throw new Error("Task title is required.");
-  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as DailyFitTask);
+  if (!canUseUserData(payload.user_id)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("daily_fit_tasks").upsert(payload).select("*").single();
   if (error) throw error;
   return data as DailyFitTask;
 }
 
 export async function deleteDailyFitTask(userId: string, id: string) {
-  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { error } = await supabase!.from("daily_fit_tasks").delete().eq("user_id", userId).eq("id", id);
   if (error) throw error;
   return true;
 }
 
 export async function getFitnessHabits(userId: string, date = todayIso()) {
-  if (!canUseUserData(userId)) return mockDelay<FitnessHabit[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("fitness_habits")
     .select("*")
@@ -71,21 +67,21 @@ export async function getFitnessHabits(userId: string, date = todayIso()) {
 export async function upsertFitnessHabit(input: FitnessHabitInput) {
   const payload = { ...input, name: input.name.trim(), notes: input.notes?.trim() || null };
   if (!payload.name) throw new Error("Habit name is required.");
-  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as FitnessHabit);
+  if (!canUseUserData(payload.user_id)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("fitness_habits").upsert(payload).select("*").single();
   if (error) throw error;
   return data as FitnessHabit;
 }
 
 export async function deleteFitnessHabit(userId: string, id: string) {
-  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { error } = await supabase!.from("fitness_habits").delete().eq("user_id", userId).eq("id", id);
   if (error) throw error;
   return true;
 }
 
 export async function getSleepRecoveryLogs(userId: string, limit = 30) {
-  if (!canUseUserData(userId)) return mockDelay<SleepRecoveryLog[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("sleep_recovery_logs")
     .select("*")
@@ -101,21 +97,21 @@ export async function getSleepRecoveryLogs(userId: string, limit = 30) {
 
 export async function upsertSleepRecoveryLog(input: SleepRecoveryInput) {
   const payload = { ...input, notes: input.notes?.trim() || null };
-  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as SleepRecoveryLog);
+  if (!canUseUserData(payload.user_id)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("sleep_recovery_logs").upsert(payload).select("*").single();
   if (error) throw error;
   return data as SleepRecoveryLog;
 }
 
 export async function deleteSleepRecoveryLog(userId: string, id: string) {
-  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { error } = await supabase!.from("sleep_recovery_logs").delete().eq("user_id", userId).eq("id", id);
   if (error) throw error;
   return true;
 }
 
 export async function getSupplementLogs(userId: string, date = todayIso()) {
-  if (!canUseUserData(userId)) return mockDelay<SupplementLog[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("supplement_logs")
     .select("*")
@@ -138,14 +134,14 @@ export async function upsertSupplementLog(input: SupplementLogInput) {
     reminder: input.reminder?.trim() || null
   };
   if (!payload.name) throw new Error("Supplement name is required.");
-  if (!canUseUserData(input.user_id)) return mockDelay(mockStamped(payload) as SupplementLog);
+  if (!canUseUserData(payload.user_id)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("supplement_logs").upsert(payload).select("*").single();
   if (error) throw error;
   return data as SupplementLog;
 }
 
 export async function deleteSupplementLog(userId: string, id: string) {
-  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { error } = await supabase!.from("supplement_logs").delete().eq("user_id", userId).eq("id", id);
   if (error) throw error;
   return true;

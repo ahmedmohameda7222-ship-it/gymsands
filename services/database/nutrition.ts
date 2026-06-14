@@ -19,10 +19,6 @@ import type {
 import { scaleFoodMacros, sumFoodLogs } from "@/services/nutrition/calculations";
 import { normalizeSavedTargets, type SavedTargets } from "@/services/nutrition/targets";
 
-function mockDelay<T>(value: T) {
-  return Promise.resolve(value);
-}
-
 function normalizeText(value: string | null | undefined) {
   return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -101,7 +97,7 @@ function localFoods(query = "") {
 
 export async function getFoodCategories() {
   const fallback = getDefaultFoodCategories();
-  if (!supabase) return mockDelay(fallback);
+  if (!supabase) throw new Error("Database not connected");
 
   const request = supabase!
     .from("food_items")
@@ -135,7 +131,7 @@ export async function getGlobalFoods(
     .slice(0, limit);
 
   if (!supabase) {
-    return mockDelay(fallback);
+    return fallback;
   }
 
   let request = supabase!
@@ -167,7 +163,7 @@ export async function getGlobalFoods(
 }
 
 export async function getCalorieTargets(userId: string) {
-  if (!canUseUserData(userId)) return mockDelay<SavedTargets | null>(null);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   const { data, error } = await supabase!
     .from("calorie_targets")
@@ -207,7 +203,7 @@ export async function upsertCalorieTargets({
     water_ml: waterMl
   };
 
-  if (!canUseUserData(userId)) return mockDelay(payload);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   const { data, error } = await supabase!
     .from("calorie_targets")
@@ -220,7 +216,7 @@ export async function upsertCalorieTargets({
 }
 
 export async function getTodayFoodLogs(userId: string, date = todayIso()) {
-  if (!canUseUserData(userId)) return mockDelay<FoodLog[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("food_logs")
     .select("*")
@@ -266,7 +262,7 @@ export async function addGlobalFoodToToday({
     notes: null
   };
 
-  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: crypto.randomUUID() } as FoodLog);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
   if (error) {
     console.warn("FitLife Hub could not add this food log.", error.message);
@@ -374,9 +370,7 @@ export async function getFoodKitchens(userId: string) {
     updated_at: fallbackKitchen.updated_at
   })) as FoodSubcategory[];
 
-  if (!canUseUserData(userId)) {
-    return mockDelay({ kitchens: [fallbackKitchen], subcategories: fallbackSubcategories });
-  }
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   const [kitchensResult, subcategoriesResult] = await Promise.all([
     supabase!
@@ -405,16 +399,7 @@ export async function getFoodKitchens(userId: string) {
 export async function createFoodKitchen(userId: string, name: string) {
   const cleanName = name.trim();
   if (!cleanName) throw new Error("Kitchen name is required.");
-  if (!canUseUserData(userId)) {
-    return mockDelay({
-      id: crypto.randomUUID(),
-      user_id: userId,
-      name: cleanName,
-      is_system: false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    } as FoodKitchen);
-  }
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   const { data, error } = await supabase!
     .from("food_kitchens")
@@ -429,13 +414,13 @@ export async function createFoodSubcategory(kitchenId: string, name: string) {
   const cleanName = name.trim();
   if (!cleanName) throw new Error("Subcategory name is required.");
   if (!supabase || !isUuid(kitchenId)) {
-    return mockDelay({
+    return {
       id: crypto.randomUUID(),
       kitchen_id: kitchenId,
       name: cleanName,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
-    } as FoodSubcategory);
+    } as FoodSubcategory;
   }
 
   const { data, error } = await supabase!
@@ -448,7 +433,7 @@ export async function createFoodSubcategory(kitchenId: string, name: string) {
 }
 
 export async function getUserFoods(userId: string) {
-  if (!canUseUserData(userId)) return mockDelay<UserFoodItem[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("user_food_items").select("*").eq("user_id", userId).order("food_name");
   if (error) {
     console.warn("FitLife Hub could not load custom foods.", error.message);
@@ -484,9 +469,7 @@ export async function getFoodLibrary(
 export async function upsertUserFood(input: UserFoodInput) {
   const payload = userFoodPayload(input);
 
-  if (!canUseUserData(input.userId)) {
-    return mockDelay(normalizeUserFood({ ...payload, id: input.id ?? crypto.randomUUID() }));
-  }
+  if (!canUseUserData(input.userId)) throw new Error("User session invalid");
 
   const request =
     input.id && isUuid(input.id)
@@ -499,14 +482,14 @@ export async function upsertUserFood(input: UserFoodInput) {
 }
 
 export async function deleteUserFood(userId: string, foodId: string) {
-  if (!canUseUserData(userId) || !isUuid(foodId)) return mockDelay(true);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { error } = await supabase!.from("user_food_items").delete().eq("id", foodId).eq("user_id", userId);
   if (error) throw error;
   return true;
 }
 
 export async function getWaterLogs(userId: string, date: string) {
-  if (!canUseUserData(userId)) return mockDelay<WaterLog[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("water_logs")
     .select("*")
@@ -523,14 +506,14 @@ export async function getWaterLogs(userId: string, date: string) {
 export async function addWaterLog(userId: string, date: string, amountMl: number) {
   if (!Number.isFinite(amountMl) || amountMl <= 0) throw new Error("Water amount must be greater than zero.");
   const payload = { user_id: userId, log_date: date, amount_ml: Math.round(amountMl) };
-  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString() } as WaterLog);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("water_logs").insert(payload).select("*").single();
   if (error) throw error;
   return data as WaterLog;
 }
 
 export async function deleteWaterLog(userId: string, id: string) {
-  if (!canUseUserData(userId) || !isUuid(id)) return mockDelay(true);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { error } = await supabase!.from("water_logs").delete().eq("id", id).eq("user_id", userId);
   if (error) throw error;
   return true;
@@ -638,7 +621,7 @@ async function foodsById(foodIds: string[], userFoodIds: string[]) {
 }
 
 export async function getCustomMeals(userId: string) {
-  if (!canUseUserData(userId)) return mockDelay<CustomMeal[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   const { data: meals, error } = await supabase!
     .from("meals")
@@ -719,7 +702,7 @@ export async function upsertCustomMeal(input: CustomMealInput) {
       };
     });
     const now = new Date().toISOString();
-    return mockDelay({
+    return {
       id: input.id ?? crypto.randomUUID(),
       user_id: input.userId,
       meal_name: cleanName,
@@ -730,7 +713,7 @@ export async function upsertCustomMeal(input: CustomMealInput) {
       updated_at: now,
       items,
       totals: summarizeMeal(items)
-    } as CustomMeal);
+    } as CustomMeal;
   }
 
   const mealPayload = {
@@ -765,7 +748,7 @@ export async function upsertCustomMeal(input: CustomMealInput) {
 }
 
 export async function deleteCustomMeal(userId: string, mealId: string) {
-  if (!canUseUserData(userId) || !isUuid(mealId)) return mockDelay(true);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { error } = await supabase!.from("meals").delete().eq("id", mealId).eq("user_id", userId);
   if (error) throw error;
   return true;
@@ -787,7 +770,7 @@ export async function addCustomMealToLog(userId: string, meal: CustomMeal, date 
     fat_g: meal.totals.fat_g,
     notes: meal.notes
   };
-  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: crypto.randomUUID() } as FoodLog);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
   if (error) throw error;
   return data as FoodLog;
@@ -814,9 +797,7 @@ export async function addCustomMealToMealPlan(userId: string, meal: CustomMeal, 
     notes: meal.notes
   };
 
-  if (!canUseUserData(userId)) {
-    return mockDelay({ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as MealPlanItem);
-  }
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   const { data, error } = await supabase!.from("user_meal_plan_items").insert(payload).select("*").single();
   if (error) throw error;
@@ -824,7 +805,7 @@ export async function addCustomMealToMealPlan(userId: string, meal: CustomMeal, 
 }
 
 export async function getTodayMealPlanItems(userId: string, date = todayIso()) {
-  if (!canUseUserData(userId)) return mockDelay<MealPlanItem[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("user_meal_plan_items")
     .select("*")
@@ -873,7 +854,7 @@ export async function addFoodToMealPlan({
     notes: null
   };
 
-  if (!canUseUserData(userId)) return mockDelay({ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as MealPlanItem);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   const { data, error } = await supabase!.from("user_meal_plan_items").insert(payload).select("*").single();
   if (error) {
@@ -965,7 +946,7 @@ export async function markMealPlanItemDone(item: MealPlanItem) {
 }
 
 export async function deleteMealPlanItem(item: MealPlanItem) {
-  if (!canUseUserData(item.user_id)) return mockDelay(true);
+  if (!canUseUserData(item.user_id)) throw new Error("User session invalid");
 
   const { error } = await supabase!.from("user_meal_plan_items").delete().eq("id", item.id);
   if (error) throw error;
@@ -992,9 +973,7 @@ export async function updateMealPlanItem(
     notes: patch.notes ?? item.notes ?? null
   };
 
-  if (!canUseUserData(item.user_id)) {
-    return mockDelay({ ...item, ...payload, updated_at: new Date().toISOString() } as MealPlanItem);
-  }
+  if (!canUseUserData(item.user_id)) throw new Error("User session invalid");
 
   const { data, error } = await supabase!
     .from("user_meal_plan_items")
@@ -1026,7 +1005,7 @@ export async function updateMealPlanItem(
 }
 
 export async function addCustomFoodLog(payload: Omit<FoodLog, "id">) {
-  if (!canUseUserData(payload.user_id)) return mockDelay({ ...payload, id: crypto.randomUUID() } as FoodLog);
+  if (!canUseUserData(payload.user_id)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
   if (error) throw error;
   return data as FoodLog;
@@ -1040,7 +1019,7 @@ export async function updateFoodLogQuantity(log: FoodLog, quantity: number) {
     fat_g: log.fat_g / log.quantity
   };
   const macros = scaleFoodMacros(unit, quantity);
-  if (!supabase) return mockDelay({ ...log, quantity, ...macros });
+  if (!supabase) throw new Error("Database not connected");
   const { data, error } = await supabase!
     .from("food_logs")
     .update({ quantity, ...macros })
@@ -1052,7 +1031,7 @@ export async function updateFoodLogQuantity(log: FoodLog, quantity: number) {
 }
 
 export async function deleteFoodLog(id: string) {
-  if (!supabase) return mockDelay(true);
+  if (!supabase) throw new Error("Database not connected");
   const { error } = await supabase!.from("food_logs").delete().eq("id", id);
   if (error) {
     console.warn("FitLife Hub could not delete this food log.", error.message);
@@ -1062,7 +1041,7 @@ export async function deleteFoodLog(id: string) {
 }
 
 export async function copyYesterdaysMeals(userId: string) {
-  if (!canUseUserData(userId)) return mockDelay<FoodLog[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const { data, error } = await supabase!.from("food_logs").select("*").eq("user_id", userId).eq("log_date", yesterday.toISOString().slice(0, 10));

@@ -93,9 +93,15 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (!user?.id) return;
+    const isEdit = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("edit") === "true";
+
     getOnboarding(user.id)
       .then((saved) => {
         if (!saved) return;
+        if (!isEdit) {
+          router.replace("/dashboard");
+          return;
+        }
         const goals = saved.goals?.length ? saved.goals : saved.goal ? saved.goal.split(",").map((goal) => goal.trim()).filter(Boolean) : defaultAnswers.goals;
         setAnswers((current) => ({
           ...current,
@@ -111,7 +117,7 @@ export default function OnboardingPage() {
         console.warn("FitLife Hub could not load saved onboarding answers.", error);
         toast({ title: "Could not load saved setup", description: "You can still review and save this setup again." });
       });
-  }, [toast, user?.id]);
+  }, [toast, user?.id, router]);
 
   async function finish() {
     if (!user?.id) {

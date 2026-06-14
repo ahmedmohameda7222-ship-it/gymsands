@@ -93,7 +93,7 @@ export default function WorkoutDetailsPage() {
   useEffect(() => {
     async function load() {
       try {
-        const customExercise = getCustomExercise(user?.id, params.id);
+        const customExercise = await getCustomExercise(user?.id, params.id);
         const nextWorkout = customExercise ?? await getWorkout(params.id);
         const [videos, customVideo, workoutHistory, libraryAlternatives] = await Promise.all([
           getExerciseVideos(nextWorkout.name),
@@ -104,7 +104,8 @@ export default function WorkoutDetailsPage() {
             equipmentRequired: nextWorkout.equipment_required || nextWorkout.equipment ? [nextWorkout.equipment_required || nextWorkout.equipment] : []
           }, 0)
         ]);
-        const localCustomAlternatives = getCustomExercises(user?.id).filter((item) => item.id !== nextWorkout.id);
+        const customExercises = await getCustomExercises(user?.id);
+        const localCustomAlternatives = customExercises.filter((item) => item.id !== nextWorkout.id);
         const combinedAlternatives = [...localCustomAlternatives, ...libraryAlternatives]
           .filter((item) => item.id !== nextWorkout.id)
           .filter((item) => sameText(item.target_muscle, nextWorkout.target_muscle) || sameText(item.equipment, nextWorkout.equipment) || sameText(item.mechanics, nextWorkout.mechanics))
@@ -116,7 +117,8 @@ export default function WorkoutDetailsPage() {
         setCustomVideoDraft(customExercise?.custom_video_url ?? customVideo?.custom_video_url ?? "");
         setHistory(workoutHistory);
         setAlternatives(combinedAlternatives);
-        setFavoriteIds(getFavoriteExerciseIds(user?.id));
+        const favoriteIds = await getFavoriteExerciseIds(user?.id);
+        setFavoriteIds(favoriteIds);
         setLoadError("");
       } catch (error) {
         const message = error instanceof Error ? error.message : "Could not load workout details.";
@@ -173,10 +175,10 @@ export default function WorkoutDetailsPage() {
     }
   }
 
-  function toggleFavorite() {
+  async function toggleFavorite() {
     const currentWorkout = workout;
     if (!currentWorkout) return;
-    const next = setFavoriteExercise(user?.id, currentWorkout.id, !favorite);
+    const next = await setFavoriteExercise(user?.id, currentWorkout.id, !favorite);
     setFavoriteIds(next);
     toast({ title: !favorite ? "Exercise favorited" : "Exercise unfavorited", description: currentWorkout.name });
   }

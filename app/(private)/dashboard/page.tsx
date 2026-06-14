@@ -14,6 +14,8 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { getOnboarding } from "@/services/database/profile";
 import {
   addWaterLog,
   getCalorieTargets,
@@ -33,6 +35,7 @@ import type { FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryLog, Supplement
 
 export default function DashboardPage() {
   const { user, profile } = useAuth();
+  const router = useRouter();
   const { toast } = useToast();
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [history, setHistory] = useState<WorkoutSession[]>([]);
@@ -58,7 +61,7 @@ export default function DashboardPage() {
     setLoadError(null);
     setLoadErrorDetails(undefined);
     try {
-      const [foodLogs, workoutHistory, dailyWater, progress, plannedMeals, plan, calorieTargets, supplementLogs, recoveryLogs] = await Promise.all([
+      const [foodLogs, workoutHistory, dailyWater, progress, plannedMeals, plan, calorieTargets, supplementLogs, recoveryLogs, onboarding] = await Promise.all([
         getTodayFoodLogs(user.id),
         getWorkoutHistory(user.id),
         getWaterLogs(user.id, todayIso()),
@@ -67,8 +70,14 @@ export default function DashboardPage() {
         getDefaultUserWorkoutPlan(user.id),
         getCalorieTargets(user.id),
         getSupplementLogs(user.id),
-        getSleepRecoveryLogs(user.id, 7)
+        getSleepRecoveryLogs(user.id, 7),
+        getOnboarding(user.id)
       ]);
+
+      if (!onboarding) {
+        router.replace("/onboarding");
+        return;
+      }
 
       setLogs(foodLogs);
       setHistory(workoutHistory);

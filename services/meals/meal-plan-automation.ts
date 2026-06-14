@@ -1,12 +1,13 @@
 "use client";
 
 import type { MealPlanItem, MealType } from "@/types";
+import { supabase } from "@/lib/supabase/client";
 
 export type MealTemplateItem = {
   food_name: string;
   meal_type: MealType;
-  serving_size: string;
-  quantity: number;
+  serving_size: string | null;
+  quantity: number | null;
   calories: number;
   protein_g: number;
   carbs_g: number;
@@ -28,7 +29,7 @@ export type BatchMeal = {
   user_id: string;
   name: string;
   portions: number;
-  serving_size: string;
+  serving_size: string | null;
   notes: string | null;
   total_calories: number;
   total_protein_g: number;
@@ -93,56 +94,201 @@ export function templateItemFromMealPlanItem(item: MealPlanItem): MealTemplateIt
   };
 }
 
-export function getMealTemplates(userId: string | null | undefined) {
-  return readJson<MealTemplate[]>(storageKey(templatePrefix, userId), []);
+let hasMigratedTemplates = false;
+let hasMigratedBatch = false;
+const migratedShoppingKeys = new Set<string>();
+
+export async function getMealTemplates(userId: string | null | undefined): Promise<MealTemplate[]> {
+  if (!userId) return readJson<MealTemplate[]>(storageKey(templatePrefix, userId), []);
+  
+  if (!hasMigratedTemplates && canStore()) {
+    hasMigratedTemplates = true;
+    const local = readJson<MealTemplate[]>(storageKey(templatePrefix, userId), []);
+    if (local.length > 0) {
+      for (const t of local) {
+        const { data: inserted, error } = await supabase!.from("meal_templates").insert({
+          user_id: userId,
+          name: t.name,
+          notes: t.notes,
+          created_at: t.created_at
+        }).select().single();
+        
+        if (inserted && !error) {
+          await supabase!.from("meal_template_items").insert(
+            t.items.map(item => ({
+              template_id: inserted.id,
+              user_id: userId,
+              food_name: item.food_name,
+              meal_type: item.meal_type,
+              serving_size: item.serving_size,
+              quantity: item.quantity,
+              calories: item.calories,
+              protein_g: item.protein_g,
+              carbs_g: item.carbs_g,
+              fat_g: item.fat_g,
+              notes: item.notes
+            }))
+          );
+        }
+      }
+      window.localStorage.removeItem(storageKey(templatePrefix, userId));
+    }
+  }
+
+  const { data: templatesData } = await supabase!.from("meal_templates").select("*").eq("user_id", userId).order("created_at", { ascending: false });
+  if (!templatesData) return [];
+
+  const { data: itemsData } = await supabase!.from("meal_template_items").select("*").in("template_id", templatesData.map((t: Record<string, unknown>) => t.id));
+  
+  return templatesData.map((t: Record<string, unknown>) => ({
+    ...t,
+    items: (itemsData || []).filter((i: Record<string, unknown>) => i.template_id === t.id).map(i => ({
+      food_name: i.food_name,
+      meal_type: i.meal_type,
+      serving_size: i.serving_size,
+      quantity: i.quantity,
+      calories: i.calories,
+      protein_g: i.protein_g,
+      carbs_g: i.carbs_g,
+      fat_g: i.fat_g,
+      notes: i.notes
+    }))
+  })) as MealTemplate[];
 }
 
-export function saveMealTemplate(userId: string | null | undefined, name: string, items: MealTemplateItem[], notes?: string | null) {
+export async function saveMealTemplate(userId: string | null | undefined, name: string, items: MealTemplateItem[], notes?: string | null): Promise<MealTemplate> {
   const cleanName = name.trim();
   if (!cleanName) throw new Error("Template name is required.");
   if (!items.length) throw new Error("Template must include at least one planned food.");
-  const template: MealTemplate = {
-    id: `template-${crypto.randomUUID()}`,
-    user_id: userId || "anonymous",
+  
+  const created_at = new Date().toISOString();
+
+  if (!userId) {
+    const template: MealTemplate = {
+      id: `template-${crypto.randomUUID()}`,
+      user_id: "anonymous",
+      name: cleanName,
+      items,
+      notes: notes?.trim() || null,
+      created_at
+    };
+    const key = storageKey(templatePrefix, userId);
+    writeJson(key, [template, ...readJson<MealTemplate[]>(key, [])]);
+    return template;
+  }
+
+    const { data: templateData, error: templateError } = await supabase!.from("meal_templates").insert({
+    user_id: userId,
     name: cleanName,
-    items,
     notes: notes?.trim() || null,
-    created_at: new Date().toISOString()
-  };
-  const key = storageKey(templatePrefix, userId);
-  writeJson(key, [template, ...getMealTemplates(userId)]);
-  return template;
+    created_at
+  }).select().single();
+
+  if (templateError) throw new Error(templateError.message);
+
+  const { data: itemsData, error: itemsError } = await supabase!.from("meal_template_items").insert(
+    items.map(item => ({
+      template_id: templateData.id,
+      user_id: userId,
+      ...item
+    }))
+  ).select();
+
+  if (itemsError) throw new Error(itemsError.message);
+
+  return {
+    ...templateData,
+    items: itemsData.map((i: Record<string, unknown>) => ({
+      food_name: i.food_name,
+      meal_type: i.meal_type,
+      serving_size: i.serving_size,
+      quantity: i.quantity,
+      calories: i.calories,
+      protein_g: i.protein_g,
+      carbs_g: i.carbs_g,
+      fat_g: i.fat_g,
+      notes: i.notes
+    }))
+  } as MealTemplate;
 }
 
-export function deleteMealTemplate(userId: string | null | undefined, templateId: string) {
-  const key = storageKey(templatePrefix, userId);
-  writeJson(key, getMealTemplates(userId).filter((template) => template.id !== templateId));
+export async function deleteMealTemplate(userId: string | null | undefined, templateId: string) {
+  if (!userId) {
+    const key = storageKey(templatePrefix, userId);
+    writeJson(key, readJson<MealTemplate[]>(key, []).filter((template) => template.id !== templateId));
+    return;
+  }
+    await supabase!.from("meal_templates").delete().match({ id: templateId, user_id: userId });
 }
 
-export function getBatchMeals(userId: string | null | undefined) {
-  return readJson<BatchMeal[]>(storageKey(batchPrefix, userId), []);
+export async function getBatchMeals(userId: string | null | undefined): Promise<BatchMeal[]> {
+  if (!userId) return readJson<BatchMeal[]>(storageKey(batchPrefix, userId), []);
+  
+  if (!hasMigratedBatch && canStore()) {
+    hasMigratedBatch = true;
+    const local = readJson<BatchMeal[]>(storageKey(batchPrefix, userId), []);
+    if (local.length > 0) {
+      for (const b of local) {
+        await supabase!.from("batch_meals").insert({
+          user_id: userId,
+          name: b.name,
+          portions: b.portions,
+          serving_size: b.serving_size,
+          notes: b.notes,
+          total_calories: b.total_calories,
+          total_protein_g: b.total_protein_g,
+          total_carbs_g: b.total_carbs_g,
+          total_fat_g: b.total_fat_g,
+          created_at: b.created_at,
+          updated_at: b.created_at
+        });
+      }
+      window.localStorage.removeItem(storageKey(batchPrefix, userId));
+    }
+  }
+
+  const { data } = await supabase!.from("batch_meals").select("*").eq("user_id", userId).order("created_at", { ascending: false });
+  return (data || []) as BatchMeal[];
 }
 
-export function saveBatchMeal(userId: string | null | undefined, input: Omit<BatchMeal, "id" | "user_id" | "created_at">) {
+export async function saveBatchMeal(userId: string | null | undefined, input: Omit<BatchMeal, "id" | "user_id" | "created_at">): Promise<BatchMeal> {
   const name = input.name.trim();
   if (!name) throw new Error("Batch meal name is required.");
   const portions = Math.max(1, Math.round(toNumber(input.portions)));
-  const batch: BatchMeal = {
-    id: `batch-${crypto.randomUUID()}`,
-    user_id: userId || "anonymous",
+  
+  if (!userId) {
+    const batch: BatchMeal = {
+      id: `batch-${crypto.randomUUID()}`,
+      user_id: "anonymous",
+      name,
+      portions,
+      serving_size: input.serving_size?.trim() || "1 portion",
+      notes: input.notes?.trim() || null,
+      total_calories: Math.max(0, toNumber(input.total_calories)),
+      total_protein_g: Math.max(0, toNumber(input.total_protein_g)),
+      total_carbs_g: Math.max(0, toNumber(input.total_carbs_g)),
+      total_fat_g: Math.max(0, toNumber(input.total_fat_g)),
+      created_at: new Date().toISOString()
+    };
+    const key = storageKey(batchPrefix, userId);
+    writeJson(key, [batch, ...readJson<BatchMeal[]>(key, [])]);
+    return batch;
+  }
+
+    const { data, error } = await supabase!.from("batch_meals").insert({
+    user_id: userId,
     name,
     portions,
-    serving_size: input.serving_size.trim() || "1 portion",
+    serving_size: input.serving_size?.trim() || "1 portion",
     notes: input.notes?.trim() || null,
     total_calories: Math.max(0, toNumber(input.total_calories)),
     total_protein_g: Math.max(0, toNumber(input.total_protein_g)),
     total_carbs_g: Math.max(0, toNumber(input.total_carbs_g)),
     total_fat_g: Math.max(0, toNumber(input.total_fat_g)),
-    created_at: new Date().toISOString()
-  };
-  const key = storageKey(batchPrefix, userId);
-  writeJson(key, [batch, ...getBatchMeals(userId)]);
-  return batch;
+  }).select().single();
+
+  if (error) throw new Error(error.message);
+  return data as BatchMeal;
 }
 
 export function batchMealToTemplateItem(batch: BatchMeal, mealType: MealType): MealTemplateItem {
@@ -189,18 +335,44 @@ export function buildShoppingList(items: MealPlanItem[], checkedKeys: string[] =
   return Array.from(map.values()).sort((a, b) => a.food_name.localeCompare(b.food_name));
 }
 
-export function getCheckedShoppingKeys(userId: string | null | undefined, weekStart: string) {
-  return readJson<string[]>(`${storageKey(shoppingPrefix, userId)}:${weekStart}`, []);
+export async function getCheckedShoppingKeys(userId: string | null | undefined, weekStart: string): Promise<string[]> {
+  const key = `${storageKey(shoppingPrefix, userId)}:${weekStart}`;
+  if (!userId) return readJson<string[]>(key, []);
+  
+    
+  if (!migratedShoppingKeys.has(key) && canStore()) {
+    migratedShoppingKeys.add(key);
+    const local = readJson<string[]>(key, []);
+    if (local.length > 0) {
+      await Promise.all(local.map(itemKey => 
+        supabase!.from("user_shopping_checks").upsert({ user_id: userId, week_start: weekStart, item_key: itemKey, checked: true }, { onConflict: "user_id, week_start, item_key" })
+      ));
+      window.localStorage.removeItem(key);
+    }
+  }
+
+  const { data } = await supabase!.from("user_shopping_checks").select("item_key").match({ user_id: userId, week_start: weekStart, checked: true });
+  return data?.map((d: Record<string, unknown>) => d.item_key as string) || [];
 }
 
-export function setShoppingItemChecked(userId: string | null | undefined, weekStart: string, key: string, checked: boolean) {
-  const storage = `${storageKey(shoppingPrefix, userId)}:${weekStart}`;
-  const current = new Set(getCheckedShoppingKeys(userId, weekStart));
-  if (checked) current.add(key);
-  else current.delete(key);
-  const next = Array.from(current);
-  writeJson(storage, next);
-  return next;
+export async function setShoppingItemChecked(userId: string | null | undefined, weekStart: string, itemKey: string, checked: boolean): Promise<string[]> {
+  if (!userId) {
+    const storage = `${storageKey(shoppingPrefix, userId)}:${weekStart}`;
+    const current = new Set(readJson<string[]>(storage, []));
+    if (checked) current.add(itemKey);
+    else current.delete(itemKey);
+    const next = Array.from(current);
+    writeJson(storage, next);
+    return next;
+  }
+
+    if (checked) {
+    await supabase!.from("user_shopping_checks").upsert({ user_id: userId, week_start: weekStart, item_key: itemKey, checked: true }, { onConflict: "user_id, week_start, item_key" });
+  } else {
+    await supabase!.from("user_shopping_checks").update({ checked: false }).match({ user_id: userId, week_start: weekStart, item_key: itemKey });
+  }
+  
+  return getCheckedShoppingKeys(userId, weekStart);
 }
 
 export function macroDiff(before: MealTemplateItem, after: MealTemplateItem) {

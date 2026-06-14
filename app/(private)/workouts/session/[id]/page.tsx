@@ -26,7 +26,7 @@ export default function WorkoutSessionPage() {
     setLoadError(null);
     setLoadErrorDetails(undefined);
     try {
-      const customExercise = getCustomExercise(user?.id, params.id);
+      const customExercise = await getCustomExercise(user?.id, params.id);
       const nextWorkout = customExercise ?? await getWorkout(params.id);
       const customVideo = user?.id && !customExercise ? await getUserExerciseVideo(user.id, nextWorkout.id) : null;
       const hydratedWorkout = customVideo?.custom_video_url

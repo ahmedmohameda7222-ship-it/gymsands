@@ -113,9 +113,18 @@ function MyMealPlanBuilderInner() {
   }, [pathname, searchParams, selectedDate]);
 
   useEffect(() => {
-    setTemplates(getMealTemplates(user?.id));
-    setBatchMeals(getBatchMeals(user?.id));
-    setCheckedShoppingKeys(getCheckedShoppingKeys(user?.id, selectedWeekStart));
+    let active = true;
+    Promise.all([
+      getMealTemplates(user?.id),
+      getBatchMeals(user?.id),
+      getCheckedShoppingKeys(user?.id, selectedWeekStart)
+    ]).then(([templates, batches, shoppingKeys]) => {
+      if (!active) return;
+      setTemplates(templates);
+      setBatchMeals(batches);
+      setCheckedShoppingKeys(shoppingKeys);
+    });
+    return () => { active = false; };
   }, [selectedWeekStart, user?.id]);
 
   useEffect(() => {
@@ -195,7 +204,7 @@ function MyMealPlanBuilderInner() {
 
   async function createItemFromTemplateItem(date: string, item: MealTemplateItem) {
     if (!user?.id) throw new Error("Login required.");
-    return normalizeMealPlanItem(await createDirectMealPlanItem({ userId: user.id, date, mealType: item.meal_type, foodName: item.food_name, quantity: item.quantity, servingInfo: item.serving_size, calories: item.calories, protein: item.protein_g, carbs: item.carbs_g, fat: item.fat_g, notes: item.notes }));
+    return normalizeMealPlanItem(await createDirectMealPlanItem({ userId: user.id, date, mealType: item.meal_type, foodName: item.food_name, quantity: item.quantity ?? undefined, servingInfo: item.serving_size ?? undefined, calories: item.calories, protein: item.protein_g, carbs: item.carbs_g, fat: item.fat_g, notes: item.notes ?? undefined }));
   }
 
   async function addTemplateToDate(template = selectedTemplate, date = selectedDate) {
@@ -350,9 +359,9 @@ function MyMealPlanBuilderInner() {
     }
   }
 
-  function saveItemTemplate(item: MealPlanItem) {
+  async function saveItemTemplate(item: MealPlanItem) {
     try {
-      const template = saveMealTemplate(user?.id, templateName.trim() || item.food_name, [templateItemFromMealPlanItem(item)], item.notes);
+      const template = await saveMealTemplate(user?.id, templateName.trim() || item.food_name, [templateItemFromMealPlanItem(item)], item.notes);
       setTemplates((current) => [template, ...current]);
       setTemplateName("");
       setNotice({ type: "success", title: "Template saved", description: `${template.name} is reusable now.` });
@@ -361,10 +370,10 @@ function MyMealPlanBuilderInner() {
     }
   }
 
-  function saveMealTypeTemplate(type: MealType) {
+  async function saveMealTypeTemplate(type: MealType) {
     const sourceItems = items.filter((item) => item.meal_type === type);
     try {
-      const template = saveMealTemplate(user?.id, templateName.trim() || `${displayMealType(type)} template`, sourceItems.map(templateItemFromMealPlanItem), `${displayDate(selectedDate)} ${displayMealType(type)}`);
+      const template = await saveMealTemplate(user?.id, templateName.trim() || `${displayMealType(type)} template`, sourceItems.map(templateItemFromMealPlanItem), `${displayDate(selectedDate)} ${displayMealType(type)}`);
       setTemplates((current) => [template, ...current]);
       setTemplateName("");
       setNotice({ type: "success", title: "Meal template saved", description: `${template.name} includes ${template.items.length} food item(s).` });
@@ -373,9 +382,9 @@ function MyMealPlanBuilderInner() {
     }
   }
 
-  function createBatchMeal() {
+  async function createBatchMeal() {
     try {
-      const batch = saveBatchMeal(user?.id, { name: batchDraft.name, portions: Number(batchDraft.portions), serving_size: batchDraft.servingSize, notes: batchDraft.notes, total_calories: Number(batchDraft.calories), total_protein_g: Number(batchDraft.protein), total_carbs_g: Number(batchDraft.carbs), total_fat_g: Number(batchDraft.fat) });
+      const batch = await saveBatchMeal(user?.id, { name: batchDraft.name, portions: Number(batchDraft.portions), serving_size: batchDraft.servingSize, notes: batchDraft.notes, total_calories: Number(batchDraft.calories), total_protein_g: Number(batchDraft.protein), total_carbs_g: Number(batchDraft.carbs), total_fat_g: Number(batchDraft.fat) });
       setBatchMeals((current) => [batch, ...current]);
       setSelectedBatchId(batch.id);
       setBatchDraft(emptyBatchDraft);
@@ -389,7 +398,7 @@ function MyMealPlanBuilderInner() {
     if (!swapState || !swapTarget || !user?.id) return;
     try {
       setIsUpdatingId(`swap-${swapState.item.id}`);
-      const updated = normalizeMealPlanItem(await updateDirectMealPlanItem(user.id, swapState.item.id, { date: swapState.item.plan_date, mealType: swapTarget.meal_type, foodName: swapTarget.food_name, quantity: swapTarget.quantity, servingInfo: swapTarget.serving_size, calories: swapTarget.calories, protein: swapTarget.protein_g, carbs: swapTarget.carbs_g, fat: swapTarget.fat_g, notes: swapTarget.notes }));
+      const updated = normalizeMealPlanItem(await updateDirectMealPlanItem(user.id, swapState.item.id, { date: swapState.item.plan_date, mealType: swapTarget.meal_type, foodName: swapTarget.food_name, quantity: swapTarget.quantity ?? undefined, servingInfo: swapTarget.serving_size ?? undefined, calories: swapTarget.calories, protein: swapTarget.protein_g, carbs: swapTarget.carbs_g, fat: swapTarget.fat_g, notes: swapTarget.notes ?? undefined }));
       upsertLocalItems([updated]);
       setSwapState(null);
       setNotice({ type: "success", title: "Meal swapped", description: `${swapState.item.food_name} was replaced with ${updated.food_name}.` });
@@ -400,8 +409,8 @@ function MyMealPlanBuilderInner() {
     }
   }
 
-  function toggleShoppingCheck(item: ShoppingListItem) {
-    const next = setShoppingItemChecked(user?.id, selectedWeekStart, item.key, !item.checked);
+  async function toggleShoppingCheck(item: ShoppingListItem) {
+    const next = await setShoppingItemChecked(user?.id, selectedWeekStart, item.key, !item.checked);
     setCheckedShoppingKeys(next);
   }
 

@@ -5,10 +5,6 @@ import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
 import type { UserWorkoutPlan, Weekday, Workout, WorkoutPlanDaySession } from "@/types";
 
-function mockDelay<T>(value: T) {
-  return Promise.resolve(value);
-}
-
 export const weekDays: Weekday[] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export function getCurrentWeekday(date = new Date()): Weekday {
@@ -159,7 +155,7 @@ function normalizeWorkoutPlan(plan: RawWorkoutPlan): UserWorkoutPlan {
 }
 
 export async function getActiveUserWorkoutPlan(userId: string) {
-  if (!canUseUserData(userId)) return mockDelay<UserWorkoutPlan | null>(null);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   const selectWithSource =
     "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
@@ -203,7 +199,7 @@ export async function getDefaultUserWorkoutPlan(userId: string) {
 }
 
 export async function getUserWorkoutPlans(userId: string) {
-  if (!canUseUserData(userId)) return mockDelay<UserWorkoutPlan[]>([]);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   const selectWithSource =
     "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
@@ -239,7 +235,7 @@ export async function getUserWorkoutPlans(userId: string) {
 }
 
 export async function getUserWorkoutPlan(userId: string, planId: string) {
-  if (!canUseUserData(userId) || !isUuid(planId)) return mockDelay<UserWorkoutPlan | null>(null);
+  if (!canUseUserData(userId) || !isUuid(planId)) throw new Error("User session invalid");
   const selectWithSource =
     "id,user_id,name,is_active,is_default,template_id,source,match_score,match_explanation,match_reasons,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
   const selectLegacy =
@@ -270,7 +266,7 @@ export async function getUserWorkoutPlan(userId: string, planId: string) {
 }
 
 export async function setDefaultUserWorkoutPlan(userId: string, planId: string) {
-  if (!canUseUserData(userId) || !isUuid(planId)) return mockDelay(true);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   let clearResult = await supabase!
     .from("user_workout_plans")
@@ -300,7 +296,7 @@ export async function setDefaultUserWorkoutPlan(userId: string, planId: string) 
 }
 
 export async function deleteUserWorkoutPlan(userId: string, planId: string) {
-  if (!canUseUserData(userId) || !isUuid(planId)) return mockDelay(true);
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   const currentPlans = await getUserWorkoutPlans(userId);
   const deletingPlan = currentPlans.find((plan) => plan.id === planId);
@@ -322,15 +318,15 @@ export async function deleteUserWorkoutPlan(userId: string, planId: string) {
 }
 
 export async function getWorkoutPlanWeekOptions() {
-  return mockDelay({ min: 1, max: 16, values: [1, 2, 3, 4, 6, 8, 10, 12, 16] });
+  return { min: 1, max: 16, values: [1, 2, 3, 4, 6, 8, 10, 12, 16] };
 }
 
 export async function getWorkoutPlanDurationOptions() {
-  return mockDelay({ min: 20, max: 90, values: [20, 30, 45, 60, 75, 90] });
+  return { min: 20, max: 90, values: [20, 30, 45, 60, 75, 90] };
 }
 
 export async function getUserWorkoutPlanDay(dayId: string) {
-  if (!supabase) return mockDelay<WorkoutPlanDaySession | null>(null);
+  if (!supabase) throw new Error("Database not connected");
 
   const result = await supabase!
     .from("user_workout_plan_days")
@@ -383,7 +379,7 @@ export async function updateUserWorkoutPlanDay(dayId: string, day: WorkoutPlanDa
   if (!cleanName) throw new Error("Workout day name is required.");
   if (!cleanExercises.length) throw new Error("Add at least one exercise before saving this workout day.");
 
-  if (!supabase || !isUuid(dayId)) return mockDelay(true);
+  if (!supabase) throw new Error("Database not connected");
 
   const { error: dayError } = await supabase!
     .from("user_workout_plan_days")
@@ -439,7 +435,7 @@ export async function createUserWorkoutPlanDay(planId: string, day: WorkoutPlanD
   const cleanExercises = day.exercises.filter(Boolean);
   if (!cleanName) throw new Error("Workout day name is required.");
   if (!supabase || !isUuid(planId)) {
-    return mockDelay({
+    return {
       id: crypto.randomUUID(),
       plan_id: planId,
       day_number: 1,
@@ -447,7 +443,7 @@ export async function createUserWorkoutPlanDay(planId: string, day: WorkoutPlanD
       weekday: day.weekday,
       notes: day.notes || null,
       exercises: []
-    } as UserWorkoutPlan["days"][number]);
+    } as UserWorkoutPlan["days"][number];
   }
 
   const { data: existingDays, error: countError } = await supabase!
@@ -530,9 +526,7 @@ export async function createUserWorkoutPlan({
   if (!planName.trim()) throw new Error("Plan name is required.");
   if (!cleanDays.length) throw new Error("Add at least one weekday with one workout.");
 
-  if (!canUseUserData(userId)) {
-    return mockDelay({ id: crypto.randomUUID(), name: planName, days: cleanDays });
-  }
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
 
   let inactiveResult = await supabase!
     .from("user_workout_plans")
