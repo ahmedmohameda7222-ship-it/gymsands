@@ -68,7 +68,7 @@ If a provider key is blank, its API route should return a clear JSON response in
 
 ## Supabase setup
 
-Run SQL in this order:
+Run SQL in this canonical order:
 
 1. `supabase/migrations/001_initial_schema.sql`
 2. `supabase/migrations/002_policy_refresh.sql`
@@ -86,12 +86,32 @@ Run SQL in this order:
 14. `supabase/migrations/012_default_plan_and_egyptian_kitchen.sql`
 15. `supabase/migrations/013_fitlife_hub_wellness_generated_plans.sql`
 16. `supabase/migrations/014_clean_exercise_library_and_api_integrations.sql`
-17. `supabase/migrations/015_auto_activate_wger_exercises.sql`
-18. `supabase/migrations/016_exercise_calorie_reference.sql`
-19. Register the first admin user.
-20. Run `supabase/seed/004_admin_setup_placeholder.sql` after editing the admin email if needed.
+17. `supabase/migrations/015_chatgpt_mcp_connections.sql`
+18. `supabase/migrations/016_auto_activate_wger_exercises.sql`
+19. `supabase/migrations/017_exercise_calorie_reference.sql`
+20. Register the first admin user.
+21. Run `supabase/seed/004_admin_setup_placeholder.sql` after editing the admin email if needed.
 
 For projects that already imported legacy exercise data, back up the database first, then review the cleanup SQL under `supabase/cleanup`.
+
+## Current route structure
+
+Primary private routes:
+
+- `/dashboard` — Today dashboard
+- `/my-workout/plans` — imported and manual workout plans
+- `/workouts` — exercise library
+- `/workout-history` — workout history
+- `/calories` — food log and calorie/macros tracking
+- `/my-meal-plan` — meal planning
+- `/calories/custom-food-meal` — custom food, kitchen, and meal builder
+- `/calories/weekly-overview` — nutrition summary
+- `/progress` — progress tracking
+- `/personal-records` — PR tracking
+- `/wellness` — wellness hub, with hydration, habits, sleep/recovery, supplements, and daily tasks available from there
+- `/settings` — connected apps and ChatGPT import setup
+
+The old `/meals` page was removed because food logging already lives under `/calories` and custom food/meal management lives under `/calories/custom-food-meal`.
 
 ## ChatGPT plan export workflow
 
@@ -106,7 +126,7 @@ For projects that already imported legacy exercise data, back up the database fi
 2. Sign in as an admin.
 3. Open Admin > API Imports.
 4. Import a page of wger exercises.
-5. New exercises become active immediately.
+5. New exercises become active immediately after running the canonical migrations.
 6. Open Admin > Exercise Library and remove anything you do not want members to use.
 
 Duplicate imports keep removed rows hidden.

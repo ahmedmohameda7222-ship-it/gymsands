@@ -5,19 +5,15 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   BarChart3,
-  BedDouble,
-  CalendarClock,
-  ClipboardList,
   CalendarCheck,
   ChefHat,
   CheckSquare,
-  Droplets,
+  ClipboardList,
   Dumbbell,
   History,
   Home,
   LogOut,
   Menu,
-  Pill,
   Settings,
   Shield,
   Soup,
@@ -42,58 +38,37 @@ type NavItem = {
 const navGroups: { label: string; items: NavItem[] }[] = [
   { label: "Today", items: [{ href: "/dashboard", label: "Today", icon: Home }] },
   {
-    label: "Workouts",
+    label: "Train",
     items: [
-      { href: "/today-workout", label: "Today's Workout", icon: CalendarClock },
-      { href: "/my-workout/plans", label: "Workout Plans", icon: CalendarCheck },
-      { href: "/workout-history", label: "Workout History", icon: History },
+      { href: "/my-workout/plans", label: "Workout Plans", icon: CalendarCheck, activePaths: ["/my-workout/plans", "/today-workout", "/workouts/session"] },
       { href: "/workouts", label: "Exercise Library", icon: Dumbbell },
-      { href: "/personal-records", label: "Personal Records", icon: Trophy }
+      { href: "/workout-history", label: "Workout History", icon: History }
     ]
   },
   {
-    label: "Food",
+    label: "Eat",
     items: [
+      { href: "/calories", label: "Food Log", icon: Utensils, activePaths: ["/calories"] },
       { href: "/my-meal-plan", label: "Meal Plan", icon: ClipboardList },
-      { href: "/calories", label: "Food Log", icon: Utensils },
-      { href: "/calories", label: "Calories/Macros", icon: Soup },
       { href: "/calories/custom-food-meal", label: "Food Builder", icon: ChefHat },
-      { href: "/calories/weekly-overview", label: "Weekly Nutrition Summary", icon: BarChart3 }
+      { href: "/calories/weekly-overview", label: "Nutrition Summary", icon: Soup }
     ]
   },
   {
     label: "Progress",
     items: [
       { href: "/progress", label: "Progress", icon: BarChart3 },
-      { href: "/calories/weekly-overview", label: "Weekly Fitness Report", icon: CalendarCheck }
+      { href: "/personal-records", label: "Personal Records", icon: Trophy }
     ]
   },
-  {
-    label: "Wellness",
-    items: [
-      { href: "/wellness", label: "Wellness Dashboard", icon: CheckSquare },
-      { href: "/hydration", label: "Hydration", icon: Droplets },
-      { href: "/habits", label: "Habits", icon: CalendarCheck },
-      { href: "/sleep-recovery", label: "Sleep & Recovery", icon: BedDouble },
-      { href: "/supplements", label: "Supplements", icon: Pill },
-      { href: "/daily-fit-tasks", label: "Daily Fit Tasks", icon: CheckSquare }
-    ]
-  },
-  {
-    label: "Settings",
-    items: [
-      { href: "/profile", label: "Profile & Goals", icon: User },
-      { href: "/settings", label: "Connected Apps", icon: Settings },
-      { href: "/settings", label: "ChatGPT Import Setup", icon: ClipboardList },
-      { href: "/settings", label: "Account Settings", icon: User }
-    ]
-  }
+  { label: "Wellness", items: [{ href: "/wellness", label: "Wellness", icon: CheckSquare, activePaths: ["/wellness", "/hydration", "/habits", "/sleep-recovery", "/supplements", "/daily-fit-tasks"] }] },
+  { label: "Settings", items: [{ href: "/settings", label: "Settings", icon: Settings, activePaths: ["/settings", "/profile"] }] }
 ];
 
 const mobilePrimaryItems: NavItem[] = [
   { href: "/dashboard", label: "Today", icon: Home, activePaths: ["/dashboard"] },
   { href: "/my-workout/plans", label: "Train", icon: Dumbbell, activePaths: ["/today-workout", "/my-workout", "/workouts", "/workout-history", "/personal-records"] },
-  { href: "/calories", label: "Food", icon: Utensils, activePaths: ["/calories", "/my-meal-plan"] },
+  { href: "/calories", label: "Eat", icon: Utensils, activePaths: ["/calories", "/my-meal-plan"] },
   { href: "/progress", label: "Progress", icon: BarChart3, activePaths: ["/progress"] },
   { href: "/settings", label: "More", icon: Settings, activePaths: ["/settings", "/profile", "/wellness", "/hydration", "/habits", "/sleep-recovery", "/supplements", "/daily-fit-tasks"] }
 ];
@@ -154,7 +129,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="hidden lg:block">
             <p className="text-sm text-muted-foreground">FitLife Hub</p>
-            <h1 className="text-lg font-semibold">Today, workouts, food, progress</h1>
+            <h1 className="text-lg font-semibold">Today, train, eat, progress</h1>
           </div>
           <Button variant="outline" size="sm" onClick={signOut} className="hidden lg:inline-flex">
             <LogOut className="h-4 w-4" />
