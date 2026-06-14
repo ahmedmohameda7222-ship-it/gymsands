@@ -96,6 +96,8 @@ For projects that already imported legacy exercise data, back up the database fi
 
 See `docs/reliability-audit-2026-06-14.md` for migration-collision notes, local-storage audit findings, and recommended account-level persistence tables.
 
+See `docs/professional-feature-roadmap-2026-06-14.md` for the phased product roadmap, recommended information architecture, Phase 1 slice, and follow-up prompts for Phase 2-4.
+
 ## Current route structure
 
 Primary private routes:

@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { Bot, Copy, ExternalLink, KeyRound, RefreshCcw, Settings2 } from "lucide-react";
+import { Bot, CheckCircle2, Copy, ExternalLink, KeyRound, RefreshCcw, Settings2 } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,21 @@ import { env } from "@/lib/env";
 import { MCP_DEFAULT_SCOPES, MCP_SCOPES } from "@/lib/mcp/scopes";
 
 const fitlifeDescription = "ChatGPT creates workout and meal plans. FitLife stores, schedules, edits, and tracks the imported data.";
+
+const importPrompts = [
+  {
+    id: "workout",
+    label: "Workout plan prompt",
+    text:
+      "Create a workout plan for me outside FitLife Hub, then import the final approved plan into FitLife Hub. Include plan name, goal, duration, days per week, workout days, exercises, sets, reps, rest, notes, and any exercise instructions. FitLife Hub must only store, schedule, edit, display, and track the plan; do not ask FitLife Hub to generate the plan internally."
+  },
+  {
+    id: "meal",
+    label: "Meal plan prompt",
+    text:
+      "Create a meal plan for me outside FitLife Hub, then import the final approved meals into FitLife Hub. Include dates or weekdays, meal type, food names, serving sizes, quantities, calories, protein, carbs, fat, and notes when known. Do not invent unknown nutrition values; mark anything uncertain clearly so I can review it before tracking."
+  }
+];
 
 type ChatGptConnection = {
   id: string;
@@ -43,6 +59,7 @@ export function ConnectedApps() {
   const [connections, setConnections] = useState<ChatGptConnection[]>([]);
   const [selectedScopes, setSelectedScopes] = useState<string[]>(MCP_DEFAULT_SCOPES);
   const [showAdvancedSetup, setShowAdvancedSetup] = useState(false);
+  const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
   const mcpServerUrl = env.fitlifeMcpServerUrl.trim();
   const hasMcpServerUrl = Boolean(mcpServerUrl);
 
@@ -70,6 +87,13 @@ export function ConnectedApps() {
     toast({ title: "Copied", description: type === "url" ? "FitLife import address copied." : "FitLife connection code copied." });
   }
 
+  async function copyPrompt(promptId: string, value: string) {
+    await navigator.clipboard.writeText(value);
+    setCopiedPromptId(promptId);
+    window.setTimeout(() => setCopiedPromptId(null), 2000);
+    toast({ title: "Prompt copied", description: "Paste it into ChatGPT after connecting FitLife Hub." });
+  }
+
   async function copyMcpUrl() {
     if (!hasMcpServerUrl) {
       toast({ title: "Import connection is not ready", description: "Ask support to finish ChatGPT import setup for this deployment." });
@@ -80,7 +104,7 @@ export function ConnectedApps() {
 
   async function generateConnectionToken() {
     if (!session?.access_token) {
-      toast({ title: "Sign in required", description: "Sign in to FitLife before generating a ChatGPT connection token." });
+      toast({ title: "Sign in required", description: "Sign in to FitLife before generating a ChatGPT connection code." });
       return;
     }
 
@@ -115,13 +139,13 @@ export function ConnectedApps() {
     setIsBusy(null);
 
     if (!response.ok) {
-      toast({ title: "Could not revoke token", description: data.error ?? "Please try again." });
+      toast({ title: "Could not revoke connection", description: data.error ?? "Please try again." });
       return;
     }
 
     setConnectionToken("");
     await loadConnections();
-    toast({ title: "Connection revoked", description: "Active ChatGPT connection tokens were revoked for this account." });
+    toast({ title: "Connection revoked", description: "Active ChatGPT connections were revoked for this account." });
   }
 
   function openChatGpt() {
@@ -184,7 +208,7 @@ export function ConnectedApps() {
               <ol className="mt-3 ml-5 list-decimal space-y-2 text-sm text-muted-foreground">
                 <li>Generate a FitLife connection code and copy it.</li>
                 <li>Open ChatGPT and connect FitLife Hub when ChatGPT asks for an app or connector.</li>
-                <li>Ask ChatGPT to import a workout plan or meal plan into FitLife Hub.</li>
+                <li>Paste one starter prompt below, review the plan in ChatGPT, then approve the import into FitLife Hub.</li>
               </ol>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button type="button" onClick={generateConnectionToken} disabled={isBusy === "chatgpt-token" || !hasMcpServerUrl}>
@@ -200,6 +224,38 @@ export function ConnectedApps() {
               {connectionToken ? (
                 <Input readOnly value={connectionToken} className="mt-3 font-mono text-xs" aria-label="FitLife connection code" />
               ) : null}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {importPrompts.map((prompt) => (
+                <div key={prompt.id} className="rounded-md border p-4">
+                  <p className="font-semibold">{prompt.label}</p>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{prompt.text}</p>
+                  <Button type="button" className="mt-3" variant="outline" onClick={() => copyPrompt(prompt.id, prompt.text)}>
+                    <Copy className="h-4 w-4" />
+                    {copiedPromptId === prompt.id ? "Copied" : "Copy prompt"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-md border p-4">
+              <p className="flex items-center gap-2 font-semibold">
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+                After import, check quality
+              </p>
+              <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                <p>Workout plans should have days, exercises, sets, reps, rest, and clear scheduling fields.</p>
+                <p>Meal plans should keep planned meals separate from done meals and avoid invented nutrition values.</p>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button asChild variant="outline">
+                  <Link href="/my-workout/plans">Review workout plans</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/my-meal-plan">Review meal plan</Link>
+                </Button>
+              </div>
             </div>
 
             <p className="rounded-md border p-3 text-sm text-muted-foreground">
@@ -230,7 +286,7 @@ export function ConnectedApps() {
                     </Button>
                   </div>
                   <p className="font-semibold">Authentication:</p>
-                  <p>Use the FitLife connection code as a bearer token if ChatGPT asks for authentication.</p>
+                  <p>Use the FitLife connection code if ChatGPT asks for authentication.</p>
                   <p className="font-semibold">Allowed access:</p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {scopeOptions.map((option) => {
@@ -266,7 +322,7 @@ export function ConnectedApps() {
                 {connections.map((connection) => (
                   <div key={connection.id} className="rounded-md bg-muted p-3 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-medium">{connection.is_active && !connection.revoked_at ? "Active token" : "Revoked token"}</span>
+                      <span className="font-medium">{connection.is_active && !connection.revoked_at ? "Active connection" : "Revoked connection"}</span>
                       <span className="text-xs text-muted-foreground">{new Date(connection.created_at).toLocaleString()}</span>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">

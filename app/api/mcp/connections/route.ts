@@ -68,7 +68,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     token,
     connection: data,
-    message: "Copy this FitLife ChatGPT connection token now. It is shown only once."
+    message: "Copy this FitLife ChatGPT connection code now. It is shown only once."
   });
 }
 

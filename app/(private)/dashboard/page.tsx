@@ -124,6 +124,21 @@ export default function DashboardPage() {
   ];
   const nextSetupItem = setupChecklist.find((item) => !item.done) ?? null;
   const setupCompletedCount = setupChecklist.filter((item) => item.done).length;
+  const todayScoreChecks = [
+    logs.length > 0,
+    Boolean(targets?.protein_g && totals.protein_g >= targets.protein_g),
+    Boolean(targets?.water_ml && waterTotalMl >= targets.water_ml),
+    completedToday,
+    Boolean(latestProgress?.entry_date === todayIso() || todaySleepLog)
+  ];
+  const todayScore = Math.round((todayScoreChecks.filter(Boolean).length / todayScoreChecks.length) * 100);
+  const trainingStreak = countCompletedTrainingStreak(history);
+  const visualSignals = [
+    { label: "Today score", value: `${todayScore}%`, detail: "Food, protein, water, training, and recovery/progress", progress: todayScore, icon: CheckCircle2 },
+    { label: "Training streak", value: `${trainingStreak} day${trainingStreak === 1 ? "" : "s"}`, detail: "Consecutive completed workout days from real history", progress: Math.min(100, trainingStreak * 20), icon: Dumbbell },
+    { label: "Protein", value: targets?.protein_g ? `${Math.min(100, percent(totals.protein_g, targets.protein_g))}%` : "Set target", detail: targets?.protein_g ? `${Math.max(0, remaining.protein_g)}g left today` : "Save a protein target to track adherence", progress: targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : 0, icon: Soup },
+    { label: "Water", value: targets?.water_ml ? `${Math.min(100, percent(waterTotalMl, targets.water_ml))}%` : "Set target", detail: targets?.water_ml ? `${Math.max(0, targets.water_ml - waterTotalMl)} ml left today` : "Save a water target to track streaks", progress: targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : 0, icon: Droplets }
+  ];
   const dashboardCoaching = buildDashboardCoaching({
     hasTargets,
     targets,
@@ -216,6 +231,17 @@ export default function DashboardPage() {
             <MetricCard icon={Droplets} label="Water intake" value={waterTotalMl ? `${waterLiters} L` : "No water logged"} detail={targets?.water_ml ? `Target ${waterTargetLiters} L today` : "Set water target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
             <MetricCard icon={Scale} label="Current weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No progress entry"} detail={latestProgress ? `Latest entry ${latestProgress.entry_date}` : "Add your first progress entry"} />
           </div>
+
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle>Command center</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {visualSignals.map((signal) => (
+                <RingMetric key={signal.label} {...signal} />
+              ))}
+            </CardContent>
+          </Card>
 
           <Card className="mt-4">
             <CardHeader>
@@ -448,4 +474,60 @@ function ChecklistLine({ label, done, emptyLabel }: { label: string; done: boole
       <span className={done ? "text-sm font-semibold text-primary" : "text-sm text-muted-foreground"}>{done ? "Done" : emptyLabel}</span>
     </div>
   );
+}
+
+function RingMetric({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  progress
+}: {
+  icon: typeof CheckCircle2;
+  label: string;
+  value: string;
+  detail: string;
+  progress: number;
+}) {
+  const safeProgress = Math.max(0, Math.min(100, progress));
+  return (
+    <div className="flex items-center gap-3 rounded-md border p-3">
+      <div
+        className="grid h-16 w-16 shrink-0 place-items-center rounded-full"
+        style={{ background: `conic-gradient(hsl(var(--primary)) ${safeProgress}%, hsl(var(--muted)) 0)` }}
+        aria-hidden="true"
+      >
+        <div className="grid h-12 w-12 place-items-center rounded-full bg-card">
+          <Icon className="h-5 w-5 text-primary" />
+        </div>
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p>
+        <p className="mt-1 text-lg font-bold">{value}</p>
+        <p className="text-sm text-muted-foreground">{detail}</p>
+      </div>
+    </div>
+  );
+}
+
+function countCompletedTrainingStreak(history: WorkoutSession[]) {
+  const completedDates = Array.from(
+    new Set(
+      history
+        .filter((session) => session.status === "completed")
+        .map((session) => (session.completed_at ?? session.started_at)?.slice(0, 10))
+        .filter(Boolean) as string[]
+    )
+  ).sort((a, b) => b.localeCompare(a));
+  if (!completedDates.length) return 0;
+
+  let cursor = completedDates[0];
+  let streak = 0;
+  while (completedDates.includes(cursor)) {
+    streak += 1;
+    const previous = new Date(`${cursor}T00:00:00`);
+    previous.setDate(previous.getDate() - 1);
+    cursor = previous.toISOString().slice(0, 10);
+  }
+  return streak;
 }
