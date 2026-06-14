@@ -32,7 +32,14 @@ import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogTr
 import { useAuth } from "@/components/auth/auth-provider";
 import { cn } from "@/lib/utils";
 
-const navGroups = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  activePaths?: string[];
+};
+
+const navGroups: { label: string; items: NavItem[] }[] = [
   { label: "Today", items: [{ href: "/dashboard", label: "Today", icon: Home }] },
   {
     label: "Workouts",
@@ -83,22 +90,26 @@ const navGroups = [
   }
 ];
 
-const mobilePrimaryItems = [
-  { href: "/dashboard", label: "Today", icon: Home },
-  { href: "/my-workout/plans", label: "Workouts", icon: Dumbbell },
-  { href: "/calories", label: "Food", icon: Utensils },
-  { href: "/progress", label: "Progress", icon: BarChart3 },
-  { href: "/wellness", label: "Wellness", icon: CheckSquare },
-  { href: "/settings", label: "Settings", icon: Settings }
+const mobilePrimaryItems: NavItem[] = [
+  { href: "/dashboard", label: "Today", icon: Home, activePaths: ["/dashboard"] },
+  { href: "/my-workout/plans", label: "Train", icon: Dumbbell, activePaths: ["/today-workout", "/my-workout", "/workouts", "/workout-history", "/personal-records"] },
+  { href: "/calories", label: "Food", icon: Utensils, activePaths: ["/calories", "/my-meal-plan"] },
+  { href: "/progress", label: "Progress", icon: BarChart3, activePaths: ["/progress"] },
+  { href: "/settings", label: "More", icon: Settings, activePaths: ["/settings", "/profile", "/wellness", "/hydration", "/habits", "/sleep-recovery", "/supplements", "/daily-fit-tasks"] }
 ];
 
-const adminItems = [
+const adminItems: NavItem[] = [
   { href: "/admin", label: "Admin", icon: Shield },
   { href: "/admin/audit", label: "Audit & Quality", icon: ClipboardList },
   { href: "/admin/foods", label: "Foods", icon: Soup },
   { href: "/admin/workouts", label: "Workouts", icon: Weight },
   { href: "/admin/settings", label: "Settings", icon: Settings }
 ];
+
+function isActivePath(pathname: string, item: NavItem) {
+  const paths = item.activePaths ?? [item.href];
+  return paths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -107,22 +118,152 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r bg-card/95 backdrop-blur lg:flex lg:flex-col">
-        <div className="flex h-20 items-center px-6"><Brand href="/dashboard" /></div>
+        <div className="flex h-20 items-center px-6">
+          <Brand href="/dashboard" />
+        </div>
         <nav className="flex-1 space-y-5 overflow-y-auto px-4 pb-4">
-          {navGroups.map((group) => <div key={group.label}><p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p><div className="space-y-1">{group.items.map((item) => <SidebarLink key={`${item.href}-${item.label}`} item={item} active={pathname === item.href || pathname.startsWith(`${item.href}/`)} />)}</div></div>)}
-          {isAdmin ? <div className="mt-6 border-t pt-4"><p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Admin</p>{adminItems.map((item) => <SidebarLink key={item.href} item={item} active={pathname === item.href || pathname.startsWith(`${item.href}/`)} />)}</div> : null}
+          {navGroups.map((group) => (
+            <div key={group.label}>
+              <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
+              <div className="space-y-1">
+                {group.items.map((item) => <SidebarLink key={`${item.href}-${item.label}`} item={item} active={isActivePath(pathname, item)} />)}
+              </div>
+            </div>
+          ))}
+          {isAdmin ? (
+            <div className="mt-6 border-t pt-4">
+              <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Admin</p>
+              {adminItems.map((item) => <SidebarLink key={item.href} item={item} active={isActivePath(pathname, item)} />)}
+            </div>
+          ) : null}
         </nav>
-        <div className="border-t p-4"><p className="text-sm font-semibold text-foreground">{profile?.full_name || "FitLife Hub member"}</p><p className="truncate text-xs text-muted-foreground">{profile?.email}</p><Button variant="ghost" className="mt-3 w-full justify-start" onClick={signOut}><LogOut className="h-4 w-4" />Logout</Button></div>
+        <div className="border-t p-4">
+          <p className="text-sm font-semibold text-foreground">{profile?.full_name || "FitLife Hub member"}</p>
+          <p className="truncate text-xs text-muted-foreground">{profile?.email}</p>
+          <Button variant="ghost" className="mt-3 w-full justify-start" onClick={signOut}>
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
+        </div>
       </aside>
-      <header className="sticky top-0 z-30 border-b bg-card/85 backdrop-blur lg:ml-72"><div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8"><div className="flex items-center gap-3 lg:hidden"><MobileMenu pathname={pathname} isAdmin={isAdmin} signOut={signOut} /><Brand href="/dashboard" /></div><div className="hidden lg:block"><p className="text-sm text-muted-foreground">FitLife Hub</p><h1 className="text-lg font-semibold">Today, workouts, food, progress</h1></div><Button variant="outline" size="sm" onClick={signOut} className="hidden lg:inline-flex"><LogOut className="h-4 w-4" />Logout</Button></div></header>
-      <main className="pb-20 lg:ml-72 lg:pb-0"><motion.div key={pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: "easeOut" }} className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8">{children}</motion.div></main>
+      <header className="sticky top-0 z-30 border-b bg-card/85 backdrop-blur lg:ml-72">
+        <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3 lg:hidden">
+            <MobileMenu pathname={pathname} isAdmin={isAdmin} signOut={signOut} />
+            <Brand href="/dashboard" />
+          </div>
+          <div className="hidden lg:block">
+            <p className="text-sm text-muted-foreground">FitLife Hub</p>
+            <h1 className="text-lg font-semibold">Today, workouts, food, progress</h1>
+          </div>
+          <Button variant="outline" size="sm" onClick={signOut} className="hidden lg:inline-flex">
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
+        </div>
+      </header>
+      <main className="pb-32 lg:ml-72 lg:pb-0">
+        <motion.div
+          key={pathname}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8"
+        >
+          {children}
+        </motion.div>
+      </main>
       <MobilePrimaryNav pathname={pathname} />
     </div>
   );
 }
 
-function MobilePrimaryNav({ pathname }: { pathname: string }) { return <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t bg-card/95 px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 shadow-luxe backdrop-blur lg:hidden">{mobilePrimaryItems.map((item) => { const Icon = item.icon; const active = pathname === item.href || pathname.startsWith(`${item.href}/`); return <Link key={item.href} href={item.href} className={cn("flex min-h-14 flex-col items-center justify-center gap-1 rounded-md px-1 text-[11px] font-medium transition", active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-primary")}><Icon className="h-4 w-4" /><span className="truncate">{item.label}</span></Link>; })}</nav>; }
+function MobilePrimaryNav({ pathname }: { pathname: string }) {
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-card/95 px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 shadow-luxe backdrop-blur lg:hidden" aria-label="Primary mobile navigation">
+      {mobilePrimaryItems.map((item) => {
+        const Icon = item.icon;
+        const active = isActivePath(pathname, item);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex min-h-14 flex-col items-center justify-center gap-1 rounded-md px-1 text-[11px] font-medium transition focus-visible:ring-2 focus-visible:ring-ring",
+              active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-primary"
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            <span className="truncate">{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
 
-function MobileMenu({ pathname, isAdmin, signOut }: { pathname: string; isAdmin: boolean; signOut: () => Promise<void> }) { return <Dialog><DialogTrigger asChild><Button variant="outline" size="icon" aria-label="Open navigation menu"><Menu className="h-5 w-5" /></Button></DialogTrigger><DialogContent className="left-3 top-3 max-h-[calc(100vh-1.5rem)] w-[calc(100vw-1.5rem)] max-w-sm translate-x-0 translate-y-0 p-4"><DialogHeader><DialogTitle>Navigation</DialogTitle></DialogHeader><div className="max-h-[calc(100vh-7rem)] overflow-y-auto pr-1"><div className="space-y-5">{navGroups.map((group) => <div key={group.label}><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p><div className="space-y-1">{group.items.map((item) => <DialogClose key={`${item.href}-${item.label}`} asChild><SidebarLink item={item} active={pathname === item.href || pathname.startsWith(`${item.href}/`)} mobile /></DialogClose>)}</div></div>)}{isAdmin ? <div className="border-t pt-4"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Admin</p>{adminItems.map((item) => <DialogClose key={item.href} asChild><SidebarLink item={item} active={pathname === item.href || pathname.startsWith(`${item.href}/`)} mobile /></DialogClose>)}</div> : null}<Button variant="ghost" className="w-full justify-start" onClick={signOut}><LogOut className="h-4 w-4" />Logout</Button></div></div></DialogContent></Dialog>; }
+function MobileMenu({ pathname, isAdmin, signOut }: { pathname: string; isAdmin: boolean; signOut: () => Promise<void> }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="icon" aria-label="Open navigation menu">
+          <Menu className="h-5 w-5" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Navigation</DialogTitle>
+        </DialogHeader>
+        <div className="max-h-[calc(90dvh-7rem)] overflow-y-auto pr-1">
+          <div className="space-y-5">
+            {navGroups.map((group) => (
+              <div key={group.label}>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
+                <div className="space-y-1">
+                  {group.items.map((item) => (
+                    <DialogClose key={`${item.href}-${item.label}`} asChild>
+                      <SidebarLink item={item} active={isActivePath(pathname, item)} mobile />
+                    </DialogClose>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {isAdmin ? (
+              <div className="border-t pt-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Admin</p>
+                {adminItems.map((item) => (
+                  <DialogClose key={item.href} asChild>
+                    <SidebarLink item={item} active={isActivePath(pathname, item)} mobile />
+                  </DialogClose>
+                ))}
+              </div>
+            ) : null}
+            <Button variant="ghost" className="w-full justify-start" onClick={signOut}>
+              <LogOut className="h-4 w-4" />
+              Logout
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-function SidebarLink({ item, active, mobile = false }: { item: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }; active: boolean; mobile?: boolean }) { const Icon = item.icon; return <Link href={item.href} className={cn("flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition", active ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:bg-muted hover:text-primary", mobile && "py-3")}><Icon className="h-4 w-4 shrink-0" /><span>{item.label}</span></Link>; }
+function SidebarLink({ item, active, mobile = false }: { item: NavItem; active: boolean; mobile?: boolean }) {
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-ring",
+        active ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:bg-muted hover:text-primary",
+        mobile && "min-h-12 py-3"
+      )}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      <span>{item.label}</span>
+    </Link>
+  );
+}
