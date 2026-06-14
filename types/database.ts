@@ -481,6 +481,19 @@ export type ProgressEntry = {
   measurements?: BodyMeasurement | null;
 };
 
+export type ProgressPhotoType = "front" | "side" | "back";
+
+export type ProgressPhoto = {
+  id: string;
+  user_id: string;
+  progress_entry_id: string | null;
+  photo_type: ProgressPhotoType;
+  taken_on: string;
+  storage_path: string;
+  created_at: string;
+  signed_url?: string | null;
+};
+
 export type BodyMeasurement = {
   id: string;
   user_id: string;
@@ -499,7 +512,9 @@ export type BodyMeasurement = {
   right_thigh_cm: number | null;
   glutes_cm: number | null;
   calves_cm: number | null;
+  body_fat_percent?: number | null;
   created_at: string;
+  updated_at?: string;
 };
 
 export type WelcomeSettings = {
