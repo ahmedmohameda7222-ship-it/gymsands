@@ -307,7 +307,11 @@ function bestHydrationStreak(weekData: DailyNutritionSummary[], targetMl: number
 function buildReminderSuggestion({ target, totalMl, remainingMl, logs }: { target: number; totalMl: number; remainingMl: number; logs: WaterLog[] }) {
   if (!target) return { value: "Set target", detail: "A target makes reminders useful." };
   if (remainingMl <= 0) return { value: "Target hit", detail: "Use the same rhythm tomorrow." };
-  if (!logs.length) return { value: "Start now", detail: "Add your first glass before the day gets busy." };
-  if (totalMl < target * 0.5) return { value: "Split it up", detail: `Try ${Math.min(750, Math.max(250, Math.ceil(remainingMl / 3 / 50) * 50))} ml over the next few check-ins.` };
-  return { value: "One more bottle", detail: `${remainingMl} ml left. A small bottle may close the target.` };
+  const currentHour = new Date().getHours();
+  const hoursLeft = Math.max(1, 22 - currentHour);
+  const splits = Math.max(1, Math.min(4, Math.ceil(hoursLeft / 3)));
+  const suggestedAmount = Math.min(750, Math.max(250, Math.ceil(remainingMl / splits / 50) * 50));
+  if (!logs.length) return { value: `Drink ${suggestedAmount} ml now`, detail: `${remainingMl} ml left. Start with one logged glass and keep reminders browser-based.` };
+  if (splits > 1) return { value: `Drink ${suggestedAmount} ml now`, detail: `You need ${remainingMl} ml left, split into ${splits} check-ins before late evening.` };
+  return { value: `Drink ${remainingMl} ml`, detail: "One focused bottle or glass can close today's target." };
 }

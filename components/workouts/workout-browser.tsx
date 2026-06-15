@@ -148,7 +148,7 @@ const emptyCustomExercise: CustomExerciseInput = {
 };
 
 export function WorkoutBrowser() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [query, setQuery] = useState("");
   const [filterOptions, setFilterOptions] = useState<WorkoutFilterOptions>(emptyOptions);
@@ -232,6 +232,8 @@ export function WorkoutBrowser() {
   const visibleCustomExercises = customExercises.filter((workout) => matchesCustomExercise(workout, query.trim(), filters));
   const allVisibleWorkouts = [...visibleCustomExercises, ...workouts].filter((workout, index, all) => all.findIndex((item) => item.id === workout.id) === index);
   const filteredWorkouts = favoritesOnly ? allVisibleWorkouts.filter((workout) => favoriteIds.includes(workout.id)) : allVisibleWorkouts;
+  const duplicateExerciseNames = useMemo(() => duplicateWorkoutNames(filteredWorkouts), [filteredWorkouts]);
+  const qualityCounts = useMemo(() => summarizeExerciseQuality(filteredWorkouts, duplicateExerciseNames), [duplicateExerciseNames, filteredWorkouts]);
 
   async function loadMore() {
     const nextPage = page + 1;
@@ -353,12 +355,33 @@ export function WorkoutBrowser() {
         </div>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Exercise library quality</CardTitle>
+          <p className="text-sm text-muted-foreground">Quality checks flag missing guidance and duplicates for review. Nothing is deleted automatically.</p>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <QualityMetric label="Missing video" value={qualityCounts.missingVideo} detail="No video or guide link found" />
+          <QualityMetric label="Missing instructions" value={qualityCounts.missingInstructions} detail="Instruction text needs review" />
+          <QualityMetric label="Missing muscle/equipment" value={qualityCounts.missingLabels} detail="Filter quality may be weaker" />
+          <QualityMetric label="Duplicate names" value={qualityCounts.duplicates} detail="Same visible exercise name appears more than once" />
+          {profile?.role === "admin" ? (
+            <Button asChild variant="outline" className="min-h-20 justify-center">
+              <Link href="/admin/exercises">Open admin review</Link>
+            </Button>
+          ) : (
+            <QualityMetric label="Review mode" value={0} detail="Admins can review quality in Admin > Exercises" />
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {isLoading && !filteredWorkouts.length ? <p className="text-sm text-muted-foreground">Loading workouts...</p> : null}
         {!isLoading && !filteredWorkouts.length ? <p className="text-sm text-muted-foreground">No exercises match these filters.</p> : null}
         {filteredWorkouts.map((workout) => {
           const guideUrl = workout.exercise_url || (isLink(workout.notes) ? workout.notes : null);
           const favorite = favoriteIds.includes(workout.id);
+          const quality = exerciseQuality(workout, duplicateExerciseNames.has(normalizeText(workout.name)));
           return (
             <Card key={workout.id}>
               <CardContent className="pt-5">
@@ -370,6 +393,7 @@ export function WorkoutBrowser() {
                   <div className="flex flex-col items-end gap-2">
                     <Badge>{workout.experience_level || workout.difficulty}</Badge>
                     {!workout.is_global ? <Badge variant="success">Custom</Badge> : null}
+                    {quality.map((item) => <Badge key={item} variant="outline">{item}</Badge>)}
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -401,6 +425,50 @@ export function WorkoutBrowser() {
 
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) {
   return <div className="space-y-1"><Label>{label}</Label><Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} /></div>;
+}
+
+function QualityMetric({ label, value, detail }: { label: string; value: number; detail: string }) {
+  return (
+    <div className="rounded-md border p-3">
+      <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p>
+      <p className="mt-1 text-xl font-bold">{value}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function duplicateWorkoutNames(workouts: Workout[]) {
+  const counts = new Map<string, number>();
+  workouts.forEach((workout) => {
+    const key = normalizeText(workout.name);
+    if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+  return new Set(Array.from(counts.entries()).filter(([, count]) => count > 1).map(([key]) => key));
+}
+
+function exerciseQuality(workout: Workout, duplicateName: boolean) {
+  const warnings: string[] = [];
+  if (!workout.video_url && !workout.custom_video_url && !workout.exercise_url && !isLink(workout.notes)) warnings.push("missing video");
+  if (!workout.instructions?.trim()) warnings.push("missing instructions");
+  if (!workout.target_muscle && !workout.muscle_category) warnings.push("missing muscle");
+  if (!workout.equipment && !workout.equipment_required) warnings.push("missing equipment");
+  if (duplicateName) warnings.push("duplicate");
+  return warnings.slice(0, 3);
+}
+
+function summarizeExerciseQuality(workouts: Workout[], duplicates: Set<string>) {
+  return workouts.reduce(
+    (summary, workout) => {
+      const warnings = exerciseQuality(workout, duplicates.has(normalizeText(workout.name)));
+      return {
+        missingVideo: summary.missingVideo + (warnings.includes("missing video") ? 1 : 0),
+        missingInstructions: summary.missingInstructions + (warnings.includes("missing instructions") ? 1 : 0),
+        missingLabels: summary.missingLabels + (warnings.includes("missing muscle") || warnings.includes("missing equipment") ? 1 : 0),
+        duplicates: summary.duplicates + (warnings.includes("duplicate") ? 1 : 0)
+      };
+    },
+    { missingVideo: 0, missingInstructions: 0, missingLabels: 0, duplicates: 0 }
+  );
 }
 
 function FilterGroup({ title, values, selected, open, onOpenChange, onToggle }: { title: string; values: string[]; selected: string[]; open: boolean; onOpenChange: () => void; onToggle: (value: string) => void; }) {

@@ -136,3 +136,10 @@ CREATE POLICY "Users can manage their own shopping checks"
   FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_custom_exercises TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_exercise_favorites TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.meal_templates TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.meal_template_items TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.batch_meals TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_shopping_checks TO authenticated;

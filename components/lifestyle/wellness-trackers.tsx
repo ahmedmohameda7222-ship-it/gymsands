@@ -94,6 +94,8 @@ export function WellnessDashboard() {
   const checklist = buildDailyChecklist({ nutrition, habits, supplements, sleep: sleepLogs, workoutActivity: workouts });
   const readiness = calculateReadiness(sleepLogs);
   const completedCount = checklist.filter((item) => item.complete).length;
+  const recoverySuggestions = buildRecoverySuggestions(readiness, sleepLogs);
+  const habitRescue = buildHabitRescue(habits);
 
   async function askNotifications() {
     const result = await requestNotificationPermission();
@@ -114,6 +116,24 @@ export function WellnessDashboard() {
         <Metric title="Notifications" value={notificationState} detail="Browser-only reminders, no native push logic" />
       </div>
       <Card>
+        <CardHeader><CardTitle>Recovery-aware suggestions</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {recoverySuggestions.map((item) => (
+            <div key={item.title} className="rounded-md border p-3">
+              <p className="font-semibold">{item.title}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Habit streak rescue</CardTitle></CardHeader>
+        <CardContent className="rounded-md border bg-muted/40 p-3">
+          <p className="font-semibold">{habitRescue.title}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{habitRescue.detail}</p>
+        </CardContent>
+      </Card>
+      <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-primary" /> Consolidated daily wellness checklist</CardTitle></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {checklist.map((item) => <div key={item.label} className="rounded-md border p-3"><div className="flex items-start justify-between gap-2"><p className="font-semibold">{item.label}</p><Badge variant={item.complete ? "success" : "outline"}>{item.complete ? "Done" : "Missing"}</Badge></div><p className="mt-2 text-sm text-muted-foreground">{item.detail}</p></div>)}
@@ -130,6 +150,54 @@ export function WellnessDashboard() {
       </Card>
     </div>
   );
+}
+
+function buildRecoverySuggestions(readiness: ReturnType<typeof calculateReadiness>, logs: EnhancedSleepRecoveryLog[]) {
+  const latest = logs[0];
+  if (!latest || readiness.value === null) {
+    return [
+      { title: "Data insufficient", detail: "Save sleep plus at least one fatigue, soreness, stress, or recovery rating to unlock cautious training guidance." },
+      { title: "Keep it simple", detail: "Use a normal warmup and avoid training through sharp pain. This is general fitness guidance, not medical advice." }
+    ];
+  }
+
+  const fatigue = Number(latest.fatigue_level);
+  const soreness = Number(latest.soreness_level);
+  const lowSleep = typeof latest.hours_slept === "number" && latest.hours_slept < 6;
+  const highFatigue = Number.isFinite(fatigue) && fatigue >= 4;
+  const highSoreness = Number.isFinite(soreness) && soreness >= 4;
+
+  if (readiness.value < 45 || lowSleep || highFatigue || highSoreness) {
+    return [
+      { title: "Ease intensity", detail: "Consider lighter loads, fewer hard sets, or a recovery day because saved recovery data is low today." },
+      { title: "Warm up longer", detail: "Add extra ramp-up sets and mobility before heavy work. Stop if discomfort becomes sharp or unusual." },
+      { title: "Hydration and protein focus", detail: "Prioritize water and a protein-forward meal to support recovery from normal training stress." }
+    ];
+  }
+
+  if (readiness.value < 70) {
+    return [
+      { title: "Moderate day", detail: "Train normally but leave a little room in reserve. Saved recovery data is okay, not excellent." },
+      { title: "Watch form", detail: "Use controlled reps and avoid adding weight if reps feel slower than usual." }
+    ];
+  }
+
+  return [
+    { title: "Ready for normal training", detail: "Saved recovery data looks solid. Progress only if warmups and first working sets feel controlled." },
+    { title: "Still log notes", detail: "Add quick notes after training so future suggestions can compare performance against recovery." }
+  ];
+}
+
+function buildHabitRescue(habits: FitnessHabit[]) {
+  if (!habits.length) return { title: "No habits set today", detail: "Create one small habit first, such as water, protein, sleep, or a short walk." };
+  const missing = habits.filter((habit) => !habit.completed);
+  if (!missing.length) return { title: "All habits done", detail: "Today's saved habits are complete. Keep tomorrow simple and repeatable." };
+  const currentHour = new Date().getHours();
+  const urgency = currentHour >= 20 ? "before the day ends" : "as your next small action";
+  return {
+    title: `${missing.length} habit${missing.length === 1 ? "" : "s"} can still be rescued`,
+    detail: `${missing.slice(0, 3).map((habit) => habit.name).join(", ")} ${missing.length === 1 ? "is" : "are"} still open. Pick the easiest one ${urgency}; no native notification is assumed.`
+  };
 }
 
 export function DailyFitTasksTracker() {

@@ -81,7 +81,7 @@ function normalizeMealType(value: string | null | undefined): MealType {
   return "Breakfast";
 }
 
-function canUseUserData(userId: string | null | undefined) {
+function canUseUserData(userId: string | null | undefined): userId is string {
   return Boolean(supabase && userId && isUuid(userId));
 }
 
@@ -189,17 +189,67 @@ export function setFavoriteFood(userId: string | null | undefined, key: FoodFavo
   return next;
 }
 
+let migratedFavoriteUsers = new Set<string>();
+
+export async function getFavoriteFoodKeysAsync(userId: string | null | undefined) {
+  const local = getFavoriteFoodKeys(userId);
+  if (!canUseUserData(userId)) return local;
+
+  if (!migratedFavoriteUsers.has(userId)) {
+    migratedFavoriteUsers = new Set([...migratedFavoriteUsers, userId]);
+    if (local.length) {
+      await Promise.all(
+        local.map((foodKey) =>
+          supabase!
+            .from("user_food_favorites")
+            .upsert({ user_id: userId, food_key: foodKey }, { onConflict: "user_id,food_key" })
+        )
+      );
+      if (canUseStorage()) window.localStorage.removeItem(storageKey(favoritePrefix, userId));
+    }
+  }
+
+  const { data, error } = await supabase!
+    .from("user_food_favorites")
+    .select("food_key")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.warn("FitLife Hub could not load synced food favorites.", error.message);
+    return local;
+  }
+  return (data ?? []).map((item) => String(item.food_key));
+}
+
+export async function setFavoriteFoodAsync(userId: string | null | undefined, key: FoodFavoriteKey, favorite: boolean, label?: string) {
+  if (!canUseUserData(userId)) return setFavoriteFood(userId, key, favorite);
+
+  const result = favorite
+    ? await supabase!
+        .from("user_food_favorites")
+        .upsert({ user_id: userId, food_key: key, label: label ?? null }, { onConflict: "user_id,food_key" })
+    : await supabase!.from("user_food_favorites").delete().eq("user_id", userId).eq("food_key", key);
+
+  if (result.error) {
+    console.warn("FitLife Hub could not update synced food favorite.", result.error.message);
+    return setFavoriteFood(userId, key, favorite);
+  }
+  return getFavoriteFoodKeysAsync(userId);
+}
+
 export function getSavedRecipes(userId: string | null | undefined) {
   return readJson<SavedRecipe[]>(storageKey(recipePrefix, userId), []);
 }
 
-export function saveRecipe(userId: string | null | undefined, input: Omit<SavedRecipe, "id" | "user_id" | "created_at" | "updated_at">) {
+let migratedRecipeUsers = new Set<string>();
+
+function buildRecipe(userId: string | null | undefined, input: Omit<SavedRecipe, "id" | "user_id" | "created_at" | "updated_at">): SavedRecipe {
   const name = input.name.trim();
   if (!name) throw new Error("Recipe name is required.");
   const portions = Math.max(1, Math.round(toNumber(input.portions)));
   if (!input.ingredients.length) throw new Error("Add at least one ingredient.");
   const now = new Date().toISOString();
-  const recipe: SavedRecipe = {
+  return {
     id: `recipe-${crypto.randomUUID()}`,
     user_id: userId || "anonymous",
     name,
@@ -217,14 +267,159 @@ export function saveRecipe(userId: string | null | undefined, input: Omit<SavedR
     created_at: now,
     updated_at: now
   };
+}
+
+function normalizeRecipeRow(recipe: Record<string, unknown>, ingredients: Record<string, unknown>[]): SavedRecipe {
+  return {
+    id: String(recipe.id),
+    user_id: String(recipe.user_id),
+    name: String(recipe.name),
+    portions: Math.max(1, Math.round(toNumber(recipe.portions) || 1)),
+    notes: typeof recipe.notes === "string" ? recipe.notes : null,
+    created_at: String(recipe.created_at || new Date().toISOString()),
+    updated_at: String(recipe.updated_at || recipe.created_at || new Date().toISOString()),
+    ingredients: ingredients.map((ingredient) => ({
+      id: String(ingredient.id),
+      foodName: String(ingredient.food_name || "Ingredient"),
+      quantity: Math.max(0.1, toNumber(ingredient.quantity) || 1),
+      servingUnit: (String(ingredient.serving_unit || "serving") as ServingUnit),
+      calories: Math.max(0, toNumber(ingredient.calories)),
+      proteinG: Math.max(0, toNumber(ingredient.protein_g)),
+      carbsG: Math.max(0, toNumber(ingredient.carbs_g)),
+      fatG: Math.max(0, toNumber(ingredient.fat_g))
+    }))
+  };
+}
+
+async function migrateLocalRecipes(userId: string, local: SavedRecipe[]) {
+  if (!local.length) return;
+  for (const recipe of local) {
+    const { data: savedRecipe, error } = await supabase!
+      .from("saved_recipes")
+      .insert({
+        user_id: userId,
+        name: recipe.name,
+        portions: recipe.portions,
+        notes: recipe.notes,
+        created_at: recipe.created_at,
+        updated_at: recipe.updated_at
+      })
+      .select("id")
+      .single();
+    if (error || !savedRecipe) {
+      console.warn("FitLife Hub could not migrate a saved recipe.", error?.message);
+      continue;
+    }
+
+    const rows = recipe.ingredients.map((ingredient) => ({
+      recipe_id: savedRecipe.id,
+      user_id: userId,
+      food_name: ingredient.foodName,
+      quantity: Math.max(0.1, toNumber(ingredient.quantity) || 1),
+      serving_unit: ingredient.servingUnit,
+      calories: Math.max(0, toNumber(ingredient.calories)),
+      protein_g: Math.max(0, toNumber(ingredient.proteinG)),
+      carbs_g: Math.max(0, toNumber(ingredient.carbsG)),
+      fat_g: Math.max(0, toNumber(ingredient.fatG))
+    }));
+    if (rows.length) {
+      const ingredientResult = await supabase!.from("saved_recipe_ingredients").insert(rows);
+      if (ingredientResult.error) console.warn("FitLife Hub could not migrate recipe ingredients.", ingredientResult.error.message);
+    }
+  }
+  if (canUseStorage()) window.localStorage.removeItem(storageKey(recipePrefix, userId));
+}
+
+export async function getSavedRecipesAsync(userId: string | null | undefined) {
+  const local = getSavedRecipes(userId);
+  if (!canUseUserData(userId)) return local;
+
+  if (!migratedRecipeUsers.has(userId)) {
+    migratedRecipeUsers = new Set([...migratedRecipeUsers, userId]);
+    await migrateLocalRecipes(userId, local);
+  }
+
+  const { data: recipes, error } = await supabase!
+    .from("saved_recipes")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.warn("FitLife Hub could not load synced recipes.", error.message);
+    return local;
+  }
+
+  const recipeIds = (recipes ?? []).map((recipe) => recipe.id);
+  const ingredientsResult = recipeIds.length
+    ? await supabase!.from("saved_recipe_ingredients").select("*").in("recipe_id", recipeIds)
+    : { data: [], error: null };
+  if (ingredientsResult.error) {
+    console.warn("FitLife Hub could not load synced recipe ingredients.", ingredientsResult.error.message);
+    return local;
+  }
+
+  return ((recipes ?? []) as Record<string, unknown>[]).map((recipe) =>
+    normalizeRecipeRow(
+      recipe,
+      ((ingredientsResult.data ?? []) as Record<string, unknown>[]).filter((ingredient) => ingredient.recipe_id === recipe.id)
+    )
+  );
+}
+
+export function saveRecipe(userId: string | null | undefined, input: Omit<SavedRecipe, "id" | "user_id" | "created_at" | "updated_at">) {
+  const recipe = buildRecipe(userId, input);
   const key = storageKey(recipePrefix, userId);
   writeJson(key, [recipe, ...getSavedRecipes(userId)]);
   return recipe;
 }
 
+export async function saveRecipeAsync(userId: string | null | undefined, input: Omit<SavedRecipe, "id" | "user_id" | "created_at" | "updated_at">) {
+  if (!canUseUserData(userId)) return saveRecipe(userId, input);
+
+  const recipe = buildRecipe(userId, input);
+  const { data, error } = await supabase!
+    .from("saved_recipes")
+    .insert({
+      user_id: userId,
+      name: recipe.name,
+      portions: recipe.portions,
+      notes: recipe.notes
+    })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "Recipe could not be saved.");
+
+  const rows = recipe.ingredients.map((ingredient) => ({
+    recipe_id: data.id,
+    user_id: userId,
+    food_name: ingredient.foodName,
+    quantity: ingredient.quantity,
+    serving_unit: ingredient.servingUnit,
+    calories: ingredient.calories,
+    protein_g: ingredient.proteinG,
+    carbs_g: ingredient.carbsG,
+    fat_g: ingredient.fatG
+  }));
+  const ingredientsResult = rows.length
+    ? await supabase!.from("saved_recipe_ingredients").insert(rows).select("*")
+    : { data: [], error: null };
+  if (ingredientsResult.error) throw new Error(ingredientsResult.error.message);
+
+  return normalizeRecipeRow(data as Record<string, unknown>, (ingredientsResult.data ?? []) as Record<string, unknown>[]);
+}
+
 export function deleteRecipe(userId: string | null | undefined, recipeId: string) {
   const key = storageKey(recipePrefix, userId);
   writeJson(key, getSavedRecipes(userId).filter((recipe) => recipe.id !== recipeId));
+}
+
+export async function deleteRecipeAsync(userId: string | null | undefined, recipeId: string) {
+  if (!canUseUserData(userId)) {
+    deleteRecipe(userId, recipeId);
+    return;
+  }
+  const { error } = await supabase!.from("saved_recipes").delete().eq("user_id", userId).eq("id", recipeId);
+  if (error) throw new Error(error.message);
 }
 
 export function recipeTotals(recipe: Pick<SavedRecipe, "ingredients" | "portions">) {

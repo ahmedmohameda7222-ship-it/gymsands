@@ -16,6 +16,8 @@ export type ImportedPlanQuality = {
   exercisesMissingPrescription: number;
   exercisesMissingMuscle: number;
   exercisesMissingRest: number;
+  exercisesMissingInstructions: number;
+  exercisesMissingGuideLinks: number;
 };
 
 function normalize(value: string | null | undefined) {
@@ -42,6 +44,8 @@ export function analyzeImportedWorkoutPlan(plan: UserWorkoutPlan): ImportedPlanQ
   const exercisesMissingPrescription = exercises.filter((exercise) => !exercise.sets || !exercise.reps).length;
   const exercisesMissingMuscle = exercises.filter((exercise) => !exercise.target_muscle && !exercise.category).length;
   const exercisesMissingRest = exercises.filter((exercise) => !exercise.rest_seconds).length;
+  const exercisesMissingInstructions = exercises.filter((exercise) => !exercise.instructions?.trim()).length;
+  const exercisesMissingGuideLinks = exercises.filter((exercise) => !exercise.exercise_url && !exercise.video_url && !exercise.custom_video_url).length;
   const duplicateExercises = duplicateNames(exercises.map((exercise) => exercise.exercise_name));
   const weekdayKeys = plan.days.map((day) => normalize(day.weekday)).filter(Boolean);
   const duplicateWeekdays = weekdayKeys.length !== new Set(weekdayKeys).size;
@@ -60,12 +64,16 @@ export function analyzeImportedWorkoutPlan(plan: UserWorkoutPlan): ImportedPlanQ
   if (exercisesMissingPrescription) warnings.push(`${exercisesMissingPrescription} exercise${exercisesMissingPrescription === 1 ? "" : "s"} are missing sets or reps.`);
   if (exercisesMissingMuscle) warnings.push(`${exercisesMissingMuscle} exercise${exercisesMissingMuscle === 1 ? "" : "s"} are missing muscle/category labels.`);
   if (exercisesMissingRest) warnings.push(`${exercisesMissingRest} exercise${exercisesMissingRest === 1 ? "" : "s"} are missing rest timers.`);
+  if (exercisesMissingInstructions) warnings.push(`${exercisesMissingInstructions} exercise${exercisesMissingInstructions === 1 ? "" : "s"} are missing instructions.`);
+  if (exercisesMissingGuideLinks) warnings.push(`${exercisesMissingGuideLinks} exercise${exercisesMissingGuideLinks === 1 ? "" : "s"} are missing video or guide links.`);
   if (duplicateExercises.length) warnings.push(`${duplicateExercises.length} duplicate exercise name${duplicateExercises.length === 1 ? "" : "s"} found.`);
 
   if (blockers.length) repairTips.push("Re-import the plan with days and exercises before activating it.");
   if (daysWithWeekdays < dayCount || duplicateWeekdays) repairTips.push("Assign one clear weekday or day slot to each workout day.");
   if (exercisesMissingPrescription) repairTips.push("Add sets and reps to every strength exercise so tracking works without guessing.");
   if (exercisesMissingRest) repairTips.push("Add rest seconds to make the in-session timer useful.");
+  if (exercisesMissingInstructions) repairTips.push("Add short setup and execution instructions for exercises that came in blank.");
+  if (exercisesMissingGuideLinks) repairTips.push("Attach a trusted video or guide link where form review would help the user.");
   if (!plan.program_duration_weeks || !plan.days_per_week) repairTips.push("Save duration and days/week so scheduling and weekly summaries are accurate.");
 
   const penalty =
@@ -76,6 +84,8 @@ export function analyzeImportedWorkoutPlan(plan: UserWorkoutPlan): ImportedPlanQ
     Math.min(24, exercisesMissingPrescription * 3) +
     Math.min(12, exercisesMissingMuscle * 2) +
     Math.min(12, exercisesMissingRest * 2) +
+    Math.min(12, exercisesMissingInstructions * 2) +
+    Math.min(8, exercisesMissingGuideLinks) +
     (!plan.days_per_week ? 6 : 0) +
     (!plan.program_duration_weeks ? 6 : 0) +
     (!plan.session_duration_minutes ? 4 : 0) +
@@ -96,6 +106,8 @@ export function analyzeImportedWorkoutPlan(plan: UserWorkoutPlan): ImportedPlanQ
     daysMissingExercises,
     exercisesMissingPrescription,
     exercisesMissingMuscle,
-    exercisesMissingRest
+    exercisesMissingRest,
+    exercisesMissingInstructions,
+    exercisesMissingGuideLinks
   };
 }

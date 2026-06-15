@@ -2,6 +2,7 @@
 
 import type { Workout } from "@/types";
 import { supabase } from "@/lib/supabase/client";
+import { isUuid } from "@/lib/utils";
 
 export type CustomExerciseInput = {
   name: string;
@@ -30,6 +31,10 @@ function storageKey(prefix: string, userId: string | null | undefined) {
   return `${prefix}:${userId || "anonymous"}`;
 }
 
+function canSyncUserData(userId: string | null | undefined) {
+  return Boolean(supabase && isUuid(userId));
+}
+
 function normalizeList(value: string) {
   return value
     .split(",")
@@ -53,7 +58,7 @@ let hasMigratedFavorites = false;
 let hasMigratedCustom = false;
 
 export async function getFavoriteExerciseIds(userId: string | null | undefined): Promise<string[]> {
-  if (!userId) return readJson<string[]>(storageKey(favoritesPrefix, userId), []);
+  if (!canSyncUserData(userId)) return readJson<string[]>(storageKey(favoritesPrefix, userId), []);
   
   if (!hasMigratedFavorites && canUseBrowserStorage()) {
     hasMigratedFavorites = true;
@@ -76,7 +81,7 @@ export async function isFavoriteExercise(userId: string | null | undefined, exer
 }
 
 export async function setFavoriteExercise(userId: string | null | undefined, exerciseId: string, favorite: boolean): Promise<string[]> {
-  if (!userId) {
+  if (!canSyncUserData(userId)) {
     const key = storageKey(favoritesPrefix, userId);
     const current = new Set(readJson<string[]>(key, []));
     if (favorite) current.add(exerciseId);
@@ -96,7 +101,7 @@ export async function setFavoriteExercise(userId: string | null | undefined, exe
 }
 
 export async function getCustomExercises(userId: string | null | undefined): Promise<Workout[]> {
-  if (!userId) return readJson<StoredCustomExercise[]>(storageKey(customPrefix, userId), []);
+  if (!canSyncUserData(userId)) return readJson<StoredCustomExercise[]>(storageKey(customPrefix, userId), []);
 
   if (!hasMigratedCustom && canUseBrowserStorage()) {
     hasMigratedCustom = true;
@@ -156,7 +161,7 @@ export async function saveCustomExercise(userId: string | null | undefined, inpu
 
   const now = new Date().toISOString();
   
-  if (!userId) {
+  if (!canSyncUserData(userId)) {
     const exercise: StoredCustomExercise = {
       id: `custom-${crypto.randomUUID()}`,
       user_id: "anonymous",

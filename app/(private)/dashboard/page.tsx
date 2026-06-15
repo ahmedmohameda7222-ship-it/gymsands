@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, CalendarCheck, CheckCircle2, Compass, Droplets, Dumbbell, Flame, Plus, Scale, Soup, Utensils } from "lucide-react";
+import { Activity, ArrowRight, Brain, CalendarCheck, CheckCircle2, Compass, Droplets, Dumbbell, Flame, Plus, Scale, Soup, Utensils } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,19 +19,22 @@ import { getOnboarding } from "@/services/database/profile";
 import {
   addWaterLog,
   getCalorieTargets,
+  getNutritionWeek,
   getTodayFoodLogs,
   getTodayMealPlanItems,
   getWaterLogs,
   markMealPlanItemDone
 } from "@/services/database/nutrition";
-import { getProgressEntries } from "@/services/database/progress";
-import { getSleepRecoveryLogs, getSupplementLogs } from "@/services/database/wellness";
+import { getPersonalRecords, getProgressEntries } from "@/services/database/progress";
+import { getFitnessHabits, getSleepRecoveryLogs, getSupplementLogs } from "@/services/database/wellness";
 import { getCurrentWeekday, getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
-import { getOpenWorkoutDaySession, getWorkoutHistory } from "@/services/database/workout-sessions";
+import { getOpenWorkoutDaySession, getWorkoutActivity, getWorkoutHistory } from "@/services/database/workout-sessions";
 import { percent, remainingMacros, sumFoodLogs } from "@/services/nutrition/calculations";
 import type { SavedTargets } from "@/services/nutrition/targets";
+import { aggregateReport, buildWeekRange, reportMetrics, startOfWeek, type AggregatedReport } from "@/services/reports/reporting";
+import { getFitnessHabitHistory, getSleepRecoveryHistory } from "@/services/wellness/wellness-data";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
-import type { FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryLog, SupplementLog, UserWorkoutPlan, WaterLog, WorkoutSession } from "@/types";
+import type { FitnessHabit, FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryLog, SupplementLog, UserWorkoutPlan, WaterLog, WorkoutSession } from "@/types";
 
 export default function DashboardPage() {
   const { user, profile, session } = useAuth();
@@ -44,10 +47,13 @@ export default function DashboardPage() {
   const [mealPlanItems, setMealPlanItems] = useState<MealPlanItem[]>([]);
   const [activePlan, setActivePlan] = useState<UserWorkoutPlan | null>(null);
   const [openSessionId, setOpenSessionId] = useState<string | null>(null);
+  const [habits, setHabits] = useState<FitnessHabit[]>([]);
   const [supplements, setSupplements] = useState<SupplementLog[]>([]);
   const [sleepLogs, setSleepLogs] = useState<SleepRecoveryLog[]>([]);
   const [targets, setTargets] = useState<SavedTargets | null>(null);
+  const [weeklyReport, setWeeklyReport] = useState<AggregatedReport | null>(null);
   const [chatGptConnected, setChatGptConnected] = useState(false);
+  const [shortcutKeys, setShortcutKeys] = useState<string[]>(defaultShortcutKeys);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
@@ -63,7 +69,25 @@ export default function DashboardPage() {
     setLoadError(null);
     setLoadErrorDetails(undefined);
     try {
-      const [foodLogs, workoutHistory, dailyWater, progress, plannedMeals, plan, calorieTargets, supplementLogs, recoveryLogs, onboarding] = await Promise.all([
+      const weekRange = buildWeekRange(today);
+      const [
+        foodLogs,
+        workoutHistory,
+        dailyWater,
+        progress,
+        plannedMeals,
+        plan,
+        calorieTargets,
+        supplementLogs,
+        recoveryLogs,
+        onboarding,
+        todayHabits,
+        weekNutrition,
+        workoutActivity,
+        habitHistory,
+        sleepHistory,
+        personalRecords
+      ] = await Promise.all([
         getTodayFoodLogs(user.id),
         getWorkoutHistory(user.id),
         getWaterLogs(user.id, today),
@@ -73,7 +97,13 @@ export default function DashboardPage() {
         getCalorieTargets(user.id),
         getSupplementLogs(user.id),
         getSleepRecoveryLogs(user.id, 7),
-        getOnboarding(user.id)
+        getOnboarding(user.id),
+        getFitnessHabits(user.id, today),
+        getNutritionWeek(user.id, startOfWeek(today)),
+        getWorkoutActivity(user.id, 180),
+        getFitnessHabitHistory(user.id, 30),
+        getSleepRecoveryHistory(user.id, 30),
+        getPersonalRecords(user.id, 30)
       ]);
 
       if (!onboarding) {
@@ -88,8 +118,10 @@ export default function DashboardPage() {
       setMealPlanItems(plannedMeals);
       setActivePlan(plan);
       setTargets(calorieTargets);
+      setHabits(todayHabits);
       setSupplements(supplementLogs);
       setSleepLogs(recoveryLogs);
+      setWeeklyReport(aggregateReport({ range: weekRange, nutrition: weekNutrition, workouts: workoutActivity, progressEntries: progress, habits: habitHistory, sleepLogs: sleepHistory, personalRecords }));
       const todayDay = plan?.days.find((day) => day.weekday === getCurrentWeekday() && day.exercises.length > 0) ?? null;
       const open = todayDay ? await getOpenWorkoutDaySession(user.id, todayDay.id) : null;
       setOpenSessionId(open?.id ?? null);
@@ -119,6 +151,16 @@ export default function DashboardPage() {
     loadDashboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = JSON.parse(window.localStorage.getItem("fitlife-dashboard-shortcuts") || "null") as string[] | null;
+      if (Array.isArray(saved) && saved.length) setShortcutKeys(saved);
+    } catch {
+      setShortcutKeys(defaultShortcutKeys);
+    }
+  }, []);
 
   const totals = useMemo(() => sumFoodLogs(logs), [logs]);
   const hasTargets = Boolean(targets);
@@ -162,6 +204,28 @@ export default function DashboardPage() {
     { label: "Protein", value: targets?.protein_g ? `${Math.min(100, percent(totals.protein_g, targets.protein_g))}%` : "Set target", detail: targets?.protein_g ? `${Math.max(0, remaining.protein_g)}g left today` : "Save a protein target to track adherence", progress: targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : 0, icon: Soup },
     { label: "Water", value: targets?.water_ml ? `${Math.min(100, percent(waterTotalMl, targets.water_ml))}%` : "Set target", detail: targets?.water_ml ? `${Math.max(0, targets.water_ml - waterTotalMl)} ml left today` : "Save a water target to track streaks", progress: targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : 0, icon: Droplets }
   ];
+  const todayPlanDayId = todayPlanDay?.id ?? null;
+  const smartActions = buildNextBestActions({
+    logs,
+    targets,
+    totals,
+    remaining,
+    waterTotalMl,
+    mealPlanItems,
+    habits,
+    todayPlanDayId,
+    activePlanId: activePlan?.id ?? null,
+    openSessionId,
+    completedToday,
+    latestProgressDate: latestProgress?.entry_date ?? null,
+    sleepLoggedToday: Boolean(todaySleepLog),
+    supplements,
+    today
+  });
+  const weeklyFocus = weeklyReport ? buildWeeklyFocus(weeklyReport) : null;
+  const weeklyMetrics = weeklyReport ? reportMetrics(weeklyReport, "weekly").slice(0, 8) : [];
+  const dashboardShortcuts = getDashboardShortcuts(todayPlanDayId);
+  const visibleShortcuts = dashboardShortcuts.filter((shortcut) => shortcutKeys.includes(shortcut.key));
   const dashboardCoaching = buildDashboardCoaching({
     hasTargets,
     targets,
@@ -199,6 +263,17 @@ export default function DashboardPage() {
       logRecoverableError("dashboard.water", error);
       toast({ title: "Could not add water", description: userSafeError(error, "Water was not logged. Retry without adding duplicate entries.") });
     }
+  }
+
+  function toggleShortcut(key: string) {
+    setShortcutKeys((current) => {
+      const next = current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key];
+      const safeNext = next.length ? next : defaultShortcutKeys;
+      if (typeof window !== "undefined") window.localStorage.setItem("fitlife-dashboard-shortcuts", JSON.stringify(safeNext));
+      return safeNext;
+    });
   }
 
   return (
@@ -270,8 +345,59 @@ export default function DashboardPage() {
           <Card className="mt-4">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
+                <Brain className="h-5 w-5 text-primary" />
+                Next best action
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">Ranked from real saved targets, food logs, water, imported workouts, progress, supplements, and recovery logs.</p>
+            </CardHeader>
+            <CardContent className="grid gap-3 lg:grid-cols-3">
+              {smartActions.map((item) => (
+                <SmartActionCard key={item.label} item={item} onAddWater={quickAddWater} />
+              ))}
+            </CardContent>
+          </Card>
+
+          {weeklyReport ? (
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Compass className="h-5 w-5 text-primary" />
+                  Weekly review
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">Beginner-friendly summary from this week's saved workouts, food logs, water, progress, habits, sleep, and PRs.</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {weeklyFocus ? (
+                  <div className="rounded-md border bg-primary/5 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Suggested focus next week</p>
+                    <p className="mt-1 font-semibold">{weeklyFocus.title}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{weeklyFocus.detail}</p>
+                  </div>
+                ) : null}
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  {weeklyMetrics.map((metric) => (
+                    <div key={metric.label} className={`rounded-md border p-3 ${metric.empty ? "border-dashed bg-muted/30" : "bg-card"}`}>
+                      <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{metric.label}</p>
+                      <p className="mt-1 font-semibold">{metric.value}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{metric.detail}</p>
+                    </div>
+                  ))}
+                </div>
+                <Button asChild variant="outline">
+                  <Link href="/calories/weekly-overview">
+                    Open full weekly report
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
                 <Compass className="h-5 w-5 text-primary" />
-                Today's coaching
+                Today's coaching details
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -355,13 +481,31 @@ export default function DashboardPage() {
 
             <Card>
               <CardHeader><CardTitle>Quick actions</CardTitle></CardHeader>
-              <CardContent className="grid gap-2 sm:grid-cols-2">
-                <Button asChild variant="outline"><Link href="/my-workout/plans"><Activity className="h-4 w-4" />Import Workout Plan</Link></Button>
-                <Button asChild variant="outline"><Link href="/my-meal-plan"><Soup className="h-4 w-4" />Import Meal Plan</Link></Button>
-                <Button asChild variant="outline"><Link href="/calories"><Utensils className="h-4 w-4" />Log Food</Link></Button>
-                <Button asChild variant="outline"><Link href="/progress"><Scale className="h-4 w-4" />Add Progress</Link></Button>
-                <Button asChild variant="outline"><Link href="/hydration"><Droplets className="h-4 w-4" />Add Water</Link></Button>
-                <Button asChild variant="outline"><Link href="/workouts"><Dumbbell className="h-4 w-4" />Exercise Library</Link></Button>
+              <CardContent className="space-y-4">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {visibleShortcuts.map((shortcut) => {
+                    const Icon = shortcut.icon;
+                    return (
+                      <Button key={shortcut.key} asChild variant="outline">
+                        <Link href={shortcut.href}>
+                          <Icon className="h-4 w-4" />
+                          {shortcut.label}
+                        </Link>
+                      </Button>
+                    );
+                  })}
+                </div>
+                <div className="rounded-md border bg-muted/40 p-3">
+                  <p className="text-sm font-semibold">Customize shortcuts</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {dashboardShortcuts.map((shortcut) => (
+                      <label key={shortcut.key} className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={shortcutKeys.includes(shortcut.key)} onChange={() => toggleShortcut(shortcut.key)} />
+                        <span>{shortcut.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -417,6 +561,286 @@ export default function DashboardPage() {
         </>
       ) : null}
     </>
+  );
+}
+
+const defaultShortcutKeys = ["workout", "calories", "meal-plan", "water", "progress", "sleep"];
+
+function getDashboardShortcuts(todayPlanDayId: string | null) {
+  return [
+    { key: "workout", label: todayPlanDayId ? "Start Workout" : "Import Workout Plan", href: todayPlanDayId ? `/workouts/session/day/${todayPlanDayId}` : "/my-workout/plans", icon: Activity },
+    { key: "calories", label: "Log Food", href: "/calories", icon: Utensils },
+    { key: "meal-plan", label: "Meal Plan", href: "/my-meal-plan", icon: Soup },
+    { key: "water", label: "Add Water", href: "/hydration", icon: Droplets },
+    { key: "progress", label: "Add Progress", href: "/progress", icon: Scale },
+    { key: "sleep", label: "Sleep & Recovery", href: "/sleep-recovery", icon: Brain },
+    { key: "supplements", label: "Supplements", href: "/supplements", icon: CheckCircle2 },
+    { key: "habits", label: "Habits", href: "/habits", icon: CalendarCheck },
+    { key: "library", label: "Exercise Library", href: "/workouts", icon: Dumbbell }
+  ];
+}
+
+type NextBestAction = {
+  label: string;
+  title: string;
+  reason: string;
+  cta: string;
+  href?: string;
+  waterAmountMl?: number;
+  priority: number;
+};
+
+function buildNextBestActions({
+  logs,
+  targets,
+  totals,
+  remaining,
+  waterTotalMl,
+  mealPlanItems,
+  habits,
+  todayPlanDayId,
+  activePlanId,
+  openSessionId,
+  completedToday,
+  latestProgressDate,
+  sleepLoggedToday,
+  supplements,
+  today
+}: {
+  logs: FoodLog[];
+  targets: SavedTargets | null;
+  totals: ReturnType<typeof sumFoodLogs>;
+  remaining: { calories: number; protein_g: number; carbs_g: number; fat_g: number };
+  waterTotalMl: number;
+  mealPlanItems: MealPlanItem[];
+  habits: FitnessHabit[];
+  todayPlanDayId: string | null;
+  activePlanId: string | null;
+  openSessionId: string | null;
+  completedToday: boolean;
+  latestProgressDate: string | null;
+  sleepLoggedToday: boolean;
+  supplements: SupplementLog[];
+  today: string;
+}) {
+  const actions: NextBestAction[] = [];
+  const unfinishedMeals = mealPlanItems.filter((item) => item.status !== "done");
+  const breakfastOpen = unfinishedMeals.find((item) => item.meal_type === "Breakfast");
+  const missingHabits = habits.filter((habit) => !habit.completed);
+  const missingSupplements = supplements.filter((item) => !item.taken_today);
+
+  if (!targets) {
+    actions.push({
+      label: "Targets",
+      title: "Set calorie, protein, and water targets",
+      reason: "Next-action automation needs your saved targets before it can calculate remaining protein, calories, and water.",
+      cta: "Set targets",
+      href: "/calories",
+      priority: 95
+    });
+  }
+
+  if (!logs.length) {
+    actions.push({
+      label: "Food",
+      title: "Log your first meal",
+      reason: mealPlanItems.length ? "Planned meals do not count as eaten until you mark them done or log real food." : "No food logs are saved for today yet.",
+      cta: "Log food",
+      href: "/calories",
+      priority: 90
+    });
+  } else if (targets?.protein_g && remaining.protein_g > 0) {
+    actions.push({
+      label: "Protein",
+      title: `${remaining.protein_g}g protein left`,
+      reason: `${totals.protein_g}g is logged against your ${targets.protein_g}g saved protein target.`,
+      cta: "Add protein food",
+      href: "/calories",
+      priority: 76
+    });
+  }
+
+  if (breakfastOpen) {
+    actions.push({
+      label: "Meal plan",
+      title: "Breakfast is planned but not done",
+      reason: `${breakfastOpen.food_name} is scheduled for today and has not created a food log yet.`,
+      cta: "Open meal plan",
+      href: "/my-meal-plan",
+      priority: 84
+    });
+  } else if (unfinishedMeals.length) {
+    actions.push({
+      label: "Meal plan",
+      title: `${unfinishedMeals.length} planned meal${unfinishedMeals.length === 1 ? "" : "s"} left`,
+      reason: "FitLife keeps planned meals separate from done food logs to avoid duplicate calories.",
+      cta: "Review meals",
+      href: "/my-meal-plan",
+      priority: 70
+    });
+  }
+
+  const waterAction = hydrationAction(targets?.water_ml ?? 0, waterTotalMl);
+  if (waterAction) actions.push(waterAction);
+
+  if (!completedToday && todayPlanDayId) {
+    actions.push({
+      label: "Workout",
+      title: openSessionId ? "Resume today's workout" : "Start today's workout",
+      reason: "Your active imported workout plan has a scheduled training day today.",
+      cta: openSessionId ? "Resume workout" : "Start workout",
+      href: `/workouts/session/day/${todayPlanDayId}`,
+      priority: 82
+    });
+  } else if (!activePlanId) {
+    actions.push({
+      label: "Workout",
+      title: "Import a workout plan",
+      reason: "No active workout plan is saved, so the app cannot recommend a scheduled workout.",
+      cta: "Import plan",
+      href: "/my-workout/plans",
+      priority: 78
+    });
+  }
+
+  if (!sleepLoggedToday) {
+    actions.push({
+      label: "Recovery",
+      title: "Sleep log missing",
+      reason: "Recovery-aware suggestions need today's saved sleep, fatigue, soreness, or recovery rating.",
+      cta: "Log recovery",
+      href: "/sleep-recovery",
+      priority: 58
+    });
+  }
+
+  if (missingHabits.length) {
+    actions.push({
+      label: "Habits",
+      title: `Protect ${missingHabits.length} habit${missingHabits.length === 1 ? "" : "s"}`,
+      reason: `${missingHabits.slice(0, 2).map((habit) => habit.name).join(", ")} ${missingHabits.length === 1 ? "is" : "are"} still open today. Choose one small action before the day ends.`,
+      cta: "Open habits",
+      href: "/habits",
+      priority: 54
+    });
+  }
+
+  if (missingSupplements.length) {
+    actions.push({
+      label: "Supplements",
+      title: `${missingSupplements.length} supplement${missingSupplements.length === 1 ? "" : "s"} still open`,
+      reason: "These are saved supplement items for today and are not marked taken yet.",
+      cta: "Review supplements",
+      href: "/supplements",
+      priority: 48
+    });
+  }
+
+  if (latestProgressDate !== today) {
+    actions.push({
+      label: "Progress",
+      title: latestProgressDate ? "Add a fresh progress entry" : "Add your first progress entry",
+      reason: latestProgressDate ? `Latest saved progress entry is ${latestProgressDate}.` : "No saved progress entry exists yet.",
+      cta: "Add progress",
+      href: "/progress",
+      priority: latestProgressDate ? 36 : 72
+    });
+  }
+
+  actions.push({
+    label: "Review",
+    title: "Open weekly review",
+    reason: "Weekly review summarizes real saved workouts, food logs, water, progress, habits, sleep, and PRs.",
+    cta: "View report",
+    href: "/calories/weekly-overview",
+    priority: 10
+  });
+
+  return actions.sort((a, b) => b.priority - a.priority).slice(0, 3);
+}
+
+function hydrationAction(targetMl: number, totalMl: number): NextBestAction | null {
+  if (!targetMl) {
+    return {
+      label: "Hydration",
+      title: "Set a water target",
+      reason: "Water pacing needs a saved daily target before it can calculate remaining intake.",
+      cta: "Set target",
+      href: "/calories",
+      priority: 68
+    };
+  }
+
+  const remainingMl = Math.max(0, targetMl - totalMl);
+  if (remainingMl <= 0) {
+    return {
+      label: "Hydration",
+      title: "Water target hit",
+      reason: `${totalMl} ml is saved today against your ${targetMl} ml target.`,
+      cta: "Open hydration",
+      href: "/hydration",
+      priority: 16
+    };
+  }
+
+  const currentHour = new Date().getHours();
+  const hoursLeft = Math.max(1, 22 - currentHour);
+  const suggestedSplits = Math.max(1, Math.min(4, Math.ceil(hoursLeft / 3)));
+  const amountMl = Math.min(750, Math.max(250, Math.ceil(remainingMl / suggestedSplits / 50) * 50));
+  return {
+    label: "Hydration",
+    title: `Drink ${amountMl} ml now`,
+    reason: `${remainingMl} ml remains. Split it into ${suggestedSplits} browser-compatible check-in${suggestedSplits === 1 ? "" : "s"} before late evening.`,
+    cta: `Add ${amountMl} ml`,
+    waterAmountMl: amountMl,
+    priority: totalMl === 0 ? 86 : 64
+  };
+}
+
+function buildWeeklyFocus(report: AggregatedReport) {
+  if (report.workoutsCompleted === null) {
+    return { title: "Complete one tracked workout", detail: "No completed or skipped workouts are saved this week, so adherence and progression cannot be judged yet." };
+  }
+  if (report.nutritionDaysLogged < 4) {
+    return { title: "Log food on at least four days", detail: `${report.nutritionDaysLogged} day(s) have food logs. More logged days make calorie and protein averages useful.` };
+  }
+  if (report.averageProtein !== null && report.averageProtein < 80) {
+    return { title: "Raise protein consistency", detail: `Average logged protein is ${report.averageProtein}g. Use saved high-protein foods or recipes instead of guessing.` };
+  }
+  if (report.waterAverage === null) {
+    return { title: "Start water tracking", detail: "No water average can be calculated because this week has no saved water logs." };
+  }
+  if (report.sleepAverage === null) {
+    return { title: "Add sleep and recovery logs", detail: "Recovery-aware workout guidance needs saved sleep or fatigue/soreness check-ins." };
+  }
+  if (report.weightChange === null) {
+    return { title: "Add two progress entries", detail: "Weight and waist trends need at least two saved progress entries in the selected period." };
+  }
+  return { title: "Keep the current rhythm", detail: "This week has enough saved data for workouts, nutrition, water, recovery, and progress. Review the detailed report for small adjustments." };
+}
+
+function SmartActionCard({ item, onAddWater }: { item: NextBestAction; onAddWater: (amountMl: number) => void }) {
+  return (
+    <div className="flex h-full flex-col justify-between rounded-md border bg-card p-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{item.label}</p>
+        <p className="mt-1 font-semibold">{item.title}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{item.reason}</p>
+      </div>
+      {item.waterAmountMl ? (
+        <Button type="button" className="mt-4 w-full" onClick={() => onAddWater(item.waterAmountMl!)}>
+          <Droplets className="h-4 w-4" />
+          {item.cta}
+        </Button>
+      ) : item.href ? (
+        <Button asChild className="mt-4 w-full">
+          <Link href={item.href}>
+            {item.cta}
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </Button>
+      ) : null}
+    </div>
   );
 }
 

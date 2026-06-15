@@ -241,7 +241,7 @@ export async function startWorkoutDaySession(userId: string, day: WorkoutPlanDay
 }
 
 export async function getOpenWorkoutDaySession(userId: string, planDayId: string) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return null;
   const { data, error } = await supabase!
     .from("workout_sessions")
     .select("*")
@@ -499,7 +499,7 @@ export async function skipWorkoutDay(userId: string, day: SkipWorkoutDayInput, n
 }
 
 export async function getWorkoutHistory(userId: string) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
   let { data, error } = await supabase!
     .from("workout_sessions")
     .select("*")
@@ -530,7 +530,7 @@ export async function getWorkoutHistory(userId: string) {
 }
 
 export async function getWorkoutHistoryDetailed(userId: string, limit = 100) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("workout_sessions")
     .select("*, exercise_logs(*)")
@@ -551,7 +551,7 @@ export async function getWorkoutHistoryDetailed(userId: string, limit = 100) {
 }
 
 export async function getWorkoutActivity(userId: string, limit = 180) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
   let { data, error } = await supabase!
     .from("workout_sessions")
     .select("*")
@@ -584,7 +584,7 @@ export async function getWorkoutActivity(userId: string, limit = 180) {
 }
 
 export async function getScheduledWorkoutHistory(userId: string, limit = 100) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("user_workout_sessions")
     .select(
@@ -604,7 +604,7 @@ export async function getScheduledWorkoutHistory(userId: string, limit = 100) {
 }
 
 export async function getScheduledWorkoutActivity(userId: string, limit = 180) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("user_workout_sessions")
     .select("id,user_id,user_workout_plan_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes")

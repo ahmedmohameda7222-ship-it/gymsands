@@ -19,6 +19,7 @@ import {
   normalizeMealPlanType,
   updateDirectMealPlanItem
 } from "@/services/database/meal-plan";
+import { getTodayFoodLogs } from "@/services/database/nutrition";
 import {
   batchMealToTemplateItem,
   buildShoppingList,
@@ -35,7 +36,7 @@ import {
   type MealTemplateItem,
   type ShoppingListItem
 } from "@/services/meals/meal-plan-automation";
-import type { MealPlanItem, MealType } from "@/types";
+import type { FoodLog, MealPlanItem, MealType } from "@/types";
 
 type MacroTotals = { calories: number; protein_g: number; carbs_g: number; fat_g: number };
 type Notice = { type: "success" | "error" | "info"; title: string; description?: string };
@@ -89,6 +90,7 @@ function MyMealPlanBuilderInner() {
   const [plannedDates, setPlannedDates] = useState<string[]>([]);
   const [items, setItems] = useState<MealPlanItem[]>([]);
   const [weekItems, setWeekItems] = useState<MealPlanItem[]>([]);
+  const [dayLogs, setDayLogs] = useState<FoodLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -141,19 +143,22 @@ function MyMealPlanBuilderInner() {
       setIsLoading(true);
       setNotice(null);
       try {
-        const [dayItems, weekPlanItems, dates] = await Promise.all([
+        const [dayItems, weekPlanItems, dates, foodLogs] = await Promise.all([
           getMealPlanItemsForDate(user.id, selectedDate),
           getMealPlanItemsForRange(user.id, selectedWeekStart, selectedWeekEnd),
-          getMealPlanDatesWithItems(user.id, calendarRangeStart(calendarMonth), calendarRangeEnd(calendarMonth))
+          getMealPlanDatesWithItems(user.id, calendarRangeStart(calendarMonth), calendarRangeEnd(calendarMonth)),
+          getTodayFoodLogs(user.id, selectedDate)
         ]);
         if (!active) return;
         setItems(dayItems.map(normalizeMealPlanItem));
         setWeekItems(weekPlanItems.map(normalizeMealPlanItem));
         setPlannedDates(dates);
+        setDayLogs(foodLogs);
       } catch (error) {
         if (!active) return;
         setItems([]);
         setWeekItems([]);
+        setDayLogs([]);
         setNotice({ type: "error", title: "Saved meal plan could not load", description: error instanceof Error ? error.message : "Please try again." });
       } finally {
         if (active) setIsLoading(false);
@@ -173,6 +178,18 @@ function MyMealPlanBuilderInner() {
   const swapTemplate = swapState ? templates.find((template) => template.id === swapState.templateId) ?? null : null;
   const swapTarget = swapTemplate?.items[0] ?? null;
   const swapDiff = swapState && swapTarget ? macroDiff(templateItemFromMealPlanItem(swapState.item), swapTarget) : null;
+  const mealInsights = useMemo(
+    () => buildMealPlanInsights({
+      selectedDate,
+      items,
+      weekItems,
+      dayLogs,
+      templates,
+      batchMeals,
+      shoppingList
+    }),
+    [batchMeals, dayLogs, items, selectedDate, shoppingList, templates, weekItems]
+  );
 
   function changeDate(nextDate: string) {
     setSelectedDate(nextDate);
@@ -478,6 +495,8 @@ function MyMealPlanBuilderInner() {
         </CardContent>
       </Card>
 
+      <MealPlanInsightsPanel insights={mealInsights} />
+
       {notice ? <NoticeBox notice={notice} onClose={() => setNotice(null)} /> : null}
 
       <WeeklyPlanner weekDays={weekDays} selectedDate={selectedDate} weekItems={weekItems} onSelectDate={changeDate} onCopyWeek={copyWholeWeekToNextWeek} />
@@ -666,6 +685,116 @@ function MealForm({ title, draft, setDraft, onSave, onCancel, saving }: { title:
   );
 }
 
+type MealPlanInsight = {
+  title: string;
+  detail: string;
+  tone: "good" | "warning" | "info";
+};
+
+function MealPlanInsightsPanel({ insights }: { insights: MealPlanInsight[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Meal-plan intelligence</CardTitle>
+        <p className="text-sm text-muted-foreground">Uses planned meals, done food logs, templates, batches, and shopping-list data only.</p>
+      </CardHeader>
+      <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {insights.map((insight) => (
+          <div key={insight.title} className="rounded-md border p-3">
+            <div className="flex items-start justify-between gap-2">
+              <p className="font-semibold">{insight.title}</p>
+              <Badge variant={insight.tone === "good" ? "success" : insight.tone === "warning" ? "outline" : "navy"}>{insight.tone}</Badge>
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">{insight.detail}</p>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function buildMealPlanInsights({
+  selectedDate,
+  items,
+  weekItems,
+  dayLogs,
+  templates,
+  batchMeals,
+  shoppingList
+}: {
+  selectedDate: string;
+  items: MealPlanItem[];
+  weekItems: MealPlanItem[];
+  dayLogs: FoodLog[];
+  templates: MealTemplate[];
+  batchMeals: BatchMeal[];
+  shoppingList: ShoppingListItem[];
+}) {
+  const insights: MealPlanInsight[] = [];
+  const missingMealTypes = mealTypes.filter((type) => !items.some((item) => item.meal_type === type));
+  const unknownMacroItems = items.filter((item) => toNumber(item.calories) === 0 && toNumber(item.protein_g) === 0 && toNumber(item.carbs_g) === 0 && toNumber(item.fat_g) === 0);
+  const similarLoggedItems = items.filter((item) => item.status !== "done" && dayLogs.some((log) => sameFoodName(log.food_name, item.food_name)));
+  const selectedProtein = items.reduce((sum, item) => sum + toNumber(item.protein_g), 0);
+  const successfulDays = successfulMealPlanDays(weekItems, selectedDate);
+  const highProteinTemplate = templates
+    .map((template) => ({ name: template.name, protein: template.items.reduce((sum, item) => sum + toNumber(item.protein_g), 0), type: "template" }))
+    .concat(batchMeals.map((batch) => ({ name: batch.name, protein: Math.round((toNumber(batch.total_protein_g) / Math.max(1, batch.portions)) * 10) / 10, type: "batch meal" })))
+    .filter((item) => item.protein > 0)
+    .sort((a, b) => b.protein - a.protein)[0];
+
+  if (missingMealTypes.length) {
+    insights.push({
+      title: "Missing planned meals",
+      detail: `${missingMealTypes.map(displayMealType).join(", ")} ${missingMealTypes.length === 1 ? "is" : "are"} not planned for ${displayDate(selectedDate)}.`,
+      tone: "warning"
+    });
+  } else {
+    insights.push({ title: "Meal coverage", detail: "Breakfast, lunch, dinner, and snacks all have planned items for this date.", tone: "good" });
+  }
+
+  if (similarLoggedItems.length) {
+    insights.push({
+      title: "Possible done match",
+      detail: `${similarLoggedItems.slice(0, 2).map((item) => item.food_name).join(", ")} appears in today's real food logs. Review and mark done only if it is the same meal.`,
+      tone: "info"
+    });
+  }
+
+  if (unknownMacroItems.length) {
+    insights.push({
+      title: "Unknown macros",
+      detail: `${unknownMacroItems.length} planned item${unknownMacroItems.length === 1 ? "" : "s"} have zero calories and macros. Update values instead of letting them look verified.`,
+      tone: "warning"
+    });
+  }
+
+  if (successfulDays.length) {
+    insights.push({
+      title: "Copy successful day",
+      detail: `${displayDate(successfulDays[0].date)} had all planned meals marked done with ${Math.round(successfulDays[0].protein)}g protein. Consider copying that structure.`,
+      tone: "good"
+    });
+  }
+
+  if (selectedProtein < 80) {
+    insights.push({
+      title: "High-protein option",
+      detail: highProteinTemplate
+        ? `${highProteinTemplate.name} is your highest-protein saved ${highProteinTemplate.type} at ${Math.round(highProteinTemplate.protein)}g protein.`
+        : "No high-protein saved template or batch meal exists yet. Save one from real planned meals after macros are known.",
+      tone: "info"
+    });
+  }
+
+  insights.push({
+    title: "Shopping list",
+    detail: shoppingList.length ? `${shoppingList.length} unique planned food${shoppingList.length === 1 ? "" : "s"} are ready in this week's shopping list.` : "Add planned meals with serving info to build a shopping list.",
+    tone: shoppingList.length ? "good" : "info"
+  });
+
+  return insights.slice(0, 6);
+}
+
 function SummaryCard({ label, value, detail, suffix = " kcal" }: { label: string; value: number; detail: string; suffix?: string }) {
   return <Card><CardContent className="pt-5"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-bold">{Math.round(toNumber(value))}{suffix}</p><p className="mt-1 text-sm text-muted-foreground">{detail}</p></CardContent></Card>;
 }
@@ -695,6 +824,16 @@ function draftFromItem(item: MealPlanItem): Draft { return { foodName: item.food
 function mergeItems(current: MealPlanItem[], nextItems: MealPlanItem[]) { const map = new Map(current.map((item) => [item.id, item])); nextItems.forEach((item) => map.set(item.id, item)); return Array.from(map.values()).sort((a, b) => a.plan_date.localeCompare(b.plan_date) || a.created_at.localeCompare(b.created_at)); }
 function formatDiff(value: number) { return `${value > 0 ? "+" : ""}${value}`; }
 function toNumber(value: unknown) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
+function normalizeText(value: string | null | undefined) { return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
+function sameFoodName(a: string, b: string) { const left = normalizeText(a); const right = normalizeText(b); return Boolean(left && right && (left === right || left.includes(right) || right.includes(left))); }
+function successfulMealPlanDays(items: MealPlanItem[], selectedDate: string) {
+  const byDate = new Map<string, MealPlanItem[]>();
+  items.forEach((item) => byDate.set(item.plan_date, [...(byDate.get(item.plan_date) ?? []), item]));
+  return Array.from(byDate.entries())
+    .filter(([date, dayItems]) => date !== selectedDate && dayItems.length > 0 && dayItems.every((item) => item.status === "done"))
+    .map(([date, dayItems]) => ({ date, protein: dayItems.reduce((sum, item) => sum + toNumber(item.protein_g), 0) }))
+    .sort((a, b) => b.protein - a.protein);
+}
 function safeDate(value: string | null) { return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null; }
 function monthStart(date: string) { return `${date.slice(0, 7)}-01`; }
 function pad(value: number) { return String(value).padStart(2, "0"); }

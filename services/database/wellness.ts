@@ -19,7 +19,7 @@ export type SleepRecoveryInput = Omit<SleepRecoveryLog, "id" | "created_at" | "u
 export type SupplementLogInput = Omit<SupplementLog, "id" | "created_at" | "updated_at"> & { id?: string };
 
 export async function getDailyFitTasks(userId: string, date = todayIso()) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("daily_fit_tasks")
     .select("*")
@@ -50,7 +50,7 @@ export async function deleteDailyFitTask(userId: string, id: string) {
 }
 
 export async function getFitnessHabits(userId: string, date = todayIso()) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("fitness_habits")
     .select("*")
@@ -81,7 +81,7 @@ export async function deleteFitnessHabit(userId: string, id: string) {
 }
 
 export async function getSleepRecoveryLogs(userId: string, limit = 30) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("sleep_recovery_logs")
     .select("*")
@@ -111,7 +111,7 @@ export async function deleteSleepRecoveryLog(userId: string, id: string) {
 }
 
 export async function getSupplementLogs(userId: string, date = todayIso()) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("supplement_logs")
     .select("*")
