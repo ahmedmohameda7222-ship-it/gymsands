@@ -153,7 +153,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
       </header>
-      <main className="pb-32 lg:ml-72 lg:pb-0">
+      <main id="main-content" className="pb-32 lg:ml-72 lg:pb-0">
         <motion.div
           key={pathname}
           initial={{ opacity: 0, y: 8 }}

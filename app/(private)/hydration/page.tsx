@@ -13,21 +13,9 @@ import { EmptyState, ErrorState } from "@/components/ui/state-views";
 import { useToast } from "@/components/ui/toaster";
 import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
+import { addDays, startOfWeek } from "@/lib/date-utils";
 import { addWaterLog, deleteWaterLog, getCalorieTargets, getNutritionWeek, getWaterLogs } from "@/services/database/nutrition";
 import type { DailyNutritionSummary, WaterLog } from "@/types";
-
-function addDays(date: string, days: number) {
-  const next = new Date(`${date}T00:00:00`);
-  next.setDate(next.getDate() + days);
-  return next.toLocaleDateString("en-CA");
-}
-
-function startOfWeek(date: string) {
-  const current = new Date(`${date}T00:00:00`);
-  const day = current.getDay();
-  current.setDate(current.getDate() - day);
-  return current.toLocaleDateString("en-CA");
-}
 
 function liters(amountMl: number) {
   return `${Math.round((amountMl / 1000) * 10) / 10} L`;

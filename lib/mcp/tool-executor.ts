@@ -12,12 +12,7 @@ import {
   requireConfirmation,
   type JsonObject
 } from "@/lib/mcp/schemas";
-
-export type McpToolResult = {
-  structuredContent: Record<string, unknown>;
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-};
+import { fail, num, ok, sumMacros, type MacroTotals, type McpToolResult } from "@/lib/mcp/tool-helpers";
 
 type FoodCandidate = {
   id: string;
@@ -30,26 +25,6 @@ type FoodCandidate = {
   fat_g: number;
 };
 
-type MacroTotals = {
-  calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
-};
-
-function ok(structuredContent: Record<string, unknown>, message?: string): McpToolResult {
-  return { structuredContent, content: [{ type: "text", text: message ?? JSON.stringify(structuredContent) }] };
-}
-
-function fail(code: string, message: string, details?: unknown): McpToolResult {
-  return { isError: true, structuredContent: { ok: false, code, message, details }, content: [{ type: "text", text: message }] };
-}
-
-function num(value: unknown, fallback = 0) {
-  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
 function dateDaysAgo(days: number) {
   const date = new Date();
   date.setDate(date.getDate() - days);
@@ -60,18 +35,6 @@ function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
   return next;
-}
-
-function sumMacros(rows: Array<Record<string, unknown>>): MacroTotals {
-  return rows.reduce<MacroTotals>(
-    (total, row) => ({
-      calories: total.calories + num(row.calories),
-      protein_g: total.protein_g + num(row.protein_g),
-      carbs_g: total.carbs_g + num(row.carbs_g),
-      fat_g: total.fat_g + num(row.fat_g)
-    }),
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
-  );
 }
 
 function normalizeFood(row: Record<string, unknown>, source: "global" | "user"): FoodCandidate {

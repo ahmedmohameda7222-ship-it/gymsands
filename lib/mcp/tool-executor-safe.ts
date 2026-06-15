@@ -1,25 +1,11 @@
 import type { McpContext } from "@/lib/mcp/auth";
 import { asObject, cleanDate, getArray, getNumber, getOptionalNumber, getOptionalString, getString, type JsonObject } from "@/lib/mcp/schemas";
-import { executeMcpTool as executeOriginalMcpTool, type McpToolResult } from "@/lib/mcp/tool-executor";
+import { executeMcpTool as executeOriginalMcpTool } from "@/lib/mcp/tool-executor";
+import { fail, num, ok, sumMacros, type DbRow, type MacroTotals, type McpToolResult } from "@/lib/mcp/tool-helpers";
 
-type MacroTotals = { calories: number; protein_g: number; carbs_g: number; fat_g: number };
-type DbRow = Record<string, unknown>;
 type MealKey = "breakfast" | "lunch" | "dinner" | "snack";
 
 const mealKeys: MealKey[] = ["breakfast", "lunch", "dinner", "snack"];
-
-function ok(structuredContent: Record<string, unknown>, message?: string): McpToolResult {
-  return { structuredContent, content: [{ type: "text", text: message ?? JSON.stringify(structuredContent) }] };
-}
-
-function fail(code: string, message: string, details?: unknown): McpToolResult {
-  return { isError: true, structuredContent: { ok: false, code, message, details }, content: [{ type: "text", text: message }] };
-}
-
-function num(value: unknown, fallback = 0) {
-  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
 
 function positive(value: unknown, fallback = 1) {
   const parsed = num(value, fallback);
@@ -45,18 +31,6 @@ function normalizeMealKey(value: unknown): MealKey {
 function dbMealType(value: unknown) {
   const key = normalizeMealKey(value);
   return key === "breakfast" ? "Breakfast" : key === "lunch" ? "Lunch" : key === "dinner" ? "Dinner" : "Snack";
-}
-
-function sumMacros(rows: DbRow[]): MacroTotals {
-  return rows.reduce<MacroTotals>(
-    (total, row) => ({
-      calories: total.calories + num(row.calories),
-      protein_g: total.protein_g + num(row.protein_g),
-      carbs_g: total.carbs_g + num(row.carbs_g),
-      fat_g: total.fat_g + num(row.fat_g)
-    }),
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
-  );
 }
 
 function readMacro(item: JsonObject, canonical: "protein" | "carbs" | "fat") {

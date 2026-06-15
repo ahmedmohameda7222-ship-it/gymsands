@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { todayIso } from "../utils";
+import { todayIso } from "@/lib/date-utils";
 
 export function useTodayDate() {
   const [today, setToday] = useState(todayIso);

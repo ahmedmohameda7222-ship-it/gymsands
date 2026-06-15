@@ -2,6 +2,8 @@
 
 import type { BodyMeasurement, DailyNutritionSummary, FitnessHabit, PersonalRecord, ProgressEntry, WorkoutSession } from "@/types";
 import type { EnhancedSleepRecoveryLog } from "@/services/wellness/wellness-data";
+import { addDays, datesInRange, endOfMonth, endOfWeek, formatIsoDate, startOfMonth, startOfWeek, todayIso } from "@/lib/date-utils";
+import { nullablePercent } from "@/services/nutrition/calculations";
 
 export type ReportRange = { start: string; end: string; label: string; kind: "weekly" | "monthly" };
 export type ReportMetric = { label: string; value: string; detail: string; empty?: boolean };
@@ -25,24 +27,15 @@ export type AggregatedReport = {
   nutritionDaysLogged: number;
 };
 
-function pad(value: number) { return String(value).padStart(2, "0"); }
-export function todayIso() { return new Date().toISOString().slice(0, 10); }
-export function toIsoDate(date: Date) { return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`; }
-export function addDays(value: string, days: number) { const date = new Date(`${value}T00:00:00`); date.setDate(date.getDate() + days); return toIsoDate(date); }
-export function startOfWeek(value: string) { const date = new Date(`${value}T00:00:00`); date.setDate(date.getDate() - date.getDay()); return toIsoDate(date); }
-export function endOfWeek(value: string) { return addDays(startOfWeek(value), 6); }
-export function startOfMonth(value: string) { const date = new Date(`${value}T00:00:00`); return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-01`; }
-export function endOfMonth(value: string) { const date = new Date(`${value}T00:00:00`); return toIsoDate(new Date(date.getFullYear(), date.getMonth() + 1, 0)); }
 export function buildWeekRange(selectedDate: string): ReportRange { const start = startOfWeek(selectedDate); const end = endOfWeek(selectedDate); return { start, end, kind: "weekly", label: `${formatDate(start)} - ${formatDate(end)}` }; }
-export function buildMonthRange(monthDate: string): ReportRange { const start = startOfMonth(monthDate); const end = endOfMonth(monthDate); return { start, end, kind: "monthly", label: new Date(`${start}T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" }) }; }
-export function datesInRange(start: string, end: string) { const dates: string[] = []; for (let date = start; date <= end; date = addDays(date, 1)) dates.push(date); return dates; }
-export function formatDate(value: string) { return new Date(`${value}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
+export function buildMonthRange(monthDate: string): ReportRange { const start = startOfMonth(monthDate); const end = endOfMonth(monthDate); return { start, end, kind: "monthly", label: formatIsoDate(start, { month: "long", year: "numeric" }) }; }
+export { addDays, datesInRange, endOfMonth, endOfWeek, startOfMonth, startOfWeek, todayIso };
+export function formatDate(value: string) { return formatIsoDate(value); }
 
 function dateOfSession(session: WorkoutSession) { return (session.completed_at || session.skipped_at || session.started_at || "").slice(0, 10); }
 function inRange(date: string | null | undefined, range: ReportRange) { return Boolean(date && date >= range.start && date <= range.end); }
 function average(values: number[]) { const valid = values.filter((value) => Number.isFinite(value)); return valid.length ? Math.round(valid.reduce((sum, value) => sum + value, 0) / valid.length) : null; }
 function round(value: number) { return Math.round(value * 10) / 10; }
-function percent(part: number, total: number) { return total > 0 ? Math.round((part / total) * 100) : null; }
 function firstLastNumber<T>(items: T[], getValue: (item: T) => number | null | undefined) { const values = items.map(getValue).filter((value): value is number => typeof value === "number" && Number.isFinite(value)); if (values.length < 2) return null; return round(values[values.length - 1] - values[0]); }
 function measurementValue(entry: ProgressEntry, key: keyof BodyMeasurement) { const value = entry.measurements?.[key]; return typeof value === "number" && Number.isFinite(value) ? value : null; }
 function measurementChanges(entries: ProgressEntry[]) {
@@ -68,7 +61,7 @@ function habitCompletionStats(habits: FitnessHabit[], range: ReportRange) {
   periodHabits.forEach((habit) => { const current = byDate.get(habit.habit_date) ?? { total: 0, completed: 0 }; current.total += 1; if (habit.completed) current.completed += 1; byDate.set(habit.habit_date, current); });
   const completedItems = periodHabits.filter((habit) => habit.completed).length;
   const completedDays = Array.from(byDate.values()).filter((day) => day.total > 0 && day.completed === day.total).length;
-  return { completion: percent(completedItems, periodHabits.length), completedDays, missedDays: datesInRange(range.start, range.end).filter((date) => !(byDate.get(date)?.completed ?? 0)).length };
+  return { completion: nullablePercent(completedItems, periodHabits.length), completedDays, missedDays: datesInRange(range.start, range.end).filter((date) => !(byDate.get(date)?.completed ?? 0)).length };
 }
 
 export function aggregateReport({ range, nutrition, workouts, progressEntries, habits, sleepLogs, personalRecords }: { range: ReportRange; nutrition: DailyNutritionSummary[]; workouts: WorkoutSession[]; progressEntries: ProgressEntry[]; habits: FitnessHabit[]; sleepLogs: EnhancedSleepRecoveryLog[]; personalRecords: PersonalRecord[] }): AggregatedReport {
@@ -94,7 +87,7 @@ export function aggregateReport({ range, nutrition, workouts, progressEntries, h
     range,
     workoutsCompleted: periodWorkouts.length ? completedWorkouts : null,
     workoutsSkipped: periodWorkouts.length ? skippedWorkouts : null,
-    workoutAdherence: percent(completedWorkouts, completedWorkouts + skippedWorkouts),
+    workoutAdherence: nullablePercent(completedWorkouts, completedWorkouts + skippedWorkouts),
     averageCalories: loggedNutritionDays.length ? average(loggedNutritionDays.map((day) => day.calories)) : null,
     averageProtein: loggedNutritionDays.length ? average(loggedNutritionDays.map((day) => day.protein_g)) : null,
     waterAverage: waterDays.length ? average(waterDays.map((day) => day.water_ml)) : null,

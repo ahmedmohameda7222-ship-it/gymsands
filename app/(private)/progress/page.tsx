@@ -21,6 +21,7 @@ import { deleteProgressEntryWithMeasurements, updateProgressEntryWithMeasurement
 import { deleteProgressPhoto, getProgressPhotos, uploadProgressPhoto, type ProgressPhoto, type ProgressPhotoType } from "@/services/progress/progress-photos";
 import type { BodyMeasurement, DailyNutritionSummary, ProgressEntry, WorkoutSession } from "@/types";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
+import { addDays, daysBetween, startOfWeek, todayIso } from "@/lib/date-utils";
 
 const GOAL_WEIGHT_STORAGE_KEY = "fitlife_goal_weight_kg";
 const BODY_FAT_SETTINGS_KEY = "fitlife_body_fat_estimate_settings";
@@ -467,9 +468,5 @@ function buildMeasurementTrends(entries: ProgressEntry[]): MeasurementTrend[] { 
 function buildBodyFatEstimate({ latestMeasurement, latestWaist, heightCm, sex }: { latestMeasurement: BodyMeasurement | null; latestWaist: number | null; heightCm: number; sex: "male" | "female" }) { if (isFiniteNumber(latestMeasurement?.body_fat_percent)) return { value: `${latestMeasurement.body_fat_percent}% manual`, detail: "Manual body-fat entry from your latest saved measurement. Not a medical measurement." }; if (!isFiniteNumber(latestWaist) || !isFiniteNumber(heightCm) || heightCm <= 0) return { value: "Not enough measurement data", detail: "Needs latest waist measurement and height to calculate a simple Relative Fat Mass estimate." }; const estimate = sex === "female" ? 76 - 20 * (heightCm / latestWaist) : 64 - 20 * (heightCm / latestWaist); if (!Number.isFinite(estimate) || estimate < 3 || estimate > 70) return { value: "Not enough measurement data", detail: "The inputs do not produce a usable estimate. Check waist and height values." }; return { value: `${round(estimate)}% estimated`, detail: `Relative Fat Mass estimate using height ${heightCm} cm, waist ${latestWaist} cm, and sex ${sex}. Not medically accurate.` }; }
 function averageNumbers(values: Array<number | null | undefined>) { const filtered = values.filter(isFiniteNumber); return filtered.length ? filtered.reduce((sum, value) => sum + value, 0) / filtered.length : null; }
 function numberOrNull(value: string) { if (!value.trim()) return null; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : null; }
-function todayIso() { return new Date().toLocaleDateString("en-CA"); }
-function startOfWeek(value: string) { const date = new Date(`${value}T00:00:00`); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() - date.getDay()); return date.toLocaleDateString("en-CA"); }
-function addDays(value: string, days: number) { const date = new Date(`${value}T00:00:00`); date.setDate(date.getDate() + days); return date.toLocaleDateString("en-CA"); }
-function daysBetween(start: string, end: string) { return Math.round((new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24)); }
 function round(value: number) { return Math.round(value * 10) / 10; }
 function formatDelta(value: number) { return `${value > 0 ? "+" : ""}${value}`; }

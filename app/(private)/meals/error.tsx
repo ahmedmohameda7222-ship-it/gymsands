@@ -1,9 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default function MealsError({ error, reset }: { error: Error; reset: () => void }) {
+  const router = useRouter();
+
   return (
     <Card className="border-amber-200 bg-amber-50">
       <CardContent className="space-y-4 pt-6 text-center">
@@ -14,7 +17,7 @@ export default function MealsError({ error, reset }: { error: Error; reset: () =
         <p className="mx-auto max-w-2xl break-words text-xs text-amber-800">{error.message}</p>
         <div className="flex justify-center gap-2">
           <Button type="button" onClick={reset}>Try again</Button>
-          <Button type="button" variant="outline" onClick={() => { window.location.href = "/dashboard"; }}>Dashboard</Button>
+          <Button type="button" variant="outline" onClick={() => router.push("/dashboard")}>Dashboard</Button>
         </div>
       </CardContent>
     </Card>
