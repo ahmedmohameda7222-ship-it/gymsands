@@ -69,8 +69,9 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)"
       },
       boxShadow: {
-        blue: "0 18px 42px rgba(85, 96, 61, 0.12)",
-        luxe: "0 18px 50px rgba(58, 44, 31, 0.12)"
+        soft: "0 10px 30px rgba(58, 44, 31, 0.07)",
+        blue: "0 14px 34px rgba(85, 96, 61, 0.10)",
+        luxe: "0 18px 42px rgba(58, 44, 31, 0.10)"
       }
     }
   },
