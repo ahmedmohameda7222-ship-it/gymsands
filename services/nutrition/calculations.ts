@@ -47,6 +47,10 @@ export function percent(value: number, target: number) {
   return Math.min(100, Math.round((value / target) * 100));
 }
 
+export function nullablePercent(value: number, target: number) {
+  return target > 0 ? Math.round((value / target) * 100) : null;
+}
+
 export function validateFoodLogInput(name: string, quantity: number, macros: MacroTotals) {
   if (!name.trim()) return "Meal name cannot be empty.";
   if (quantity <= 0) return "Quantity must be greater than zero.";

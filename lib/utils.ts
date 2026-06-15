@@ -18,9 +18,7 @@ export function toSlug(value: string) {
     .replace(/(^-|-$)+/g, "");
 }
 
-export function todayIso() {
-  return new Date().toLocaleDateString("en-CA");
-}
+export { todayIso } from "@/lib/date-utils";
 
 export function isUuid(value: string | null | undefined) {
   return Boolean(
