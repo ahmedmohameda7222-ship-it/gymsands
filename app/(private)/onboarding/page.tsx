@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, Sparkles } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/toaster";
 import { getOnboarding, saveOnboarding } from "@/services/database/profile";
 import { getWorkoutPlanDurationOptions, getWorkoutPlanWeekOptions } from "@/services/database/workout-plans";
 
-const steps = ["Basic info", "Goals", "Training", "Nutrition", "Finish"];
+const steps = ["Basic info", "Goals", "Training", "Schedule", "Nutrition", "Review"];
 const goalOptions = [
   "Lose fat",
   "Build muscle",
@@ -143,116 +143,140 @@ export default function OnboardingPage() {
     }
   }
 
+  const progressValue = ((step + 1) / steps.length) * 100;
+
   return (
     <>
-      <PageHeading title="Profile Setup" description="Review or update your training and nutrition profile so imported plans fit your goals, equipment, and schedule." />
-      <Card className="mx-auto max-w-3xl">
-        <CardHeader>
-          <div className="flex items-center justify-between gap-3">
-            <CardTitle>{steps[step]}</CardTitle>
-            <span className="text-sm text-muted-foreground">Step {step + 1} of {steps.length}</span>
+      <PageHeading title="Profile Setup" description="A clean setup flow for real imported plans. FitLife Hub uses this profile to store, schedule, edit, display, and track plans created outside the app." />
+
+      <Card className="mx-auto max-w-4xl overflow-hidden border-primary/15">
+        <CardHeader className="space-y-4 border-b border-border/70 bg-muted/25">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Step {step + 1} of {steps.length}</p>
+              <CardTitle className="mt-1 text-2xl tracking-tight">{steps[step]}</CardTitle>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Premium setup
+            </div>
           </div>
-          <Progress value={((step + 1) / steps.length) * 100} />
+          <Progress value={progressValue} />
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {steps.map((item, index) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setStep(index)}
+                className={`min-w-fit rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${index === step ? "border-primary bg-primary text-primary-foreground" : index < step ? "border-primary/30 bg-primary/10 text-primary" : "bg-card text-muted-foreground"}`}
+              >
+                {index < step ? "✓ " : ""}{item}
+              </button>
+            ))}
+          </div>
         </CardHeader>
-        <CardContent className="space-y-5">
+
+        <CardContent className="space-y-6 p-4 sm:p-6">
           {step === 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <ChoiceGroup label="Age range" value={answers.age_range} values={["18-24", "25-34", "35-44", "45+"]} onChange={(age_range) => setAnswers((current) => ({ ...current, age_range }))} />
-              <ChoiceGroup label="Gender / sex" value={answers.gender} values={["Male", "Female", "Prefer not to say"]} onChange={(gender) => setAnswers((current) => ({ ...current, gender }))} />
-              <NumberField label="Height" value={answers.height_cm} suffix="cm" onChange={(height_cm) => setAnswers((current) => ({ ...current, height_cm }))} />
-              <NumberField label="Weight" value={answers.weight_kg} suffix="kg" onChange={(weight_kg) => setAnswers((current) => ({ ...current, weight_kg }))} />
-            </div>
-          ) : null}
-          {step === 1 ? (
-            <MultiChoice
-              label="Goals"
-              values={goalOptions}
-              selected={answers.goals}
-              onChange={(goals) => setAnswers((current) => ({ ...current, goals, goal: goals.join(", ") || "General wellness" }))}
-            />
-          ) : null}
-          {step === 2 ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <ChoiceGroup label="Training level" value={answers.training_level} values={["Beginner", "Intermediate", "Advanced"]} onChange={(training_level) => setAnswers((current) => ({ ...current, training_level }))} />
-              <ChoiceGroup label="Training place" value={answers.training_place} values={["Gym", "Home", "Both"]} onChange={(training_place) => setAnswers((current) => ({ ...current, training_place }))} />
-              <ChoiceGroup label="Preferred split" value={answers.training_cycle} values={trainingCycles} onChange={(training_cycle) => setAnswers((current) => ({ ...current, training_cycle }))} />
-              <ChoiceGroup label="Training availability" value={`${answers.training_days_per_week} days/week`} values={["2 days/week", "3 days/week", "4 days/week", "5 days/week", "6 days/week"]} onChange={(value) => setAnswers((current) => ({ ...current, training_days_per_week: Number(value[0]) }))} />
-              <ChoiceGroup label="Minimum duration" value={`${answers.min_workout_duration_minutes} minutes`} values={durationOptions.map((duration) => `${duration} minutes`)} onChange={(value) => {
-                const min = Number(value.split(" ")[0]);
-                setAnswers((current) => ({
-                  ...current,
-                  min_workout_duration_minutes: min,
-                  max_workout_duration_minutes: Math.max(min, current.max_workout_duration_minutes),
-                  workout_duration_minutes: Math.round((min + Math.max(min, current.max_workout_duration_minutes)) / 2)
-                }));
-              }} />
-              <ChoiceGroup label="Maximum duration" value={`${answers.max_workout_duration_minutes} minutes`} values={durationOptions.map((duration) => `${duration} minutes`)} onChange={(value) => {
-                const max = Number(value.split(" ")[0]);
-                setAnswers((current) => ({
-                  ...current,
-                  min_workout_duration_minutes: Math.min(current.min_workout_duration_minutes, max),
-                  max_workout_duration_minutes: max,
-                  workout_duration_minutes: Math.round((Math.min(current.min_workout_duration_minutes, max) + max) / 2)
-                }));
-              }} />
-              <ChoiceGroup label="Plan duration" value={`${answers.desired_duration_weeks} weeks`} values={weekOptions.map((week) => `${week} weeks`)} onChange={(value) => setAnswers((current) => ({ ...current, desired_duration_weeks: Number(value.split(" ")[0]) }))} />
-              <div className="sm:col-span-2">
-                <MultiChoice
-                  label="Available equipment"
-                  values={["Full gym", "Bodyweight", "Dumbbells", "Barbell", "Machines", "Cables", "Kettle Bells", "EZ Bar", "Bands", "Medicine Ball", "Exercise Ball"]}
-                  selected={answers.available_equipment}
-                  onChange={(available_equipment) => setAnswers((current) => ({ ...current, available_equipment }))}
-                />
+            <section className="space-y-4">
+              <StepIntro title="Basic body profile" detail="Use real values when known. Leave optional values empty if you are not sure yet." />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ChoiceGroup label="Age range" value={answers.age_range} values={["18-24", "25-34", "35-44", "45+"]} onChange={(age_range) => setAnswers((current) => ({ ...current, age_range }))} />
+                <ChoiceGroup label="Gender / sex" value={answers.gender} values={["Male", "Female", "Prefer not to say"]} onChange={(gender) => setAnswers((current) => ({ ...current, gender }))} />
+                <NumberField label="Height" value={answers.height_cm} suffix="cm" onChange={(height_cm) => setAnswers((current) => ({ ...current, height_cm }))} />
+                <NumberField label="Weight" value={answers.weight_kg} suffix="kg" onChange={(weight_kg) => setAnswers((current) => ({ ...current, weight_kg }))} />
               </div>
-            </div>
+            </section>
           ) : null}
+
+          {step === 1 ? (
+            <section className="space-y-4">
+              <StepIntro title="Choose your goals" detail="Select one or more goals. These labels guide imported plans and dashboard priorities only." />
+              <MultiChoice label="Goals" values={goalOptions} selected={answers.goals} onChange={(goals) => setAnswers((current) => ({ ...current, goals, goal: goals.join(", ") || "General wellness" }))} />
+            </section>
+          ) : null}
+
+          {step === 2 ? (
+            <section className="space-y-4">
+              <StepIntro title="Training style" detail="Keep this focused on how you train. Schedule and session length are handled separately in the next step." />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ChoiceGroup label="Training level" value={answers.training_level} values={["Beginner", "Intermediate", "Advanced"]} onChange={(training_level) => setAnswers((current) => ({ ...current, training_level }))} />
+                <ChoiceGroup label="Training place" value={answers.training_place} values={["Gym", "Home", "Both"]} onChange={(training_place) => setAnswers((current) => ({ ...current, training_place }))} />
+                <div className="sm:col-span-2">
+                  <ChoiceGroup label="Preferred split" value={answers.training_cycle} values={trainingCycles} onChange={(training_cycle) => setAnswers((current) => ({ ...current, training_cycle }))} />
+                </div>
+                <div className="sm:col-span-2">
+                  <MultiChoice label="Available equipment" values={["Full gym", "Bodyweight", "Dumbbells", "Barbell", "Machines", "Cables", "Kettle Bells", "EZ Bar", "Bands", "Medicine Ball", "Exercise Ball"]} selected={answers.available_equipment} onChange={(available_equipment) => setAnswers((current) => ({ ...current, available_equipment }))} />
+                </div>
+              </div>
+            </section>
+          ) : null}
+
           {step === 3 ? (
-            <div className="space-y-4">
-              <MultiChoice
-                label="Nutrition preferences"
-                values={["Normal", "High protein", "Vegetarian", "Halal", "Egyptian food preferred", "Middle Eastern food preferred"]}
-                selected={answers.nutrition_preferences}
-                onChange={(nutrition_preferences) => setAnswers((current) => ({ ...current, nutrition_preferences }))}
-              />
+            <section className="space-y-4">
+              <StepIntro title="Schedule and duration" detail="This keeps imported workout plans realistic and prevents crowded sessions." />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ChoiceGroup label="Training availability" value={`${answers.training_days_per_week} days/week`} values={["2 days/week", "3 days/week", "4 days/week", "5 days/week", "6 days/week"]} onChange={(value) => setAnswers((current) => ({ ...current, training_days_per_week: Number(value[0]) }))} />
+                <ChoiceGroup label="Plan duration" value={`${answers.desired_duration_weeks} weeks`} values={weekOptions.map((week) => `${week} weeks`)} onChange={(value) => setAnswers((current) => ({ ...current, desired_duration_weeks: Number(value.split(" ")[0]) }))} />
+                <ChoiceGroup label="Minimum session" value={`${answers.min_workout_duration_minutes} minutes`} values={durationOptions.map((duration) => `${duration} minutes`)} onChange={(value) => {
+                  const min = Number(value.split(" ")[0]);
+                  setAnswers((current) => ({
+                    ...current,
+                    min_workout_duration_minutes: min,
+                    max_workout_duration_minutes: Math.max(min, current.max_workout_duration_minutes),
+                    workout_duration_minutes: Math.round((min + Math.max(min, current.max_workout_duration_minutes)) / 2)
+                  }));
+                }} />
+                <ChoiceGroup label="Maximum session" value={`${answers.max_workout_duration_minutes} minutes`} values={durationOptions.map((duration) => `${duration} minutes`)} onChange={(value) => {
+                  const max = Number(value.split(" ")[0]);
+                  setAnswers((current) => ({
+                    ...current,
+                    min_workout_duration_minutes: Math.min(current.min_workout_duration_minutes, max),
+                    max_workout_duration_minutes: max,
+                    workout_duration_minutes: Math.round((Math.min(current.min_workout_duration_minutes, max) + max) / 2)
+                  }));
+                }} />
+              </div>
+            </section>
+          ) : null}
+
+          {step === 4 ? (
+            <section className="space-y-4">
+              <StepIntro title="Nutrition preferences" detail="Use clear preferences and limitations. Unknown macros should stay reviewable, not invented." />
+              <MultiChoice label="Nutrition preferences" values={["Normal", "High protein", "Vegetarian", "Halal", "Egyptian food preferred", "Middle Eastern food preferred"]} selected={answers.nutrition_preferences} onChange={(nutrition_preferences) => setAnswers((current) => ({ ...current, nutrition_preferences }))} />
               <div className="space-y-2">
                 <Label htmlFor="limitations">Allergies and limitations</Label>
-                <Input
-                  id="limitations"
-                  value={answers.allergies_limitations}
-                  onChange={(event) => setAnswers((current) => ({ ...current, allergies_limitations: event.target.value }))}
-                  placeholder="Optional allergies or limitations, e.g. lower-back weakness or peanut allergy"
-                />
+                <Input id="limitations" value={answers.allergies_limitations} onChange={(event) => setAnswers((current) => ({ ...current, allergies_limitations: event.target.value }))} placeholder="Optional allergies, injuries, weak areas, or foods to avoid" />
               </div>
-            </div>
+            </section>
           ) : null}
-          {step === 4 ? (
-            <div className="space-y-3">
-              <div className="rounded-lg border bg-card p-5">
-                <h2 className="text-lg font-semibold">Profile ready</h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  FitLife Hub will not generate plans internally. Use ChatGPT to create your workout or meal plan, then export it to FitLife Hub for storage, editing, and tracking.
+
+          {step === 5 ? (
+            <section className="space-y-4">
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+                <h2 className="text-lg font-semibold">Review before saving</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  FitLife Hub will not generate plans internally. Create workout and meal plans externally, then import them for storage, scheduling, editing, display, and tracking.
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                {[
-                  "Import or build one workout plan",
-                  "Set calorie, macro, and water targets",
-                  "Log one normal eating day",
-                  "Add first weight or measurement"
-                ].map((item) => (
-                  <div key={item} className="rounded-md border bg-muted/40 p-3 text-sm font-medium">{item}</div>
-                ))}
+                <ReviewItem label="Goals" value={answers.goals.join(", ")} />
+                <ReviewItem label="Training" value={`${answers.training_level} · ${answers.training_place} · ${answers.training_cycle}`} />
+                <ReviewItem label="Schedule" value={`${answers.training_days_per_week} days/week · ${answers.min_workout_duration_minutes}-${answers.max_workout_duration_minutes} min · ${answers.desired_duration_weeks} weeks`} />
+                <ReviewItem label="Equipment" value={answers.available_equipment.join(", ")} />
+                <ReviewItem label="Nutrition" value={answers.nutrition_preferences.join(", ")} />
+                <ReviewItem label="Limitations" value={answers.allergies_limitations || "None added"} />
               </div>
-            </div>
+            </section>
           ) : null}
 
-          <div className="flex items-center justify-between gap-3">
+          <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] z-20 -mx-4 flex items-center justify-between gap-3 border-t border-border/70 bg-card/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-t sm:bg-transparent sm:px-0 sm:pb-0 sm:backdrop-blur-none">
             <Button variant="outline" disabled={step === 0} onClick={() => setStep((current) => Math.max(0, current - 1))}>
               <ChevronLeft className="h-4 w-4" />
               Back
             </Button>
             {step < steps.length - 1 ? (
-              <Button onClick={() => setStep((current) => current + 1)}>
+              <Button onClick={() => setStep((current) => Math.min(steps.length - 1, current + 1))}>
                 Next
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -269,21 +293,29 @@ export default function OnboardingPage() {
   );
 }
 
+function StepIntro({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="rounded-2xl border bg-muted/30 p-4">
+      <p className="font-semibold text-foreground">{title}</p>
+      <p className="mt-1 text-sm leading-6 text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
 function ChoiceGroup({ label, value, values, onChange }: { label: string; value: string; values: string[]; onChange: (value: string) => void }) {
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
       <div className="grid gap-2">
-        {values.map((item) => (
-          <button
-            key={item}
-            type="button"
-            onClick={() => onChange(item)}
-            className={`min-h-11 rounded-md border px-3 text-left text-sm font-medium transition ${item === value ? "border-primary bg-primary/10 text-primary" : "bg-card text-foreground"}`}
-          >
-            {item}
-          </button>
-        ))}
+        {values.map((item) => {
+          const active = item === value;
+          return (
+            <button key={item} type="button" onClick={() => onChange(item)} className={`flex min-h-12 items-center justify-between gap-3 rounded-2xl border px-3 text-left text-sm font-medium transition ${active ? "border-primary bg-primary/10 text-primary shadow-soft" : "bg-card text-foreground hover:border-primary/40 hover:bg-muted/45"}`}>
+              <span>{item}</span>
+              {active ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : null}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -293,17 +325,13 @@ function MultiChoice({ label, values, selected, onChange }: { label: string; val
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <div className="flex flex-wrap gap-2">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {values.map((item) => {
           const active = selected.includes(item);
           return (
-            <button
-              key={item}
-              type="button"
-              onClick={() => onChange(active ? selected.filter((value) => value !== item) : [...selected, item])}
-              className={`min-h-11 rounded-md border px-3 text-sm font-medium transition ${active ? "border-primary bg-primary/10 text-primary" : "bg-card text-foreground"}`}
-            >
-              {item}
+            <button key={item} type="button" onClick={() => onChange(active ? selected.filter((value) => value !== item) : [...selected, item])} className={`flex min-h-12 items-center justify-between gap-3 rounded-2xl border px-3 text-left text-sm font-medium transition ${active ? "border-primary bg-primary/10 text-primary shadow-soft" : "bg-card text-foreground hover:border-primary/40 hover:bg-muted/45"}`}>
+              <span>{item}</span>
+              {active ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : null}
             </button>
           );
         })}
@@ -317,18 +345,18 @@ function NumberField({ label, value, suffix, onChange }: { label: string; value:
     <div className="space-y-2">
       <Label>{label}</Label>
       <div className="grid grid-cols-[1fr_auto] gap-2">
-        <Input
-          type="text"
-          inputMode="decimal"
-          value={value ?? ""}
-          onChange={(event) => {
-            const nextValue = event.target.value.trim();
-            onChange(nextValue ? Math.max(0, Number(nextValue) || 0) : null);
-          }}
-          placeholder={label}
-        />
-        <span className="flex h-11 items-center rounded-md border bg-card px-3 text-sm font-semibold text-muted-foreground">{suffix}</span>
+        <Input type="text" inputMode="decimal" value={value ?? ""} onChange={(event) => { const nextValue = event.target.value.trim(); onChange(nextValue ? Math.max(0, Number(nextValue) || 0) : null); }} placeholder={label} />
+        <span className="flex h-11 items-center rounded-xl border bg-card px-3 text-sm font-semibold text-muted-foreground">{suffix}</span>
       </div>
+    </div>
+  );
+}
+
+function ReviewItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border bg-card p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+      <p className="mt-2 text-sm font-semibold leading-6 text-foreground">{value}</p>
     </div>
   );
 }
