@@ -145,7 +145,7 @@ export function WorkoutHistory() {
       <CardContent className="space-y-3">
         {isLoading ? <p className="text-sm text-muted-foreground">Loading workout history...</p> : null}
         {!isLoading && !filteredHistory.length ? (
-          <div className="rounded-md border bg-slate-50 p-4 text-sm text-muted-foreground">
+          <div className="rounded-md border bg-muted/40 p-4 text-sm text-muted-foreground">
             No completed workouts match this filter.
           </div>
         ) : null}
@@ -190,10 +190,10 @@ export function WorkoutHistory() {
           const sessionDate = new Date(session.date);
 
           return (
-            <div key={session.id} className="rounded-md border bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-sm">
+            <div key={session.id} className="rounded-md border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/30">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="font-semibold text-slate-950">{session.title}</p>
+                  <p className="font-semibold text-foreground">{session.title}</p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {sessionDate.toLocaleDateString()} at {sessionDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </p>
@@ -211,15 +211,15 @@ export function WorkoutHistory() {
                     return (
                       <div
                         key={`${session.id}-${exercise.id}`}
-                        className={cn("grid gap-3 rounded-md bg-slate-50 p-3 text-sm", "lg:grid-cols-[1.1fr_1.5fr_0.8fr]")}
+                        className={cn("grid gap-3 rounded-md bg-muted/40 p-3 text-sm", "lg:grid-cols-[1.1fr_1.5fr_0.8fr]")}
                       >
                         <div>
-                          <p className="font-medium text-slate-950">{exercise.name}</p>
+                          <p className="font-medium text-foreground">{exercise.name}</p>
                           <p className="text-xs text-muted-foreground">{exercise.category}</p>
                         </div>
                         <div className="space-y-1">
                           {exercise.setDetails.map((line, lineIndex) => (
-                            <p key={`${exercise.id}-set-${lineIndex}`} className="text-slate-800">{line}</p>
+                            <p key={`${exercise.id}-set-${lineIndex}`} className="text-foreground">{line}</p>
                           ))}
                         </div>
                         <div>
@@ -231,10 +231,10 @@ export function WorkoutHistory() {
                   })}
                 </div>
               ) : (
-                <p className="mt-4 rounded-md bg-slate-50 p-3 text-sm text-muted-foreground">No set details were logged for this workout.</p>
+                <p className="mt-4 rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">No set details were logged for this workout.</p>
               )}
 
-              {session.notes ? <p className="mt-3 text-sm text-slate-700">Notes: {session.notes}</p> : null}
+              {session.notes ? <p className="mt-3 text-sm text-muted-foreground">Notes: {session.notes}</p> : null}
             </div>
           );
         })}

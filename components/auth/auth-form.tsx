@@ -156,7 +156,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
               </Button>
             </div>
           </div>
-          <label className="flex min-h-11 items-center gap-3 rounded-md border bg-blue-50 px-3 text-sm">
+          <label className="flex min-h-11 items-center gap-3 rounded-md border bg-primary/10 px-3 text-sm">
             <input
               type="checkbox"
               checked={remember}
@@ -172,7 +172,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         </form>
 
         {mode === "login" ? (
-          <div className="mt-4 rounded-md bg-slate-50 p-3">
+          <div className="mt-4 rounded-md bg-muted/40 p-3">
             <Label htmlFor="reset-email" className="text-xs">
               Password reset
             </Label>

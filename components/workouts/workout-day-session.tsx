@@ -682,7 +682,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                     setActiveSetIndex(firstOpen >= 0 ? firstOpen : item.sets.length - 1);
                     setTimerSeconds(item.exercise.rest_seconds ?? 75);
                   }}
-                  className={`rounded-md border p-3 text-left transition ${active ? "border-primary bg-blue-50" : "bg-white hover:border-primary"}`}
+                  className={`rounded-md border p-3 text-left transition-colors ${active ? "border-primary bg-primary/10" : "bg-card hover:border-primary/45"}`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="truncate text-sm font-semibold">{index + 1}. {item.exercise.exercise_name}</p>
@@ -723,7 +723,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+            <div className="rounded-md bg-muted/40 p-3 text-sm leading-6 text-muted-foreground">
               {currentInstructions}
               <div className="mt-3 flex flex-wrap gap-2">
                 {currentGuideUrl ? (
@@ -748,7 +748,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               {activeExercise.sets.map((set, setIndex) => {
                 const previousSet = previousSetForExercise(history, activeExercise.exercise.exercise_name, set.setNumber);
                 return (
-                  <div key={set.setNumber} className={`rounded-md border p-3 ${set.completedAt ? "border-emerald-300 bg-emerald-50" : setIndex === activeSetIndex ? "border-primary bg-blue-50" : "bg-white"}`}>
+                  <div key={set.setNumber} className={`rounded-md border p-3 ${set.completedAt ? "border-success/40 bg-success/10" : setIndex === activeSetIndex ? "border-primary bg-primary/10" : "bg-card"}`}>
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <p className="font-semibold">Set {set.setNumber}</p>
                       {set.completedAt ? <Badge variant="success">Done</Badge> : <Badge variant="outline">Open</Badge>}
@@ -831,7 +831,7 @@ function InfoBox({ title, lines }: { title: string; lines: string[] }) {
 
 function WorkoutSummaryCard({ summary }: { summary: WorkoutSummary }) {
   return (
-    <Card className="border-primary bg-blue-50">
+    <Card className="border-primary bg-primary/10">
       <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> Workout summary saved</CardTitle></CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-4">

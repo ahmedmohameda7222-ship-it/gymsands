@@ -279,7 +279,7 @@ function ChoiceGroup({ label, value, values, onChange }: { label: string; value:
             key={item}
             type="button"
             onClick={() => onChange(item)}
-            className={`min-h-11 rounded-md border px-3 text-left text-sm font-medium transition ${item === value ? "border-primary bg-blue-50 text-primary" : "bg-white text-slate-700"}`}
+            className={`min-h-11 rounded-md border px-3 text-left text-sm font-medium transition ${item === value ? "border-primary bg-primary/10 text-primary" : "bg-card text-foreground"}`}
           >
             {item}
           </button>
@@ -301,7 +301,7 @@ function MultiChoice({ label, values, selected, onChange }: { label: string; val
               key={item}
               type="button"
               onClick={() => onChange(active ? selected.filter((value) => value !== item) : [...selected, item])}
-              className={`min-h-11 rounded-md border px-3 text-sm font-medium transition ${active ? "border-primary bg-blue-50 text-primary" : "bg-white text-slate-700"}`}
+              className={`min-h-11 rounded-md border px-3 text-sm font-medium transition ${active ? "border-primary bg-primary/10 text-primary" : "bg-card text-foreground"}`}
             >
               {item}
             </button>

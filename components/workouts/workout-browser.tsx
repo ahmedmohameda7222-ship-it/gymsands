@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ExternalLink, Heart, Play, Plus, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, ExternalLink, Heart, MoreHorizontal, Play, Plus, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -348,20 +348,20 @@ export function WorkoutBrowser() {
         </Card>
       ) : null}
 
-      <div className="rounded-md border bg-white p-4">
+      <div className="rounded-md border bg-card p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="h-5 w-5 text-primary" />
-            <p className="font-semibold text-slate-950">Exercise filters</p>
+            <p className="font-semibold text-foreground">Exercise filters</p>
             {activeFilterCount ? <Badge>{activeFilterCount} selected</Badge> : null}
             {favoritesOnly ? <Badge variant="success">Favorites only</Badge> : null}
             {showAllWorkouts ? <Badge variant="success">Showing all</Badge> : null}
           </div>
           <p className="text-sm text-muted-foreground">{filteredWorkouts.length} exercises shown</p>
         </div>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-slate-50 p-3">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/40 p-3">
           <div>
-            <p className="text-sm font-semibold text-slate-900">Show all workouts</p>
+            <p className="text-sm font-semibold text-foreground">Show all workouts</p>
             <p className="text-sm text-muted-foreground">Keep this off to show exercises only after a search or filter.</p>
           </div>
           <Button type="button" variant={showAllWorkouts ? "default" : "outline"} onClick={() => setShowAllWorkouts((current) => !current)}>
@@ -380,25 +380,23 @@ export function WorkoutBrowser() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Exercise library quality</CardTitle>
-          <p className="text-sm text-muted-foreground">Quality checks flag missing guidance and duplicates for review. Nothing is deleted automatically.</p>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <QualityMetric label="Missing video" value={qualityCounts.missingVideo} detail="No video or guide link found" />
-          <QualityMetric label="Missing instructions" value={qualityCounts.missingInstructions} detail="Instruction text needs review" />
-          <QualityMetric label="Missing muscle/equipment" value={qualityCounts.missingLabels} detail="Filter quality may be weaker" />
-          <QualityMetric label="Duplicate names" value={qualityCounts.duplicates} detail="Same visible exercise name appears more than once" />
-          {profile?.role === "admin" ? (
+      {profile?.role === "admin" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Exercise library quality</CardTitle>
+            <p className="text-sm text-muted-foreground">Quality checks flag missing guidance and duplicates for review. Nothing is deleted automatically.</p>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <QualityMetric label="Missing video" value={qualityCounts.missingVideo} detail="No video or guide link found" />
+            <QualityMetric label="Missing instructions" value={qualityCounts.missingInstructions} detail="Instruction text needs review" />
+            <QualityMetric label="Missing muscle/equipment" value={qualityCounts.missingLabels} detail="Filter quality may be weaker" />
+            <QualityMetric label="Duplicate names" value={qualityCounts.duplicates} detail="Same visible exercise name appears more than once" />
             <Button asChild variant="outline" className="min-h-20 justify-center">
               <Link href="/admin/exercises">Open admin review</Link>
             </Button>
-          ) : (
-            <QualityMetric label="Review mode" value={0} detail="Admins can review quality in Admin > Exercises" />
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {isLoading && !filteredWorkouts.length ? <p className="text-sm text-muted-foreground">Loading workouts...</p> : null}
@@ -413,13 +411,13 @@ export function WorkoutBrowser() {
               <CardContent className="pt-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="font-semibold text-slate-950">{workout.name}</h3>
+                    <h3 className="font-semibold text-foreground">{workout.name}</h3>
                     <p className="mt-1 text-sm text-muted-foreground">{workout.muscle_category || workout.target_muscle}</p>
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <Badge>{workout.experience_level || workout.difficulty}</Badge>
                     {!workout.is_global ? <Badge variant="success">Custom</Badge> : null}
-                    {quality.map((item) => <Badge key={item} variant="outline">{item}</Badge>)}
+                    {profile?.role === "admin" ? quality.map((item) => <Badge key={item} variant="outline">{item}</Badge>) : null}
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -431,13 +429,18 @@ export function WorkoutBrowser() {
                 </div>
                 {workout.secondary_muscles?.length ? <p className="mt-3 text-xs text-muted-foreground">Secondary: {workout.secondary_muscles.join(", ")}</p> : null}
                 <p className="mt-4 line-clamp-3 text-sm leading-6 text-muted-foreground">{workout.instructions}</p>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  <Button asChild variant="outline"><Link href={`/workouts/${workout.id}`}>Details</Link></Button>
-                  <Button asChild><Link href={`/workouts/session/${workout.id}`}><Play className="h-4 w-4" /> Start</Link></Button>
-                  <Button variant={favorite ? "default" : "outline"} onClick={() => toggleFavorite(workout)}>
-                    <Heart className="h-4 w-4" /> {favorite ? "Favorited" : "Favorite"}
-                  </Button>
-                  {guideUrl ? <Button asChild variant="ghost"><a href={guideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Guide</a></Button> : null}
+                <div className="mt-4 flex items-center gap-2">
+                  <Button asChild className="flex-1"><Link href={`/workouts/session/${workout.id}`}><Play className="h-4 w-4" /> Start</Link></Button>
+                  <details className="relative">
+                    <summary className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${workout.name}`}>
+                      <MoreHorizontal className="h-4 w-4" />
+                    </summary>
+                    <div className="absolute right-0 z-20 mt-2 grid w-44 gap-1 rounded-md border bg-card p-2 shadow-luxe">
+                      <Button asChild size="sm" variant="ghost" className="justify-start"><Link href={`/workouts/${workout.id}`}>Details</Link></Button>
+                      <Button size="sm" variant="ghost" className="justify-start" onClick={() => toggleFavorite(workout)}><Heart className="h-4 w-4" /> {favorite ? "Favorited" : "Favorite"}</Button>
+                      {guideUrl ? <Button asChild size="sm" variant="ghost" className="justify-start"><a href={guideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Guide</a></Button> : null}
+                    </div>
+                  </details>
                 </div>
               </CardContent>
             </Card>

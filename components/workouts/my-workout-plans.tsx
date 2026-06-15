@@ -175,7 +175,7 @@ export function MyWorkoutPlans() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-950">Workout Plans</h2>
+          <h2 className="text-lg font-semibold text-foreground">Workout Plans</h2>
           <p className="text-sm text-muted-foreground">Imported plans are recommended. Manual tools are for backup, repair, and small edits.</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -250,8 +250,8 @@ export function MyWorkoutPlans() {
                     </div>
                   ) : null}
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-md bg-slate-50 p-3"><CalendarDays className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-xl font-bold text-slate-950">{plan.days.length}</p><p className="text-xs text-muted-foreground">Days</p></div>
-                    <div className="rounded-md bg-slate-50 p-3"><Dumbbell className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-xl font-bold text-slate-950">{exerciseCount}</p><p className="text-xs text-muted-foreground">Exercises</p></div>
+                    <div className="rounded-md bg-muted/40 p-3"><CalendarDays className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-xl font-semibold text-foreground">{plan.days.length}</p><p className="text-xs text-muted-foreground">Days</p></div>
+                    <div className="rounded-md bg-muted/40 p-3"><Dumbbell className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-xl font-semibold text-foreground">{exerciseCount}</p><p className="text-xs text-muted-foreground">Exercises</p></div>
                   </div>
                   <PlanQualityPanel quality={quality} />
                   <div className="flex flex-wrap gap-2">
@@ -324,7 +324,7 @@ function sourceBadge(plan: UserWorkoutPlan) {
 }
 
 function PlanQualityPanel({ quality }: { quality: ImportedPlanQuality }) {
-  const tone = quality.status === "ready" ? "border-emerald-200 bg-emerald-50 text-emerald-950" : quality.status === "blocked" ? "border-red-200 bg-red-50 text-red-950" : "border-amber-200 bg-amber-50 text-amber-950";
+  const tone = quality.status === "ready" ? "border-success/30 bg-success/10 text-foreground" : quality.status === "blocked" ? "border-destructive/30 bg-destructive/10 text-foreground" : "border-warning/30 bg-warning/10 text-foreground";
   const label = quality.status === "ready" ? "Ready" : quality.status === "blocked" ? "Blocked" : "Needs review";
   return (
     <div className={`rounded-md border p-3 text-sm ${tone}`}>

@@ -1,12 +1,13 @@
 "use client";
 
-import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Copy, Edit3, PackagePlus, PlusCircle, Printer, RefreshCw, Repeat, Save, ShoppingCart, Trash2, Utensils, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Copy, Edit3, MoreHorizontal, PackagePlus, PlusCircle, Printer, RefreshCw, Repeat, Save, ShoppingCart, Trash2, Utensils, X } from "lucide-react";
 import { Component, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
 import {
@@ -73,11 +74,11 @@ class MealPlanBoundary extends Component<{ children: ReactNode }, { message: str
   render() {
     if (this.state.message) {
       return (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="space-y-3 pt-5 text-sm text-amber-950">
+        <Card className="border-warning/30 bg-warning/10">
+          <CardContent className="space-y-3 pt-5 text-sm text-foreground">
             <div className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> My Meal Plan could not load</div>
             <p>The page stayed open, but one meal-plan widget could not load. Please try again.</p>
-            <p className="break-words text-xs text-amber-800">{this.state.message}</p>
+            <p className="break-words text-xs text-muted-foreground">{this.state.message}</p>
             <Button variant="outline" size="sm" onClick={() => this.setState({ message: null })}>Try again</Button>
           </CardContent>
         </Card>
@@ -491,110 +492,146 @@ function MyMealPlanBuilderInner() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><CalendarDays className="h-5 w-5" /> Meal calendar</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h2 className="text-lg font-semibold">Meal Plan for {longDate(selectedDate)}</h2><p className="text-sm text-muted-foreground">Planned food counts only after you press Mark done.</p></div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" type="button" onClick={() => changeDate(addDays(selectedDate, -1))}><ChevronLeft className="h-4 w-4" /> Previous Day</Button>
-              <Button variant="outline" type="button" onClick={() => changeDate(today)}>Today</Button>
-              <Button variant="outline" type="button" onClick={() => changeDate(addDays(selectedDate, 1))}>Next Day <ChevronRight className="h-4 w-4" /></Button>
-            </div>
-          </div>
-          <CompactCalendar month={calendarMonth} selectedDate={selectedDate} plannedDates={plannedDates} onMonthChange={setCalendarMonth} onSelectDate={changeDate} />
-        </CardContent>
-      </Card>
-
-      <MealPlanInsightsPanel insights={mealInsights} />
-
       {notice ? <NoticeBox notice={notice} onClose={() => setNotice(null)} /> : null}
 
-      <WeeklyPlanner weekDays={weekDays} selectedDate={selectedDate} weekItems={weekItems} onSelectDate={changeDate} onCopyWeek={copyWholeWeekToNextWeek} />
+      <Tabs defaultValue="day" className="space-y-4">
+        <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
+          <TabsTrigger value="day">Day</TabsTrigger>
+          <TabsTrigger value="week">Week</TabsTrigger>
+          <TabsTrigger value="automation">Automation</TabsTrigger>
+          <TabsTrigger value="shopping">Shopping</TabsTrigger>
+        </TabsList>
 
-      <AutomationPanel
-        selectedDate={selectedDate}
-        items={items}
-        templates={templates}
-        selectedTemplateId={selectedTemplateId}
-        setSelectedTemplateId={setSelectedTemplateId}
-        templateName={templateName}
-        setTemplateName={setTemplateName}
-        onAddTemplate={() => addTemplateToDate()}
-        onCopyDay={() => copyItemsToDate(items, addDays(selectedDate, 1), "Day copied")}
-        onMarkBreakfast={() => markManyDone(items.filter((item) => item.meal_type === "Breakfast"), "breakfast")}
-        onMarkDay={() => markManyDone(items, displayDate(selectedDate))}
-        batches={batchMeals}
-        selectedBatchId={selectedBatchId}
-        setSelectedBatchId={setSelectedBatchId}
-        batchDraft={batchDraft}
-        setBatchDraft={setBatchDraft}
-        onCreateBatch={createBatchMeal}
-        onAddBatch={addBatchPortionToDate}
-      />
+        <TabsContent value="day" className="space-y-4">
+          <Card>
+            <CardContent className="space-y-4 p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold">{longDate(selectedDate)}</h2>
+                  <p className="text-sm text-muted-foreground">Planned food counts only after Mark done creates a food log.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" type="button" onClick={() => changeDate(addDays(selectedDate, -1))}><ChevronLeft className="h-4 w-4" /> Previous</Button>
+                  <Button variant="outline" type="button" onClick={() => changeDate(today)}>Today</Button>
+                  <Button variant="outline" type="button" onClick={() => changeDate(addDays(selectedDate, 1))}>Next <ChevronRight className="h-4 w-4" /></Button>
+                </div>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {weekDays.map((day) => (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => changeDate(day)}
+                    className={`min-w-[92px] rounded-md border px-3 py-2 text-left text-sm transition-colors ${day === selectedDate ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:border-primary/40"}`}
+                  >
+                    <span className="block font-semibold">{displayDate(day)}</span>
+                    <span className={day === selectedDate ? "text-primary-foreground/70" : "text-muted-foreground"}>{weekItems.filter((item) => item.plan_date === day).length} meals</span>
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
-      <div id="shopping-list">
-        <ShoppingListPanel items={shoppingList} onToggle={toggleShoppingCheck} onPrint={printShoppingList} />
-      </div>
+          {swapState ? <SwapConfirmPanel item={swapState.item} templates={templates} templateId={swapState.templateId} onTemplateChange={(templateId) => setSwapState({ item: swapState.item, templateId })} diff={swapDiff} onConfirm={confirmSwap} onCancel={() => setSwapState(null)} /> : null}
+          {bulkDoneConfirm ? (
+            <Card className="border-primary/40 bg-primary/5">
+              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-semibold">Mark {bulkDoneConfirm.label} done?</p>
+                  <p className="text-sm text-muted-foreground">
+                    This will create food logs once for {bulkDoneConfirm.items.length} planned item(s). Duplicate logs are prevented by meal-plan status.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button type="button" onClick={confirmBulkDone} disabled={isUpdatingId === "bulk-done"}>
+                    <CheckCircle2 className="h-4 w-4" />
+                    Confirm
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setBulkDoneConfirm(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
 
-      {swapState ? <SwapConfirmPanel item={swapState.item} templates={templates} templateId={swapState.templateId} onTemplateChange={(templateId) => setSwapState({ item: swapState.item, templateId })} diff={swapDiff} onConfirm={confirmSwap} onCancel={() => setSwapState(null)} /> : null}
-      {bulkDoneConfirm ? (
-        <Card className="border-primary/40 bg-primary/5">
-          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-semibold">Mark {bulkDoneConfirm.label} done?</p>
-              <p className="text-sm text-muted-foreground">
-                This will create food logs once for {bulkDoneConfirm.items.length} planned item(s). Duplicate logs are prevented by meal-plan status.
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="button" onClick={confirmBulkDone} disabled={isUpdatingId === "bulk-done"}>
-                <CheckCircle2 className="h-4 w-4" />
-                Confirm
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setBulkDoneConfirm(null)}>
-                Cancel
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-lg font-semibold">{displayDate(selectedDate)} meals</h2><p className="text-sm text-muted-foreground">Breakfast, lunch, dinner, and snacks for the selected date.</p></div>
+            <Button type="button" onClick={() => setShowAddForm((current) => !current)}><PlusCircle className="h-4 w-4" /> {showAddForm ? "Hide add food" : "Add food"}</Button>
+          </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="text-lg font-semibold">{displayDate(selectedDate)} meals</h2><p className="text-sm text-muted-foreground">Breakfast, lunch, dinner, and snacks for the selected date.</p></div>
-        <Button type="button" onClick={() => setShowAddForm((current) => !current)}><PlusCircle className="h-4 w-4" /> {showAddForm ? "Hide add food" : "Add food"}</Button>
-      </div>
+          {showAddForm ? <MealForm title="Add planned food" draft={draft} setDraft={setDraft} onSave={addPlannedFood} onCancel={() => setShowAddForm(false)} saving={isUpdatingId === "new"} /> : null}
+          {isLoading ? <p className="text-sm text-muted-foreground">Loading meal plan for {displayDate(selectedDate)}...</p> : null}
 
-      {showAddForm ? <MealForm title="Add planned food" draft={draft} setDraft={setDraft} onSave={addPlannedFood} onCancel={() => setShowAddForm(false)} saving={isUpdatingId === "new"} /> : null}
-      {isLoading ? <p className="text-sm text-muted-foreground">Loading meal plan for {displayDate(selectedDate)}...</p> : null}
+          <div className="grid gap-4 xl:grid-cols-4">
+            {mealTypes.map((type) => (
+              <MealColumn
+                key={type}
+                type={type}
+                items={items.filter((item) => item.meal_type === type)}
+                onAdd={() => { setDraft((current) => ({ ...current, mealType: type })); setShowAddForm(true); }}
+                onDone={markDone}
+                onDelete={removeItem}
+                onStartEdit={startEditing}
+                onSaveEdit={saveEdit}
+                onCancelEdit={() => setEditingId(null)}
+                onDuplicate={(item) => duplicateItem(item)}
+                onCopyTomorrow={(item) => duplicateItem(item, addDays(item.plan_date, 1))}
+                onRepeatDaily={repeatMealDaily}
+                onRepeatWeekly={repeatMealWeekly}
+                onSaveTemplate={saveItemTemplate}
+                onSaveMealTemplate={() => saveMealTypeTemplate(type)}
+                onStartSwap={(item) => setSwapState({ item, templateId: templates[0]?.id ?? "" })}
+                editingId={editingId}
+                editDraft={editDraft}
+                setEditDraft={setEditDraft}
+                updatingId={isUpdatingId}
+                canSwap={templates.length > 0}
+              />
+            ))}
+          </div>
+        </TabsContent>
 
-      <div className="grid gap-4 xl:grid-cols-4">
-        {mealTypes.map((type) => (
-          <MealColumn
-            key={type}
-            type={type}
-            items={items.filter((item) => item.meal_type === type)}
-            onAdd={() => { setDraft((current) => ({ ...current, mealType: type })); setShowAddForm(true); }}
-            onDone={markDone}
-            onDelete={removeItem}
-            onStartEdit={startEditing}
-            onSaveEdit={saveEdit}
-            onCancelEdit={() => setEditingId(null)}
-            onDuplicate={(item) => duplicateItem(item)}
-            onCopyTomorrow={(item) => duplicateItem(item, addDays(item.plan_date, 1))}
-            onRepeatDaily={repeatMealDaily}
-            onRepeatWeekly={repeatMealWeekly}
-            onSaveTemplate={saveItemTemplate}
-            onSaveMealTemplate={() => saveMealTypeTemplate(type)}
-            onStartSwap={(item) => setSwapState({ item, templateId: templates[0]?.id ?? "" })}
-            editingId={editingId}
-            editDraft={editDraft}
-            setEditDraft={setEditDraft}
-            updatingId={isUpdatingId}
-            canSwap={templates.length > 0}
+        <TabsContent value="week" className="space-y-4">
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><CalendarDays className="h-5 w-5" /> Meal calendar</CardTitle></CardHeader>
+            <CardContent>
+              <CompactCalendar month={calendarMonth} selectedDate={selectedDate} plannedDates={plannedDates} onMonthChange={setCalendarMonth} onSelectDate={changeDate} />
+            </CardContent>
+          </Card>
+          <WeeklyPlanner weekDays={weekDays} selectedDate={selectedDate} weekItems={weekItems} onSelectDate={changeDate} onCopyWeek={copyWholeWeekToNextWeek} />
+          <MealPlanInsightsPanel insights={mealInsights} />
+        </TabsContent>
+
+        <TabsContent value="automation" className="space-y-4">
+          <AutomationPanel
+            selectedDate={selectedDate}
+            items={items}
+            templates={templates}
+            selectedTemplateId={selectedTemplateId}
+            setSelectedTemplateId={setSelectedTemplateId}
+            templateName={templateName}
+            setTemplateName={setTemplateName}
+            onAddTemplate={() => addTemplateToDate()}
+            onCopyDay={() => copyItemsToDate(items, addDays(selectedDate, 1), "Day copied")}
+            onMarkBreakfast={() => markManyDone(items.filter((item) => item.meal_type === "Breakfast"), "breakfast")}
+            onMarkDay={() => markManyDone(items, displayDate(selectedDate))}
+            batches={batchMeals}
+            selectedBatchId={selectedBatchId}
+            setSelectedBatchId={setSelectedBatchId}
+            batchDraft={batchDraft}
+            setBatchDraft={setBatchDraft}
+            onCreateBatch={createBatchMeal}
+            onAddBatch={addBatchPortionToDate}
           />
-        ))}
-      </div>
+        </TabsContent>
+
+        <TabsContent value="shopping" className="space-y-4">
+          <div id="shopping-list">
+            <ShoppingListPanel items={shoppingList} onToggle={toggleShoppingCheck} onPrint={printShoppingList} />
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -607,7 +644,7 @@ function AutomationPanel(props: { selectedDate: string; items: MealPlanItem[]; t
         <CardContent className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={props.onCopyDay} disabled={!props.items.length}><Copy className="h-4 w-4" /> Copy day to tomorrow</Button><Button variant="outline" onClick={props.onMarkBreakfast}><CheckCircle2 className="h-4 w-4" /> Mark breakfast done</Button><Button variant="outline" onClick={props.onMarkDay} className="sm:col-span-2"><CheckCircle2 className="h-4 w-4" /> Mark all day done</Button></div>
           <Input value={props.templateName} onChange={(event) => props.setTemplateName(event.target.value)} placeholder="Template name for Save as template" />
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]"><select value={props.selectedTemplateId} onChange={(event) => props.setSelectedTemplateId(event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option value="">Choose template</option>{props.templates.map((template) => <option key={template.id} value={template.id}>{template.name} ({template.items.length})</option>)}</select><Button onClick={props.onAddTemplate} disabled={!props.selectedTemplateId}><PlusCircle className="h-4 w-4" /> Add template</Button></div>
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]"><select value={props.selectedTemplateId} onChange={(event) => props.setSelectedTemplateId(event.target.value)} className="h-10 rounded-md border bg-card px-3 text-sm"><option value="">Choose template</option>{props.templates.map((template) => <option key={template.id} value={template.id}>{template.name} ({template.items.length})</option>)}</select><Button onClick={props.onAddTemplate} disabled={!props.selectedTemplateId}><PlusCircle className="h-4 w-4" /> Add template</Button></div>
           {!props.templates.length ? <p className="text-sm text-muted-foreground">No templates yet. Save an item or meal column as a template below.</p> : null}
         </CardContent>
       </Card>
@@ -617,14 +654,14 @@ function AutomationPanel(props: { selectedDate: string; items: MealPlanItem[]; t
           <Input value={props.batchDraft.name} onChange={(e) => props.setBatchDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Batch meal name" />
           <Input type="number" value={props.batchDraft.portions} onChange={(e) => props.setBatchDraft((d) => ({ ...d, portions: e.target.value }))} placeholder="Portions" />
           <Input value={props.batchDraft.servingSize} onChange={(e) => props.setBatchDraft((d) => ({ ...d, servingSize: e.target.value }))} placeholder="Serving size" />
-          <select value={props.batchDraft.mealType} onChange={(e) => props.setBatchDraft((d) => ({ ...d, mealType: normalizeMealPlanType(e.target.value) }))} className="h-10 rounded-md border bg-white px-3 text-sm">{mealTypes.map((type) => <option key={type} value={type}>{displayMealType(type)}</option>)}</select>
+          <select value={props.batchDraft.mealType} onChange={(e) => props.setBatchDraft((d) => ({ ...d, mealType: normalizeMealPlanType(e.target.value) }))} className="h-10 rounded-md border bg-card px-3 text-sm">{mealTypes.map((type) => <option key={type} value={type}>{displayMealType(type)}</option>)}</select>
           <Input type="number" value={props.batchDraft.calories} onChange={(e) => props.setBatchDraft((d) => ({ ...d, calories: e.target.value }))} placeholder="Total calories" />
           <Input type="number" value={props.batchDraft.protein} onChange={(e) => props.setBatchDraft((d) => ({ ...d, protein: e.target.value }))} placeholder="Total protein" />
           <Input type="number" value={props.batchDraft.carbs} onChange={(e) => props.setBatchDraft((d) => ({ ...d, carbs: e.target.value }))} placeholder="Total carbs" />
           <Input type="number" value={props.batchDraft.fat} onChange={(e) => props.setBatchDraft((d) => ({ ...d, fat: e.target.value }))} placeholder="Total fat" />
           <Input className="md:col-span-2" value={props.batchDraft.notes} onChange={(e) => props.setBatchDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Ingredients / notes" />
           <Button onClick={props.onCreateBatch}><Save className="h-4 w-4" /> Save batch</Button>
-          <div className="grid gap-2 md:col-span-4 md:grid-cols-[1fr_auto]"><select value={props.selectedBatchId} onChange={(event) => props.setSelectedBatchId(event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option value="">Choose saved batch meal</option>{props.batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.name} ({batch.portions} portions)</option>)}</select><Button variant="outline" onClick={props.onAddBatch} disabled={!props.selectedBatchId}>Log one portion to plan</Button></div>
+          <div className="grid gap-2 md:col-span-4 md:grid-cols-[1fr_auto]"><select value={props.selectedBatchId} onChange={(event) => props.setSelectedBatchId(event.target.value)} className="h-10 rounded-md border bg-card px-3 text-sm"><option value="">Choose saved batch meal</option>{props.batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.name} ({batch.portions} portions)</option>)}</select><Button variant="outline" onClick={props.onAddBatch} disabled={!props.selectedBatchId}>Log one portion to plan</Button></div>
         </CardContent>
       </Card>
     </div>
@@ -641,7 +678,7 @@ function WeeklyPlanner({ weekDays, selectedDate, weekItems, onSelectDate, onCopy
           const planned = dayItems.filter((item) => item.status === "planned").reduce(addItemToTotals, emptyTotals());
           const done = dayItems.filter((item) => item.status === "done").reduce(addItemToTotals, emptyTotals());
           return (
-            <button key={day} type="button" onClick={() => onSelectDate(day)} className={`rounded-md border p-3 text-left transition hover:border-primary ${day === selectedDate ? "border-primary bg-primary/10" : "bg-white"}`}>
+            <button key={day} type="button" onClick={() => onSelectDate(day)} className={`rounded-md border p-3 text-left transition-colors hover:border-primary/45 ${day === selectedDate ? "border-primary bg-primary/10" : "bg-card"}`}>
               <p className="font-semibold">{displayDate(day)}</p>
               <p className="mt-1 text-xs text-muted-foreground">Planned {Math.round(planned.calories)} kcal | Done {Math.round(done.calories)} kcal</p>
               <p className="text-xs text-muted-foreground">P {Math.round(planned.protein_g)}/{Math.round(done.protein_g)}g C {Math.round(planned.carbs_g)}/{Math.round(done.carbs_g)}g F {Math.round(planned.fat_g)}/{Math.round(done.fat_g)}g</p>
@@ -671,7 +708,7 @@ function SwapConfirmPanel({ item, templates, templateId, onTemplateChange, diff,
     <Card className="border-primary/40 bg-primary/5">
       <CardHeader><CardTitle className="text-base">Confirm meal swap for {item.food_name}</CardTitle></CardHeader>
       <CardContent className="space-y-3">
-        <select value={templateId} onChange={(event) => onTemplateChange(event.target.value)} className="h-10 w-full rounded-md border bg-white px-3 text-sm"><option value="">Choose replacement template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select>
+        <select value={templateId} onChange={(event) => onTemplateChange(event.target.value)} className="h-10 w-full rounded-md border bg-card px-3 text-sm"><option value="">Choose replacement template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select>
         {diff ? <p className="text-sm text-muted-foreground">Macro difference: {formatDiff(diff.calories)} kcal | protein {formatDiff(diff.protein_g)}g | carbs {formatDiff(diff.carbs_g)}g | fat {formatDiff(diff.fat_g)}g</p> : <p className="text-sm text-muted-foreground">Choose a template to preview macro difference.</p>}
         <div className="flex gap-2"><Button onClick={onConfirm} disabled={!templateId || !diff}>Confirm swap</Button><Button variant="outline" onClick={onCancel}>Cancel</Button></div>
       </CardContent>
@@ -683,7 +720,7 @@ function MealForm({ title, draft, setDraft, onSave, onCancel, saving }: { title:
   return (
     <Card><CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       <Input value={draft.foodName} onChange={(e) => setDraft((d) => ({ ...d, foodName: e.target.value }))} placeholder="Food name" />
-      <select value={draft.mealType} onChange={(e) => setDraft((d) => ({ ...d, mealType: normalizeMealPlanType(e.target.value) }))} className="h-10 rounded-md border bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring">{mealTypes.map((type) => <option key={type} value={type}>{displayMealType(type)}</option>)}</select>
+      <select value={draft.mealType} onChange={(e) => setDraft((d) => ({ ...d, mealType: normalizeMealPlanType(e.target.value) }))} className="h-10 rounded-md border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">{mealTypes.map((type) => <option key={type} value={type}>{displayMealType(type)}</option>)}</select>
       <Input type="number" min="0.1" step="0.1" value={draft.quantity} onChange={(e) => setDraft((d) => ({ ...d, quantity: e.target.value }))} placeholder="Quantity" />
       <Input value={draft.servingInfo} onChange={(e) => setDraft((d) => ({ ...d, servingInfo: e.target.value }))} placeholder="Serving info" />
       <Input type="number" min="0" value={draft.calories} onChange={(e) => setDraft((d) => ({ ...d, calories: e.target.value }))} placeholder="Calories" />
@@ -813,17 +850,75 @@ function SummaryCard({ label, value, detail, suffix = " kcal" }: { label: string
 function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () => void; onDone: (item: MealPlanItem) => void; onDelete: (item: MealPlanItem) => void; onStartEdit: (item: MealPlanItem) => void; onSaveEdit: (item: MealPlanItem) => void; onCancelEdit: () => void; onDuplicate: (item: MealPlanItem) => void; onCopyTomorrow: (item: MealPlanItem) => void; onRepeatDaily: (item: MealPlanItem) => void; onRepeatWeekly: (item: MealPlanItem) => void; onSaveTemplate: (item: MealPlanItem) => void; onSaveMealTemplate: () => void; onStartSwap: (item: MealPlanItem) => void; editingId: string | null; editDraft: Draft; setEditDraft: Dispatch<SetStateAction<Draft>>; updatingId: string | null; canSwap: boolean }) {
   const { type, items, onAdd, onDone, onDelete, onStartEdit, onSaveEdit, onCancelEdit, onDuplicate, onCopyTomorrow, onRepeatDaily, onRepeatWeekly, onSaveTemplate, onSaveMealTemplate, onStartSwap, editingId, editDraft, setEditDraft, updatingId, canSwap } = props;
   const totals = items.reduce((sum, item) => addItemToTotals(sum, item), emptyTotals());
+
   return (
-    <Card className="h-full"><CardHeader><CardTitle className="flex items-center justify-between gap-2 text-base"><span className="flex items-center gap-2"><Utensils className="h-4 w-4" /> {displayMealType(type)}</span><div className="flex items-center gap-2"><Badge variant="outline">{items.length}</Badge><Button type="button" size="icon" variant="ghost" onClick={onAdd}><PlusCircle className="h-4 w-4" /></Button></div></CardTitle><p className="text-xs text-muted-foreground">{Math.round(totals.calories)} kcal | {Math.round(totals.protein_g)}g protein</p><Button type="button" variant="outline" size="sm" onClick={onSaveMealTemplate} disabled={!items.length}>Save meal as template</Button></CardHeader>
-      <CardContent className="space-y-3">{!items.length ? <p className="text-sm text-muted-foreground">No food planned yet.</p> : null}{items.map((item) => {
-        const isEditing = editingId === item.id;
-        return <div key={item.id} className="rounded-md border bg-white p-3 transition hover:-translate-y-0.5 hover:shadow-sm"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="font-semibold leading-5">{item.food_name}</p><p className="mt-1 text-xs text-muted-foreground">{item.quantity}x {item.serving_size}</p><p className="mt-1 text-xs text-muted-foreground">{Math.round(toNumber(item.calories))} kcal | {Math.round(toNumber(item.protein_g))}g protein | {Math.round(toNumber(item.carbs_g))}g carbs | {Math.round(toNumber(item.fat_g))}g fat</p></div><Badge variant={item.status === "done" ? "success" : "outline"}>{item.status}</Badge></div>{isEditing ? <MealForm title="Edit planned food" draft={editDraft} setDraft={setEditDraft} onSave={() => onSaveEdit(item)} onCancel={onCancelEdit} saving={updatingId === item.id} /> : <div className="mt-3 grid grid-cols-2 gap-2"><Button type="button" size="sm" onClick={() => onDone(item)} disabled={item.status === "done" || updatingId === item.id}><CheckCircle2 className="h-4 w-4" />{item.status === "done" ? "Done" : "Mark done"}</Button><Button type="button" size="sm" variant="outline" onClick={() => onDuplicate(item)} disabled={updatingId === item.id}><Copy className="h-4 w-4" /> Duplicate</Button><Button type="button" size="sm" variant="outline" onClick={() => onCopyTomorrow(item)}>Tomorrow</Button><Button type="button" size="sm" variant="outline" onClick={() => onRepeatDaily(item)}><Repeat className="h-4 w-4" /> Daily</Button><Button type="button" size="sm" variant="outline" onClick={() => onRepeatWeekly(item)}>Weekly</Button><Button type="button" size="sm" variant="outline" onClick={() => onSaveTemplate(item)}>Template</Button><Button type="button" size="sm" variant="outline" onClick={() => onStartSwap(item)} disabled={!canSwap}><RefreshCw className="h-4 w-4" /> Swap</Button><div className="grid grid-cols-2 gap-1"><Button type="button" size="icon" variant="ghost" onClick={() => onStartEdit(item)} disabled={updatingId === item.id}><Edit3 className="h-4 w-4" /></Button><Button type="button" size="icon" variant="ghost" onClick={() => onDelete(item)} disabled={updatingId === item.id}><Trash2 className="h-4 w-4" /></Button></div></div>}</div>;
-      })}</CardContent></Card>
+    <Card className="h-full">
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between gap-2 text-base">
+          <span className="flex items-center gap-2"><Utensils className="h-4 w-4" /> {displayMealType(type)}</span>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">{items.length}</Badge>
+            <Button type="button" size="icon" variant="ghost" onClick={onAdd} aria-label={`Add ${displayMealType(type)} item`}>
+              <PlusCircle className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">{Math.round(totals.calories)} kcal | {Math.round(totals.protein_g)}g protein</p>
+        <Button type="button" variant="outline" size="sm" onClick={onSaveMealTemplate} disabled={!items.length}>Save meal as template</Button>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!items.length ? <p className="text-sm text-muted-foreground">No food planned yet.</p> : null}
+        {items.map((item) => {
+          const isEditing = editingId === item.id;
+          return (
+            <div key={item.id} className="rounded-md border bg-card p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold leading-5">{item.food_name}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.quantity}x {item.serving_size}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {Math.round(toNumber(item.calories))} kcal | {Math.round(toNumber(item.protein_g))}g protein | {Math.round(toNumber(item.carbs_g))}g carbs | {Math.round(toNumber(item.fat_g))}g fat
+                  </p>
+                </div>
+                <Badge variant={item.status === "done" ? "success" : "outline"}>{item.status}</Badge>
+              </div>
+              {isEditing ? (
+                <div className="mt-3">
+                  <MealForm title="Edit planned food" draft={editDraft} setDraft={setEditDraft} onSave={() => onSaveEdit(item)} onCancel={onCancelEdit} saving={updatingId === item.id} />
+                </div>
+              ) : (
+                <div className="mt-3 flex items-center gap-2">
+                  <Button type="button" size="sm" className="flex-1" onClick={() => onDone(item)} disabled={item.status === "done" || updatingId === item.id}>
+                    <CheckCircle2 className="h-4 w-4" />
+                    {item.status === "done" ? "Done" : "Mark done"}
+                  </Button>
+                  <details className="relative">
+                    <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${item.food_name}`}>
+                      <MoreHorizontal className="h-4 w-4" />
+                    </summary>
+                    <div className="absolute right-0 z-20 mt-2 grid w-52 gap-1 rounded-md border bg-card p-2 shadow-luxe">
+                      <Button type="button" size="sm" variant="ghost" className="justify-start" onClick={() => onDuplicate(item)} disabled={updatingId === item.id}><Copy className="h-4 w-4" /> Duplicate</Button>
+                      <Button type="button" size="sm" variant="ghost" className="justify-start" onClick={() => onCopyTomorrow(item)}>Tomorrow</Button>
+                      <Button type="button" size="sm" variant="ghost" className="justify-start" onClick={() => onRepeatDaily(item)}><Repeat className="h-4 w-4" /> Daily</Button>
+                      <Button type="button" size="sm" variant="ghost" className="justify-start" onClick={() => onRepeatWeekly(item)}>Weekly</Button>
+                      <Button type="button" size="sm" variant="ghost" className="justify-start" onClick={() => onSaveTemplate(item)}>Template</Button>
+                      <Button type="button" size="sm" variant="ghost" className="justify-start" onClick={() => onStartSwap(item)} disabled={!canSwap}><RefreshCw className="h-4 w-4" /> Swap</Button>
+                      <Button type="button" size="sm" variant="ghost" className="justify-start" onClick={() => onStartEdit(item)} disabled={updatingId === item.id}><Edit3 className="h-4 w-4" /> Edit</Button>
+                      <Button type="button" size="sm" variant="ghost" className="justify-start text-destructive hover:text-destructive" onClick={() => onDelete(item)} disabled={updatingId === item.id}><Trash2 className="h-4 w-4" /> Delete</Button>
+                    </div>
+                  </details>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
   );
 }
 
 function NoticeBox({ notice, onClose }: { notice: Notice; onClose: () => void }) {
-  const styles = notice.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-950" : notice.type === "error" ? "border-red-200 bg-red-50 text-red-950" : "border-primary/40 bg-primary/5 text-foreground";
+  const styles = notice.type === "success" ? "border-success/30 bg-success/10 text-foreground" : notice.type === "error" ? "border-destructive/30 bg-destructive/10 text-foreground" : "border-primary/40 bg-primary/5 text-foreground";
   return <div className={`rounded-md border p-4 text-sm ${styles}`}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{notice.title}</p>{notice.description ? <p className="mt-1 break-words opacity-90">{notice.description}</p> : null}</div><button type="button" onClick={onClose} className="text-xs font-semibold underline">close</button></div></div>;
 }
 

@@ -94,19 +94,19 @@ export function WorkoutCalendar({
                 type="button"
                 onClick={() => planIndex >= 0 && onSelectDay(planIndex)}
                 className={cn(
-                  "min-h-36 rounded-lg border bg-white p-3 text-left transition hover:-translate-y-0.5 hover:border-primary hover:bg-blue-50 hover:shadow-sm",
-                  isToday ? "border-primary ring-2 ring-blue-100" : "border-slate-200",
-                  isActive ? "bg-blue-50" : "",
-                  status === "completed" ? "border-emerald-300 bg-emerald-50 hover:bg-emerald-50" : "",
-                  status === "skipped" ? "border-amber-300 bg-amber-50 hover:bg-amber-50" : ""
+                  "min-h-36 rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary/45 hover:bg-muted/40",
+                  isToday ? "border-primary ring-2 ring-primary/10" : "border-border",
+                  isActive ? "bg-primary/5" : "",
+                  status === "completed" ? "border-success/40 bg-success/10 hover:bg-success/10" : "",
+                  status === "skipped" ? "border-warning/40 bg-warning/10 hover:bg-warning/10" : ""
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="font-semibold text-slate-950">{weekday}</p>
+                  <p className="font-semibold text-foreground">{weekday}</p>
                   <div className="flex flex-wrap justify-end gap-1">
                     {isToday ? <Badge>Today</Badge> : null}
                     {status === "completed" ? <Badge variant="success">Done</Badge> : null}
-                    {status === "skipped" ? <Badge className="bg-amber-100 text-amber-800">Skipped</Badge> : null}
+                    {status === "skipped" ? <Badge variant="warning">Skipped</Badge> : null}
                   </div>
                 </div>
                 {planDay ? (
@@ -115,7 +115,7 @@ export function WorkoutCalendar({
                     <p className="text-xs text-muted-foreground">{planDay.exercises.length} exercises</p>
                     <div className="space-y-1">
                       {planDay.exercises.slice(0, 3).map((exercise) => (
-                        <p key={exercise.id} className="truncate text-xs text-slate-700">- {exercise.name}</p>
+                        <p key={exercise.id} className="truncate text-xs text-muted-foreground">- {exercise.name}</p>
                       ))}
                       {planDay.exercises.length > 3 ? <p className="text-xs text-muted-foreground">+{planDay.exercises.length - 3} more</p> : null}
                     </div>

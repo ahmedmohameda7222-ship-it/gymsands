@@ -268,7 +268,7 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
                     type="button"
                     onClick={() => addExercise(workout)}
                     disabled={isAdded}
-                    className={isAdded ? "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-100" : undefined}
+                    className={isAdded ? "bg-success text-success-foreground hover:bg-success disabled:opacity-100" : undefined}
                   >
                     {isAdded ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                     {isAdded ? "Added" : "Add"}

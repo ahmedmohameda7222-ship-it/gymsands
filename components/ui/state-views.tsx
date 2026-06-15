@@ -30,11 +30,8 @@ export function EmptyState({
     : null;
 
   return (
-    <Card className={cn("border-dashed bg-card/70", className)}>
+    <Card className={cn("border-dashed bg-card/80", className)}>
       <CardContent className="flex flex-col items-start gap-4 p-5 sm:p-6">
-        <div className="rounded-full bg-primary/10 p-2 text-primary">
-          <ArrowRight className="h-4 w-4" />
-        </div>
         <div>
           <p className="text-lg font-semibold text-foreground">{title}</p>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
@@ -69,19 +66,20 @@ export function ErrorState({
   details?: string;
   className?: string;
 }) {
-  const showTechnicalDetails = process.env.NODE_ENV === "development" && Boolean(details);
-
   return (
-    <Card className={cn("border-destructive/25 bg-destructive/5 shadow-none", className)}>
+    <Card className={cn("border-destructive/30 bg-destructive/5", className)}>
       <CardContent className="space-y-4 p-5 sm:p-6">
         <div className="flex items-start gap-3">
-          <div className="rounded-full bg-destructive/10 p-2">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
-          </div>
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
           <div>
             <p className="font-semibold text-foreground">{title}</p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
-            {showTechnicalDetails ? <pre className="mt-3 max-h-40 overflow-auto rounded-lg bg-background p-3 text-xs text-muted-foreground">{details}</pre> : null}
+            {details ? (
+              <details className="mt-3 rounded-md border bg-background p-3 text-xs text-muted-foreground">
+                <summary className="cursor-pointer font-semibold text-foreground">Technical details</summary>
+                <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap">{details}</pre>
+              </details>
+            ) : null}
           </div>
         </div>
         {(onRetry || fallbackLabel) ? (
@@ -97,7 +95,7 @@ export function ErrorState({
 
 export function CardSkeleton({ rows = 3, className }: { rows?: number; className?: string }) {
   return (
-    <Card className={cn("shadow-none", className)} aria-busy="true" aria-label="Loading content">
+    <Card className={className} aria-busy="true" aria-label="Loading content">
       <CardHeader>
         <SkeletonLine className="h-5 w-1/2" />
       </CardHeader>
@@ -117,7 +115,7 @@ export function CardGridSkeleton({ count = 3, rows = 3, className }: { count?: n
 }
 
 export function SkeletonLine({ className }: { className?: string }) {
-  return <div className={cn("h-4 animate-pulse rounded-lg bg-muted/70", className)} />;
+  return <div className={cn("h-4 animate-pulse rounded-md bg-muted", className)} />;
 }
 
 export function AdminMigrationNotice({ migrationName }: { migrationName?: string }) {

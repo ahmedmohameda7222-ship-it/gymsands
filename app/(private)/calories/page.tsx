@@ -4,6 +4,7 @@ import { BarChart3, ChefHat, Copy, Plus, Save, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeading } from "@/components/layout/page-heading";
 import { FoodBrowser } from "@/components/meals/food-browser";
 import { FoodLogList } from "@/components/meals/food-log-list";
@@ -267,121 +268,136 @@ export default function CaloriesPage() {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <TrackerCard label="Calories" value={totals.calories} target={displayTargets.daily_calories} unit="kcal" hasTarget={Boolean(targets?.daily_calories)} />
-        <TrackerCard label="Protein" value={totals.protein_g} target={displayTargets.protein_g} unit="g" hasTarget={Boolean(targets?.protein_g)} />
-        <TrackerCard label="Carbs" value={totals.carbs_g} target={displayTargets.carbs_g} unit="g" hasTarget={Boolean(targets?.carbs_g)} />
-        <TrackerCard label="Fat" value={totals.fat_g} target={displayTargets.fat_g} unit="g" hasTarget={Boolean(targets?.fat_g)} />
-        <TrackerCard label="Water" value={Math.round(waterTotal / 1000 * 10) / 10} target={Math.round(displayTargets.water_ml / 1000 * 10) / 10} unit="L" hasTarget={Boolean(targets?.water_ml)} />
-      </div>
+      <Tabs defaultValue="today" className="space-y-4">
+        <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
+          <TabsTrigger value="today">Today</TabsTrigger>
+          <TabsTrigger value="week">Week</TabsTrigger>
+          <TabsTrigger value="targets">Targets</TabsTrigger>
+          <TabsTrigger value="tools">Tools</TabsTrigger>
+        </TabsList>
 
-      <Card id="daily-targets" className="mt-4 scroll-mt-24">
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
-          <div>
-            <CardTitle>Daily target</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {hasTargets ? "Targets are saved for calorie, macro, and water reporting." : "No targets saved yet. Set targets to unlock remaining macros and weekly adherence."}
-            </p>
+        <TabsContent value="today" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <TrackerCard label="Calories" value={totals.calories} target={displayTargets.daily_calories} unit="kcal" hasTarget={Boolean(targets?.daily_calories)} />
+            <TrackerCard label="Protein" value={totals.protein_g} target={displayTargets.protein_g} unit="g" hasTarget={Boolean(targets?.protein_g)} />
+            <TrackerCard label="Carbs" value={totals.carbs_g} target={displayTargets.carbs_g} unit="g" hasTarget={Boolean(targets?.carbs_g)} />
+            <TrackerCard label="Fat" value={totals.fat_g} target={displayTargets.fat_g} unit="g" hasTarget={Boolean(targets?.fat_g)} />
+            <TrackerCard label="Water" value={Math.round(waterTotal / 1000 * 10) / 10} target={Math.round(displayTargets.water_ml / 1000 * 10) / 10} unit="L" hasTarget={Boolean(targets?.water_ml)} />
           </div>
-          <Button variant={showTargetEditor || !hasTargets ? "default" : "outline"} onClick={() => setShowTargetEditor((current) => !current)}>
-            <Settings2 className="h-4 w-4" />
-            {showTargetEditor || !hasTargets ? "Hide target setup" : "Edit targets"}
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {showTargetEditor || !hasTargets ? (
-            <div className="grid gap-3 md:grid-cols-6">
-              <div className="rounded-md border bg-muted/40 p-3 md:col-span-6">
-                <p className="font-semibold">Goal-based target setup</p>
-                <div className="mt-3 grid gap-3 md:grid-cols-6">
-                  <TargetField label="Age" value={wizard.age} onChange={(age) => setWizard((current) => ({ ...current, age }))} />
-                  <TargetField label="Height cm" value={wizard.heightCm} onChange={(heightCm) => setWizard((current) => ({ ...current, heightCm }))} />
-                  <TargetField label="Weight kg" value={wizard.weightKg} onChange={(weightKg) => setWizard((current) => ({ ...current, weightKg }))} />
-                  <SelectField label="Sex" value={wizard.sex} values={["male", "female"]} onChange={(sex) => setWizard((current) => ({ ...current, sex: sex as "male" | "female" }))} />
-                  <SelectField label="Activity" value={wizard.activityLevel} values={["sedentary", "light", "moderate", "very_active"]} onChange={(activityLevel) => setWizard((current) => ({ ...current, activityLevel: activityLevel as typeof current.activityLevel }))} />
-                  <SelectField label="Goal" value={wizard.goal} values={["fat_loss", "maintenance", "muscle_gain", "recomposition"]} onChange={(goal) => setWizard((current) => ({ ...current, goal: goal as typeof current.goal }))} />
-                  <Button className="md:col-span-6" type="button" variant="outline" onClick={calculateTargetsFromWizard}>
-                    Estimate targets
+
+          <FastFoodFlowCard
+            selectedDateLabel={formatDay(selectedDate)}
+            hasFoodLogs={logs.length > 0}
+            hasTargets={hasTargets}
+            onCopyYesterday={copyYesterday}
+          />
+
+          <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+            <div className="space-y-4">
+              <WaterCard
+                waterTotal={waterTotal}
+                waterGoal={displayTargets.water_ml}
+                customWaterMl={customWaterMl}
+                setCustomWaterMl={setCustomWaterMl}
+                waterLogs={waterLogs}
+                onAddWater={addWater}
+                onRemoveWater={removeWater}
+              />
+            </div>
+            <FoodLogList
+              logs={logs}
+              title={`${formatDay(selectedDate)} food log`}
+              onDeleted={(id) => {
+                setLogs((current) => current.filter((log) => log.id !== id));
+                loadWeek().catch(() => undefined);
+              }}
+            />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="week" className="space-y-4">
+          <WeeklyTracker
+            selectedDate={selectedDate}
+            weekData={weekData}
+            onSelectDate={setSelectedDate}
+            onMoveWeek={moveWeek}
+          />
+          <NutritionCoachCard
+            weekData={weekData}
+            targets={displayTargets}
+            totals={totals}
+            waterTotal={waterTotal}
+          />
+          <WeeklyOverview weekData={weekData} waterGoalMl={displayTargets.water_ml} />
+        </TabsContent>
+
+        <TabsContent value="targets" className="space-y-4">
+          <Card id="daily-targets" className="scroll-mt-24">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+              <div>
+                <CardTitle>Daily target</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {hasTargets ? "Targets are saved for calorie, macro, and water reporting." : "No targets saved yet. Set targets to unlock remaining macros and weekly adherence."}
+                </p>
+              </div>
+              <Button variant={showTargetEditor || !hasTargets ? "default" : "outline"} onClick={() => setShowTargetEditor((current) => !current)}>
+                <Settings2 className="h-4 w-4" />
+                {showTargetEditor || !hasTargets ? "Hide setup" : "Edit targets"}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {showTargetEditor || !hasTargets ? (
+                <div className="grid gap-3 md:grid-cols-6">
+                  <div className="rounded-md border bg-muted/40 p-3 md:col-span-6">
+                    <p className="font-semibold">Goal-based target setup</p>
+                    <div className="mt-3 grid gap-3 md:grid-cols-6">
+                      <TargetField label="Age" value={wizard.age} onChange={(age) => setWizard((current) => ({ ...current, age }))} />
+                      <TargetField label="Height cm" value={wizard.heightCm} onChange={(heightCm) => setWizard((current) => ({ ...current, heightCm }))} />
+                      <TargetField label="Weight kg" value={wizard.weightKg} onChange={(weightKg) => setWizard((current) => ({ ...current, weightKg }))} />
+                      <SelectField label="Sex" value={wizard.sex} values={["male", "female"]} onChange={(sex) => setWizard((current) => ({ ...current, sex: sex as "male" | "female" }))} />
+                      <SelectField label="Activity" value={wizard.activityLevel} values={["sedentary", "light", "moderate", "very_active"]} onChange={(activityLevel) => setWizard((current) => ({ ...current, activityLevel: activityLevel as typeof current.activityLevel }))} />
+                      <SelectField label="Goal" value={wizard.goal} values={["fat_loss", "maintenance", "muscle_gain", "recomposition"]} onChange={(goal) => setWizard((current) => ({ ...current, goal: goal as typeof current.goal }))} />
+                      <Button className="md:col-span-6" type="button" variant="outline" onClick={calculateTargetsFromWizard}>
+                        Estimate targets
+                      </Button>
+                    </div>
+                  </div>
+                  <TargetField label="Calories" value={targetForm.dailyCalories} onChange={(dailyCalories) => setTargetForm((current) => ({ ...current, dailyCalories }))} />
+                  <TargetField label="Protein g" value={targetForm.proteinG} onChange={(proteinG) => setTargetForm((current) => ({ ...current, proteinG }))} />
+                  <TargetField label="Carbs g" value={targetForm.carbsG} onChange={(carbsG) => setTargetForm((current) => ({ ...current, carbsG }))} />
+                  <TargetField label="Fat g" value={targetForm.fatG} onChange={(fatG) => setTargetForm((current) => ({ ...current, fatG }))} />
+                  <TargetField label="Water ml" value={targetForm.waterMl} onChange={(waterMl) => setTargetForm((current) => ({ ...current, waterMl }))} />
+                  <Button className="self-end" onClick={saveTargets} disabled={isSavingTargets}>
+                    <Save className="h-4 w-4" />
+                    {isSavingTargets ? "Saving..." : "Save target"}
                   </Button>
                 </div>
-              </div>
-              <TargetField label="Calories" value={targetForm.dailyCalories} onChange={(dailyCalories) => setTargetForm((current) => ({ ...current, dailyCalories }))} />
-              <TargetField label="Protein g" value={targetForm.proteinG} onChange={(proteinG) => setTargetForm((current) => ({ ...current, proteinG }))} />
-              <TargetField label="Carbs g" value={targetForm.carbsG} onChange={(carbsG) => setTargetForm((current) => ({ ...current, carbsG }))} />
-              <TargetField label="Fat g" value={targetForm.fatG} onChange={(fatG) => setTargetForm((current) => ({ ...current, fatG }))} />
-              <TargetField label="Water ml" value={targetForm.waterMl} onChange={(waterMl) => setTargetForm((current) => ({ ...current, waterMl }))} />
-              <Button className="self-end" onClick={saveTargets} disabled={isSavingTargets}>
-                <Save className="h-4 w-4" />
-                {isSavingTargets ? "Saving..." : "Save target"}
-              </Button>
-            </div>
-          ) : (
-            <div className="grid gap-3 text-sm md:grid-cols-5">
-              <SavedTarget label="Calories" value={`${displayTargets.daily_calories} kcal`} />
-              <SavedTarget label="Protein" value={`${displayTargets.protein_g}g`} />
-              <SavedTarget label="Carbs" value={`${displayTargets.carbs_g}g`} />
-              <SavedTarget label="Fat" value={`${displayTargets.fat_g}g`} />
-              <SavedTarget label="Water" value={`${displayTargets.water_ml} ml`} />
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              ) : (
+                <div className="grid gap-3 text-sm md:grid-cols-5">
+                  <SavedTarget label="Calories" value={`${displayTargets.daily_calories} kcal`} />
+                  <SavedTarget label="Protein" value={`${displayTargets.protein_g}g`} />
+                  <SavedTarget label="Carbs" value={`${displayTargets.carbs_g}g`} />
+                  <SavedTarget label="Fat" value={`${displayTargets.fat_g}g`} />
+                  <SavedTarget label="Water" value={`${displayTargets.water_ml} ml`} />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <WeeklyTracker
-        selectedDate={selectedDate}
-        weekData={weekData}
-        onSelectDate={setSelectedDate}
-        onMoveWeek={moveWeek}
-      />
-
-      <FastFoodFlowCard
-        selectedDateLabel={formatDay(selectedDate)}
-        hasFoodLogs={logs.length > 0}
-        hasTargets={hasTargets}
-        onCopyYesterday={copyYesterday}
-      />
-
-      <NutritionCoachCard
-        weekData={weekData}
-        targets={displayTargets}
-        totals={totals}
-        waterTotal={waterTotal}
-      />
-
-      <WeeklyOverview weekData={weekData} waterGoalMl={displayTargets.water_ml} />
-
-      <div id="barcode-tools" className="mt-4 scroll-mt-24">
-        <ApiFoodTools selectedDate={selectedDate} onFoodLogged={handleLogAdded} />
-      </div>
-
-      <div className="mt-4 grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
-        <div className="space-y-4">
-          <WaterCard
-            waterTotal={waterTotal}
-            waterGoal={displayTargets.water_ml}
-            customWaterMl={customWaterMl}
-            setCustomWaterMl={setCustomWaterMl}
-            waterLogs={waterLogs}
-            onAddWater={addWater}
-            onRemoveWater={removeWater}
-          />
-          <FoodLogList
-            logs={logs}
-            title={`${formatDay(selectedDate)} food log`}
-            onDeleted={(id) => {
-              setLogs((current) => current.filter((log) => log.id !== id));
-              loadWeek().catch(() => undefined);
-            }}
-          />
-        </div>
-        <div>
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-            <Plus className="h-4 w-4" />
-            Add food to {formatDay(selectedDate)}
+        <TabsContent value="tools" className="space-y-4">
+          <div id="barcode-tools" className="scroll-mt-24">
+            <ApiFoodTools selectedDate={selectedDate} onFoodLogged={handleLogAdded} />
           </div>
-          <FoodBrowser initialLogs={logs} logDate={selectedDate} onLogAdded={handleLogAdded} />
-        </div>
-      </div>
+          <div>
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Plus className="h-4 w-4" />
+              Add food to {formatDay(selectedDate)}
+            </div>
+            <FoodBrowser initialLogs={logs} logDate={selectedDate} onLogAdded={handleLogAdded} />
+          </div>
+        </TabsContent>
+      </Tabs>
     </>
   );
 }
