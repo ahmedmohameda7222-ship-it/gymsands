@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Save } from "lucide-react";
+import { CheckCircle2, ExternalLink, Save, ShieldCheck, UserRound } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,15 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const trimmedName = fullName.trim();
   const hasChanges = useMemo(() => trimmedName !== (profile?.full_name ?? "").trim(), [profile?.full_name, trimmedName]);
+  const initials = useMemo(() => {
+    const source = trimmedName || profile?.email || "FH";
+    return source
+      .split(/[\s@.]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "FH";
+  }, [profile?.email, trimmedName]);
 
   useEffect(() => {
     setFullName(profile?.full_name ?? "");
@@ -47,12 +57,37 @@ export default function ProfilePage() {
 
   return (
     <>
-      <PageHeading title="Profile" description="Keep your member details current." />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
+      <PageHeading title="Profile" description="Your account identity and safety notes for a real fitness-tracking web app." />
+
+      <Card className="mb-5 overflow-hidden border-primary/15 bg-primary text-primary-foreground">
+        <CardContent className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div className="flex items-center gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-primary-foreground/15 text-xl font-semibold">
+              {initials}
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground/70">FitLife Hub member</p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight">{trimmedName || "Complete your profile"}</h2>
+              <p className="mt-1 text-sm text-primary-foreground/75">{profile?.email ?? "Email loading..."}</p>
+            </div>
+          </div>
+          <Button asChild variant="secondary">
+            <Link href="/onboarding?edit=true">
+              Edit fitness profile
+              <ExternalLink className="h-4 w-4" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+        <Card className="border-border/70">
           <CardHeader>
-            <CardTitle>Profile</CardTitle>
-            <CardDescription>Your name is shown across the app.</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <UserRound className="h-5 w-5 text-primary" />
+              Account details
+            </CardTitle>
+            <CardDescription>Your name is shown across the app. Email comes from your signed-in account.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -63,22 +98,36 @@ export default function ProfilePage() {
               <Label htmlFor="profile-name">Full name</Label>
               <Input id="profile-name" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your name, e.g. Ahmed" />
             </div>
-            <Button onClick={saveProfile} disabled={isSaving || !hasChanges}>
-              <Save className="h-4 w-4" />
-              {isSaving ? "Saving..." : "Save profile"}
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button onClick={saveProfile} disabled={isSaving || !hasChanges}>
+                <Save className="h-4 w-4" />
+                {isSaving ? "Saving..." : "Save profile"}
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/settings">Open settings</Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
-        <Card className="bg-success/10">
+
+        <Card className="border-success/30 bg-success/10">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-success" /> Ready to train</CardTitle>
-            <CardDescription>Small consistent updates make your dashboard more useful.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-success" /> Safety and data notes</CardTitle>
+            <CardDescription>Clear rules for a responsible pre-launch fitness app.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm text-foreground">
-            <p>This app is for general fitness tracking only.</p>
-            <p>It is not medical advice. Speak with a doctor if you have medical conditions.</p>
-            <p>Do not train through serious pain.</p>
-            <p>Nutrition values are approximate and may vary depending on preparation and portion size.</p>
+          <CardContent className="space-y-3 text-sm text-foreground">
+            {[
+              "This app is for general fitness tracking only.",
+              "It is not medical advice. Speak with a doctor if you have medical conditions.",
+              "Do not train through serious pain.",
+              "Nutrition values are approximate and may vary by preparation and portion size.",
+              "Workout and meal plans should be created externally, then imported for tracking."
+            ].map((item) => (
+              <div key={item} className="flex items-start gap-3 rounded-xl border border-success/20 bg-card/70 p-3">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                <span>{item}</span>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>
