@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client";
+import { env } from "@/lib/env";
 import { isUuid } from "@/lib/utils";
 import type { OnboardingAnswers, Profile } from "@/types";
 
@@ -16,6 +17,29 @@ function cleanNumber(value: number | null | undefined) {
   if (value === null) return null;
   if (value === undefined) return undefined;
   return Number.isFinite(value) ? value : undefined;
+}
+
+function mockOnboarding(userId: string): OnboardingAnswers {
+  return {
+    user_id: userId,
+    age_range: "25-34",
+    gender: "Prefer not to say",
+    height_cm: null,
+    weight_kg: null,
+    goal: "General fitness",
+    goals: ["General fitness"],
+    training_cycle: null,
+    training_level: "Beginner",
+    training_place: "Gym",
+    training_days_per_week: 3,
+    workout_duration_minutes: 45,
+    min_workout_duration_minutes: 30,
+    max_workout_duration_minutes: 60,
+    desired_duration_weeks: 4,
+    available_equipment: [],
+    nutrition_preferences: [],
+    allergies_limitations: null
+  };
 }
 
 export async function updateProfile(userId: string, patch: ProfilePatch) {
@@ -83,6 +107,7 @@ export async function saveOnboarding(answers: OnboardingAnswers) {
 }
 
 export async function getOnboarding(userId: string) {
+  if (env.useMockAuth && userId === "mock-user") return mockOnboarding(userId);
   if (!canUseUserData(userId)) return null;
   const { data, error } = await supabase!.from("onboarding_answers").select("*").eq("user_id", userId).maybeSingle();
   if (error) throw error;

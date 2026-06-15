@@ -2,6 +2,7 @@
 
 import type { MealPlanItem, MealType } from "@/types";
 import { supabase } from "@/lib/supabase/client";
+import { isUuid } from "@/lib/utils";
 
 export type MealTemplateItem = {
   food_name: string;
@@ -60,6 +61,10 @@ function canStore() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
 }
 
+function canUseUserData(userId: string | null | undefined): userId is string {
+  return Boolean(supabase && userId && isUuid(userId));
+}
+
 function readJson<T>(key: string, fallback: T): T {
   // TODO(migration): Move meal plan templates and batches to Supabase
   if (!canStore()) return fallback;
@@ -100,7 +105,7 @@ let hasMigratedBatch = false;
 const migratedShoppingKeys = new Set<string>();
 
 export async function getMealTemplates(userId: string | null | undefined): Promise<MealTemplate[]> {
-  if (!userId) return readJson<MealTemplate[]>(storageKey(templatePrefix, userId), []);
+  if (!canUseUserData(userId)) return readJson<MealTemplate[]>(storageKey(templatePrefix, userId), []);
   
   if (!hasMigratedTemplates && canStore()) {
     hasMigratedTemplates = true;
@@ -164,7 +169,7 @@ export async function saveMealTemplate(userId: string | null | undefined, name: 
   
   const created_at = new Date().toISOString();
 
-  if (!userId) {
+  if (!canUseUserData(userId)) {
     const template: MealTemplate = {
       id: `template-${crypto.randomUUID()}`,
       user_id: "anonymous",
@@ -214,7 +219,7 @@ export async function saveMealTemplate(userId: string | null | undefined, name: 
 }
 
 export async function deleteMealTemplate(userId: string | null | undefined, templateId: string) {
-  if (!userId) {
+  if (!canUseUserData(userId)) {
     const key = storageKey(templatePrefix, userId);
     writeJson(key, readJson<MealTemplate[]>(key, []).filter((template) => template.id !== templateId));
     return;
@@ -223,7 +228,7 @@ export async function deleteMealTemplate(userId: string | null | undefined, temp
 }
 
 export async function getBatchMeals(userId: string | null | undefined): Promise<BatchMeal[]> {
-  if (!userId) return readJson<BatchMeal[]>(storageKey(batchPrefix, userId), []);
+  if (!canUseUserData(userId)) return readJson<BatchMeal[]>(storageKey(batchPrefix, userId), []);
   
   if (!hasMigratedBatch && canStore()) {
     hasMigratedBatch = true;
@@ -257,7 +262,7 @@ export async function saveBatchMeal(userId: string | null | undefined, input: Om
   if (!name) throw new Error("Batch meal name is required.");
   const portions = Math.max(1, Math.round(toNumber(input.portions)));
   
-  if (!userId) {
+  if (!canUseUserData(userId)) {
     const batch: BatchMeal = {
       id: `batch-${crypto.randomUUID()}`,
       user_id: "anonymous",
@@ -338,7 +343,7 @@ export function buildShoppingList(items: MealPlanItem[], checkedKeys: string[] =
 
 export async function getCheckedShoppingKeys(userId: string | null | undefined, weekStart: string): Promise<string[]> {
   const key = `${storageKey(shoppingPrefix, userId)}:${weekStart}`;
-  if (!userId) return readJson<string[]>(key, []);
+  if (!canUseUserData(userId)) return readJson<string[]>(key, []);
   
     
   if (!migratedShoppingKeys.has(key) && canStore()) {
@@ -357,7 +362,7 @@ export async function getCheckedShoppingKeys(userId: string | null | undefined, 
 }
 
 export async function setShoppingItemChecked(userId: string | null | undefined, weekStart: string, itemKey: string, checked: boolean): Promise<string[]> {
-  if (!userId) {
+  if (!canUseUserData(userId)) {
     const storage = `${storageKey(shoppingPrefix, userId)}:${weekStart}`;
     const current = new Set(readJson<string[]>(storage, []));
     if (checked) current.add(itemKey);

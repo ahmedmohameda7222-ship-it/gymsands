@@ -88,8 +88,9 @@ Run SQL in this canonical order. Some legacy files share numeric prefixes; do no
 25. `supabase/migrations/020_wellness_sleep_recovery_fields.sql`
 26. `supabase/migrations/021_chatgpt_mcp_full_access_scopes.sql`
 27. `supabase/migrations/021_cloud_sync_persistence.sql`
-28. Register the first admin user.
-29. Run `supabase/seed/004_admin_setup_placeholder.sql` after editing the admin email if needed.
+28. `supabase/migrations/022_saved_nutrition_favorites_recipes.sql`
+29. Register the first admin user.
+30. Run `supabase/seed/004_admin_setup_placeholder.sql` after editing the admin email if needed.
 
 For projects that already imported legacy exercise data, back up the database first, then review the cleanup SQL under `supabase/cleanup`.
 

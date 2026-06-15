@@ -145,7 +145,7 @@ function normalizeWorkoutPlan(plan: RawWorkoutPlan): UserWorkoutPlan {
 }
 
 export async function getActiveUserWorkoutPlan(userId: string) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return null;
 
   const selectWithSource =
     "id,user_id,name,is_active,is_default,source,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
@@ -189,7 +189,7 @@ export async function getDefaultUserWorkoutPlan(userId: string) {
 }
 
 export async function getUserWorkoutPlans(userId: string) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
 
   const selectWithSource =
     "id,user_id,name,is_active,is_default,source,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
@@ -225,7 +225,7 @@ export async function getUserWorkoutPlans(userId: string) {
 }
 
 export async function getUserWorkoutPlan(userId: string, planId: string) {
-  if (!canUseUserData(userId) || !isUuid(planId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId) || !isUuid(planId)) return null;
   const selectWithSource =
     "id,user_id,name,is_active,is_default,source,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
   const selectLegacy =

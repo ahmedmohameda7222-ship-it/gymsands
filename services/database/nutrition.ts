@@ -163,7 +163,7 @@ export async function getGlobalFoods(
 }
 
 export async function getCalorieTargets(userId: string) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return null;
 
   const { data, error } = await supabase!
     .from("calorie_targets")
@@ -216,7 +216,7 @@ export async function upsertCalorieTargets({
 }
 
 export async function getTodayFoodLogs(userId: string, date = todayIso()) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("food_logs")
     .select("*")
@@ -370,7 +370,7 @@ export async function getFoodKitchens(userId: string) {
     updated_at: fallbackKitchen.updated_at
   })) as FoodSubcategory[];
 
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return { kitchens: [fallbackKitchen], subcategories: fallbackSubcategories };
 
   const [kitchensResult, subcategoriesResult] = await Promise.all([
     supabase!
@@ -433,7 +433,7 @@ export async function createFoodSubcategory(kitchenId: string, name: string) {
 }
 
 export async function getUserFoods(userId: string) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!.from("user_food_items").select("*").eq("user_id", userId).order("food_name");
   if (error) {
     console.warn("FitLife Hub could not load custom foods.", error.message);
@@ -489,7 +489,7 @@ export async function deleteUserFood(userId: string, foodId: string) {
 }
 
 export async function getWaterLogs(userId: string, date: string) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("water_logs")
     .select("*")
@@ -621,7 +621,7 @@ async function foodsById(foodIds: string[], userFoodIds: string[]) {
 }
 
 export async function getCustomMeals(userId: string) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
 
   const { data: meals, error } = await supabase!
     .from("meals")
@@ -805,7 +805,7 @@ export async function addCustomMealToMealPlan(userId: string, meal: CustomMeal, 
 }
 
 export async function getTodayMealPlanItems(userId: string, date = todayIso()) {
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("user_meal_plan_items")
     .select("*")
