@@ -109,24 +109,27 @@ function readPersistedFilterState() {
     return next;
   }, { ...emptyFilters } as Record<FilterKey, string[]>);
   const urlQuery = params.get("q") ?? "";
-  const hasUrlState = Boolean(urlQuery || Object.values(urlFilters).some((values) => values.length));
-  if (hasUrlState) return { query: urlQuery, filters: urlFilters };
+  const urlShowAll = params.get("all") === "1";
+  const hasUrlState = Boolean(urlQuery || urlShowAll || Object.values(urlFilters).some((values) => values.length));
+  if (hasUrlState) return { query: urlQuery, filters: urlFilters, showAll: urlShowAll };
 
   const stored = window.localStorage.getItem(filterStorageKey);
   if (!stored) return null;
   try {
-    return JSON.parse(stored) as { query: string; filters: Record<FilterKey, string[]> };
+    return JSON.parse(stored) as { query: string; filters: Record<FilterKey, string[]>; showAll?: boolean };
   } catch {
     return null;
   }
 }
 
-function persistFilterState(query: string, filters: Record<FilterKey, string[]>) {
+function persistFilterState(query: string, filters: Record<FilterKey, string[]>, showAll: boolean) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(filterStorageKey, JSON.stringify({ query, filters }));
+  window.localStorage.setItem(filterStorageKey, JSON.stringify({ query, filters, showAll }));
   const params = new URLSearchParams(window.location.search);
   if (query) params.set("q", query);
   else params.delete("q");
+  if (showAll) params.set("all", "1");
+  else params.delete("all");
   (Object.keys(filterParamKeys) as FilterKey[]).forEach((key) => {
     const values = filters[key];
     if (values.length) params.set(filterParamKeys[key], values.join("|"));
@@ -157,6 +160,7 @@ export function WorkoutBrowser() {
   const [customExercises, setCustomExercises] = useState<Workout[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [showAllWorkouts, setShowAllWorkouts] = useState(false);
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customDraft, setCustomDraft] = useState<CustomExerciseInput>(emptyCustomExercise);
   const [page, setPage] = useState(0);
@@ -170,6 +174,7 @@ export function WorkoutBrowser() {
     if (persisted) {
       setQuery(persisted.query ?? "");
       setFilters({ ...emptyFilters, ...(persisted.filters ?? {}) });
+      setShowAllWorkouts(Boolean(persisted.showAll));
     }
     setIsHydrated(true);
   }, []);
@@ -195,14 +200,22 @@ export function WorkoutBrowser() {
 
   const activeFilterCount = useMemo(() => Object.values(filters).reduce((sum, values) => sum + values.length, 0), [filters]);
   const requestFilters: WorkoutFilters = filters;
+  const hasActiveLibraryRequest = Boolean(showAllWorkouts || favoritesOnly || query.trim() || activeFilterCount);
 
   useEffect(() => {
     if (!isHydrated) return;
-    persistFilterState(query, filters);
-  }, [filters, isHydrated, query]);
+    persistFilterState(query, filters, showAllWorkouts);
+  }, [filters, isHydrated, query, showAllWorkouts]);
 
   useEffect(() => {
     if (!isHydrated) return;
+    if (!hasActiveLibraryRequest) {
+      setWorkouts([]);
+      setPage(0);
+      setHasMore(false);
+      setIsLoading(false);
+      return;
+    }
     let active = true;
     const timer = window.setTimeout(() => {
       setIsLoading(true);
@@ -227,15 +240,16 @@ export function WorkoutBrowser() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [filters, isHydrated, query, requestFilters, toast]);
+  }, [filters, hasActiveLibraryRequest, isHydrated, query, requestFilters, toast]);
 
-  const visibleCustomExercises = customExercises.filter((workout) => matchesCustomExercise(workout, query.trim(), filters));
+  const visibleCustomExercises = hasActiveLibraryRequest ? customExercises.filter((workout) => matchesCustomExercise(workout, query.trim(), filters)) : [];
   const allVisibleWorkouts = [...visibleCustomExercises, ...workouts].filter((workout, index, all) => all.findIndex((item) => item.id === workout.id) === index);
   const filteredWorkouts = favoritesOnly ? allVisibleWorkouts.filter((workout) => favoriteIds.includes(workout.id)) : allVisibleWorkouts;
   const duplicateExerciseNames = useMemo(() => duplicateWorkoutNames(filteredWorkouts), [filteredWorkouts]);
   const qualityCounts = useMemo(() => summarizeExerciseQuality(filteredWorkouts, duplicateExerciseNames), [duplicateExerciseNames, filteredWorkouts]);
 
   async function loadMore() {
+    if (!hasActiveLibraryRequest) return;
     const nextPage = page + 1;
     setIsLoading(true);
     try {
@@ -271,6 +285,7 @@ export function WorkoutBrowser() {
     setFilters(emptyFilters);
     setOpenFilters([]);
     setFavoritesOnly(false);
+    setShowAllWorkouts(false);
     if (typeof window !== "undefined") window.localStorage.removeItem(filterStorageKey);
   }
 
@@ -340,8 +355,18 @@ export function WorkoutBrowser() {
             <p className="font-semibold text-slate-950">Exercise filters</p>
             {activeFilterCount ? <Badge>{activeFilterCount} selected</Badge> : null}
             {favoritesOnly ? <Badge variant="success">Favorites only</Badge> : null}
+            {showAllWorkouts ? <Badge variant="success">Showing all</Badge> : null}
           </div>
           <p className="text-sm text-muted-foreground">{filteredWorkouts.length} exercises shown</p>
+        </div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-slate-50 p-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Show all workouts</p>
+            <p className="text-sm text-muted-foreground">Keep this off to show exercises only after a search or filter.</p>
+          </div>
+          <Button type="button" variant={showAllWorkouts ? "default" : "outline"} onClick={() => setShowAllWorkouts((current) => !current)}>
+            {showAllWorkouts ? "All workouts on" : "Show all workouts"}
+          </Button>
         </div>
         <div className="grid gap-4 lg:grid-cols-3">
           <FilterGroup title="Muscle Category" values={filterOptions.muscleCategories} selected={filters.muscleCategories} open={openFilters.includes("muscleCategories")} onOpenChange={() => toggleFilterGroup("muscleCategories")} onToggle={(value) => toggleFilter("muscleCategories", value)} />
@@ -377,7 +402,8 @@ export function WorkoutBrowser() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {isLoading && !filteredWorkouts.length ? <p className="text-sm text-muted-foreground">Loading workouts...</p> : null}
-        {!isLoading && !filteredWorkouts.length ? <p className="text-sm text-muted-foreground">No exercises match these filters.</p> : null}
+        {!isLoading && !hasActiveLibraryRequest ? <p className="text-sm text-muted-foreground">Choose a filter, search, open favorites, or turn on show all workouts to see exercises.</p> : null}
+        {!isLoading && hasActiveLibraryRequest && !filteredWorkouts.length ? <p className="text-sm text-muted-foreground">No exercises match these filters.</p> : null}
         {filteredWorkouts.map((workout) => {
           const guideUrl = workout.exercise_url || (isLink(workout.notes) ? workout.notes : null);
           const favorite = favoriteIds.includes(workout.id);
