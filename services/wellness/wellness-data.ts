@@ -61,15 +61,21 @@ function daysAgoIso(days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function isIsoDate(value: string | null | undefined) {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
 export async function getFitnessHabitHistory(userId: string, days = 30) {
+  const safeDays = Math.max(1, Math.min(90, Math.floor(days)));
   if (!canUseUserData(userId)) return [] as FitnessHabit[];
   const { data, error } = await supabase!
     .from("fitness_habits")
     .select("*")
     .eq("user_id", userId)
-    .gte("habit_date", daysAgoIso(days))
+    .gte("habit_date", daysAgoIso(safeDays))
     .order("habit_date", { ascending: false })
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .limit(safeDays * 20);
   if (error) {
     console.warn("FitLife Hub could not load habit history.", error.message);
     return [];
@@ -131,13 +137,18 @@ export async function upsertEnhancedSleepRecoveryLog(input: EnhancedSleepRecover
 
 export function calculateStreakStats(records: Array<{ date: string; completed: boolean }>) {
   const byDate = new Map<string, boolean>();
-  records.forEach((record) => byDate.set(record.date, (byDate.get(record.date) ?? false) || record.completed));
+  records.forEach((record) => {
+    if (isIsoDate(record.date)) byDate.set(record.date, (byDate.get(record.date) ?? false) || record.completed);
+  });
   const dates = Array.from(byDate.keys()).sort();
   if (!dates.length) return { currentStreak: 0, bestStreak: 0, missedDays: 0, history: [] as Array<{ date: string; completed: boolean }> };
-  const start = dates[0];
   const end = todayIso();
+  const maxHistoryDays = 90;
+  const start = dates[0] < daysAgoIso(maxHistoryDays) ? daysAgoIso(maxHistoryDays) : dates[0];
   const history: Array<{ date: string; completed: boolean }> = [];
-  for (let date = start; date <= end; date = addDays(date, 1)) history.push({ date, completed: byDate.get(date) ?? false });
+  for (let date = start, guard = 0; date <= end && guard < maxHistoryDays; date = addDays(date, 1), guard += 1) {
+    history.push({ date, completed: byDate.get(date) ?? false });
+  }
   let bestStreak = 0;
   let run = 0;
   history.forEach((item) => {
@@ -255,7 +266,8 @@ export function buildDailyChecklist({
 }
 
 function addDays(value: string, days: number) {
-  const date = new Date(`${value}T00:00:00`);
-  date.setDate(date.getDate() + days);
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }

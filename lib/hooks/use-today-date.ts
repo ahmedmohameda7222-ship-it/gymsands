@@ -7,9 +7,7 @@ export function useTodayDate() {
   useEffect(() => {
     function checkDate() {
       const current = todayIso();
-      if (current !== today) {
-        setToday(current);
-      }
+      setToday((saved) => (current === saved ? saved : current));
     }
 
     const intervalId = setInterval(checkDate, 60000);
@@ -22,7 +20,7 @@ export function useTodayDate() {
       window.removeEventListener("visibilitychange", checkDate);
       window.removeEventListener("focus", checkDate);
     };
-  }, [today]);
+  }, []);
 
   return today;
 }
