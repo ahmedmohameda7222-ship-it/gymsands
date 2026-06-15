@@ -19,10 +19,10 @@ function mixColor(start: [number, number, number], end: [number, number, number]
 }
 
 function calorieProgressColor(progressPercent: number) {
-  if (progressPercent <= 50) return "rgb(85, 96, 61)";
-  if (progressPercent <= 80) return mixColor([85, 96, 61], [212, 176, 106], (progressPercent - 50) / 30);
-  if (progressPercent <= 95) return mixColor([212, 176, 106], [184, 138, 74], (progressPercent - 80) / 15);
-  return "rgb(143, 59, 52)";
+  if (progressPercent <= 50) return "#2D3A1E";
+  if (progressPercent <= 80) return mixColor([45, 58, 30], [196, 154, 59], (progressPercent - 50) / 30);
+  if (progressPercent <= 95) return mixColor([196, 154, 59], [184, 92, 0], (progressPercent - 80) / 15);
+  return "#9E2B2B";
 }
 
 export function formatDay(value: string) {
@@ -73,7 +73,7 @@ export function WeeklyTracker({ selectedDate, weekData, onSelectDate, onMoveWeek
       <CardContent>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
           {weekData.map((day) => (
-            <button key={day.date} type="button" onClick={() => onSelectDate(day.date)} className={`rounded-md border p-3 text-left transition hover:border-primary hover:bg-blue-50 ${day.date === selectedDate ? "border-primary bg-blue-50" : "bg-white"}`}>
+            <button key={day.date} type="button" onClick={() => onSelectDate(day.date)} className={`rounded-md border p-3 text-left transition-colors hover:border-primary/45 hover:bg-muted/40 ${day.date === selectedDate ? "border-primary bg-primary/10" : "bg-card"}`}>
               <p className="font-semibold">{formatDay(day.date)}</p>
               <p className="mt-2 text-sm text-muted-foreground">{day.has_targets ? `${day.calories} / ${day.planned_calories} kcal` : `${day.calories} kcal logged`}</p>
               <p className="mt-1 text-xs text-muted-foreground">P {day.protein_g}g | C {day.carbs_g}g | F {day.fat_g}g</p>
@@ -114,7 +114,7 @@ export function NutritionCoachCard({ weekData, targets, totals, waterTotal }: { 
     <Card className="mt-4">
       <CardHeader><CardTitle>Nutrition coaching</CardTitle></CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {insights.map((insight) => <div key={insight.label} className="rounded-md border bg-slate-50 p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{insight.label}</p><p className="mt-1 font-semibold text-slate-950">{insight.value}</p><p className="mt-1 text-sm text-muted-foreground">{insight.detail}</p></div>)}
+        {insights.map((insight) => <div key={insight.label} className="rounded-md border bg-muted/35 p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{insight.label}</p><p className="mt-1 font-semibold text-foreground">{insight.value}</p><p className="mt-1 text-sm text-muted-foreground">{insight.detail}</p></div>)}
       </CardContent>
     </Card>
   );
@@ -164,7 +164,7 @@ export function WeeklyOverview({ weekData, waterGoalMl }: { weekData: DailyNutri
           <div className="rounded-md border p-3">
             <p className="text-sm font-semibold">Daily comparison</p>
             <div className="mt-3 space-y-2">
-              {weekData.map((day) => <div key={day.date} className="grid grid-cols-[76px_1fr] items-center gap-3 text-xs"><span>{formatDay(day.date).split(",")[0]}</span><div className="space-y-1"><div className="h-2 rounded bg-primary"><div className="h-2 rounded bg-primary" style={{ width: `${Math.min(100, (day.planned_calories / maxCalories) * 100)}%` }} /></div><div className="h-2 rounded bg-emerald-100"><div className="h-2 rounded bg-emerald-500" style={{ width: `${Math.min(100, (day.calories / maxCalories) * 100)}%` }} /></div></div></div>)}
+              {weekData.map((day) => <div key={day.date} className="grid grid-cols-[76px_1fr] items-center gap-3 text-xs"><span>{formatDay(day.date).split(",")[0]}</span><div className="space-y-1"><div className="h-2 rounded bg-primary/30"><div className="h-2 rounded bg-primary" style={{ width: `${Math.min(100, (day.planned_calories / maxCalories) * 100)}%` }} /></div><div className="h-2 rounded bg-success/15"><div className="h-2 rounded bg-success" style={{ width: `${Math.min(100, (day.calories / maxCalories) * 100)}%` }} /></div></div></div>)}
             </div>
           </div>
           <div className="rounded-md border p-3">
@@ -178,7 +178,7 @@ export function WeeklyOverview({ weekData, waterGoalMl }: { weekData: DailyNutri
 }
 
 function OverviewMetric({ label, value, detail }: { label: string; value: string | number; detail?: string }) {
-  return <div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p><p className="mt-1 text-lg font-bold text-slate-950">{value}</p>{detail ? <p className="mt-1 text-xs text-muted-foreground">{detail}</p> : null}</div>;
+  return <div className="rounded-md bg-muted/35 p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p><p className="mt-1 text-lg font-semibold text-foreground">{value}</p>{detail ? <p className="mt-1 text-xs text-muted-foreground">{detail}</p> : null}</div>;
 }
 
 function MacroBar({ label, value, total }: { label: string; value: number; total: number }) {

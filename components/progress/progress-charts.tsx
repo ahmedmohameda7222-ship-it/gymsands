@@ -35,10 +35,10 @@ export function ProgressCharts({
                 <XAxis dataKey="date" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} width={35} />
                 <Tooltip />
-                <Line dataKey="weight" name="Weight kg" stroke="#0284c7" strokeWidth={3} dot={{ r: 4 }} connectNulls />
-                <Line dataKey="waist" name="Waist cm" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} connectNulls />
-                <Line dataKey="hips" name="Hips cm" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4 }} connectNulls />
-                <Line dataKey="chest" name="Chest cm" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+                <Line dataKey="weight" name="Weight kg" stroke="#2D3A1E" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+                <Line dataKey="waist" name="Waist cm" stroke="#C49A3B" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+                <Line dataKey="hips" name="Hips cm" stroke="#6B6B6B" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+                <Line dataKey="chest" name="Chest cm" stroke="#3A7D44" strokeWidth={3} dot={{ r: 4 }} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -59,8 +59,8 @@ export function ProgressCharts({
                 <XAxis dataKey="date" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} width={30} allowDecimals={false} />
                 <Tooltip />
-                <Bar dataKey="completed" name="Completed" fill="#10b981" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="skipped" name="Skipped" fill="#f59e0b" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="completed" name="Completed" fill="#3A7D44" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="skipped" name="Skipped" fill="#B85C00" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -74,7 +74,7 @@ export function ProgressCharts({
 
 function EmptyChartText({ text }: { text: string }) {
   return (
-    <div className="flex h-full items-center justify-center rounded-md bg-slate-50 p-4 text-center text-sm text-muted-foreground">
+    <div className="flex h-full items-center justify-center rounded-md bg-muted/40 p-4 text-center text-sm text-muted-foreground">
       {text}
     </div>
   );

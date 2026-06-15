@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Brain, CalendarCheck, CheckCircle2, Compass, Droplets, Dumbbell, Flame, Plus, Scale, Soup } from "lucide-react";
+import { ArrowRight, CheckCircle2, Compass, Droplets, Flame, MoreHorizontal, Plus, Scale, Soup } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,13 +12,9 @@ import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import {
   ChecklistLine,
   MacroLine,
-  RingMetric,
-  SmartActionCard,
-  buildDashboardCoaching,
   buildNextBestActions,
   buildWeeklyFocus,
   countCompletedTrainingStreak,
-  defaultShortcutKeys,
   getDashboardShortcuts
 } from "@/components/dashboard/dashboard-sections";
 import { WelcomePopup } from "@/components/dashboard/welcome-popup";
@@ -65,7 +61,6 @@ export default function DashboardPage() {
   const [targets, setTargets] = useState<SavedTargets | null>(null);
   const [weeklyReport, setWeeklyReport] = useState<AggregatedReport | null>(null);
   const [chatGptConnected, setChatGptConnected] = useState(false);
-  const [shortcutKeys, setShortcutKeys] = useState<string[]>(defaultShortcutKeys);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
@@ -164,16 +159,6 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const saved = JSON.parse(window.localStorage.getItem("fitlife-dashboard-shortcuts") || "null") as string[] | null;
-      if (Array.isArray(saved) && saved.length) setShortcutKeys(saved);
-    } catch {
-      setShortcutKeys(defaultShortcutKeys);
-    }
-  }, []);
-
   const totals = useMemo(() => sumFoodLogs(logs), [logs]);
   const hasTargets = Boolean(targets);
   const remaining = targets ? remainingMacros({ calories: targets.daily_calories, protein_g: targets.protein_g, carbs_g: targets.carbs_g, fat_g: targets.fat_g, water_ml: targets.water_ml }, totals) : { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
@@ -182,7 +167,6 @@ export default function DashboardPage() {
   const currentWeekday = getCurrentWeekday();
   const todayPlanDay = activePlan?.days.find((day) => day.weekday === currentWeekday && day.exercises.length > 0) ?? null;
   const todaySleepLog = sleepLogs.find((log) => log.log_date === today) ?? null;
-  const supplementsTaken = supplements.length > 0 && supplements.every((item) => item.taken_today);
   const plannedMealsCount = mealPlanItems.length;
   const doneMealsCount = mealPlanItems.filter((item) => item.status === "done").length;
   const waterLiters = Math.round((waterTotalMl / 1000) * 10) / 10;
@@ -210,12 +194,6 @@ export default function DashboardPage() {
   ];
   const todayScore = Math.round((todayScoreChecks.filter(Boolean).length / todayScoreChecks.length) * 100);
   const trainingStreak = countCompletedTrainingStreak(history);
-  const visualSignals = [
-    { label: "Today score", value: `${todayScore}%`, detail: "Food, protein, water, training, and recovery/progress", progress: todayScore, icon: CheckCircle2 },
-    { label: "Training streak", value: `${trainingStreak} day${trainingStreak === 1 ? "" : "s"}`, detail: "Consecutive completed workout days from real history", progress: Math.min(100, trainingStreak * 20), icon: Dumbbell },
-    { label: "Protein", value: targets?.protein_g ? `${Math.min(100, percent(totals.protein_g, targets.protein_g))}%` : "Set target", detail: targets?.protein_g ? `${Math.max(0, remaining.protein_g)}g left today` : "Save a protein target to track adherence", progress: targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : 0, icon: Soup },
-    { label: "Water", value: targets?.water_ml ? `${Math.min(100, percent(waterTotalMl, targets.water_ml))}%` : "Set target", detail: targets?.water_ml ? `${Math.max(0, targets.water_ml - waterTotalMl)} ml left today` : "Save a water target to track streaks", progress: targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : 0, icon: Droplets }
-  ];
   const todayPlanDayId = todayPlanDay?.id ?? null;
   const smartActions = buildNextBestActions({
     logs,
@@ -237,21 +215,16 @@ export default function DashboardPage() {
   const weeklyFocus = weeklyReport ? buildWeeklyFocus(weeklyReport) : null;
   const weeklyMetrics = weeklyReport ? reportMetrics(weeklyReport, "weekly").slice(0, 8) : [];
   const dashboardShortcuts = getDashboardShortcuts(todayPlanDayId);
-  const visibleShortcuts = dashboardShortcuts.filter((shortcut) => shortcutKeys.includes(shortcut.key));
-  const dashboardCoaching = buildDashboardCoaching({
-    hasTargets,
-    targets,
-    totals,
-    remaining,
-    waterTotalMl,
-    plannedMealsCount,
-    doneMealsCount,
-    todayPlanDay: Boolean(todayPlanDay),
-    completedToday,
-    latestProgressDate: latestProgress?.entry_date ?? null,
-    sleepLoggedToday: Boolean(todaySleepLog),
-    todayIso: today
-  });
+  const visibleShortcuts = dashboardShortcuts.slice(0, 5);
+  const primaryAction = smartActions[0];
+  const secondaryActions = smartActions.slice(1, 3);
+  const closedTodayCount = [
+    completedToday || !todayPlanDay,
+    plannedMealsCount > 0 && doneMealsCount === plannedMealsCount,
+    Boolean(targets?.protein_g && totals.protein_g >= targets.protein_g),
+    Boolean(targets?.water_ml && waterTotalMl >= targets.water_ml),
+    Boolean(latestProgress?.entry_date === today || todaySleepLog)
+  ].filter(Boolean).length;
 
   async function quickMarkMealDone(item: MealPlanItem) {
     if (!user?.id) return;
@@ -277,23 +250,12 @@ export default function DashboardPage() {
     }
   }
 
-  function toggleShortcut(key: string) {
-    setShortcutKeys((current) => {
-      const next = current.includes(key)
-        ? current.filter((item) => item !== key)
-        : [...current, key];
-      const safeNext = next.length ? next : defaultShortcutKeys;
-      if (typeof window !== "undefined") window.localStorage.setItem("fitlife-dashboard-shortcuts", JSON.stringify(safeNext));
-      return safeNext;
-    });
-  }
-
   return (
     <>
       <WelcomePopup />
       <PageHeading
         title={`Today${profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}`}
-        description="Your daily command center for workouts, meals, calories, water, and progress. No placeholder health data is shown."
+        description="Your daily plan for training, food, hydration, and progress."
         action={
           <>
             <Button asChild>
@@ -325,7 +287,7 @@ export default function DashboardPage() {
       {!isLoading && !loadError && !hasAnyTodayData ? (
         <EmptyState
           title="No activity saved for today yet"
-          description="Start by importing a ChatGPT workout plan, logging food, adding water, or saving a progress entry. No fake dashboard numbers are shown."
+          description="Start by logging food, adding water, importing a workout plan, or saving a progress entry."
           actionLabel="Log food"
           actionHref="/calories"
           secondaryLabel="Import workout plan"
@@ -335,7 +297,23 @@ export default function DashboardPage() {
       ) : null}
 
       {!isLoading && !loadError ? (
-        <>
+        <div className="space-y-4">
+          {setupCompletedCount < setupChecklist.length ? (
+            <Card className="border-primary/20 bg-primary/5 shadow-none">
+              <CardContent className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{nextSetupItem ? `Next setup step: ${nextSetupItem.label}` : "Setup complete"}</p>
+                  <p className="text-xs text-muted-foreground">{setupCompletedCount}/{setupChecklist.length} account foundations complete.</p>
+                </div>
+                {nextSetupItem ? (
+                  <Button asChild size="sm">
+                    <Link href={nextSetupItem.href}>{nextSetupItem.action}</Link>
+                  </Button>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
+
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard icon={Flame} label="Calories eaten" value={`${totals.calories} kcal`} detail={hasTargets ? `${remaining.calories} kcal remaining` : "No calorie target set"} progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined} />
             <MetricCard icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={hasTargets ? `${remaining.protein_g}g remaining` : "Set protein target"} progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined} />
@@ -343,51 +321,188 @@ export default function DashboardPage() {
             <MetricCard icon={Scale} label="Current weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No progress entry"} detail={latestProgress ? `Latest entry ${latestProgress.entry_date}` : "Add your first progress entry"} />
           </div>
 
-          <Card className="mt-4">
-            <CardHeader>
-              <CardTitle>Command center</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {visualSignals.map((signal) => (
-                <RingMetric key={signal.label} {...signal} />
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="mt-4">
+          <Card className="overflow-hidden border-primary/15">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Brain className="h-5 w-5 text-primary" />
                 Next best action
               </CardTitle>
-              <p className="text-sm text-muted-foreground">Ranked from real saved targets, food logs, water, imported workouts, progress, supplements, and recovery logs.</p>
             </CardHeader>
-            <CardContent className="grid gap-3 lg:grid-cols-3">
-              {smartActions.map((item) => (
-                <SmartActionCard key={item.label} item={item} onAddWater={quickAddWater} />
-              ))}
+            <CardContent className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+              <div className="rounded-lg border border-primary/15 bg-primary p-5 text-primary-foreground">
+                <p className="text-xs font-semibold uppercase tracking-normal text-primary-foreground/70">{primaryAction.label}</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-normal">{primaryAction.title}</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-primary-foreground/80">{primaryAction.reason}</p>
+                {primaryAction.waterAmountMl ? (
+                  <Button type="button" variant="secondary" className="mt-5 w-full sm:w-auto" onClick={() => quickAddWater(primaryAction.waterAmountMl!)}>
+                    <Droplets className="h-4 w-4" />
+                    {primaryAction.cta}
+                  </Button>
+                ) : primaryAction.href ? (
+                  <Button asChild variant="secondary" className="mt-5 w-full sm:w-auto">
+                    <Link href={primaryAction.href}>
+                      {primaryAction.cta}
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
+              <div className="grid gap-3">
+                {secondaryActions.map((item) => (
+                  <div key={item.label} className="rounded-md border bg-muted/35 p-3">
+                    <div className="flex items-start gap-3">
+                      <MoreHorizontal className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{item.label}</p>
+                        <p className="mt-1 font-semibold">{item.title}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{item.reason}</p>
+                        {item.waterAmountMl ? (
+                          <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => quickAddWater(item.waterAmountMl!)}>
+                            {item.cta}
+                          </Button>
+                        ) : item.href ? (
+                          <Button asChild variant="outline" size="sm" className="mt-3">
+                            <Link href={item.href}>{item.cta}</Link>
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
 
-          {weeklyReport ? (
-            <Card className="mt-4">
+          <div className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
+            <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Compass className="h-5 w-5 text-primary" />
-                  Weekly review
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">Beginner-friendly summary from this week's saved workouts, food logs, water, progress, habits, sleep, and PRs.</p>
+                <CardTitle>Nutrition snapshot</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {targets ? (
+                  <div className="space-y-4">
+                    <MacroLine label="Protein" value={totals.protein_g} target={targets.protein_g} />
+                    <MacroLine label="Carbs" value={totals.carbs_g} target={targets.carbs_g} />
+                    <MacroLine label="Fat" value={totals.fat_g} target={targets.fat_g} />
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Save calorie, macro, and water targets to unlock the full nutrition snapshot.</div>
+                )}
+                <div className="rounded-md border bg-muted/30 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">Water</p>
+                      <p className="text-sm text-muted-foreground">{waterTotalMl ? `${waterLiters} L logged` : "No water logged"}{targets?.water_ml ? ` / ${waterTargetLiters} L target` : ""}</p>
+                    </div>
+                    <Droplets className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {[250, 500, 750, 1000].map((amount) => (
+                      <Button key={amount} type="button" variant="outline" size="sm" onClick={() => quickAddWater(amount)}>
+                        +{amount === 1000 ? "1 L" : `${amount} ml`}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="text-sm font-semibold text-muted-foreground">Planned meals</p>
+                  <p className="mt-1 font-semibold">{doneMealsCount}/{plannedMealsCount} done</p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    {mealPlanItems.filter((item) => item.status !== "done").slice(0, 1).map((item) => (
+                      <Button key={item.id} type="button" size="sm" onClick={() => quickMarkMealDone(item)}>
+                        <CheckCircle2 className="h-4 w-4" />
+                        Mark {item.meal_type} done
+                      </Button>
+                    ))}
+                    <Button asChild size="sm" variant="outline"><Link href="/my-meal-plan">Meal plan</Link></Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Progress snapshot</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Today</p>
+                    <p className="mt-1 text-xl font-semibold">{todayScore}%</p>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Closed</p>
+                    <p className="mt-1 text-xl font-semibold">{closedTodayCount}/5</p>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Streak</p>
+                    <p className="mt-1 text-xl font-semibold">{trainingStreak}</p>
+                  </div>
+                </div>
+                <div className="grid gap-2 text-sm">
+                  <ChecklistLine label="Workout" done={completedToday || !todayPlanDay} emptyLabel={todayPlanDay ? "Not completed yet" : "Rest day"} />
+                  <ChecklistLine label="Meals" done={plannedMealsCount > 0 && doneMealsCount === plannedMealsCount} emptyLabel={plannedMealsCount ? `${plannedMealsCount - doneMealsCount} left` : "No meals planned"} />
+                  <ChecklistLine label="Water" done={Boolean(targets?.water_ml && waterTotalMl >= targets.water_ml)} emptyLabel={targets?.water_ml ? (waterTotalMl ? `${Math.max(0, targets.water_ml - waterTotalMl)} ml left` : "No water yet") : "Set target"} />
+                </div>
                 {weeklyFocus ? (
                   <div className="rounded-md border bg-primary/5 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Suggested focus next week</p>
+                    <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-muted-foreground">
+                      <Compass className="h-4 w-4 text-primary" />
+                      Weekly focus
+                    </p>
                     <p className="mt-1 font-semibold">{weeklyFocus.title}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{weeklyFocus.detail}</p>
                   </div>
                 ) : null}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader><CardTitle>Quick links</CardTitle></CardHeader>
+            <CardContent>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {visibleShortcuts.map((shortcut) => {
+                  const Icon = shortcut.icon;
+                  return (
+                    <Button key={shortcut.key} asChild variant="outline" className="min-w-fit">
+                      <Link href={shortcut.href}>
+                        <Icon className="h-4 w-4" />
+                        {shortcut.label}
+                      </Link>
+                    </Button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>Recent activity</CardTitle></CardHeader>
+            <CardContent>
+              <div className="flex gap-3 overflow-x-auto pb-1">
+                {logs.slice(0, 4).map((log) => (
+                  <div key={log.id} className="min-w-[220px] rounded-md border bg-card p-3">
+                    <p className="font-semibold">{log.food_name}</p>
+                    <p className="text-sm text-muted-foreground">{log.calories} kcal | {log.protein_g}g protein</p>
+                  </div>
+                ))}
+                {history.slice(0, 4).map((session) => (
+                  <div key={session.id} className="min-w-[220px] rounded-md border bg-card p-3">
+                    <p className="font-semibold">{session.workout_name}</p>
+                    <p className="text-sm text-muted-foreground">{session.status} | {session.duration_minutes ?? 0} minutes</p>
+                  </div>
+                ))}
+                {!logs.length && !history.length ? <p className="text-sm text-muted-foreground">Log a meal or workout to build your activity timeline.</p> : null}
+              </div>
+            </CardContent>
+          </Card>
+
+          {weeklyReport ? (
+            <Card>
+              <CardHeader><CardTitle>Weekly review</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  {weeklyMetrics.map((metric) => (
+                  {weeklyMetrics.slice(0, 4).map((metric) => (
                     <div key={metric.label} className={`rounded-md border p-3 ${metric.empty ? "border-dashed bg-muted/30" : "bg-card"}`}>
                       <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{metric.label}</p>
                       <p className="mt-1 font-semibold">{metric.value}</p>
@@ -405,172 +520,10 @@ export default function DashboardPage() {
             </Card>
           ) : null}
 
-          <Card className="mt-4">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Compass className="h-5 w-5 text-primary" />
-                Today's coaching details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {dashboardCoaching.map((item) => (
-                <div key={item.label} className="rounded-md border bg-muted/40 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{item.label}</p>
-                  <p className="mt-1 font-semibold">{item.value}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{item.detail}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {setupCompletedCount < setupChecklist.length ? (
-            <Card className="mt-4">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-primary" />
-                  Start here
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/40 p-3">
-                  <div>
-                    <p className="font-semibold">{nextSetupItem ? `Next: ${nextSetupItem.label}` : "Setup complete"}</p>
-                    <p className="text-sm text-muted-foreground">{setupCompletedCount}/{setupChecklist.length} setup steps complete from real saved account data.</p>
-                  </div>
-                  {nextSetupItem ? (
-                    <Button asChild>
-                      <Link href={nextSetupItem.href}>{nextSetupItem.action}</Link>
-                    </Button>
-                  ) : null}
-                </div>
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                  {setupChecklist.map((item) => (
-                    <Link
-                      key={item.label}
-                      href={item.href}
-                      className="flex min-h-14 items-center justify-between gap-3 rounded-md border p-3 text-sm font-medium transition hover:border-primary hover:bg-muted"
-                    >
-                      <span>{item.label}</span>
-                      <span className={item.done ? "text-primary" : "text-muted-foreground"}>{item.done ? "Done" : item.action}</span>
-                    </Link>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><CalendarCheck className="h-5 w-5 text-primary" />Today's plan</CardTitle></CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-md border p-3">
-                  <p className="text-sm font-semibold text-muted-foreground">Workout</p>
-                  {activePlan ? (
-                    <>
-                      <p className="mt-1 font-semibold">{todayPlanDay ? todayPlanDay.day_name : `${currentWeekday} rest day`}</p>
-                      <p className="text-sm text-muted-foreground">{activePlan.name}</p>
-                      <Button asChild className="mt-3" size="sm"><Link href={todayPlanDay ? `/workouts/session/day/${todayPlanDay.id}` : `/my-workout/plans/${activePlan.id}`}><Dumbbell className="h-4 w-4" />{openSessionId ? "Resume Workout" : todayPlanDay ? "Start Today's Workout" : "View Active Plan"}</Link></Button>
-                    </>
-                  ) : (
-                    <>
-                      <p className="mt-1 font-semibold">No workout plan active</p>
-                      <p className="text-sm text-muted-foreground">Import a ChatGPT plan or create a manual plan.</p>
-                      <Button asChild className="mt-3" size="sm"><Link href="/my-workout/plans">Import Workout Plan</Link></Button>
-                    </>
-                  )}
-                </div>
-                <div className="rounded-md border p-3">
-                  <p className="text-sm font-semibold text-muted-foreground">Meals</p>
-                  <p className="mt-1 font-semibold">{doneMealsCount}/{plannedMealsCount} planned meals done</p>
-                  <p className="text-sm text-muted-foreground">{plannedMealsCount ? "Planned meals only count after they are marked done." : "No meals planned for today."}</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {mealPlanItems.filter((item) => item.status !== "done").slice(0, 2).map((item) => <Button key={item.id} type="button" size="sm" onClick={() => quickMarkMealDone(item)}><CheckCircle2 className="h-4 w-4" />Mark {item.meal_type} done</Button>)}
-                    <Button asChild size="sm" variant="outline"><Link href="/my-meal-plan">Manage Meal Plan</Link></Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader><CardTitle>Quick actions</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {visibleShortcuts.map((shortcut) => {
-                    const Icon = shortcut.icon;
-                    return (
-                      <Button key={shortcut.key} asChild variant="outline">
-                        <Link href={shortcut.href}>
-                          <Icon className="h-4 w-4" />
-                          {shortcut.label}
-                        </Link>
-                      </Button>
-                    );
-                  })}
-                </div>
-                <div className="rounded-md border bg-muted/40 p-3">
-                  <p className="text-sm font-semibold">Customize shortcuts</p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {dashboardShortcuts.map((shortcut) => (
-                      <label key={shortcut.key} className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={shortcutKeys.includes(shortcut.key)} onChange={() => toggleShortcut(shortcut.key)} />
-                        <span>{shortcut.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <div>
+            {logs.length ? <DashboardCharts macros={totals} /> : <EmptyState title="Not enough data for charts" description="Charts appear after you log meals." actionLabel="Log food" actionHref="/calories" />}
           </div>
-
-          <Card className="mt-4">
-            <CardHeader><CardTitle>Water quick add</CardTitle></CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              {[250, 500, 750, 1000].map((amount) => <Button key={amount} type="button" variant="outline" onClick={() => quickAddWater(amount)}><Droplets className="h-4 w-4" />+{amount === 1000 ? "1 L" : `${amount} ml`}</Button>)}
-            </CardContent>
-          </Card>
-
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader><CardTitle>Macros today</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                {targets ? <><MacroLine label="Protein" value={totals.protein_g} target={targets.protein_g} /><MacroLine label="Carbs" value={totals.carbs_g} target={targets.carbs_g} /><MacroLine label="Fat" value={totals.fat_g} target={targets.fat_g} /></> : <div className="rounded-md border p-3 text-sm text-muted-foreground">No calorie or macro targets set. Open Calories/Macros or Profile & Goals to save your targets.</div>}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Daily checklist</CardTitle></CardHeader>
-              <CardContent className="grid gap-2 text-sm">
-                <ChecklistLine label="Workout" done={completedToday} emptyLabel={todayPlanDay ? "Not completed yet" : "Rest day or no active plan"} />
-                <ChecklistLine label="Meals" done={plannedMealsCount > 0 && doneMealsCount === plannedMealsCount} emptyLabel={plannedMealsCount ? `${plannedMealsCount - doneMealsCount} planned meals left` : "No meals planned"} />
-                <ChecklistLine label="Protein" done={Boolean(targets?.protein_g && totals.protein_g >= targets.protein_g)} emptyLabel={targets?.protein_g ? `${remaining.protein_g}g remaining` : "Set protein target"} />
-                <ChecklistLine label="Water" done={Boolean(targets?.water_ml && waterTotalMl >= targets.water_ml)} emptyLabel={targets?.water_ml ? (waterTotalMl ? `${Math.max(0, targets.water_ml - waterTotalMl)} ml remaining` : "No water logged today") : "Set water target"} />
-                <ChecklistLine label="Supplements" done={supplementsTaken} emptyLabel={supplements.length ? "Supplements still open" : "No supplements scheduled"} />
-                <ChecklistLine label="Sleep/recovery" done={Boolean(todaySleepLog)} emptyLabel="No sleep/recovery log today" />
-                <ChecklistLine label="Progress" done={Boolean(latestProgress?.entry_date === today)} emptyLabel="No progress entry today" />
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader><CardTitle>Recent meals</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                {logs.slice(0, 4).map((log) => <div key={log.id} className="rounded-md border p-3"><p className="font-semibold">{log.food_name}</p><p className="text-sm text-muted-foreground">{log.calories} kcal | {log.protein_g}g protein</p></div>)}
-                {!logs.length ? <p className="text-sm text-muted-foreground">No meals logged yet.</p> : null}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Recent workouts</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                {history.slice(0, 4).map((session) => <div key={session.id} className="rounded-md border p-3"><p className="font-semibold">{session.workout_name}</p><p className="text-sm text-muted-foreground">{session.status} | {session.duration_minutes ?? 0} minutes</p></div>)}
-                {!history.length ? <p className="text-sm text-muted-foreground">No workouts logged yet.</p> : null}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="mt-4">
-            {logs.length ? <DashboardCharts macros={totals} /> : <EmptyState title="Not enough data for charts" description="Charts appear after you log real meals. No fake macro chart is shown when there is no food log data." actionLabel="Log food" actionHref="/calories" />}
-          </div>
-        </>
+        </div>
       ) : null}
     </>
   );

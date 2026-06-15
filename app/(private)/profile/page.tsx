@@ -69,12 +69,12 @@ export default function ProfilePage() {
             </Button>
           </CardContent>
         </Card>
-        <Card className="bg-emerald-50">
+        <Card className="bg-success/10">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-emerald-600" /> Ready to train</CardTitle>
+            <CardTitle className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-success" /> Ready to train</CardTitle>
             <CardDescription>Small consistent updates make your dashboard more useful.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm text-emerald-900">
+          <CardContent className="space-y-2 text-sm text-foreground">
             <p>This app is for general fitness tracking only.</p>
             <p>It is not medical advice. Speak with a doctor if you have medical conditions.</p>
             <p>Do not train through serious pain.</p>

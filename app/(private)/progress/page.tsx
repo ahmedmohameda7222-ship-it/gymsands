@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { CalendarCheck, Camera, Edit3, ImageIcon, Ruler, Scale, SkipForward, Target, Trash2, TrendingDown, TrendingUp, Upload } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
-import { CardGridSkeleton, ErrorState } from "@/components/ui/state-views";
+import { CardGridSkeleton } from "@/components/ui/state-views";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { ProgressEntryModal } from "@/components/progress/progress-entry-modal";
 import { ProgressCharts } from "@/components/progress/progress-charts";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { getNutritionWeek } from "@/services/database/nutrition";
@@ -240,87 +241,104 @@ export default function ProgressPage() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Scale} label="Body weight" value={latestWeightEntry ? `${latestWeightEntry.body_weight_kg} kg` : "No entry"} detail={weightDelta === null ? "No trend yet" : `${formatDelta(weightDelta)} kg from first entry`} />
-        <MetricCard icon={TrendingUp} label="7-day average" value={sevenDayAverage === null ? "Not enough data" : `${sevenDayAverage} kg`} detail="Average from real weight entries only" />
-        <MetricCard icon={TrendingDown} label="30-day average" value={thirtyDayAverage === null ? "Not enough data" : `${thirtyDayAverage} kg`} detail="Longer-term weight trend" />
-        <MetricCard icon={Target} label="Goal estimate" value={numericGoalWeight ? `${numericGoalWeight} kg` : "No goal"} detail={targetDateEstimate} />
-      </div>
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="measurements">Measurements</TabsTrigger>
+          <TabsTrigger value="photos">Photos</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
+        </TabsList>
 
-      <Card className="mt-4">
-        <CardHeader><CardTitle>Goal line</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-[1fr_auto]">
-          <div className="space-y-2"><Label>Goal weight, kg</Label><Input type="number" value={goalWeight} onChange={(event) => setGoalWeight(event.target.value)} placeholder="Example: 78" /><p className="text-xs text-muted-foreground">Saved to your profile when Supabase is available. A browser-local fallback is kept only if sync fails.</p></div>
-          <Button className="self-end" onClick={saveGoalWeight}>Save goal</Button>
-        </CardContent>
-      </Card>
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <MetricCard icon={Scale} label="Body weight" value={latestWeightEntry ? `${latestWeightEntry.body_weight_kg} kg` : "No entry"} detail={weightDelta === null ? "No trend yet" : `${formatDelta(weightDelta)} kg from first entry`} />
+            <MetricCard icon={TrendingUp} label="7-day average" value={sevenDayAverage === null ? "Not enough data" : `${sevenDayAverage} kg`} detail="Average from real weight entries only" />
+            <MetricCard icon={TrendingDown} label="30-day average" value={thirtyDayAverage === null ? "Not enough data" : `${thirtyDayAverage} kg`} detail="Longer-term weight trend" />
+            <MetricCard icon={Target} label="Goal estimate" value={numericGoalWeight ? `${numericGoalWeight} kg` : "No goal"} detail={targetDateEstimate} />
+          </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Ruler} label="Waist" value={isFiniteNumber(latestWaist) ? `${latestWaist} cm` : "No entry"} detail={waistDelta === null ? "No measurement trend yet" : `${formatDelta(waistDelta)} cm from first entry`} />
-        <MetricCard icon={CalendarCheck} label="Completed this week" value={weeklyInsights.completedWorkouts === null ? "Not enough data" : `${weeklyInsights.completedWorkouts}`} detail="Completed workout sessions in current week" progress={weeklyInsights.weekWorkoutCompletionRate ?? undefined} />
-        <MetricCard icon={SkipForward} label="Skipped this week" value={weeklyInsights.skippedWorkouts === null ? "Not enough data" : `${weeklyInsights.skippedWorkouts}`} detail="Skipped workout sessions in current week" progress={weeklyInsights.weekWorkoutTotal ? Math.round(((weeklyInsights.skippedWorkouts ?? 0) / weeklyInsights.weekWorkoutTotal) * 100) : undefined} />
-        <MetricCard icon={Target} label="Consistency" value={`${consistencyScore}%`} detail="Based on current week logs, workouts, water, and progress entries" progress={consistencyScore} />
-      </div>
+          <Card>
+            <CardHeader><CardTitle>Goal line</CardTitle></CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-[1fr_auto]">
+              <div className="space-y-2"><Label>Goal weight, kg</Label><Input type="number" value={goalWeight} onChange={(event) => setGoalWeight(event.target.value)} placeholder="Example: 78" /><p className="text-xs text-muted-foreground">Saved to your profile when Supabase is available. A browser-local fallback is kept only if sync fails.</p></div>
+              <Button className="self-end" onClick={saveGoalWeight}>Save goal</Button>
+            </CardContent>
+          </Card>
 
-      <ProgressFeedbackCard feedback={progressFeedback} />
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <MetricCard icon={Ruler} label="Waist" value={isFiniteNumber(latestWaist) ? `${latestWaist} cm` : "No entry"} detail={waistDelta === null ? "No measurement trend yet" : `${formatDelta(waistDelta)} cm from first entry`} />
+            <MetricCard icon={CalendarCheck} label="Completed this week" value={weeklyInsights.completedWorkouts === null ? "Not enough data" : `${weeklyInsights.completedWorkouts}`} detail="Completed workout sessions in current week" progress={weeklyInsights.weekWorkoutCompletionRate ?? undefined} />
+            <MetricCard icon={SkipForward} label="Skipped this week" value={weeklyInsights.skippedWorkouts === null ? "Not enough data" : `${weeklyInsights.skippedWorkouts}`} detail="Skipped workout sessions in current week" progress={weeklyInsights.weekWorkoutTotal ? Math.round(((weeklyInsights.skippedWorkouts ?? 0) / weeklyInsights.weekWorkoutTotal) * 100) : undefined} />
+            <MetricCard icon={Target} label="Consistency" value={`${consistencyScore}%`} detail="Based on current week logs, workouts, water, and progress entries" progress={consistencyScore} />
+          </div>
 
-      <ProgressPhotoManager userId={user?.id ?? null} photos={photos} setPhotos={setPhotos} />
+          <ProgressFeedbackCard feedback={progressFeedback} />
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-        <Card>
-          <CardHeader><CardTitle>Body-fat estimate</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">Body-fat estimate is calculated from your saved measurements and should be treated as a rough fitness estimate, not medical data. Manual body-fat % is shown when saved. The optional estimate uses the Relative Fat Mass formula with height, sex, and latest waist measurement.</p>
-            <div className="grid gap-3 sm:grid-cols-[1fr_160px_auto]">
-              <div className="space-y-2"><Label>Height cm for estimate</Label><Input type="number" value={estimateSettings.heightCm} onChange={(event) => setEstimateSettings((current) => ({ ...current, heightCm: event.target.value }))} placeholder="Example: 175" /></div>
-              <div className="space-y-2"><Label>Sex for formula</Label><select value={estimateSettings.sex} onChange={(event) => setEstimateSettings((current) => ({ ...current, sex: event.target.value as "male" | "female" }))} className="h-10 w-full rounded-md border bg-white px-3 text-sm"><option value="male">male</option><option value="female">female</option></select></div>
-              <Button className="self-end" variant="outline" onClick={saveEstimateSettings}>Save settings</Button>
-            </div>
-            <div className="rounded-md border bg-muted/40 p-3"><p className="font-semibold">{bodyFatEstimate.value}</p><p className="mt-1 text-sm text-muted-foreground">{bodyFatEstimate.detail}</p></div>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader><CardTitle>Weekly progress insights</CardTitle></CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <Insight text={entries.length ? `${entries.length} progress entr${entries.length === 1 ? "y" : "ies"} saved.` : "No progress entries yet. Add your first weight or measurement."} />
+              <Insight text={weeklyInsights.completedWorkouts === null ? "Not enough workout data for this week." : `This week: ${weeklyInsights.completedWorkouts} completed and ${weeklyInsights.skippedWorkouts} skipped workouts.`} />
+              <Insight text={weeklyInsights.averageCalories === null ? "Not enough calorie data this week." : `Weekly calories: ${weeklyInsights.averageCalories} kcal (logged-day avg) | ${weeklyInsights.calendarAverageCalories} kcal (7-day calendar avg).`} />
+              <Insight text={weeklyInsights.averageProtein === null ? "Not enough protein data this week." : `Weekly protein: ${weeklyInsights.averageProtein} g (logged-day avg) | ${weeklyInsights.calendarAverageProtein} g (7-day calendar avg).`} />
+              <Insight text={weeklyInsights.waterAverage === null ? "Not enough water data this week." : `Average water this week: ${weeklyInsights.waterAverage} ml.`} />
+              <Insight text={latestWeightChange === null ? "Add at least two weight entries to see weight velocity." : `Last weight change: ${formatDelta(latestWeightChange)} kg.`} />
+              <Insight text={sevenDayAverage === null || thirtyDayAverage === null ? "Not enough data yet for a reliable 7/30-day weight trend." : `7-day average is ${formatDelta(round(sevenDayAverage - thirtyDayAverage))} kg vs 30-day average.`} />
+              <Insight text={waistDelta === null ? "Add waist measurements to see waist trend." : `Waist trend: ${formatDelta(waistDelta)} cm.`} />
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader><CardTitle>Measurement trends</CardTitle></CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {measurementTrends.map((trend) => <TrendCard key={trend.label} trend={trend} />)}
-          </CardContent>
-        </Card>
-      </div>
+          <ProgressCharts entries={entries} workoutActivity={workoutActivity} />
+        </TabsContent>
 
-      <Card className="mt-4">
-        <CardHeader><CardTitle>Weekly progress insights</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <Insight text={entries.length ? `${entries.length} progress entr${entries.length === 1 ? "y" : "ies"} saved.` : "No progress entries yet. Add your first weight or measurement."} />
-          <Insight text={weeklyInsights.completedWorkouts === null ? "Not enough workout data for this week." : `This week: ${weeklyInsights.completedWorkouts} completed and ${weeklyInsights.skippedWorkouts} skipped workouts.`} />
-          <Insight text={weeklyInsights.averageCalories === null ? "Not enough calorie data this week." : `Weekly calories: ${weeklyInsights.averageCalories} kcal (logged-day avg) | ${weeklyInsights.calendarAverageCalories} kcal (7-day calendar avg).`} />
-          <Insight text={weeklyInsights.averageProtein === null ? "Not enough protein data this week." : `Weekly protein: ${weeklyInsights.averageProtein} g (logged-day avg) | ${weeklyInsights.calendarAverageProtein} g (7-day calendar avg).`} />
-          <Insight text={weeklyInsights.waterAverage === null ? "Not enough water data this week." : `Average water this week: ${weeklyInsights.waterAverage} ml.`} />
-          <Insight text={latestWeightChange === null ? "Add at least two weight entries to see weight velocity." : `Last weight change: ${formatDelta(latestWeightChange)} kg.`} />
-          <Insight text={sevenDayAverage === null || thirtyDayAverage === null ? "Not enough data yet for a reliable 7/30-day weight trend." : `7-day average is ${formatDelta(round(sevenDayAverage - thirtyDayAverage))} kg vs 30-day average.`} />
-          <Insight text={waistDelta === null ? "Add waist measurements to see waist trend." : `Waist trend: ${formatDelta(waistDelta)} cm.`} />
-        </CardContent>
-      </Card>
+        <TabsContent value="measurements" className="space-y-4">
+          <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+            <Card>
+              <CardHeader><CardTitle>Body-fat estimate</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">Body-fat estimate is calculated from saved measurements and should be treated as a rough fitness estimate, not medical data.</p>
+                <div className="grid gap-3 sm:grid-cols-[1fr_160px_auto]">
+                  <div className="space-y-2"><Label>Height cm for estimate</Label><Input type="number" value={estimateSettings.heightCm} onChange={(event) => setEstimateSettings((current) => ({ ...current, heightCm: event.target.value }))} placeholder="Example: 175" /></div>
+                  <div className="space-y-2"><Label>Sex for formula</Label><select value={estimateSettings.sex} onChange={(event) => setEstimateSettings((current) => ({ ...current, sex: event.target.value as "male" | "female" }))} className="h-10 w-full rounded-md border bg-card px-3 text-sm"><option value="male">male</option><option value="female">female</option></select></div>
+                  <Button className="self-end" variant="outline" onClick={saveEstimateSettings}>Save settings</Button>
+                </div>
+                <div className="rounded-md border bg-muted/40 p-3"><p className="font-semibold">{bodyFatEstimate.value}</p><p className="mt-1 text-sm text-muted-foreground">{bodyFatEstimate.detail}</p></div>
+              </CardContent>
+            </Card>
 
-      <div className="mt-4"><ProgressCharts entries={entries} workoutActivity={workoutActivity} /></div>
-      {editingEntry && editDraft ? <EditProgressCard draft={editDraft} setDraft={setEditDraft} onCancel={() => { setEditingEntry(null); setEditDraft(null); }} onSave={saveEdit} /> : null}
+            <Card>
+              <CardHeader><CardTitle>Measurement trends</CardTitle></CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {measurementTrends.map((trend) => <TrendCard key={trend.label} trend={trend} />)}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
 
-      <Card className="mt-4">
-        <CardHeader><CardTitle>Progress history</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          {sortedEntries.map((entry) => (
-            <div key={entry.id} className="rounded-md border p-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div><p className="font-semibold">{entry.entry_date}</p><p className="text-sm text-muted-foreground">{entry.body_weight_kg ? `${entry.body_weight_kg} kg` : "No weight"} | {(entry.measurements?.waist_cm ?? entry.waist_cm) ? `${entry.measurements?.waist_cm ?? entry.waist_cm} cm waist` : "No waist"}</p></div>
-                <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => startEdit(entry)}><Edit3 className="h-4 w-4" /> Edit</Button><Button size="sm" variant="outline" onClick={() => deleteEntry(entry)}><Trash2 className="h-4 w-4" /> Delete</Button></div>
-              </div>
-              <MeasurementList entry={entry} />
-              {entry.notes ? <p className="mt-2 text-sm text-slate-600">{entry.notes}</p> : null}
-            </div>
-          ))}
-          {!entries.length ? <p className="text-sm text-muted-foreground">No progress entries yet.</p> : null}
-        </CardContent>
-      </Card>
+        <TabsContent value="photos" className="space-y-4">
+          <ProgressPhotoManager userId={user?.id ?? null} photos={photos} setPhotos={setPhotos} />
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-4">
+          {editingEntry && editDraft ? <EditProgressCard draft={editDraft} setDraft={setEditDraft} onCancel={() => { setEditingEntry(null); setEditDraft(null); }} onSave={saveEdit} /> : null}
+          <Card>
+            <CardHeader><CardTitle>Progress history</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {sortedEntries.map((entry) => (
+                <div key={entry.id} className="rounded-md border p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div><p className="font-semibold">{entry.entry_date}</p><p className="text-sm text-muted-foreground">{entry.body_weight_kg ? `${entry.body_weight_kg} kg` : "No weight"} | {(entry.measurements?.waist_cm ?? entry.waist_cm) ? `${entry.measurements?.waist_cm ?? entry.waist_cm} cm waist` : "No waist"}</p></div>
+                    <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => startEdit(entry)}><Edit3 className="h-4 w-4" /> Edit</Button><Button size="sm" variant="outline" onClick={() => deleteEntry(entry)}><Trash2 className="h-4 w-4" /> Delete</Button></div>
+                  </div>
+                  <MeasurementList entry={entry} />
+                  {entry.notes ? <p className="mt-2 text-sm text-muted-foreground">{entry.notes}</p> : null}
+                </div>
+              ))}
+              {!entries.length ? <p className="text-sm text-muted-foreground">No progress entries yet.</p> : null}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </>
   );
 }

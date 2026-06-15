@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ComponentType, ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   BarChart3,
@@ -17,6 +18,7 @@ import {
   LogOut,
   Menu,
   Pill,
+  Plus,
   Settings,
   Shield,
   Soup,
@@ -34,7 +36,7 @@ import { cn } from "@/lib/utils";
 type NavItem = {
   href: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string }>;
   activePaths?: string[];
 };
 
@@ -81,10 +83,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
 const mobilePrimaryItems: NavItem[] = [
   { href: "/dashboard", label: "Today", icon: Home, activePaths: ["/dashboard"] },
   { href: "/my-workout/plans", label: "Train", icon: Dumbbell, activePaths: ["/today-workout", "/my-workout", "/workouts", "/workout-history", "/personal-records"] },
-  { href: "/calories", label: "Eat", icon: Utensils, activePaths: ["/calories", "/my-meal-plan"] },
-  { href: "/progress", label: "Progress", icon: BarChart3, activePaths: ["/progress"] },
-  { href: "/wellness", label: "Wellness", icon: CheckSquare, activePaths: ["/wellness", "/hydration", "/habits", "/sleep-recovery", "/supplements", "/daily-fit-tasks"] },
-  { href: "/settings", label: "More", icon: Settings, activePaths: ["/settings", "/profile"] }
+  { href: "/calories", label: "Eat", icon: Utensils, activePaths: ["/calories", "/my-meal-plan"] }
 ];
 
 const adminItems: NavItem[] = [
@@ -95,12 +94,38 @@ const adminItems: NavItem[] = [
   { href: "/admin/settings", label: "Settings", icon: Settings }
 ];
 
+const moreActivePaths = [
+  "/progress",
+  "/personal-records",
+  "/wellness",
+  "/hydration",
+  "/habits",
+  "/sleep-recovery",
+  "/supplements",
+  "/daily-fit-tasks",
+  "/settings",
+  "/profile",
+  "/admin"
+];
+
+const quickLogItems: NavItem[] = [
+  { href: "/calories", label: "Log food", icon: Utensils },
+  { href: "/hydration", label: "Add water", icon: Droplets },
+  { href: "/today-workout", label: "Start workout", icon: Dumbbell },
+  { href: "/progress", label: "Add progress", icon: BarChart3 },
+  { href: "/habits", label: "Add habit or task", icon: CheckSquare }
+];
+
 function isActivePath(pathname: string, item: NavItem) {
   const paths = item.activePaths ?? [item.href];
   return paths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+function isMoreActive(pathname: string) {
+  return moreActivePaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
+export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { profile, isAdmin, signOut } = useAuth();
 
@@ -135,7 +160,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
       </aside>
-      <header className="sticky top-0 z-30 border-b bg-card/85 backdrop-blur lg:ml-72">
+      <header className="sticky top-0 z-30 border-b bg-card/90 backdrop-blur lg:ml-72">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3 lg:hidden">
             <MobileMenu pathname={pathname} isAdmin={isAdmin} signOut={signOut} />
@@ -162,65 +187,137 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </motion.div>
       </main>
-      <MobilePrimaryNav pathname={pathname} />
+      <MobilePrimaryNav pathname={pathname} isAdmin={isAdmin} signOut={signOut} />
     </div>
   );
 }
 
-function MobilePrimaryNav({ pathname }: { pathname: string }) {
+function MobilePrimaryNav({ pathname, isAdmin, signOut }: { pathname: string; isAdmin: boolean; signOut: () => Promise<void> }) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t bg-card/95 px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 shadow-luxe backdrop-blur lg:hidden" aria-label="Primary mobile navigation">
-      {mobilePrimaryItems.map((item) => {
-        const Icon = item.icon;
-        const active = isActivePath(pathname, item);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "flex min-h-14 flex-col items-center justify-center gap-1 rounded-md px-1 text-[11px] font-medium transition focus-visible:ring-2 focus-visible:ring-ring",
-              active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-primary"
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            <span className="truncate">{item.label}</span>
-          </Link>
-        );
-      })}
-    </nav>
+    <div className="fixed inset-x-0 bottom-0 z-40 lg:hidden">
+      <QuickLogSheet />
+      <nav className="grid grid-cols-4 border-t bg-card/95 px-2 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1 shadow-luxe backdrop-blur" aria-label="Primary mobile navigation">
+        {mobilePrimaryItems.map((item) => (
+          <MobileNavLink key={item.href} item={item} active={isActivePath(pathname, item)} />
+        ))}
+        <MobileMenu pathname={pathname} isAdmin={isAdmin} signOut={signOut} asNavItem active={isMoreActive(pathname)} />
+      </nav>
+    </div>
   );
 }
 
-function MobileMenu({ pathname, isAdmin, signOut }: { pathname: string; isAdmin: boolean; signOut: () => Promise<void> }) {
+function MobileNavLink({ item, active }: { item: NavItem; active: boolean }) {
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex min-h-14 flex-col items-center justify-center gap-1 border-t-2 px-1 text-[11px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+        active ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-primary"
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      <span className="truncate">{item.label}</span>
+    </Link>
+  );
+}
+
+function QuickLogSheet() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" aria-label="Open navigation menu">
-          <Menu className="h-5 w-5" />
+        <Button
+          size="icon"
+          className="absolute left-1/2 top-0 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-background bg-primary text-primary-foreground shadow-luxe hover:bg-[#1F2A14]"
+          aria-label="Open quick log"
+        >
+          <Plus className="h-6 w-6" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Navigation</DialogTitle>
+      <DialogContent className="rounded-t-2xl p-0 sm:max-w-sm">
+        <DialogHeader className="border-b px-5 py-4 text-left">
+          <DialogTitle>Quick log</DialogTitle>
         </DialogHeader>
-        <div className="max-h-[calc(90dvh-7rem)] overflow-y-auto pr-1">
-          <div className="space-y-5">
-            {navGroups.map((group) => (
+        <div className="grid gap-2 p-4">
+          {quickLogItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <DialogClose key={item.href} asChild>
+                <Link href={item.href} className="flex min-h-12 items-center gap-3 rounded-md border bg-card px-3 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-muted">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  {item.label}
+                </Link>
+              </DialogClose>
+            );
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MobileMenu({
+  pathname,
+  isAdmin,
+  signOut,
+  asNavItem = false,
+  active = false
+}: {
+  pathname: string;
+  isAdmin: boolean;
+  signOut: () => Promise<void>;
+  asNavItem?: boolean;
+  active?: boolean;
+}) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        {asNavItem ? (
+          <button
+            type="button"
+            aria-label="Open more navigation"
+            className={cn(
+              "flex min-h-14 flex-col items-center justify-center gap-1 border-t-2 px-1 text-[11px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+              active ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-primary"
+            )}
+          >
+            <Settings className="h-4 w-4" />
+            <span>More</span>
+          </button>
+        ) : (
+          <Button variant="outline" size="icon" aria-label="Open navigation menu">
+            <Menu className="h-5 w-5" />
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="inset-y-0 left-0 right-auto top-0 h-dvh max-h-dvh w-[86vw] max-w-sm translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 border-r p-0 sm:left-0 sm:top-0 sm:translate-x-0 sm:translate-y-0 sm:rounded-none sm:max-w-sm">
+        <DialogHeader className="border-b px-5 py-4 text-left">
+          <DialogTitle>More</DialogTitle>
+        </DialogHeader>
+        <div className="h-[calc(100dvh-4.5rem)] overflow-y-auto px-4 py-4">
+          <div className="space-y-4">
+            {navGroups.map((group) => {
+              const visibleInMore = group.label === "Today" ? group.items.slice(0, 0) : group.items;
+              if (visibleInMore.length === 0) return null;
+              return (
               <div key={group.label}>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
+                <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
                 <div className="space-y-1">
-                  {group.items.map((item) => (
+                  {visibleInMore.map((item) => (
                     <DialogClose key={`${item.href}-${item.label}`} asChild>
                       <SidebarLink item={item} active={isActivePath(pathname, item)} mobile />
                     </DialogClose>
                   ))}
                 </div>
               </div>
-            ))}
+              );
+            })}
             {isAdmin ? (
               <div className="border-t pt-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Admin</p>
+                <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Admin</p>
                 {adminItems.map((item) => (
                   <DialogClose key={item.href} asChild>
                     <SidebarLink item={item} active={isActivePath(pathname, item)} mobile />

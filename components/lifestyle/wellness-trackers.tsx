@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bell, CheckCircle2, Clock, Moon, Pencil, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { Bell, CheckCircle2, MoreHorizontal, Pencil, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -278,7 +278,7 @@ export function HabitsTracker() {
 
 function HabitStreakCard({ name, records }: { name: string; records: Array<{ date: string; completed: boolean }> }) {
   const stats = calculateStreakStats(records);
-  return <div className="rounded-md border p-3"><p className="font-semibold">{name}</p><p className="mt-1 text-sm text-muted-foreground">Current streak {stats.currentStreak} days | Best {stats.bestStreak} days | Missed {stats.missedDays}</p><div className="mt-3 flex flex-wrap gap-1">{stats.history.slice(-14).map((day, index) => <span key={`${name}-${day.date}-${index}`} title={day.date} className={`h-3 w-3 rounded-sm ${day.completed ? "bg-primary" : "bg-slate-200"}`} />)}</div></div>;
+  return <div className="rounded-md border p-3"><p className="font-semibold">{name}</p><p className="mt-1 text-sm text-muted-foreground">Current streak {stats.currentStreak} days | Best {stats.bestStreak} days | Missed {stats.missedDays}</p><div className="mt-3 flex flex-wrap gap-1">{stats.history.slice(-14).map((day, index) => <span key={`${name}-${day.date}-${index}`} title={day.date} className={`h-3 w-3 rounded-sm ${day.completed ? "bg-primary" : "bg-muted"}`} />)}</div></div>;
 }
 
 export function SupplementsTracker() {
@@ -353,7 +353,36 @@ export function PersonalRecordsTracker() {
 function Metric({ title, value, detail }: { title: string; value: string; detail: string }) { return <Card><CardContent className="pt-5"><p className="text-sm text-muted-foreground">{title}</p><p className="mt-2 text-2xl font-bold">{value}</p><p className="mt-1 text-sm text-muted-foreground">{detail}</p></CardContent></Card>; }
 function TrackerShell({ title, description, children }: { title: string; description: string; children: React.ReactNode }) { return <Card><CardHeader><CardTitle>{title}</CardTitle><p className="text-sm text-muted-foreground">{description}</p></CardHeader><CardContent className="space-y-4">{children}</CardContent></Card>; }
 function ItemGrid({ children }: { children: React.ReactNode }) { return <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{children}</div>; }
-function ActionCard({ title, detail, done, onToggle, onEdit, onDelete }: { title: string; detail: string; done?: boolean; onToggle?: () => void; onEdit: () => void; onDelete: () => void }) { return <div className="rounded-md border bg-card p-3"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-foreground">{title}</p><p className="mt-1 text-sm text-muted-foreground">{detail}</p></div>{typeof done === "boolean" ? <Badge variant={done ? "success" : "outline"}>{done ? "Done" : "Open"}</Badge> : null}</div><div className="mt-3 flex flex-wrap gap-2">{onToggle ? <Button size="sm" variant={done ? "secondary" : "outline"} onClick={onToggle}><CheckCircle2 className="h-4 w-4" />{done ? "Reopen" : "Mark Done"}</Button> : null}<Button size="sm" variant="outline" onClick={onEdit}><Pencil className="h-4 w-4" />Edit</Button><Button size="sm" variant="ghost" onClick={onDelete}><Trash2 className="h-4 w-4" />Delete</Button></div></div>; }
+function ActionCard({ title, detail, done, onToggle, onEdit, onDelete }: { title: string; detail: string; done?: boolean; onToggle?: () => void; onEdit: () => void; onDelete: () => void }) {
+  return (
+    <div className="rounded-md border bg-card p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold text-foreground">{title}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
+        </div>
+        {typeof done === "boolean" ? <Badge variant={done ? "success" : "outline"}>{done ? "Done" : "Open"}</Badge> : null}
+      </div>
+      <div className="mt-3 flex items-center gap-2">
+        {onToggle ? (
+          <Button size="sm" className="flex-1" variant={done ? "secondary" : "default"} onClick={onToggle}>
+            <CheckCircle2 className="h-4 w-4" />
+            {done ? "Reopen" : "Mark done"}
+          </Button>
+        ) : null}
+        <details className="relative ml-auto">
+          <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${title}`}>
+            <MoreHorizontal className="h-4 w-4" />
+          </summary>
+          <div className="absolute right-0 z-20 mt-2 grid w-36 gap-1 rounded-md border bg-card p-2 shadow-luxe">
+            <Button size="sm" variant="ghost" className="justify-start" onClick={onEdit}><Pencil className="h-4 w-4" />Edit</Button>
+            <Button size="sm" variant="ghost" className="justify-start text-destructive hover:text-destructive" onClick={onDelete}><Trash2 className="h-4 w-4" />Delete</Button>
+          </div>
+        </details>
+      </div>
+    </div>
+  );
+}
 function Field({ label, value, onChange, type = "text", placeholder }: { label: string; value: string; onChange: (value: string) => void; type?: string; placeholder?: string }) { return <div className="space-y-2"><Label>{label}</Label><Input type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder ?? label} /></div>; }
 function SelectField({ label, value, values, onChange }: { label: string; value: string; values: string[]; onChange: (value: string) => void }) { return <div className="space-y-2"><Label>{label}</Label><select value={value} onChange={(event) => onChange(event.target.value)} className="flex h-11 w-full rounded-md border bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"><option value="">Choose</option>{values.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>; }
 function startOfWeek(value: string) { const [year, month, day] = value.split("-").map(Number); const date = new Date(Date.UTC(year, month - 1, day)); date.setUTCDate(date.getUTCDate() - date.getUTCDay()); return date.toISOString().slice(0, 10); }

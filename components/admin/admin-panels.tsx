@@ -519,7 +519,7 @@ export function AdminAuditPanel() {
         </CardHeader>
         <CardContent className="space-y-3">
           <Button variant="outline" onClick={loadAuditLogs}><RefreshCcw className="h-4 w-4" /> Refresh</Button>
-          {warnings.map((warning) => <p key={warning} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{warning}</p>)}
+          {warnings.map((warning) => <p key={warning} className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-foreground">{warning}</p>)}
           {adminLogs.map((log) => (
             <div key={log.id} className="rounded-md border p-3 text-sm">
               <p className="font-semibold">{log.action}</p>
@@ -716,7 +716,7 @@ export function AdminWelcomePanel() {
           </form>
         </CardContent>
       </Card>
-      <Card className="bg-blue-50">
+      <Card className="bg-primary/10">
         <CardHeader>
           <CardTitle>Preview</CardTitle>
           <CardDescription>Members see this after login or once per day.</CardDescription>

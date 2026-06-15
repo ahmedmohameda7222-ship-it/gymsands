@@ -393,7 +393,7 @@ export function WorkoutPlanBuilder({
         <CardHeader>
           <CardTitle>Workout plan</CardTitle>
           {isLoadingSavedPlan ? <p className="text-sm text-muted-foreground">Loading saved plan...</p> : null}
-          {savedMessage ? <p className="text-sm text-emerald-700">{savedMessage}</p> : null}
+          {savedMessage ? <p className="text-sm text-success">{savedMessage}</p> : null}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto]">
@@ -645,7 +645,7 @@ function StatCard({
             <p className="text-sm text-muted-foreground">{label}</p>
             <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
           </div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-md bg-blue-50 text-primary">
+          <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Icon className="h-5 w-5" />
           </div>
         </div>

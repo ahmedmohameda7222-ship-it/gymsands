@@ -32,7 +32,7 @@ export function FoodLogList({ logs = [], onDeleted, title = "Today's food log" }
       <CardContent className="space-y-3">
         {logs.length ? (
           logs.map((log) => (
-            <div key={log.id} className="flex items-center justify-between gap-3 rounded-md border p-3 transition hover:-translate-y-0.5 hover:shadow-sm">
+            <div key={log.id} className="flex items-center justify-between gap-3 rounded-md border p-3 transition-colors hover:border-primary/40 hover:bg-muted/30">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold">{log.food_name || "Food"}</p>

@@ -14,7 +14,7 @@ export function SelectTrigger({
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        "flex h-11 w-full items-center justify-between rounded-md border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring",
+        "flex h-11 w-full items-center justify-between rounded-md border border-border bg-card px-3 text-sm text-foreground transition-colors focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-ring",
         className
       )}
     >
@@ -32,7 +32,7 @@ export function SelectContent({
 }: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>) {
   return (
     <SelectPrimitive.Portal>
-      <SelectPrimitive.Content className={cn("z-50 min-w-40 overflow-hidden rounded-md border bg-card shadow-luxe", className)}>
+      <SelectPrimitive.Content className={cn("z-50 min-w-40 overflow-hidden rounded-md border border-border bg-card shadow-luxe", className)}>
         <SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport>
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>

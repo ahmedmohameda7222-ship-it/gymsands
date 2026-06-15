@@ -34,7 +34,7 @@ export default function LandingPage() {
               style={{ backgroundImage: `url(${image})`, animationDelay: `${index * 6}s` }}
             />
           ))}
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(58,44,31,0.78),rgba(85,96,61,0.48),rgba(245,240,232,0.18)),linear-gradient(180deg,rgba(245,240,232,0.06),#F5F0E8)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(26,26,26,0.78),rgba(45,58,30,0.54),rgba(248,246,241,0.12)),linear-gradient(180deg,rgba(248,246,241,0.04),#F8F6F1)]" />
           <div className="container relative flex min-h-[88vh] items-center pb-16 pt-14">
             <div className="max-w-3xl">
               <p className="text-sm font-semibold uppercase tracking-wide text-primary">Luxury wellness dashboard</p>

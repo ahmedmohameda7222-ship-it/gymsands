@@ -24,10 +24,10 @@ export function MetricCard({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
-            <p className="mt-1 text-sm text-slate-500">{detail}</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{value}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
           </div>
-          <div className="rounded-md bg-blue-50 p-3 text-primary">
+          <div className="rounded-md bg-primary/10 p-3 text-primary">
             <Icon className="h-5 w-5" />
           </div>
         </div>
