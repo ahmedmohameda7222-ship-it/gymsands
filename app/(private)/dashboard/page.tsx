@@ -176,8 +176,8 @@ export default function DashboardPage() {
   const waterLiters = Math.round((waterTotalMl / 1000) * 10) / 10;
   const waterTargetLiters = Math.round(((targets?.water_ml ?? 0) / 1000) * 10) / 10;
   const hasAnyTodayData = logs.length > 0 || history.length > 0 || waterLogs.length > 0 || progressEntries.length > 0 || mealPlanItems.length > 0 || Boolean(activePlan) || supplements.length > 0 || sleepLogs.length > 0 || Boolean(targets);
-  const completedToday = Boolean(history.find((session) => session.status === "completed" && session.started_at?.slice(0, 10) === today));
-  const hasStartedWorkout = Boolean(openSessionId || history.length);
+  const completedToday = Boolean(history.find((session) => session.status === "completed" && (session.completed_at?.slice(0, 10) === today || session.started_at?.slice(0, 10) === today)));
+  const hasStartedWorkout = Boolean(openSessionId || history.some((session) => session.status === "completed"));
   const setupChecklist = [
     { label: "Finish profile", done: Boolean(profile?.full_name), href: "/profile", action: "Edit profile" },
     { label: "Set calorie and water targets", done: hasTargets, href: "/calories", action: "Set targets" },

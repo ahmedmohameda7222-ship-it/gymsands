@@ -19,14 +19,14 @@ import type { DailyNutritionSummary, WaterLog } from "@/types";
 function addDays(date: string, days: number) {
   const next = new Date(`${date}T00:00:00`);
   next.setDate(next.getDate() + days);
-  return next.toISOString().slice(0, 10);
+  return next.toLocaleDateString("en-CA");
 }
 
 function startOfWeek(date: string) {
   const current = new Date(`${date}T00:00:00`);
   const day = current.getDay();
   current.setDate(current.getDate() - day);
-  return current.toISOString().slice(0, 10);
+  return current.toLocaleDateString("en-CA");
 }
 
 function liters(amountMl: number) {

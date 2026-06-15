@@ -524,7 +524,7 @@ function weekDates(weekStart: string) {
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
-    return date.toISOString().slice(0, 10);
+    return date.toLocaleDateString("en-CA");
   });
 }
 
@@ -1042,9 +1042,9 @@ export async function deleteFoodLog(id: string) {
 
 export async function copyYesterdaysMeals(userId: string, targetDate = todayIso()) {
   if (!canUseUserData(userId)) throw new Error("User session invalid");
-  const yesterday = new Date(targetDate);
+  const yesterday = new Date(`${targetDate}T00:00:00`);
   yesterday.setDate(yesterday.getDate() - 1);
-  const sourceDate = yesterday.toISOString().slice(0, 10);
+  const sourceDate = yesterday.toLocaleDateString("en-CA");
   const { data, error } = await supabase!.from("food_logs").select("*").eq("user_id", userId).eq("log_date", sourceDate);
   if (error) {
     console.warn("FitLife Hub could not copy yesterday's meals.", error.message);

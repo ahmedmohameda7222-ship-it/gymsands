@@ -58,7 +58,7 @@ function writeJson<T>(key: string, value: T) {
 function daysAgoIso(days: number) {
   const date = new Date();
   date.setDate(date.getDate() - days + 1);
-  return date.toISOString().slice(0, 10);
+  return date.toLocaleDateString("en-CA");
 }
 
 export async function getFitnessHabitHistory(userId: string, days = 30) {

@@ -50,7 +50,7 @@ function addDays(date: Date, days: number) {
 }
 
 function toDateOnly(date: Date) {
-  return date.toISOString().slice(0, 10);
+  return date.toLocaleDateString("en-CA");
 }
 
 function startOfWeek(value: string) {

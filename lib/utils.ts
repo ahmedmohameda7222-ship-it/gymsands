@@ -19,7 +19,7 @@ export function toSlug(value: string) {
 }
 
 export function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toLocaleDateString("en-CA");
 }
 
 export function isUuid(value: string | null | undefined) {
