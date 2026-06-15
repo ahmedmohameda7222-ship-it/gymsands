@@ -105,45 +105,47 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { profile, isAdmin, signOut } = useAuth();
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r bg-card/95 backdrop-blur lg:flex lg:flex-col">
+    <div className="min-h-screen bg-transparent text-foreground">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-border/70 bg-card/80 shadow-soft backdrop-blur-xl lg:flex lg:flex-col">
         <div className="flex h-20 items-center px-6">
           <Brand href="/dashboard" />
         </div>
-        <nav className="flex-1 space-y-5 overflow-y-auto px-4 pb-4">
+        <nav className="flex-1 space-y-5 overflow-y-auto px-4 pb-4" aria-label="Main navigation">
           {navGroups.map((group) => (
             <div key={group.label}>
-              <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
+              <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{group.label}</p>
               <div className="space-y-1">
                 {group.items.map((item) => <SidebarLink key={`${item.href}-${item.label}`} item={item} active={isActivePath(pathname, item)} />)}
               </div>
             </div>
           ))}
           {isAdmin ? (
-            <div className="mt-6 border-t pt-4">
-              <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Admin</p>
+            <div className="mt-6 border-t border-border/70 pt-4">
+              <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Admin</p>
               {adminItems.map((item) => <SidebarLink key={item.href} item={item} active={isActivePath(pathname, item)} />)}
             </div>
           ) : null}
         </nav>
-        <div className="border-t p-4">
-          <p className="text-sm font-semibold text-foreground">{profile?.full_name || "FitLife Hub member"}</p>
-          <p className="truncate text-xs text-muted-foreground">{profile?.email}</p>
-          <Button variant="ghost" className="mt-3 w-full justify-start" onClick={signOut}>
-            <LogOut className="h-4 w-4" />
-            Logout
-          </Button>
+        <div className="border-t border-border/70 p-4">
+          <div className="rounded-2xl bg-background/70 p-3">
+            <p className="truncate text-sm font-semibold text-foreground">{profile?.full_name || "FitLife Hub member"}</p>
+            <p className="truncate text-xs text-muted-foreground">{profile?.email}</p>
+            <Button variant="ghost" className="mt-3 w-full justify-start" onClick={signOut}>
+              <LogOut className="h-4 w-4" />
+              Logout
+            </Button>
+          </div>
         </div>
       </aside>
-      <header className="sticky top-0 z-30 border-b bg-card/85 backdrop-blur lg:ml-72">
+      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/75 backdrop-blur-xl lg:ml-72">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3 lg:hidden">
             <MobileMenu pathname={pathname} isAdmin={isAdmin} signOut={signOut} />
             <Brand href="/dashboard" />
           </div>
           <div className="hidden lg:block">
-            <p className="text-sm text-muted-foreground">FitLife Hub</p>
-            <h1 className="text-lg font-semibold">Today, train, eat, progress</h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">FitLife Hub</p>
+            <h1 className="text-base font-semibold text-foreground">Today, training, nutrition, progress</h1>
           </div>
           <Button variant="outline" size="sm" onClick={signOut} className="hidden lg:inline-flex">
             <LogOut className="h-4 w-4" />
@@ -169,7 +171,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function MobilePrimaryNav({ pathname }: { pathname: string }) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t bg-card/95 px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 shadow-luxe backdrop-blur lg:hidden" aria-label="Primary mobile navigation">
+    <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-border/70 bg-card/95 px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 shadow-luxe backdrop-blur-xl lg:hidden" aria-label="Primary mobile navigation">
       {mobilePrimaryItems.map((item) => {
         const Icon = item.icon;
         const active = isActivePath(pathname, item);
@@ -179,8 +181,8 @@ function MobilePrimaryNav({ pathname }: { pathname: string }) {
             href={item.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex min-h-14 flex-col items-center justify-center gap-1 rounded-md px-1 text-[11px] font-medium transition focus-visible:ring-2 focus-visible:ring-ring",
-              active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-primary"
+              "flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium transition focus-visible:ring-2 focus-visible:ring-ring",
+              active ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:bg-muted/60 hover:text-primary"
             )}
           >
             <Icon className="h-4 w-4" />
@@ -208,7 +210,7 @@ function MobileMenu({ pathname, isAdmin, signOut }: { pathname: string; isAdmin:
           <div className="space-y-5">
             {navGroups.map((group) => (
               <div key={group.label}>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{group.label}</p>
                 <div className="space-y-1">
                   {group.items.map((item) => (
                     <DialogClose key={`${item.href}-${item.label}`} asChild>
@@ -219,8 +221,8 @@ function MobileMenu({ pathname, isAdmin, signOut }: { pathname: string; isAdmin:
               </div>
             ))}
             {isAdmin ? (
-              <div className="border-t pt-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Admin</p>
+              <div className="border-t border-border/70 pt-4">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Admin</p>
                 {adminItems.map((item) => (
                   <DialogClose key={item.href} asChild>
                     <SidebarLink item={item} active={isActivePath(pathname, item)} mobile />
@@ -246,8 +248,8 @@ function SidebarLink({ item, active, mobile = false }: { item: NavItem; active: 
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-ring",
-        active ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:bg-muted hover:text-primary",
+        "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-ring",
+        active ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:bg-muted/60 hover:text-primary",
         mobile && "min-h-12 py-3"
       )}
     >
