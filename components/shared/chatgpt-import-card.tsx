@@ -25,7 +25,7 @@ export function ChatGptImportCard({ mode, title, description, className }: ChatG
     <Card className={className}>
       <CardContent className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
         <div className="flex gap-3">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
             <Bot className="h-5 w-5" />
           </div>
           <div>
@@ -44,13 +44,13 @@ export function ChatGptImportCard({ mode, title, description, className }: ChatG
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row md:flex-col">
-          <Button asChild>
+          <Button asChild className="min-h-12">
             <Link href="/settings">
               <Settings2 className="h-4 w-4" />
               Set up import
             </Link>
           </Button>
-          <Button type="button" variant="outline" onClick={openChatGpt}>
+          <Button type="button" variant="outline" onClick={openChatGpt} className="min-h-12">
             <ExternalLink className="h-4 w-4" />
             Open ChatGPT
           </Button>

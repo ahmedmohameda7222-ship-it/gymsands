@@ -65,10 +65,10 @@ export default function ProfilePage() {
             <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-primary-foreground/15 text-xl font-semibold">
               {initials}
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground/70">FitLife Hub member</p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight">{trimmedName || "Complete your profile"}</h2>
-              <p className="mt-1 text-sm text-primary-foreground/75">{profile?.email ?? "Email loading..."}</p>
+              <h2 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">{trimmedName || "Complete your profile"}</h2>
+              <p className="mt-1 truncate text-sm text-primary-foreground/75">{profile?.email ?? "Email loading..."}</p>
             </div>
           </div>
           <Button asChild variant="secondary">
@@ -99,11 +99,11 @@ export default function ProfilePage() {
               <Input id="profile-name" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your name, e.g. Ahmed" />
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button onClick={saveProfile} disabled={isSaving || !hasChanges}>
+              <Button onClick={saveProfile} disabled={isSaving || !hasChanges} className="min-h-12">
                 <Save className="h-4 w-4" />
                 {isSaving ? "Saving..." : "Save profile"}
               </Button>
-              <Button asChild variant="outline">
+              <Button asChild variant="outline" className="min-h-12">
                 <Link href="/settings">Open settings</Link>
               </Button>
             </div>
@@ -131,6 +131,9 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Mobile bottom spacer for nav */}
+      <div className="h-24 lg:hidden" />
     </>
   );
 }
