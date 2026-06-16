@@ -68,6 +68,7 @@ export default function ProgressPage() {
   const [estimateSettings, setEstimateSettings] = useState({ heightCm: "", sex: "male" as "male" | "female" });
 
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("overview");
   const { dialog, ask } = useConfirm();
   const today = useTodayDate();
   const currentWeekStart = useMemo(() => startOfWeek(today), [today]);
@@ -252,7 +253,7 @@ export default function ProgressPage() {
         </Card>
       ) : null}
 
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="measurements">Measurements</TabsTrigger>
@@ -261,45 +262,156 @@ export default function ProgressPage() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <MetricCard icon={Scale} label="Body weight" value={latestWeightEntry ? `${latestWeightEntry.body_weight_kg} kg` : "No entry"} detail={weightDelta === null ? "No trend yet" : `${formatDelta(weightDelta)} kg from first entry`} />
-            <MetricCard icon={TrendingUp} label="7-day average" value={sevenDayAverage === null ? "Not enough data" : `${sevenDayAverage} kg`} detail="Average from real weight entries only" />
-            <MetricCard icon={TrendingDown} label="30-day average" value={thirtyDayAverage === null ? "Not enough data" : `${thirtyDayAverage} kg`} detail="Longer-term weight trend" />
-            <MetricCard icon={Target} label="Goal estimate" value={numericGoalWeight ? `${numericGoalWeight} kg` : "No goal"} detail={targetDateEstimate} />
+          {/* Hero Summary */}
+          <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-luxe">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-muted-foreground">Current weight</p>
+              <p className="text-xs text-muted-foreground">{latestWeightEntry?.entry_date ?? "No entry yet"}</p>
+            </div>
+            <div className="mt-2">
+              <p className="text-4xl font-bold tracking-tight text-foreground">
+                {latestWeightEntry ? `${latestWeightEntry.body_weight_kg} kg` : "—"}
+              </p>
+              {latestWeightEntry && previousWeightEntry && latestWeightChange !== null ? (
+                <p className={`mt-1 inline-flex items-center gap-1 text-sm font-medium ${latestWeightChange < 0 ? "text-emerald-600" : latestWeightChange > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
+                  {latestWeightChange < 0 ? "↓" : latestWeightChange > 0 ? "↑" : "→"} {Math.abs(latestWeightChange)} kg from previous
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-muted-foreground">Add a second entry to see trend</p>
+              )}
+            </div>
+
+            {/* Goal progress */}
+            {numericGoalWeight && latestWeightEntry && firstWeightEntry ? (
+              <div className="mt-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Goal: {numericGoalWeight} kg</span>
+                  <span className="font-medium text-foreground">
+                    {Math.abs(round(latestWeightEntry.body_weight_kg - numericGoalWeight))} kg to go
+                  </span>
+                </div>
+                <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: `${(() => {
+                      const total = Math.abs(firstWeightEntry.body_weight_kg - numericGoalWeight);
+                      const moved = Math.abs(firstWeightEntry.body_weight_kg - latestWeightEntry.body_weight_kg);
+                      if (total === 0) return "0%";
+                      const direction = numericGoalWeight - firstWeightEntry.body_weight_kg;
+                      const actualDirection = latestWeightEntry.body_weight_kg - firstWeightEntry.body_weight_kg;
+                      return (direction * actualDirection >= 0) ? `${Math.min(100, Math.round((moved / total) * 100))}%` : "0%";
+                    })()}` }}
+                  />
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">{targetDateEstimate}</p>
+              </div>
+            ) : (
+              <div className="mt-4">
+                <p className="text-sm text-muted-foreground">Set a goal weight to track progress.</p>
+                <div className="mt-2 flex gap-2">
+                  <Input type="number" className="h-11" value={goalWeight} onChange={(event) => setGoalWeight(event.target.value)} placeholder="Goal kg" />
+                  <Button className="h-11" onClick={saveGoalWeight}>Save</Button>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4">
+              <ProgressEntryModal onSaved={(entry) => setEntries((current) => [...current, entry])} buttonClassName="w-full" />
+            </div>
           </div>
 
-          <Card>
-            <CardHeader><CardTitle>Goal line</CardTitle></CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-[1fr_auto]">
-              <div className="space-y-2"><Label>Goal weight, kg</Label><Input type="number" value={goalWeight} onChange={(event) => setGoalWeight(event.target.value)} placeholder="Example: 78" /><p className="text-xs text-muted-foreground">Saved to your profile when Supabase is available. A browser-local fallback is kept only if sync fails.</p></div>
-              <Button className="self-end" onClick={saveGoalWeight}>Save goal</Button>
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <MetricCard icon={Ruler} label="Waist" value={isFiniteNumber(latestWaist) ? `${latestWaist} cm` : "No entry"} detail={waistDelta === null ? "No measurement trend yet" : `${formatDelta(waistDelta)} cm from first entry`} />
-            <MetricCard icon={CalendarCheck} label="Completed this week" value={weeklyInsights.completedWorkouts === null ? "Not enough data" : `${weeklyInsights.completedWorkouts}`} detail="Completed workout sessions in current week" progress={weeklyInsights.weekWorkoutCompletionRate ?? undefined} />
-            <MetricCard icon={SkipForward} label="Skipped this week" value={weeklyInsights.skippedWorkouts === null ? "Not enough data" : `${weeklyInsights.skippedWorkouts}`} detail="Skipped workout sessions in current week" progress={weeklyInsights.weekWorkoutTotal ? Math.round(((weeklyInsights.skippedWorkouts ?? 0) / weeklyInsights.weekWorkoutTotal) * 100) : undefined} />
-            <MetricCard icon={Target} label="Consistency" value={`${consistencyScore}%`} detail="Based on current week logs, workouts, water, and progress entries" progress={consistencyScore} />
+          {/* Quick stats row */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <CompactStat label="7-day avg" value={sevenDayAverage === null ? "—" : `${sevenDayAverage} kg`} />
+            <CompactStat label="30-day avg" value={thirtyDayAverage === null ? "—" : `${thirtyDayAverage} kg`} />
+            <CompactStat label="Waist" value={isFiniteNumber(latestWaist) ? `${latestWaist} cm` : "—"} />
+            <CompactStat label="Consistency" value={`${consistencyScore}%`} />
           </div>
 
+          {/* Charts */}
+          <ProgressCharts entries={entries} workoutActivity={workoutActivity} />
+
+          {/* Progress Feedback */}
           <ProgressFeedbackCard feedback={progressFeedback} />
 
-          <Card>
-            <CardHeader><CardTitle>Weekly progress insights</CardTitle></CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <Insight text={entries.length ? `${entries.length} progress entr${entries.length === 1 ? "y" : "ies"} saved.` : "No progress entries yet. Add your first weight or measurement."} />
-              <Insight text={weeklyInsights.completedWorkouts === null ? "Not enough workout data for this week." : `This week: ${weeklyInsights.completedWorkouts} completed and ${weeklyInsights.skippedWorkouts} skipped workouts.`} />
-              <Insight text={weeklyInsights.averageCalories === null ? "Not enough calorie data this week." : `Weekly calories: ${weeklyInsights.averageCalories} kcal (logged-day avg) | ${weeklyInsights.calendarAverageCalories} kcal (7-day calendar avg).`} />
-              <Insight text={weeklyInsights.averageProtein === null ? "Not enough protein data this week." : `Weekly protein: ${weeklyInsights.averageProtein} g (logged-day avg) | ${weeklyInsights.calendarAverageProtein} g (7-day calendar avg).`} />
-              <Insight text={weeklyInsights.waterAverage === null ? "Not enough water data this week." : `Average water this week: ${weeklyInsights.waterAverage} ml.`} />
-              <Insight text={latestWeightChange === null ? "Add at least two weight entries to see weight velocity." : `Last weight change: ${formatDelta(latestWeightChange)} kg.`} />
-              <Insight text={sevenDayAverage === null || thirtyDayAverage === null ? "Not enough data yet for a reliable 7/30-day weight trend." : `7-day average is ${formatDelta(round(sevenDayAverage - thirtyDayAverage))} kg vs 30-day average.`} />
-              <Insight text={waistDelta === null ? "Add waist measurements to see waist trend." : `Waist trend: ${formatDelta(waistDelta)} cm.`} />
-            </CardContent>
-          </Card>
+          {/* Latest measurements preview */}
+          {latestMeasurement && (
+            <Card className="border-border/70 shadow-luxe">
+              <CardHeader className="p-4 pb-0">
+                <CardTitle className="text-sm font-medium">Latest measurements</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                  {measurementTrends.filter(t => t.latest !== null).slice(0, 6).map(t => (
+                    <div key={t.label} className="rounded-lg border border-border/70 bg-card p-3">
+                      <p className="text-xs text-muted-foreground">{t.label}</p>
+                      <p className="mt-1 text-lg font-semibold">{t.latest}{t.unit}</p>
+                      {t.delta !== null && (
+                        <p className={`mt-0.5 text-xs ${t.delta < 0 ? "text-emerald-600" : t.delta > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
+                          {formatDelta(t.delta)}{t.unit}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => setActiveTab("measurements")} className="mt-3 text-sm font-medium text-primary">
+                  See all measurements →
+                </button>
+              </CardContent>
+            </Card>
+          )}
 
-          <ProgressCharts entries={entries} workoutActivity={workoutActivity} />
+          {/* Photos shortcut */}
+          {photos.length > 0 && (
+            <Card className="border-border/70 shadow-luxe">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Progress photos</p>
+                    <p className="text-xs text-muted-foreground">{photos.length} photo{photos.length !== 1 ? 's' : ''} saved</p>
+                  </div>
+                  <button onClick={() => setActiveTab("photos")} className="text-sm font-medium text-primary">
+                    View →
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Recent history preview */}
+          {entries.length > 0 && (
+            <Card className="border-border/70 shadow-luxe">
+              <CardHeader className="p-4 pb-0">
+                <CardTitle className="text-sm font-medium">Recent entries</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="space-y-2">
+                  {sortedEntries.slice(-3).reverse().map(entry => (
+                    <div key={entry.id} className="flex items-center justify-between rounded-lg border border-border/70 bg-card p-3">
+                      <div>
+                        <p className="text-sm font-medium">{entry.entry_date}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {entry.body_weight_kg ? `${entry.body_weight_kg} kg` : "No weight"}
+                          {(entry.measurements?.waist_cm ?? entry.waist_cm) ? ` · ${entry.measurements?.waist_cm ?? entry.waist_cm} cm waist` : ""}
+                        </p>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" className="h-10 w-10" onClick={() => startEdit(entry)}>
+                          <Edit3 className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-10 w-10 text-destructive" onClick={() => deleteEntry(entry)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => setActiveTab("history")} className="mt-3 text-sm font-medium text-primary">
+                  View full history →
+                </button>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="measurements" className="space-y-4">
@@ -332,18 +444,35 @@ export default function ProgressPage() {
 
         <TabsContent value="history" className="space-y-4">
           {editingEntry && editDraft ? <EditProgressCard draft={editDraft} setDraft={setEditDraft} onCancel={() => { setEditingEntry(null); setEditDraft(null); }} onSave={saveEdit} /> : null}
-          <Card>
-            <CardHeader><CardTitle>Progress history</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {sortedEntries.map((entry) => (
-                <div key={entry.id} className="rounded-md border p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div><p className="font-semibold">{entry.entry_date}</p><p className="text-sm text-muted-foreground">{entry.body_weight_kg ? `${entry.body_weight_kg} kg` : "No weight"} | {(entry.measurements?.waist_cm ?? entry.waist_cm) ? `${entry.measurements?.waist_cm ?? entry.waist_cm} cm waist` : "No waist"}</p></div>
-                    <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => startEdit(entry)}><Edit3 className="h-4 w-4" /> Edit</Button><Button size="sm" variant="outline" onClick={() => deleteEntry(entry)}><Trash2 className="h-4 w-4" /> Delete</Button></div>
+          <Card className="border-border/70 shadow-luxe">
+            <CardHeader className="p-4 pb-0">
+              <CardTitle className="text-sm font-medium">Progress history</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 space-y-2">
+              {sortedEntries.slice().reverse().map((entry) => (
+                <details key={entry.id} className="group rounded-lg border border-border/70 bg-card">
+                  <summary className="flex cursor-pointer items-center justify-between gap-3 p-3 list-none">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold">{entry.entry_date}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {entry.body_weight_kg ? `${entry.body_weight_kg} kg` : "No weight"}
+                        {(entry.measurements?.waist_cm ?? entry.waist_cm) ? ` · ${entry.measurements?.waist_cm ?? entry.waist_cm} cm waist` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button size="icon" variant="ghost" className="h-10 w-10" onClick={(e) => { e.preventDefault(); startEdit(entry); }}>
+                        <Edit3 className="h-4 w-4" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-10 w-10 text-destructive" onClick={(e) => { e.preventDefault(); deleteEntry(entry); }}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </summary>
+                  <div className="border-t border-border/70 p-3">
+                    <MeasurementList entry={entry} />
+                    {entry.notes ? <p className="mt-2 text-sm text-muted-foreground">{entry.notes}</p> : null}
                   </div>
-                  <MeasurementList entry={entry} />
-                  {entry.notes ? <p className="mt-2 text-sm text-muted-foreground">{entry.notes}</p> : null}
-                </div>
+                </details>
               ))}
               {!entries.length ? <p className="text-sm text-muted-foreground">No progress entries yet.</p> : null}
             </CardContent>
@@ -402,45 +531,88 @@ function ProgressPhotoManager({ userId, photos, setPhotos }: { userId: string | 
   }
 
   return (
-    <div className="mt-4 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+    <div className="space-y-4">
       {dialog}
-      <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><Camera className="h-5 w-5" /> Private progress photos</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">Upload real front, side, and back photos. Files are stored privately for your account when photo storage is available.</p>
+      <Card className="border-border/70 shadow-luxe">
+        <CardHeader className="p-4 pb-0">
+          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <Camera className="h-4 w-4 text-primary" />
+            Upload progress photo
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 space-y-3">
           <div className="grid gap-3 sm:grid-cols-[1fr_140px_130px_auto]">
-            <div className="space-y-2"><Label>Photo file</Label><Input type="file" accept="image/*" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></div>
-            <div className="space-y-2"><Label>Type</Label><select value={photoType} onChange={(event) => setPhotoType(event.target.value as ProgressPhotoType)} className="h-10 w-full rounded-md border bg-white px-3 text-sm">{photoTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></div>
-            <div className="space-y-2"><Label>Date</Label><Input type="date" value={photoDate} onChange={(event) => setPhotoDate(event.target.value)} /></div>
-            <Button className="self-end" onClick={upload} disabled={isUploading}><Upload className="h-4 w-4" /> {isUploading ? "Uploading" : "Upload"}</Button>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Photo file</Label>
+              <Input type="file" accept="image/*" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Type</Label>
+              <select value={photoType} onChange={(event) => setPhotoType(event.target.value as ProgressPhotoType)} className="h-11 w-full rounded-md border bg-card px-3 text-sm">
+                {photoTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Date</Label>
+              <Input type="date" value={photoDate} onChange={(event) => setPhotoDate(event.target.value)} />
+            </div>
+            <Button className="self-end h-11" onClick={upload} disabled={isUploading}>
+              <Upload className="h-4 w-4" />
+              {isUploading ? "Uploading" : "Upload"}
+            </Button>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {photos.map((photo) => <PhotoCard key={photo.id} photo={photo} onDelete={remove} />)}
-            {!photos.length ? <p className="text-sm text-muted-foreground">No progress photos uploaded yet.</p> : null}
+            {!photos.length ? <p className="col-span-full text-sm text-muted-foreground">No progress photos uploaded yet.</p> : null}
           </div>
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><ImageIcon className="h-5 w-5" /> Before / after comparison</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2"><PhotoSelect label="Before" value={beforeId} photos={photos} onChange={setBeforeId} /><PhotoSelect label="After" value={afterId} photos={photos} onChange={setAfterId} /></div>
-          {beforePhoto && afterPhoto ? <div className="grid gap-3 sm:grid-cols-2"><ComparisonPhoto label="Before" photo={beforePhoto} /><ComparisonPhoto label="After" photo={afterPhoto} /></div> : <p className="text-sm text-muted-foreground">Upload at least two photos or choose two dates/photos to compare.</p>}
+
+      <Card className="border-border/70 shadow-luxe">
+        <CardHeader className="p-4 pb-0">
+          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <ImageIcon className="h-4 w-4 text-primary" />
+            Before / after comparison
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <PhotoSelect label="Before" value={beforeId} photos={photos} onChange={setBeforeId} />
+            <PhotoSelect label="After" value={afterId} photos={photos} onChange={setAfterId} />
+          </div>
+          {beforePhoto && afterPhoto ? (
+            <div className="grid grid-cols-2 gap-3">
+              <ComparisonPhoto label="Before" photo={beforePhoto} />
+              <ComparisonPhoto label="After" photo={afterPhoto} />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Upload at least two photos or choose two dates/photos to compare.</p>
+          )}
         </CardContent>
       </Card>
     </div>
   );
 }
 
+function CompactStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border/70 bg-card p-3 shadow-soft">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold">{value}</p>
+    </div>
+  );
+}
+
 function PhotoCard({ photo, onDelete }: { photo: ProgressPhoto; onDelete: (photo: ProgressPhoto) => void }) {
-  return <div className="rounded-md border p-2"><ProgressPhotoImage url={photo.signed_url} label={`${photo.photo_type} progress ${photo.taken_on}`} unavailableLabel="Signed URL unavailable" /><div className="mt-2 flex items-center justify-between gap-2"><div><p className="font-semibold capitalize">{photo.photo_type}</p><p className="text-xs text-muted-foreground">{photo.taken_on}</p></div><Button size="icon" variant="ghost" onClick={() => onDelete(photo)}><Trash2 className="h-4 w-4" /></Button></div></div>;
+  return <div className="rounded-lg border border-border/70 bg-card p-2"><ProgressPhotoImage url={photo.signed_url} label={`${photo.photo_type} progress ${photo.taken_on}`} unavailableLabel="Signed URL unavailable" /><div className="mt-2 flex items-center justify-between gap-2"><div><p className="font-semibold capitalize text-sm">{photo.photo_type}</p><p className="text-xs text-muted-foreground">{photo.taken_on}</p></div><Button size="icon" variant="ghost" className="h-10 w-10" onClick={() => onDelete(photo)}><Trash2 className="h-4 w-4" /></Button></div></div>;
 }
 
 function PhotoSelect({ label, value, photos, onChange }: { label: string; value: string; photos: ProgressPhoto[]; onChange: (value: string) => void }) {
-  return <div className="space-y-2"><Label>{label}</Label><select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full rounded-md border bg-white px-3 text-sm"><option value="">Auto-select</option>{photos.map((photo) => <option key={photo.id} value={photo.id}>{photo.taken_on} — {photo.photo_type}</option>)}</select></div>;
+  return <div className="space-y-1.5"><Label className="text-sm">{label}</Label><select value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-md border bg-card px-3 text-sm"><option value="">Auto-select</option>{photos.map((photo) => <option key={photo.id} value={photo.id}>{photo.taken_on} — {photo.photo_type}</option>)}</select></div>;
 }
 
 function ComparisonPhoto({ label, photo }: { label: string; photo: ProgressPhoto }) {
-  return <div className="rounded-md border p-3"><p className="mb-2 font-semibold">{label}: {photo.taken_on} ({photo.photo_type})</p><ProgressPhotoImage url={photo.signed_url} label={`${label} progress ${photo.taken_on}`} unavailableLabel="Photo unavailable" /></div>;
+  return <div className="rounded-lg border border-border/70 bg-card p-3"><p className="mb-2 font-semibold text-sm">{label}: {photo.taken_on} ({photo.photo_type})</p><ProgressPhotoImage url={photo.signed_url} label={`${label} progress ${photo.taken_on}`} unavailableLabel="Photo unavailable" /></div>;
 }
 
 function ProgressPhotoImage({ url, label, unavailableLabel }: { url: string | null; label: string; unavailableLabel: string }) {
@@ -448,26 +620,26 @@ function ProgressPhotoImage({ url, label, unavailableLabel }: { url: string | nu
     <div
       role="img"
       aria-label={label}
-      className="aspect-[3/4] rounded-md bg-slate-100 bg-cover bg-center"
+      className="aspect-[3/4] rounded-md bg-muted bg-cover bg-center"
       style={{ backgroundImage: `url("${url}")` }}
     />
   ) : (
-    <div className="flex aspect-[3/4] items-center justify-center rounded-md bg-slate-100 text-sm text-muted-foreground">
+    <div className="flex aspect-[3/4] items-center justify-center rounded-md bg-muted text-sm text-muted-foreground">
       {unavailableLabel}
     </div>
   );
 }
 
 function EditProgressCard({ draft, setDraft, onSave, onCancel }: { draft: EditDraft; setDraft: Dispatch<SetStateAction<EditDraft | null>>; onSave: () => void; onCancel: () => void }) {
-  return <Card className="mt-4 border-primary/40 bg-primary/5"><CardHeader><CardTitle>Edit progress entry</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Field label="Date" type="date" value={draft.entryDate} onChange={(value) => setDraft((current) => current ? { ...current, entryDate: value } : current)} /><Field label="Body weight kg" value={draft.bodyWeightKg} onChange={(value) => setDraft((current) => current ? { ...current, bodyWeightKg: value } : current)} /><Field label="Waist cm" value={draft.waistCm} onChange={(value) => setDraft((current) => current ? { ...current, waistCm: value } : current)} /><Field label="Notes" value={draft.notes} onChange={(value) => setDraft((current) => current ? { ...current, notes: value } : current)} />{editableMeasurementFields.map(([key, label]) => <Field key={String(key)} label={label} value={draft.measurements[String(key)] ?? ""} onChange={(value) => setDraft((current) => current ? { ...current, measurements: { ...current.measurements, [String(key)]: value } } : current)} />)}<div className="flex gap-2 sm:col-span-2 lg:col-span-4"><Button onClick={onSave}>Save changes</Button><Button variant="outline" onClick={onCancel}>Cancel</Button></div></CardContent></Card>;
+  return <Card className="mt-4 border-primary/40 bg-primary/5"><CardHeader className="p-4 pb-0"><CardTitle className="text-sm font-medium">Edit progress entry</CardTitle></CardHeader><CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4"><Field label="Date" type="date" value={draft.entryDate} onChange={(value) => setDraft((current) => current ? { ...current, entryDate: value } : current)} /><Field label="Body weight kg" value={draft.bodyWeightKg} onChange={(value) => setDraft((current) => current ? { ...current, bodyWeightKg: value } : current)} /><Field label="Waist cm" value={draft.waistCm} onChange={(value) => setDraft((current) => current ? { ...current, waistCm: value } : current)} /><Field label="Notes" value={draft.notes} onChange={(value) => setDraft((current) => current ? { ...current, notes: value } : current)} />{editableMeasurementFields.map(([key, label]) => <Field key={String(key)} label={label} value={draft.measurements[String(key)] ?? ""} onChange={(value) => setDraft((current) => current ? { ...current, measurements: { ...current.measurements, [String(key)]: value } } : current)} />)}<div className="flex gap-2 sm:col-span-2 lg:col-span-4"><Button className="h-11" onClick={onSave}>Save changes</Button><Button variant="outline" className="h-11" onClick={onCancel}>Cancel</Button></div></CardContent></Card>;
 }
 
 function Field({ label, value, onChange, type = "number" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
-  return <div className="space-y-2"><Label>{label}</Label><Input type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.1" : undefined} value={value} onChange={(event) => onChange(event.target.value)} /></div>;
+  return <div className="space-y-1.5"><Label className="text-sm">{label}</Label><Input type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.1" : undefined} value={value} onChange={(event) => onChange(event.target.value)} className="h-11" /></div>;
 }
 
 function TrendCard({ trend }: { trend: MeasurementTrend }) {
-  return <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{trend.label}</p><p className="mt-1 font-semibold">{trend.latest === null ? "No data" : `${trend.latest}${trend.unit}`}</p><p className="mt-1 text-xs text-muted-foreground">{trend.delta === null ? "No trend yet" : `${formatDelta(trend.delta)}${trend.unit} from first entry`}</p></div>;
+  return <div className="rounded-lg border border-border/70 bg-card p-3 shadow-soft"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{trend.label}</p><p className="mt-1 font-semibold">{trend.latest === null ? "No data" : `${trend.latest}${trend.unit}`}</p><p className="mt-1 text-xs text-muted-foreground">{trend.delta === null ? "No trend yet" : `${formatDelta(trend.delta)}${trend.unit} from first entry`}</p></div>;
 }
 
 function MeasurementList({ entry }: { entry: ProgressEntry }) {
@@ -489,11 +661,11 @@ function MeasurementList({ entry }: { entry: ProgressEntry }) {
   ];
   const values = allValues.filter((item): item is [string, number, string] => isFiniteNumber(item[1]));
   if (!values.length) return null;
-  return <div className="mt-2 flex flex-wrap gap-2">{values.map(([label, value, unit]) => <span key={label} className="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">{label}: {value}{unit}</span>)}</div>;
+  return <div className="mt-2 flex flex-wrap gap-2">{values.map(([label, value, unit]) => <span key={label} className="rounded-md bg-primary/5 px-2.5 py-1 text-xs font-medium text-foreground">{label}: {value}{unit}</span>)}</div>;
 }
 
-function Insight({ text }: { text: string }) { return <div className="rounded-md border bg-slate-50 p-3 text-sm text-muted-foreground">{text}</div>; }
-function ProgressFeedbackCard({ feedback }: { feedback: ProgressFeedback[] }) { return <Card className="mt-4"><CardHeader><CardTitle>Progress feedback</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-3">{feedback.map((item) => <div key={item.label} className="rounded-md border bg-slate-50 p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{item.label}</p><p className="mt-1 font-semibold text-slate-950">{item.value}</p><p className="mt-1 text-sm text-muted-foreground">{item.detail}</p></div>)}</CardContent></Card>; }
+function Insight({ text }: { text: string }) { return <div className="rounded-lg border border-border/70 bg-card p-3 text-sm text-muted-foreground shadow-soft">{text}</div>; }
+function ProgressFeedbackCard({ feedback }: { feedback: ProgressFeedback[] }) { return <Card className="border-border/70 shadow-luxe"><CardHeader className="p-4 pb-0"><CardTitle className="text-sm font-medium">Progress feedback</CardTitle></CardHeader><CardContent className="grid gap-3 p-4 md:grid-cols-3">{feedback.map((item) => <div key={item.label} className="rounded-lg border border-border/70 bg-card p-3 shadow-soft"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{item.label}</p><p className="mt-1 font-semibold text-foreground">{item.value}</p><p className="mt-1 text-sm text-muted-foreground">{item.detail}</p></div>)}</CardContent></Card>; }
 function hasBodyWeight(entry: ProgressEntry): entry is ProgressEntry & { body_weight_kg: number } { return isFiniteNumber(entry.body_weight_kg); }
 function isFiniteNumber(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value); }
 function stringifyNullable(value: unknown) { return isFiniteNumber(value) ? String(value) : ""; }

@@ -747,39 +747,80 @@ export function PersonalRecordsTracker() {
     setItems((current) => current.filter((record) => record.id !== item.id));
   }
 
+  const groupedRecords = useMemo(() => {
+    const groups = new Map<string, PersonalRecord[]>();
+    items.forEach((item) => {
+      const name = item.exercise_name.trim();
+      if (!name) return;
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name)!.push(item);
+    });
+    return Array.from(groups.entries())
+      .map(([name, records]) => ({
+        name,
+        records: records.sort((a, b) => b.record_date.localeCompare(a.record_date))
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [items]);
+
   return (
     <TrackerShell title="Personal Records" description="Track best lifts, reps, and custom exercise milestones.">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Field label="Exercise name" value={draft.exercise_name} onChange={(exercise_name) => setDraft((current) => ({ ...current, exercise_name }))} />
-        <SelectField label="Record type" value={draft.record_type} values={recordTypes} onChange={(record_type) => setDraft((current) => ({ ...current, record_type }))} />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+        <Field label="Exercise" value={draft.exercise_name} onChange={(exercise_name) => setDraft((current) => ({ ...current, exercise_name }))} />
+        <SelectField label="Type" value={draft.record_type} values={recordTypes} onChange={(record_type) => setDraft((current) => ({ ...current, record_type }))} />
         <Field label="Weight kg" type="number" inputMode="decimal" enterKeyHint="done" value={draft.weight_kg} onChange={(weight_kg) => setDraft((current) => ({ ...current, weight_kg }))} />
         <Field label="Reps" type="number" inputMode="numeric" enterKeyHint="done" value={draft.reps} onChange={(reps) => setDraft((current) => ({ ...current, reps }))} />
         <Field label="Date" type="date" value={draft.record_date} onChange={(record_date) => setDraft((current) => ({ ...current, record_date }))} />
         <Field label="Notes" value={draft.notes} onChange={(notes) => setDraft((current) => ({ ...current, notes }))} />
-        <Button className="self-end h-12" onClick={saveRecord} disabled={!draft.exercise_name.trim()}>
-          <Save className="h-4 w-4" />
-          Save Record
-        </Button>
       </div>
-      <ItemGrid>
-        {items.map((item) => (
-          <ActionCard
-            key={item.id}
-            title={`${item.exercise_name} | ${item.record_type}`}
-            detail={[item.weight_kg ? `${item.weight_kg} kg` : null, item.reps ? `${item.reps} reps` : null, item.record_date, item.notes].filter(Boolean).join(" | ")}
-            onEdit={() => setDraft({
-              id: item.id,
-              exercise_name: item.exercise_name,
-              record_type: item.record_type,
-              weight_kg: item.weight_kg === null ? "" : String(item.weight_kg),
-              reps: item.reps === null ? "" : String(item.reps),
-              record_date: item.record_date,
-              notes: item.notes ?? ""
-            })}
-            onDelete={() => removeRecord(item)}
-          />
+      <Button className="h-12 w-full sm:w-auto" onClick={saveRecord} disabled={!draft.exercise_name.trim()}>
+        <Save className="h-4 w-4" />
+        {draft.id ? "Update Record" : "Save Record"}
+      </Button>
+
+      <div className="space-y-4">
+        {groupedRecords.map((group) => (
+          <div key={group.name} className="rounded-xl border border-border/70 bg-card p-4 shadow-soft">
+            <p className="text-sm font-semibold text-foreground">{group.name}</p>
+            <div className="mt-2 space-y-2">
+              {group.records.map((item) => (
+                <div key={item.id} className="flex items-center justify-between rounded-lg border border-border/70 bg-card p-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold">{item.record_type}</span>
+                      <span className="text-xs text-muted-foreground">{item.record_date}</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {item.weight_kg ? `${item.weight_kg} kg` : null}
+                      {item.reps ? ` · ${item.reps} reps` : null}
+                      {item.notes ? ` · ${item.notes}` : null}
+                    </p>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button size="icon" variant="ghost" className="h-10 w-10" onClick={() => setDraft({
+                      id: item.id,
+                      exercise_name: item.exercise_name,
+                      record_type: item.record_type,
+                      weight_kg: item.weight_kg === null ? "" : String(item.weight_kg),
+                      reps: item.reps === null ? "" : String(item.reps),
+                      record_date: item.record_date,
+                      notes: item.notes ?? ""
+                    })}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-10 w-10 text-destructive" onClick={() => removeRecord(item)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         ))}
-      </ItemGrid>
+        {!groupedRecords.length && (
+          <p className="text-sm text-muted-foreground">No personal records yet. Add your first record above.</p>
+        )}
+      </div>
     </TrackerShell>
   );
 }
