@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { EmptyState, ErrorState } from "@/components/ui/state-views";
+import { CardGridSkeleton, EmptyState, ErrorState } from "@/components/ui/state-views";
 import { useToast } from "@/components/ui/toaster";
 import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
@@ -206,7 +206,7 @@ export default function HydrationPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-normal">Recent entries</CardTitle>
             </CardHeader>
             <CardContent className="p-4 sm:p-5">
-              {isLoading ? <p className="text-sm text-muted-foreground">Loading real water logs...</p> : null}
+              {isLoading ? <CardGridSkeleton count={1} rows={3} /> : null}
               {!isLoading && !logs.length ? (
                 <EmptyState
                   title="No water logged today"

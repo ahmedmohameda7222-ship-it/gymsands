@@ -27,6 +27,7 @@ import {
 } from "@/components/meals/calories-page-sections";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { CardGridSkeleton } from "@/components/ui/state-views";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -237,7 +238,7 @@ export default function CaloriesPage() {
   }
 
   if (isLoading) {
-    return <div className="flex h-32 items-center justify-center"><p className="text-muted-foreground animate-pulse">Loading daily trackers...</p></div>;
+    return <CardGridSkeleton count={2} rows={3} />;
   }
 
   if (loadError) {
@@ -443,7 +444,7 @@ export default function CaloriesPage() {
             <CardContent>
               {showTargetEditor || !hasTargets ? (
                 <div className="grid gap-3 md:grid-cols-6">
-                  <div className="rounded-md border bg-muted/40 p-3 md:col-span-6">
+                  <div className="rounded-md border border-border/70 bg-card p-3 md:col-span-6">
                     <p className="font-semibold">Goal-based target setup</p>
                     <div className="mt-3 grid gap-3 md:grid-cols-6">
                       <TargetField label="Age" value={wizard.age} onChange={(age) => setWizard((current) => ({ ...current, age }))} />
