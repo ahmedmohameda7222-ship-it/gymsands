@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Dumbbell, TrendingUp, Trophy } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toaster";
 import { getPersonalRecords } from "@/services/database/progress";
 import type { PersonalRecord } from "@/types";
@@ -21,31 +19,72 @@ export function PersonalRecordsInsights() {
   }, [toast, user?.id]);
 
   const insights = useMemo(() => buildRecordInsights(records), [records]);
+  const groupedByExercise = useMemo(() => buildExerciseGroups(records), [records]);
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <InsightCard icon={Trophy} label="Record entries" value={records.length ? String(records.length) : "No records"} detail={records.length ? "Saved real exercise records" : "Save your first record below."} />
-      <InsightCard icon={Dumbbell} label="Best max weight" value={insights.bestWeight ? `${insights.bestWeight.weight_kg} kg` : "No data"} detail={insights.bestWeight ? `${insights.bestWeight.exercise_name} on ${insights.bestWeight.record_date}` : "Add a max-weight record."} />
-      <InsightCard icon={TrendingUp} label="Best est. 1RM" value={insights.bestOneRepMax ? `${insights.bestOneRepMax.estimate} kg` : "No data"} detail={insights.bestOneRepMax ? `${insights.bestOneRepMax.exercise_name} from ${insights.bestOneRepMax.weight_kg}kg x ${insights.bestOneRepMax.reps}` : "Requires weight and reps."} />
+    <div className="space-y-4">
+      {/* Hero summary */}
+      <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-luxe">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-muted-foreground">Personal Records</p>
+          <p className="text-xs text-muted-foreground">{records.length} record{records.length !== 1 ? 's' : ''}</p>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div>
+            <p className="text-3xl font-bold tracking-tight">{records.length ? String(records.length) : "—"}</p>
+            <p className="text-xs text-muted-foreground mt-1">Saved records</p>
+          </div>
+          <div>
+            <p className="text-3xl font-bold tracking-tight">{insights.bestWeight ? `${insights.bestWeight.weight_kg} kg` : "—"}</p>
+            <p className="text-xs text-muted-foreground mt-1">Best max weight</p>
+          </div>
+          <div>
+            <p className="text-3xl font-bold tracking-tight">{insights.bestOneRepMax ? `${insights.bestOneRepMax.estimate} kg` : "—"}</p>
+            <p className="text-xs text-muted-foreground mt-1">Best est. 1RM</p>
+          </div>
+        </div>
+        {insights.bestWeight && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Best lift: <span className="font-medium text-foreground">{insights.bestWeight.exercise_name}</span> on {insights.bestWeight.record_date}
+          </p>
+        )}
+      </div>
+
+      {/* Exercise group summary */}
+      {groupedByExercise.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {groupedByExercise.slice(0, 6).map((group) => (
+            <div key={group.exercise_name} className="rounded-xl border border-border/70 bg-card p-3 shadow-soft">
+              <p className="text-sm font-semibold text-foreground">{group.exercise_name}</p>
+              <div className="mt-2 flex items-end gap-2">
+                <p className="text-lg font-bold">{group.bestWeight ? `${group.bestWeight} kg` : "—"}</p>
+                {group.bestOneRepMax && <p className="text-xs text-muted-foreground mb-0.5">1RM est. {group.bestOneRepMax} kg</p>}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{group.count} record{group.count !== 1 ? 's' : ''}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function InsightCard({ icon: Icon, label, value, detail }: { icon: typeof Trophy; label: string; value: string; detail: string }) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Icon className="h-4 w-4 text-primary" />
-          {label}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-bold">{value}</p>
-        <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
-      </CardContent>
-    </Card>
-  );
+function buildExerciseGroups(records: PersonalRecord[]) {
+  const grouped = new Map<string, { exercise_name: string; count: number; bestWeight: number | null; bestOneRepMax: number | null }>();
+  records.forEach((record) => {
+    const name = record.exercise_name.trim();
+    if (!name) return;
+    const existing = grouped.get(name) ?? { exercise_name: name, count: 0, bestWeight: null, bestOneRepMax: null };
+    existing.count += 1;
+    if (record.record_type === "Max weight" && typeof record.weight_kg === "number" && (existing.bestWeight === null || record.weight_kg > existing.bestWeight)) {
+      existing.bestWeight = record.weight_kg;
+    }
+    if (record.record_type === "Estimated 1RM" && typeof record.weight_kg === "number" && typeof record.reps === "number" && record.reps > 0 && (existing.bestOneRepMax === null || record.weight_kg > existing.bestOneRepMax)) {
+      existing.bestOneRepMax = record.weight_kg;
+    }
+    grouped.set(name, existing);
+  });
+  return Array.from(grouped.values()).sort((a, b) => b.count - a.count);
 }
 
 function buildRecordInsights(records: PersonalRecord[]) {

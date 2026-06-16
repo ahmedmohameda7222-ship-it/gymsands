@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
 import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
+import { cn } from "@/lib/utils";
 import { addProgressEntry } from "@/services/database/progress";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
 import type { ProgressEntry } from "@/types";
@@ -33,7 +34,7 @@ function invalidPositiveNumber(value: string) {
   return !Number.isFinite(parsed) || parsed < 0;
 }
 
-export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntry) => void }) {
+export function ProgressEntryModal({ onSaved, buttonClassName }: { onSaved?: (entry: ProgressEntry) => void; buttonClassName?: string }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const today = useTodayDate();
@@ -104,8 +105,8 @@ export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntr
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="h-4 w-4" />
+        <Button className={cn("h-12 text-base", buttonClassName)}>
+          <Plus className="h-5 w-5" />
           Add progress entry
         </Button>
       </DialogTrigger>
@@ -139,8 +140,8 @@ export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntr
             <Input id="progress-notes" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Progress note, e.g. energy felt better this week" />
           </div>
         </div>
-        <Button onClick={save} className="w-full" disabled={isSaving}>
-          {isSaving ? "Saving..." : "Save progress entry"}
+        <Button onClick={save} className="w-full h-12 text-base" disabled={isSaving}>
+          {isSaving ? "Saving…" : "Save progress entry"}
         </Button>
       </DialogContent>
     </Dialog>
