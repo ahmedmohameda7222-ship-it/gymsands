@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Trash2, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,17 @@ import type { FoodLog } from "@/types";
 import { deleteFoodLog } from "@/services/database/nutrition";
 import { useToast } from "@/components/ui/toaster";
 
-export function FoodLogList({ logs = [], onDeleted, title = "Today's food log" }: { logs?: FoodLog[]; onDeleted?: (id: string) => void; title?: string }) {
+export function FoodLogList({
+  logs = [],
+  onDeleted,
+  title = "Today's food log",
+  onAddAction,
+}: {
+  logs?: FoodLog[];
+  onDeleted?: (id: string) => void;
+  title?: string;
+  onAddAction?: () => void;
+}) {
   const { toast } = useToast();
 
   async function remove(id: string) {
@@ -19,40 +29,91 @@ export function FoodLogList({ logs = [], onDeleted, title = "Today's food log" }
     } catch (error) {
       toast({
         title: "Could not delete food",
-        description: error instanceof Error ? error.message : "Please try again."
+        description: error instanceof Error ? error.message : "Please try again.",
       });
     }
   }
 
+  const grouped = groupByMealType(logs);
+  const mealOrder = ["Breakfast", "Lunch", "Dinner", "Snack"] as const;
+  const hasLogs = logs.length > 0;
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Utensils className="h-4 w-4 text-primary" />
+          {title}
+        </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {logs.length ? (
-          logs.map((log) => (
-            <div key={log.id} className="flex items-center justify-between gap-3 rounded-md border p-3 transition-colors hover:border-primary/40 hover:bg-muted/30">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-semibold">{log.food_name || "Food"}</p>
-                  <Badge variant="outline">{Number(log.quantity) || 1}x</Badge>
+      <CardContent className="space-y-4">
+        {hasLogs ? (
+          mealOrder.map((meal) => {
+            const items = grouped[meal];
+            if (!items?.length) return null;
+            return (
+              <div key={meal} className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{meal === "Snack" ? "Snacks" : meal}</p>
+                  <div className="flex-1 border-t border-border/70" />
+                  <Badge variant="outline" className="text-[11px]">
+                    {items.reduce((s, l) => s + toNumber(l.calories), 0)} kcal
+                  </Badge>
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {toNumber(log.calories)} kcal | {toNumber(log.protein_g)}g protein | {toNumber(log.carbs_g)}g carbs | {toNumber(log.fat_g)}g fat
-                </p>
+                {items.map((log) => (
+                  <div
+                    key={log.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-card p-3 transition-colors hover:border-primary/40 hover:bg-muted/20"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-semibold">{log.food_name || "Food"}</p>
+                        <span className="shrink-0 text-xs text-muted-foreground">{Number(log.quantity) || 1}x</span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {toNumber(log.calories)} kcal · {toNumber(log.protein_g)}g P · {toNumber(log.carbs_g)}g C · {toNumber(log.fat_g)}g F
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                      onClick={() => remove(log.id)}
+                      aria-label={`Delete ${log.food_name || "food"}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
               </div>
-              <Button variant="ghost" size="icon" onClick={() => remove(log.id)} aria-label={`Delete ${log.food_name || "food"}`}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))
+            );
+          })
         ) : (
-          <p className="text-sm text-muted-foreground">No food logged yet today.</p>
+          <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed bg-card/80 p-5">
+            <div>
+              <p className="text-sm font-semibold text-foreground">No food logged yet</p>
+              <p className="mt-1 text-sm text-muted-foreground">Log your first meal to start tracking today.</p>
+            </div>
+            {onAddAction ? (
+              <Button className="min-h-11" onClick={onAddAction}>
+                <Utensils className="mr-2 h-4 w-4" />
+                Log food
+              </Button>
+            ) : null}
+          </div>
         )}
       </CardContent>
     </Card>
   );
+}
+
+function groupByMealType(logs: FoodLog[]) {
+  return logs.reduce<Record<string, FoodLog[]>>((acc, log) => {
+    const meal = log.meal_type || "Other";
+    acc[meal] = acc[meal] || [];
+    acc[meal].push(log);
+    return acc;
+  }, {});
 }
 
 function toNumber(value: unknown) {

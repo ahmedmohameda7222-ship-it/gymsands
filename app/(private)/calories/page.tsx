@@ -9,6 +9,8 @@ import { PageHeading } from "@/components/layout/page-heading";
 import { FoodBrowser } from "@/components/meals/food-browser";
 import { FoodLogList } from "@/components/meals/food-log-list";
 import { ApiFoodTools } from "@/components/meals/api-food-tools";
+import { QuickAddFoodDialog } from "@/components/meals/quick-add-food-dialog";
+import { RecentFoodStrip } from "@/components/meals/recent-food-strip";
 import {
   FastFoodFlowCard,
   NutritionCoachCard,
@@ -19,7 +21,9 @@ import {
   WaterCard,
   WeeklyOverview,
   WeeklyTracker,
-  formatDay
+  formatDay,
+  CompactNutritionSummary,
+  WaterMiniSummary
 } from "@/components/meals/calories-page-sections";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
@@ -56,6 +60,8 @@ export default function CaloriesPage() {
   const [customWaterMl, setCustomWaterMl] = useState("250");
   const [isSavingTargets, setIsSavingTargets] = useState(false);
   const [showTargetEditor, setShowTargetEditor] = useState(false);
+  const [activeTab, setActiveTab] = useState("today");
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [wizard, setWizard] = useState({
     age: "",
     heightCm: "",
@@ -206,6 +212,7 @@ export default function CaloriesPage() {
   function handleLogAdded(log: FoodLog) {
     if (log.log_date === selectedDate) setLogs((current) => [log, ...current]);
     loadWeek().catch(() => undefined);
+    loadDay().catch(() => undefined);
   }
 
   function calculateTargetsFromWizard() {
@@ -247,7 +254,7 @@ export default function CaloriesPage() {
         title="Calorie Tracker"
         description={`Track daily food, macros, and water intake for ${formatDay(selectedDate)}.`}
         action={
-          <div className="flex flex-wrap gap-2">
+          <div className="hidden sm:flex flex-wrap gap-2">
             <Button asChild variant="outline">
               <Link href="/calories/weekly-overview">
                 <BarChart3 className="h-4 w-4" />
@@ -268,8 +275,22 @@ export default function CaloriesPage() {
         }
       />
 
-      <Tabs defaultValue="today" className="space-y-4">
-        <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <div className="sm:hidden">
+          <select
+            value={activeTab}
+            onChange={(e) => setActiveTab(e.target.value)}
+            className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Select tab"
+          >
+            <option value="today">Today — Food log & summary</option>
+            <option value="week">Week — Weekly overview</option>
+            <option value="targets">Targets — Goals & setup</option>
+            <option value="tools">Tools — Browse, scan, recipes</option>
+          </select>
+        </div>
+
+        <TabsList className="hidden sm:inline-flex w-full justify-start overflow-x-auto sm:w-auto">
           <TabsTrigger value="today">Today</TabsTrigger>
           <TabsTrigger value="week">Week</TabsTrigger>
           <TabsTrigger value="targets">Targets</TabsTrigger>
@@ -277,41 +298,113 @@ export default function CaloriesPage() {
         </TabsList>
 
         <TabsContent value="today" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <TrackerCard label="Calories" value={totals.calories} target={displayTargets.daily_calories} unit="kcal" hasTarget={Boolean(targets?.daily_calories)} />
-            <TrackerCard label="Protein" value={totals.protein_g} target={displayTargets.protein_g} unit="g" hasTarget={Boolean(targets?.protein_g)} />
-            <TrackerCard label="Carbs" value={totals.carbs_g} target={displayTargets.carbs_g} unit="g" hasTarget={Boolean(targets?.carbs_g)} />
-            <TrackerCard label="Fat" value={totals.fat_g} target={displayTargets.fat_g} unit="g" hasTarget={Boolean(targets?.fat_g)} />
-            <TrackerCard label="Water" value={Math.round(waterTotal / 1000 * 10) / 10} target={Math.round(displayTargets.water_ml / 1000 * 10) / 10} unit="L" hasTarget={Boolean(targets?.water_ml)} />
-          </div>
-
-          <FastFoodFlowCard
-            selectedDateLabel={formatDay(selectedDate)}
-            hasFoodLogs={logs.length > 0}
-            hasTargets={hasTargets}
-            onCopyYesterday={copyYesterday}
-          />
-
-          <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
-            <div className="space-y-4">
-              <WaterCard
-                waterTotal={waterTotal}
-                waterGoal={displayTargets.water_ml}
-                customWaterMl={customWaterMl}
-                setCustomWaterMl={setCustomWaterMl}
-                waterLogs={waterLogs}
-                onAddWater={addWater}
-                onRemoveWater={removeWater}
-              />
+          {/* Mobile today view */}
+          <div className="space-y-4 sm:hidden">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-muted-foreground">{formatDay(selectedDate)}</p>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => moveWeek(-1)}>← Prev</Button>
+                <Button variant="outline" size="sm" onClick={() => moveWeek(1)}>Next →</Button>
+              </div>
             </div>
+
+            <CompactNutritionSummary totals={totals} targets={displayTargets} waterTotal={waterTotal} />
+
+            <QuickAddFoodDialog
+              userId={user?.id}
+              logDate={selectedDate}
+              onFoodLogged={handleLogAdded}
+              open={quickAddOpen}
+              onOpenChange={setQuickAddOpen}
+            />
+
+            <RecentFoodStrip logDate={selectedDate} onFoodLogged={handleLogAdded} />
+
             <FoodLogList
               logs={logs}
               title={`${formatDay(selectedDate)} food log`}
               onDeleted={(id) => {
                 setLogs((current) => current.filter((log) => log.id !== id));
                 loadWeek().catch(() => undefined);
+                loadDay().catch(() => undefined);
               }}
+              onAddAction={() => setQuickAddOpen(true)}
             />
+
+            <WaterMiniSummary waterTotal={waterTotal} waterGoal={displayTargets.water_ml} onAddWater={addWater} />
+
+            <details className="rounded-lg border border-border/70 bg-card">
+              <summary className="flex cursor-pointer items-center justify-between p-4 text-sm font-semibold">
+                <span>More tools</span>
+                <span className="text-xs text-muted-foreground">Tap to expand</span>
+              </summary>
+              <div className="space-y-4 p-4 pt-0">
+                <FastFoodFlowCard
+                  selectedDateLabel={formatDay(selectedDate)}
+                  hasFoodLogs={logs.length > 0}
+                  hasTargets={hasTargets}
+                  onCopyYesterday={copyYesterday}
+                />
+                <div className="grid gap-3">
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href="/calories/weekly-overview">
+                      <BarChart3 className="mr-2 h-4 w-4" />
+                      Weekly Summary
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href="/calories/custom-food-meal">
+                      <ChefHat className="mr-2 h-4 w-4" />
+                      Food Builder
+                    </Link>
+                  </Button>
+                  <Button variant="outline" className="w-full" onClick={copyYesterday}>
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy previous day
+                  </Button>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          {/* Desktop today view */}
+          <div className="hidden sm:block space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <TrackerCard label="Calories" value={totals.calories} target={displayTargets.daily_calories} unit="kcal" hasTarget={Boolean(targets?.daily_calories)} />
+              <TrackerCard label="Protein" value={totals.protein_g} target={displayTargets.protein_g} unit="g" hasTarget={Boolean(targets?.protein_g)} />
+              <TrackerCard label="Carbs" value={totals.carbs_g} target={displayTargets.carbs_g} unit="g" hasTarget={Boolean(targets?.carbs_g)} />
+              <TrackerCard label="Fat" value={totals.fat_g} target={displayTargets.fat_g} unit="g" hasTarget={Boolean(targets?.fat_g)} />
+              <TrackerCard label="Water" value={Math.round(waterTotal / 1000 * 10) / 10} target={Math.round(displayTargets.water_ml / 1000 * 10) / 10} unit="L" hasTarget={Boolean(targets?.water_ml)} />
+            </div>
+
+            <FastFoodFlowCard
+              selectedDateLabel={formatDay(selectedDate)}
+              hasFoodLogs={logs.length > 0}
+              hasTargets={hasTargets}
+              onCopyYesterday={copyYesterday}
+            />
+
+            <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+              <div className="space-y-4">
+                <WaterCard
+                  waterTotal={waterTotal}
+                  waterGoal={displayTargets.water_ml}
+                  customWaterMl={customWaterMl}
+                  setCustomWaterMl={setCustomWaterMl}
+                  waterLogs={waterLogs}
+                  onAddWater={addWater}
+                  onRemoveWater={removeWater}
+                />
+              </div>
+              <FoodLogList
+                logs={logs}
+                title={`${formatDay(selectedDate)} food log`}
+                onDeleted={(id) => {
+                  setLogs((current) => current.filter((log) => log.id !== id));
+                  loadWeek().catch(() => undefined);
+                }}
+              />
+            </div>
           </div>
         </TabsContent>
 
@@ -401,4 +494,3 @@ export default function CaloriesPage() {
     </>
   );
 }
-
