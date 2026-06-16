@@ -66,8 +66,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             <div className="flex items-start gap-3">
               <Icon className={cn("mt-0.5 h-5 w-5 shrink-0", variant.iconClassName)} />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-950">{item.title}</p>
-                {item.description ? <p className="mt-1 text-sm text-slate-600">{item.description}</p> : null}
+                <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                {item.description ? <p className="mt-1 text-sm text-muted-foreground">{item.description}</p> : null}
               </div>
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeToast(item.id)}>
                 <X className="h-4 w-4" />

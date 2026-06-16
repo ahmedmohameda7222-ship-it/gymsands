@@ -273,7 +273,7 @@ export default function ProgressPage() {
                 {latestWeightEntry ? `${latestWeightEntry.body_weight_kg} kg` : "—"}
               </p>
               {latestWeightEntry && previousWeightEntry && latestWeightChange !== null ? (
-                <p className={`mt-1 inline-flex items-center gap-1 text-sm font-medium ${latestWeightChange < 0 ? "text-emerald-600" : latestWeightChange > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
+                <p className={`mt-1 inline-flex items-center gap-1 text-sm font-medium ${latestWeightChange < 0 ? "text-success" : latestWeightChange > 0 ? "text-warning" : "text-muted-foreground"}`}>
                   {latestWeightChange < 0 ? "↓" : latestWeightChange > 0 ? "↑" : "→"} {Math.abs(latestWeightChange)} kg from previous
                 </p>
               ) : (
@@ -347,7 +347,7 @@ export default function ProgressPage() {
                       <p className="text-xs text-muted-foreground">{t.label}</p>
                       <p className="mt-1 text-lg font-semibold">{t.latest}{t.unit}</p>
                       {t.delta !== null && (
-                        <p className={`mt-0.5 text-xs ${t.delta < 0 ? "text-emerald-600" : t.delta > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
+                        <p className={`mt-0.5 text-xs ${t.delta < 0 ? "text-success" : t.delta > 0 ? "text-warning" : "text-muted-foreground"}`}>
                           {formatDelta(t.delta)}{t.unit}
                         </p>
                       )}

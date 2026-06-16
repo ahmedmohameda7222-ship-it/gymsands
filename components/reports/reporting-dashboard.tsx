@@ -148,7 +148,7 @@ function MetricGrid({ metrics }: { metrics: ReportMetric[] }) {
         <Card key={metric.label} className={metric.empty ? "border-dashed" : undefined}>
           <CardContent className="pt-5">
             <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{metric.label}</p>
-            <p className="mt-2 text-xl font-bold text-slate-950">{metric.value}</p>
+            <p className="mt-2 text-xl font-bold text-foreground">{metric.value}</p>
             <p className="mt-1 text-sm text-muted-foreground">{metric.detail}</p>
           </CardContent>
         </Card>

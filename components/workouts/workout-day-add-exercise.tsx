@@ -212,7 +212,7 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
         <CardContent className="space-y-3">
           <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
             <div className="relative">
-              <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+              <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
               <Input
                 value={filters.query}
                 onChange={(event) => patchFilters({ query: event.target.value })}
@@ -250,7 +250,7 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
               <CardContent className="pt-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="font-semibold text-slate-950">{workout.name}</h3>
+                    <h3 className="font-semibold text-foreground">{workout.name}</h3>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {workout.muscle_category || workout.target_muscle} | {workout.equipment_required || workout.equipment}
                     </p>

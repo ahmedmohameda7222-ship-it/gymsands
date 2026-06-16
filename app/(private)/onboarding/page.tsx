@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, Sparkles } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,7 @@ export default function OnboardingPage() {
   const { user } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [answers, setAnswers] = useState(defaultAnswers);
@@ -93,7 +94,7 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (!user?.id) return;
-    const isEdit = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("edit") === "true";
+    const isEdit = searchParams.get("edit") === "true";
 
     getOnboarding(user.id)
       .then((saved) => {
@@ -117,7 +118,7 @@ export default function OnboardingPage() {
         console.warn("FitLife Hub could not load saved onboarding answers.", error);
         toast({ title: "Could not load saved setup", description: "You can still review and save this setup again." });
       });
-  }, [toast, user?.id, router]);
+  }, [toast, user?.id, router, searchParams]);
 
   async function finish() {
     if (!user?.id) {

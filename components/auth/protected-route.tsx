@@ -26,7 +26,7 @@ export function ProtectedRoute({
   }, [isLoading, pathname, router, user]);
 
   if (isLoading) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-slate-600">Loading FitLife Hub...</div>;
+    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading FitLife Hub...</div>;
   }
 
   if (!user) return null;

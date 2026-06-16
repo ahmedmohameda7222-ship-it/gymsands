@@ -171,7 +171,7 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
             <textarea
               value={draft.notes}
               onChange={(event) => patchDraft({ notes: event.target.value })}
-              className="min-h-20 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-20 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
         </CardContent>
@@ -190,10 +190,10 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
               const customVideoUrl = exercise.custom_video_url || null;
               const isEditing = editingIndex === index;
               return (
-                <div key={`${exercise.id}-${index}`} className="rounded-md border bg-white p-3">
+                <div key={`${exercise.id}-${index}`} className="rounded-md border bg-card p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="font-semibold text-slate-950">{index + 1}. {exercise.name}</p>
+                      <p className="font-semibold text-foreground">{index + 1}. {exercise.name}</p>
                       <p className="mt-1 text-sm text-muted-foreground">
                         {exercise.muscle_category || exercise.target_muscle} | {exercise.equipment_required || exercise.equipment}
                       </p>

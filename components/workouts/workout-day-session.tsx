@@ -708,12 +708,12 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                   <p className="mt-1 text-xs text-muted-foreground">{previous ? `Last: ${previous.lastWeightKg ?? 0} kg x ${previous.lastReps ?? 0}` : "No previous data"}</p>
                   <div className="mt-3 grid gap-2">
                     {guideUrl ? (
-                      <a href={guideUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border bg-white px-2 text-xs font-semibold text-foreground transition hover:bg-secondary">
+                      <a href={guideUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border bg-card px-2 text-xs font-semibold text-foreground transition hover:bg-secondary">
                         <ExternalLink className="h-3.5 w-3.5" /> Open Exercise Guide
                       </a>
                     ) : <span className="inline-flex min-h-9 items-center justify-center rounded-md border px-2 text-xs font-semibold text-muted-foreground">No guide added</span>}
                     {customVideoUrl ? (
-                      <a href={customVideoUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border bg-white px-2 text-xs font-semibold text-foreground transition hover:bg-secondary">
+                      <a href={customVideoUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border bg-card px-2 text-xs font-semibold text-foreground transition hover:bg-secondary">
                         <ExternalLink className="h-3.5 w-3.5" /> Open Custom Video
                       </a>
                     ) : <span className="inline-flex min-h-9 items-center justify-center rounded-md border px-2 text-xs font-semibold text-muted-foreground">No custom video</span>}
@@ -776,7 +776,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                       <div className="space-y-1"><Label>RIR</Label><Input className="h-14 lg:h-12" value={set.rir} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" /></div>
                       <div className="space-y-1">
                         <Label>Set type</Label>
-                        <select value={set.setType} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-14 lg:h-12 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <select value={set.setType} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-14 lg:h-12 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
                           <option value="normal">Normal</option>
                           <option value="warmup">Warm-up</option>
                           <option value="working">Working</option>
@@ -797,7 +797,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               })}
             </div>
 
-            <div className="sticky bottom-3 z-20 rounded-xl border bg-white/95 p-3 shadow-lg backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+            <div className="lg:sticky lg:bottom-3 z-20 rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
               <div className="grid gap-2 sm:grid-cols-2">
                 <Button className="min-h-12" onClick={finishCurrentSet} disabled={!activeSet || Boolean(activeSet.completedAt)}><CheckCircle2 className="h-4 w-4" /> Finish current set</Button>
                 <Button className="min-h-12" variant="outline" onClick={restartCurrentSet} disabled={!activeSet?.completedAt}><RotateCcw className="h-4 w-4" /> Reopen set</Button>
@@ -836,7 +836,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
           <Card>
             <CardHeader><CardTitle>Finish workout</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <textarea value={sessionNotes} onChange={(event) => setSessionNotes(event.target.value)} placeholder="How did this workout feel?" className="min-h-24 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              <textarea value={sessionNotes} onChange={(event) => setSessionNotes(event.target.value)} placeholder="How did this workout feel?" className="min-h-24 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
               <Button className="w-full hidden lg:inline-flex" onClick={askFinishWorkout} disabled={isSaving || !session}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : isFinished ? "Finish workout" : "Finish and save partial workout"}</Button>
               <p className="text-xs text-muted-foreground">Time spent: {formatTime(elapsedSeconds)}. Completed sets are already saved while the session is open.</p>
             </CardContent>
