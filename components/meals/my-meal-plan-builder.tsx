@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Copy, Edit3, MoreHorizontal, PackagePlus, PlusCircle, Printer, RefreshCw, Repeat, Save, ShoppingCart, Trash2, Utensils, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Copy, Edit3, MoreHorizontal, PackagePlus, PlusCircle, Printer, RefreshCw, Repeat, Save, ShoppingCart, Trash2, Utensils, X } from "lucide-react";
 import { Component, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
+import { cn } from "@/lib/utils";
 import {
   createDirectMealPlanItem,
   deleteDirectMealPlanItem,
@@ -62,6 +64,17 @@ const mealTypes: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
 const emptyDraft: Draft = { foodName: "", mealType: "Breakfast", quantity: "1", servingInfo: "1 serving", calories: "0", protein: "0", carbs: "0", fat: "0", notes: "" };
 const emptyBatchDraft: BatchDraft = { name: "", portions: "4", servingSize: "1 portion", calories: "0", protein: "0", carbs: "0", fat: "0", notes: "", mealType: "Lunch" };
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 1024);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return isMobile;
+}
+
 class MealPlanBoundary extends Component<{ children: ReactNode }, { message: string | null }> {
   constructor(props: { children: ReactNode }) {
     super(props);
@@ -98,6 +111,7 @@ function MyMealPlanBuilderInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const today = useTodayDate();
+  const isMobile = useIsMobile();
   const [selectedDate, setSelectedDate] = useState(() => safeDate(searchParams.get("date")) ?? today);
   const [calendarMonth, setCalendarMonth] = useState(() => monthStart(selectedDate));
   const [plannedDates, setPlannedDates] = useState<string[]>([]);
@@ -121,6 +135,8 @@ function MyMealPlanBuilderInner() {
   const [bulkDoneConfirm, setBulkDoneConfirm] = useState<BulkDoneConfirm>(null);
   const [checkedShoppingKeys, setCheckedShoppingKeys] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState("day");
+  const [activeMealType, setActiveMealType] = useState<MealType>("Breakfast");
+  const [addMealDialogOpen, setAddMealDialogOpen] = useState(false);
   const shoppingListRef = useRef<HTMLDivElement>(null);
   const { dialog, ask } = useConfirm();
 
@@ -207,6 +223,15 @@ function MyMealPlanBuilderInner() {
     [batchMeals, dayLogs, items, selectedDate, shoppingList, templates, weekItems]
   );
 
+  const dayStats = useMemo(() => {
+    const totalPlanned = items.filter((i) => i.status === "planned").length;
+    const totalDone = items.filter((i) => i.status === "done").length;
+    return { totalPlanned, totalDone };
+  }, [items]);
+
+  const shoppingShortcutCount = shoppingList.length;
+  const shoppingCheckedCount = shoppingList.filter((i) => i.checked).length;
+
   function changeDate(nextDate: string) {
     setSelectedDate(nextDate);
     setCalendarMonth(monthStart(nextDate));
@@ -226,6 +251,7 @@ function MyMealPlanBuilderInner() {
       upsertLocalItems([item]);
       setDraft(emptyDraft);
       setShowAddForm(false);
+      setAddMealDialogOpen(false);
       setNotice({ type: "success", title: "Planned food added", description: `${item.food_name} was added to ${displayDate(selectedDate)}.` });
     } catch (error) {
       setNotice({ type: "error", title: "Could not add planned food", description: error instanceof Error ? error.message : "Please try again." });
@@ -477,16 +503,21 @@ function MyMealPlanBuilderInner() {
     win.print();
   }
 
+  function openAddMeal(type: MealType) {
+    setDraft((current) => ({ ...current, mealType: type }));
+    setAddMealDialogOpen(true);
+  }
+
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Planned" value={plannedTotals.calories} detail={`${Math.round(plannedTotals.protein_g)}g protein planned`} />
-        <SummaryCard label="Done" value={doneTotals.calories} detail={`${Math.round(doneTotals.protein_g)}g protein logged`} />
-        <SummaryCard label="Planned carbs" value={plannedTotals.carbs_g} suffix="g" detail={`${Math.round(plannedTotals.fat_g)}g fat planned`} />
-        <SummaryCard label="Done carbs" value={doneTotals.carbs_g} suffix="g" detail={`${Math.round(doneTotals.fat_g)}g fat logged`} />
+    <div className="space-y-3 sm:space-y-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4">
+        <SummaryCard label="Planned" value={plannedTotals.calories} detail={`${Math.round(plannedTotals.protein_g)}g protein`} />
+        <SummaryCard label="Done" value={doneTotals.calories} detail={`${Math.round(doneTotals.protein_g)}g protein`} />
+        <SummaryCard label="Planned carbs" value={plannedTotals.carbs_g} suffix="g" detail={`${Math.round(plannedTotals.fat_g)}g fat`} />
+        <SummaryCard label="Done carbs" value={doneTotals.carbs_g} suffix="g" detail={`${Math.round(doneTotals.fat_g)}g fat`} />
       </div>
 
-      <Card>
+      <Card className="hidden sm:block">
         <CardContent className="grid gap-4 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
           <div>
             <p className="text-lg font-semibold">How meal planning works</p>
@@ -497,11 +528,11 @@ function MyMealPlanBuilderInner() {
             </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-            <Button type="button" onClick={() => { setActiveTab("day"); setShowAddForm(true); }}>
+            <Button type="button" onClick={() => openAddMeal("Breakfast")}>
               <PlusCircle className="h-4 w-4" />
               Add planned meal
             </Button>
-            <Button variant="outline" type="button" onClick={() => { setActiveTab("shopping"); setTimeout(() => shoppingListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0); }}>
+            <Button variant="outline" type="button" onClick={() => setActiveTab("shopping")}>
               Shopping list
             </Button>
           </div>
@@ -511,7 +542,17 @@ function MyMealPlanBuilderInner() {
       {notice ? <NoticeBox notice={notice} onClose={() => setNotice(null)} /> : null}
       {dialog}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Dialog open={addMealDialogOpen} onOpenChange={setAddMealDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add planned meal</DialogTitle>
+            <DialogDescription>Plan a meal for {displayDate(selectedDate)}. It will not count in calories until marked done.</DialogDescription>
+          </DialogHeader>
+          <MealForm title="" draft={draft} setDraft={setDraft} onSave={addPlannedFood} onCancel={() => setAddMealDialogOpen(false)} saving={isUpdatingId === "new"} />
+        </DialogContent>
+      </Dialog>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3 sm:space-y-4">
         <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
           <TabsTrigger value="day">Day</TabsTrigger>
           <TabsTrigger value="week">Week</TabsTrigger>
@@ -519,40 +560,46 @@ function MyMealPlanBuilderInner() {
           <TabsTrigger value="shopping">Shopping</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="day" className="space-y-4">
-          <Card>
-            <CardContent className="space-y-4 p-4 sm:p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold">{longDate(selectedDate)}</h2>
-                  <p className="text-sm text-muted-foreground">Planned food counts only after Mark done creates a food log.</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" type="button" onClick={() => changeDate(addDays(selectedDate, -1))}><ChevronLeft className="h-4 w-4" /> Previous</Button>
-                  <Button variant="outline" type="button" onClick={() => changeDate(today)}>Today</Button>
-                  <Button variant="outline" type="button" onClick={() => changeDate(addDays(selectedDate, 1))}>Next <ChevronRight className="h-4 w-4" /></Button>
-                </div>
+        <TabsContent value="day" className="space-y-3 sm:space-y-4">
+          <div className="rounded-lg border border-border bg-card p-3 sm:p-5 shadow-soft">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold sm:text-lg">{longDate(selectedDate)}</h2>
+                <p className="text-xs text-muted-foreground sm:text-sm">{dayStats.totalDone}/{dayStats.totalPlanned + dayStats.totalDone} meals marked done</p>
               </div>
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {weekDays.map((day) => (
+              <div className="flex shrink-0 gap-1.5">
+                <Button variant="outline" size="sm" type="button" onClick={() => changeDate(addDays(selectedDate, -1))}><ChevronLeft className="h-4 w-4" /></Button>
+                <Button variant="outline" size="sm" type="button" onClick={() => changeDate(today)}>Today</Button>
+                <Button variant="outline" size="sm" type="button" onClick={() => changeDate(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
+              </div>
+            </div>
+            <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1 mobile-card-scroll">
+              {weekDays.map((day) => {
+                const dayCount = weekItems.filter((item) => item.plan_date === day).length;
+                const isSelected = day === selectedDate;
+                const isToday = day === today;
+                return (
                   <button
                     key={day}
                     type="button"
                     onClick={() => changeDate(day)}
-                    className={`min-w-[92px] rounded-md border px-3 py-2 text-left text-sm transition-colors ${day === selectedDate ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:border-primary/40"}`}
+                    className={cn(
+                      "min-w-[72px] rounded-md border px-2 py-1.5 text-left text-xs transition-colors sm:min-w-[92px] sm:px-3 sm:py-2 sm:text-sm",
+                      isSelected ? "border-primary bg-primary text-primary-foreground" : isToday ? "border-primary/40 bg-primary/5" : "bg-card hover:border-primary/40"
+                    )}
                   >
                     <span className="block font-semibold">{displayDate(day)}</span>
-                    <span className={day === selectedDate ? "text-primary-foreground/70" : "text-muted-foreground"}>{weekItems.filter((item) => item.plan_date === day).length} meals</span>
+                    <span className={isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}>{dayCount} meals</span>
                   </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                );
+              })}
+            </div>
+          </div>
 
           {swapState ? <SwapConfirmPanel item={swapState.item} templates={templates} templateId={swapState.templateId} onTemplateChange={(templateId) => setSwapState({ item: swapState.item, templateId })} diff={swapDiff} onConfirm={confirmSwap} onCancel={() => setSwapState(null)} /> : null}
           {bulkDoneConfirm ? (
             <Card className="border-primary/40 bg-primary/5">
-              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <CardContent className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
                 <div>
                   <p className="font-semibold">Mark {bulkDoneConfirm.label} done?</p>
                   <p className="text-sm text-muted-foreground">
@@ -560,11 +607,11 @@ function MyMealPlanBuilderInner() {
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button type="button" onClick={confirmBulkDone} disabled={isUpdatingId === "bulk-done"}>
+                  <Button type="button" size="sm" onClick={confirmBulkDone} disabled={isUpdatingId === "bulk-done"}>
                     <CheckCircle2 className="h-4 w-4" />
                     Confirm
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => setBulkDoneConfirm(null)}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setBulkDoneConfirm(null)}>
                     Cancel
                   </Button>
                 </div>
@@ -572,21 +619,53 @@ function MyMealPlanBuilderInner() {
             </Card>
           ) : null}
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h2 className="text-lg font-semibold">{displayDate(selectedDate)} meals</h2><p className="text-sm text-muted-foreground">Breakfast, lunch, dinner, and snacks for the selected date.</p></div>
-            <Button type="button" onClick={() => setShowAddForm((current) => !current)}><PlusCircle className="h-4 w-4" /> {showAddForm ? "Hide add food" : "Add food"}</Button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-semibold sm:text-lg">{displayDate(selectedDate)} meals</h2>
+              <p className="text-xs text-muted-foreground sm:text-sm">{dayStats.totalPlanned} planned · {dayStats.totalDone} done</p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setActiveTab("shopping")}>
+                <ShoppingCart className="h-4 w-4" />
+                <span className="hidden sm:inline">Shopping</span>
+                <span className="sm:hidden">{shoppingCheckedCount}/{shoppingShortcutCount}</span>
+              </Button>
+              <Button size="sm" onClick={() => openAddMeal(activeMealType)}>
+                <PlusCircle className="h-4 w-4" />
+                Add food
+              </Button>
+            </div>
           </div>
 
-          {showAddForm ? <MealForm title="Add planned food" draft={draft} setDraft={setDraft} onSave={addPlannedFood} onCancel={() => setShowAddForm(false)} saving={isUpdatingId === "new"} /> : null}
           {isLoading ? <p className="text-sm text-muted-foreground">Loading meal plan for {displayDate(selectedDate)}...</p> : null}
 
-          <div className="grid gap-4 xl:grid-cols-4">
-            {mealTypes.map((type) => (
+          {isMobile ? (
+            <div className="space-y-3">
+              <div className="flex gap-1 overflow-x-auto pb-1 mobile-card-scroll">
+                {mealTypes.map((type) => {
+                  const count = items.filter((i) => i.meal_type === type).length;
+                  const isActive = activeMealType === type;
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setActiveMealType(type)}
+                      className={cn(
+                        "flex min-w-[80px] shrink-0 items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-xs font-semibold transition-colors",
+                        isActive ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:border-primary/40"
+                      )}
+                    >
+                      <Utensils className="h-3.5 w-3.5" />
+                      {displayMealType(type)}
+                      <Badge variant="outline" className="ml-0.5 text-[10px]">{count}</Badge>
+                    </button>
+                  );
+                })}
+              </div>
               <MealColumn
-                key={type}
-                type={type}
-                items={items.filter((item) => item.meal_type === type)}
-                onAdd={() => { setDraft((current) => ({ ...current, mealType: type })); setShowAddForm(true); }}
+                type={activeMealType}
+                items={items.filter((item) => item.meal_type === activeMealType)}
+                onAdd={() => openAddMeal(activeMealType)}
                 onDone={markDone}
                 onDelete={removeItem}
                 onStartEdit={startEditing}
@@ -597,7 +676,7 @@ function MyMealPlanBuilderInner() {
                 onRepeatDaily={repeatMealDaily}
                 onRepeatWeekly={repeatMealWeekly}
                 onSaveTemplate={saveItemTemplate}
-                onSaveMealTemplate={() => saveMealTypeTemplate(type)}
+                onSaveMealTemplate={() => saveMealTypeTemplate(activeMealType)}
                 onStartSwap={(item) => setSwapState({ item, templateId: templates[0]?.id ?? "" })}
                 editingId={editingId}
                 editDraft={editDraft}
@@ -605,14 +684,44 @@ function MyMealPlanBuilderInner() {
                 updatingId={isUpdatingId}
                 canSwap={templates.length > 0}
               />
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-4">
+              {mealTypes.map((type) => (
+                <MealColumn
+                  key={type}
+                  type={type}
+                  items={items.filter((item) => item.meal_type === type)}
+                  onAdd={() => openAddMeal(type)}
+                  onDone={markDone}
+                  onDelete={removeItem}
+                  onStartEdit={startEditing}
+                  onSaveEdit={saveEdit}
+                  onCancelEdit={() => setEditingId(null)}
+                  onDuplicate={(item) => duplicateItem(item)}
+                  onCopyTomorrow={(item) => duplicateItem(item, addDays(item.plan_date, 1))}
+                  onRepeatDaily={repeatMealDaily}
+                  onRepeatWeekly={repeatMealWeekly}
+                  onSaveTemplate={saveItemTemplate}
+                  onSaveMealTemplate={() => saveMealTypeTemplate(type)}
+                  onStartSwap={(item) => setSwapState({ item, templateId: templates[0]?.id ?? "" })}
+                  editingId={editingId}
+                  editDraft={editDraft}
+                  setEditDraft={setEditDraft}
+                  updatingId={isUpdatingId}
+                  canSwap={templates.length > 0}
+                />
+              ))}
+            </div>
+          )}
         </TabsContent>
 
-        <TabsContent value="week" className="space-y-4">
+        <TabsContent value="week" className="space-y-3 sm:space-y-4">
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><CalendarDays className="h-5 w-5" /> Meal calendar</CardTitle></CardHeader>
-            <CardContent>
+            <CardHeader className="p-4 sm:p-5">
+              <CardTitle className="flex items-center gap-2 text-base"><CalendarDays className="h-5 w-5" /> Meal calendar</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-5">
               <CompactCalendar month={calendarMonth} selectedDate={selectedDate} plannedDates={plannedDates} onMonthChange={setCalendarMonth} onSelectDate={changeDate} />
             </CardContent>
           </Card>
@@ -620,7 +729,7 @@ function MyMealPlanBuilderInner() {
           <MealPlanInsightsPanel insights={mealInsights} />
         </TabsContent>
 
-        <TabsContent value="automation" className="space-y-4">
+        <TabsContent value="automation" className="space-y-3 sm:space-y-4">
           <AutomationPanel
             selectedDate={selectedDate}
             items={items}
@@ -643,9 +752,9 @@ function MyMealPlanBuilderInner() {
           />
         </TabsContent>
 
-        <TabsContent value="shopping" className="space-y-4">
+        <TabsContent value="shopping" className="space-y-3 sm:space-y-4">
           <div ref={shoppingListRef}>
-            <ShoppingListPanel items={shoppingList} onToggle={toggleShoppingCheck} onPrint={printShoppingList} />
+            <ShoppingListPanel items={shoppingList} onToggle={toggleShoppingCheck} onPrint={printShoppingList} checkedCount={shoppingCheckedCount} />
           </div>
         </TabsContent>
       </Tabs>
@@ -655,19 +764,33 @@ function MyMealPlanBuilderInner() {
 
 function AutomationPanel(props: { selectedDate: string; items: MealPlanItem[]; templates: MealTemplate[]; selectedTemplateId: string; setSelectedTemplateId: (id: string) => void; templateName: string; setTemplateName: (value: string) => void; onAddTemplate: () => void; onCopyDay: () => void; onMarkBreakfast: () => void; onMarkDay: () => void; batches: BatchMeal[]; selectedBatchId: string; setSelectedBatchId: (id: string) => void; batchDraft: BatchDraft; setBatchDraft: Dispatch<SetStateAction<BatchDraft>>; onCreateBatch: () => void; onAddBatch: () => void }) {
   return (
-    <div className="grid gap-4 xl:grid-cols-3">
+    <div className="space-y-3 sm:grid sm:gap-4 sm:space-y-0 xl:grid-cols-3">
       <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Copy className="h-4 w-4" /> Copy, templates, bulk done</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={props.onCopyDay} disabled={!props.items.length}><Copy className="h-4 w-4" /> Copy day to tomorrow</Button><Button variant="outline" onClick={props.onMarkBreakfast}><CheckCircle2 className="h-4 w-4" /> Mark breakfast done</Button><Button variant="outline" onClick={props.onMarkDay} className="sm:col-span-2"><CheckCircle2 className="h-4 w-4" /> Mark all day done</Button></div>
-          <Input value={props.templateName} onChange={(event) => props.setTemplateName(event.target.value)} placeholder="Template name for Save as template" />
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]"><select value={props.selectedTemplateId} onChange={(event) => props.setSelectedTemplateId(event.target.value)} className="h-10 rounded-md border bg-card px-3 text-sm"><option value="">Choose template</option>{props.templates.map((template) => <option key={template.id} value={template.id}>{template.name} ({template.items.length})</option>)}</select><Button onClick={props.onAddTemplate} disabled={!props.selectedTemplateId}><PlusCircle className="h-4 w-4" /> Add template</Button></div>
+        <CardHeader className="p-4 sm:p-5">
+          <CardTitle className="flex items-center gap-2 text-base"><Copy className="h-4 w-4" /> Copy, templates, bulk done</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-5 sm:pt-0">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button variant="outline" size="sm" onClick={props.onCopyDay} disabled={!props.items.length}><Copy className="h-4 w-4" /> Copy day to tomorrow</Button>
+            <Button variant="outline" size="sm" onClick={props.onMarkBreakfast}><CheckCircle2 className="h-4 w-4" /> Mark breakfast done</Button>
+            <Button variant="outline" size="sm" onClick={props.onMarkDay} className="sm:col-span-2"><CheckCircle2 className="h-4 w-4" /> Mark all day done</Button>
+          </div>
+          <Input value={props.templateName} onChange={(event) => props.setTemplateName(event.target.value)} placeholder="Template name" />
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <select value={props.selectedTemplateId} onChange={(event) => props.setSelectedTemplateId(event.target.value)} className="h-10 rounded-md border bg-card px-3 text-sm">
+              <option value="">Choose template</option>
+              {props.templates.map((template) => <option key={template.id} value={template.id}>{template.name} ({template.items.length})</option>)}
+            </select>
+            <Button size="sm" onClick={props.onAddTemplate} disabled={!props.selectedTemplateId}><PlusCircle className="h-4 w-4" /> Add</Button>
+          </div>
           {!props.templates.length ? <p className="text-sm text-muted-foreground">No templates yet. Save an item or meal column as a template below.</p> : null}
         </CardContent>
       </Card>
       <Card className="xl:col-span-2">
-        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><PackagePlus className="h-4 w-4" /> Batch meal / meal prep</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-4">
+        <CardHeader className="p-4 sm:p-5">
+          <CardTitle className="flex items-center gap-2 text-base"><PackagePlus className="h-4 w-4" /> Batch meal / meal prep</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 p-4 pt-0 sm:p-5 sm:pt-0 md:grid-cols-4">
           <Input value={props.batchDraft.name} onChange={(e) => props.setBatchDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Batch meal name" />
           <Input type="number" inputMode="numeric" enterKeyHint="done" value={props.batchDraft.portions} onChange={(e) => props.setBatchDraft((d) => ({ ...d, portions: e.target.value }))} placeholder="Portions" />
           <Input value={props.batchDraft.servingSize} onChange={(e) => props.setBatchDraft((d) => ({ ...d, servingSize: e.target.value }))} placeholder="Serving size" />
@@ -677,8 +800,14 @@ function AutomationPanel(props: { selectedDate: string; items: MealPlanItem[]; t
           <Input type="number" inputMode="decimal" enterKeyHint="done" value={props.batchDraft.carbs} onChange={(e) => props.setBatchDraft((d) => ({ ...d, carbs: e.target.value }))} placeholder="Total carbs" />
           <Input type="number" inputMode="decimal" enterKeyHint="done" value={props.batchDraft.fat} onChange={(e) => props.setBatchDraft((d) => ({ ...d, fat: e.target.value }))} placeholder="Total fat" />
           <Input className="md:col-span-2" value={props.batchDraft.notes} onChange={(e) => props.setBatchDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Ingredients / notes" />
-          <Button onClick={props.onCreateBatch}><Save className="h-4 w-4" /> Save batch</Button>
-          <div className="grid gap-2 md:col-span-4 md:grid-cols-[1fr_auto]"><select value={props.selectedBatchId} onChange={(event) => props.setSelectedBatchId(event.target.value)} className="h-10 rounded-md border bg-card px-3 text-sm"><option value="">Choose saved batch meal</option>{props.batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.name} ({batch.portions} portions)</option>)}</select><Button variant="outline" onClick={props.onAddBatch} disabled={!props.selectedBatchId}>Log one portion to plan</Button></div>
+          <Button size="sm" onClick={props.onCreateBatch}><Save className="h-4 w-4" /> Save batch</Button>
+          <div className="grid gap-2 md:col-span-4 md:grid-cols-[1fr_auto]">
+            <select value={props.selectedBatchId} onChange={(event) => props.setSelectedBatchId(event.target.value)} className="h-10 rounded-md border bg-card px-3 text-sm">
+              <option value="">Choose saved batch meal</option>
+              {props.batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.name} ({batch.portions} portions)</option>)}
+            </select>
+            <Button variant="outline" size="sm" onClick={props.onAddBatch} disabled={!props.selectedBatchId}>Log one portion</Button>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -688,18 +817,33 @@ function AutomationPanel(props: { selectedDate: string; items: MealPlanItem[]; t
 function WeeklyPlanner({ weekDays, selectedDate, weekItems, onSelectDate, onCopyWeek }: { weekDays: string[]; selectedDate: string; weekItems: MealPlanItem[]; onSelectDate: (date: string) => void; onCopyWeek: () => void }) {
   return (
     <Card>
-      <CardHeader><CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base"><span className="flex items-center gap-2"><CalendarDays className="h-5 w-5" /> Weekly meal plan view</span><Button variant="outline" size="sm" onClick={onCopyWeek}><Repeat className="h-4 w-4" /> Copy full week to next week</Button></CardTitle></CardHeader>
-      <CardContent className="grid gap-3 lg:grid-cols-7">
+      <CardHeader className="p-4 sm:p-5">
+        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
+          <span className="flex items-center gap-2"><CalendarDays className="h-5 w-5" /> Weekly plan</span>
+          <Button variant="outline" size="sm" onClick={onCopyWeek}><Repeat className="h-4 w-4" /> Copy week</Button>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-2 p-4 pt-0 sm:gap-3 sm:p-5 sm:pt-0 sm:grid-cols-2 lg:grid-cols-7">
         {weekDays.map((day) => {
           const dayItems = weekItems.filter((item) => item.plan_date === day);
           const planned = dayItems.filter((item) => item.status === "planned").reduce(addItemToTotals, emptyTotals());
           const done = dayItems.filter((item) => item.status === "done").reduce(addItemToTotals, emptyTotals());
           return (
-            <button key={day} type="button" onClick={() => onSelectDate(day)} className={`rounded-md border p-3 text-left transition-colors hover:border-primary/45 ${day === selectedDate ? "border-primary bg-primary/10" : "bg-card"}`}>
-              <p className="font-semibold">{displayDate(day)}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Planned {Math.round(planned.calories)} kcal | Done {Math.round(done.calories)} kcal</p>
-              <p className="text-xs text-muted-foreground">P {Math.round(planned.protein_g)}/{Math.round(done.protein_g)}g C {Math.round(planned.carbs_g)}/{Math.round(done.carbs_g)}g F {Math.round(planned.fat_g)}/{Math.round(done.fat_g)}g</p>
-              <div className="mt-2 space-y-1 text-xs text-muted-foreground">{mealTypes.map((type) => <p key={type}>{displayMealType(type)}: {dayItems.filter((item) => item.meal_type === type).length}</p>)}</div>
+            <button key={day} type="button" onClick={() => onSelectDate(day)} className={cn("rounded-md border p-2.5 text-left transition-colors hover:border-primary/45 sm:p-3", day === selectedDate ? "border-primary bg-primary/10" : "bg-card")}>
+              <p className="text-sm font-semibold">{displayDate(day)}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{dayItems.length} meals · {Math.round(done.calories)}/{Math.round(planned.calories + done.calories)} kcal</p>
+              <p className="text-[11px] text-muted-foreground">P {Math.round(planned.protein_g + done.protein_g)}g · C {Math.round(planned.carbs_g + done.carbs_g)}g · F {Math.round(planned.fat_g + done.fat_g)}g</p>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {mealTypes.map((type) => {
+                  const count = dayItems.filter((item) => item.meal_type === type).length;
+                  if (!count) return null;
+                  return (
+                    <span key={type} className="inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      {displayMealType(type)}: {count}
+                    </span>
+                  );
+                })}
+              </div>
             </button>
           );
         })}
@@ -708,13 +852,65 @@ function WeeklyPlanner({ weekDays, selectedDate, weekItems, onSelectDate, onCopy
   );
 }
 
-function ShoppingListPanel({ items, onToggle, onPrint }: { items: ShoppingListItem[]; onToggle: (item: ShoppingListItem) => void; onPrint: () => void }) {
+function ShoppingListPanel({ items, onToggle, onPrint, checkedCount }: { items: ShoppingListItem[]; onToggle: (item: ShoppingListItem) => void; onPrint: () => void; checkedCount: number }) {
+  const categories = useMemo(() => {
+    const map = new Map<string, ShoppingListItem[]>();
+    items.forEach((item) => {
+      const list = map.get(item.category) ?? [];
+      list.push(item);
+      map.set(item.category, list);
+    });
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [items]);
+
   return (
     <Card>
-      <CardHeader><CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base"><span className="flex items-center gap-2"><ShoppingCart className="h-5 w-5" /> Shopping list</span><Button variant="outline" size="sm" onClick={onPrint} disabled={!items.length}><Printer className="h-4 w-4" /> Print/export page</Button></CardTitle></CardHeader>
-      <CardContent className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-        {!items.length ? <p className="text-sm text-muted-foreground">No shopping list yet. Add planned meals with serving data first.</p> : null}
-        {items.map((item) => <label key={item.key} className="flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm"><input type="checkbox" checked={item.checked} onChange={() => onToggle(item)} className="mt-1 h-4 w-4" /><span><span className="font-semibold">{item.food_name}</span><br /><span className="text-muted-foreground">{item.quantity === null ? "Quantity not specified" : `${Math.round(item.quantity * 10) / 10}x`} {item.serving_size ?? "serving info missing"} | {item.category}</span></span></label>)}
+      <CardHeader className="p-4 sm:p-5">
+        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
+          <span className="flex items-center gap-2"><ShoppingCart className="h-5 w-5" /> Shopping list</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{checkedCount}/{items.length} checked</span>
+            <Button variant="outline" size="sm" onClick={onPrint} disabled={!items.length}><Printer className="h-4 w-4" /> Print</Button>
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 pt-0 sm:p-5 sm:pt-0">
+        {!items.length ? (
+          <p className="text-sm text-muted-foreground">No shopping list yet. Add planned meals with serving data first.</p>
+        ) : (
+          <div className="space-y-4">
+            {categories.map(([category, categoryItems]) => (
+              <div key={category}>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{category}</p>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {categoryItems.map((item) => (
+                    <label
+                      key={item.key}
+                      className={cn(
+                        "flex min-h-[48px] cursor-pointer items-center gap-3 rounded-md border p-3 text-sm transition-colors",
+                        item.checked ? "border-primary/30 bg-primary/5" : "bg-card hover:border-primary/40"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={item.checked}
+                        onChange={() => onToggle(item)}
+                        className="h-5 w-5 shrink-0 accent-primary"
+                        aria-label={`Mark ${item.food_name} as ${item.checked ? "unchecked" : "checked"}`}
+                      />
+                      <span className="min-w-0">
+                        <span className={cn("block font-semibold", item.checked && "text-muted-foreground line-through")}>{item.food_name}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {item.quantity === null ? "Qty not specified" : `${Math.round(item.quantity * 10) / 10}x`} {item.serving_size ?? "serving info missing"}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -723,11 +919,16 @@ function ShoppingListPanel({ items, onToggle, onPrint }: { items: ShoppingListIt
 function SwapConfirmPanel({ item, templates, templateId, onTemplateChange, diff, onConfirm, onCancel }: { item: MealPlanItem; templates: MealTemplate[]; templateId: string; onTemplateChange: (id: string) => void; diff: MacroTotals | null; onConfirm: () => void; onCancel: () => void }) {
   return (
     <Card className="border-primary/40 bg-primary/5">
-      <CardHeader><CardTitle className="text-base">Confirm meal swap for {item.food_name}</CardTitle></CardHeader>
-      <CardContent className="space-y-3">
-        <select value={templateId} onChange={(event) => onTemplateChange(event.target.value)} className="h-10 w-full rounded-md border bg-card px-3 text-sm"><option value="">Choose replacement template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select>
+      <CardHeader className="p-4 sm:p-5">
+        <CardTitle className="text-base">Confirm meal swap for {item.food_name}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 p-4 pt-0 sm:p-5 sm:pt-0">
+        <select value={templateId} onChange={(event) => onTemplateChange(event.target.value)} className="h-10 w-full rounded-md border bg-card px-3 text-sm">
+          <option value="">Choose replacement template</option>
+          {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+        </select>
         {diff ? <p className="text-sm text-muted-foreground">Macro difference: {formatDiff(diff.calories)} kcal | protein {formatDiff(diff.protein_g)}g | carbs {formatDiff(diff.carbs_g)}g | fat {formatDiff(diff.fat_g)}g</p> : <p className="text-sm text-muted-foreground">Choose a template to preview macro difference.</p>}
-        <div className="flex gap-2"><Button onClick={onConfirm} disabled={!templateId || !diff}>Confirm swap</Button><Button variant="outline" onClick={onCancel}>Cancel</Button></div>
+        <div className="flex gap-2"><Button size="sm" onClick={onConfirm} disabled={!templateId || !diff}>Confirm swap</Button><Button size="sm" variant="outline" onClick={onCancel}>Cancel</Button></div>
       </CardContent>
     </Card>
   );
@@ -735,18 +936,24 @@ function SwapConfirmPanel({ item, templates, templateId, onTemplateChange, diff,
 
 function MealForm({ title, draft, setDraft, onSave, onCancel, saving }: { title: string; draft: Draft; setDraft: Dispatch<SetStateAction<Draft>>; onSave: () => void; onCancel: () => void; saving: boolean }) {
   return (
-    <Card><CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <Input value={draft.foodName} onChange={(e) => setDraft((d) => ({ ...d, foodName: e.target.value }))} placeholder="Food name" />
-      <select value={draft.mealType} onChange={(e) => setDraft((d) => ({ ...d, mealType: normalizeMealPlanType(e.target.value) }))} className="h-10 rounded-md border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">{mealTypes.map((type) => <option key={type} value={type}>{displayMealType(type)}</option>)}</select>
-      <Input type="number" min="0.1" step="0.1" inputMode="decimal" enterKeyHint="done" value={draft.quantity} onChange={(e) => setDraft((d) => ({ ...d, quantity: e.target.value }))} placeholder="Quantity" />
-      <Input value={draft.servingInfo} onChange={(e) => setDraft((d) => ({ ...d, servingInfo: e.target.value }))} placeholder="Serving info" />
-      <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.calories} onChange={(e) => setDraft((d) => ({ ...d, calories: e.target.value }))} placeholder="Calories" />
-      <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.protein} onChange={(e) => setDraft((d) => ({ ...d, protein: e.target.value }))} placeholder="Protein g" />
-      <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.carbs} onChange={(e) => setDraft((d) => ({ ...d, carbs: e.target.value }))} placeholder="Carbs g" />
-      <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.fat} onChange={(e) => setDraft((d) => ({ ...d, fat: e.target.value }))} placeholder="Fat g" />
-      <Input className="xl:col-span-2" value={draft.notes} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Notes" />
-      <div className="flex gap-2 xl:col-span-2"><Button type="button" onClick={onSave} disabled={saving}><Save className="h-4 w-4" /> Save</Button><Button type="button" variant="outline" onClick={onCancel}><X className="h-4 w-4" /> Cancel</Button></div>
-    </CardContent></Card>
+    <div className="space-y-3">
+      {title ? <h3 className="text-base font-semibold">{title}</h3> : null}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <Input value={draft.foodName} onChange={(e) => setDraft((d) => ({ ...d, foodName: e.target.value }))} placeholder="Food name" />
+        <select value={draft.mealType} onChange={(e) => setDraft((d) => ({ ...d, mealType: normalizeMealPlanType(e.target.value) }))} className="h-10 rounded-md border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">{mealTypes.map((type) => <option key={type} value={type}>{displayMealType(type)}</option>)}</select>
+        <Input type="number" min="0.1" step="0.1" inputMode="decimal" enterKeyHint="done" value={draft.quantity} onChange={(e) => setDraft((d) => ({ ...d, quantity: e.target.value }))} placeholder="Quantity" />
+        <Input value={draft.servingInfo} onChange={(e) => setDraft((d) => ({ ...d, servingInfo: e.target.value }))} placeholder="Serving info" />
+        <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.calories} onChange={(e) => setDraft((d) => ({ ...d, calories: e.target.value }))} placeholder="Calories" />
+        <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.protein} onChange={(e) => setDraft((d) => ({ ...d, protein: e.target.value }))} placeholder="Protein g" />
+        <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.carbs} onChange={(e) => setDraft((d) => ({ ...d, carbs: e.target.value }))} placeholder="Carbs g" />
+        <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.fat} onChange={(e) => setDraft((d) => ({ ...d, fat: e.target.value }))} placeholder="Fat g" />
+        <Input className="xl:col-span-2" value={draft.notes} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Notes" />
+        <div className="flex gap-2 xl:col-span-2">
+          <Button type="button" onClick={onSave} disabled={saving} className="flex-1 sm:flex-none"><Save className="h-4 w-4" /> Save</Button>
+          <Button type="button" variant="outline" onClick={onCancel}><X className="h-4 w-4" /> Cancel</Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -759,18 +966,18 @@ type MealPlanInsight = {
 function MealPlanInsightsPanel({ insights }: { insights: MealPlanInsight[] }) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Meal-plan intelligence</CardTitle>
+      <CardHeader className="p-4 sm:p-5">
+        <CardTitle className="text-base">Meal-plan insights</CardTitle>
         <p className="text-sm text-muted-foreground">Uses planned meals, done food logs, templates, batches, and shopping-list data only.</p>
       </CardHeader>
-      <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <CardContent className="grid gap-2 p-4 pt-0 sm:gap-3 sm:p-5 sm:pt-0 sm:grid-cols-2 xl:grid-cols-3">
         {insights.map((insight) => (
-          <div key={insight.title} className="rounded-md border p-3">
+          <div key={insight.title} className="rounded-md border p-2.5 sm:p-3">
             <div className="flex items-start justify-between gap-2">
-              <p className="font-semibold">{insight.title}</p>
-              <Badge variant={insight.tone === "good" ? "success" : insight.tone === "warning" ? "outline" : "navy"}>{insight.tone}</Badge>
+              <p className="text-sm font-semibold">{insight.title}</p>
+              <Badge variant={insight.tone === "good" ? "success" : insight.tone === "warning" ? "outline" : "navy"} className="text-[10px]">{insight.tone}</Badge>
             </div>
-            <p className="mt-2 text-sm text-muted-foreground">{insight.detail}</p>
+            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">{insight.detail}</p>
           </div>
         ))}
       </CardContent>
@@ -861,59 +1068,69 @@ function buildMealPlanInsights({
 }
 
 function SummaryCard({ label, value, detail, suffix = " kcal" }: { label: string; value: number; detail: string; suffix?: string }) {
-  return <Card><CardContent className="pt-5"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-bold">{Math.round(toNumber(value))}{suffix}</p><p className="mt-1 text-sm text-muted-foreground">{detail}</p></CardContent></Card>;
+  return (
+    <Card>
+      <CardContent className="p-3 pt-3 sm:p-5 sm:pt-5">
+        <p className="text-xs text-muted-foreground sm:text-sm">{label}</p>
+        <p className="mt-1 text-lg font-bold sm:mt-2 sm:text-2xl">{Math.round(toNumber(value))}{suffix}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground sm:mt-1 sm:text-sm">{detail}</p>
+      </CardContent>
+    </Card>
+  );
 }
 
 function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () => void; onDone: (item: MealPlanItem) => void; onDelete: (item: MealPlanItem) => void; onStartEdit: (item: MealPlanItem) => void; onSaveEdit: (item: MealPlanItem) => void; onCancelEdit: () => void; onDuplicate: (item: MealPlanItem) => void; onCopyTomorrow: (item: MealPlanItem) => void; onRepeatDaily: (item: MealPlanItem) => void; onRepeatWeekly: (item: MealPlanItem) => void; onSaveTemplate: (item: MealPlanItem) => void; onSaveMealTemplate: () => void; onStartSwap: (item: MealPlanItem) => void; editingId: string | null; editDraft: Draft; setEditDraft: Dispatch<SetStateAction<Draft>>; updatingId: string | null; canSwap: boolean }) {
   const { type, items, onAdd, onDone, onDelete, onStartEdit, onSaveEdit, onCancelEdit, onDuplicate, onCopyTomorrow, onRepeatDaily, onRepeatWeekly, onSaveTemplate, onSaveMealTemplate, onStartSwap, editingId, editDraft, setEditDraft, updatingId, canSwap } = props;
   const totals = items.reduce((sum, item) => addItemToTotals(sum, item), emptyTotals());
+  const plannedCount = items.filter((i) => i.status === "planned").length;
+  const doneCount = items.filter((i) => i.status === "done").length;
 
   return (
     <Card className="h-full">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between gap-2 text-base">
+      <CardHeader className="p-3 sm:p-5">
+        <CardTitle className="flex items-center justify-between gap-2 text-sm sm:text-base">
           <span className="flex items-center gap-2"><Utensils className="h-4 w-4" /> {displayMealType(type)}</span>
           <div className="flex items-center gap-2">
-            <Badge variant="outline">{items.length}</Badge>
-            <Button type="button" size="icon" variant="ghost" onClick={onAdd} aria-label={`Add ${displayMealType(type)} item`}>
+            <Badge variant="outline" className="text-[10px]">{plannedCount + doneCount}</Badge>
+            <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={onAdd} aria-label={`Add ${displayMealType(type)} item`}>
               <PlusCircle className="h-4 w-4" />
             </Button>
           </div>
         </CardTitle>
-        <p className="text-xs text-muted-foreground">{Math.round(totals.calories)} kcal | {Math.round(totals.protein_g)}g protein</p>
-        <Button type="button" variant="outline" size="sm" onClick={onSaveMealTemplate} disabled={!items.length}>Save meal as template</Button>
+        <p className="text-xs text-muted-foreground">{Math.round(totals.calories)} kcal · {Math.round(totals.protein_g)}g protein</p>
+        <Button type="button" variant="outline" size="sm" className="mt-1 text-xs" onClick={onSaveMealTemplate} disabled={!items.length}>Save as template</Button>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {!items.length ? <p className="text-sm text-muted-foreground">No food planned yet.</p> : null}
+      <CardContent className="space-y-2 p-3 pt-0 sm:space-y-3 sm:p-5 sm:pt-0">
+        {!items.length ? <p className="text-sm text-muted-foreground">No food planned yet. Tap + to add.</p> : null}
         {items.map((item) => {
           const isEditing = editingId === item.id;
           return (
-            <div key={item.id} className="rounded-md border bg-card p-3">
+            <div key={item.id} className="rounded-md border bg-card p-2.5 sm:p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-semibold leading-5">{item.food_name}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{item.quantity}x {item.serving_size}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {Math.round(toNumber(item.calories))} kcal | {Math.round(toNumber(item.protein_g))}g protein | {Math.round(toNumber(item.carbs_g))}g carbs | {Math.round(toNumber(item.fat_g))}g fat
+                  <p className="text-sm font-semibold leading-5">{item.food_name}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{item.quantity}x {item.serving_size}</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground sm:text-xs">
+                    {Math.round(toNumber(item.calories))} kcal · {Math.round(toNumber(item.protein_g))}g protein · {Math.round(toNumber(item.carbs_g))}g carbs · {Math.round(toNumber(item.fat_g))}g fat
                   </p>
                 </div>
-                <Badge variant={item.status === "done" ? "success" : "outline"}>{item.status}</Badge>
+                <Badge variant={item.status === "done" ? "success" : "outline"} className="text-[10px] shrink-0">{item.status}</Badge>
               </div>
               {isEditing ? (
-                <div className="mt-3">
+                <div className="mt-2 sm:mt-3">
                   <MealForm title="Edit planned food" draft={editDraft} setDraft={setEditDraft} onSave={() => onSaveEdit(item)} onCancel={onCancelEdit} saving={updatingId === item.id} />
                 </div>
               ) : (
-                <div className="mt-3 flex items-center gap-2">
+                <div className="mt-2 flex items-center gap-2 sm:mt-3">
                   <Button type="button" size="sm" className="flex-1" onClick={() => onDone(item)} disabled={item.status === "done" || updatingId === item.id}>
                     <CheckCircle2 className="h-4 w-4" />
                     {item.status === "done" ? "Done" : "Mark done"}
                   </Button>
                   <details className="relative">
-                    <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${item.food_name}`}>
+                    <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary sm:h-10 sm:w-10" aria-label={`More actions for ${item.food_name}`}>
                       <MoreHorizontal className="h-4 w-4" />
                     </summary>
-                    <div className="absolute right-0 z-20 mt-2 grid w-52 gap-1 rounded-md border bg-card p-2 shadow-luxe">
+                    <div className="absolute right-0 z-20 mt-1 grid w-48 gap-0.5 rounded-md border bg-card p-2 shadow-luxe">
                       <Button type="button" size="sm" variant="ghost" className="justify-start" onClick={() => onDuplicate(item)} disabled={updatingId === item.id}><Copy className="h-4 w-4" /> Duplicate</Button>
                       <Button type="button" size="sm" variant="ghost" className="justify-start" onClick={() => onCopyTomorrow(item)}>Tomorrow</Button>
                       <Button type="button" size="sm" variant="ghost" className="justify-start" onClick={() => onRepeatDaily(item)}><Repeat className="h-4 w-4" /> Daily</Button>
@@ -936,7 +1153,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
 
 function NoticeBox({ notice, onClose }: { notice: Notice; onClose: () => void }) {
   const styles = notice.type === "success" ? "border-success/30 bg-success/10 text-foreground" : notice.type === "error" ? "border-destructive/30 bg-destructive/10 text-foreground" : "border-primary/40 bg-primary/5 text-foreground";
-  return <div className={`rounded-md border p-4 text-sm ${styles}`}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{notice.title}</p>{notice.description ? <p className="mt-1 break-words opacity-90">{notice.description}</p> : null}</div><button type="button" onClick={onClose} className="text-xs font-semibold underline">close</button></div></div>;
+  return <div className={`rounded-md border p-3 text-sm sm:p-4 ${styles}`}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{notice.title}</p>{notice.description ? <p className="mt-1 break-words opacity-90">{notice.description}</p> : null}</div><button type="button" onClick={onClose} className="text-xs font-semibold underline">close</button></div></div>;
 }
 
 function emptyTotals(): MacroTotals { return { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }; }
