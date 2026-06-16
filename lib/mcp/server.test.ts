@@ -118,6 +118,62 @@ describe("canUseTool - read/write rules", () => {
   });
 });
 
+describe("canUseTool - read tool section isolation", () => {
+  it("nutrition.write can access nutrition read tools", () => {
+    const ctx = mockContext([MCP_SCOPES.nutritionWrite]);
+    const searchFoods = mcpTools.find((t) => t.name === "search_foods")!;
+    const getFoodLogs = mcpTools.find((t) => t.name === "get_food_logs_by_date")!;
+    expect(canUseTool(ctx, searchFoods)).toBe(true);
+    expect(canUseTool(ctx, getFoodLogs)).toBe(true);
+  });
+
+  it("nutrition.write cannot access workout read tools", () => {
+    const ctx = mockContext([MCP_SCOPES.nutritionWrite]);
+    const getWorkoutPlans = mcpTools.find((t) => t.name === "get_workout_plans")!;
+    const getTodayWorkout = mcpTools.find((t) => t.name === "get_today_workout")!;
+    expect(canUseTool(ctx, getWorkoutPlans)).toBe(false);
+    expect(canUseTool(ctx, getTodayWorkout)).toBe(false);
+  });
+
+  it("nutrition.write cannot access progress read tools", () => {
+    const ctx = mockContext([MCP_SCOPES.nutritionWrite]);
+    const getProgressSummary = mcpTools.find((t) => t.name === "get_progress_summary")!;
+    const getPersonalRecords = mcpTools.find((t) => t.name === "get_personal_records")!;
+    expect(canUseTool(ctx, getProgressSummary)).toBe(false);
+    expect(canUseTool(ctx, getPersonalRecords)).toBe(false);
+  });
+
+  it("workouts.read cannot access nutrition read tools", () => {
+    const ctx = mockContext([MCP_SCOPES.workoutsRead]);
+    const searchFoods = mcpTools.find((t) => t.name === "search_foods")!;
+    const getFoodLogs = mcpTools.find((t) => t.name === "get_food_logs_by_date")!;
+    expect(canUseTool(ctx, searchFoods)).toBe(false);
+    expect(canUseTool(ctx, getFoodLogs)).toBe(false);
+  });
+
+  it("profile.read cannot access get_today_summary", () => {
+    const ctx = mockContext([MCP_SCOPES.profileRead]);
+    const getTodaySummary = mcpTools.find((t) => t.name === "get_today_summary")!;
+    expect(canUseTool(ctx, getTodaySummary)).toBe(false);
+  });
+
+  it("full_access can access all normal read and write tools", () => {
+    const ctx = mockContext([MCP_SCOPES.fullAccess]);
+    const normalTools = mcpTools.filter((t) => t.risk !== "admin");
+    for (const tool of normalTools) {
+      expect(canUseTool(ctx, tool)).toBe(true);
+    }
+  });
+
+  it("admin tools remain blocked for normal users even with fitlife.admin", () => {
+    const ctx = mockContext([MCP_SCOPES.admin, MCP_SCOPES.fullAccess], "member");
+    const adminTools = mcpTools.filter((t) => t.risk === "admin");
+    for (const tool of adminTools) {
+      expect(canUseTool(ctx, tool)).toBe(false);
+    }
+  });
+});
+
 describe("canUseTool - admin protection", () => {
   it("admin tools are not available to normal users even with admin scope", () => {
     const ctx = mockContext([MCP_SCOPES.admin, MCP_SCOPES.fullAccess], "member");

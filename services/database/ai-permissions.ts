@@ -81,7 +81,8 @@ function configToScopes(config: AiPermissionConfig): string[] {
       "fitlife.wellness.write",
       "fitlife.profile.read",
       "fitlife.profile.write",
-      "fitlife.settings.read"
+      "fitlife.settings.read",
+      "fitlife.settings.write"
     ];
   }
 
@@ -115,7 +116,8 @@ export function getDefaultAiPermissionConfig(): AiPermissionConfig {
     "fitlife.wellness.write",
     "fitlife.profile.read",
     "fitlife.profile.write",
-    "fitlife.settings.read"
+    "fitlife.settings.read",
+    "fitlife.settings.write"
   ]);
 }
 
