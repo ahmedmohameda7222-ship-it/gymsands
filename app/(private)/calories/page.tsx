@@ -28,6 +28,7 @@ import {
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   addWaterLog,
   copyYesterdaysMeals,
@@ -48,6 +49,7 @@ import type { DailyNutritionSummary, FoodLog, WaterLog } from "@/types";
 export default function CaloriesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const today = useTodayDate();
   const [selectedDate, setSelectedDate] = useState(today);
   const [logs, setLogs] = useState<FoodLog[]>([]);
@@ -243,7 +245,7 @@ export default function CaloriesPage() {
       <div className="rounded-lg border border-destructive bg-destructive/10 p-6 text-center text-destructive m-4">
         <p className="font-semibold">Failed to load calories</p>
         <p className="text-sm mt-1">{loadError}</p>
-        <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>Retry</Button>
+        <Button variant="outline" className="mt-4" onClick={() => router.refresh()}>Retry</Button>
       </div>
     );
   }

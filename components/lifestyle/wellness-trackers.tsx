@@ -805,10 +805,10 @@ export function PersonalRecordsTracker() {
                       reps: item.reps === null ? "" : String(item.reps),
                       record_date: item.record_date,
                       notes: item.notes ?? ""
-                    })}>
+                    })} aria-label={`Edit ${item.exercise_name} record`}>
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-10 w-10 text-destructive" onClick={() => removeRecord(item)}>
+                    <Button size="icon" variant="ghost" className="h-10 w-10 text-destructive" onClick={() => removeRecord(item)} aria-label={`Delete ${item.exercise_name} record`}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

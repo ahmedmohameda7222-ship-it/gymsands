@@ -40,9 +40,9 @@ interface LauncherCardProps {
 }
 
 function LauncherCard({ href, icon: Icon, label, status, detail, progress, accent = "default" }: LauncherCardProps) {
-  const accentBorder = accent === "success" ? "border-primary/40" : accent === "warning" ? "border-amber-400/40" : "border-border/70";
-  const accentBg = accent === "success" ? "bg-primary/5" : accent === "warning" ? "bg-amber-50" : "bg-card";
-  const statusColor = accent === "success" ? "text-primary" : accent === "warning" ? "text-amber-600" : "text-muted-foreground";
+  const accentBorder = accent === "success" ? "border-primary/40" : accent === "warning" ? "border-warning/40" : "border-border/70";
+  const accentBg = accent === "success" ? "bg-primary/5" : accent === "warning" ? "bg-warning/10" : "bg-card";
+  const statusColor = accent === "success" ? "text-primary" : accent === "warning" ? "text-warning" : "text-muted-foreground";
 
   return (
     <Link

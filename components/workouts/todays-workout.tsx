@@ -93,7 +93,7 @@ export function TodaysWorkout() {
     return (
       <Card>
         <CardContent className="space-y-3 pt-5">
-          <div className="flex items-center gap-2 font-semibold text-slate-950">
+          <div className="flex items-center gap-2 font-semibold text-foreground">
             <CalendarCheck className="h-5 w-5 text-primary" />
             {today} is a rest day
           </div>
@@ -134,8 +134,8 @@ export function TodaysWorkout() {
             const url = guideUrl(exercise);
             const customUrl = customVideoUrl(exercise);
             return (
-              <div key={`${exercise.id}-${index}`} className="rounded-md border bg-white p-3">
-                <p className="font-semibold text-slate-950">{index + 1}. {exercise.name}</p>
+              <div key={`${exercise.id}-${index}`} className="rounded-md border bg-card p-3">
+                <p className="font-semibold text-foreground">{index + 1}. {exercise.name}</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {exercise.muscle_category || exercise.target_muscle} | {exercise.equipment_required || exercise.equipment}
                 </p>
@@ -188,10 +188,10 @@ export function TodaysWorkout() {
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {mealItems.map((item) => (
-              <div key={item.id} className="rounded-md border bg-white p-3">
+              <div key={item.id} className="rounded-md border bg-card p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-slate-950">{item.food_name}</p>
+                    <p className="font-semibold text-foreground">{item.food_name}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{item.meal_type} | {item.calories} kcal</p>
                   </div>
                   <Badge variant={item.status === "done" ? "success" : "outline"}>{item.status === "done" ? "Done" : "Planned"}</Badge>

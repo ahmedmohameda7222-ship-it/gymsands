@@ -455,7 +455,7 @@ export function WorkoutPlanBuilder({
                   value={activeDay.notes}
                   onChange={(event) => updateDay(activeDayIndex, { notes: event.target.value, id: undefined, planId: undefined })}
                   placeholder="Optional notes for this day"
-                  className="min-h-20 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="min-h-20 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
               </div>
 
@@ -471,7 +471,7 @@ export function WorkoutPlanBuilder({
                 </div>
                 {!activeDay.exercises.length ? <p className="text-sm text-muted-foreground">No workouts added to this day yet.</p> : null}
                 {activeDay.exercises.map((workout, index) => (
-                  <div key={workout.id} className="space-y-3 rounded-md bg-white p-3 text-sm shadow-sm">
+                  <div key={workout.id} className="space-y-3 rounded-md bg-card p-3 text-sm shadow-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold">{index + 1}. {workout.name}</p>
@@ -545,18 +545,18 @@ export function WorkoutPlanBuilder({
             </div>
 
             <div className="space-y-3">
-              <div className="space-y-3 rounded-md border bg-white p-3">
+              <div className="space-y-3 rounded-md border bg-card p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <SlidersHorizontal className="h-5 w-5 text-primary" />
-                    <p className="font-semibold text-slate-950">Exercise filters</p>
+                    <p className="font-semibold text-foreground">Exercise filters</p>
                     {activeFilterCount ? <Badge>{activeFilterCount} selected</Badge> : null}
                   </div>
                   <p className="text-sm text-muted-foreground">{results.length} exercises loaded</p>
                 </div>
                 <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
                   <div className="relative">
-                    <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                    <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
                     <Input
                       value={filters.query}
                       onChange={(event) => patchFilters({ query: event.target.value })}
@@ -585,7 +585,7 @@ export function WorkoutPlanBuilder({
               {!isLoading && !results.length ? <p className="text-sm text-muted-foreground">No exercises match these filters.</p> : null}
               <div className="grid gap-3 md:grid-cols-2">
                 {results.map((workout) => (
-                  <div key={workout.id} className="rounded-md border bg-white p-3">
+                  <div key={workout.id} className="rounded-md border bg-card p-3">
                     <div className="flex items-start gap-2">
                       <Dumbbell className="mt-1 h-4 w-4 shrink-0 text-primary" />
                       <div>
@@ -647,7 +647,7 @@ function StatCard({
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+            <p className="mt-2 text-2xl font-bold text-foreground">{value}</p>
           </div>
           <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Icon className="h-5 w-5" />
@@ -672,7 +672,7 @@ function FilterSelect({
 }) {
   return (
     <div className="space-y-1">
-      <Label className="text-xs font-semibold text-slate-700">{label}</Label>
+      <Label className="text-xs font-semibold text-muted-foreground">{label}</Label>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger aria-label={label}>
           <SelectValue placeholder={label} />

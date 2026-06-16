@@ -200,9 +200,9 @@ export function WorkoutPlanDetail() {
         <CardContent className="space-y-4">
           {activeDay ? (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-card p-3">
                 <div>
-                  <p className="font-semibold text-slate-950">{activeDay.dayName}</p>
+                  <p className="font-semibold text-foreground">{activeDay.dayName}</p>
                   <p className="text-sm text-muted-foreground">{activeDay.weekday ?? "No weekday"} | {activeDay.exercises.length} exercises</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -218,7 +218,7 @@ export function WorkoutPlanDetail() {
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 {activeDay.exercises.map((exercise, index) => (
-                  <div key={`${exercise.id}-${index}`} className="rounded-md border bg-white p-3">
+                  <div key={`${exercise.id}-${index}`} className="rounded-md border bg-card p-3">
                     <p className="font-semibold">{index + 1}. {exercise.name}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{exercise.target_muscle} | {exercise.equipment}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
