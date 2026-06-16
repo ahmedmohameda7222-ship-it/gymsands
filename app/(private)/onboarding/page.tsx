@@ -180,11 +180,14 @@ export default function OnboardingPage() {
           {step === 0 ? (
             <section className="space-y-4">
               <StepIntro title="Basic body profile" detail="Use real values when known. Leave optional values empty if you are not sure yet." />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <ChoiceGroup label="Age range" value={answers.age_range} values={["18-24", "25-34", "35-44", "45+"]} onChange={(age_range) => setAnswers((current) => ({ ...current, age_range }))} />
-                <ChoiceGroup label="Gender / sex" value={answers.gender} values={["Male", "Female", "Prefer not to say"]} onChange={(gender) => setAnswers((current) => ({ ...current, gender }))} />
-                <NumberField label="Height" value={answers.height_cm} suffix="cm" onChange={(height_cm) => setAnswers((current) => ({ ...current, height_cm }))} />
-                <NumberField label="Weight" value={answers.weight_kg} suffix="kg" onChange={(weight_kg) => setAnswers((current) => ({ ...current, weight_kg }))} />
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Body stats</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <ChoiceGroup label="Age range" value={answers.age_range} values={["18-24", "25-34", "35-44", "45+"]} onChange={(age_range) => setAnswers((current) => ({ ...current, age_range }))} />
+                  <ChoiceGroup label="Gender / sex" value={answers.gender} values={["Male", "Female", "Prefer not to say"]} onChange={(gender) => setAnswers((current) => ({ ...current, gender }))} />
+                  <NumberField label="Height" value={answers.height_cm} suffix="cm" onChange={(height_cm) => setAnswers((current) => ({ ...current, height_cm }))} />
+                  <NumberField label="Weight" value={answers.weight_kg} suffix="kg" onChange={(weight_kg) => setAnswers((current) => ({ ...current, weight_kg }))} />
+                </div>
               </div>
             </section>
           ) : null}
@@ -199,14 +202,22 @@ export default function OnboardingPage() {
           {step === 2 ? (
             <section className="space-y-4">
               <StepIntro title="Training style" detail="Keep this focused on how you train. Schedule and session length are handled separately in the next step." />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <ChoiceGroup label="Training level" value={answers.training_level} values={["Beginner", "Intermediate", "Advanced"]} onChange={(training_level) => setAnswers((current) => ({ ...current, training_level }))} />
-                <ChoiceGroup label="Training place" value={answers.training_place} values={["Gym", "Home", "Both"]} onChange={(training_place) => setAnswers((current) => ({ ...current, training_place }))} />
-                <div className="sm:col-span-2">
-                  <ChoiceGroup label="Preferred split" value={answers.training_cycle} values={trainingCycles} onChange={(training_cycle) => setAnswers((current) => ({ ...current, training_cycle }))} />
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Experience & location</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <ChoiceGroup label="Training level" value={answers.training_level} values={["Beginner", "Intermediate", "Advanced"]} onChange={(training_level) => setAnswers((current) => ({ ...current, training_level }))} />
+                  <ChoiceGroup label="Training place" value={answers.training_place} values={["Gym", "Home", "Both"]} onChange={(training_place) => setAnswers((current) => ({ ...current, training_place }))} />
                 </div>
-                <div className="sm:col-span-2">
-                  <MultiChoice label="Available equipment" values={["Full gym", "Bodyweight", "Dumbbells", "Barbell", "Machines", "Cables", "Kettle Bells", "EZ Bar", "Bands", "Medicine Ball", "Exercise Ball"]} selected={answers.available_equipment} onChange={(available_equipment) => setAnswers((current) => ({ ...current, available_equipment }))} />
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Training preferences</p>
+                <div className="grid gap-4">
+                  <div className="sm:col-span-2">
+                    <ChoiceGroup label="Preferred split" value={answers.training_cycle} values={trainingCycles} onChange={(training_cycle) => setAnswers((current) => ({ ...current, training_cycle }))} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <MultiChoice label="Available equipment" values={["Full gym", "Bodyweight", "Dumbbells", "Barbell", "Machines", "Cables", "Kettle Bells", "EZ Bar", "Bands", "Medicine Ball", "Exercise Ball"]} selected={answers.available_equipment} onChange={(available_equipment) => setAnswers((current) => ({ ...current, available_equipment }))} />
+                  </div>
                 </div>
               </div>
             </section>
@@ -215,27 +226,35 @@ export default function OnboardingPage() {
           {step === 3 ? (
             <section className="space-y-4">
               <StepIntro title="Schedule and duration" detail="This keeps imported workout plans realistic and prevents crowded sessions." />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <ChoiceGroup label="Training availability" value={`${answers.training_days_per_week} days/week`} values={["2 days/week", "3 days/week", "4 days/week", "5 days/week", "6 days/week"]} onChange={(value) => setAnswers((current) => ({ ...current, training_days_per_week: Number(value[0]) }))} />
-                <ChoiceGroup label="Plan duration" value={`${answers.desired_duration_weeks} weeks`} values={weekOptions.map((week) => `${week} weeks`)} onChange={(value) => setAnswers((current) => ({ ...current, desired_duration_weeks: Number(value.split(" ")[0]) }))} />
-                <ChoiceGroup label="Minimum session" value={`${answers.min_workout_duration_minutes} minutes`} values={durationOptions.map((duration) => `${duration} minutes`)} onChange={(value) => {
-                  const min = Number(value.split(" ")[0]);
-                  setAnswers((current) => ({
-                    ...current,
-                    min_workout_duration_minutes: min,
-                    max_workout_duration_minutes: Math.max(min, current.max_workout_duration_minutes),
-                    workout_duration_minutes: Math.round((min + Math.max(min, current.max_workout_duration_minutes)) / 2)
-                  }));
-                }} />
-                <ChoiceGroup label="Maximum session" value={`${answers.max_workout_duration_minutes} minutes`} values={durationOptions.map((duration) => `${duration} minutes`)} onChange={(value) => {
-                  const max = Number(value.split(" ")[0]);
-                  setAnswers((current) => ({
-                    ...current,
-                    min_workout_duration_minutes: Math.min(current.min_workout_duration_minutes, max),
-                    max_workout_duration_minutes: max,
-                    workout_duration_minutes: Math.round((Math.min(current.min_workout_duration_minutes, max) + max) / 2)
-                  }));
-                }} />
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Weekly schedule</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <ChoiceGroup label="Training availability" value={`${answers.training_days_per_week} days/week`} values={["2 days/week", "3 days/week", "4 days/week", "5 days/week", "6 days/week"]} onChange={(value) => setAnswers((current) => ({ ...current, training_days_per_week: Number(value[0]) }))} />
+                  <ChoiceGroup label="Plan duration" value={`${answers.desired_duration_weeks} weeks`} values={weekOptions.map((week) => `${week} weeks`)} onChange={(value) => setAnswers((current) => ({ ...current, desired_duration_weeks: Number(value.split(" ")[0]) }))} />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Session length</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <ChoiceGroup label="Minimum session" value={`${answers.min_workout_duration_minutes} minutes`} values={durationOptions.map((duration) => `${duration} minutes`)} onChange={(value) => {
+                    const min = Number(value.split(" ")[0]);
+                    setAnswers((current) => ({
+                      ...current,
+                      min_workout_duration_minutes: min,
+                      max_workout_duration_minutes: Math.max(min, current.max_workout_duration_minutes),
+                      workout_duration_minutes: Math.round((min + Math.max(min, current.max_workout_duration_minutes)) / 2)
+                    }));
+                  }} />
+                  <ChoiceGroup label="Maximum session" value={`${answers.max_workout_duration_minutes} minutes`} values={durationOptions.map((duration) => `${duration} minutes`)} onChange={(value) => {
+                    const max = Number(value.split(" ")[0]);
+                    setAnswers((current) => ({
+                      ...current,
+                      min_workout_duration_minutes: Math.min(current.min_workout_duration_minutes, max),
+                      max_workout_duration_minutes: max,
+                      workout_duration_minutes: Math.round((Math.min(current.min_workout_duration_minutes, max) + max) / 2)
+                    }));
+                  }} />
+                </div>
               </div>
             </section>
           ) : null}
@@ -243,10 +262,16 @@ export default function OnboardingPage() {
           {step === 4 ? (
             <section className="space-y-4">
               <StepIntro title="Nutrition preferences" detail="Use clear preferences and limitations. Unknown macros should stay reviewable, not invented." />
-              <MultiChoice label="Nutrition preferences" values={["Normal", "High protein", "Vegetarian", "Halal", "Egyptian food preferred", "Middle Eastern food preferred"]} selected={answers.nutrition_preferences} onChange={(nutrition_preferences) => setAnswers((current) => ({ ...current, nutrition_preferences }))} />
-              <div className="space-y-2">
-                <Label htmlFor="limitations">Allergies and limitations</Label>
-                <Input id="limitations" value={answers.allergies_limitations} onChange={(event) => setAnswers((current) => ({ ...current, allergies_limitations: event.target.value }))} placeholder="Optional allergies, injuries, weak areas, or foods to avoid" />
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Diet preferences</p>
+                <MultiChoice label="Nutrition preferences" values={["Normal", "High protein", "Vegetarian", "Halal", "Egyptian food preferred", "Middle Eastern food preferred"]} selected={answers.nutrition_preferences} onChange={(nutrition_preferences) => setAnswers((current) => ({ ...current, nutrition_preferences }))} />
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Limitations / allergies</p>
+                <div className="space-y-2">
+                  <Label htmlFor="limitations">Allergies and limitations</Label>
+                  <Input id="limitations" value={answers.allergies_limitations} onChange={(event) => setAnswers((current) => ({ ...current, allergies_limitations: event.target.value }))} placeholder="Optional allergies, injuries, weak areas, or foods to avoid" />
+                </div>
               </div>
             </section>
           ) : null}
@@ -271,17 +296,17 @@ export default function OnboardingPage() {
           ) : null}
 
           <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] z-20 -mx-4 flex items-center justify-between gap-3 border-t border-border/70 bg-card/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-t sm:bg-transparent sm:px-0 sm:pb-0 sm:backdrop-blur-none">
-            <Button variant="outline" disabled={step === 0} onClick={() => setStep((current) => Math.max(0, current - 1))}>
+            <Button variant="outline" disabled={step === 0} onClick={() => setStep((current) => Math.max(0, current - 1))} className="min-h-12">
               <ChevronLeft className="h-4 w-4" />
               Back
             </Button>
             {step < steps.length - 1 ? (
-              <Button onClick={() => setStep((current) => Math.min(steps.length - 1, current + 1))}>
+              <Button onClick={() => setStep((current) => Math.min(steps.length - 1, current + 1))} className="min-h-12">
                 Next
                 <ChevronRight className="h-4 w-4" />
               </Button>
             ) : (
-              <Button onClick={finish} disabled={isSaving}>
+              <Button onClick={finish} disabled={isSaving} className="min-h-12">
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 {isSaving ? "Saving profile..." : "Save profile"}
               </Button>
@@ -289,6 +314,9 @@ export default function OnboardingPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Mobile bottom spacer for nav */}
+      <div className="h-24 lg:hidden" />
     </>
   );
 }
