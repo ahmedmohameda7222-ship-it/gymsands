@@ -291,7 +291,7 @@ export function ApiFoodTools({
               <p className="font-semibold">{barcodeFood.name}</p>
               <p className="text-muted-foreground">{barcodeFood.brand ?? "Unknown brand"} | {macroLine(barcodeFood)}</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <Input type="number" min="0.1" step="0.1" value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder="Qty" />
+                <Input type="number" min="0.1" step="0.1" inputMode="decimal" enterKeyHint="done" value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder="Qty" />
                 <Select value={mealType} onValueChange={(value) => setMealType(value as MealType)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -323,8 +323,8 @@ export function ApiFoodTools({
                 ))}
               </SelectContent>
             </Select>
-            <Input type="number" min="1" value={minutes} onChange={(event) => setMinutes(event.target.value)} placeholder="Minutes" />
-            <Input type="number" min="1" value={weightKg} onChange={(event) => setWeightKg(event.target.value)} placeholder="Weight kg" />
+            <Input type="number" min="1" inputMode="numeric" enterKeyHint="done" value={minutes} onChange={(event) => setMinutes(event.target.value)} placeholder="Minutes" />
+            <Input type="number" min="1" inputMode="decimal" enterKeyHint="done" value={weightKg} onChange={(event) => setWeightKg(event.target.value)} placeholder="Weight kg" />
             <Button type="button" onClick={() => estimateExercise(false)}>Estimate</Button>
           </div>
           {exerciseEstimate ? (

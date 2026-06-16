@@ -227,7 +227,7 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
                     <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                       <div className="space-y-1">
                         <Label>Sets</Label>
-                        <Input type="number" min="1" value={exercise.sets ?? 3} onChange={(event) => updateExercise(index, { sets: Math.max(1, Number(event.target.value) || 1) })} />
+                        <Input type="number" min="1" inputMode="numeric" enterKeyHint="done" value={exercise.sets ?? 3} onChange={(event) => updateExercise(index, { sets: Math.max(1, Number(event.target.value) || 1) })} />
                       </div>
                       <div className="space-y-1">
                         <Label>Planned reps</Label>
@@ -235,7 +235,7 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
                       </div>
                       <div className="space-y-1">
                         <Label>Rest seconds</Label>
-                        <Input type="number" min="0" value={exercise.rest_seconds ?? 75} onChange={(event) => updateExercise(index, { rest_seconds: Math.max(0, Number(event.target.value) || 0) })} />
+                        <Input type="number" min="0" inputMode="numeric" enterKeyHint="done" value={exercise.rest_seconds ?? 75} onChange={(event) => updateExercise(index, { rest_seconds: Math.max(0, Number(event.target.value) || 0) })} />
                       </div>
                       <div className="space-y-1 sm:col-span-2 lg:col-span-1">
                         <Label>Custom video URL</Label>

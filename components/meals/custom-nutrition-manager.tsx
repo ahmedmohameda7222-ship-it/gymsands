@@ -367,13 +367,13 @@ export function CustomNutritionManager({
                   Add Subcategory
                 </Button>
               </div>
-              <Field label="Calories" type="number" value={foodDraft.calories} onChange={(calories) => patchFoodDraft({ calories })} />
-              <Field label="Protein" type="number" value={foodDraft.proteinG} onChange={(proteinG) => patchFoodDraft({ proteinG })} />
-              <Field label="Carbs" type="number" value={foodDraft.carbsG} onChange={(carbsG) => patchFoodDraft({ carbsG })} />
-              <Field label="Fat" type="number" value={foodDraft.fatG} onChange={(fatG) => patchFoodDraft({ fatG })} />
-              <Field label="Fiber optional" type="number" value={foodDraft.fiberG} onChange={(fiberG) => patchFoodDraft({ fiberG })} />
-              <Field label="Sugar optional" type="number" value={foodDraft.sugarG} onChange={(sugarG) => patchFoodDraft({ sugarG })} />
-              <Field label="Sodium mg optional" type="number" value={foodDraft.sodiumMg} onChange={(sodiumMg) => patchFoodDraft({ sodiumMg })} />
+              <Field label="Calories" type="number" inputMode="decimal" enterKeyHint="done" value={foodDraft.calories} onChange={(calories) => patchFoodDraft({ calories })} />
+              <Field label="Protein" type="number" inputMode="decimal" enterKeyHint="done" value={foodDraft.proteinG} onChange={(proteinG) => patchFoodDraft({ proteinG })} />
+              <Field label="Carbs" type="number" inputMode="decimal" enterKeyHint="done" value={foodDraft.carbsG} onChange={(carbsG) => patchFoodDraft({ carbsG })} />
+              <Field label="Fat" type="number" inputMode="decimal" enterKeyHint="done" value={foodDraft.fatG} onChange={(fatG) => patchFoodDraft({ fatG })} />
+              <Field label="Fiber optional" type="number" inputMode="decimal" enterKeyHint="done" value={foodDraft.fiberG} onChange={(fiberG) => patchFoodDraft({ fiberG })} />
+              <Field label="Sugar optional" type="number" inputMode="decimal" enterKeyHint="done" value={foodDraft.sugarG} onChange={(sugarG) => patchFoodDraft({ sugarG })} />
+              <Field label="Sodium mg optional" type="number" inputMode="decimal" enterKeyHint="done" value={foodDraft.sodiumMg} onChange={(sodiumMg) => patchFoodDraft({ sodiumMg })} />
               <Field label="Notes optional" value={foodDraft.notes} onChange={(notes) => patchFoodDraft({ notes })} />
             </div>
             <Button onClick={saveFood} disabled={isSaving}>
@@ -428,6 +428,8 @@ export function CustomNutritionManager({
                       type="number"
                       min="0.1"
                       step="0.1"
+                      inputMode="decimal"
+                      enterKeyHint="done"
                       value={item.quantity}
                       onChange={(event) => setMealItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value } : row))}
                     />
@@ -491,17 +493,21 @@ function Field({
   label,
   value,
   onChange,
-  type = "text"
+  type = "text",
+  inputMode,
+  enterKeyHint
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
+  inputMode?: React.InputHTMLAttributes<HTMLInputElement>['inputMode'];
+  enterKeyHint?: React.InputHTMLAttributes<HTMLInputElement>['enterKeyHint'];
 }) {
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <Input type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.1" : undefined} value={value} onChange={(event) => onChange(event.target.value)} />
+      <Input type={type} inputMode={inputMode} enterKeyHint={enterKeyHint} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.1" : undefined} value={value} onChange={(event) => onChange(event.target.value)} />
     </div>
   );
 }

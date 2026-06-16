@@ -795,7 +795,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><TimerReset className="h-5 w-5" /> Rest timer</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <div className="space-y-2"><Label>Timer seconds</Label><Input type="number" min="0" value={timerSeconds} onChange={(event) => setTimerSeconds(Math.max(0, Number(event.target.value) || 0))} /></div>
+              <div className="space-y-2"><Label>Timer seconds</Label><Input type="number" min="0" inputMode="numeric" enterKeyHint="done" value={timerSeconds} onChange={(event) => setTimerSeconds(Math.max(0, Number(event.target.value) || 0))} /></div>
               <div className="rounded-md bg-navy-950 p-5 text-center text-white"><Clock className="mx-auto h-6 w-6" /><p className="mt-2 text-4xl font-bold">{formatTime(timerLeft)}</p></div>
               <div className="grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => startRestTimer(timerSeconds)}>Start timer</Button><Button variant="outline" onClick={stopRestTimer}>Stop</Button></div>
             </CardContent>

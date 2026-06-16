@@ -10,6 +10,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError, logRecoverableError, technicalErrorDetails } from "@/lib/error-formatting";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { setDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
 import { getWorkoutActivity } from "@/services/database/workout-sessions";
 import { archiveWorkoutPlan, duplicateWorkoutPlan, getActiveWorkoutPlan, getAllUserWorkoutPlans, updateWorkoutPlanMetadata, workoutsFromLoadedPlanDay } from "@/services/database/workout-plan-loader";
@@ -45,6 +46,7 @@ function calendarDaysFromPlan(plan: UserWorkoutPlan) {
 }
 
 export function MyWorkoutPlans() {
+  const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
   const [plans, setPlans] = useState<UserWorkoutPlan[]>([]);
@@ -125,7 +127,7 @@ export function MyWorkoutPlans() {
       return;
     }
     const day = activeCalendarDays[todayIndex];
-    if (day.id) window.location.href = `/workouts/session/day/${day.id}`;
+    if (day.id) router.push(`/workouts/session/day/${day.id}`);
   }
 
   async function duplicatePlan(plan: UserWorkoutPlan) {

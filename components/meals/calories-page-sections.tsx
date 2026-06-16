@@ -30,7 +30,7 @@ export function formatDay(value: string) {
 }
 
 export function TargetField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <div className="space-y-2"><Label>{label}</Label><Input type="number" min="0" value={value} onChange={(event) => onChange(event.target.value)} /></div>;
+  return <div className="space-y-2"><Label>{label}</Label><Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={value} onChange={(event) => onChange(event.target.value)} /></div>;
 }
 
 export function TrackerCard({ label, value, target, unit, hasTarget }: { label: string; value: number; target: number; unit: string; hasTarget: boolean }) {
@@ -192,7 +192,7 @@ export function WaterCard({ waterTotal, waterGoal, customWaterMl, setCustomWater
       <CardContent className="space-y-3">
         <div><p className="text-2xl font-bold">{waterTotal} ml</p><p className="text-sm text-muted-foreground">Goal {waterGoal} ml</p><Progress value={percent(waterTotal, waterGoal)} className="mt-3" /></div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[250, 500, 750, 1000].map((amount) => <Button key={amount} type="button" variant="outline" size="sm" onClick={() => onAddWater(amount)}>+{amount === 1000 ? "1 L" : `${amount} ml`}</Button>)}</div>
-        <div className="grid gap-2 sm:grid-cols-[1fr_auto]"><Input type="number" min="1" value={customWaterMl} onChange={(event) => setCustomWaterMl(event.target.value)} /><Button type="button" onClick={() => onAddWater(Number(customWaterMl))}>Add water</Button></div>
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]"><Input type="number" min="1" inputMode="numeric" enterKeyHint="done" value={customWaterMl} onChange={(event) => setCustomWaterMl(event.target.value)} /><Button type="button" onClick={() => onAddWater(Number(customWaterMl))}>Add water</Button></div>
         <div className="space-y-2">{waterLogs.map((log) => <div key={log.id} className="flex items-center justify-between rounded-md border p-2 text-sm"><span>{log.amount_ml} ml</span><Button type="button" variant="ghost" size="icon" onClick={() => onRemoveWater(log)} aria-label="Delete water log"><Trash2 className="h-4 w-4" /></Button></div>)}</div>
       </CardContent>
     </Card>
