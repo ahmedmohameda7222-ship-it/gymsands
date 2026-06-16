@@ -489,3 +489,23 @@ export type WelcomeSettings = {
   show_frequency: "every_login" | "once_per_day";
   default_message: string;
 };
+
+
+export type UserAiPermissionSettings = {
+  id: string;
+  user_id: string;
+  access_mode: "full" | "custom";
+  scopes: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type AiPermissionSection =
+  | "workouts"
+  | "nutrition"
+  | "meal_plans"
+  | "hydration"
+  | "wellness"
+  | "progress"
+  | "profile"
+  | "settings";

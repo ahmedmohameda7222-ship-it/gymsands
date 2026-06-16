@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { serverEnv } from "@/lib/integrations/env";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { hashConnectionToken } from "@/lib/mcp/auth";
-import { MCP_DEFAULT_SCOPES, MCP_FULL_ACCESS_SCOPES, MCP_SUPPORTED_SCOPES, normalizeMcpScopes } from "@/lib/mcp/scopes";
+import { MCP_DEFAULT_SCOPES, MCP_SUPPORTED_SCOPES, normalizeMcpScopes, expandMcpScopes, migrateLegacyScopes } from "@/lib/mcp/scopes";
 
 type AuthorizationCodePayload = {
   clientHash: string;
@@ -177,6 +177,20 @@ export function oauthProtectedResourceMetadata(request: Request) {
   );
 }
 
+async function getUserAiScopes(userId: string): Promise<string[]> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("user_ai_permission_settings")
+    .select("scopes")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (data && !error && Array.isArray(data.scopes) && data.scopes.length > 0) {
+    return expandMcpScopes(data.scopes);
+  }
+  return MCP_DEFAULT_SCOPES;
+}
+
 export async function handleOAuthAuthorize(request: Request) {
   const url = new URL(request.url);
   const responseType = url.searchParams.get("response_type");
@@ -203,7 +217,8 @@ export async function handleOAuthAuthorize(request: Request) {
       return oauthErrorRedirect(redirectUri, state, "access_denied", "FitLife connection token is invalid or revoked.");
     }
 
-    const scope = normalizeMcpScopes(requestedScope, MCP_FULL_ACCESS_SCOPES).join(" ");
+    const userScopes = await getUserAiScopes(connection.user_id);
+    const scope = normalizeMcpScopes(requestedScope, userScopes).join(" ");
 
     const code = createAuthorizationCode({
       clientHash: connection.tokenHash,
@@ -256,7 +271,7 @@ export async function handleOAuthToken(request: Request) {
         access_token: clientId,
         token_type: "Bearer",
         expires_in: 60 * 60 * 24 * 30,
-        scope: payload.scope || MCP_FULL_ACCESS_SCOPES.join(" ")
+        scope: payload.scope || MCP_DEFAULT_SCOPES.join(" ")
       },
       { headers: metadataHeaders() }
     );

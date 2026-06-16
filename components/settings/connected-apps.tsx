@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Bot, CheckCircle2, Copy, ExternalLink, KeyRound, RefreshCcw, Settings2 } from "lucide-react";
+import { Shield, Bot, CheckCircle2, Copy, ExternalLink, KeyRound, RefreshCcw, Settings2 } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -157,6 +157,15 @@ export function ConnectedApps() {
               ChatGPT import is not ready for this deployment yet. Ask support to finish the connection setup.
             </p>
           ) : null}
+          <div className="rounded-2xl border border-border/70 bg-muted/30 p-3 text-sm">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-primary" />
+              <span className="font-medium text-foreground">AI Permissions</span>
+            </div>
+            <p className="mt-1 text-muted-foreground">
+              Control what ChatGPT can read and manage in your FitLife account. Review and update permissions in the <Link href="#ai-permissions" className="text-primary underline">AI Permissions</Link> section above.
+            </p>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => { setIsChatGptModalOpen(true); void loadConnections(); }} className="min-h-12">
               <ExternalLink className="h-4 w-4" /> {hasMcpServerUrl ? "Set up ChatGPT import" : "Import setup unavailable"}
@@ -187,7 +196,7 @@ export function ConnectedApps() {
             <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4 sm:p-5">
               <p className="font-semibold text-foreground">Simple import wizard</p>
               <ol className="mt-3 ml-5 list-decimal space-y-2 text-sm leading-6 text-muted-foreground">
-                <li>Generate a full-access FitLife connection code and copy it.</li>
+                <li>Generate a FitLife connection code and copy it. Access is controlled by your AI Permissions.</li>
                 <li>Open ChatGPT and connect FitLife Hub when ChatGPT asks for an app or connector.</li>
                 <li>Paste one starter prompt below, review the plan in ChatGPT, then approve the import into FitLife Hub.</li>
               </ol>
@@ -274,9 +283,9 @@ export function ConnectedApps() {
                   <p>Use the FitLife connection code if ChatGPT asks for authentication.</p>
                   <p className="font-semibold text-foreground">Allowed access:</p>
                   <div className="rounded-xl border border-border/70 bg-muted/30 p-3">
-                    <p className="text-sm font-semibold text-foreground">Full FitLife account access through ChatGPT MCP</p>
+                    <p className="text-sm font-semibold text-foreground">AI Permissions controlled access</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      ChatGPT can use every FitLife MCP tool for this account after connection: profile, dashboard summaries, nutrition, meal plans, training plans, workout logs, progress, wellness, and admin tools when the linked FitLife user is an admin.
+                      What ChatGPT can access depends on your AI Permissions settings. Review the AI Permissions section in Settings to manage read and write access for workouts, nutrition, meal plans, hydration, progress, wellness, and profile. Admin tools are never available through normal user MCP access.
                     </p>
                   </div>
                 </div>

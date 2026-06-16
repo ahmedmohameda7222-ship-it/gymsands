@@ -21,6 +21,7 @@ import { ProfileSummaryCard } from "@/components/settings/profile-summary-card";
 import { SetupProgressCard } from "@/components/settings/setup-progress-card";
 import { SettingsSectionCard } from "@/components/settings/settings-section-card";
 import { ConnectedApps } from "@/components/settings/connected-apps";
+import { AiPermissionsCard } from "@/components/settings/ai-permissions-card";
 import { getOnboarding } from "@/services/database/profile";
 import { getCalorieTargets, getTodayFoodLogs, getTodayMealPlanItems } from "@/services/database/nutrition";
 import { getProgressEntries } from "@/services/database/progress";
@@ -167,7 +168,12 @@ export default function SettingsPage() {
         />
       </div>
 
-      {/* 5. Connected apps / ChatGPT import / MCP */}
+      {/* 5. AI Permissions */}
+      <section id="ai-permissions" className="mt-4 scroll-mt-24">
+        <AiPermissionsCard />
+      </section>
+
+      {/* 6. Connected apps / ChatGPT import / MCP */}
       <section id="connected-apps" className="mt-4 scroll-mt-24">
         <ConnectedApps />
       </section>

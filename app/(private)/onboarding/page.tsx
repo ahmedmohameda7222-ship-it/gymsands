@@ -12,9 +12,15 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { getOnboarding, saveOnboarding } from "@/services/database/profile";
+import {
+  getDefaultAiPermissionConfig,
+  saveAiPermissionSettings,
+  type AiPermissionConfig,
+  ALL_AI_PERMISSION_SECTIONS
+} from "@/services/database/ai-permissions";
 import { getWorkoutPlanDurationOptions, getWorkoutPlanWeekOptions } from "@/services/database/workout-plans";
 
-const steps = ["Basic info", "Goals", "Training", "Schedule", "Nutrition", "Review"];
+const steps = ["Basic info", "Goals", "Training", "Schedule", "Nutrition", "AI Permissions", "Review"];
 const goalOptions = [
   "Lose fat",
   "Build muscle",
@@ -65,6 +71,7 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [answers, setAnswers] = useState(defaultAnswers);
+  const [aiPermissions, setAiPermissions] = useState<AiPermissionConfig>(getDefaultAiPermissionConfig);
   const [weekOptions, setWeekOptions] = useState<number[]>([1, 2, 3, 4]);
   const [durationOptions, setDurationOptions] = useState<number[]>([20, 30, 45, 60, 75]);
 
@@ -132,6 +139,7 @@ export default function OnboardingPage() {
         goal: answers.goals.join(", "),
         user_id: user.id
       });
+      await saveAiPermissionSettings(user.id, aiPermissions);
       toast({
         title: "Profile saved",
         description: "Create your plan in ChatGPT, then export it to FitLife Hub for tracking."
@@ -279,6 +287,105 @@ export default function OnboardingPage() {
 
           {step === 5 ? (
             <section className="space-y-4">
+              <StepIntro title="AI Permissions" detail="Choose what access AI should have to your FitLife account during setup." />
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <ChoiceGroup
+                    label="AI Access Mode"
+                    value={aiPermissions.accessMode === "full" ? "Full AI Access" : "Custom AI Access"}
+                    values={["Full AI Access", "Custom AI Access"]}
+                    onChange={(value) =>
+                      setAiPermissions((current) => ({
+                        ...current,
+                        accessMode: value === "Full AI Access" ? "full" : "custom"
+                      }))
+                    }
+                  />
+                </div>
+
+                {aiPermissions.accessMode === "full" ? (
+                  <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+                    <p className="font-semibold text-foreground">Full AI Access</p>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      AI can read and manage your workouts, nutrition, meal plans, food logs, hydration, wellness, progress, and profile data.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Choose sections AI can access</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {ALL_AI_PERMISSION_SECTIONS.map((section) => (
+                        <div key={section} className="rounded-2xl border bg-card p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-semibold capitalize">{section.replace("_", " ")}</p>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setAiPermissions((current) => ({
+                                    ...current,
+                                    sections: {
+                                      ...current.sections,
+                                      [section]: {
+                                        ...current.sections[section],
+                                        read: !current.sections[section].read
+                                      }
+                                    }
+                                  }))
+                                }
+                                className={`rounded-lg border px-2 py-1 text-xs font-medium transition ${
+                                  aiPermissions.sections[section].read
+                                    ? "border-primary bg-primary/10 text-primary"
+                                    : "bg-muted text-muted-foreground"
+                                }`}
+                              >
+                                Read
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setAiPermissions((current) => {
+                                    const nextWrite = !current.sections[section].write;
+                                    return {
+                                      ...current,
+                                      sections: {
+                                        ...current.sections,
+                                        [section]: {
+                                          read: nextWrite ? true : current.sections[section].read,
+                                          write: nextWrite
+                                        }
+                                      }
+                                    };
+                                  })
+                                }
+                                className={`rounded-lg border px-2 py-1 text-xs font-medium transition ${
+                                  aiPermissions.sections[section].write
+                                    ? "border-primary bg-primary/10 text-primary"
+                                    : "bg-muted text-muted-foreground"
+                                }`}
+                              >
+                                Write
+                              </button>
+                            </div>
+                          </div>
+                          {aiPermissions.sections[section].write ? (
+                            <p className="text-xs text-muted-foreground">Write access includes read access for this section.</p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="rounded-2xl border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
+                  You can change or revoke AI access anytime from Settings.
+                </div>
+              </div>
+            </section>
+          ) : null}
+
+          {step === 6 ? (
+            <section className="space-y-4">
               <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
                 <h2 className="text-lg font-semibold">Review before saving</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -292,6 +399,7 @@ export default function OnboardingPage() {
                 <ReviewItem label="Equipment" value={answers.available_equipment.join(", ")} />
                 <ReviewItem label="Nutrition" value={answers.nutrition_preferences.join(", ")} />
                 <ReviewItem label="Limitations" value={answers.allergies_limitations || "None added"} />
+                <ReviewItem label="AI Access" value={aiPermissions.accessMode === "full" ? "Full AI Access" : "Custom AI Access"} />
               </div>
             </section>
           ) : null}
