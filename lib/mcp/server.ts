@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticateMcpRequest, type McpContext } from "@/lib/mcp/auth";
+import { hasAnyScope, readScopeAllowed, hasScope, MCP_SCOPES } from "@/lib/mcp/scopes";
 import { executeMcpTool, type McpToolResult } from "@/lib/mcp/tool-executor-safe";
 import { mcpTools, type McpToolDefinition } from "@/lib/mcp/tools";
 import { serverEnv } from "@/lib/integrations/env";
@@ -49,35 +50,135 @@ function rpcError(id: JsonRpcRequest["id"], code: number, message: string, reque
   return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, error: { code, message } }, { status: code === -32601 ? 404 : 400, headers: corsHeaders(request) });
 }
 
-function hasAnyScope(ctx: McpContext, scopes: string[]) {
-  const current = new Set(ctx.scopes ?? []);
-  return current.has("fitlife.all") || scopes.some((scope) => current.has(scope));
+function mcpHasAnyScope(ctx: McpContext, scopes: string[]) {
+  return hasAnyScope(ctx.scopes, scopes);
 }
 
-function readScopeAllowed(ctx: McpContext) {
-  return ctx.scopes.some((scope) => scope === "fitlife.all" || scope.endsWith(".read") || scope.endsWith(".write"));
+function mcpReadScopeAllowed(ctx: McpContext) {
+  return readScopeAllowed(ctx.scopes);
 }
 
-function requiredScopesForTool(tool: McpToolDefinition) {
-  if (tool.risk === "admin") return ["fitlife.admin"];
-  if (tool.risk === "read") return ["fitlife.profile.read", "fitlife.summary.read"];
+/**
+ * Map each MCP tool to its required scope(s).
+ * Write access implies read within the same section only.
+ * Admin tools require fitlife.admin AND an admin role.
+ */
+export function requiredScopesForTool(tool: McpToolDefinition): string[] {
+  if (tool.risk === "admin") return [MCP_SCOPES.admin];
 
   const name = tool.name;
-  if (/food|meal|calorie|water|kitchen|nutrition/i.test(name)) return ["fitlife.nutrition.write"];
-  if (/workout|exercise|plan|personal_record|training/i.test(name)) return ["fitlife.training.write"];
-  if (/weight|body_measurement|progress/i.test(name)) return ["fitlife.progress.write"];
-  if (/profile|goal/i.test(name)) return ["fitlife.profile.write", "fitlife.progress.write"];
-  if (/habit|daily_fit|sleep|recovery|supplement/i.test(name)) return ["fitlife.wellness.write", "fitlife.progress.write"];
-  return ["fitlife.summary.write"];
-}
 
-function canUseTool(ctx: McpContext, tool: McpToolDefinition) {
-  if (tool.risk === "admin") {
-    return ctx.profile.role === "admin" && hasAnyScope(ctx, requiredScopesForTool(tool));
+  // Profile / identity read tools
+  if (name === "get_fitlife_status" || name === "get_user_profile") {
+    return [MCP_SCOPES.profileRead];
   }
 
-  if (tool.risk === "read") return readScopeAllowed(ctx);
-  return hasAnyScope(ctx, requiredScopesForTool(tool));
+  // Dashboard summary read
+  if (name === "get_today_summary") {
+    return [MCP_SCOPES.profileRead, MCP_SCOPES.nutritionRead, MCP_SCOPES.workoutsRead, MCP_SCOPES.wellnessRead];
+  }
+
+  // Nutrition read
+  if (name === "search_foods" || name === "get_kitchens" || name === "get_foods_by_kitchen" || name === "get_food_logs_by_date" || name === "get_today_calories") {
+    return [MCP_SCOPES.nutritionRead];
+  }
+
+  // Nutrition write
+  if (name === "create_kitchen" || name === "update_kitchen" || name === "assign_food_to_kitchen" || name === "add_food_log" || name === "update_food_log" || name === "move_food_log_meal_type" || name === "create_custom_food" || name === "create_custom_meal") {
+    return [MCP_SCOPES.nutritionWrite];
+  }
+
+  // Nutrition destructive (still nutrition, but requires confirmation)
+  if (name === "delete_kitchen" || name === "delete_food_log") {
+    return [MCP_SCOPES.nutritionWrite];
+  }
+
+  // Meal plans read
+  if (name === "get_meal_plan" || name === "get_meal_plan_for_date" || name === "get_meal_plan_for_week" || name === "generate_shopping_list") {
+    return [MCP_SCOPES.mealPlansRead];
+  }
+
+  // Meal plans write
+  if (name === "create_meal_plan_item" || name === "create_day_meal_plan" || name === "create_week_meal_plan" || name === "update_meal_plan_item" || name === "replace_meal_plan_item" || name === "delete_meal_plan_item" || name === "mark_meal_plan_item_done") {
+    return [MCP_SCOPES.mealPlansWrite];
+  }
+
+  // Hydration read
+  if (name === "get_water_summary") {
+    return [MCP_SCOPES.hydrationRead];
+  }
+
+  // Hydration write
+  if (name === "add_water_log" || name === "delete_water_log") {
+    return [MCP_SCOPES.hydrationWrite];
+  }
+
+  // Workouts read
+  if (name === "get_workout_plans" || name === "get_workout_plan_by_id" || name === "get_today_workout") {
+    return [MCP_SCOPES.workoutsRead];
+  }
+
+  // Workouts write
+  if (name === "create_custom_workout_plan" || name === "save_chatgpt_workout_plan" || name === "generate_workout_plan" || name === "create_workout_plan_day" || name === "update_workout_plan_day" || name === "add_exercise_to_plan_day" || name === "add_warmup_to_plan_day" || name === "add_cardio_to_plan_day" || name === "add_cooldown_to_plan_day" || name === "update_plan_exercise" || name === "start_workout" || name === "log_exercise_sets" || name === "complete_workout" || name === "skip_workout") {
+    return [MCP_SCOPES.workoutsWrite];
+  }
+
+  // Workouts destructive (still workouts, but requires confirmation)
+  if (name === "delete_workout_plan_day" || name === "delete_plan_exercise" || name === "activate_workout_plan" || name === "delete_workout_plan") {
+    return [MCP_SCOPES.workoutsWrite];
+  }
+
+  // Progress read
+  if (name === "get_personal_records" || name === "get_progress_summary") {
+    return [MCP_SCOPES.progressRead];
+  }
+
+  // Progress write
+  if (name === "add_personal_record" || name === "add_weight_entry" || name === "add_body_measurement") {
+    return [MCP_SCOPES.progressWrite];
+  }
+
+  // Profile write
+  if (name === "update_user_profile" || name === "update_training_goal" || name === "update_body_goal") {
+    return [MCP_SCOPES.profileWrite];
+  }
+
+  // Settings write (targets and safe settings)
+  if (name === "update_calorie_target" || name === "update_water_target") {
+    return [MCP_SCOPES.settingsWrite];
+  }
+
+  // Wellness read
+  if (name === "get_daily_fit_tasks" || name === "get_habits" || name === "get_sleep_recovery_summary" || name === "get_today_supplements") {
+    return [MCP_SCOPES.wellnessRead];
+  }
+
+  // Wellness write
+  if (name === "create_daily_fit_task" || name === "mark_daily_fit_task_done" || name === "mark_daily_fit_task_skipped" || name === "create_habit" || name === "mark_habit_done" || name === "add_sleep_recovery_log" || name === "add_supplement_log" || name === "mark_supplement_taken") {
+    return [MCP_SCOPES.wellnessWrite];
+  }
+
+  // Fallback: any unknown read tool needs any read scope; unknown write needs any write scope
+  if (tool.risk === "read") {
+    return [MCP_SCOPES.profileRead, MCP_SCOPES.nutritionRead, MCP_SCOPES.workoutsRead, MCP_SCOPES.wellnessRead, MCP_SCOPES.progressRead, MCP_SCOPES.mealPlansRead, MCP_SCOPES.hydrationRead, MCP_SCOPES.settingsRead];
+  }
+  return [MCP_SCOPES.workoutsWrite, MCP_SCOPES.nutritionWrite, MCP_SCOPES.mealPlansWrite, MCP_SCOPES.hydrationWrite, MCP_SCOPES.progressWrite, MCP_SCOPES.wellnessWrite, MCP_SCOPES.profileWrite, MCP_SCOPES.settingsWrite];
+}
+
+export function canUseTool(ctx: McpContext, tool: McpToolDefinition) {
+  // Admin tools are NEVER available through normal MCP access, even if the user has the admin scope.
+  // Admin tools require the user to be an admin in the FitLife system AND have the admin scope.
+  if (tool.risk === "admin") {
+    return ctx.profile.role === "admin" && mcpHasAnyScope(ctx, requiredScopesForTool(tool));
+  }
+
+  // Read tools require any read scope (after write->read expansion within same section)
+  if (tool.risk === "read") {
+    return mcpReadScopeAllowed(ctx);
+  }
+
+  // Write/ destructive tools require the specific scope
+  return mcpHasAnyScope(ctx, requiredScopesForTool(tool));
 }
 
 async function auditToolCall(ctx: McpContext, toolName: string, input: unknown, result: McpToolResult) {

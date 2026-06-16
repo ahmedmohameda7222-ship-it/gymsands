@@ -1,34 +1,68 @@
 export const MCP_SCOPES = {
+  fullAccess: "fitlife.full_access",
+
+  workoutsRead: "fitlife.workouts.read",
+  workoutsWrite: "fitlife.workouts.write",
+
+  nutritionRead: "fitlife.nutrition.read",
+  nutritionWrite: "fitlife.nutrition.write",
+
+  mealPlansRead: "fitlife.meal_plans.read",
+  mealPlansWrite: "fitlife.meal_plans.write",
+
+  hydrationRead: "fitlife.hydration.read",
+  hydrationWrite: "fitlife.hydration.write",
+
+  progressRead: "fitlife.progress.read",
+  progressWrite: "fitlife.progress.write",
+
+  wellnessRead: "fitlife.wellness.read",
+  wellnessWrite: "fitlife.wellness.write",
+
   profileRead: "fitlife.profile.read",
   profileWrite: "fitlife.profile.write",
-  summaryRead: "fitlife.summary.read",
-  nutritionWrite: "fitlife.nutrition.write",
-  trainingWrite: "fitlife.training.write",
-  progressWrite: "fitlife.progress.write",
-  wellnessWrite: "fitlife.wellness.write",
+
+  settingsRead: "fitlife.settings.read",
+  settingsWrite: "fitlife.settings.write",
+
   admin: "fitlife.admin",
-  all: "fitlife.all"
+  all: "fitlife.all" // legacy alias, prefer fullAccess
 } as const;
 
-export const MCP_SUPPORTED_SCOPES = [
+// Normal user scopes (non-admin)
+export const MCP_NORMAL_USER_SCOPES = [
+  MCP_SCOPES.workoutsRead,
+  MCP_SCOPES.workoutsWrite,
+  MCP_SCOPES.nutritionRead,
+  MCP_SCOPES.nutritionWrite,
+  MCP_SCOPES.mealPlansRead,
+  MCP_SCOPES.mealPlansWrite,
+  MCP_SCOPES.hydrationRead,
+  MCP_SCOPES.hydrationWrite,
+  MCP_SCOPES.progressRead,
+  MCP_SCOPES.progressWrite,
+  MCP_SCOPES.wellnessRead,
+  MCP_SCOPES.wellnessWrite,
   MCP_SCOPES.profileRead,
   MCP_SCOPES.profileWrite,
-  MCP_SCOPES.summaryRead,
-  MCP_SCOPES.nutritionWrite,
-  MCP_SCOPES.trainingWrite,
-  MCP_SCOPES.progressWrite,
-  MCP_SCOPES.wellnessWrite,
+  MCP_SCOPES.settingsRead,
+  MCP_SCOPES.settingsWrite
+];
+
+export const MCP_SUPPORTED_SCOPES = [
+  MCP_SCOPES.fullAccess,
+  ...MCP_NORMAL_USER_SCOPES,
   MCP_SCOPES.admin,
   MCP_SCOPES.all
 ];
 
-export const MCP_FULL_ACCESS_SCOPES = MCP_SUPPORTED_SCOPES;
+export const MCP_FULL_ACCESS_SCOPES = [MCP_SCOPES.fullAccess, ...MCP_NORMAL_USER_SCOPES];
 
 export const MCP_DEFAULT_SCOPES = MCP_FULL_ACCESS_SCOPES;
 
 const supportedScopeSet = new Set<string>(MCP_SUPPORTED_SCOPES);
 
-export function normalizeMcpScopes(input: unknown, fallback = MCP_DEFAULT_SCOPES) {
+export function normalizeMcpScopes(input: unknown, fallback: readonly string[] = MCP_DEFAULT_SCOPES) {
   const raw = Array.isArray(input)
     ? input
     : typeof input === "string"
@@ -40,4 +74,117 @@ export function normalizeMcpScopes(input: unknown, fallback = MCP_DEFAULT_SCOPES
     .filter((scope) => supportedScopeSet.has(scope));
 
   return Array.from(new Set(clean.length ? clean : fallback));
+}
+
+/**
+ * Expand a set of scopes so that write scopes imply read scopes within the same section.
+ * Example: fitlife.nutrition.write implies fitlife.nutrition.read
+ * Does NOT cross sections: fitlife.nutrition.write does NOT imply fitlife.workouts.read
+ */
+export function expandMcpScopes(scopes: string[]): string[] {
+  const expanded = new Set(scopes);
+
+  // fitlife.full_access implies all normal user scopes
+  if (expanded.has(MCP_SCOPES.fullAccess) || expanded.has(MCP_SCOPES.all)) {
+    MCP_NORMAL_USER_SCOPES.forEach((s) => expanded.add(s));
+  }
+
+  // Section write implies section read
+  const writeToReadMap: Record<string, string> = {
+    [MCP_SCOPES.workoutsWrite]: MCP_SCOPES.workoutsRead,
+    [MCP_SCOPES.nutritionWrite]: MCP_SCOPES.nutritionRead,
+    [MCP_SCOPES.mealPlansWrite]: MCP_SCOPES.mealPlansRead,
+    [MCP_SCOPES.hydrationWrite]: MCP_SCOPES.hydrationRead,
+    [MCP_SCOPES.progressWrite]: MCP_SCOPES.progressRead,
+    [MCP_SCOPES.wellnessWrite]: MCP_SCOPES.wellnessRead,
+    [MCP_SCOPES.profileWrite]: MCP_SCOPES.profileRead,
+    [MCP_SCOPES.settingsWrite]: MCP_SCOPES.settingsRead
+  };
+
+  for (const [writeScope, readScope] of Object.entries(writeToReadMap)) {
+    if (expanded.has(writeScope)) {
+      expanded.add(readScope);
+    }
+  }
+
+  return Array.from(expanded);
+}
+
+/**
+ * Check if a set of granted scopes includes a required scope, respecting
+ * section-only write->read implication and full_access.
+ */
+export function hasScope(grantedScopes: string[], requiredScope: string): boolean {
+  const expanded = new Set(expandMcpScopes(grantedScopes));
+  return expanded.has(requiredScope);
+}
+
+/**
+ * Check if any of the required scopes are present in the granted scopes.
+ */
+export function hasAnyScope(grantedScopes: string[], requiredScopes: string[]): boolean {
+  const expanded = new Set(expandMcpScopes(grantedScopes));
+  return requiredScopes.some((scope) => expanded.has(scope));
+}
+
+/**
+ * Migrate old scope names to new canonical names.
+ * Used for backward compatibility with chatgpt_connections.scopes that were
+ * written before the AI Permissions feature.
+ */
+export function migrateLegacyScopes(scopes: string[]): string[] {
+  const migrated = new Set<string>();
+
+  for (const scope of scopes) {
+    if (scope === "fitlife.all") {
+      migrated.add(MCP_SCOPES.fullAccess);
+      MCP_NORMAL_USER_SCOPES.forEach((s) => migrated.add(s));
+    } else if (scope === "fitlife.training.write") {
+      migrated.add(MCP_SCOPES.workoutsWrite);
+      migrated.add(MCP_SCOPES.workoutsRead);
+    } else if (scope === "fitlife.nutrition.write") {
+      migrated.add(MCP_SCOPES.nutritionWrite);
+      migrated.add(MCP_SCOPES.nutritionRead);
+      migrated.add(MCP_SCOPES.mealPlansWrite);
+      migrated.add(MCP_SCOPES.mealPlansRead);
+      migrated.add(MCP_SCOPES.hydrationWrite);
+      migrated.add(MCP_SCOPES.hydrationRead);
+    } else if (scope === "fitlife.progress.write") {
+      migrated.add(MCP_SCOPES.progressWrite);
+      migrated.add(MCP_SCOPES.progressRead);
+    } else if (scope === "fitlife.wellness.write") {
+      migrated.add(MCP_SCOPES.wellnessWrite);
+      migrated.add(MCP_SCOPES.wellnessRead);
+    } else if (scope === "fitlife.profile.write") {
+      migrated.add(MCP_SCOPES.profileWrite);
+      migrated.add(MCP_SCOPES.profileRead);
+    } else if (scope === "fitlife.profile.read") {
+      migrated.add(MCP_SCOPES.profileRead);
+    } else if (scope === "fitlife.summary.read") {
+      // Legacy summary read was a generic read indicator. Map to profile read
+      // and settings read as a safe fallback, since summary often included
+      // dashboard-level data.
+      migrated.add(MCP_SCOPES.profileRead);
+      migrated.add(MCP_SCOPES.settingsRead);
+    } else if (scope === "fitlife.admin") {
+      migrated.add(MCP_SCOPES.admin);
+    } else if (supportedScopeSet.has(scope)) {
+      migrated.add(scope);
+    }
+  }
+
+  return normalizeMcpScopes(Array.from(migrated));
+}
+
+/**
+ * Determine if the granted scopes allow read access.
+ * Read access is allowed if full_access is present, or any .read scope, or any .write scope (which implies .read in same section).
+ */
+export function readScopeAllowed(grantedScopes: string[]): boolean {
+  const expanded = new Set(expandMcpScopes(grantedScopes));
+  return (
+    expanded.has(MCP_SCOPES.fullAccess) ||
+    expanded.has(MCP_SCOPES.all) ||
+    Array.from(expanded).some((scope) => scope.endsWith(".read") || scope.endsWith(".write"))
+  );
 }

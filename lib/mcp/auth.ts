@@ -3,7 +3,12 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { serverEnv } from "@/lib/integrations/env";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
-import { MCP_FULL_ACCESS_SCOPES } from "@/lib/mcp/scopes";
+import {
+  MCP_SCOPES,
+  MCP_DEFAULT_SCOPES,
+  expandMcpScopes,
+  migrateLegacyScopes
+} from "@/lib/mcp/scopes";
 
 export type McpProfile = {
   id: string;
@@ -172,11 +177,32 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
 
   await supabase.from("chatgpt_connections").update({ last_used_at: new Date().toISOString() }).eq("id", connection.id);
 
+  // Source of truth: user_ai_permission_settings
+  let resolvedScopes: string[] = [];
+  const { data: permissionSettings, error: permissionError } = await supabase
+    .from("user_ai_permission_settings")
+    .select("access_mode,scopes")
+    .eq("user_id", connection.user_id)
+    .maybeSingle();
+
+  if (permissionSettings && !permissionError) {
+    // Use stored user AI permission settings as the source of truth
+    resolvedScopes = expandMcpScopes(permissionSettings.scopes ?? []);
+  } else if (connection.scopes && Array.isArray(connection.scopes) && connection.scopes.length > 0) {
+    // Fallback: migrate legacy connection scopes for backward compatibility
+    resolvedScopes = expandMcpScopes(migrateLegacyScopes(connection.scopes));
+  }
+
+  // Safety: if no valid permission settings and no legacy scopes, deny access
+  if (!resolvedScopes.length || resolvedScopes.length === 0) {
+    return unauthorizedMcpResponse(request, "AI permission settings are missing for this account. Please configure AI Permissions in Settings.", 403);
+  }
+
   return {
     supabase,
     userId: connection.user_id,
     connectionId: connection.id,
-    scopes: MCP_FULL_ACCESS_SCOPES,
+    scopes: resolvedScopes,
     profile: profile as McpProfile
   };
 }
