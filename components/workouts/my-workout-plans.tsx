@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, CalendarDays, Copy, Dumbbell, Edit3, Plus, RefreshCcw, Save, Star } from "lucide-react";
+import { Archive, CalendarDays, Copy, Dumbbell, Edit3, MoreHorizontal, Play, Plus, RefreshCcw, Save, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,14 @@ import { WorkoutCalendar } from "@/components/workouts/workout-calendar";
 import { Input } from "@/components/ui/input";
 import type { UserWorkoutPlan, WorkoutSession } from "@/types";
 
-type PlanMeta = Omit<UserWorkoutPlan, "source"> & { source?: string; chatgpt_source?: boolean };
+type PlanMeta = Omit<UserWorkoutPlan, "source"> & {
+  source?: string;
+  chatgpt_source?: boolean;
+  program_duration_weeks?: number | null;
+  duration_weeks?: number | null;
+  days_per_week?: number | null;
+  session_duration_minutes?: number | null;
+};
 
 function isChatGptPlan(plan: UserWorkoutPlan | null) {
   const meta = plan as PlanMeta | null;
@@ -173,19 +180,21 @@ export function MyWorkoutPlans() {
     }
   }
 
+  const activeExerciseCount = activePlan ? activePlan.days.reduce((sum, day) => sum + day.exercises.length, 0) : 0;
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Workout Plans</h2>
-          <p className="text-sm text-muted-foreground">Imported plans are recommended. Manual tools are for backup, repair, and small edits.</p>
+          <p className="text-sm text-muted-foreground">Imported plans stay primary. Manual tools are kept as backup, repair, and small-edit controls.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={loadPlans} disabled={isLoading}>
             <RefreshCcw className="h-4 w-4" /> Refresh
           </Button>
           <Button variant="outline" onClick={() => setShowBuilder((current) => !current)}>
-            <Plus className="h-4 w-4" /> {showBuilder ? "Close manual fallback" : "Manual backup / edit plan"}
+            <Plus className="h-4 w-4" /> {showBuilder ? "Close manual fallback" : "Manual backup"}
           </Button>
         </div>
       </div>
@@ -193,38 +202,42 @@ export function MyWorkoutPlans() {
       {isLoading ? <CardGridSkeleton count={3} rows={4} /> : null}
 
       {!isLoading && loadError ? (
-        <ErrorState
-          title="Workout plans could not load"
-          description={loadError}
-          onRetry={loadPlans}
-          fallbackLabel="Open ChatGPT setup"
-          fallbackHref="/settings"
-          details={loadErrorDetails}
-        />
+        <ErrorState title="Workout plans could not load" description={loadError} onRetry={loadPlans} fallbackLabel="Open ChatGPT setup" fallbackHref="/settings" details={loadErrorDetails} />
       ) : null}
 
       {!isLoading && !loadError && activePlan ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex flex-wrap items-center gap-2">
-              Active plan <Badge>{activePlan.name}</Badge>
-              {isChatGptPlan(activePlan) ? <Badge variant="outline">ChatGPT</Badge> : null}
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">Weekly calendar is loaded from the saved active plan days and exercises.</p>
-          </CardHeader>
-          <CardContent>
-            <WorkoutCalendar days={activeCalendarDays} activity={activity} activeDayIndex={activeDayIndex} onSelectDay={setActiveDayIndex} onStartToday={startToday} />
+        <Card className="overflow-hidden border-primary/20">
+          <CardContent className="grid gap-5 p-0 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="bg-primary p-5 text-primary-foreground sm:p-6">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">Active plan</Badge>
+                {isChatGptPlan(activePlan) ? <Badge variant="outline" className="border-primary-foreground/30 text-primary-foreground">Imported</Badge> : <Badge variant="outline" className="border-primary-foreground/30 text-primary-foreground">{sourceBadge(activePlan)}</Badge>}
+              </div>
+              <h2 className="mt-4 text-2xl font-semibold tracking-tight">{activePlan.name}</h2>
+              <p className="mt-3 text-sm leading-6 text-primary-foreground/80">Your weekly calendar is loaded from saved active plan days and exercises. No generated or demo workout data is shown.</p>
+              <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
+                <MiniStat label="Days" value={String(activePlan.days.length)} />
+                <MiniStat label="Exercises" value={String(activeExerciseCount)} />
+                <MiniStat label="Source" value={sourceBadge(activePlan)} />
+              </div>
+              <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                <Button type="button" variant="secondary" onClick={startToday}>
+                  <Play className="h-4 w-4" /> Start today
+                </Button>
+                <Button asChild variant="outline" className="border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10">
+                  <Link href={`/my-workout/plans/${activePlan.id}`}>Open active plan</Link>
+                </Button>
+              </div>
+            </div>
+            <div className="p-4 sm:p-5">
+              <WorkoutCalendar days={activeCalendarDays} activity={activity} activeDayIndex={activeDayIndex} onSelectDay={setActiveDayIndex} onStartToday={startToday} />
+            </div>
           </CardContent>
         </Card>
       ) : null}
 
       {!isLoading && !loadError && !plans.length ? (
-        <EmptyState
-          title="No workout plans yet"
-          description="Import a workout plan from ChatGPT to start scheduling and tracking real saved exercises. The app will not show fake workout data here."
-          actionLabel="Set up ChatGPT import"
-          actionHref="/settings"
-        />
+        <EmptyState title="No workout plans yet" description="Import a workout plan from ChatGPT to start scheduling and tracking real saved exercises. The app will not show fake workout data here." actionLabel="Set up ChatGPT import" actionHref="/settings" />
       ) : null}
 
       {!isLoading && !loadError ? (
@@ -234,15 +247,31 @@ export function MyWorkoutPlans() {
             const isDefault = plan.is_default ?? plan.is_active;
             const sourceLabel = sourceBadge(plan);
             const quality = analyzeImportedWorkoutPlan(plan);
+            const meta = plan as PlanMeta;
             return (
-              <Card key={plan.id}>
-                <CardHeader>
-                  <CardTitle className="flex items-start justify-between gap-3">
-                    <span>{plan.name}</span>
-                    {isDefault ? <Badge>Default</Badge> : <Badge variant="outline">{sourceLabel}</Badge>}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
+              <Card key={plan.id} className="overflow-hidden border-border/70">
+                <CardContent className="space-y-4 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="mb-2 flex flex-wrap gap-2">
+                        {isDefault ? <Badge>Default</Badge> : <Badge variant="outline">{sourceLabel}</Badge>}
+                        {quality.status !== "ready" ? <Badge variant="outline">Needs review</Badge> : null}
+                      </div>
+                      <h3 className="line-clamp-2 text-base font-semibold leading-6 text-foreground">{plan.name}</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">{plan.days.length} day plan · {exerciseCount} exercises{meta.session_duration_minutes ? ` · ${meta.session_duration_minutes} min` : ""}</p>
+                    </div>
+                    <PlanActions
+                      plan={plan}
+                      isDefault={isDefault}
+                      quality={quality}
+                      busyPlanId={busyPlanId}
+                      onDefault={setDefaultPlan}
+                      onDuplicate={duplicatePlan}
+                      onArchive={archivePlan}
+                      onEdit={(nextPlan) => { setEditingPlanId(nextPlan.id); setEditName(nextPlan.name); }}
+                    />
+                  </div>
+
                   {editingPlanId === plan.id ? (
                     <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                       <Input value={editName} onChange={(event) => setEditName(event.target.value)} aria-label="Plan name" />
@@ -251,31 +280,16 @@ export function MyWorkoutPlans() {
                       </Button>
                     </div>
                   ) : null}
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-md bg-muted/40 p-3"><CalendarDays className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-xl font-semibold text-foreground">{plan.days.length}</p><p className="text-xs text-muted-foreground">Days</p></div>
-                    <div className="rounded-md bg-muted/40 p-3"><Dumbbell className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-xl font-semibold text-foreground">{exerciseCount}</p><p className="text-xs text-muted-foreground">Exercises</p></div>
+
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <PlanFact label="Days" value={String(plan.days.length)} icon={CalendarDays} />
+                    <PlanFact label="Exercises" value={String(exerciseCount)} icon={Dumbbell} />
+                    <PlanFact label="Duration" value={planDurationLabel(plan)} icon={CalendarDays} />
                   </div>
-                  <PlanQualityPanel quality={quality} />
-                  <div className="flex flex-wrap gap-2">
-                    {plan.days.slice(0, 4).map((day) => <Badge key={day.id} variant="outline">{day.weekday ?? day.day_name}</Badge>)}
-                  </div>
-                  <div className="grid gap-2">
-                    <Button asChild className="w-full"><Link href={`/my-workout/plans/${plan.id}`}>Open Plan</Link></Button>
-                    <Button type="button" variant={isDefault ? "secondary" : "outline"} className="w-full" onClick={() => setDefaultPlan(plan)} disabled={isDefault || busyPlanId === plan.id}>
-                      <Star className="h-4 w-4" /> {isDefault ? "Default Plan" : "Set as Default Plan"}
-                    </Button>
-                    <div className="grid grid-cols-3 gap-2">
-                      <Button type="button" variant="outline" size="sm" onClick={() => { setEditingPlanId(plan.id); setEditName(plan.name); }} aria-label="Edit plan name">
-                        <Edit3 className="h-4 w-4" />
-                      </Button>
-                      <Button type="button" variant="outline" size="sm" onClick={() => duplicatePlan(plan)} disabled={busyPlanId === plan.id} aria-label="Duplicate plan">
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      <Button type="button" variant="outline" size="sm" onClick={() => archivePlan(plan)} disabled={busyPlanId === plan.id} aria-label="Archive plan">
-                        <Archive className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
+
+                  <Button asChild className="w-full">
+                    <Link href={`/my-workout/plans/${plan.id}`}>Open Plan</Link>
+                  </Button>
                 </CardContent>
               </Card>
             );
@@ -285,9 +299,7 @@ export function MyWorkoutPlans() {
 
       {!isLoading && !loadError && archivedPlans.length ? (
         <Card>
-          <CardHeader>
-            <CardTitle>Archived plans</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Archived plans</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {archivedPlans.map((plan) => (
               <div key={plan.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm">
@@ -304,12 +316,10 @@ export function MyWorkoutPlans() {
 
       <div id="manual-fallback">
         {showBuilder ? (
-          <section className="space-y-3 rounded-md border p-4">
+          <section className="space-y-3 rounded-2xl border bg-card p-4">
             <div>
               <h3 className="text-lg font-semibold">Manual backup / edit plan</h3>
-              <p className="text-sm text-muted-foreground">
-                Use this only when you need to repair an imported plan or enter a plan you already approved elsewhere.
-              </p>
+              <p className="text-sm text-muted-foreground">Use this only when you need to repair an imported plan or enter a plan you already approved elsewhere.</p>
             </div>
             <WorkoutPlanBuilder loadActivePlan={false} onSaved={loadPlans} />
           </section>
@@ -325,23 +335,58 @@ function sourceBadge(plan: UserWorkoutPlan) {
   return "Saved";
 }
 
+function planDurationLabel(plan: UserWorkoutPlan) {
+  const meta = plan as PlanMeta;
+  const weeks = meta.program_duration_weeks ?? meta.duration_weeks;
+  if (weeks) return `${weeks}w`;
+  return `${plan.days.length}d`;
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-2xl border border-primary-foreground/15 bg-primary-foreground/10 p-3"><p className="text-xs text-primary-foreground/70">{label}</p><p className="mt-1 truncate font-semibold">{value}</p></div>;
+}
+
+function PlanFact({ label, value, icon: Icon }: { label: string; value: string; icon: typeof CalendarDays }) {
+  return <div className="rounded-xl bg-muted/40 p-3"><Icon className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-lg font-semibold text-foreground">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div>;
+}
+
+function PlanActions({ plan, isDefault, quality, busyPlanId, onDefault, onDuplicate, onArchive, onEdit }: { plan: UserWorkoutPlan; isDefault: boolean; quality: ImportedPlanQuality; busyPlanId: string | null; onDefault: (plan: UserWorkoutPlan) => void; onDuplicate: (plan: UserWorkoutPlan) => void; onArchive: (plan: UserWorkoutPlan) => void; onEdit: (plan: UserWorkoutPlan) => void }) {
+  return (
+    <details className="relative shrink-0">
+      <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-xl border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${plan.name}`}>
+        <MoreHorizontal className="h-4 w-4" />
+      </summary>
+      <div className="absolute right-0 z-20 mt-2 grid w-64 gap-1 rounded-xl border bg-card p-2 shadow-luxe">
+        <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={() => onDefault(plan)} disabled={isDefault || busyPlanId === plan.id}>
+          <Star className="h-4 w-4" /> {isDefault ? "Default plan" : "Set as default"}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={() => onEdit(plan)} disabled={busyPlanId === plan.id}>
+          <Edit3 className="h-4 w-4" /> Rename
+        </Button>
+        <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={() => onDuplicate(plan)} disabled={busyPlanId === plan.id}>
+          <Copy className="h-4 w-4" /> Duplicate
+        </Button>
+        <Button type="button" variant="ghost" size="sm" className="justify-start text-destructive hover:text-destructive" onClick={() => onArchive(plan)} disabled={busyPlanId === plan.id}>
+          <Archive className="h-4 w-4" /> Archive
+        </Button>
+        <PlanQualityPanel quality={quality} />
+      </div>
+    </details>
+  );
+}
+
 function PlanQualityPanel({ quality }: { quality: ImportedPlanQuality }) {
   const tone = quality.status === "ready" ? "border-success/30 bg-success/10 text-foreground" : quality.status === "blocked" ? "border-destructive/30 bg-destructive/10 text-foreground" : "border-warning/30 bg-warning/10 text-foreground";
   const label = quality.status === "ready" ? "Ready" : quality.status === "blocked" ? "Blocked" : "Needs review";
   return (
-    <div className={`rounded-md border p-3 text-sm ${tone}`}>
+    <div className={`mt-1 rounded-xl border p-3 text-xs ${tone}`}>
       <div className="flex items-center justify-between gap-2">
         <p className="font-semibold">Import readiness</p>
         <Badge variant={quality.status === "ready" ? "success" : "outline"}>{quality.score}/100 {label}</Badge>
       </div>
       {quality.blockers.length ? <p className="mt-2">{quality.blockers.join(" ")}</p> : null}
-      {quality.warnings.length ? <p className="mt-2">{quality.warnings.slice(0, 3).join(" ")}</p> : null}
-      {quality.repairTips.length ? (
-        <ul className="mt-2 list-disc space-y-1 pl-4">
-          {quality.repairTips.slice(0, 2).map((tip) => <li key={tip}>{tip}</li>)}
-        </ul>
-      ) : null}
-      {quality.duplicateExercises.length ? <p className="mt-2 text-xs">Duplicates: {quality.duplicateExercises.slice(0, 4).join(", ")}</p> : null}
+      {quality.warnings.length ? <p className="mt-2">{quality.warnings.slice(0, 2).join(" ")}</p> : null}
+      {quality.duplicateExercises.length ? <p className="mt-2">Duplicates: {quality.duplicateExercises.slice(0, 4).join(", ")}</p> : null}
     </div>
   );
 }
