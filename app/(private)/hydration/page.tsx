@@ -123,7 +123,7 @@ export default function HydrationPage() {
         title="Hydration"
         description="Track today's water from the same account-backed logs used by the dashboard and calorie tracker."
         action={
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" size="sm">
             <Link href="/calories">Edit Targets</Link>
           </Button>
         }
@@ -141,31 +141,48 @@ export default function HydrationPage() {
       ) : null}
 
       {!loadError ? (
-        <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Droplets className="h-5 w-5 text-primary" />
-                Today
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div>
-                <p className="text-4xl font-bold">{Math.round(totalMl / 10) / 100} L</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {target ? `${remainingMl} ml remaining from ${Math.round(target / 10) / 100} L target` : "Set a water target in Calories/Macros."}
-                </p>
+        <div className="space-y-4">
+          {/* Today progress — mobile hero */}
+          <Card className="border-border/70 shadow-luxe">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Today</p>
+                  <p className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">{liters(totalMl)}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {target ? `${remainingMl} ml remaining` : "Set a water target in Calories / Macros."}
+                  </p>
+                </div>
+                <div className="flex h-16 w-16 items-center justify-center rounded-full border bg-card sm:h-20 sm:w-20">
+                  <Droplets className="h-7 w-7 text-primary sm:h-8 sm:w-8" />
+                </div>
               </div>
-              {target ? <Progress value={progress} /> : null}
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+              {target ? (
+                <div className="mt-4">
+                  <Progress value={progress} className="h-3" />
+                  <p className="mt-1.5 text-xs text-muted-foreground">{progress}% of {liters(target)} target</p>
+                </div>
+              ) : null}
+
+              {/* Quick add buttons — large touch targets */}
+              <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[250, 500, 750, 1000].map((amount) => (
-                  <Button key={amount} type="button" className="min-h-12" variant="outline" onClick={() => quickAdd(amount)} disabled={isSaving || isLoading}>
-                    <Droplets className="h-4 w-4" />
+                  <Button
+                    key={amount}
+                    type="button"
+                    className="min-h-14 gap-2 text-sm sm:text-base"
+                    variant="outline"
+                    onClick={() => quickAdd(amount)}
+                    disabled={isSaving || isLoading}
+                  >
+                    <Droplets className="h-4 w-4 text-primary" />
                     +{amount === 1000 ? "1 L" : `${amount} ml`}
                   </Button>
                 ))}
               </div>
-              <div className="grid gap-2 rounded-md border bg-muted/40 p-3 sm:grid-cols-[1fr_auto]">
+
+              {/* Manual input — compact */}
+              <div className="mt-3 flex items-center gap-2">
                 <Input
                   type="number"
                   min="1"
@@ -174,28 +191,21 @@ export default function HydrationPage() {
                   onChange={(event) => setManualAmountMl(event.target.value)}
                   aria-label="Manual water amount in milliliters"
                   placeholder="350"
+                  className="h-12"
                 />
-                <Button type="button" onClick={addManualAmount} disabled={isSaving || isLoading}>
-                  Add manual amount
+                <Button type="button" className="h-12 shrink-0 px-5" onClick={addManualAmount} disabled={isSaving || isLoading}>
+                  Add
                 </Button>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <HydrationMetric icon={Target} label="Today target" value={target ? liters(target) : "Not set"} detail={target ? `${progress}% complete` : "Set target in Calories"} />
-                <HydrationMetric icon={TrendingUp} label="Current streak" value={`${currentStreak} day${currentStreak === 1 ? "" : "s"}`} detail={`Best this week ${bestStreak} day${bestStreak === 1 ? "" : "s"}`} />
-                <HydrationMetric icon={Bell} label="Reminder idea" value={reminderSuggestion.value} detail={reminderSuggestion.detail} />
-              </div>
-              <Button type="button" variant="ghost" onClick={loadHydration} disabled={isLoading}>
-                <RefreshCcw className="h-4 w-4" />
-                Refresh
-              </Button>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent water entries</CardTitle>
+          {/* Recent entries — compact list */}
+          <Card className="border-border/70 shadow-luxe">
+            <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-normal">Recent entries</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="p-4 sm:p-5">
               {isLoading ? <p className="text-sm text-muted-foreground">Loading real water logs...</p> : null}
               {!isLoading && !logs.length ? (
                 <EmptyState
@@ -205,49 +215,135 @@ export default function HydrationPage() {
                   onAction={() => quickAdd(500)}
                 />
               ) : null}
-              {logs.map((log) => (
-                <div key={log.id} className="flex items-center justify-between gap-3 rounded-md border p-3">
-                  <div>
-                    <p className="font-semibold">{log.amount_ml} ml</p>
-                    <p className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+              <div className="space-y-2">
+                {logs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-card p-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-semibold">{log.amount_ml} ml</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(log.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-10 w-10 shrink-0"
+                      aria-label="Remove water entry"
+                      onClick={() => removeLog(log)}
+                      disabled={isSaving}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <Button type="button" variant="ghost" size="icon" aria-label="Remove water entry" onClick={() => removeLog(log)} disabled={isSaving}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+                ))}
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="xl:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CalendarDays className="h-5 w-5 text-primary" />
+          {/* Weekly hydration — compact horizontal scroll on mobile */}
+          <Card className="border-border/70 shadow-luxe">
+            <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground uppercase tracking-normal">
+                <CalendarDays className="h-4 w-4 text-primary" />
                 Weekly hydration
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-3">
-                <HydrationMetric icon={Droplets} label="Week total" value={liters(weekTotalMl)} detail={target ? `${weeklyProgress}% of weekly target` : `${daysWithWater} logged days`} />
-                <HydrationMetric icon={Target} label="Target days" value={target ? `${daysHitTarget}/7` : "Set target"} detail={target ? "Days at or above target" : "Targets unlock adherence"} />
-                <HydrationMetric icon={TrendingUp} label="Average logged day" value={averageMl ? `${averageMl} ml` : "No logs"} detail={daysWithWater ? `${daysWithWater} day${daysWithWater === 1 ? "" : "s"} with water` : "Start with one glass today"} />
+            <CardContent className="p-4 sm:p-5">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <HydrationMetric
+                  icon={Droplets}
+                  label="Week total"
+                  value={liters(weekTotalMl)}
+                  detail={target ? `${weeklyProgress}% of weekly target` : `${daysWithWater} logged days`}
+                />
+                <HydrationMetric
+                  icon={Target}
+                  label="Target days"
+                  value={target ? `${daysHitTarget}/7` : "Set target"}
+                  detail={target ? "Days at or above target" : "Targets unlock adherence"}
+                />
+                <HydrationMetric
+                  icon={TrendingUp}
+                  label="Average logged day"
+                  value={averageMl ? `${averageMl} ml` : "No logs"}
+                  detail={daysWithWater ? `${daysWithWater} day${daysWithWater === 1 ? "" : "s"} with water` : "Start with one glass today"}
+                />
               </div>
-              {target ? <Progress value={weeklyProgress} /> : null}
-              <div className="grid gap-2 sm:grid-cols-7">
+              {target ? <Progress value={weeklyProgress} className="mt-4 h-2" /> : null}
+
+              {/* Mobile: horizontal scroll row of 7 compact day indicators */}
+              <div className="mt-4 flex gap-2 overflow-x-auto pb-1 sm:hidden">
                 {weekData.map((day) => {
                   const amount = Number(day.water_ml);
                   const dayProgress = target ? Math.min(100, Math.round((amount / target) * 100)) : amount ? 100 : 0;
+                  const isToday = day.date === date;
                   return (
-                    <div key={day.date} className="rounded-md border p-3">
-                      <p className="text-xs font-semibold text-muted-foreground">{day.date === date ? "Today" : new Date(`${day.date}T00:00:00`).toLocaleDateString([], { weekday: "short" })}</p>
-                      <p className="mt-1 font-semibold">{amount ? `${amount} ml` : "No log"}</p>
-                      <Progress value={dayProgress} className="mt-2" />
+                    <div
+                      key={day.date}
+                      className={`flex min-w-[4.5rem] flex-1 flex-col items-center rounded-md border p-2 text-center ${isToday ? "border-primary/40 bg-primary/5" : "border-border/70 bg-card"}`}
+                    >
+                      <p className={`text-[10px] font-semibold uppercase ${isToday ? "text-primary" : "text-muted-foreground"}`}>
+                        {isToday ? "Today" : new Date(`${day.date}T00:00:00`).toLocaleDateString([], { weekday: "short" })}
+                      </p>
+                      <p className="mt-1 text-xs font-bold">{amount ? `${amount} ml` : "—"}</p>
+                      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary"
+                          style={{ width: `${dayProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop: 7-day grid */}
+              <div className="mt-4 hidden gap-2 sm:grid sm:grid-cols-7">
+                {weekData.map((day) => {
+                  const amount = Number(day.water_ml);
+                  const dayProgress = target ? Math.min(100, Math.round((amount / target) * 100)) : amount ? 100 : 0;
+                  const isToday = day.date === date;
+                  return (
+                    <div
+                      key={day.date}
+                      className={`rounded-md border p-3 text-center ${isToday ? "border-primary/40 bg-primary/5" : "border-border/70 bg-card"}`}
+                    >
+                      <p className={`text-xs font-semibold ${isToday ? "text-primary" : "text-muted-foreground"}`}>
+                        {isToday ? "Today" : new Date(`${day.date}T00:00:00`).toLocaleDateString([], { weekday: "short" })}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold">{amount ? `${amount} ml` : "No log"}</p>
+                      <Progress value={dayProgress} className="mt-2 h-1.5" />
                     </div>
                   );
                 })}
               </div>
             </CardContent>
           </Card>
+
+          {/* Streak + reminder — compact row */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <HydrationMetric
+              icon={TrendingUp}
+              label="Current streak"
+              value={`${currentStreak} day${currentStreak === 1 ? "" : "s"}`}
+              detail={`Best this week: ${bestStreak} day${bestStreak === 1 ? "" : "s"}`}
+            />
+            <HydrationMetric
+              icon={Bell}
+              label="Reminder"
+              value={reminderSuggestion.value}
+              detail={reminderSuggestion.detail}
+            />
+          </div>
+
+          <Button type="button" variant="ghost" size="sm" onClick={loadHydration} disabled={isLoading} className="w-full sm:w-auto">
+            <RefreshCcw className="h-4 w-4" />
+            Refresh
+          </Button>
         </div>
       ) : null}
     </>
@@ -256,7 +352,7 @@ export default function HydrationPage() {
 
 function HydrationMetric({ icon: Icon, label, value, detail }: { icon: typeof Droplets; label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-md border p-3">
+    <div className="rounded-md border border-border/70 bg-card p-3">
       <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-muted-foreground">
         <Icon className="h-4 w-4 text-primary" />
         {label}
