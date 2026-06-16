@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { useConfirm, ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { MobileStickyActions, MobileStickyActionsSpacer } from "@/components/layout/mobile-sticky-actions";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
@@ -323,6 +325,7 @@ function setNote(set: SetState) {
 export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { dialog: confirmDialog, ask: confirmAsk } = useConfirm();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [startedAtMs, setStartedAtMs] = useState(() => Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -606,6 +609,18 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     }
   }
 
+  function askFinishWorkout() {
+    const remaining = totalSets - completedSets;
+    confirmAsk({
+      title: "Finish workout?",
+      description: remaining > 0 ? `You have ${remaining} set${remaining === 1 ? "" : "s"} remaining. This will save your workout to history.` : "All sets completed. Save this workout to your history?",
+      confirmLabel: "Finish Workout",
+      cancelLabel: "Keep Training",
+      variant: remaining > 0 ? "destructive" : "default",
+      onConfirm: () => completeSession()
+    });
+  }
+
   function resetWorkoutTimer() {
     const nextStartedAt = Date.now();
     setStartedAtMs(nextStartedAt);
@@ -629,6 +644,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
 
   return (
     <div className="space-y-4 pb-28 lg:pb-4">
+      {confirmDialog}
       {completedSummary ? <WorkoutSummaryCard summary={completedSummary} /> : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -655,7 +671,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         </CardHeader>
         <CardContent className="space-y-3">
           <Progress value={progress} />
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-2 grid-cols-2 lg:grid-cols-4">
             {exerciseStates.map((item, index) => {
               const done = item.sets.filter((set) => set.completedAt).length;
               const active = index === activeExerciseIndex;
@@ -753,14 +769,14 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                       <p className="font-semibold">Set {set.setNumber}</p>
                       {set.completedAt ? <Badge variant="success">Done</Badge> : <Badge variant="outline">Open</Badge>}
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                      <div className="space-y-1"><Label>Actual reps</Label><Input className="h-12 text-lg" value={set.reps} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { reps: event.target.value })} inputMode="numeric" /></div>
-                      <div className="space-y-1"><Label>Weight kg</Label><Input className="h-12 text-lg" value={set.weightKg} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { weightKg: event.target.value })} inputMode="decimal" placeholder="0" /></div>
-                      <div className="space-y-1"><Label>RPE</Label><Input className="h-12" value={set.rpe} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" /></div>
-                      <div className="space-y-1"><Label>RIR</Label><Input className="h-12" value={set.rir} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" /></div>
+                    <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+                      <div className="space-y-1"><Label>Actual reps</Label><Input className="h-14 text-xl lg:h-12 lg:text-lg" value={set.reps} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { reps: event.target.value })} inputMode="numeric" /></div>
+                      <div className="space-y-1"><Label>Weight kg</Label><Input className="h-14 text-xl lg:h-12 lg:text-lg" value={set.weightKg} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { weightKg: event.target.value })} inputMode="decimal" placeholder="0" /></div>
+                      <div className="space-y-1"><Label>RPE</Label><Input className="h-14 lg:h-12" value={set.rpe} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" /></div>
+                      <div className="space-y-1"><Label>RIR</Label><Input className="h-14 lg:h-12" value={set.rir} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" /></div>
                       <div className="space-y-1">
                         <Label>Set type</Label>
-                        <select value={set.setType} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-12 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <select value={set.setType} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-14 lg:h-12 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
                           <option value="normal">Normal</option>
                           <option value="warmup">Warm-up</option>
                           <option value="working">Working</option>
@@ -768,7 +784,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                           <option value="drop">Drop set</option>
                         </select>
                       </div>
-                      <div className="space-y-1 lg:col-span-5"><Label>Notes</Label><Input className="h-12" value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional" /></div>
+                      <div className="space-y-1 col-span-2 lg:col-span-5"><Label>Notes</Label><Input className="h-14 lg:h-12" value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional" /></div>
                     </div>
                     {previousSet ? <p className="mt-2 text-xs text-muted-foreground">Previous set: {previousSet.weightKg ?? 0} kg x {previousSet.reps ?? 0}{previousSet.performedAt ? ` on ${previousSet.performedAt.slice(0, 10)}` : ""}</p> : null}
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -796,6 +812,12 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
             <CardHeader><CardTitle className="flex items-center gap-2"><TimerReset className="h-5 w-5" /> Rest timer</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-2"><Label>Timer seconds</Label><Input type="number" min="0" inputMode="numeric" enterKeyHint="done" value={timerSeconds} onChange={(event) => setTimerSeconds(Math.max(0, Number(event.target.value) || 0))} /></div>
+              <div className="grid grid-cols-4 gap-2">
+                <Button variant="outline" size="sm" onClick={() => startRestTimer(30)}>30s</Button>
+                <Button variant="outline" size="sm" onClick={() => startRestTimer(60)}>60s</Button>
+                <Button variant="outline" size="sm" onClick={() => startRestTimer(90)}>90s</Button>
+                <Button variant="outline" size="sm" onClick={() => startRestTimer(180)}>3m</Button>
+              </div>
               <div className="rounded-md bg-navy-950 p-5 text-center text-white"><Clock className="mx-auto h-6 w-6" /><p className="mt-2 text-4xl font-bold">{formatTime(timerLeft)}</p></div>
               <div className="grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => startRestTimer(timerSeconds)}>Start timer</Button><Button variant="outline" onClick={stopRestTimer}>Stop</Button></div>
             </CardContent>
@@ -815,12 +837,26 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
             <CardHeader><CardTitle>Finish workout</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <textarea value={sessionNotes} onChange={(event) => setSessionNotes(event.target.value)} placeholder="How did this workout feel?" className="min-h-24 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-              <Button className="w-full" onClick={completeSession} disabled={isSaving || !session}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : isFinished ? "Finish workout" : "Finish and save partial workout"}</Button>
+              <Button className="w-full hidden lg:inline-flex" onClick={askFinishWorkout} disabled={isSaving || !session}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : isFinished ? "Finish workout" : "Finish and save partial workout"}</Button>
               <p className="text-xs text-muted-foreground">Time spent: {formatTime(elapsedSeconds)}. Completed sets are already saved while the session is open.</p>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      <MobileStickyActions>
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1 text-sm">
+            <p className="font-semibold text-foreground">{completedSets}/{totalSets} sets</p>
+            <p className="truncate text-xs text-muted-foreground">{formatTime(elapsedSeconds)} elapsed</p>
+          </div>
+          <Button className="min-h-12 flex-1 text-base" onClick={askFinishWorkout} disabled={isSaving || !session}>
+            <Save className="h-5 w-5" />
+            {isSaving ? "Saving..." : "Finish Workout"}
+          </Button>
+        </div>
+      </MobileStickyActions>
+      <MobileStickyActionsSpacer />
     </div>
   );
 }

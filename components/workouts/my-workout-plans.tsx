@@ -119,15 +119,16 @@ export function MyWorkoutPlans() {
   const availablePlans = plans.filter((plan) => !plan.archived_at);
   const archivedPlans = plans.filter((plan) => plan.archived_at);
 
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
+  const todayIndex = activeCalendarDays.findIndex((day) => day.weekday === today && day.exercises.length > 0);
+  const todayDay = todayIndex >= 0 ? activeCalendarDays[todayIndex] : null;
+
   function startToday() {
-    const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
-    const todayIndex = activeCalendarDays.findIndex((day) => day.weekday === today && day.exercises.length > 0);
-    if (todayIndex < 0) {
+    if (!todayDay) {
       toast({ title: "No workout for today", description: activePlan ? `${activePlan.name} has no workout assigned today.` : "Choose an active workout plan first." });
       return;
     }
-    const day = activeCalendarDays[todayIndex];
-    if (day.id) router.push(`/workouts/session/day/${day.id}`);
+    if (todayDay.id) router.push(`/workouts/session/day/${todayDay.id}`);
   }
 
   async function duplicatePlan(plan: UserWorkoutPlan) {
@@ -206,34 +207,61 @@ export function MyWorkoutPlans() {
       ) : null}
 
       {!isLoading && !loadError && activePlan ? (
-        <Card className="overflow-hidden border-primary/20">
-          <CardContent className="grid gap-5 p-0 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="bg-primary p-5 text-primary-foreground sm:p-6">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">Active plan</Badge>
-                {isChatGptPlan(activePlan) ? <Badge variant="outline" className="border-primary-foreground/30 text-primary-foreground">Imported</Badge> : <Badge variant="outline" className="border-primary-foreground/30 text-primary-foreground">{sourceBadge(activePlan)}</Badge>}
+        <div className="space-y-4">
+          {/* Active Plan Summary */}
+          <Card className="overflow-hidden border-primary/20">
+            <CardContent className="grid gap-5 p-0 lg:grid-cols-[0.9fr_1.1fr]">
+              <div className="bg-primary p-5 text-primary-foreground sm:p-6">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary">Active plan</Badge>
+                  {isChatGptPlan(activePlan) ? <Badge variant="outline" className="border-primary-foreground/30 text-primary-foreground">Imported</Badge> : <Badge variant="outline" className="border-primary-foreground/30 text-primary-foreground">{sourceBadge(activePlan)}</Badge>}
+                </div>
+                <h2 className="mt-4 text-2xl font-semibold tracking-tight">{activePlan.name}</h2>
+                <p className="mt-3 text-sm leading-6 text-primary-foreground/80">Your weekly calendar is loaded from saved active plan days and exercises. No generated or demo workout data is shown.</p>
+                <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
+                  <MiniStat label="Days" value={String(activePlan.days.length)} />
+                  <MiniStat label="Exercises" value={String(activeExerciseCount)} />
+                  <MiniStat label="Source" value={sourceBadge(activePlan)} />
+                </div>
+                <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                  <Button type="button" variant="secondary" onClick={startToday} className="h-12 text-base">
+                    <Play className="h-5 w-5" /> Start today
+                  </Button>
+                  <Button asChild variant="outline" className="border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10">
+                    <Link href={`/my-workout/plans/${activePlan.id}`}>Open active plan</Link>
+                  </Button>
+                </div>
               </div>
-              <h2 className="mt-4 text-2xl font-semibold tracking-tight">{activePlan.name}</h2>
-              <p className="mt-3 text-sm leading-6 text-primary-foreground/80">Your weekly calendar is loaded from saved active plan days and exercises. No generated or demo workout data is shown.</p>
-              <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
-                <MiniStat label="Days" value={String(activePlan.days.length)} />
-                <MiniStat label="Exercises" value={String(activeExerciseCount)} />
-                <MiniStat label="Source" value={sourceBadge(activePlan)} />
+              <div className="p-4 sm:p-5">
+                <WorkoutCalendar days={activeCalendarDays} activity={activity} activeDayIndex={activeDayIndex} onSelectDay={setActiveDayIndex} onStartToday={startToday} />
               </div>
-              <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                <Button type="button" variant="secondary" onClick={startToday}>
-                  <Play className="h-4 w-4" /> Start today
+            </CardContent>
+          </Card>
+
+          {/* Today's Workout Card - prominent on mobile */}
+          {todayDay ? (
+            <Card className="overflow-hidden border-primary/20 shadow-luxe lg:hidden">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2">
+                  <Badge>Today</Badge>
+                  <Badge variant="outline">{todayDay.weekday}</Badge>
+                </div>
+                <h3 className="mt-3 text-xl font-semibold tracking-tight">{todayDay.dayName}</h3>
+                <div className="mt-3 space-y-2">
+                  {todayDay.exercises.map((exercise, index) => (
+                    <div key={exercise.id} className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium">{index + 1}. {exercise.name}</p>
+                      <Badge variant="outline" className="shrink-0">{exercise.sets ?? 3} x {exercise.reps ?? "?"}</Badge>
+                    </div>
+                  ))}
+                </div>
+                <Button className="mt-4 h-12 w-full text-base" onClick={startToday}>
+                  <Play className="h-5 w-5" /> Start Today&apos;s Workout
                 </Button>
-                <Button asChild variant="outline" className="border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10">
-                  <Link href={`/my-workout/plans/${activePlan.id}`}>Open active plan</Link>
-                </Button>
-              </div>
-            </div>
-            <div className="p-4 sm:p-5">
-              <WorkoutCalendar days={activeCalendarDays} activity={activity} activeDayIndex={activeDayIndex} onSelectDay={setActiveDayIndex} onStartToday={startToday} />
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
       ) : null}
 
       {!isLoading && !loadError && !plans.length ? (
