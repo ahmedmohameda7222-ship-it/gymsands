@@ -146,7 +146,7 @@ export function buildWeeklyFocus(report: AggregatedReport) {
 
 export function SmartActionCard({ item, onAddWater }: { item: NextBestAction; onAddWater: (amountMl: number) => void }) {
   return (
-    <div className="flex h-full flex-col justify-between rounded-md border bg-card p-4">
+    <div className="flex h-full flex-col justify-between rounded-md border border-border/70 bg-card p-4">
       <div><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{item.label}</p><p className="mt-1 font-semibold">{item.title}</p><p className="mt-2 text-sm text-muted-foreground">{item.reason}</p></div>
       {item.waterAmountMl ? <Button type="button" className="mt-4 w-full" onClick={() => onAddWater(item.waterAmountMl!)}><Droplets className="h-4 w-4" />{item.cta}</Button> : item.href ? <Button asChild className="mt-4 w-full"><Link href={item.href}>{item.cta}<ArrowRight className="h-4 w-4" /></Link></Button> : null}
     </div>
@@ -202,13 +202,13 @@ export function MacroLine({ label, value, target }: { label: string; value: numb
 }
 
 export function ChecklistLine({ label, done, emptyLabel }: { label: string; done: boolean; emptyLabel: string }) {
-  return <div className="flex items-center justify-between rounded-md border p-3"><span className="font-medium">{label}</span><span className={done ? "text-sm font-semibold text-primary" : "text-sm text-muted-foreground"}>{done ? "Done" : emptyLabel}</span></div>;
+  return <div className="flex items-center justify-between rounded-md border border-border/70 bg-card p-3"><span className="font-medium">{label}</span><span className={done ? "text-sm font-semibold text-primary" : "text-sm text-muted-foreground"}>{done ? "Done" : emptyLabel}</span></div>;
 }
 
 export function RingMetric({ icon: Icon, label, value, detail, progress }: { icon: typeof CheckCircle2; label: string; value: string; detail: string; progress: number }) {
   const safeProgress = Math.max(0, Math.min(100, progress));
   return (
-    <div className="flex items-center gap-3 rounded-md border p-3">
+    <div className="flex items-center gap-3 rounded-md border border-border/70 bg-card p-3">
       <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(hsl(var(--primary)) ${safeProgress}%, hsl(var(--muted)) 0)` }} aria-hidden="true"><div className="grid h-12 w-12 place-items-center rounded-full bg-card"><Icon className="h-5 w-5 text-primary" /></div></div>
       <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p><p className="mt-1 text-lg font-bold">{value}</p><p className="text-sm text-muted-foreground">{detail}</p></div>
     </div>
@@ -352,13 +352,13 @@ export function CompactRecentActivity({
   return (
     <div className="flex gap-2 overflow-x-auto pb-1 mobile-card-scroll">
       {logs.slice(0, 4).map((log) => (
-        <div key={log.id} className="min-w-[160px] rounded-md border bg-card p-2.5 sm:min-w-[180px] sm:p-3">
+        <div key={log.id} className="min-w-[160px] rounded-md border border-border/70 bg-card p-2.5 sm:min-w-[180px] sm:p-3">
           <p className="text-sm font-semibold">{log.food_name}</p>
           <p className="text-xs text-muted-foreground">{log.calories} kcal · {log.protein_g}g protein</p>
         </div>
       ))}
       {history.slice(0, 4).map((session) => (
-        <div key={session.id} className="min-w-[160px] rounded-md border bg-card p-2.5 sm:min-w-[180px] sm:p-3">
+        <div key={session.id} className="min-w-[160px] rounded-md border border-border/70 bg-card p-2.5 sm:min-w-[180px] sm:p-3">
           <p className="text-sm font-semibold">{session.workout_name}</p>
           <p className="text-xs text-muted-foreground">{session.status} · {session.duration_minutes ?? 0} min</p>
         </div>

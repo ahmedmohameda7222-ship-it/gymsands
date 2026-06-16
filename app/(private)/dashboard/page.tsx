@@ -366,7 +366,7 @@ export default function DashboardPage() {
               </div>
               <div className="grid gap-3">
                 {secondaryActions.map((item) => (
-                  <div key={item.label} className="rounded-md border bg-muted/35 p-3">
+                  <div key={item.label} className="rounded-md border border-border/70 bg-card p-3">
                     <div className="flex items-start gap-3">
                       <MoreHorizontal className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                       <div className="min-w-0">
@@ -420,7 +420,7 @@ export default function DashboardPage() {
               ) : (
                 <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Save calorie, macro, and water targets to unlock the full nutrition snapshot.</div>
               )}
-              <div className="rounded-md border bg-muted/30 p-3">
+              <div className="rounded-md border border-border/70 bg-card p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold">Water</p>
@@ -436,7 +436,7 @@ export default function DashboardPage() {
                   ))}
                 </div>
               </div>
-              <div className="rounded-md border p-3">
+              <div className="rounded-md border border-border/70 bg-card p-3">
                 <p className="text-sm font-semibold text-muted-foreground">Planned meals</p>
                 <p className="mt-1 font-semibold">{doneMealsCount}/{plannedMealsCount} done</p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -455,15 +455,15 @@ export default function DashboardPage() {
           <CollapsibleSection title="Progress snapshot" preview={progressPreview} defaultOpen={false}>
             <div className="space-y-4">
               <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-md border p-3">
+                <div className="rounded-md border border-border/70 bg-card p-3">
                   <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Today</p>
                   <p className="mt-1 text-xl font-semibold">{todayScore}%</p>
                 </div>
-                <div className="rounded-md border p-3">
+                <div className="rounded-md border border-border/70 bg-card p-3">
                   <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Closed</p>
                   <p className="mt-1 text-xl font-semibold">{closedTodayCount}/5</p>
                 </div>
-                <div className="rounded-md border p-3">
+                <div className="rounded-md border border-border/70 bg-card p-3">
                   <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Streak</p>
                   <p className="mt-1 text-xl font-semibold">{trainingStreak}</p>
                 </div>
@@ -495,7 +495,7 @@ export default function DashboardPage() {
               <div className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                   {weeklyMetrics.slice(0, 4).map((metric) => (
-                    <div key={metric.label} className={`rounded-md border p-3 ${metric.empty ? "border-dashed bg-muted/30" : "bg-card"}`}>
+                    <div key={metric.label} className={`rounded-md border border-border/70 p-3 ${metric.empty ? "border-dashed bg-muted/30" : "bg-card"}`}>
                       <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{metric.label}</p>
                       <p className="mt-1 font-semibold">{metric.value}</p>
                       <p className="mt-1 text-sm text-muted-foreground">{metric.detail}</p>
