@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, CalendarDays, History, TrendingUp, Trophy } from "lucide-react";
+import { BarChart3, CalendarDays, ChevronDown, Clock, Dumbbell, Filter, Flame, History, Layers, TrendingUp, Trophy, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { CardSkeleton, EmptyState } from "@/components/ui/state-views";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { getScheduledWorkoutHistory, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
@@ -59,188 +62,6 @@ function parseSetCount(value: string | number | null | undefined) {
 
 function normalizeText(value: string | null | undefined) {
   return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-export function WorkoutHistory() {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
-  const [scheduledHistory, setScheduledHistory] = useState<UserWorkoutSession[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [filterMode, setFilterMode] = useState<FilterMode>("all");
-  const [weekFilter, setWeekFilter] = useState(toIsoWeekInput(new Date()));
-  const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7));
-
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    setIsLoading(true);
-    Promise.all([getWorkoutHistoryDetailed(user.id), getScheduledWorkoutHistory(user.id)])
-      .then(([legacyItems, scheduledItems]) => {
-        if (!active) return;
-        setHistory(legacyItems);
-        setScheduledHistory(scheduledItems);
-      })
-      .catch((error) => {
-        if (!active) return;
-        setHistory([]);
-        toast({ title: "Could not load workout history", description: error instanceof Error ? error.message : "Please try again." });
-      })
-      .finally(() => {
-        if (active) setIsLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [toast, user]);
-
-  const filteredHistory = useMemo(() => {
-    const items = [...history.map(normalizeLegacyHistory), ...scheduledHistory.map(normalizeScheduledHistory)].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-    return items.filter((session) => {
-      const date = new Date(session.date);
-      if (filterMode === "week") return toIsoWeekInput(date) === weekFilter;
-      if (filterMode === "month") return date.toISOString().slice(0, 7) === monthFilter;
-      return true;
-    });
-  }, [filterMode, scheduledHistory, history, monthFilter, weekFilter]);
-
-  const totalHistoryCount = history.length + scheduledHistory.length;
-  const progression = useMemo(() => buildWorkoutProgression(history, scheduledHistory), [history, scheduledHistory]);
-
-  return (
-    <Card>
-      <CardHeader className="space-y-4">
-        <div>
-          <CardTitle className="flex items-center gap-2">
-            <History className="h-5 w-5 text-primary" />
-            Workout history
-          </CardTitle>
-          <p className="mt-1 text-sm text-muted-foreground">Completed workouts with date, category, sets, weight, reps, and notes.</p>
-        </div>
-        <div className="grid gap-3 lg:grid-cols-[auto_180px_180px_1fr]">
-          <div className="flex flex-wrap gap-2">
-            {(["all", "week", "month"] as FilterMode[]).map((mode) => (
-              <Button
-                key={mode}
-                type="button"
-                variant={filterMode === mode ? "default" : "outline"}
-                size="sm"
-                onClick={() => setFilterMode(mode)}
-                className="capitalize"
-              >
-                {mode}
-              </Button>
-            ))}
-          </div>
-          <Input type="week" value={weekFilter} onChange={(event) => { setWeekFilter(event.target.value); setFilterMode("week"); }} aria-label="Filter workout history by week" />
-          <Input type="month" value={monthFilter} onChange={(event) => { setMonthFilter(event.target.value); setFilterMode("month"); }} aria-label="Filter workout history by month" />
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CalendarDays className="h-4 w-4" />
-            {filteredHistory.length} of {totalHistoryCount} workouts
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {isLoading ? <p className="text-sm text-muted-foreground">Loading workout history...</p> : null}
-        {!isLoading && !filteredHistory.length ? (
-          <div className="rounded-md border bg-muted/40 p-4 text-sm text-muted-foreground">
-            No completed workouts match this filter.
-          </div>
-        ) : null}
-
-        {progression.length ? (
-          <div className="rounded-md border bg-primary/5 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="flex items-center gap-2 font-semibold">
-                  <TrendingUp className="h-5 w-5 text-primary" />
-                  Smart workout progression
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">Suggestions use logged sets, reps, weights, and planned rep ranges only.</p>
-              </div>
-              <Badge variant="outline">{progression.length} exercise insights</Badge>
-            </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {progression.map((item) => (
-                <div key={item.exerciseName} className="rounded-md border bg-card p-3">
-                  <p className="font-semibold">{item.exerciseName}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{item.suggestion}</p>
-                  <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><Trophy className="h-3.5 w-3.5 text-primary" /> PR: {item.prLine}</span>
-                    <span className="flex items-center gap-1"><BarChart3 className="h-3.5 w-3.5 text-primary" /> Volume: {item.volumeTrend}</span>
-                    <span>Estimated 1RM: {item.oneRepMaxTrend}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : !isLoading ? (
-          <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-            <p className="flex items-center gap-2 font-semibold text-foreground">
-              <TrendingUp className="h-5 w-5 text-primary" />
-              Smart workout progression
-            </p>
-            <p className="mt-1">Log completed workouts with reps and weights to unlock progression suggestions.</p>
-          </div>
-        ) : null}
-
-        {filteredHistory.map((session) => {
-          const sessionDate = new Date(session.date);
-
-          return (
-            <div key={session.id} className="rounded-md border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/30">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-foreground">{session.title}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {sessionDate.toLocaleDateString()} at {sessionDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge>{session.category}</Badge>
-                  <Badge variant="outline">{session.durationMinutes} min</Badge>
-                  <Badge variant="success">Completed</Badge>
-                </div>
-              </div>
-
-              {session.exercises.length ? (
-                <div className="mt-4 grid gap-2">
-                  {session.exercises.map((exercise) => {
-                    return (
-                      <div
-                        key={`${session.id}-${exercise.id}`}
-                        className={cn("grid gap-3 rounded-md bg-muted/40 p-3 text-sm", "lg:grid-cols-[1.1fr_1.5fr_0.8fr]")}
-                      >
-                        <div>
-                          <p className="font-medium text-foreground">{exercise.name}</p>
-                          <p className="text-xs text-muted-foreground">{exercise.category}</p>
-                        </div>
-                        <div className="space-y-1">
-                          {exercise.setDetails.map((line, lineIndex) => (
-                            <p key={`${exercise.id}-set-${lineIndex}`} className="text-foreground">{line}</p>
-                          ))}
-                        </div>
-                        <div>
-                          <p>{exercise.sets}</p>
-                          {exercise.notes ? <p className="mt-1 text-muted-foreground">{exercise.notes}</p> : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="mt-4 rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">No set details were logged for this workout.</p>
-              )}
-
-              {session.notes ? <p className="mt-3 text-sm text-muted-foreground">Notes: {session.notes}</p> : null}
-            </div>
-          );
-        })}
-      </CardContent>
-    </Card>
-  );
 }
 
 function toIsoWeekInput(date: Date) {
@@ -422,4 +243,286 @@ function trendLine(values: number[], unit: string) {
   const delta = Math.round((latest - previous) * 10) / 10;
   if (delta === 0) return `Flat at ${Math.round(latest)}${unit}`;
   return `${delta > 0 ? "+" : ""}${delta}${unit} vs previous`;
+}
+
+function computeStats(items: HistoryItem[]) {
+  if (!items.length) return null;
+  const now = new Date();
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - now.getDay());
+  weekStart.setHours(0, 0, 0, 0);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const thisWeek = items.filter((i) => new Date(i.date) >= weekStart).length;
+  const thisMonth = items.filter((i) => new Date(i.date) >= monthStart).length;
+  let totalSets = 0;
+  const muscleCounts = new Map<string, number>();
+  items.forEach((item) => {
+    item.exercises.forEach((ex) => {
+      const count = parseSetCount(ex.sets);
+      totalSets += count;
+      const muscle = ex.category || "General";
+      muscleCounts.set(muscle, (muscleCounts.get(muscle) || 0) + 1);
+    });
+  });
+  const mostTrained = Array.from(muscleCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || "-";
+  return { thisWeek, thisMonth, totalSets, mostTrained };
+}
+
+export function WorkoutHistory() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
+  const [scheduledHistory, setScheduledHistory] = useState<UserWorkoutSession[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [filterMode, setFilterMode] = useState<FilterMode>("all");
+  const [weekFilter, setWeekFilter] = useState(toIsoWeekInput(new Date()));
+  const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7));
+  const [showFilterDialog, setShowFilterDialog] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    setIsLoading(true);
+    Promise.all([getWorkoutHistoryDetailed(user.id), getScheduledWorkoutHistory(user.id)])
+      .then(([legacyItems, scheduledItems]) => {
+        if (!active) return;
+        setHistory(legacyItems);
+        setScheduledHistory(scheduledItems);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setHistory([]);
+        toast({ title: "Could not load workout history", description: error instanceof Error ? error.message : "Please try again." });
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [toast, user]);
+
+  const filteredHistory = useMemo(() => {
+    const items = [...history.map(normalizeLegacyHistory), ...scheduledHistory.map(normalizeScheduledHistory)].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+    return items.filter((session) => {
+      const date = new Date(session.date);
+      if (filterMode === "week") return toIsoWeekInput(date) === weekFilter;
+      if (filterMode === "month") return date.toISOString().slice(0, 7) === monthFilter;
+      return true;
+    });
+  }, [filterMode, scheduledHistory, history, monthFilter, weekFilter]);
+
+  const totalHistoryCount = history.length + scheduledHistory.length;
+  const progression = useMemo(() => buildWorkoutProgression(history, scheduledHistory), [history, scheduledHistory]);
+  const stats = useMemo(() => computeStats([...history.map(normalizeLegacyHistory), ...scheduledHistory.map(normalizeScheduledHistory)]), [history, scheduledHistory]);
+  const latestHighlight = progression[0] ?? null;
+
+  return (
+    <div className="space-y-5">
+      {stats && !isLoading ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-md border border-border/70 bg-card p-3 shadow-soft">
+            <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">This week</p>
+            <p className="mt-1 text-xl font-bold">{stats.thisWeek} <span className="text-sm font-normal text-muted-foreground">workouts</span></p>
+          </div>
+          <div className="rounded-md border border-border/70 bg-card p-3 shadow-soft">
+            <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">This month</p>
+            <p className="mt-1 text-xl font-bold">{stats.thisMonth} <span className="text-sm font-normal text-muted-foreground">workouts</span></p>
+          </div>
+          <div className="rounded-md border border-border/70 bg-card p-3 shadow-soft">
+            <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Total sets</p>
+            <p className="mt-1 text-xl font-bold">{stats.totalSets}</p>
+          </div>
+          <div className="rounded-md border border-border/70 bg-card p-3 shadow-soft">
+            <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Top muscle</p>
+            <p className="mt-1 text-lg font-bold leading-6">{stats.mostTrained}</p>
+          </div>
+        </div>
+      ) : null}
+
+      {latestHighlight ? (
+        <div className="rounded-md border border-border/70 bg-primary/5 p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Trophy className="h-4 w-4 text-primary" /> Latest highlight: {latestHighlight.exerciseName}
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">{latestHighlight.prLine}</p>
+        </div>
+      ) : null}
+
+      <Card>
+        <CardHeader className="space-y-4">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-primary" />
+              Workout history
+            </CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">Completed workouts with date, category, sets, weight, reps, and notes.</p>
+          </div>
+
+          <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[auto_180px_180px_1fr]">
+            <div className="flex flex-wrap gap-2">
+              {(["all", "week", "month"] as FilterMode[]).map((mode) => (
+                <Button
+                  key={mode}
+                  type="button"
+                  variant={filterMode === mode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterMode(mode)}
+                  className="capitalize"
+                >
+                  {mode}
+                </Button>
+              ))}
+              <Button variant="outline" size="sm" className="lg:hidden" onClick={() => setShowFilterDialog(true)}>
+                <Filter className="h-4 w-4" /> Date
+              </Button>
+            </div>
+            <div className="hidden lg:block">
+              <Input type="week" value={weekFilter} onChange={(event) => { setWeekFilter(event.target.value); setFilterMode("week"); }} aria-label="Filter workout history by week" />
+            </div>
+            <div className="hidden lg:block">
+              <Input type="month" value={monthFilter} onChange={(event) => { setMonthFilter(event.target.value); setFilterMode("month"); }} aria-label="Filter workout history by month" />
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CalendarDays className="h-4 w-4" />
+              {filteredHistory.length} of {totalHistoryCount} workouts
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {isLoading ? <CardSkeleton rows={3} /> : null}
+          {!isLoading && !filteredHistory.length ? (
+            <EmptyState
+              title="No completed workouts"
+              description="Start a workout session and log your sets to see your history here."
+              actionLabel="Start a workout"
+              actionHref="/today-workout"
+            />
+          ) : null}
+
+          {progression.length ? (
+            <div className="rounded-md border border-border/70 bg-primary/5 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="flex items-center gap-2 font-semibold">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                    Smart workout progression
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">Suggestions use logged sets, reps, weights, and planned rep ranges only.</p>
+                </div>
+                <Badge variant="outline">{progression.length} exercise insights</Badge>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {progression.map((item) => (
+                  <div key={item.exerciseName} className="rounded-md border border-border/70 bg-card p-3">
+                    <p className="font-semibold">{item.exerciseName}</p>
+                    <p className="mt-2 text-sm text-muted-foreground">{item.suggestion}</p>
+                    <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1"><Trophy className="h-3.5 w-3.5 text-primary" /> PR: {item.prLine}</span>
+                      <span className="flex items-center gap-1"><BarChart3 className="h-3.5 w-3.5 text-primary" /> Volume: {item.volumeTrend}</span>
+                      <span>Estimated 1RM: {item.oneRepMaxTrend}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : !isLoading ? (
+            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+              <p className="flex items-center gap-2 font-semibold text-foreground">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                Smart workout progression
+              </p>
+              <p className="mt-1">Log completed workouts with reps and weights to unlock progression suggestions.</p>
+            </div>
+          ) : null}
+
+          {filteredHistory.map((session) => {
+            const sessionDate = new Date(session.date);
+            const totalSets = session.exercises.reduce((sum, ex) => sum + parseSetCount(ex.sets), 0);
+            return (
+              <div key={session.id} className="rounded-md border border-border/70 bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/30">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground">{session.title}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {sessionDate.toLocaleDateString()} at {sessionDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge>{session.category}</Badge>
+                    <Badge variant="outline">{session.durationMinutes} min</Badge>
+                    <Badge variant="success">Completed</Badge>
+                  </div>
+                </div>
+
+                <details className="mt-3 group">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-md bg-muted/40 px-3 text-sm transition hover:bg-muted/60">
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <Dumbbell className="h-4 w-4" />
+                      {session.exercises.length} exercises · {totalSets} sets · {session.durationMinutes} min
+                    </span>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition group-open:rotate-180" />
+                  </summary>
+                  {session.exercises.length ? (
+                    <div className="mt-2 grid gap-2">
+                      {session.exercises.map((exercise) => {
+                        return (
+                          <div
+                            key={`${session.id}-${exercise.id}`}
+                            className={cn("grid gap-3 rounded-md bg-muted/40 p-3 text-sm", "lg:grid-cols-[1.1fr_1.5fr_0.8fr]")}
+                          >
+                            <div>
+                              <p className="font-medium text-foreground">{exercise.name}</p>
+                              <p className="text-xs text-muted-foreground">{exercise.category}</p>
+                            </div>
+                            <div className="space-y-1">
+                              {exercise.setDetails.map((line, lineIndex) => (
+                                <p key={`${exercise.id}-set-${lineIndex}`} className="text-foreground">{line}</p>
+                              ))}
+                            </div>
+                            <div>
+                              <p>{exercise.sets}</p>
+                              {exercise.notes ? <p className="mt-1 text-muted-foreground">{exercise.notes}</p> : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="mt-2 rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">No set details were logged for this workout.</p>
+                  )}
+                  {session.notes ? <p className="mt-2 text-sm text-muted-foreground">Notes: {session.notes}</p> : null}
+                </details>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      <Dialog open={showFilterDialog} onOpenChange={setShowFilterDialog}>
+        <DialogContent className="max-h-[85dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Filter by date</DialogTitle>
+            <DialogDescription>Choose a week or month to narrow your history.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="mb-2 block text-sm font-medium">Week</Label>
+              <Input type="week" value={weekFilter} onChange={(event) => { setWeekFilter(event.target.value); setFilterMode("week"); }} aria-label="Filter workout history by week" />
+            </div>
+            <div>
+              <Label className="mb-2 block text-sm font-medium">Month</Label>
+              <Input type="month" value={monthFilter} onChange={(event) => { setMonthFilter(event.target.value); setFilterMode("month"); }} aria-label="Filter workout history by month" />
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={() => setShowFilterDialog(false)} className="flex-1">Apply</Button>
+              <Button variant="outline" onClick={() => { setFilterMode("all"); setShowFilterDialog(false); }}>Reset</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }

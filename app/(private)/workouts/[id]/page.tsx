@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Heart, Play, RotateCcw, Save, TrendingUp } from "lucide-react";
+import { ExternalLink, Heart, Play, RotateCcw, Save, TrendingUp, ChevronDown } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -266,9 +266,17 @@ export default function WorkoutDetailsPage() {
 }
 
 function TextPanel({ title, text }: { title: string; text: string | null | undefined }) {
-  return <div className="rounded-md bg-slate-50 p-3"><p className="text-sm font-semibold text-slate-950">{title}</p><p className="mt-2 leading-7 text-slate-700">{text || "Not saved for this exercise yet."}</p></div>;
+  return (
+    <details className="group rounded-md bg-muted/40">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 p-3 text-sm font-semibold text-foreground">
+        {title}
+        <ChevronDown className="h-4 w-4 text-muted-foreground transition group-open:rotate-180" />
+      </summary>
+      <p className="px-3 pb-3 leading-7 text-muted-foreground">{text || "Not saved for this exercise yet."}</p>
+    </details>
+  );
 }
 
 function Detail({ label, value }: { label: string | null | undefined; value: string | null | undefined }) {
-  return <div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p><p className="mt-1 text-sm font-medium text-slate-950">{value || "N/A"}</p></div>;
+  return <div className="rounded-md bg-muted/40 p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p><p className="mt-1 text-sm font-medium text-foreground">{value || "N/A"}</p></div>;
 }
