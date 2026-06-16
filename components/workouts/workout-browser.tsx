@@ -1,17 +1,20 @@
 "use client";
 
-import { ChevronDown, ExternalLink, Heart, MoreHorizontal, Play, Plus, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, ExternalLink, Heart, MoreHorizontal, Play, Plus, RotateCcw, Search, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CardGridSkeleton, EmptyState } from "@/components/ui/state-views";
 import Link from "next/link";
 import { getWorkoutFilterOptions, getWorkouts, type WorkoutFilterOptions, type WorkoutFilters } from "@/services/database/workout-library";
 import { getCustomExercises, getFavoriteExerciseIds, saveCustomExercise, setFavoriteExercise, type CustomExerciseInput } from "@/services/workouts/exercise-library-store";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { cn } from "@/lib/utils";
 import type { Workout } from "@/types";
 
 const pageSize = 500;
@@ -168,6 +171,7 @@ export function WorkoutBrowser() {
   const [hasMore, setHasMore] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [openFilters, setOpenFilters] = useState<FilterKey[]>([]);
+  const [showFiltersDialog, setShowFiltersDialog] = useState(false);
 
   useEffect(() => {
     const persisted = readPersistedFilterState();
@@ -308,22 +312,63 @@ export function WorkoutBrowser() {
     }
   }
 
+  const filterPanelContent = (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/40 p-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Show all workouts</p>
+          <p className="text-sm text-muted-foreground">Keep this off to show exercises only after a search or filter.</p>
+        </div>
+        <Button type="button" variant={showAllWorkouts ? "default" : "outline"} onClick={() => setShowAllWorkouts((current) => !current)} size="sm">
+          {showAllWorkouts ? "All on" : "Show all"}
+        </Button>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <FilterGroup title="Muscle Category" values={filterOptions.muscleCategories} selected={filters.muscleCategories} open={openFilters.includes("muscleCategories")} onOpenChange={() => toggleFilterGroup("muscleCategories")} onToggle={(value) => toggleFilter("muscleCategories", value)} />
+        <FilterGroup title="Primary Muscle" values={filterOptions.primaryMuscles} selected={filters.primaryMuscles} open={openFilters.includes("primaryMuscles")} onOpenChange={() => toggleFilterGroup("primaryMuscles")} onToggle={(value) => toggleFilter("primaryMuscles", value)} />
+        <FilterGroup title="Equipment" values={filterOptions.equipmentRequired} selected={filters.equipmentRequired} open={openFilters.includes("equipmentRequired")} onOpenChange={() => toggleFilterGroup("equipmentRequired")} onToggle={(value) => toggleFilter("equipmentRequired", value)} />
+        <FilterGroup title="Mechanics" values={filterOptions.mechanics} selected={filters.mechanics} open={openFilters.includes("mechanics")} onOpenChange={() => toggleFilterGroup("mechanics")} onToggle={(value) => toggleFilter("mechanics", value)} />
+        <FilterGroup title="Exercise Type" values={filterOptions.exerciseTypes} selected={filters.exerciseTypes} open={openFilters.includes("exerciseTypes")} onOpenChange={() => toggleFilterGroup("exerciseTypes")} onToggle={(value) => toggleFilter("exerciseTypes", value)} />
+        <FilterGroup title="Force Type" values={filterOptions.forceTypes} selected={filters.forceTypes} open={openFilters.includes("forceTypes")} onOpenChange={() => toggleFilterGroup("forceTypes")} onToggle={(value) => toggleFilter("forceTypes", value)} />
+        <FilterGroup title="Experience Level" values={filterOptions.experienceLevels} selected={filters.experienceLevels} open={openFilters.includes("experienceLevels")} onOpenChange={() => toggleFilterGroup("experienceLevels")} onToggle={(value) => toggleFilter("experienceLevels", value)} />
+        <FilterGroup title="Secondary Muscles" values={filterOptions.secondaryMuscles} selected={filters.secondaryMuscles} open={openFilters.includes("secondaryMuscles")} onOpenChange={() => toggleFilterGroup("secondaryMuscles")} onToggle={(value) => toggleFilter("secondaryMuscles", value)} />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {activeFilterCount > 0 ? (
+          <Button variant="outline" size="sm" onClick={resetFilters}>
+            <RotateCcw className="h-4 w-4" /> Clear all
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto_auto]">
+      <div className="flex flex-col gap-3">
         <div className="relative">
-          <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search exercises by name, muscle, equipment, mechanics, or force type" className="pl-10" />
+          <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search exercises by name, muscle, or equipment"
+            className="h-12 pl-10"
+          />
         </div>
-        <Button variant={favoritesOnly ? "default" : "outline"} onClick={() => setFavoritesOnly((current) => !current)}>
-          <Heart className="h-4 w-4" /> Favorites
-        </Button>
-        <Button variant="outline" onClick={() => setShowCustomForm((current) => !current)}>
-          <Plus className="h-4 w-4" /> Custom exercise
-        </Button>
-        <Button variant="outline" onClick={resetFilters} disabled={!query && activeFilterCount === 0 && !favoritesOnly}>
-          <RotateCcw className="h-4 w-4" /> Reset filters
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant={favoritesOnly ? "default" : "outline"} onClick={() => setFavoritesOnly((current) => !current)} className="h-11">
+            <Heart className={cn("h-4 w-4", favoritesOnly && "fill-current")} /> Favorites
+          </Button>
+          <Button variant="outline" onClick={() => setShowCustomForm((current) => !current)} className="h-11">
+            <Plus className="h-4 w-4" /> Custom
+          </Button>
+          <Button variant="outline" onClick={() => setShowFiltersDialog(true)} className="h-11 lg:hidden">
+            <SlidersHorizontal className="h-4 w-4" /> Filters {activeFilterCount ? `(${activeFilterCount})` : ""}
+          </Button>
+          <Button variant="outline" onClick={resetFilters} disabled={!query && activeFilterCount === 0 && !favoritesOnly} className="h-11">
+            <RotateCcw className="h-4 w-4" /> Reset
+          </Button>
+        </div>
       </div>
 
       {showCustomForm ? (
@@ -348,7 +393,7 @@ export function WorkoutBrowser() {
         </Card>
       ) : null}
 
-      <div className="rounded-md border bg-card p-4">
+      <div className="hidden rounded-md border border-border/70 bg-card p-4 lg:block">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="h-5 w-5 text-primary" />
@@ -359,26 +404,22 @@ export function WorkoutBrowser() {
           </div>
           <p className="text-sm text-muted-foreground">{filteredWorkouts.length} exercises shown</p>
         </div>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/40 p-3">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Show all workouts</p>
-            <p className="text-sm text-muted-foreground">Keep this off to show exercises only after a search or filter.</p>
-          </div>
-          <Button type="button" variant={showAllWorkouts ? "default" : "outline"} onClick={() => setShowAllWorkouts((current) => !current)}>
-            {showAllWorkouts ? "All workouts on" : "Show all workouts"}
-          </Button>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-3">
-          <FilterGroup title="Muscle Category" values={filterOptions.muscleCategories} selected={filters.muscleCategories} open={openFilters.includes("muscleCategories")} onOpenChange={() => toggleFilterGroup("muscleCategories")} onToggle={(value) => toggleFilter("muscleCategories", value)} />
-          <FilterGroup title="Primary Muscle" values={filterOptions.primaryMuscles} selected={filters.primaryMuscles} open={openFilters.includes("primaryMuscles")} onOpenChange={() => toggleFilterGroup("primaryMuscles")} onToggle={(value) => toggleFilter("primaryMuscles", value)} />
-          <FilterGroup title="Equipment Required" values={filterOptions.equipmentRequired} selected={filters.equipmentRequired} open={openFilters.includes("equipmentRequired")} onOpenChange={() => toggleFilterGroup("equipmentRequired")} onToggle={(value) => toggleFilter("equipmentRequired", value)} />
-          <FilterGroup title="Mechanics" values={filterOptions.mechanics} selected={filters.mechanics} open={openFilters.includes("mechanics")} onOpenChange={() => toggleFilterGroup("mechanics")} onToggle={(value) => toggleFilter("mechanics", value)} />
-          <FilterGroup title="Exercise Type" values={filterOptions.exerciseTypes} selected={filters.exerciseTypes} open={openFilters.includes("exerciseTypes")} onOpenChange={() => toggleFilterGroup("exerciseTypes")} onToggle={(value) => toggleFilter("exerciseTypes", value)} />
-          <FilterGroup title="Force Type" values={filterOptions.forceTypes} selected={filters.forceTypes} open={openFilters.includes("forceTypes")} onOpenChange={() => toggleFilterGroup("forceTypes")} onToggle={(value) => toggleFilter("forceTypes", value)} />
-          <FilterGroup title="Experience Level" values={filterOptions.experienceLevels} selected={filters.experienceLevels} open={openFilters.includes("experienceLevels")} onOpenChange={() => toggleFilterGroup("experienceLevels")} onToggle={(value) => toggleFilter("experienceLevels", value)} />
-          <FilterGroup title="Secondary Muscles" values={filterOptions.secondaryMuscles} selected={filters.secondaryMuscles} open={openFilters.includes("secondaryMuscles")} onOpenChange={() => toggleFilterGroup("secondaryMuscles")} onToggle={(value) => toggleFilter("secondaryMuscles", value)} />
-        </div>
+        {filterPanelContent}
       </div>
+
+      <Dialog open={showFiltersDialog} onOpenChange={setShowFiltersDialog}>
+        <DialogContent className="max-h-[85dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Filters</DialogTitle>
+            <DialogDescription>{filteredWorkouts.length} exercises match your selection</DialogDescription>
+          </DialogHeader>
+          {filterPanelContent}
+          <div className="flex gap-2 pt-2">
+            <Button onClick={() => setShowFiltersDialog(false)} className="flex-1">Apply</Button>
+            <Button variant="outline" onClick={() => { resetFilters(); setShowFiltersDialog(false); }}>Clear all</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {profile?.role === "admin" ? (
         <Card>
@@ -398,49 +439,64 @@ export function WorkoutBrowser() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {isLoading && !filteredWorkouts.length ? <p className="text-sm text-muted-foreground">Loading workouts...</p> : null}
-        {!isLoading && !hasActiveLibraryRequest ? <p className="text-sm text-muted-foreground">Choose a filter, search, open favorites, or turn on show all workouts to see exercises.</p> : null}
-        {!isLoading && hasActiveLibraryRequest && !filteredWorkouts.length ? <p className="text-sm text-muted-foreground">No exercises match these filters.</p> : null}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {isLoading && !filteredWorkouts.length ? <CardGridSkeleton count={3} /> : null}
+        {!isLoading && !hasActiveLibraryRequest ? (
+          <div className="md:col-span-2 xl:col-span-3">
+            <EmptyState
+              title="Start browsing"
+              description="Search by name, muscle, or equipment. You can also turn on 'Show all workouts' or filter by favorites."
+              actionLabel="Show all workouts"
+              onAction={() => setShowAllWorkouts(true)}
+            />
+          </div>
+        ) : null}
+        {!isLoading && hasActiveLibraryRequest && !filteredWorkouts.length ? (
+          <div className="md:col-span-2 xl:col-span-3">
+            <EmptyState title="No exercises found" description="Try adjusting your search or filters." actionLabel="Clear filters" onAction={resetFilters} />
+          </div>
+        ) : null}
         {filteredWorkouts.map((workout) => {
           const guideUrl = workout.exercise_url || (isLink(workout.notes) ? workout.notes : null);
           const favorite = favoriteIds.includes(workout.id);
           const quality = exerciseQuality(workout, duplicateExerciseNames.has(normalizeText(workout.name)));
           return (
-            <Card key={workout.id}>
-              <CardContent className="pt-5">
+            <Card key={workout.id} className="border-border/70 shadow-luxe">
+              <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <h3 className="font-semibold text-foreground">{workout.name}</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">{workout.muscle_category || workout.target_muscle}</p>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{workout.muscle_category || workout.target_muscle}</p>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
+                  <div className="flex flex-col items-end gap-1.5">
                     <Badge>{workout.experience_level || workout.difficulty}</Badge>
                     {!workout.is_global ? <Badge variant="success">Custom</Badge> : null}
                     {profile?.role === "admin" ? quality.map((item) => <Badge key={item} variant="outline">{item}</Badge>) : null}
                   </div>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-1.5">
                   <Badge variant="outline">{workout.equipment_required || workout.equipment}</Badge>
                   {workout.mechanics ? <Badge variant="outline">{workout.mechanics}</Badge> : null}
                   {workout.force_type ? <Badge variant="outline">{workout.force_type}</Badge> : null}
                   {workout.sets ? <Badge variant="outline">{workout.sets} sets</Badge> : null}
                   {workout.reps ? <Badge variant="outline">{workout.reps}</Badge> : null}
                 </div>
-                {workout.secondary_muscles?.length ? <p className="mt-3 text-xs text-muted-foreground">Secondary: {workout.secondary_muscles.join(", ")}</p> : null}
-                <p className="mt-4 line-clamp-3 text-sm leading-6 text-muted-foreground">{workout.instructions}</p>
+                {workout.secondary_muscles?.length ? <p className="mt-2 text-xs text-muted-foreground">Secondary: {workout.secondary_muscles.join(", ")}</p> : null}
                 <div className="mt-4 flex items-center gap-2">
-                  <Button asChild className="flex-1"><Link href={`/workouts/session/${workout.id}`}><Play className="h-4 w-4" /> Start</Link></Button>
-                  <details className="relative">
-                    <summary className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${workout.name}`}>
-                      <MoreHorizontal className="h-4 w-4" />
-                    </summary>
-                    <div className="absolute right-0 z-20 mt-2 grid w-44 gap-1 rounded-md border bg-card p-2 shadow-luxe">
-                      <Button asChild size="sm" variant="ghost" className="justify-start"><Link href={`/workouts/${workout.id}`}>Details</Link></Button>
-                      <Button size="sm" variant="ghost" className="justify-start" onClick={() => toggleFavorite(workout)}><Heart className="h-4 w-4" /> {favorite ? "Favorited" : "Favorite"}</Button>
-                      {guideUrl ? <Button asChild size="sm" variant="ghost" className="justify-start"><a href={guideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Guide</a></Button> : null}
-                    </div>
-                  </details>
+                  <Button asChild className="h-11 flex-1">
+                    <Link href={`/workouts/session/${workout.id}`}><Play className="h-4 w-4" /> Start</Link>
+                  </Button>
+                  <Button asChild variant="outline" className="h-11 w-11 p-0">
+                    <Link href={`/workouts/${workout.id}`} aria-label={`Details for ${workout.name}`}><MoreHorizontal className="h-4 w-4" /></Link>
+                  </Button>
+                  <Button variant="outline" className="h-11 w-11 p-0" onClick={() => toggleFavorite(workout)} aria-label={favorite ? "Unfavorite" : "Favorite"}>
+                    <Heart className={cn("h-4 w-4", favorite && "fill-current text-primary")} />
+                  </Button>
+                  {guideUrl ? (
+                    <Button asChild variant="outline" className="h-11 w-11 p-0">
+                      <a href={guideUrl} target="_blank" rel="noreferrer" aria-label={`Guide for ${workout.name}`}><ExternalLink className="h-4 w-4" /></a>
+                    </Button>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
@@ -458,7 +514,7 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
 
 function QualityMetric({ label, value, detail }: { label: string; value: number; detail: string }) {
   return (
-    <div className="rounded-md border p-3">
+    <div className="rounded-md border border-border/70 p-3">
       <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p>
       <p className="mt-1 text-xl font-bold">{value}</p>
       <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
@@ -502,16 +558,16 @@ function summarizeExerciseQuality(workouts: Workout[], duplicates: Set<string>) 
 
 function FilterGroup({ title, values, selected, open, onOpenChange, onToggle }: { title: string; values: string[]; selected: string[]; open: boolean; onOpenChange: () => void; onToggle: (value: string) => void; }) {
   return (
-    <div className="rounded-md bg-slate-50 p-3">
+    <div className="rounded-md bg-muted/40 p-3">
       <button type="button" onClick={onOpenChange} aria-expanded={open} className="flex min-h-10 w-full items-center justify-between gap-2 rounded-md px-1 text-left">
-        <span className="min-w-0 text-sm font-semibold text-slate-900">{title}</span>
-        <span className="flex items-center gap-2">{selected.length ? <Badge variant="outline">{selected.length}</Badge> : null}<ChevronDown className={`h-4 w-4 text-muted-foreground transition ${open ? "rotate-180" : ""}`} /></span>
+        <span className="min-w-0 text-sm font-semibold text-foreground">{title}</span>
+        <span className="flex items-center gap-2">{selected.length ? <Badge variant="outline">{selected.length}</Badge> : null}<ChevronDown className={cn("h-4 w-4 text-muted-foreground transition", open && "rotate-180")} /></span>
       </button>
       {open ? (
         <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto pr-1">
           {values.map((value) => (
-            <label key={value} className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-sm transition hover:bg-white">
-              <input type="checkbox" checked={selected.includes(value)} onChange={() => onToggle(value)} className="h-4 w-4 rounded border-slate-300 text-primary" />
+            <label key={value} className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-sm transition hover:bg-card">
+              <input type="checkbox" checked={selected.includes(value)} onChange={() => onToggle(value)} className="h-4 w-4 rounded border-border text-primary" />
               <span className="min-w-0 truncate">{value}</span>
             </label>
           ))}
