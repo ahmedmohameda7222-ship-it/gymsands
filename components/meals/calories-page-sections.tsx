@@ -198,3 +198,80 @@ export function WaterCard({ waterTotal, waterGoal, customWaterMl, setCustomWater
     </Card>
   );
 }
+
+export function CompactNutritionSummary({ totals, targets, waterTotal }: { totals: ReturnType<typeof sumFoodLogs>; targets: SavedTargets; waterTotal: number }) {
+  const calorieProgress = percent(totals.calories, targets.daily_calories);
+  const proteinProgress = percent(totals.protein_g, targets.protein_g);
+  const carbsProgress = percent(totals.carbs_g, targets.carbs_g);
+  const fatProgress = percent(totals.fat_g, targets.fat_g);
+  const waterProgress = percent(waterTotal, targets.water_ml);
+  const hasAnyTargets = targets.daily_calories > 0 || targets.protein_g > 0;
+
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col items-center gap-1">
+            <div className="relative flex h-16 w-16 items-center justify-center rounded-full border-4 border-muted">
+              <svg className="absolute inset-0 h-16 w-16 -rotate-90" viewBox="0 0 64 64">
+                <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4" className="text-muted" />
+                <circle
+                  cx="32" cy="32" r="28" fill="none" stroke={calorieProgressColor(calorieProgress)}
+                  strokeWidth="4"
+                  strokeDasharray={hasAnyTargets ? `${(calorieProgress / 100) * 175.9} 175.9` : "0 175.9"}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="text-sm font-bold">{totals.calories}</span>
+            </div>
+            <span className="text-[11px] text-muted-foreground">kcal</span>
+          </div>
+          <div className="flex-1 space-y-2">
+            <MacroMiniBar label="Protein" value={totals.protein_g} target={targets.protein_g} progress={proteinProgress} color="#4B5A38" />
+            <MacroMiniBar label="Carbs" value={totals.carbs_g} target={targets.carbs_g} progress={carbsProgress} color="#C49A3B" />
+            <MacroMiniBar label="Fat" value={totals.fat_g} target={targets.fat_g} progress={fatProgress} color="#2D3A1E" />
+            <MacroMiniBar label="Water" value={waterTotal} target={targets.water_ml} progress={waterProgress} color="#3A7D44" unit="ml" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MacroMiniBar({ label, value, target, progress, color, unit = "g" }: { label: string; value: number; target: number; progress: number; color: string; unit?: string }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium text-muted-foreground">{label}</span>
+        <span className="font-semibold">{value}{target > 0 ? ` / ${target}${unit}` : unit}</span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, progress)}%`, background: color }} />
+      </div>
+    </div>
+  );
+}
+
+export function WaterMiniSummary({ waterTotal, waterGoal, onAddWater }: { waterTotal: number; waterGoal: number; onAddWater: (amount: number) => void }) {
+  const progress = percent(waterTotal, waterGoal);
+  return (
+    <div className="rounded-lg border border-border/70 bg-card p-3 shadow-soft">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-muted-foreground">Water</p>
+          <p className="text-sm font-semibold">{waterTotal} <span className="text-xs font-normal text-muted-foreground">/ {waterGoal} ml</span></p>
+        </div>
+        <div className="flex shrink-0 gap-1">
+          {[250, 500].map((amount) => (
+            <Button key={amount} variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={() => onAddWater(amount)}>
+              +{amount}
+            </Button>
+          ))}
+        </div>
+      </div>
+      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-[#3A7D44] transition-all duration-500" style={{ width: `${Math.min(100, progress)}%` }} />
+      </div>
+    </div>
+  );
+}
