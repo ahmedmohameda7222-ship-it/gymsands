@@ -1,27 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, ArrowRight, Brain, CalendarCheck, CheckCircle2, Droplets, Dumbbell, Scale, Soup, Utensils } from "lucide-react";
+import { Activity, ArrowRight, Brain, CalendarCheck, CheckCircle2, ChevronDown, Droplets, Dumbbell, Moon, Pill, Scale, Soup, Utensils, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 import { percent, sumFoodLogs } from "@/services/nutrition/calculations";
 import type { SavedTargets } from "@/services/nutrition/targets";
 import type { AggregatedReport } from "@/services/reports/reporting";
-import type { FitnessHabit, FoodLog, MealPlanItem, SupplementLog, WorkoutSession } from "@/types";
+import type { FitnessHabit, FoodLog, MealPlanItem, SleepRecoveryLog, SupplementLog, WorkoutSession } from "@/types";
+import { useState } from "react";
+import type { ReactNode } from "react";
 
 export const defaultShortcutKeys = ["workout", "calories", "meal-plan", "water", "progress", "sleep"];
 
 export function getDashboardShortcuts(todayPlanDayId: string | null) {
   return [
-    { key: "workout", label: todayPlanDayId ? "Start Workout" : "Import Workout Plan", href: todayPlanDayId ? `/workouts/session/day/${todayPlanDayId}` : "/my-workout/plans", icon: Activity },
-    { key: "calories", label: "Log Food", href: "/calories", icon: Utensils },
-    { key: "meal-plan", label: "Meal Plan", href: "/my-meal-plan", icon: Soup },
-    { key: "water", label: "Add Water", href: "/hydration", icon: Droplets },
-    { key: "progress", label: "Add Progress", href: "/progress", icon: Scale },
-    { key: "sleep", label: "Sleep & Recovery", href: "/sleep-recovery", icon: Brain },
-    { key: "supplements", label: "Supplements", href: "/supplements", icon: CheckCircle2 },
-    { key: "habits", label: "Habits", href: "/habits", icon: CalendarCheck },
-    { key: "library", label: "Exercise Library", href: "/workouts", icon: Dumbbell }
+    { key: "workout", label: todayPlanDayId ? "Start Workout" : "Import Workout Plan", shortLabel: "Workout", href: todayPlanDayId ? `/workouts/session/day/${todayPlanDayId}` : "/my-workout/plans", icon: Activity },
+    { key: "calories", label: "Log Food", shortLabel: "Food", href: "/calories", icon: Utensils },
+    { key: "meal-plan", label: "Meal Plan", shortLabel: "Meals", href: "/my-meal-plan", icon: Soup },
+    { key: "water", label: "Add Water", shortLabel: "Water", href: "/hydration", icon: Droplets },
+    { key: "progress", label: "Add Progress", shortLabel: "Progress", href: "/progress", icon: Scale },
+    { key: "sleep", label: "Sleep & Recovery", shortLabel: "Sleep", href: "/sleep-recovery", icon: Brain },
+    { key: "supplements", label: "Supplements", shortLabel: "Supps", href: "/supplements", icon: CheckCircle2 },
+    { key: "habits", label: "Habits", href: "/habits", shortLabel: "Habits", icon: CalendarCheck },
+    { key: "library", label: "Exercise Library", shortLabel: "Library", href: "/workouts", icon: Dumbbell }
   ];
 }
 
@@ -223,4 +227,191 @@ export function countCompletedTrainingStreak(history: WorkoutSession[]) {
     cursor = previous.toISOString().slice(0, 10);
   }
   return streak;
+}
+export function CollapsibleSection({
+  title,
+  preview,
+  children,
+  defaultOpen = false,
+  className
+}: {
+  title: string;
+  preview?: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={cn("rounded-lg border border-border bg-card text-card-foreground shadow-soft", className)}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full cursor-pointer items-center justify-between gap-3 p-4 sm:p-5 text-left"
+        aria-expanded={open}
+      >
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold leading-tight tracking-normal">{title}</h3>
+          {preview ? <p className="mt-0.5 text-sm text-muted-foreground">{preview}</p> : null}
+        </div>
+        <ChevronDown className={cn("h-5 w-5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+      {open ? <div className="border-t border-border/70 p-4 sm:p-5">{children}</div> : null}
+    </div>
+  );
+}
+
+export function CompactSetupChecklist({
+  checklist,
+  nextItem,
+  completedCount,
+  totalCount
+}: {
+  checklist: { label: string; done: boolean; href: string; action: string }[];
+  nextItem: { label: string; done: boolean; href: string; action: string } | null;
+  completedCount: number;
+  totalCount: number;
+}) {
+  return (
+    <details className="group rounded-lg border border-primary/20 bg-primary/5">
+      <summary className="flex cursor-pointer list-none items-center gap-3 p-3 sm:p-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-foreground">
+              {nextItem ? `Next: ${nextItem.label}` : "Setup complete"}
+            </span>
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <Progress value={(completedCount / totalCount) * 100} className="h-2 flex-1" />
+            <span className="text-xs text-muted-foreground">{completedCount}/{totalCount}</span>
+          </div>
+        </div>
+        {nextItem ? (
+          <Button asChild size="sm" className="shrink-0">
+            <Link href={nextItem.href}>{nextItem.action}</Link>
+          </Button>
+        ) : null}
+      </summary>
+      <div className="border-t border-primary/10 p-3 sm:p-4">
+        <div className="space-y-2">
+          {checklist.map((item) => (
+            <div key={item.label} className="flex items-center justify-between gap-2 text-sm">
+              <div className="flex items-center gap-2 min-w-0">
+                <CheckCircle2 className={cn("h-4 w-4 shrink-0", item.done ? "text-primary" : "text-muted-foreground")} />
+                <span className={cn("truncate", item.done ? "text-muted-foreground line-through" : "text-foreground")}>{item.label}</span>
+              </div>
+              {!item.done ? (
+                <Button asChild size="sm" variant="ghost" className="shrink-0">
+                  <Link href={item.href}>{item.action}</Link>
+                </Button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+export function QuickLinkGrid({
+  shortcuts
+}: {
+  shortcuts: { key: string; label: string; shortLabel: string; href: string; icon: typeof Activity }[];
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
+      {shortcuts.map((shortcut) => {
+        const Icon = shortcut.icon;
+        return (
+          <Link
+            key={shortcut.key}
+            href={shortcut.href}
+            className="flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-lg border border-border/70 bg-card px-1 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-muted/60 sm:min-h-[56px] sm:flex-row sm:gap-2 sm:text-sm"
+          >
+            <Icon className="h-4 w-4 shrink-0 text-primary" />
+            <span className="truncate">{shortcut.shortLabel}</span>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+export function CompactRecentActivity({
+  logs,
+  history
+}: {
+  logs: FoodLog[];
+  history: WorkoutSession[];
+}) {
+  const hasData = logs.length > 0 || history.length > 0;
+  if (!hasData) {
+    return <p className="text-sm text-muted-foreground">Log a meal or workout to build your activity timeline.</p>;
+  }
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-1 mobile-card-scroll">
+      {logs.slice(0, 4).map((log) => (
+        <div key={log.id} className="min-w-[160px] rounded-md border bg-card p-2.5 sm:min-w-[180px] sm:p-3">
+          <p className="text-sm font-semibold">{log.food_name}</p>
+          <p className="text-xs text-muted-foreground">{log.calories} kcal · {log.protein_g}g protein</p>
+        </div>
+      ))}
+      {history.slice(0, 4).map((session) => (
+        <div key={session.id} className="min-w-[160px] rounded-md border bg-card p-2.5 sm:min-w-[180px] sm:p-3">
+          <p className="text-sm font-semibold">{session.workout_name}</p>
+          <p className="text-xs text-muted-foreground">{session.status} · {session.duration_minutes ?? 0} min</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function WellnessSummary({
+  habits,
+  supplements,
+  sleepLogs
+}: {
+  habits: FitnessHabit[];
+  supplements: SupplementLog[];
+  sleepLogs: SleepRecoveryLog[];
+}) {
+  const openHabits = habits.filter((h) => !h.completed).length;
+  const openSupplements = supplements.filter((s) => !s.taken_today).length;
+  const latestSleep = sleepLogs.find((log) => log.hours_slept !== null) ?? null;
+  const hasWellnessData = habits.length > 0 || supplements.length > 0 || sleepLogs.length > 0;
+
+  if (!hasWellnessData) return null;
+
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      {habits.length > 0 ? (
+        <div className="rounded-md border bg-card p-2.5 sm:p-3">
+          <div className="flex items-center gap-1.5">
+            <Zap className="h-3.5 w-3.5 text-primary" />
+            <p className="text-xs text-muted-foreground">Habits</p>
+          </div>
+          <p className="mt-1 text-sm font-semibold">{openHabits} open</p>
+        </div>
+      ) : null}
+      {supplements.length > 0 ? (
+        <div className="rounded-md border bg-card p-2.5 sm:p-3">
+          <div className="flex items-center gap-1.5">
+            <Pill className="h-3.5 w-3.5 text-primary" />
+            <p className="text-xs text-muted-foreground">Supps</p>
+          </div>
+          <p className="mt-1 text-sm font-semibold">{openSupplements} open</p>
+        </div>
+      ) : null}
+      {latestSleep ? (
+        <div className="rounded-md border bg-card p-2.5 sm:p-3">
+          <div className="flex items-center gap-1.5">
+            <Moon className="h-3.5 w-3.5 text-primary" />
+            <p className="text-xs text-muted-foreground">Sleep</p>
+          </div>
+          <p className="mt-1 text-sm font-semibold">{latestSleep.hours_slept ?? "-"}h</p>
+        </div>
+      ) : null}
+    </div>
+  );
 }
