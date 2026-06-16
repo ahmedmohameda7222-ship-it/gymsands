@@ -103,21 +103,36 @@ export function DailyFitTasksPageClient() {
     }
   }
 
+  const doneCount = items.filter((i) => i.completed).length;
+  const progress = items.length ? Math.round((doneCount / items.length) * 100) : 0;
+
   return (
-    <Card>
-      <CardHeader>
+    <Card className="border-border/70 shadow-luxe">
+      <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
         <CardTitle>Daily Fit Tasks</CardTitle>
         <p className="text-sm text-muted-foreground">Today's fitness to-do list for movement, meals, recovery, and consistency.</p>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+      <CardContent className="space-y-4 p-4 sm:p-5">
+        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
           <Field label="Task" value={draft.title} onChange={(title) => setDraft((current) => ({ ...current, title }))} />
           <Field label="Notes" value={draft.notes} onChange={(notes) => setDraft((current) => ({ ...current, notes }))} />
-          <Button className="self-end" onClick={() => saveTask()} disabled={!draft.title.trim() || isSaving}>
+          <Button className="self-end h-12" onClick={() => saveTask()} disabled={!draft.title.trim() || isSaving}>
             <Save className="h-4 w-4" />
             {isSaving ? "Saving..." : draft.id ? "Update" : "Save"}
           </Button>
         </div>
+
+        {items.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{doneCount}/{items.length} completed</span>
+              <span>{progress}%</span>
+            </div>
+            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        )}
 
         {isLoading ? <p className="text-sm text-muted-foreground">Loading today's tasks...</p> : null}
 
@@ -125,18 +140,18 @@ export function DailyFitTasksPageClient() {
           <div className="rounded-md border border-destructive bg-destructive/10 p-4 text-sm text-destructive">
             <p className="font-semibold">Daily Fit Tasks could not load</p>
             <p className="mt-1">{loadError}</p>
-            <Button type="button" variant="outline" size="sm" className="mt-3" onClick={loadTasks}>
+            <Button type="button" variant="outline" size="sm" className="mt-3 h-10" onClick={loadTasks}>
               <RefreshCcw className="h-4 w-4" /> Retry
             </Button>
           </div>
         ) : null}
 
         {!isLoading && !loadError && !items.length ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <p className="text-sm text-muted-foreground">No tasks saved for today. Start with one simple action.</p>
             <div className="flex flex-wrap gap-2">
               {starterTasks.map((task) => (
-                <Button key={task} variant="outline" size="sm" onClick={() => saveTask(task, "")}> 
+                <Button key={task} variant="outline" size="sm" onClick={() => saveTask(task, "")}>
                   <Plus className="h-4 w-4" /> {task}
                 </Button>
               ))}
@@ -145,26 +160,26 @@ export function DailyFitTasksPageClient() {
         ) : null}
 
         {!loadError ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {items.map((item) => (
-              <div key={item.id} className="rounded-md border p-3">
+              <div key={item.id} className="rounded-md border border-border/70 bg-card p-3">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold">{item.title}</p>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm sm:text-base">{item.title}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{item.notes || "Today"}</p>
                   </div>
-                  <span className={`rounded-full px-2 py-1 text-xs font-semibold ${item.completed ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${item.completed ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
                     {item.completed ? "Done" : "Open"}
                   </span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant={item.completed ? "outline" : "default"} onClick={() => toggleTask(item)}>
+                  <Button type="button" size="sm" className="h-11" variant={item.completed ? "outline" : "default"} onClick={() => toggleTask(item)}>
                     <CheckCircle2 className="h-4 w-4" /> {item.completed ? "Reopen" : "Mark done"}
                   </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setDraft({ id: item.id, title: item.title, notes: item.notes ?? "" })}>
+                  <Button type="button" size="sm" className="h-11" variant="outline" onClick={() => setDraft({ id: item.id, title: item.title, notes: item.notes ?? "" })}>
                     <Pencil className="h-4 w-4" /> Edit
                   </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => removeTask(item)}>
+                  <Button type="button" size="sm" className="h-11" variant="outline" onClick={() => removeTask(item)}>
                     <Trash2 className="h-4 w-4" /> Delete
                   </Button>
                 </div>
@@ -181,7 +196,7 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
   return (
     <label className="grid gap-1 text-sm font-medium">
       {label}
-      <Input value={value} onChange={(event) => onChange(event.target.value)} />
+      <Input value={value} onChange={(event) => onChange(event.target.value)} className="h-11" />
     </label>
   );
 }
