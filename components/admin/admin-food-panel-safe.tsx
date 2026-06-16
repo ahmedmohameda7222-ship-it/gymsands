@@ -119,10 +119,10 @@ export function AdminFoodPanelSafe() {
           <form className="grid gap-3 sm:grid-cols-2" onSubmit={submit}>
             <TextField label="Food name" value={form.food_name} onChange={(food_name) => setForm((current) => ({ ...current, food_name }))} placeholder="Food name, e.g. Molokhia" />
             <TextField label="Serving size" value={form.serving_size} onChange={(serving_size) => setForm((current) => ({ ...current, serving_size }))} placeholder="Serving size, e.g. 1 bowl" />
-            <TextField label="Calories" type="number" value={form.calories} onChange={(calories) => setForm((current) => ({ ...current, calories }))} placeholder="Calories, e.g. 180" />
-            <TextField label="Protein g" type="number" value={form.protein_g} onChange={(protein_g) => setForm((current) => ({ ...current, protein_g }))} placeholder="Protein grams, e.g. 5" />
-            <TextField label="Carbs g" type="number" value={form.carbs_g} onChange={(carbs_g) => setForm((current) => ({ ...current, carbs_g }))} placeholder="Carbs grams, e.g. 12" />
-            <TextField label="Fat g" type="number" value={form.fat_g} onChange={(fat_g) => setForm((current) => ({ ...current, fat_g }))} placeholder="Fat grams, e.g. 12" />
+            <TextField label="Calories" type="number" inputMode="decimal" enterKeyHint="done" value={form.calories} onChange={(calories) => setForm((current) => ({ ...current, calories }))} placeholder="Calories, e.g. 180" />
+            <TextField label="Protein g" type="number" inputMode="decimal" enterKeyHint="done" value={form.protein_g} onChange={(protein_g) => setForm((current) => ({ ...current, protein_g }))} placeholder="Protein grams, e.g. 5" />
+            <TextField label="Carbs g" type="number" inputMode="decimal" enterKeyHint="done" value={form.carbs_g} onChange={(carbs_g) => setForm((current) => ({ ...current, carbs_g }))} placeholder="Carbs grams, e.g. 12" />
+            <TextField label="Fat g" type="number" inputMode="decimal" enterKeyHint="done" value={form.fat_g} onChange={(fat_g) => setForm((current) => ({ ...current, fat_g }))} placeholder="Fat grams, e.g. 12" />
             <div className="sm:col-span-2">
               <TextField label="Category" value={form.category} onChange={(category) => setForm((current) => ({ ...current, category }))} placeholder="Category, e.g. Stew" />
             </div>
@@ -195,11 +195,11 @@ export function AdminFoodPanelSafe() {
   );
 }
 
-function TextField({ label, value, onChange, placeholder, type = "text" }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string }) {
+function TextField({ label, value, onChange, placeholder, type = "text", inputMode, enterKeyHint }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string; inputMode?: React.InputHTMLAttributes<HTMLInputElement>['inputMode']; enterKeyHint?: React.InputHTMLAttributes<HTMLInputElement>['enterKeyHint'] }) {
   return (
     <label className="grid gap-1 text-sm font-medium">
       {label}
-      <Input type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.1" : undefined} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
+      <Input type={type} inputMode={inputMode} enterKeyHint={enterKeyHint} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.1" : undefined} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
     </label>
   );
 }

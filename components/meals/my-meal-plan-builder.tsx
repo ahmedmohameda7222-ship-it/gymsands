@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Copy, Edit3, MoreHorizontal, PackagePlus, PlusCircle, Printer, RefreshCw, Repeat, Save, ShoppingCart, Trash2, Utensils, X } from "lucide-react";
-import { Component, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { Component, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/components/auth/auth-provider";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
 import {
   createDirectMealPlanItem,
@@ -119,6 +120,9 @@ function MyMealPlanBuilderInner() {
   const [swapState, setSwapState] = useState<SwapState>(null);
   const [bulkDoneConfirm, setBulkDoneConfirm] = useState<BulkDoneConfirm>(null);
   const [checkedShoppingKeys, setCheckedShoppingKeys] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState("day");
+  const shoppingListRef = useRef<HTMLDivElement>(null);
+  const { dialog, ask } = useConfirm();
 
   const selectedWeekStart = useMemo(() => weekStart(selectedDate), [selectedDate]);
   const selectedWeekEnd = useMemo(() => addDays(selectedWeekStart, 6), [selectedWeekStart]);
@@ -363,18 +367,24 @@ function MyMealPlanBuilderInner() {
   }
 
   async function repeatMealDaily(item: MealPlanItem) {
-    if (!window.confirm(`Repeat ${item.food_name} daily for the next 7 days?`)) return;
-    try {
-      setIsUpdatingId(`repeat-${item.id}`);
-      const created: MealPlanItem[] = [];
-      for (let offset = 1; offset <= 7; offset += 1) created.push(await createItemFromTemplateItem(addDays(item.plan_date, offset), templateItemFromMealPlanItem(item)));
-      upsertLocalItems(created);
-      setNotice({ type: "success", title: "Meal repeated daily", description: `${item.food_name} was copied to the next 7 days without logging it.` });
-    } catch (error) {
-      setNotice({ type: "error", title: "Could not repeat meal", description: error instanceof Error ? error.message : "Please try again." });
-    } finally {
-      setIsUpdatingId(null);
-    }
+    ask({
+      title: `Repeat ${item.food_name} daily?`,
+      description: `This will copy ${item.food_name} to the next 7 days without logging calories.`,
+      confirmLabel: "Repeat",
+      onConfirm: async () => {
+        try {
+          setIsUpdatingId(`repeat-${item.id}`);
+          const created: MealPlanItem[] = [];
+          for (let offset = 1; offset <= 7; offset += 1) created.push(await createItemFromTemplateItem(addDays(item.plan_date, offset), templateItemFromMealPlanItem(item)));
+          upsertLocalItems(created);
+          setNotice({ type: "success", title: "Meal repeated daily", description: `${item.food_name} was copied to the next 7 days without logging it.` });
+        } catch (error) {
+          setNotice({ type: "error", title: "Could not repeat meal", description: error instanceof Error ? error.message : "Please try again." });
+        } finally {
+          setIsUpdatingId(null);
+        }
+      }
+    });
   }
 
   async function repeatMealWeekly(item: MealPlanItem) {
@@ -383,18 +393,24 @@ function MyMealPlanBuilderInner() {
 
   async function copyWholeWeekToNextWeek() {
     if (!weekItems.length) return setNotice({ type: "info", title: "Nothing to copy", description: "This week has no planned meals." });
-    if (!window.confirm(`Copy all ${weekItems.length} planned item(s) to next week?`)) return;
-    try {
-      setIsUpdatingId("copy-week");
-      const created: MealPlanItem[] = [];
-      for (const item of weekItems) created.push(await createItemFromTemplateItem(addDays(item.plan_date, 7), templateItemFromMealPlanItem(item)));
-      upsertLocalItems(created);
-      setNotice({ type: "success", title: "Week copied", description: `${created.length} planned item(s) copied to next week without logging calories.` });
-    } catch (error) {
-      setNotice({ type: "error", title: "Could not copy week", description: error instanceof Error ? error.message : "Please try again." });
-    } finally {
-      setIsUpdatingId(null);
-    }
+    ask({
+      title: "Copy whole week to next week?",
+      description: `Copy all ${weekItems.length} planned item(s) to next week without logging calories.`,
+      confirmLabel: "Copy week",
+      onConfirm: async () => {
+        try {
+          setIsUpdatingId("copy-week");
+          const created: MealPlanItem[] = [];
+          for (const item of weekItems) created.push(await createItemFromTemplateItem(addDays(item.plan_date, 7), templateItemFromMealPlanItem(item)));
+          upsertLocalItems(created);
+          setNotice({ type: "success", title: "Week copied", description: `${created.length} planned item(s) copied to next week without logging calories.` });
+        } catch (error) {
+          setNotice({ type: "error", title: "Could not copy week", description: error instanceof Error ? error.message : "Please try again." });
+        } finally {
+          setIsUpdatingId(null);
+        }
+      }
+    });
   }
 
   async function saveItemTemplate(item: MealPlanItem) {
@@ -481,20 +497,21 @@ function MyMealPlanBuilderInner() {
             </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-            <Button type="button" onClick={() => setShowAddForm(true)}>
+            <Button type="button" onClick={() => { setActiveTab("day"); setShowAddForm(true); }}>
               <PlusCircle className="h-4 w-4" />
               Add planned meal
             </Button>
-            <Button asChild variant="outline">
-              <a href="#shopping-list">Shopping list</a>
+            <Button variant="outline" type="button" onClick={() => { setActiveTab("shopping"); setTimeout(() => shoppingListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0); }}>
+              Shopping list
             </Button>
           </div>
         </CardContent>
       </Card>
 
       {notice ? <NoticeBox notice={notice} onClose={() => setNotice(null)} /> : null}
+      {dialog}
 
-      <Tabs defaultValue="day" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
           <TabsTrigger value="day">Day</TabsTrigger>
           <TabsTrigger value="week">Week</TabsTrigger>
@@ -627,7 +644,7 @@ function MyMealPlanBuilderInner() {
         </TabsContent>
 
         <TabsContent value="shopping" className="space-y-4">
-          <div id="shopping-list">
+          <div ref={shoppingListRef}>
             <ShoppingListPanel items={shoppingList} onToggle={toggleShoppingCheck} onPrint={printShoppingList} />
           </div>
         </TabsContent>
@@ -652,13 +669,13 @@ function AutomationPanel(props: { selectedDate: string; items: MealPlanItem[]; t
         <CardHeader><CardTitle className="flex items-center gap-2 text-base"><PackagePlus className="h-4 w-4" /> Batch meal / meal prep</CardTitle></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-4">
           <Input value={props.batchDraft.name} onChange={(e) => props.setBatchDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Batch meal name" />
-          <Input type="number" value={props.batchDraft.portions} onChange={(e) => props.setBatchDraft((d) => ({ ...d, portions: e.target.value }))} placeholder="Portions" />
+          <Input type="number" inputMode="numeric" enterKeyHint="done" value={props.batchDraft.portions} onChange={(e) => props.setBatchDraft((d) => ({ ...d, portions: e.target.value }))} placeholder="Portions" />
           <Input value={props.batchDraft.servingSize} onChange={(e) => props.setBatchDraft((d) => ({ ...d, servingSize: e.target.value }))} placeholder="Serving size" />
           <select value={props.batchDraft.mealType} onChange={(e) => props.setBatchDraft((d) => ({ ...d, mealType: normalizeMealPlanType(e.target.value) }))} className="h-10 rounded-md border bg-card px-3 text-sm">{mealTypes.map((type) => <option key={type} value={type}>{displayMealType(type)}</option>)}</select>
-          <Input type="number" value={props.batchDraft.calories} onChange={(e) => props.setBatchDraft((d) => ({ ...d, calories: e.target.value }))} placeholder="Total calories" />
-          <Input type="number" value={props.batchDraft.protein} onChange={(e) => props.setBatchDraft((d) => ({ ...d, protein: e.target.value }))} placeholder="Total protein" />
-          <Input type="number" value={props.batchDraft.carbs} onChange={(e) => props.setBatchDraft((d) => ({ ...d, carbs: e.target.value }))} placeholder="Total carbs" />
-          <Input type="number" value={props.batchDraft.fat} onChange={(e) => props.setBatchDraft((d) => ({ ...d, fat: e.target.value }))} placeholder="Total fat" />
+          <Input type="number" inputMode="decimal" enterKeyHint="done" value={props.batchDraft.calories} onChange={(e) => props.setBatchDraft((d) => ({ ...d, calories: e.target.value }))} placeholder="Total calories" />
+          <Input type="number" inputMode="decimal" enterKeyHint="done" value={props.batchDraft.protein} onChange={(e) => props.setBatchDraft((d) => ({ ...d, protein: e.target.value }))} placeholder="Total protein" />
+          <Input type="number" inputMode="decimal" enterKeyHint="done" value={props.batchDraft.carbs} onChange={(e) => props.setBatchDraft((d) => ({ ...d, carbs: e.target.value }))} placeholder="Total carbs" />
+          <Input type="number" inputMode="decimal" enterKeyHint="done" value={props.batchDraft.fat} onChange={(e) => props.setBatchDraft((d) => ({ ...d, fat: e.target.value }))} placeholder="Total fat" />
           <Input className="md:col-span-2" value={props.batchDraft.notes} onChange={(e) => props.setBatchDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Ingredients / notes" />
           <Button onClick={props.onCreateBatch}><Save className="h-4 w-4" /> Save batch</Button>
           <div className="grid gap-2 md:col-span-4 md:grid-cols-[1fr_auto]"><select value={props.selectedBatchId} onChange={(event) => props.setSelectedBatchId(event.target.value)} className="h-10 rounded-md border bg-card px-3 text-sm"><option value="">Choose saved batch meal</option>{props.batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.name} ({batch.portions} portions)</option>)}</select><Button variant="outline" onClick={props.onAddBatch} disabled={!props.selectedBatchId}>Log one portion to plan</Button></div>
@@ -721,12 +738,12 @@ function MealForm({ title, draft, setDraft, onSave, onCancel, saving }: { title:
     <Card><CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       <Input value={draft.foodName} onChange={(e) => setDraft((d) => ({ ...d, foodName: e.target.value }))} placeholder="Food name" />
       <select value={draft.mealType} onChange={(e) => setDraft((d) => ({ ...d, mealType: normalizeMealPlanType(e.target.value) }))} className="h-10 rounded-md border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">{mealTypes.map((type) => <option key={type} value={type}>{displayMealType(type)}</option>)}</select>
-      <Input type="number" min="0.1" step="0.1" value={draft.quantity} onChange={(e) => setDraft((d) => ({ ...d, quantity: e.target.value }))} placeholder="Quantity" />
+      <Input type="number" min="0.1" step="0.1" inputMode="decimal" enterKeyHint="done" value={draft.quantity} onChange={(e) => setDraft((d) => ({ ...d, quantity: e.target.value }))} placeholder="Quantity" />
       <Input value={draft.servingInfo} onChange={(e) => setDraft((d) => ({ ...d, servingInfo: e.target.value }))} placeholder="Serving info" />
-      <Input type="number" min="0" value={draft.calories} onChange={(e) => setDraft((d) => ({ ...d, calories: e.target.value }))} placeholder="Calories" />
-      <Input type="number" min="0" value={draft.protein} onChange={(e) => setDraft((d) => ({ ...d, protein: e.target.value }))} placeholder="Protein g" />
-      <Input type="number" min="0" value={draft.carbs} onChange={(e) => setDraft((d) => ({ ...d, carbs: e.target.value }))} placeholder="Carbs g" />
-      <Input type="number" min="0" value={draft.fat} onChange={(e) => setDraft((d) => ({ ...d, fat: e.target.value }))} placeholder="Fat g" />
+      <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.calories} onChange={(e) => setDraft((d) => ({ ...d, calories: e.target.value }))} placeholder="Calories" />
+      <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.protein} onChange={(e) => setDraft((d) => ({ ...d, protein: e.target.value }))} placeholder="Protein g" />
+      <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.carbs} onChange={(e) => setDraft((d) => ({ ...d, carbs: e.target.value }))} placeholder="Carbs g" />
+      <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.fat} onChange={(e) => setDraft((d) => ({ ...d, fat: e.target.value }))} placeholder="Fat g" />
       <Input className="xl:col-span-2" value={draft.notes} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Notes" />
       <div className="flex gap-2 xl:col-span-2"><Button type="button" onClick={onSave} disabled={saving}><Save className="h-4 w-4" /> Save</Button><Button type="button" variant="outline" onClick={onCancel}><X className="h-4 w-4" /> Cancel</Button></div>
     </CardContent></Card>

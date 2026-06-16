@@ -122,16 +122,16 @@ export function ProgressEntryModal({ onSaved }: { onSaved?: (entry: ProgressEntr
           </div>
           <div className="space-y-2">
             <Label htmlFor="progress-weight">Body weight kg</Label>
-            <Input id="progress-weight" type="number" step="0.1" min="0" value={weight} onChange={(event) => setWeight(event.target.value)} placeholder="Weight in kg, e.g. 72.5" aria-invalid={invalidPositiveNumber(weight)} />
+            <Input id="progress-weight" type="number" step="0.1" min="0" inputMode="decimal" enterKeyHint="done" value={weight} onChange={(event) => setWeight(event.target.value)} placeholder="Weight in kg, e.g. 72.5" aria-invalid={invalidPositiveNumber(weight)} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="progress-waist">Waist cm</Label>
-            <Input id="progress-waist" type="number" step="0.1" min="0" value={waist} onChange={(event) => setWaist(event.target.value)} placeholder="Waist in cm, e.g. 82" aria-invalid={invalidPositiveNumber(waist)} />
+            <Input id="progress-waist" type="number" step="0.1" min="0" inputMode="decimal" enterKeyHint="done" value={waist} onChange={(event) => setWaist(event.target.value)} placeholder="Waist in cm, e.g. 82" aria-invalid={invalidPositiveNumber(waist)} />
           </div>
           {measurementFields.map(([id, label, placeholder]) => (
             <div key={id} className="space-y-2">
               <Label htmlFor={id}>{label}</Label>
-              <Input id={id} type="number" min="0" step="0.1" value={measurements[id] ?? ""} onChange={(event) => setMeasurements((current) => ({ ...current, [id]: event.target.value }))} placeholder={placeholder} aria-invalid={invalidPositiveNumber(measurements[id] ?? "")} />
+              <Input id={id} type="number" min="0" step="0.1" inputMode="decimal" enterKeyHint="done" value={measurements[id] ?? ""} onChange={(event) => setMeasurements((current) => ({ ...current, [id]: event.target.value }))} placeholder={placeholder} aria-invalid={invalidPositiveNumber(measurements[id] ?? "")} />
             </div>
           ))}
           <div className="space-y-2 sm:col-span-2">

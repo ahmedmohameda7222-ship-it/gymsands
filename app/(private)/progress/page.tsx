@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/components/auth/auth-provider";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toaster";
 import { getNutritionWeek } from "@/services/database/nutrition";
 import { updateProfile } from "@/services/database/profile";
@@ -67,6 +68,7 @@ export default function ProgressPage() {
   const [estimateSettings, setEstimateSettings] = useState({ heightCm: "", sex: "male" as "male" | "female" });
 
   const [isLoading, setIsLoading] = useState(true);
+  const { dialog, ask } = useConfirm();
   const today = useTodayDate();
   const currentWeekStart = useMemo(() => startOfWeek(today), [today]);
 
@@ -202,19 +204,27 @@ export default function ProgressPage() {
 
   async function deleteEntry(entry: ProgressEntry) {
     if (!user?.id) return;
-    if (!window.confirm(`Delete progress entry from ${entry.entry_date}? Progress photos are managed separately.`)) return;
-    try {
-      await deleteProgressEntryWithMeasurements(user.id, entry.id);
-      setEntries((current) => current.filter((item) => item.id !== entry.id));
-      toast({ title: "Progress entry deleted", description: "Measurement data linked to this entry was removed." });
-    } catch (error) {
-      toast({ title: "Could not delete progress entry", description: error instanceof Error ? error.message : "Please try again." });
-    }
+    ask({
+      title: "Delete progress entry?",
+      description: `Delete progress entry from ${entry.entry_date}? Progress photos are managed separately.`,
+      variant: "destructive",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        try {
+          await deleteProgressEntryWithMeasurements(user.id, entry.id);
+          setEntries((current) => current.filter((item) => item.id !== entry.id));
+          toast({ title: "Progress entry deleted", description: "Measurement data linked to this entry was removed." });
+        } catch (error) {
+          toast({ title: "Could not delete progress entry", description: error instanceof Error ? error.message : "Please try again." });
+        }
+      }
+    });
   }
 
   if (isLoading) {
     return (
       <>
+        {dialog}
         <PageHeading title="Progress Tracker" description="Track body weight, measurements, private progress photos, workout consistency, and real trend insights." action={<ProgressEntryModal onSaved={(entry) => setEntries((current) => [...current, entry])} />} />
         <div className="mt-6">
           <CardGridSkeleton />
@@ -225,6 +235,7 @@ export default function ProgressPage() {
 
   return (
     <>
+      {dialog}
       <PageHeading title="Progress Tracker" description="Track body weight, measurements, private progress photos, workout consistency, and real trend insights." action={<ProgressEntryModal onSaved={(entry) => setEntries((current) => [...current, entry])} />} />
 
       {!entries.length ? (
@@ -352,6 +363,7 @@ function ProgressPhotoManager({ userId, photos, setPhotos }: { userId: string | 
   const [beforeId, setBeforeId] = useState("");
   const [afterId, setAfterId] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const { dialog, ask } = useConfirm();
   const beforePhoto = photos.find((photo) => photo.id === beforeId) ?? photos.at(-1) ?? null;
   const afterPhoto = photos.find((photo) => photo.id === afterId) ?? photos[0] ?? null;
 
@@ -372,18 +384,26 @@ function ProgressPhotoManager({ userId, photos, setPhotos }: { userId: string | 
   }
 
   async function remove(photo: ProgressPhoto) {
-    if (!window.confirm(`Delete ${photo.photo_type} photo from ${photo.taken_on}?`)) return;
-    try {
-      await deleteProgressPhoto(photo);
-      setPhotos((current) => current.filter((item) => item.id !== photo.id));
-      toast({ title: "Progress photo deleted", description: "Private photo metadata and storage object were removed." });
-    } catch (error) {
-      toast({ title: "Could not delete progress photo", description: error instanceof Error ? error.message : "Please try again." });
-    }
+    ask({
+      title: "Delete progress photo?",
+      description: `Delete ${photo.photo_type} photo from ${photo.taken_on}?`,
+      variant: "destructive",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        try {
+          await deleteProgressPhoto(photo);
+          setPhotos((current) => current.filter((item) => item.id !== photo.id));
+          toast({ title: "Progress photo deleted", description: "Private photo metadata and storage object were removed." });
+        } catch (error) {
+          toast({ title: "Could not delete progress photo", description: error instanceof Error ? error.message : "Please try again." });
+        }
+      }
+    });
   }
 
   return (
     <div className="mt-4 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+      {dialog}
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Camera className="h-5 w-5" /> Private progress photos</CardTitle></CardHeader>
         <CardContent className="space-y-4">

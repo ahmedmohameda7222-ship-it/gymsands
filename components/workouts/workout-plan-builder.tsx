@@ -486,6 +486,8 @@ export function WorkoutPlanBuilder({
                         <Label>Sets</Label>
                         <Input
                           type="number"
+                          inputMode="numeric"
+                          enterKeyHint="done"
                           min="1"
                           value={workout.sets ?? 3}
                           onChange={(event) => updateWorkout(workout.id, { sets: Math.max(1, Number(event.target.value) || 1) })}
@@ -499,6 +501,8 @@ export function WorkoutPlanBuilder({
                         <Label>Rest seconds</Label>
                         <Input
                           type="number"
+                          inputMode="numeric"
+                          enterKeyHint="done"
                           min="0"
                           value={workout.rest_seconds ?? 75}
                           onChange={(event) => updateWorkout(workout.id, { rest_seconds: Math.max(0, Number(event.target.value) || 0) })}
