@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock, ExternalLink, Plus, TimerReset } from "lucide-react";
+import { CheckCircle2, Clock, ExternalLink, Plus, Timer, TimerReset, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,8 +12,9 @@ import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
 import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
-import { completeWorkoutSession, saveWorkoutSetLogs, startWorkoutSession } from "@/services/database/workout-sessions";
-import type { Workout, WorkoutSession } from "@/types";
+import { completeWorkoutSession, getWorkoutHistoryDetailed, saveWorkoutSetLogs, startWorkoutSession } from "@/services/database/workout-sessions";
+import type { Workout, WorkoutSession, WorkoutSessionSummary } from "@/types";
+import { useConfirm, ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type SetLog = {
   reps: number;
@@ -34,6 +35,7 @@ function formatTime(totalSeconds: number) {
 export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { dialog: confirmDialog, ask: confirmAsk } = useConfirm();
   const router = useRouter();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [duration, setDuration] = useState(45);
@@ -43,9 +45,44 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [startedAtMs, setStartedAtMs] = useState(() => Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [timerSeconds, setTimerSeconds] = useState(workout.rest_seconds ?? 60);
+  const [timerLeft, setTimerLeft] = useState(0);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [timerEndsAtMs, setTimerEndsAtMs] = useState<number | null>(null);
+  const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
   const timerKey = useMemo(() => workoutStorageKey(["single-workout-session", user?.id ?? "anonymous", workout.id]), [user?.id, workout.id]);
+  const restTimerKey = useMemo(() => workoutStorageKey(["single-workout-rest", user?.id ?? "anonymous", workout.id]), [user?.id, workout.id]);
   const guideUrl = workout.exercise_url || (isLink(workout.notes) ? workout.notes : null);
   const customVideoUrl = workout.custom_video_url || null;
+
+  const [previousSet, setPreviousSet] = useState<{ reps: number | null; weightKg: number | null; performedAt: string | null } | null>(null);
+
+  useEffect(() => {
+    if (!history.length) {
+      setPreviousSet(null);
+      return;
+    }
+    const normalizedName = workout.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    for (const session of history) {
+      const logs = (session.exercise_logs ?? [])
+        .filter((log) => log.exercise_name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === normalizedName)
+        .filter((log) => Number(log.reps ?? 0) > 0 || Number(log.weight_kg ?? 0) > 0)
+        .sort((a, b) => new Date(b.completed_at || b.created_at).getTime() - new Date(a.completed_at || a.created_at).getTime());
+      if (logs.length) {
+        const latest = logs[0];
+        setPreviousSet({ reps: latest.reps, weightKg: latest.weight_kg, performedAt: session.completed_at || session.started_at });
+        return;
+      }
+    }
+    setPreviousSet(null);
+  }, [history, workout.name]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    getWorkoutHistoryDetailed(user.id, 20)
+      .then((items) => setHistory(items))
+      .catch(() => setHistory([]));
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -79,6 +116,49 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
     return () => window.clearInterval(interval);
   }, [startedAtMs]);
 
+  useEffect(() => {
+    const storedRestDeadline = readStoredTimestamp(restTimerKey);
+    if (!storedRestDeadline || storedRestDeadline <= Date.now()) return;
+    setTimerEndsAtMs(storedRestDeadline);
+    setTimerLeft(Math.max(0, Math.ceil((storedRestDeadline - Date.now()) / 1000)));
+    setIsTimerRunning(true);
+  }, [restTimerKey]);
+
+  useEffect(() => {
+    if (!timerEndsAtMs) return;
+    const tick = () => {
+      const nextLeft = Math.max(0, Math.ceil((timerEndsAtMs - Date.now()) / 1000));
+      setTimerLeft(nextLeft);
+      if (nextLeft <= 0) {
+        setTimerEndsAtMs(null);
+        setIsTimerRunning(false);
+        clearStoredValue(restTimerKey);
+        toast({ title: "Rest finished", description: "Next set ready." });
+      }
+    };
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [restTimerKey, timerEndsAtMs, toast]);
+
+  function startRestTimer(seconds: number) {
+    const safeSeconds = Math.max(0, seconds);
+    if (!safeSeconds) return;
+    const deadline = Date.now() + safeSeconds * 1000;
+    setTimerSeconds(safeSeconds);
+    setTimerLeft(safeSeconds);
+    setTimerEndsAtMs(deadline);
+    setIsTimerRunning(true);
+    storeTimestamp(restTimerKey, deadline);
+  }
+
+  function stopRestTimer() {
+    setTimerLeft(0);
+    setTimerEndsAtMs(null);
+    setIsTimerRunning(false);
+    clearStoredValue(restTimerKey);
+  }
+
   async function complete() {
     if (isSaving) return;
     if (!user?.id) {
@@ -109,6 +189,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
       );
       await completeWorkoutSession(session.id, notes, duration);
       clearStoredValue(timerKey);
+      clearStoredValue(restTimerKey);
       toast({ title: "Workout completed", description: `${workout.name} was saved to your FitLife Hub history.` });
       router.push("/workout-history");
     } catch (error) {
@@ -122,6 +203,16 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
     }
   }
 
+  function askComplete() {
+    confirmAsk({
+      title: "Finish workout?",
+      description: "This will save your workout to history.",
+      confirmLabel: "Finish",
+      cancelLabel: "Keep Training",
+      onConfirm: () => complete()
+    });
+  }
+
   function resetWorkoutTimer() {
     const nextStartedAt = Date.now();
     setStartedAtMs(nextStartedAt);
@@ -132,12 +223,13 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
 
   return (
     <div className="space-y-4 pb-24 lg:pb-0">
+      {confirmDialog}
       <Card>
         <CardHeader>
-          <CardTitle>Log workout results</CardTitle>
+          <CardTitle>{workout.name}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+          <div className="rounded-md bg-muted/40 p-3 text-sm leading-6 text-muted-foreground">
             <p>{workout.instructions || "Use controlled form and stop if the movement feels painful."}</p>
             <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap">
               {guideUrl ? (
@@ -171,20 +263,43 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
               {sessionError}
             </div>
           ) : null}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-slate-50 p-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/40 p-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <Clock className="h-4 w-4 text-primary" />
-              Time spent: {formatTime(elapsedSeconds)}
+              Time: {formatTime(elapsedSeconds)}
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={resetWorkoutTimer}>
-              <TimerReset className="h-4 w-4" />
-              Reset workout timer
-            </Button>
+            <div className="flex items-center gap-2">
+              {isTimerRunning ? (
+                <div className="flex items-center gap-2 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-semibold text-primary">
+                  <Timer className="h-4 w-4" />
+                  {formatTime(timerLeft)}
+                </div>
+              ) : null}
+              <Button type="button" variant="outline" size="sm" onClick={resetWorkoutTimer}>
+                <TimerReset className="h-4 w-4" />
+                Reset
+              </Button>
+            </div>
           </div>
+
+          {previousSet ? (
+            <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
+              <p className="font-semibold text-foreground">Previous set</p>
+              <p className="text-muted-foreground">{previousSet.weightKg ?? 0} kg × {previousSet.reps ?? 0}{previousSet.performedAt ? ` on ${previousSet.performedAt.slice(0, 10)}` : ""}</p>
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-4 gap-2">
+            <Button variant="outline" size="sm" onClick={() => startRestTimer(30)}>30s</Button>
+            <Button variant="outline" size="sm" onClick={() => startRestTimer(60)}>60s</Button>
+            <Button variant="outline" size="sm" onClick={() => startRestTimer(90)}>90s</Button>
+            <Button variant="outline" size="sm" onClick={() => startRestTimer(180)}>3m</Button>
+          </div>
+
           {sets.map((set, index) => (
             <div key={index} className="rounded-xl border bg-card p-4">
               <p className="mb-3 text-base font-semibold">Set {index + 1}</p>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor={`reps-${index}`}>Reps</Label>
                   <Input
@@ -216,7 +331,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
                     placeholder="40"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 col-span-2 lg:col-span-1">
                   <Label htmlFor={`set-note-${index}`}>Set note</Label>
                   <Input
                     id={`set-note-${index}`}
@@ -257,7 +372,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
               />
             </div>
           </div>
-          <Button className="hidden w-full lg:inline-flex" onClick={complete} disabled={isSaving || Boolean(sessionError) || !session}>
+          <Button className="hidden w-full lg:inline-flex" onClick={askComplete} disabled={isSaving || Boolean(sessionError) || !session}>
             <CheckCircle2 className="h-4 w-4" />
             {isSaving ? "Saving workout..." : "Mark workout completed"}
           </Button>
@@ -270,8 +385,8 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
             <p className="font-semibold text-foreground">{formatTime(elapsedSeconds)}</p>
             <p className="truncate text-xs text-muted-foreground">{sets.length} set{sets.length === 1 ? "" : "s"} ready to save</p>
           </div>
-          <Button className="min-h-12 flex-1" onClick={complete} disabled={isSaving || Boolean(sessionError) || !session}>
-            <CheckCircle2 className="h-4 w-4" />
+          <Button className="min-h-12 flex-1 text-base" onClick={askComplete} disabled={isSaving || Boolean(sessionError) || !session}>
+            <CheckCircle2 className="h-5 w-5" />
             {isSaving ? "Saving..." : "Finish"}
           </Button>
         </div>
