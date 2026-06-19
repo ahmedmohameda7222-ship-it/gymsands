@@ -1,11 +1,10 @@
 "use client";
 
-import { CalendarCheck, Dumbbell, ExternalLink, Pencil, Play, Plus, RotateCcw, Save, Search, SkipForward, SlidersHorizontal, Trash2, TrendingUp } from "lucide-react";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { ExternalLink, Dumbbell, Pencil, Play, Plus, RotateCcw, Save, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -111,6 +110,7 @@ export function WorkoutPlanBuilder({
   const [isSkipping, setIsSkipping] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const [activity, setActivity] = useState<WorkoutSession[]>([]);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     getWorkoutFilterOptions()
@@ -189,7 +189,14 @@ export function WorkoutPlanBuilder({
     [filters]
   );
 
+  const hasActiveFilter = activeFilterCount > 0 || showAll;
+
   useEffect(() => {
+    if (!hasActiveFilter) {
+      setResults([]);
+      setIsLoading(false);
+      return;
+    }
     let active = true;
     const timer = window.setTimeout(() => {
       setIsLoading(true);
@@ -211,13 +218,12 @@ export function WorkoutPlanBuilder({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [filters.query, requestFilters, toast]);
+  }, [filters.query, requestFilters, toast, hasActiveFilter]);
 
   const activeDay = days[activeDayIndex] ?? days[0];
   const totalExercises = useMemo(() => days.reduce((sum, day) => sum + day.exercises.length, 0), [days]);
   const today = getCurrentWeekday();
   const todaysDay = days.find((day) => day.weekday === today && day.exercises.length > 0);
-  const stats = useMemo(() => buildWorkoutStats(activity, days), [activity, days]);
 
   function updateDay(index: number, patch: Partial<WeeklyPlanDay>) {
     setDays((current) => current.map((day, itemIndex) => (itemIndex === index ? { ...day, ...patch, id: patch.exercises ? undefined : day.id } : day)));
@@ -382,26 +388,15 @@ export function WorkoutPlanBuilder({
         isSkipping={isSkipping}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={CalendarCheck} label="Completed days" value={stats.completed} detail={`${stats.completedThisWeek} this week`} />
-        <StatCard icon={SkipForward} label="Skipped days" value={stats.skipped} detail={`${stats.skippedThisWeek} this week`} />
-        <StatCard icon={TrendingUp} label="Weekly progress" value={`${stats.weeklyPercent}%`} detail={`${stats.completedThisMonth} completed this month`} />
-        <StatCard icon={Dumbbell} label="Planned days" value={stats.plannedDays} detail={`${totalExercises} workouts in plan`} />
-      </div>
-
       <div className="space-y-4">
         {isLoadingSavedPlan ? <p className="text-sm text-muted-foreground">Loading saved plan...</p> : null}
         {savedMessage ? <p className="text-sm text-success">{savedMessage}</p> : null}
 
-        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto]">
+        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
           <div className="space-y-2">
             <Label>Plan name</Label>
             <Input value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder="Push Pull Legs, Ramadan plan, etc." />
           </div>
-          <Button className="self-end" variant="outline" onClick={() => startPlanDay(activeDay)} disabled={!activeDay?.exercises.length}>
-            <Play className="h-4 w-4" />
-            Start this day
-          </Button>
           <Button className="self-end" variant="outline" onClick={() => editPlanDay(activeDay)} disabled={!activeDay?.exercises.length}>
             <Pencil className="h-4 w-4" />
             Edit day
@@ -551,7 +546,7 @@ export function WorkoutPlanBuilder({
                 </div>
                 <p className="text-sm text-muted-foreground">{results.length} exercises loaded</p>
               </div>
-              <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+              <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
                   <Input
@@ -561,9 +556,13 @@ export function WorkoutPlanBuilder({
                     className="pl-10"
                   />
                 </div>
-                <Button type="button" variant="outline" onClick={resetFilters} disabled={!activeFilterCount}>
+                <Button type="button" variant="outline" onClick={() => { resetFilters(); setShowAll(false); }} disabled={!activeFilterCount && !showAll}>
                   <RotateCcw className="h-4 w-4" />
                   Clear filters
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setShowAll(true)} disabled={showAll}>
+                  <Search className="h-4 w-4" />
+                  Show all
                 </Button>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
@@ -579,7 +578,10 @@ export function WorkoutPlanBuilder({
             </div>
 
             {isLoading ? <p className="text-sm text-muted-foreground">Loading workouts...</p> : null}
-            {!isLoading && !results.length ? <p className="text-sm text-muted-foreground">No exercises match these filters.</p> : null}
+            {!isLoading && !results.length && !hasActiveFilter ? (
+              <p className="text-sm text-muted-foreground">Use filters or click Show all to browse exercises.</p>
+            ) : null}
+            {!isLoading && !results.length && hasActiveFilter ? <p className="text-sm text-muted-foreground">No exercises match these filters.</p> : null}
             <div className="grid gap-3 md:grid-cols-2">
               {results.map((workout) => (
                 <div key={workout.id} className="rounded-md border bg-card p-3">
@@ -626,35 +628,6 @@ export function WorkoutPlanBuilder({
   );
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  detail
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  value: string | number;
-  detail: string;
-}) {
-  return (
-    <Card>
-      <CardContent className="pt-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="mt-2 text-2xl font-bold text-foreground">{value}</p>
-          </div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <Icon className="h-5 w-5" />
-          </div>
-        </div>
-        <p className="mt-3 text-sm text-muted-foreground">{detail}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
 function FilterSelect({
   label,
   value,
@@ -682,29 +655,6 @@ function FilterSelect({
       </Select>
     </div>
   );
-}
-
-function buildWorkoutStats(activity: WorkoutSession[], days: WeeklyPlanDay[]) {
-  const now = new Date();
-  const weekStart = startOfWeek(now);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const plannedDays = days.filter((day) => day.exercises.length > 0).length;
-
-  const completed = activity.filter((session) => session.status === "completed");
-  const skipped = activity.filter((session) => session.status === "skipped");
-  const completedThisWeek = completed.filter((session) => sessionDate(session) >= weekStart).length;
-  const skippedThisWeek = skipped.filter((session) => sessionDate(session) >= weekStart).length;
-  const completedThisMonth = completed.filter((session) => sessionDate(session) >= monthStart).length;
-
-  return {
-    completed: completed.length,
-    skipped: skipped.length,
-    completedThisWeek,
-    skippedThisWeek,
-    completedThisMonth,
-    plannedDays,
-    weeklyPercent: plannedDays ? Math.min(100, Math.round((completedThisWeek / plannedDays) * 100)) : 0
-  };
 }
 
 function sessionDate(session: WorkoutSession) {
