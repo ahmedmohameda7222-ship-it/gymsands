@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { getOnboarding } from "@/services/database/profile";
-import { getActiveWorkoutPlan } from "@/services/database/workout-plan-loader";
+import { getAllUserWorkoutPlans } from "@/services/database/workout-plan-loader";
 import type { OnboardingAnswers, UserWorkoutPlan } from "@/types";
 
 function isChatGptPlan(plan: UserWorkoutPlan | null) {
@@ -69,7 +69,7 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const [onboarding, setOnboarding] = useState<OnboardingAnswers | null>(null);
-  const [activePlan, setActivePlan] = useState<UserWorkoutPlan | null>(null);
+  const [plans, setPlans] = useState<UserWorkoutPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
@@ -80,12 +80,12 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
     }
     async function load() {
       try {
-        const [onb, plan] = await Promise.all([
+        const [onb, allPlans] = await Promise.all([
           getOnboarding(user!.id),
-          getActiveWorkoutPlan(user!.id)
+          getAllUserWorkoutPlans(user!.id)
         ]);
         setOnboarding(onb);
-        setActivePlan(plan);
+        setPlans(allPlans);
       } catch {
         // silently fail; card degrades gracefully
       } finally {
@@ -95,7 +95,7 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
     load();
   }, [user?.id]);
 
-  const hasImportedActivePlan = isChatGptPlan(activePlan);
+  const hasImportedPlan = plans.some(isChatGptPlan);
   const setupComplete = Boolean(onboarding);
 
   const prompt = useMemo(() => {
@@ -116,8 +116,8 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
     window.open("https://chatgpt.com", "_blank", "noopener,noreferrer");
   }
 
-  // Hide completely if user already has an imported active plan
-  if (!isLoading && hasImportedActivePlan) return null;
+  // Hide completely if user already has any imported plan
+  if (!isLoading && hasImportedPlan) return null;
 
   const noun = mode === "workout" ? "workout plan" : "meal plan";
 
