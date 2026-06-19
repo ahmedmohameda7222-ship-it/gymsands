@@ -518,15 +518,7 @@ function MyMealPlanBuilderInner() {
       </div>
 
       <Card className="hidden sm:block">
-        <CardContent className="grid gap-4 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
-          <div>
-            <p className="text-lg font-semibold">How meal planning works</p>
-            <div className="mt-3 grid gap-2 text-sm text-muted-foreground md:grid-cols-3">
-              <p className="rounded-md border p-3">Planned meals do not count in calories.</p>
-              <p className="rounded-md border p-3">Meals count only after Mark done creates a real food log once.</p>
-              <p className="rounded-md border p-3">Templates, batch meals, and shopping list are for weekly prep.</p>
-            </div>
-          </div>
+        <CardContent className="p-5">
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
             <Button type="button" onClick={() => openAddMeal("Breakfast")}>
               <PlusCircle className="h-4 w-4" />
