@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -389,243 +389,239 @@ export function WorkoutPlanBuilder({
         <StatCard icon={Dumbbell} label="Planned days" value={stats.plannedDays} detail={`${totalExercises} workouts in plan`} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Workout plan</CardTitle>
-          {isLoadingSavedPlan ? <p className="text-sm text-muted-foreground">Loading saved plan...</p> : null}
-          {savedMessage ? <p className="text-sm text-success">{savedMessage}</p> : null}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto]">
+      <div className="space-y-4">
+        {isLoadingSavedPlan ? <p className="text-sm text-muted-foreground">Loading saved plan...</p> : null}
+        {savedMessage ? <p className="text-sm text-success">{savedMessage}</p> : null}
+
+        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto]">
+          <div className="space-y-2">
+            <Label>Plan name</Label>
+            <Input value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder="Push Pull Legs, Ramadan plan, etc." />
+          </div>
+          <Button className="self-end" variant="outline" onClick={() => startPlanDay(activeDay)} disabled={!activeDay?.exercises.length}>
+            <Play className="h-4 w-4" />
+            Start this day
+          </Button>
+          <Button className="self-end" variant="outline" onClick={() => editPlanDay(activeDay)} disabled={!activeDay?.exercises.length}>
+            <Pencil className="h-4 w-4" />
+            Edit day
+          </Button>
+          <Button className="self-end" onClick={savePlan} disabled={isSaving || totalExercises === 0}>
+            <Save className="h-4 w-4" />
+            {isSaving ? "Saving..." : "Save plan"}
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {days.map((day, index) => (
+            <Button key={`${day.dayName}-${index}`} variant={activeDayIndex === index ? "default" : "outline"} size="sm" onClick={() => openCalendarDay(index)}>
+              {day.weekday ?? `Day ${index + 1}`} <Badge className="ml-2" variant="outline">{day.exercises.length}</Badge>
+            </Button>
+          ))}
+          <Button variant="outline" size="sm" onClick={addDay} disabled={days.length >= 7}>
+            <Plus className="h-4 w-4" />
+            Add day
+          </Button>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[1fr_1.1fr]">
+          <div className="space-y-3 rounded-md border bg-slate-50 p-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Workout day</Label>
+                <Select value={activeDay.weekday ?? undefined} onValueChange={(weekday) => updateDay(activeDayIndex, { weekday: weekday as Weekday, id: undefined, planId: undefined })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose weekday" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {weekDays.map((weekday) => (
+                      <SelectItem key={weekday} value={weekday}>{weekday}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Day name</Label>
+                <Input value={activeDay.dayName} onChange={(event) => updateDay(activeDayIndex, { dayName: event.target.value, id: undefined, planId: undefined })} placeholder="Push day, Leg day, Day 1..." />
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <Label>Plan name</Label>
-              <Input value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder="Push Pull Legs, Ramadan plan, etc." />
-            </div>
-            <Button className="self-end" variant="outline" onClick={() => startPlanDay(activeDay)} disabled={!activeDay?.exercises.length}>
-              <Play className="h-4 w-4" />
-              Start this day
-            </Button>
-            <Button className="self-end" variant="outline" onClick={() => editPlanDay(activeDay)} disabled={!activeDay?.exercises.length}>
-              <Pencil className="h-4 w-4" />
-              Edit day
-            </Button>
-            <Button className="self-end" onClick={savePlan} disabled={isSaving || totalExercises === 0}>
-              <Save className="h-4 w-4" />
-              {isSaving ? "Saving..." : "Save plan"}
-            </Button>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {days.map((day, index) => (
-              <Button key={`${day.dayName}-${index}`} variant={activeDayIndex === index ? "default" : "outline"} size="sm" onClick={() => openCalendarDay(index)}>
-                {day.weekday ?? `Day ${index + 1}`} <Badge className="ml-2" variant="outline">{day.exercises.length}</Badge>
-              </Button>
-            ))}
-            <Button variant="outline" size="sm" onClick={addDay} disabled={days.length >= 7}>
-              <Plus className="h-4 w-4" />
-              Add day
-            </Button>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-[1fr_1.1fr]">
-            <div className="space-y-3 rounded-md border bg-slate-50 p-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Workout day</Label>
-                  <Select value={activeDay.weekday ?? undefined} onValueChange={(weekday) => updateDay(activeDayIndex, { weekday: weekday as Weekday, id: undefined, planId: undefined })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose weekday" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {weekDays.map((weekday) => (
-                        <SelectItem key={weekday} value={weekday}>{weekday}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Day name</Label>
-                  <Input value={activeDay.dayName} onChange={(event) => updateDay(activeDayIndex, { dayName: event.target.value, id: undefined, planId: undefined })} placeholder="Push day, Leg day, Day 1..." />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Notes</Label>
-                <textarea
-                  value={activeDay.notes}
-                  onChange={(event) => updateDay(activeDayIndex, { notes: event.target.value, id: undefined, planId: undefined })}
-                  placeholder="Optional notes for this day"
-                  className="min-h-20 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <Label>Selected workouts</Label>
-                  {days.length > 1 ? (
-                    <Button variant="ghost" size="sm" onClick={() => removeDay(activeDayIndex)}>
-                      <Trash2 className="h-4 w-4" />
-                      Remove day
-                    </Button>
-                  ) : null}
-                </div>
-                {!activeDay.exercises.length ? <p className="text-sm text-muted-foreground">No workouts added to this day yet.</p> : null}
-                {activeDay.exercises.map((workout, index) => (
-                  <div key={workout.id} className="space-y-3 rounded-md bg-card p-3 text-sm shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold">{index + 1}. {workout.name}</p>
-                        <p className="text-muted-foreground">{workout.target_muscle} | {workout.equipment}</p>
-                      </div>
-                      <Button variant="ghost" size="sm" onClick={() => removeWorkout(workout.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                      <div className="space-y-1">
-                        <Label>Sets</Label>
-                        <Input
-                          type="number"
-                          inputMode="numeric"
-                          enterKeyHint="done"
-                          min="1"
-                          value={workout.sets ?? 3}
-                          onChange={(event) => updateWorkout(workout.id, { sets: Math.max(1, Number(event.target.value) || 1) })}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label>Planned reps</Label>
-                        <Input value={workout.reps ?? "8-12"} onChange={(event) => updateWorkout(workout.id, { reps: event.target.value })} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label>Rest seconds</Label>
-                        <Input
-                          type="number"
-                          inputMode="numeric"
-                          enterKeyHint="done"
-                          min="0"
-                          value={workout.rest_seconds ?? 75}
-                          onChange={(event) => updateWorkout(workout.id, { rest_seconds: Math.max(0, Number(event.target.value) || 0) })}
-                        />
-                      </div>
-                      <div className="space-y-1 sm:col-span-2 xl:col-span-1">
-                        <Label>Custom video URL</Label>
-                        <Input
-                          value={workout.custom_video_url ?? ""}
-                          onChange={(event) => updateWorkout(workout.id, { custom_video_url: event.target.value, video_url: event.target.value })}
-                          placeholder="Optional user-added URL"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {isVideoLink(workout.exercise_url || workout.notes) ? (
-                        <Button asChild variant="ghost" size="sm">
-                          <a href={workout.exercise_url || workout.notes || "#"} target="_blank" rel="noreferrer">
-                            <ExternalLink className="h-4 w-4" />
-                            Open Exercise Guide
-                          </a>
-                        </Button>
-                      ) : (
-                        <Button variant="ghost" size="sm" disabled>No guide added</Button>
-                      )}
-                      {workout.custom_video_url ? (
-                        <Button asChild variant="ghost" size="sm">
-                          <a href={workout.custom_video_url} target="_blank" rel="noreferrer">
-                            <ExternalLink className="h-4 w-4" />
-                            Open Custom Video
-                          </a>
-                        </Button>
-                      ) : (
-                        <Button variant="ghost" size="sm" disabled>No custom video</Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <Label>Notes</Label>
+              <textarea
+                value={activeDay.notes}
+                onChange={(event) => updateDay(activeDayIndex, { notes: event.target.value, id: undefined, planId: undefined })}
+                placeholder="Optional notes for this day"
+                className="min-h-20 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
             </div>
 
-            <div className="space-y-3">
-              <div className="space-y-3 rounded-md border bg-card p-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <SlidersHorizontal className="h-5 w-5 text-primary" />
-                    <p className="font-semibold text-foreground">Exercise filters</p>
-                    {activeFilterCount ? <Badge>{activeFilterCount} selected</Badge> : null}
-                  </div>
-                  <p className="text-sm text-muted-foreground">{results.length} exercises loaded</p>
-                </div>
-                <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                    <Input
-                      value={filters.query}
-                      onChange={(event) => patchFilters({ query: event.target.value })}
-                      placeholder="Search workouts"
-                      className="pl-10"
-                    />
-                  </div>
-                  <Button type="button" variant="outline" onClick={resetFilters} disabled={!activeFilterCount}>
-                    <RotateCcw className="h-4 w-4" />
-                    Clear filters
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label>Selected workouts</Label>
+                {days.length > 1 ? (
+                  <Button variant="ghost" size="sm" onClick={() => removeDay(activeDayIndex)}>
+                    <Trash2 className="h-4 w-4" />
+                    Remove day
                   </Button>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-                  <FilterSelect label="Muscle category" value={filters.muscleCategory} values={filterOptions.muscleCategories} onChange={(muscleCategory) => patchFilters({ muscleCategory })} />
-                  <FilterSelect label="Primary muscle" value={filters.primaryMuscle} values={filterOptions.primaryMuscles} onChange={(primaryMuscle) => patchFilters({ primaryMuscle })} />
-                  <FilterSelect label="Secondary muscle" value={filters.secondaryMuscle} values={filterOptions.secondaryMuscles} onChange={(secondaryMuscle) => patchFilters({ secondaryMuscle })} />
-                  <FilterSelect label="Equipment" value={filters.equipment} values={filterOptions.equipmentRequired} onChange={(equipment) => patchFilters({ equipment })} />
-                  <FilterSelect label="Mechanics" value={filters.mechanics} values={filterOptions.mechanics} onChange={(mechanics) => patchFilters({ mechanics })} />
-                  <FilterSelect label="Exercise type" value={filters.exerciseType} values={filterOptions.exerciseTypes} onChange={(exerciseType) => patchFilters({ exerciseType })} />
-                  <FilterSelect label="Force type" value={filters.forceType} values={filterOptions.forceTypes} onChange={(forceType) => patchFilters({ forceType })} />
-                  <FilterSelect label="Difficulty / level" value={filters.level} values={filterOptions.experienceLevels} onChange={(level) => patchFilters({ level })} />
-                </div>
+                ) : null}
               </div>
-
-              {isLoading ? <p className="text-sm text-muted-foreground">Loading workouts...</p> : null}
-              {!isLoading && !results.length ? <p className="text-sm text-muted-foreground">No exercises match these filters.</p> : null}
-              <div className="grid gap-3 md:grid-cols-2">
-                {results.map((workout) => (
-                  <div key={workout.id} className="rounded-md border bg-card p-3">
-                    <div className="flex items-start gap-2">
-                      <Dumbbell className="mt-1 h-4 w-4 shrink-0 text-primary" />
-                      <div>
-                        <p className="font-semibold">{workout.name}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">{workout.target_muscle} | {workout.equipment}</p>
-                      </div>
+              {!activeDay.exercises.length ? <p className="text-sm text-muted-foreground">No workouts added to this day yet.</p> : null}
+              {activeDay.exercises.map((workout, index) => (
+                <div key={workout.id} className="space-y-3 rounded-md bg-card p-3 text-sm shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{index + 1}. {workout.name}</p>
+                      <p className="text-muted-foreground">{workout.target_muscle} | {workout.equipment}</p>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                      <Badge variant="outline">{workout.sets ?? 3} sets</Badge>
-                      <Badge variant="outline">{workout.reps ?? "8-12"}</Badge>
-                      <Badge variant="outline">{workout.rest_seconds ?? 75}s rest</Badge>
+                    <Button variant="ghost" size="sm" onClick={() => removeWorkout(workout.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="space-y-1">
+                      <Label>Sets</Label>
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        enterKeyHint="done"
+                        min="1"
+                        value={workout.sets ?? 3}
+                        onChange={(event) => updateWorkout(workout.id, { sets: Math.max(1, Number(event.target.value) || 1) })}
+                      />
                     </div>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      <Button variant="outline" size="sm" onClick={() => addWorkout(workout)}>
-                        <Plus className="h-4 w-4" />
-                        Add
-                      </Button>
-                      <Button asChild variant="ghost" size="sm">
-                        <Link href={`/workouts/${workout.id}`}>Details</Link>
-                      </Button>
-                      {isVideoLink(workout.exercise_url || workout.notes) ? (
-                        <Button asChild variant="ghost" size="sm" className="sm:col-span-2">
-                          <a href={workout.exercise_url || workout.notes || "#"} target="_blank" rel="noreferrer">
-                            <ExternalLink className="h-4 w-4" />
-                            Open Exercise Guide
-                          </a>
-                        </Button>
-                      ) : (
-                        <Button variant="ghost" size="sm" className="sm:col-span-2" disabled>
-                          No guide added
-                        </Button>
-                      )}
+                    <div className="space-y-1">
+                      <Label>Planned reps</Label>
+                      <Input value={workout.reps ?? "8-12"} onChange={(event) => updateWorkout(workout.id, { reps: event.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Rest seconds</Label>
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        enterKeyHint="done"
+                        min="0"
+                        value={workout.rest_seconds ?? 75}
+                        onChange={(event) => updateWorkout(workout.id, { rest_seconds: Math.max(0, Number(event.target.value) || 0) })}
+                      />
+                    </div>
+                    <div className="space-y-1 sm:col-span-2 xl:col-span-1">
+                      <Label>Custom video URL</Label>
+                      <Input
+                        value={workout.custom_video_url ?? ""}
+                        onChange={(event) => updateWorkout(workout.id, { custom_video_url: event.target.value, video_url: event.target.value })}
+                        placeholder="Optional user-added URL"
+                      />
                     </div>
                   </div>
-                ))}
-              </div>
+                  <div className="flex flex-wrap gap-2">
+                    {isVideoLink(workout.exercise_url || workout.notes) ? (
+                      <Button asChild variant="ghost" size="sm">
+                        <a href={workout.exercise_url || workout.notes || "#"} target="_blank" rel="noreferrer">
+                          <ExternalLink className="h-4 w-4" />
+                          Open Exercise Guide
+                        </a>
+                      </Button>
+                    ) : (
+                      <Button variant="ghost" size="sm" disabled>No guide added</Button>
+                    )}
+                    {workout.custom_video_url ? (
+                      <Button asChild variant="ghost" size="sm">
+                        <a href={workout.custom_video_url} target="_blank" rel="noreferrer">
+                          <ExternalLink className="h-4 w-4" />
+                          Open Custom Video
+                        </a>
+                      </Button>
+                    ) : (
+                      <Button variant="ghost" size="sm" disabled>No custom video</Button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        </CardContent>
-      </Card>
+
+          <div className="space-y-3">
+            <div className="space-y-3 rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal className="h-5 w-5 text-primary" />
+                  <p className="font-semibold text-foreground">Exercise filters</p>
+                  {activeFilterCount ? <Badge>{activeFilterCount} selected</Badge> : null}
+                </div>
+                <p className="text-sm text-muted-foreground">{results.length} exercises loaded</p>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+                  <Input
+                    value={filters.query}
+                    onChange={(event) => patchFilters({ query: event.target.value })}
+                    placeholder="Search workouts"
+                    className="pl-10"
+                  />
+                </div>
+                <Button type="button" variant="outline" onClick={resetFilters} disabled={!activeFilterCount}>
+                  <RotateCcw className="h-4 w-4" />
+                  Clear filters
+                </Button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+                <FilterSelect label="Muscle category" value={filters.muscleCategory} values={filterOptions.muscleCategories} onChange={(muscleCategory) => patchFilters({ muscleCategory })} />
+                <FilterSelect label="Primary muscle" value={filters.primaryMuscle} values={filterOptions.primaryMuscles} onChange={(primaryMuscle) => patchFilters({ primaryMuscle })} />
+                <FilterSelect label="Secondary muscle" value={filters.secondaryMuscle} values={filterOptions.secondaryMuscles} onChange={(secondaryMuscle) => patchFilters({ secondaryMuscle })} />
+                <FilterSelect label="Equipment" value={filters.equipment} values={filterOptions.equipmentRequired} onChange={(equipment) => patchFilters({ equipment })} />
+                <FilterSelect label="Mechanics" value={filters.mechanics} values={filterOptions.mechanics} onChange={(mechanics) => patchFilters({ mechanics })} />
+                <FilterSelect label="Exercise type" value={filters.exerciseType} values={filterOptions.exerciseTypes} onChange={(exerciseType) => patchFilters({ exerciseType })} />
+                <FilterSelect label="Force type" value={filters.forceType} values={filterOptions.forceTypes} onChange={(forceType) => patchFilters({ forceType })} />
+                <FilterSelect label="Difficulty / level" value={filters.level} values={filterOptions.experienceLevels} onChange={(level) => patchFilters({ level })} />
+              </div>
+            </div>
+
+            {isLoading ? <p className="text-sm text-muted-foreground">Loading workouts...</p> : null}
+            {!isLoading && !results.length ? <p className="text-sm text-muted-foreground">No exercises match these filters.</p> : null}
+            <div className="grid gap-3 md:grid-cols-2">
+              {results.map((workout) => (
+                <div key={workout.id} className="rounded-md border bg-card p-3">
+                  <div className="flex items-start gap-2">
+                    <Dumbbell className="mt-1 h-4 w-4 shrink-0 text-primary" />
+                    <div>
+                      <p className="font-semibold">{workout.name}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{workout.target_muscle} | {workout.equipment}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    <Badge variant="outline">{workout.sets ?? 3} sets</Badge>
+                    <Badge variant="outline">{workout.reps ?? "8-12"}</Badge>
+                    <Badge variant="outline">{workout.rest_seconds ?? 75}s rest</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <Button variant="outline" size="sm" onClick={() => addWorkout(workout)}>
+                      <Plus className="h-4 w-4" />
+                      Add
+                    </Button>
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href={`/workouts/${workout.id}`}>Details</Link>
+                    </Button>
+                    {isVideoLink(workout.exercise_url || workout.notes) ? (
+                      <Button asChild variant="ghost" size="sm" className="sm:col-span-2">
+                        <a href={workout.exercise_url || workout.notes || "#"} target="_blank" rel="noreferrer">
+                          <ExternalLink className="h-4 w-4" />
+                          Open Exercise Guide
+                        </a>
+                      </Button>
+                    ) : (
+                      <Button variant="ghost" size="sm" className="sm:col-span-2" disabled>
+                        No guide added
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

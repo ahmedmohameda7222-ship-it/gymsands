@@ -15,7 +15,6 @@ import { setDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
 import { getWorkoutActivity } from "@/services/database/workout-sessions";
 import { archiveWorkoutPlan, deleteWorkoutPlan, duplicateWorkoutPlan, getActiveWorkoutPlan, getAllUserWorkoutPlans, updateWorkoutPlanMetadata, workoutsFromLoadedPlanDay } from "@/services/database/workout-plan-loader";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { WorkoutPlanBuilder } from "@/components/workouts/workout-plan-builder";
 import { WorkoutCalendar } from "@/components/workouts/workout-calendar";
 import { Input } from "@/components/ui/input";
 import type { UserWorkoutPlan, WorkoutSession } from "@/types";
@@ -56,7 +55,6 @@ export function MyWorkoutPlans() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
-  const [showBuilder, setShowBuilder] = useState(false);
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const { dialog, ask } = useConfirm();
@@ -210,8 +208,8 @@ export function MyWorkoutPlans() {
           <Button variant="outline" onClick={loadPlans} disabled={isLoading}>
             <RefreshCcw className="h-4 w-4" /> Refresh
           </Button>
-          <Button variant="outline" onClick={() => setShowBuilder((current) => !current)}>
-            <Plus className="h-4 w-4" /> {showBuilder ? "Close manual fallback" : "Manual backup"}
+          <Button variant="outline" onClick={() => router.push("/my-workout/plans/builder")}>
+            <Plus className="h-4 w-4" /> Create manually
           </Button>
         </div>
       </div>
@@ -356,17 +354,6 @@ export function MyWorkoutPlans() {
         </Card>
       ) : null}
 
-      <div id="manual-fallback">
-        {showBuilder ? (
-          <section className="space-y-3 rounded-2xl border bg-card p-4">
-            <div>
-              <h3 className="text-lg font-semibold">Manual backup / edit plan</h3>
-              <p className="text-sm text-muted-foreground">Use this only when you need to repair an imported plan or enter a plan you already approved elsewhere.</p>
-            </div>
-            <WorkoutPlanBuilder loadActivePlan={false} onSaved={loadPlans} />
-          </section>
-        ) : null}
-      </div>
       {dialog}
     </div>
   );
