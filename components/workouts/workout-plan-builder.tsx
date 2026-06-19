@@ -103,7 +103,11 @@ export function WorkoutPlanBuilder({
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [filterOptions, setFilterOptions] = useState<WorkoutFilterOptions>(emptyOptions);
   const [filters, setFilters] = useState<BuilderFilterState>(emptyFilterState);
-  const [results, setResults] = useState<Workout[]>([]);
+  const [allResults, setAllResults] = useState<Workout[]>([]);
+  const [displayCount, setDisplayCount] = useState(60);
+  const [apiPage, setApiPage] = useState(0);
+  const [hasMoreApi, setHasMoreApi] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingSavedPlan, setIsLoadingSavedPlan] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -193,20 +197,28 @@ export function WorkoutPlanBuilder({
 
   useEffect(() => {
     if (!hasActiveFilter) {
-      setResults([]);
+      setAllResults([]);
+      setDisplayCount(60);
+      setApiPage(0);
+      setHasMoreApi(true);
       setIsLoading(false);
       return;
     }
     let active = true;
     const timer = window.setTimeout(() => {
       setIsLoading(true);
-      getWorkouts(filters.query.trim(), requestFilters, 0)
+      const query = showAll ? "" : filters.query.trim();
+      getWorkouts(query, requestFilters, 0)
         .then((items) => {
-          if (active) setResults(items.slice(0, 60).map(withTrainingDefaults));
+          if (!active) return;
+          setAllResults(items.map(withTrainingDefaults));
+          setDisplayCount(60);
+          setApiPage(0);
+          setHasMoreApi(items.length >= 500);
         })
         .catch((error) => {
           if (!active) return;
-          setResults([]);
+          setAllResults([]);
           toast({ title: "Could not load workouts", description: error instanceof Error ? error.message : "Try another filter." });
         })
         .finally(() => {
@@ -218,7 +230,7 @@ export function WorkoutPlanBuilder({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [filters.query, requestFilters, toast, hasActiveFilter]);
+  }, [filters.query, requestFilters, toast, hasActiveFilter, showAll]);
 
   const activeDay = days[activeDayIndex] ?? days[0];
   const totalExercises = useMemo(() => days.reduce((sum, day) => sum + day.exercises.length, 0), [days]);
@@ -340,6 +352,31 @@ export function WorkoutPlanBuilder({
       return;
     }
     startPlanDay(todaysDay);
+  }
+
+  async function handleLoadMore() {
+    if (isLoadingMore) return;
+    const nextDisplay = displayCount + 60;
+    if (nextDisplay <= allResults.length) {
+      setDisplayCount(nextDisplay);
+      return;
+    }
+    if (!hasMoreApi) return;
+    setIsLoadingMore(true);
+    try {
+      const nextPage = apiPage + 1;
+      const query = showAll ? "" : filters.query.trim();
+      const items = await getWorkouts(query, requestFilters, nextPage);
+      const mapped = items.map(withTrainingDefaults);
+      setAllResults((prev) => [...prev, ...mapped]);
+      setApiPage(nextPage);
+      setDisplayCount(nextDisplay);
+      setHasMoreApi(items.length >= 500);
+    } catch (error) {
+      toast({ title: "Could not load more workouts", description: error instanceof Error ? error.message : "Try again." });
+    } finally {
+      setIsLoadingMore(false);
+    }
   }
 
   async function skipToday() {
@@ -544,7 +581,7 @@ export function WorkoutPlanBuilder({
                   <p className="font-semibold text-foreground">Exercise filters</p>
                   {activeFilterCount ? <Badge>{activeFilterCount} selected</Badge> : null}
                 </div>
-                <p className="text-sm text-muted-foreground">{results.length} exercises loaded</p>
+                <p className="text-sm text-muted-foreground">{allResults.length} exercises loaded</p>
               </div>
               <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
                 <div className="relative">
@@ -560,7 +597,7 @@ export function WorkoutPlanBuilder({
                   <RotateCcw className="h-4 w-4" />
                   Clear filters
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setShowAll(true)} disabled={showAll}>
+                <Button type="button" variant="outline" onClick={() => { setShowAll(true); setFilters({ ...emptyFilterState }); }} disabled={showAll}>
                   <Search className="h-4 w-4" />
                   Show all
                 </Button>
@@ -578,12 +615,12 @@ export function WorkoutPlanBuilder({
             </div>
 
             {isLoading ? <p className="text-sm text-muted-foreground">Loading workouts...</p> : null}
-            {!isLoading && !results.length && !hasActiveFilter ? (
+            {!isLoading && !allResults.length && !hasActiveFilter ? (
               <p className="text-sm text-muted-foreground">Use filters or click Show all to browse exercises.</p>
             ) : null}
-            {!isLoading && !results.length && hasActiveFilter ? <p className="text-sm text-muted-foreground">No exercises match these filters.</p> : null}
+            {!isLoading && !allResults.length && hasActiveFilter ? <p className="text-sm text-muted-foreground">No exercises found.</p> : null}
             <div className="grid gap-3 md:grid-cols-2">
-              {results.map((workout) => (
+              {allResults.slice(0, displayCount).map((workout) => (
                 <div key={workout.id} className="rounded-md border bg-card p-3">
                   <div className="flex items-start gap-2">
                     <Dumbbell className="mt-1 h-4 w-4 shrink-0 text-primary" />
@@ -621,6 +658,13 @@ export function WorkoutPlanBuilder({
                 </div>
               ))}
             </div>
+            {allResults.length > 0 && (displayCount < allResults.length || hasMoreApi) ? (
+              <div className="flex justify-center py-3">
+                <Button type="button" variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
+                  {isLoadingMore ? "Loading..." : "Load more"}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
