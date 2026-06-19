@@ -11,7 +11,6 @@ import { useToast } from "@/components/ui/toaster";
 import Link from "next/link";
 import { createUserWorkoutPlanDay, getCurrentWeekday, getUserWorkoutPlan, weekDays, workoutsFromPlanDay } from "@/services/database/workout-plans";
 import { getWorkoutActivity } from "@/services/database/workout-sessions";
-import { analyzeImportedWorkoutPlan } from "@/services/workouts/imported-plan-quality";
 import { WorkoutCalendar, type WeeklyPlanDay } from "@/components/workouts/workout-calendar";
 import type { UserWorkoutPlan, WorkoutSession } from "@/types";
 
@@ -64,7 +63,6 @@ export function WorkoutPlanDetail() {
 
   const days = useMemo(() => (plan ? daysFromPlan(plan) : []), [plan]);
   const activeDay = days[activeDayIndex] ?? days[0];
-  const quality = useMemo(() => (plan ? analyzeImportedWorkoutPlan(plan) : null), [plan]);
 
   function startDay(day: WeeklyPlanDay | undefined) {
     if (!day?.id) return;
@@ -146,52 +144,6 @@ export function WorkoutPlanDetail() {
         onStartToday={startToday}
       />
 
-      {quality ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Plan quality check</CardTitle>
-            <p className="text-sm text-muted-foreground">Imported-plan checks use saved days, exercises, equipment, and structure. They do not generate new plan content.</p>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-md border bg-muted/40 p-3">
-              <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Readiness</p>
-              <p className="mt-1 text-2xl font-bold">{quality.score}/100</p>
-              <p className="mt-1 text-sm text-muted-foreground">{quality.status === "ready" ? "Ready to start" : quality.status === "blocked" ? "Fix blockers before starting" : "Review before starting"}</p>
-            </div>
-            <div className="rounded-md border bg-muted/40 p-3">
-              <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Warnings</p>
-              <p className="mt-1 font-semibold">{quality.warnings.length + quality.blockers.length}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{[...quality.blockers, ...quality.warnings].slice(0, 2).join(" ") || "No structural warnings detected."}</p>
-            </div>
-            <div className="rounded-md border bg-muted/40 p-3">
-              <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Repair tips</p>
-              <p className="mt-1 font-semibold">{quality.repairTips.length ? "Available" : "None needed"}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{quality.repairTips[0] ?? "The plan has enough detail for tracking."}</p>
-            </div>
-            <div className="rounded-md border p-3 md:col-span-3">
-              <p className="text-sm font-semibold">Warnings and repair checklist</p>
-              <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                <QualityList
-                  title="Needs review"
-                  items={[...quality.blockers, ...quality.warnings]}
-                  empty="No structural warnings detected."
-                />
-                <QualityList
-                  title="Safe repair suggestions"
-                  items={quality.repairTips}
-                  empty="No repair suggestions needed."
-                />
-              </div>
-              {quality.duplicateExercises.length ? (
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Duplicate exercises to review: {quality.duplicateExercises.join(", ")}.
-                </p>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
       <Card>
         <CardHeader>
           <CardTitle>{plan.name}</CardTitle>
@@ -235,17 +187,6 @@ export function WorkoutPlanDetail() {
           )}
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function QualityList({ title, items, empty }: { title: string; items: string[]; empty: string }) {
-  return (
-    <div className="rounded-md bg-muted/40 p-3">
-      <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{title}</p>
-      <div className="mt-2 space-y-2 text-sm text-muted-foreground">
-        {items.length ? items.map((item) => <p key={item}>{item}</p>) : <p>{empty}</p>}
-      </div>
     </div>
   );
 }

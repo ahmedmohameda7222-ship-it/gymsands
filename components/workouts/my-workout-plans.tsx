@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, CalendarDays, Copy, Dumbbell, Edit3, MoreHorizontal, Play, Plus, RefreshCcw, Save, Star } from "lucide-react";
+import { Archive, CalendarDays, Copy, Dumbbell, Edit3, MoreHorizontal, Play, Plus, RefreshCcw, Save, Star, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { setDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
 import { getWorkoutActivity } from "@/services/database/workout-sessions";
-import { archiveWorkoutPlan, duplicateWorkoutPlan, getActiveWorkoutPlan, getAllUserWorkoutPlans, updateWorkoutPlanMetadata, workoutsFromLoadedPlanDay } from "@/services/database/workout-plan-loader";
-import { analyzeImportedWorkoutPlan, type ImportedPlanQuality } from "@/services/workouts/imported-plan-quality";
+import { archiveWorkoutPlan, deleteWorkoutPlan, duplicateWorkoutPlan, getActiveWorkoutPlan, getAllUserWorkoutPlans, updateWorkoutPlanMetadata, workoutsFromLoadedPlanDay } from "@/services/database/workout-plan-loader";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { WorkoutPlanBuilder } from "@/components/workouts/workout-plan-builder";
 import { WorkoutCalendar } from "@/components/workouts/workout-calendar";
 import { Input } from "@/components/ui/input";
@@ -59,6 +59,7 @@ export function MyWorkoutPlans() {
   const [showBuilder, setShowBuilder] = useState(false);
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const { dialog, ask } = useConfirm();
   const [editName, setEditName] = useState("");
 
   async function loadPlans() {
@@ -181,6 +182,21 @@ export function MyWorkoutPlans() {
     }
   }
 
+  async function deletePlan(plan: UserWorkoutPlan) {
+    if (!user?.id || busyPlanId) return;
+    setBusyPlanId(plan.id);
+    try {
+      await deleteWorkoutPlan(user.id, plan.id);
+      await loadPlans();
+      toast({ title: "Plan deleted", description: `${plan.name} and its exercises were removed.` });
+    } catch (error) {
+      logRecoverableError("workout-plans.delete", error);
+      toast({ title: "Could not delete plan", description: userSafeError(error, "The plan was not deleted. Try again.") });
+    } finally {
+      setBusyPlanId(null);
+    }
+  }
+
   const activeExerciseCount = activePlan ? activePlan.days.reduce((sum, day) => sum + day.exercises.length, 0) : 0;
 
   return (
@@ -274,7 +290,6 @@ export function MyWorkoutPlans() {
             const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
             const isDefault = plan.is_default ?? plan.is_active;
             const sourceLabel = sourceBadge(plan);
-            const quality = analyzeImportedWorkoutPlan(plan);
             const meta = plan as PlanMeta;
             return (
               <Card key={plan.id} className="overflow-hidden border-border/70">
@@ -283,7 +298,6 @@ export function MyWorkoutPlans() {
                     <div className="min-w-0">
                       <div className="mb-2 flex flex-wrap gap-2">
                         {isDefault ? <Badge>Default</Badge> : <Badge variant="outline">{sourceLabel}</Badge>}
-                        {quality.status !== "ready" ? <Badge variant="outline">Needs review</Badge> : null}
                       </div>
                       <h3 className="line-clamp-2 text-base font-semibold leading-6 text-foreground">{plan.name}</h3>
                       <p className="mt-1 text-sm text-muted-foreground">{plan.days.length} day plan · {exerciseCount} exercises{meta.session_duration_minutes ? ` · ${meta.session_duration_minutes} min` : ""}</p>
@@ -291,11 +305,11 @@ export function MyWorkoutPlans() {
                     <PlanActions
                       plan={plan}
                       isDefault={isDefault}
-                      quality={quality}
                       busyPlanId={busyPlanId}
                       onDefault={setDefaultPlan}
                       onDuplicate={duplicatePlan}
                       onArchive={archivePlan}
+                      onDelete={(p) => ask({ title: "Delete plan?", description: `This will permanently remove ${p.name} and all its days and exercises. Workout history will be kept.`, variant: "destructive", confirmLabel: "Delete", onConfirm: () => deletePlan(p) })}
                       onEdit={(nextPlan) => { setEditingPlanId(nextPlan.id); setEditName(nextPlan.name); }}
                     />
                   </div>
@@ -353,6 +367,7 @@ export function MyWorkoutPlans() {
           </section>
         ) : null}
       </div>
+      {dialog}
     </div>
   );
 }
@@ -378,7 +393,7 @@ function PlanFact({ label, value, icon: Icon }: { label: string; value: string; 
   return <div className="rounded-xl bg-muted/40 p-3"><Icon className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-lg font-semibold text-foreground">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div>;
 }
 
-function PlanActions({ plan, isDefault, quality, busyPlanId, onDefault, onDuplicate, onArchive, onEdit }: { plan: UserWorkoutPlan; isDefault: boolean; quality: ImportedPlanQuality; busyPlanId: string | null; onDefault: (plan: UserWorkoutPlan) => void; onDuplicate: (plan: UserWorkoutPlan) => void; onArchive: (plan: UserWorkoutPlan) => void; onEdit: (plan: UserWorkoutPlan) => void }) {
+function PlanActions({ plan, isDefault, busyPlanId, onDefault, onDuplicate, onArchive, onDelete, onEdit }: { plan: UserWorkoutPlan; isDefault: boolean; busyPlanId: string | null; onDefault: (plan: UserWorkoutPlan) => void; onDuplicate: (plan: UserWorkoutPlan) => void; onArchive: (plan: UserWorkoutPlan) => void; onDelete: (plan: UserWorkoutPlan) => void; onEdit: (plan: UserWorkoutPlan) => void }) {
   return (
     <details className="relative shrink-0">
       <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-xl border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${plan.name}`}>
@@ -397,24 +412,10 @@ function PlanActions({ plan, isDefault, quality, busyPlanId, onDefault, onDuplic
         <Button type="button" variant="ghost" size="sm" className="justify-start text-destructive hover:text-destructive" onClick={() => onArchive(plan)} disabled={busyPlanId === plan.id}>
           <Archive className="h-4 w-4" /> Archive
         </Button>
-        <PlanQualityPanel quality={quality} />
+        <Button type="button" variant="ghost" size="sm" className="justify-start text-destructive hover:text-destructive" onClick={() => onDelete(plan)} disabled={busyPlanId === plan.id}>
+          <Trash2 className="h-4 w-4" /> Delete
+        </Button>
       </div>
     </details>
-  );
-}
-
-function PlanQualityPanel({ quality }: { quality: ImportedPlanQuality }) {
-  const tone = quality.status === "ready" ? "border-success/30 bg-success/10 text-foreground" : quality.status === "blocked" ? "border-destructive/30 bg-destructive/10 text-foreground" : "border-warning/30 bg-warning/10 text-foreground";
-  const label = quality.status === "ready" ? "Ready" : quality.status === "blocked" ? "Blocked" : "Needs review";
-  return (
-    <div className={`mt-1 rounded-xl border p-3 text-xs ${tone}`}>
-      <div className="flex items-center justify-between gap-2">
-        <p className="font-semibold">Import readiness</p>
-        <Badge variant={quality.status === "ready" ? "success" : "outline"}>{quality.score}/100 {label}</Badge>
-      </div>
-      {quality.blockers.length ? <p className="mt-2">{quality.blockers.join(" ")}</p> : null}
-      {quality.warnings.length ? <p className="mt-2">{quality.warnings.slice(0, 2).join(" ")}</p> : null}
-      {quality.duplicateExercises.length ? <p className="mt-2">Duplicates: {quality.duplicateExercises.slice(0, 4).join(", ")}</p> : null}
-    </div>
   );
 }

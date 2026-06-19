@@ -181,9 +181,38 @@ export async function getActiveWorkoutPlan(userId: string) {
   return availablePlans.find((plan) => plan.is_active) ?? availablePlans.find((plan) => plan.is_default) ?? null;
 }
 
-export async function getWorkoutPlanById(userId: string, planId: string) {
-  const plans = await getAllUserWorkoutPlans(userId);
-  return plans.find((plan) => plan.id === planId) ?? null;
+export async function deleteWorkoutPlan(userId: string, planId: string) {
+  if (!supabase || !isUuid(userId) || !isUuid(planId)) return true;
+
+  // Clear plan references from workout sessions to avoid FK blocks
+  const { error: sessionError } = await supabase!
+    .from("workout_sessions")
+    .update({ plan_id: null, plan_day_id: null })
+    .eq("plan_id", planId)
+    .eq("user_id", userId);
+  if (sessionError && !isCompatibilityError(sessionError)) {
+    console.warn("Could not clear session plan references before delete.", sessionError.message);
+  }
+
+  // Delete plan exercises via days
+  const { data: dayRows } = await supabase!
+    .from("user_workout_plan_days")
+    .select("id")
+    .eq("plan_id", planId);
+  const dayIds = (dayRows ?? []).map((d) => (d as { id: string }).id);
+  if (dayIds.length) {
+    const { error: exError } = await supabase!.from("user_workout_plan_exercises").delete().in("plan_day_id", dayIds);
+    if (exError && !isCompatibilityError(exError)) throw exError;
+  }
+
+  // Delete plan days
+  const { error: dayError } = await supabase!.from("user_workout_plan_days").delete().eq("plan_id", planId);
+  if (dayError && !isCompatibilityError(dayError)) throw dayError;
+
+  // Delete the plan
+  const { error: planError } = await supabase!.from("user_workout_plans").delete().eq("id", planId).eq("user_id", userId);
+  if (planError) throw planError;
+  return true;
 }
 
 export function workoutFromLoadedPlanExercise(exercise: UserWorkoutPlanExercise): Workout {
