@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticateMcpRequest, type McpContext } from "@/lib/mcp/auth";
-import { hasAnyScope, readScopeAllowed, hasScope, MCP_SCOPES } from "@/lib/mcp/scopes";
+import { hasAnyScope, MCP_SCOPES } from "@/lib/mcp/scopes";
 import { executeMcpTool, type McpToolResult } from "@/lib/mcp/tool-executor-safe";
 import { mcpTools, type McpToolDefinition } from "@/lib/mcp/tools";
 import { serverEnv } from "@/lib/integrations/env";
@@ -54,10 +54,6 @@ function mcpHasAnyScope(ctx: McpContext, scopes: string[]) {
   return hasAnyScope(ctx.scopes, scopes);
 }
 
-function mcpReadScopeAllowed(ctx: McpContext) {
-  return readScopeAllowed(ctx.scopes);
-}
-
 /**
  * Map each MCP tool to its required scope(s).
  * Write access implies read within the same section only.
@@ -75,7 +71,7 @@ export function requiredScopesForTool(tool: McpToolDefinition): string[] {
 
   // Dashboard summary read
   if (name === "get_today_summary") {
-    return [MCP_SCOPES.profileRead, MCP_SCOPES.nutritionRead, MCP_SCOPES.workoutsRead, MCP_SCOPES.wellnessRead];
+    return [MCP_SCOPES.fullAccess, MCP_SCOPES.all];
   }
 
   // Nutrition read
@@ -172,12 +168,12 @@ export function canUseTool(ctx: McpContext, tool: McpToolDefinition) {
     return ctx.profile.role === "admin" && mcpHasAnyScope(ctx, requiredScopesForTool(tool));
   }
 
-  // Read tools require any read scope (after write->read expansion within same section)
+  // Read tools require the specific required scopes for that tool (write implies read within same section only)
   if (tool.risk === "read") {
-    return mcpReadScopeAllowed(ctx);
+    return mcpHasAnyScope(ctx, requiredScopesForTool(tool));
   }
 
-  // Write/ destructive tools require the specific scope
+  // Write / destructive tools require the specific scope
   return mcpHasAnyScope(ctx, requiredScopesForTool(tool));
 }
 

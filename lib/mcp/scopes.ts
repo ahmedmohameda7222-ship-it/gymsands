@@ -60,7 +60,7 @@ export const MCP_FULL_ACCESS_SCOPES = [MCP_SCOPES.fullAccess, ...MCP_NORMAL_USER
 
 export const MCP_DEFAULT_SCOPES = MCP_FULL_ACCESS_SCOPES;
 
-const supportedScopeSet = new Set<string>(MCP_SUPPORTED_SCOPES);
+export const supportedScopeSet = new Set<string>(MCP_SUPPORTED_SCOPES);
 
 export function normalizeMcpScopes(input: unknown, fallback: readonly string[] = MCP_DEFAULT_SCOPES) {
   const raw = Array.isArray(input)

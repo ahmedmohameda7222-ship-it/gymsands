@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { requireUser } from "@/lib/integrations/env";
+import {
+  MCP_SCOPES,
+  MCP_FULL_ACCESS_SCOPES,
+  supportedScopeSet,
+  expandMcpScopes,
+  normalizeMcpScopes
+} from "@/lib/mcp/scopes";
 
 export const runtime = "nodejs";
 
@@ -34,8 +41,41 @@ export async function POST(request: Request) {
   }
 
   const accessMode = body.access_mode === "custom" ? "custom" : "full";
-  const rawScopes = Array.isArray(body.scopes) ? body.scopes : [];
-  const scopes = rawScopes.map((s) => String(s).trim()).filter(Boolean);
+
+  let scopes: string[];
+  if (accessMode === "full") {
+    // Derive the full normal-user scope list server-side. Do not trust body.scopes.
+    scopes = [...MCP_FULL_ACCESS_SCOPES];
+  } else {
+    // Custom mode: validate and normalize submitted scopes
+    const rawScopes = Array.isArray(body.scopes) ? body.scopes : [];
+    const candidateScopes = rawScopes
+      .map((s) => String(s).trim())
+      .filter(Boolean);
+
+    // Reject unknown scopes
+    const invalidScopes = candidateScopes.filter(
+      (s) => !supportedScopeSet.has(s)
+    );
+    if (invalidScopes.length > 0) {
+      return NextResponse.json(
+        { error: `Invalid scopes: ${invalidScopes.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
+    // Never allow normal users to save fitlife.admin
+    if (candidateScopes.includes(MCP_SCOPES.admin)) {
+      return NextResponse.json(
+        { error: "Admin scope is not allowed for normal users." },
+        { status: 400 }
+      );
+    }
+
+    // Normalize and expand write->read within the same section only
+    const normalized = normalizeMcpScopes(candidateScopes, []);
+    scopes = expandMcpScopes(normalized);
+  }
 
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
