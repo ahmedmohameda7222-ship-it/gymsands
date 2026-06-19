@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ComponentType, ReactNode } from "react";
+import { useState, type ComponentType, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   BarChart3,
@@ -272,8 +272,14 @@ function MobileMenu({
   asNavItem?: boolean;
   active?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+
+  function handleNavigate() {
+    window.setTimeout(() => setOpen(false), 180);
+  }
+
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {asNavItem ? (
           <button
@@ -307,9 +313,7 @@ function MobileMenu({
                   <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{group.label}</p>
                   <div className="space-y-1">
                     {visibleInMore.map((item) => (
-                      <DialogClose key={`${item.href}-${item.label}`} asChild>
-                        <SidebarLink item={item} active={isActivePath(pathname, item)} mobile />
-                      </DialogClose>
+                      <SidebarLink key={`${item.href}-${item.label}`} item={item} active={isActivePath(pathname, item)} mobile onClick={handleNavigate} />
                     ))}
                   </div>
                 </div>
@@ -319,18 +323,21 @@ function MobileMenu({
               <div className="border-t border-border/70 pt-4">
                 <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Admin</p>
                 {adminItems.map((item) => (
-                  <DialogClose key={item.href} asChild>
-                    <SidebarLink item={item} active={isActivePath(pathname, item)} mobile />
-                  </DialogClose>
+                  <SidebarLink key={item.href} item={item} active={isActivePath(pathname, item)} mobile onClick={handleNavigate} />
                 ))}
               </div>
             ) : null}
-            <DialogClose asChild>
-              <Button variant="ghost" className="w-full justify-start" onClick={signOut}>
-                <LogOut className="h-4 w-4" />
-                Logout
-              </Button>
-            </DialogClose>
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => {
+                handleNavigate();
+                void signOut();
+              }}
+            >
+              <LogOut className="h-4 w-4" />
+              Logout
+            </Button>
           </div>
         </div>
       </DialogContent>
