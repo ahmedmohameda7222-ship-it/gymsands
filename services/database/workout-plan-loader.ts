@@ -181,6 +181,11 @@ export async function getActiveWorkoutPlan(userId: string) {
   return availablePlans.find((plan) => plan.is_active) ?? availablePlans.find((plan) => plan.is_default) ?? null;
 }
 
+export async function getWorkoutPlanById(userId: string, planId: string) {
+  const plans = await getAllUserWorkoutPlans(userId);
+  return plans.find((plan) => plan.id === planId) ?? null;
+}
+
 export async function deleteWorkoutPlan(userId: string, planId: string) {
   if (!supabase || !isUuid(userId) || !isUuid(planId)) return true;
 
@@ -321,7 +326,7 @@ export async function duplicateWorkoutPlan(userId: string, planId: string) {
       .single();
     if (dayInsert.error) throw dayInsert.error;
     if (!day.exercises.length) continue;
-    const rows = day.exercises.map((exercise, index) => exerciseInsertRow(dayInsert.data.id, workoutFromLoadedPlanExercise(exercise), index));
+    const rows = day.exercises.map((exercise: UserWorkoutPlanExercise, index: number) => exerciseInsertRow(dayInsert.data.id, workoutFromLoadedPlanExercise(exercise), index));
     const fullInsert = await supabase!.from("user_workout_plan_exercises").insert(rows);
     if (fullInsert.error && isCompatibilityError(fullInsert.error)) {
       const compatible = await supabase!.from("user_workout_plan_exercises").insert(rows.map(compatibleExerciseRow));
