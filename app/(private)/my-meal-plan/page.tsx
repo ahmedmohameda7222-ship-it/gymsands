@@ -10,14 +10,7 @@ export default function MyMealPlanPage() {
         title="My Meal Plan"
         description="Plan breakfast, lunch, snacks, and dinner. Planned food counts only after you mark it done."
       />
-      <div className="meal-plan-page-clean">
-        <MyMealPlanBuilder />
-      </div>
-      <style>{`
-        .meal-plan-page-clean > div > :nth-child(2) {
-          display: none !important;
-        }
-      `}</style>
+      <MyMealPlanBuilder />
     </>
   );
 }
