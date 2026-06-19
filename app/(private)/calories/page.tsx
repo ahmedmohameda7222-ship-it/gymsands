@@ -10,7 +10,6 @@ import { FoodLogList } from "@/components/meals/food-log-list";
 import { ApiFoodTools } from "@/components/meals/api-food-tools";
 import { RecentFoodStrip } from "@/components/meals/recent-food-strip";
 import {
-  FastFoodFlowCard,
   NutritionCoachCard,
   SavedTarget,
   SelectField,
@@ -331,12 +330,6 @@ export default function CaloriesPage() {
                 <span className="text-xs text-muted-foreground">Tap to expand</span>
               </summary>
               <div className="space-y-4 p-4 pt-0">
-                <FastFoodFlowCard
-                  selectedDateLabel={formatDay(selectedDate)}
-                  hasFoodLogs={logs.length > 0}
-                  hasTargets={hasTargets}
-                  onCopyYesterday={copyYesterday}
-                />
                 <div className="grid gap-3">
                   <Button asChild variant="outline" className="w-full">
                     <Link href="/calories/weekly-overview">
@@ -368,13 +361,6 @@ export default function CaloriesPage() {
               <TrackerCard label="Fat" value={totals.fat_g} target={displayTargets.fat_g} unit="g" hasTarget={Boolean(targets?.fat_g)} />
               <TrackerCard label="Water" value={Math.round(waterTotal / 1000 * 10) / 10} target={Math.round(displayTargets.water_ml / 1000 * 10) / 10} unit="L" hasTarget={Boolean(targets?.water_ml)} />
             </div>
-
-            <FastFoodFlowCard
-              selectedDateLabel={formatDay(selectedDate)}
-              hasFoodLogs={logs.length > 0}
-              hasTargets={hasTargets}
-              onCopyYesterday={copyYesterday}
-            />
 
             <RecentFoodStrip logDate={selectedDate} onFoodLogged={handleLogAdded} />
 
