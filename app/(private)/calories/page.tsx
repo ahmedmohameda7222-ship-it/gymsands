@@ -8,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeading } from "@/components/layout/page-heading";
 import { FoodLogList } from "@/components/meals/food-log-list";
 import { ApiFoodTools } from "@/components/meals/api-food-tools";
-import { QuickAddFoodDialog } from "@/components/meals/quick-add-food-dialog";
 import { RecentFoodStrip } from "@/components/meals/recent-food-strip";
 import {
   FastFoodFlowCard,
@@ -63,7 +62,6 @@ export default function CaloriesPage() {
   const [isSavingTargets, setIsSavingTargets] = useState(false);
   const [showTargetEditor, setShowTargetEditor] = useState(false);
   const [activeTab, setActiveTab] = useState("today");
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [wizard, setWizard] = useState({
     age: "",
     heightCm: "",
@@ -312,14 +310,6 @@ export default function CaloriesPage() {
 
             <CompactNutritionSummary totals={totals} targets={displayTargets} waterTotal={waterTotal} />
 
-            <QuickAddFoodDialog
-              userId={user?.id}
-              logDate={selectedDate}
-              onFoodLogged={handleLogAdded}
-              open={quickAddOpen}
-              onOpenChange={setQuickAddOpen}
-            />
-
             <RecentFoodStrip logDate={selectedDate} onFoodLogged={handleLogAdded} />
 
             <FoodLogList
@@ -330,7 +320,7 @@ export default function CaloriesPage() {
                 loadWeek().catch(() => undefined);
                 loadDay().catch(() => undefined);
               }}
-              onAddAction={() => setQuickAddOpen(true)}
+              onAddAction={() => router.push("/calories/food-hub")}
             />
 
             <WaterMiniSummary waterTotal={waterTotal} waterGoal={displayTargets.water_ml} onAddWater={addWater} />
@@ -385,6 +375,8 @@ export default function CaloriesPage() {
               hasTargets={hasTargets}
               onCopyYesterday={copyYesterday}
             />
+
+            <RecentFoodStrip logDate={selectedDate} onFoodLogged={handleLogAdded} />
 
             <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
               <div className="space-y-4">

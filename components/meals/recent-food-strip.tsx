@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Clock, Heart, Utensils, CheckCircle2, RotateCcw } from "lucide-react";
+import { Clock, Heart, CheckCircle2, Utensils } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   getRecentFoodLogs,
@@ -28,6 +28,7 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
   const [favoriteKeys, setFavoriteKeys] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mealType, setMealType] = useState<MealType>(defaultMealType);
+  const [activePanel, setActivePanel] = useState<"recent" | "frequent" | null>(null);
 
   useEffect(() => {
     setMealType(defaultMealType);
@@ -57,12 +58,8 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
 
   const uniqueRecents = useMemo(() => uniqueLogs(recentLogs).slice(0, 8), [recentLogs]);
   const frequent = useMemo(() => frequentLogs(recentLogs).slice(0, 8), [recentLogs]);
-  const favorites = useMemo(
-    () => uniqueLogs(recentLogs).filter((log) => favoriteKeys.includes(favoriteKeyForLog(log))).slice(0, 8),
-    [favoriteKeys, recentLogs]
-  );
 
-  const hasAny = uniqueRecents.length > 0 || frequent.length > 0 || favorites.length > 0;
+  const hasAny = uniqueRecents.length > 0 || frequent.length > 0;
   if (isLoading) return null;
   if (!hasAny) return null;
 
@@ -88,57 +85,65 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
     }
   }
 
+  function togglePanel(panel: "recent" | "frequent") {
+    setActivePanel((current) => (current === panel ? null : panel));
+  }
+
   return (
     <Card className="border-dashed">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between gap-2 text-sm">
           <span className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-primary" />
-            Recent & favorites
+            Quick log
           </span>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={load} aria-label="Refresh recent foods">
-            <RotateCcw className="h-4 w-4" />
-          </Button>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {favorites.length > 0 && (
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Favorites</p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {favorites.map((log) => (
-                <FoodChip
-                  key={`fav-${favoriteKeyForLog(log)}`}
-                  log={log}
-                  isFavorite
-                  onLog={() => logAgain(log)}
-                  onFavorite={() => toggleFavorite(favoriteKeyForLog(log), log.food_name)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-        {frequent.length > 0 && (
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Frequent</p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {frequent.map((log) => (
-                <FoodChip
-                  key={`freq-${favoriteKeyForLog(log)}`}
-                  log={log}
-                  onLog={() => logAgain(log)}
-                  onFavorite={() => toggleFavorite(favoriteKeyForLog(log), log.food_name)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-        {uniqueRecents.length > 0 && favorites.length === 0 && frequent.length === 0 && (
+        <div className="flex gap-2">
+          <Button
+            variant={activePanel === "recent" ? "default" : "outline"}
+            size="sm"
+            onClick={() => togglePanel("recent")}
+            className="flex-1"
+            disabled={uniqueRecents.length === 0}
+          >
+            <Clock className="mr-1 h-3.5 w-3.5" />
+            Recent Foods
+          </Button>
+          <Button
+            variant={activePanel === "frequent" ? "default" : "outline"}
+            size="sm"
+            onClick={() => togglePanel("frequent")}
+            className="flex-1"
+            disabled={frequent.length === 0}
+          >
+            <Utensils className="mr-1 h-3.5 w-3.5" />
+            Frequent Foods
+          </Button>
+        </div>
+
+        {activePanel === "recent" && uniqueRecents.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-1">
             {uniqueRecents.map((log) => (
               <FoodChip
                 key={`recent-${favoriteKeyForLog(log)}`}
                 log={log}
+                isFavorite={favoriteKeys.includes(favoriteKeyForLog(log))}
+                onLog={() => logAgain(log)}
+                onFavorite={() => toggleFavorite(favoriteKeyForLog(log), log.food_name)}
+              />
+            ))}
+          </div>
+        )}
+
+        {activePanel === "frequent" && frequent.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {frequent.map((log) => (
+              <FoodChip
+                key={`freq-${favoriteKeyForLog(log)}`}
+                log={log}
+                isFavorite={favoriteKeys.includes(favoriteKeyForLog(log))}
                 onLog={() => logAgain(log)}
                 onFavorite={() => toggleFavorite(favoriteKeyForLog(log), log.food_name)}
               />
