@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Barcode, Bike, Camera, Save, Square } from "lucide-react";
+import { Barcode, Camera, Save, Square } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,13 +16,6 @@ type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => Barc
 type BarcodeWindow = Window & { BarcodeDetector?: BarcodeDetectorConstructor };
 type ScannerControls = { stop: () => void };
 
-type ExerciseActivity = {
-  id: string;
-  display_name: string;
-  category: string | null;
-  default_intensity: string | null;
-  met: number;
-};
 
 const mealTypes: MealType[] = ["Breakfast", "Lunch", "Snack", "Dinner"];
 
@@ -71,11 +64,6 @@ export function ApiFoodTools({
   const zxingControlsRef = useRef<ScannerControls | null>(null);
   const scanTimerRef = useRef<number | null>(null);
 
-  const [activities, setActivities] = useState<ExerciseActivity[]>([]);
-  const [activityId, setActivityId] = useState("");
-  const [minutes, setMinutes] = useState("30");
-  const [weightKg, setWeightKg] = useState("");
-  const [exerciseEstimate, setExerciseEstimate] = useState<any>(null);
 
   function authHeaders(contentType = false) {
     return {
@@ -234,34 +222,10 @@ export function ApiFoodTools({
     });
   }
 
-  async function loadActivities() {
-    const response = await fetch("/api/exercise-calories", { headers: authHeaders() });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) return toast({ title: "Exercise calories unavailable", description: data.error ?? "Please try again later." });
-    const nextActivities = data.activities ?? [];
-    setActivities(nextActivities);
-    if (!activityId && nextActivities[0]?.id) setActivityId(nextActivities[0].id);
-  }
 
-  async function estimateExercise(save = false) {
-    const response = await fetch("/api/exercise-calories", {
-      method: "POST",
-      headers: authHeaders(true),
-      body: JSON.stringify({
-        activityId,
-        minutes: Number(minutes),
-        weightKg: weightKg ? Number(weightKg) : undefined,
-        save
-      })
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) return toast({ title: "Could not estimate calories", description: data.error ?? "Please try again." });
-    setExerciseEstimate(data.estimate);
-    if (save) toast({ title: "Exercise calories saved", description: `${data.estimate.calories} kcal added to cardio history.` });
-  }
 
   useEffect(() => {
-    loadActivities().catch(() => undefined);
+
     return stopScanner;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.access_token]);
@@ -269,9 +233,9 @@ export function ApiFoodTools({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Barcode meals and exercise calories</CardTitle>
+        <CardTitle>Barcode meals</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-4 lg:grid-cols-2">
+      <CardContent className="grid gap-4">
         <div className="rounded-md border p-3">
           <p className="mb-2 flex items-center gap-2 font-semibold"><Barcode className="h-4 w-4 text-primary" /> Barcode lookup</p>
           <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
@@ -312,29 +276,6 @@ export function ApiFoodTools({
           ) : null}
         </div>
 
-        <div className="rounded-md border p-3">
-          <p className="mb-2 flex items-center gap-2 font-semibold"><Bike className="h-4 w-4 text-primary" /> Exercise calories</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Select value={activityId} onValueChange={setActivityId}>
-              <SelectTrigger><SelectValue placeholder="Activity" /></SelectTrigger>
-              <SelectContent>
-                {activities.map((activity) => (
-                  <SelectItem key={activity.id} value={activity.id}>{activity.display_name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input type="number" min="1" inputMode="numeric" enterKeyHint="done" value={minutes} onChange={(event) => setMinutes(event.target.value)} placeholder="Minutes" />
-            <Input type="number" min="1" inputMode="decimal" enterKeyHint="done" value={weightKg} onChange={(event) => setWeightKg(event.target.value)} placeholder="Weight kg" />
-            <Button type="button" onClick={() => estimateExercise(false)}>Estimate</Button>
-          </div>
-          {exerciseEstimate ? (
-            <div className="mt-3 rounded-md border bg-card p-3 text-sm">
-              <p className="font-semibold">{exerciseEstimate.activity.display_name}: {exerciseEstimate.calories} kcal</p>
-              <p className="text-muted-foreground">{exerciseEstimate.minutes} min | {exerciseEstimate.weightKg} kg | MET {exerciseEstimate.activity.met}</p>
-              <Button className="mt-3" size="sm" variant="outline" onClick={() => estimateExercise(true)}>Save cardio estimate</Button>
-            </div>
-          ) : null}
-        </div>
       </CardContent>
     </Card>
   );

@@ -54,6 +54,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Eat",
     items: [
       { href: "/calories", label: "Food Log", icon: Utensils, activePaths: ["/calories"], exact: true },
+      { href: "/calories/food-hub", label: "Food Hub", icon: ChefHat },
       { href: "/my-meal-plan", label: "Meal Plan", icon: ClipboardList },
       { href: "/calories/custom-food-meal", label: "Food Builder", icon: ChefHat },
       { href: "/calories/weekly-overview", label: "Nutrition Summary", icon: Soup }

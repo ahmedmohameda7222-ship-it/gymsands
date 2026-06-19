@@ -1,12 +1,11 @@
 "use client";
 
-import { BarChart3, ChefHat, Copy, Plus, Save, Settings2 } from "lucide-react";
+import { BarChart3, ChefHat, Copy, Save, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeading } from "@/components/layout/page-heading";
-import { FoodBrowser } from "@/components/meals/food-browser";
 import { FoodLogList } from "@/components/meals/food-log-list";
 import { ApiFoodTools } from "@/components/meals/api-food-tools";
 import { QuickAddFoodDialog } from "@/components/meals/quick-add-food-dialog";
@@ -484,13 +483,6 @@ export default function CaloriesPage() {
         <TabsContent value="tools" className="space-y-4">
           <div id="barcode-tools" className="scroll-mt-24">
             <ApiFoodTools selectedDate={selectedDate} onFoodLogged={handleLogAdded} />
-          </div>
-          <div>
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Plus className="h-4 w-4" />
-              Add food to {formatDay(selectedDate)}
-            </div>
-            <FoodBrowser initialLogs={logs} logDate={selectedDate} onLogAdded={handleLogAdded} />
           </div>
         </TabsContent>
       </Tabs>
