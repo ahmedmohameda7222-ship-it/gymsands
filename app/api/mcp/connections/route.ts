@@ -63,12 +63,18 @@ export async function POST(request: Request) {
   const tokenHash = hashConnectionToken(token);
   const supabase = createSupabaseAdminClient();
 
-  await supabase
-    .from("chatgpt_connections")
-    .update({ is_active: false, revoked_at: new Date().toISOString() })
-    .eq("user_id", context.user.id)
-    .eq("is_active", true)
-    .is("revoked_at", null);
+  try {
+    const { error: revokeError } = await supabase
+      .from("chatgpt_connections")
+      .update({ is_active: false, revoked_at: new Date().toISOString() })
+      .eq("user_id", context.user.id)
+      .eq("is_active", true);
+    if (revokeError) {
+      console.warn("FitLife MCP could not revoke previous connections:", revokeError.message);
+    }
+  } catch {
+    // Non-blocking: continue to create new token even if revoke fails
+  }
 
   const userScopes = await getOrCreateUserAiScopes(supabase, context.user.id);
 
@@ -100,13 +106,20 @@ export async function DELETE(request: Request) {
   if (missingConfig) return missingConfig;
 
   const supabase = createSupabaseAdminClient();
-  const { error } = await supabase
-    .from("chatgpt_connections")
-    .update({ is_active: false, revoked_at: new Date().toISOString() })
-    .eq("user_id", context.user.id)
-    .eq("is_active", true)
-    .is("revoked_at", null);
+  try {
+    const { error } = await supabase
+      .from("chatgpt_connections")
+      .update({ is_active: false, revoked_at: new Date().toISOString() })
+      .eq("user_id", context.user.id)
+      .eq("is_active", true);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ ok: true });
+    if (error) {
+      console.error("FitLife MCP revoke error:", error.message);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("FitLife MCP revoke unexpected error:", error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unexpected error" }, { status: 500 });
+  }
 }
