@@ -124,7 +124,7 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
         </div>
 
         {activePanel === "recent" && uniqueRecents.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="grid gap-2">
             {uniqueRecents.map((log) => (
               <FoodChip
                 key={`recent-${favoriteKeyForLog(log)}`}
@@ -138,7 +138,7 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
         )}
 
         {activePanel === "frequent" && frequent.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="grid gap-2">
             {frequent.map((log) => (
               <FoodChip
                 key={`freq-${favoriteKeyForLog(log)}`}
@@ -167,9 +167,9 @@ function FoodChip({
   onFavorite: () => void;
 }) {
   return (
-    <div className="flex shrink-0 flex-col gap-1 rounded-lg border bg-card p-2 shadow-soft transition hover:border-primary/40">
+    <div className="flex w-full flex-col gap-2 rounded-lg border bg-card p-2 shadow-soft transition hover:border-primary/40">
       <div className="flex items-center justify-between gap-2">
-        <p className="max-w-[140px] truncate text-xs font-semibold">{log.food_name}</p>
+        <p className="min-w-0 flex-1 truncate text-xs font-semibold">{log.food_name}</p>
         <button
           type="button"
           onClick={onFavorite}
@@ -182,7 +182,7 @@ function FoodChip({
       <p className="text-[11px] text-muted-foreground">
         {Math.round(log.calories)} kcal · {Math.round(log.protein_g)}g P
       </p>
-      <Button size="sm" className="h-8 text-xs" onClick={onLog}>
+      <Button size="sm" className="h-8 w-full text-xs" onClick={onLog}>
         <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
         Log
       </Button>
