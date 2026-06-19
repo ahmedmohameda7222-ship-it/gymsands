@@ -109,11 +109,4 @@ export type { DailyFitTaskInput, FitnessHabitInput, SleepRecoveryInput, Suppleme
 
 export { adminUpdateWelcomeSettings, adminUpsertWelcomeMessage, getWelcomeSettings } from "./settings";
 
-export {
-  adminImportExerciseVideos,
-  adminListUsers,
-  adminUpdateUserRole,
-  adminUpsertExerciseVideo,
-  adminUpsertGlobalFood,
-  adminUpsertWorkout
-} from "./admin";
+export { adminListUsers, adminUpdateUserRole } from "./admin";

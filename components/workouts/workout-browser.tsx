@@ -432,9 +432,6 @@ export function WorkoutBrowser() {
             <QualityMetric label="Missing instructions" value={qualityCounts.missingInstructions} detail="Instruction text needs review" />
             <QualityMetric label="Missing muscle/equipment" value={qualityCounts.missingLabels} detail="Filter quality may be weaker" />
             <QualityMetric label="Duplicate names" value={qualityCounts.duplicates} detail="Same visible exercise name appears more than once" />
-            <Button asChild variant="outline" className="min-h-20 justify-center">
-              <Link href="/admin/exercises">Open admin review</Link>
-            </Button>
           </CardContent>
         </Card>
       ) : null}

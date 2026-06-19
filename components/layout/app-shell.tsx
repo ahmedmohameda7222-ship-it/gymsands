@@ -23,8 +23,7 @@ import {
   Shield,
   Soup,
   Trophy,
-  Utensils,
-  Weight
+  Utensils
 } from "lucide-react";
 import { Brand } from "@/components/layout/brand";
 import { Button } from "@/components/ui/button";
@@ -87,11 +86,7 @@ const mobilePrimaryItems: NavItem[] = [
 ];
 
 const adminItems: NavItem[] = [
-  { href: "/admin", label: "Admin", icon: Shield },
-  { href: "/admin/audit", label: "Audit & Quality", icon: ClipboardList },
-  { href: "/admin/foods", label: "Foods", icon: Soup },
-  { href: "/admin/workouts", label: "Workouts", icon: Weight },
-  { href: "/admin/settings", label: "Settings", icon: Settings }
+  { href: "/admin", label: "Admin", icon: Shield }
 ];
 
 const moreActivePaths = [
