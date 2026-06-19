@@ -325,10 +325,12 @@ function MobileMenu({
                 ))}
               </div>
             ) : null}
-            <Button variant="ghost" className="w-full justify-start" onClick={signOut}>
-              <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
+            <DialogClose asChild>
+              <Button variant="ghost" className="w-full justify-start" onClick={signOut}>
+                <LogOut className="h-4 w-4" />
+                Logout
+              </Button>
+            </DialogClose>
           </div>
         </div>
       </DialogContent>
@@ -336,11 +338,12 @@ function MobileMenu({
   );
 }
 
-function SidebarLink({ item, active, mobile = false }: { item: NavItem; active: boolean; mobile?: boolean }) {
+function SidebarLink({ item, active, mobile = false, onClick }: { item: NavItem; active: boolean; mobile?: boolean; onClick?: () => void }) {
   const Icon = item.icon;
   return (
     <Link
       href={item.href}
+      onClick={onClick}
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-ring",
