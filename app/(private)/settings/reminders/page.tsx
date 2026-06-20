@@ -13,7 +13,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, type SelectOption } from "@/components/ui/select-field";
 import { SettingsPageShell } from "@/components/settings/settings-page-shell";
 import { SettingsToggleRow } from "@/components/settings/settings-toggle-row";
-import { type ReminderSettings, useReminderSettings } from "@/lib/settings/reminder-settings";
+import { type UserAppSettings } from "@/services/database/user-settings";
+import { useUserSettings } from "@/lib/settings/user-settings-context";
+import { useTranslation } from "@/lib/i18n/use-translation";
 
 type IconComponent = ComponentType<{ className?: string }>;
 
@@ -32,6 +34,7 @@ function ReminderSelectRow({
   options: SelectOption[];
   widthClass?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="group flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3 transition-colors hover:border-primary/40 hover:bg-muted/45">
       <span className="flex min-w-0 items-center gap-3">
@@ -41,234 +44,130 @@ function ReminderSelectRow({
         <span className="min-w-0 font-semibold text-foreground">{label}</span>
       </span>
       <div className={`${widthClass} shrink-0`}>
-        <Select value={value} onChange={onChange} options={options} placeholder="Select" />
+        <Select value={value} onChange={onChange} options={options} placeholder={t("common.select")} />
       </div>
     </div>
   );
 }
 
+function SaveStatus({ hasSaved }: { hasSaved: boolean }) {
+  const { t } = useTranslation();
+  return <p className="text-center text-sm text-muted-foreground">{hasSaved ? t("common.savedAccount") : t("common.syncedDevices")}</p>;
+}
+
 export default function RemindersPage() {
-  const { settings, setSettings } = useReminderSettings();
+  const { settings, isLoadingSettings, updateSettings } = useUserSettings();
+  const { t } = useTranslation();
   const [hasSaved, setHasSaved] = useState(false);
 
-  function updateSetting<Key extends keyof ReminderSettings>(key: Key, value: ReminderSettings[Key]) {
-    setSettings((current) => ({ ...current, [key]: value }));
+  async function updateSetting<Key extends keyof UserAppSettings>(key: Key, value: UserAppSettings[Key]) {
+    await updateSettings({ [key]: value } as Partial<UserAppSettings>);
     setHasSaved(true);
+  }
+
+  if (isLoadingSettings) {
+    return (
+      <SettingsPageShell title={t("settings.reminders")} description={t("settings.remindersDesc")}>
+        <p className="text-sm text-muted-foreground">{t("common.loadingSettings")}</p>
+      </SettingsPageShell>
+    );
   }
 
   return (
     <SettingsPageShell
-      title="Reminders"
-      description="Workout, meals, hydration, sleep, supplements, and quiet hours."
+      title={t("settings.reminders")}
+      description={t("settings.remindersDesc")}
     >
       <Card className="border-border/70">
         <CardHeader>
-          <CardTitle className="text-base">Workout reminders</CardTitle>
+          <CardTitle className="text-base">{t("settings.workoutReminders")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <SettingsToggleRow
-            label="Enable workout reminders"
-            defaultOn={settings.workoutReminders}
-            onChange={(value) => updateSetting("workoutReminders", value)}
-          />
-          <ReminderSelectRow
-            icon={Dumbbell}
-            label="Preferred time"
-            value={settings.workoutTime}
-            onChange={(value) => updateSetting("workoutTime", value)}
-            options={[
-              { value: "morning", label: "Morning" },
-              { value: "afternoon", label: "Afternoon" },
-              { value: "evening", label: "Evening" }
-            ]}
-          />
+          <SettingsToggleRow label={t("settings.enableWorkoutReminders")} defaultOn={settings.workoutReminders} onChange={(value) => void updateSetting("workoutReminders", value)} />
+          <ReminderSelectRow icon={Dumbbell} label={t("settings.preferredTime")} value={settings.workoutTime ?? ""} onChange={(value) => void updateSetting("workoutTime", value)} options={[{ value: "morning", label: t("settings.morning") }, { value: "afternoon", label: t("settings.afternoon") }, { value: "evening", label: t("settings.evening") }]} />
         </CardContent>
       </Card>
 
       <Card className="border-border/70">
         <CardHeader>
-          <CardTitle className="text-base">Meal reminders</CardTitle>
+          <CardTitle className="text-base">{t("settings.mealReminders")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <SettingsToggleRow
-            label="Enable meal reminders"
-            defaultOn={settings.mealReminders}
-            onChange={(value) => updateSetting("mealReminders", value)}
-          />
-          <SettingsToggleRow
-            label="Remind before meals"
-            defaultOn={settings.remindBeforeMeals}
-            onChange={(value) => updateSetting("remindBeforeMeals", value)}
-          />
+          <SettingsToggleRow label={t("settings.enableMealReminders")} defaultOn={settings.mealReminders} onChange={(value) => void updateSetting("mealReminders", value)} />
+          <SettingsToggleRow label={t("settings.remindBeforeMeals")} defaultOn={settings.remindBeforeMeals} onChange={(value) => void updateSetting("remindBeforeMeals", value)} />
         </CardContent>
       </Card>
 
       <Card className="border-border/70">
         <CardHeader>
-          <CardTitle className="text-base">Hydration reminders</CardTitle>
+          <CardTitle className="text-base">{t("settings.hydrationReminders")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <SettingsToggleRow
-            label="Enable hydration reminders"
-            defaultOn={settings.hydrationReminders}
-            onChange={(value) => updateSetting("hydrationReminders", value)}
-          />
-          <ReminderSelectRow
-            icon={Droplets}
-            label="Reminder interval"
-            value={settings.hydrationInterval}
-            onChange={(value) => updateSetting("hydrationInterval", value)}
-            options={[
-              { value: "30", label: "Every 30 min" },
-              { value: "60", label: "Every 1 hour" },
-              { value: "120", label: "Every 2 hours" }
-            ]}
-            widthClass="w-40"
-          />
+          <SettingsToggleRow label={t("settings.enableHydrationReminders")} defaultOn={settings.hydrationReminders} onChange={(value) => void updateSetting("hydrationReminders", value)} />
+          <ReminderSelectRow icon={Droplets} label={t("settings.reminderInterval")} value={settings.hydrationInterval ?? ""} onChange={(value) => void updateSetting("hydrationInterval", value)} options={[{ value: "30", label: "Every 30 min" }, { value: "60", label: "Every 1 hour" }, { value: "120", label: "Every 2 hours" }]} widthClass="w-40" />
         </CardContent>
       </Card>
 
       <Card className="border-border/70">
         <CardHeader>
-          <CardTitle className="text-base">Sleep reminders</CardTitle>
+          <CardTitle className="text-base">{t("settings.sleepReminders")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <SettingsToggleRow
-            label="Enable bedtime reminder"
-            defaultOn={settings.bedtimeReminder}
-            onChange={(value) => updateSetting("bedtimeReminder", value)}
-          />
-          <ReminderSelectRow
-            icon={Moon}
-            label="Bedtime"
-            value={settings.bedtime}
-            onChange={(value) => updateSetting("bedtime", value)}
-            options={[
-              { value: "21:00", label: "9:00 PM" },
-              { value: "22:00", label: "10:00 PM" },
-              { value: "23:00", label: "11:00 PM" },
-              { value: "00:00", label: "12:00 AM" }
-            ]}
-            widthClass="w-32"
-          />
+          <SettingsToggleRow label={t("settings.enableBedtimeReminder")} defaultOn={settings.bedtimeReminder} onChange={(value) => void updateSetting("bedtimeReminder", value)} />
+          <ReminderSelectRow icon={Moon} label={t("settings.bedtime")} value={settings.bedtime ?? ""} onChange={(value) => void updateSetting("bedtime", value)} options={[{ value: "21:00", label: "9:00 PM" }, { value: "22:00", label: "10:00 PM" }, { value: "23:00", label: "11:00 PM" }, { value: "00:00", label: "12:00 AM" }]} widthClass="w-32" />
         </CardContent>
       </Card>
 
       <Card className="border-border/70">
         <CardHeader>
-          <CardTitle className="text-base">Supplement reminders</CardTitle>
+          <CardTitle className="text-base">{t("settings.supplementReminders")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <SettingsToggleRow
-            label="Enable supplement reminders"
-            defaultOn={settings.supplementReminders}
-            onChange={(value) => updateSetting("supplementReminders", value)}
-          />
+          <SettingsToggleRow label={t("settings.enableSupplementReminders")} defaultOn={settings.supplementReminders} onChange={(value) => void updateSetting("supplementReminders", value)} />
         </CardContent>
       </Card>
 
       <Card className="border-border/70">
         <CardHeader>
-          <CardTitle className="text-base">Weigh-in reminders</CardTitle>
+          <CardTitle className="text-base">{t("settings.weighInReminders")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <SettingsToggleRow
-            label="Enable weigh-in reminder"
-            defaultOn={settings.weighInReminder}
-            onChange={(value) => updateSetting("weighInReminder", value)}
-          />
-          <ReminderSelectRow
-            icon={Scale}
-            label="Preferred day"
-            value={settings.weighInDay}
-            onChange={(value) => updateSetting("weighInDay", value)}
-            options={[
-              { value: "daily", label: "Daily" },
-              { value: "weekly", label: "Weekly" }
-            ]}
-            widthClass="w-32"
-          />
+          <SettingsToggleRow label={t("settings.enableWeighInReminder")} defaultOn={settings.weighInReminder} onChange={(value) => void updateSetting("weighInReminder", value)} />
+          <ReminderSelectRow icon={Scale} label={t("settings.preferredDay")} value={settings.weighInDay ?? ""} onChange={(value) => void updateSetting("weighInDay", value)} options={[{ value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" }]} widthClass="w-32" />
         </CardContent>
       </Card>
 
       <Card className="border-border/70">
         <CardHeader>
-          <CardTitle className="text-base">Progress photo reminders</CardTitle>
+          <CardTitle className="text-base">{t("settings.progressPhotoReminders")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <SettingsToggleRow
-            label="Enable photo reminder"
-            defaultOn={settings.photoReminder}
-            onChange={(value) => updateSetting("photoReminder", value)}
-          />
-          <ReminderSelectRow
-            icon={Camera}
-            label="Frequency"
-            value={settings.photoFrequency}
-            onChange={(value) => updateSetting("photoFrequency", value)}
-            options={[
-              { value: "weekly", label: "Weekly" },
-              { value: "monthly", label: "Monthly" }
-            ]}
-            widthClass="w-32"
-          />
+          <SettingsToggleRow label={t("settings.enablePhotoReminder")} defaultOn={settings.photoReminder} onChange={(value) => void updateSetting("photoReminder", value)} />
+          <ReminderSelectRow icon={Camera} label={t("settings.frequency")} value={settings.photoFrequency ?? ""} onChange={(value) => void updateSetting("photoFrequency", value)} options={[{ value: "weekly", label: "Weekly" }, { value: "monthly", label: "Monthly" }]} widthClass="w-32" />
         </CardContent>
       </Card>
 
       <Card className="border-border/70">
         <CardHeader>
-          <CardTitle className="text-base">Habit reminders</CardTitle>
+          <CardTitle className="text-base">{t("settings.habitReminders")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <SettingsToggleRow
-            label="Enable habit reminders"
-            defaultOn={settings.habitReminders}
-            onChange={(value) => updateSetting("habitReminders", value)}
-          />
+          <SettingsToggleRow label={t("settings.enableHabitReminders")} defaultOn={settings.habitReminders} onChange={(value) => void updateSetting("habitReminders", value)} />
         </CardContent>
       </Card>
 
       <Card className="border-border/70">
         <CardHeader>
-          <CardTitle className="text-base">Quiet hours</CardTitle>
+          <CardTitle className="text-base">{t("settings.quietHours")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <SettingsToggleRow
-            label="Enable quiet hours"
-            defaultOn={settings.quietHours}
-            onChange={(value) => updateSetting("quietHours", value)}
-          />
-          <ReminderSelectRow
-            icon={VolumeX}
-            label="Start time"
-            value={settings.quietStart}
-            onChange={(value) => updateSetting("quietStart", value)}
-            options={[
-              { value: "21:00", label: "9:00 PM" },
-              { value: "22:00", label: "10:00 PM" },
-              { value: "23:00", label: "11:00 PM" }
-            ]}
-            widthClass="w-32"
-          />
-          <ReminderSelectRow
-            icon={VolumeX}
-            label="End time"
-            value={settings.quietEnd}
-            onChange={(value) => updateSetting("quietEnd", value)}
-            options={[
-              { value: "06:00", label: "6:00 AM" },
-              { value: "07:00", label: "7:00 AM" },
-              { value: "08:00", label: "8:00 AM" }
-            ]}
-            widthClass="w-32"
-          />
+          <SettingsToggleRow label={t("settings.enableQuietHours")} defaultOn={settings.quietHours} onChange={(value) => void updateSetting("quietHours", value)} />
+          <ReminderSelectRow icon={VolumeX} label={t("settings.startTime")} value={settings.quietStart ?? ""} onChange={(value) => void updateSetting("quietStart", value)} options={[{ value: "21:00", label: "9:00 PM" }, { value: "22:00", label: "10:00 PM" }, { value: "23:00", label: "11:00 PM" }]} widthClass="w-32" />
+          <ReminderSelectRow icon={VolumeX} label={t("settings.endTime")} value={settings.quietEnd ?? ""} onChange={(value) => void updateSetting("quietEnd", value)} options={[{ value: "06:00", label: "6:00 AM" }, { value: "07:00", label: "7:00 AM" }, { value: "08:00", label: "8:00 AM" }]} widthClass="w-32" />
         </CardContent>
       </Card>
 
-      <p className="text-center text-sm text-muted-foreground">
-        {hasSaved ? "Saved on this device. " : ""}
-        Reminder preferences are saved on this device. Browser notifications will be added later.
-      </p>
+      <SaveStatus hasSaved={hasSaved} />
     </SettingsPageShell>
   );
 }

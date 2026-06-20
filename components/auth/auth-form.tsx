@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
 import { supabase, setRememberSession } from "@/lib/supabase/client";
+import { defaultStartPageToPath, getUserAppSettings } from "@/services/database/user-settings";
 
 async function withAuthTimeout<T>(request: Promise<T>) {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -55,7 +56,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         if (error) throw error;
         if (!data.session) throw new Error("Login could not finish. Please try again.");
         toast({ title: "Welcome back to FitLife Hub", description: "Your session is ready." });
-        router.replace(searchParams.get("next") ?? "/dashboard");
+        const explicitNext = searchParams.get("next");
+        const settings = explicitNext ? null : await getUserAppSettings(data.session.user.id).catch(() => null);
+        router.replace(explicitNext ?? defaultStartPageToPath(settings?.defaultStartPage ?? "today"));
         router.refresh();
       } else {
         const { error } = await withAuthTimeout(supabase.auth.signUp({

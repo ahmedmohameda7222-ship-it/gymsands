@@ -18,9 +18,11 @@ import { getOnboarding } from "@/services/database/profile";
 import { getCalorieTargets, getTodayFoodLogs, getTodayMealPlanItems } from "@/services/database/nutrition";
 import { getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
 import type { OnboardingAnswers } from "@/types";
+import { useTranslation } from "@/lib/i18n/use-translation";
 
 export default function SettingsPage() {
   const { user, profile, isLoading: authLoading } = useAuth();
+  const { t } = useTranslation();
   const [onboarding, setOnboarding] = useState<OnboardingAnswers | null>(null);
   const [hasTargets, setHasTargets] = useState(false);
   const [hasPlan, setHasPlan] = useState(false);
@@ -73,14 +75,14 @@ export default function SettingsPage() {
 
   const setupChecklist = useMemo(
     () => [
-      { label: "Complete profile", done: Boolean(profile?.full_name), href: "/profile", action: "Edit" },
-      { label: "Set fitness goal", done: Boolean(onboarding), href: "/onboarding?edit=true", action: "Set" },
-      { label: "Import workout plan", done: hasPlan, href: "/my-workout/plans", action: "Import" },
-      { label: "Add meal plan", done: hasMeals || hasFoodLogs, href: "/my-meal-plan", action: "Add" },
-      { label: "Set calorie target", done: hasTargets, href: "/calories", action: "Set" },
-      { label: "Add hydration target", done: hasTargets, href: "/calories", action: "Set" },
+      { label: t("setup.completeProfile"), done: Boolean(profile?.full_name), href: "/profile", action: t("common.edit") },
+      { label: t("setup.setFitnessGoal"), done: Boolean(onboarding), href: "/onboarding?edit=true", action: t("common.edit") },
+      { label: t("setup.importWorkoutPlan"), done: hasPlan, href: "/my-workout/plans", action: t("common.open") },
+      { label: t("setup.addMealPlan"), done: hasMeals || hasFoodLogs, href: "/my-meal-plan", action: t("common.open") },
+      { label: t("setup.setCalorieTarget"), done: hasTargets, href: "/calories", action: t("common.edit") },
+      { label: t("setup.addHydrationTarget"), done: hasTargets, href: "/calories", action: t("common.edit") },
     ],
-    [profile?.full_name, onboarding, hasPlan, hasMeals, hasFoodLogs, hasTargets]
+    [profile?.full_name, onboarding, hasPlan, hasMeals, hasFoodLogs, hasTargets, t]
   );
 
   const nextSetupItem = useMemo(() => setupChecklist.find((item) => !item.done) ?? null, [setupChecklist]);
@@ -89,38 +91,38 @@ export default function SettingsPage() {
   const categories = [
     {
       icon: User,
-      title: "Account",
-      description: "Profile, fitness profile, and account session.",
+      title: t("settings.account"),
+      description: t("settings.accountDesc"),
       href: "/settings/account",
     },
     {
       icon: Target,
-      title: "Goals & Tracking",
-      description: "Workout, nutrition, hydration, and progress defaults.",
+      title: t("settings.goalsTracking"),
+      description: t("settings.goalsTrackingDesc"),
       href: "/settings/goals-tracking",
     },
     {
       icon: Bell,
-      title: "Reminders",
-      description: "Workout, meals, hydration, sleep, supplements, and quiet hours.",
+      title: t("settings.reminders"),
+      description: t("settings.remindersDesc"),
       href: "/settings/reminders",
     },
     {
       icon: Bot,
-      title: "AI & Imports",
-      description: "ChatGPT import, AI permissions, and connected apps.",
+      title: t("settings.aiImports"),
+      description: t("settings.aiImportsDesc"),
       href: "/settings/ai-imports",
     },
     {
       icon: SlidersHorizontal,
-      title: "App Preferences",
-      description: "Theme, units, language, dashboard, and app behavior.",
+      title: t("settings.preferences"),
+      description: t("settings.preferencesDesc"),
       href: "/settings/preferences",
     },
     {
       icon: Shield,
-      title: "Data & Privacy",
-      description: "Export, reset, privacy, and account data.",
+      title: t("settings.dataPrivacy"),
+      description: t("settings.dataPrivacyDesc"),
       href: "/settings/data-privacy",
     },
   ];
@@ -128,8 +130,8 @@ export default function SettingsPage() {
   return (
     <>
       <PageHeading
-        title="Settings"
-        description="Manage your account, fitness profile, reminders, connected apps, and saved data."
+        title={t("settings.title")}
+        description={t("settings.description")}
       />
 
       {/* 1. Profile summary */}

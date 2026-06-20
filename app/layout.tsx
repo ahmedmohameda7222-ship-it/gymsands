@@ -3,6 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { ToastProvider } from "@/components/ui/toaster";
 import { AppPreferenceEffects } from "@/components/settings/app-preference-effects";
+import { UserSettingsProvider } from "@/lib/settings/user-settings-context";
 
 export const metadata: Metadata = {
   title: "FitLife Hub",
@@ -18,7 +19,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="font-sans">
-        <AppPreferenceEffects />
         <a
           href="#main-content"
           className="sr-only fixed left-4 top-4 z-[100] rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-luxe focus:not-sr-only"
@@ -26,7 +26,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to content
         </a>
         <ToastProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <UserSettingsProvider>
+              <AppPreferenceEffects />
+              {children}
+            </UserSettingsProvider>
+          </AuthProvider>
         </ToastProvider>
       </body>
     </html>

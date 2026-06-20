@@ -6,39 +6,41 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/auth-provider";
 import { SettingsPageShell } from "@/components/settings/settings-page-shell";
 import { SettingsSectionCard } from "@/components/settings/settings-section-card";
+import { useTranslation } from "@/lib/i18n/use-translation";
 
 export default function AccountSettingsPage() {
   const { signOut } = useAuth();
+  const { t } = useTranslation();
 
   return (
     <SettingsPageShell
-      title="Account"
-      description="Manage your profile, fitness profile, and account session."
+      title={t("settings.account")}
+      description={t("settings.accountDesc")}
     >
       {/* Profile */}
       <SettingsSectionCard
-        title="Profile"
+        title={t("settings.profile")}
         rows={[
           {
             icon: UserRound,
-            title: "Profile",
-            detail: "Update your name, account details, and profile information.",
+            title: t("settings.profile"),
+            detail: t("settings.profileDesc"),
             href: "/profile",
-            action: "Open",
+            action: t("common.open"),
           },
         ]}
       />
 
       {/* Fitness profile */}
       <SettingsSectionCard
-        title="Fitness profile"
+        title={t("settings.fitnessProfile")}
         rows={[
           {
             icon: Goal,
-            title: "Fitness profile",
-            detail: "Edit goals, training availability, equipment, nutrition preferences, and limitations.",
+            title: t("settings.fitnessProfile"),
+            detail: t("settings.fitnessProfileDesc"),
             href: "/onboarding?edit=true",
-            action: "Edit",
+            action: t("common.edit"),
           },
         ]}
       />
@@ -46,7 +48,7 @@ export default function AccountSettingsPage() {
       {/* Account session */}
       <Card className="border-destructive/20">
         <CardHeader>
-          <CardTitle className="text-base">Account session</CardTitle>
+          <CardTitle className="text-base">{t("settings.accountSession")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="group flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3">
@@ -56,15 +58,15 @@ export default function AccountSettingsPage() {
               </span>
               <span className="min-w-0">
                 <span className="block font-semibold text-foreground">
-                  Account session
+                  {t("settings.accountSession")}
                 </span>
                 <span className="mt-1 block text-sm leading-5 text-muted-foreground">
-                  Sign out of FitLife Hub on this device.
+                  {t("settings.signOutDevice")}
                 </span>
               </span>
             </span>
             <Button variant="destructive" size="sm" onClick={() => signOut()}>
-              Sign out
+              {t("settings.signOut")}
             </Button>
           </div>
         </CardContent>

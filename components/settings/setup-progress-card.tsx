@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/use-translation";
 
 type SetupItem = {
   label: string;
@@ -25,6 +26,8 @@ export function SetupProgressCard({
   completedCount: number;
   totalCount: number;
 }) {
+  const { t } = useTranslation();
+
   if (completedCount >= totalCount) return null;
 
   return (
@@ -33,7 +36,7 @@ export function SetupProgressCard({
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground">
-              {nextItem ? `Next: ${nextItem.label}` : "Setup in progress"}
+              {nextItem ? `${t("setup.next")}: ${nextItem.label}` : t("setup.inProgress")}
             </p>
             <div className="mt-2 flex items-center gap-2">
               <Progress value={(completedCount / totalCount) * 100} className="h-2 flex-1" />
@@ -52,7 +55,7 @@ export function SetupProgressCard({
         <details className="group mt-3">
           <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground">
             <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
-            Show all setup steps
+            {t("setup.showAll")}
           </summary>
           <div className="mt-3 space-y-2 border-t border-primary/10 pt-3">
             {checklist.map((item) => (
