@@ -104,14 +104,21 @@ export async function adminListWelcomeMessages(): Promise<AdminWelcomeMessage[]>
     .select("user_id,message,popup_enabled,show_frequency,is_active")
     .eq("is_active", true);
   if (error) throw error;
-  const rows = (data ?? []) as Array<AdminWelcomeMessage & { show_frequency: string | null }>;
-  return rows.map((item) => ({
-    user_id: item.user_id,
-    message: item.message.trim(),
-    popup_enabled: item.popup_enabled,
-    show_frequency: normalizeFrequency(item.show_frequency),
-    is_active: item.is_active
-  }));
+  return ((data ?? []) as Array<{
+    user_id: string;
+    message: string | null;
+    popup_enabled: boolean | null;
+    show_frequency: string | null;
+    is_active: boolean | null;
+  }>)
+    .filter((item) => Boolean(item.user_id && item.message?.trim()))
+    .map((item) => ({
+      user_id: item.user_id,
+      message: item.message?.trim() ?? "",
+      popup_enabled: typeof item.popup_enabled === "boolean" ? item.popup_enabled : true,
+      show_frequency: normalizeFrequency(item.show_frequency),
+      is_active: typeof item.is_active === "boolean" ? item.is_active : true
+    }));
 }
 
 export async function adminUpsertWelcomeMessage(payload: {
