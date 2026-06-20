@@ -4,6 +4,8 @@ import { Label } from "@/components/ui/label";
 
 export type SelectOption = { value: string; label: string } | string;
 
+type NativeSelectProps = Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "value" | "onChange">;
+
 const defaultSelectClass =
   "h-10 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -20,7 +22,7 @@ export function Select({
   options: SelectOption[];
   placeholder?: string;
   className?: string;
-} & React.SelectHTMLAttributes<HTMLSelectElement>) {
+} & NativeSelectProps) {
   return (
     <select
       value={value}
@@ -57,7 +59,7 @@ export function SelectField({
   options: SelectOption[];
   placeholder?: string;
   className?: string;
-} & React.SelectHTMLAttributes<HTMLSelectElement>) {
+} & NativeSelectProps) {
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
