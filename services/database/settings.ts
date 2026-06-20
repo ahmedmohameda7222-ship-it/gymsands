@@ -21,6 +21,16 @@ export type AdminWelcomeMessage = {
   is_active: boolean;
 };
 
+type WelcomeSettingsRow = {
+  value: Partial<WelcomeSettings> | null;
+};
+
+type CustomWelcomeMessageRow = {
+  message: string | null;
+  popup_enabled: boolean | null;
+  show_frequency: string | null;
+};
+
 function canUseUserData(userId: string | null | undefined) {
   return Boolean(supabase && isUuid(userId));
 }
@@ -31,7 +41,7 @@ function normalizeFrequency(value: unknown): WelcomeFrequency {
 
 function normalizeWelcomeSettings(value: Partial<WelcomeSettings> | null | undefined): WelcomeSettings {
   const message = typeof value?.default_message === "string" && value.default_message.trim()
-    ? value.default_message
+    ? value.default_message.trim()
     : fallbackWelcomeSettings.default_message;
 
   return {
@@ -59,19 +69,20 @@ export async function getWelcomeSettings(userId: string): Promise<WelcomeSetting
     console.warn("FitLife Hub could not load default welcome settings.", settingsResult.error.message);
   }
 
-  const parsed = normalizeWelcomeSettings((settingsResult.data?.value as Partial<WelcomeSettings> | null) ?? null);
+  const settingsRow = settingsResult.data as WelcomeSettingsRow | null;
+  const parsed = normalizeWelcomeSettings(settingsRow?.value ?? null);
 
   if (customResult.error) {
     console.warn("FitLife Hub could not load custom welcome message.", customResult.error.message);
     return parsed;
   }
 
-  const custom = customResult.data as Pick<AdminWelcomeMessage, "message" | "popup_enabled" | "show_frequency"> | null;
+  const custom = customResult.data as CustomWelcomeMessageRow | null;
   if (!custom?.message?.trim()) return parsed;
 
   return {
     ...parsed,
-    default_message: custom.message,
+    default_message: custom.message.trim(),
     popup_enabled: typeof custom.popup_enabled === "boolean" ? custom.popup_enabled : parsed.popup_enabled,
     show_frequency: normalizeFrequency(custom.show_frequency),
     is_custom_message: true
@@ -82,7 +93,8 @@ export async function adminGetWelcomeSettings(): Promise<WelcomeSettings> {
   if (!supabase) throw new Error("Database not connected");
   const { data, error } = await supabase!.from("admin_settings").select("value").eq("key", "welcome_settings").maybeSingle();
   if (error) throw error;
-  return normalizeWelcomeSettings((data?.value as Partial<WelcomeSettings> | null) ?? null);
+  const settingsRow = data as WelcomeSettingsRow | null;
+  return normalizeWelcomeSettings(settingsRow?.value ?? null);
 }
 
 export async function adminListWelcomeMessages(): Promise<AdminWelcomeMessage[]> {
@@ -92,9 +104,10 @@ export async function adminListWelcomeMessages(): Promise<AdminWelcomeMessage[]>
     .select("user_id,message,popup_enabled,show_frequency,is_active")
     .eq("is_active", true);
   if (error) throw error;
-  return (data ?? []).map((item) => ({
+  const rows = (data ?? []) as Array<AdminWelcomeMessage & { show_frequency: string | null }>;
+  return rows.map((item) => ({
     user_id: item.user_id,
-    message: item.message,
+    message: item.message.trim(),
     popup_enabled: item.popup_enabled,
     show_frequency: normalizeFrequency(item.show_frequency),
     is_active: item.is_active
