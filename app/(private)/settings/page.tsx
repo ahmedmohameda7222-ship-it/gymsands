@@ -16,20 +16,16 @@ import { SetupProgressCard } from "@/components/settings/setup-progress-card";
 import { SettingsHubCard } from "@/components/settings/settings-hub-card";
 import { getOnboarding } from "@/services/database/profile";
 import { getCalorieTargets, getTodayFoodLogs, getTodayMealPlanItems } from "@/services/database/nutrition";
-import { getProgressEntries } from "@/services/database/progress";
 import { getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
-import { getWorkoutHistory } from "@/services/database/workout-sessions";
 import type { OnboardingAnswers } from "@/types";
 
 export default function SettingsPage() {
-  const { user, profile, session, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading } = useAuth();
   const [onboarding, setOnboarding] = useState<OnboardingAnswers | null>(null);
   const [hasTargets, setHasTargets] = useState(false);
   const [hasPlan, setHasPlan] = useState(false);
   const [hasMeals, setHasMeals] = useState(false);
-  const [hasProgress, setHasProgress] = useState(false);
   const [hasFoodLogs, setHasFoodLogs] = useState(false);
-  const [chatGptConnected, setChatGptConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -51,14 +47,12 @@ export default function SettingsPage() {
           targets,
           plan,
           meals,
-          progress,
           foodLogs,
         ] = await Promise.all([
           getOnboarding(userId),
           getCalorieTargets(userId),
           getDefaultUserWorkoutPlan(userId),
           getTodayMealPlanItems(userId),
-          getProgressEntries(userId),
           getTodayFoodLogs(userId),
         ]);
 
@@ -66,20 +60,7 @@ export default function SettingsPage() {
         setHasTargets(Boolean(targets));
         setHasPlan(Boolean(plan));
         setHasMeals(meals.length > 0);
-        setHasProgress(progress.length > 0);
         setHasFoodLogs(foodLogs.length > 0);
-
-        if (session?.access_token) {
-          fetch("/api/mcp/connections", { headers: { Authorization: `Bearer ${session.access_token}` } })
-            .then((res) => (res.ok ? res.json() : null))
-            .then((data) => {
-              const connections = Array.isArray(data?.connections) ? data.connections : [];
-              setChatGptConnected(
-                connections.some((c: { is_active?: boolean; revoked_at?: string | null }) => c.is_active && !c.revoked_at)
-              );
-            })
-            .catch(() => setChatGptConnected(false));
-        }
       } catch (error) {
         console.warn("Settings page could not load setup data.", error);
       } finally {
@@ -88,7 +69,6 @@ export default function SettingsPage() {
     }
 
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   const setupChecklist = useMemo(
@@ -99,9 +79,8 @@ export default function SettingsPage() {
       { label: "Add meal plan", done: hasMeals || hasFoodLogs, href: "/my-meal-plan", action: "Add" },
       { label: "Set calorie target", done: hasTargets, href: "/calories", action: "Set" },
       { label: "Add hydration target", done: hasTargets, href: "/calories", action: "Set" },
-      { label: "Connect ChatGPT", done: chatGptConnected, href: "/settings/ai-imports", action: "Connect" },
     ],
-    [profile?.full_name, onboarding, hasPlan, hasMeals, hasFoodLogs, hasTargets, chatGptConnected]
+    [profile?.full_name, onboarding, hasPlan, hasMeals, hasFoodLogs, hasTargets]
   );
 
   const nextSetupItem = useMemo(() => setupChecklist.find((item) => !item.done) ?? null, [setupChecklist]);
