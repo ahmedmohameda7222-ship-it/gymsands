@@ -112,7 +112,6 @@ export function ReportingDashboard() {
               <Badge>{mode === "weekly" ? "Weekly report" : "Monthly report"}</Badge>
               <Badge variant="outline">{range.label}</Badge>
             </div>
-            <p className="mt-2 text-sm text-muted-foreground">Reports use real saved workouts, food logs, water logs, progress entries, habits, sleep logs, and PRs only.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant={mode === "weekly" ? "default" : "outline"} onClick={() => setMode("weekly")}>Weekly</Button>

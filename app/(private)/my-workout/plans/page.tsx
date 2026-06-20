@@ -7,7 +7,7 @@ export default function MyPlansPage() {
     <>
       <PageHeading
         title="Workout Plans"
-        description="ChatGPT-created plans are the recommended flow. FitLife stores, schedules, edits, and tracks the approved imported plan."
+        description="Manage your workout plans and import from ChatGPT."
       />
       <div className="mb-5">
         <ChatGptImportCard mode="workout" />

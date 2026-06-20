@@ -202,7 +202,6 @@ export function MyWorkoutPlans() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Workout Plans</h2>
-          <p className="text-sm text-muted-foreground">Imported plans stay primary. Manual tools are kept as backup, repair, and small-edit controls.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={loadPlans} disabled={isLoading}>
@@ -231,7 +230,6 @@ export function MyWorkoutPlans() {
                   {isChatGptPlan(activePlan) ? <Badge variant="outline" className="border-primary-foreground/30 text-primary-foreground">Imported</Badge> : <Badge variant="outline" className="border-primary-foreground/30 text-primary-foreground">{sourceBadge(activePlan)}</Badge>}
                 </div>
                 <h2 className="mt-4 text-2xl font-semibold tracking-tight">{activePlan.name}</h2>
-                <p className="mt-3 text-sm leading-6 text-primary-foreground/80">Your weekly calendar is loaded from saved active plan days and exercises. No generated or demo workout data is shown.</p>
                 <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
                   <MiniStat label="Days" value={String(activePlan.days.length)} />
                   <MiniStat label="Exercises" value={String(activeExerciseCount)} />
