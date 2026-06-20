@@ -275,7 +275,7 @@ function MobileMenu({
   const [open, setOpen] = useState(false);
 
   function handleNavigate() {
-    window.setTimeout(() => setOpen(false), 180);
+    setOpen(false);
   }
 
   return (
@@ -299,7 +299,7 @@ function MobileMenu({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="inset-y-0 left-0 right-auto top-0 h-dvh max-h-dvh w-[86vw] max-w-sm translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 border-r border-border/70 p-0 sm:left-0 sm:top-0 sm:max-w-sm sm:translate-x-0 sm:translate-y-0 sm:rounded-none">
+      <DialogContent className="inset-y-0 left-0 right-auto top-0 h-dvh max-h-dvh w-[86vw] max-w-sm translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 border-r border-border/70 p-0 data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:slide-in-from-left data-[state=open]:duration-300 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:slide-out-to-left data-[state=closed]:duration-300 sm:left-0 sm:top-0 sm:max-w-sm sm:translate-x-0 sm:translate-y-0 sm:rounded-none">
         <DialogHeader className="border-b border-border/70 px-5 py-4 text-left">
           <DialogTitle>More</DialogTitle>
         </DialogHeader>
