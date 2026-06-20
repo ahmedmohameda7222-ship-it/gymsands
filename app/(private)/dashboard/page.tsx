@@ -78,6 +78,8 @@ export default function DashboardPage() {
   const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
   const today = useTodayDate();
   const isMobile = useIsMobile();
+  const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
+  const [activeMealType, setActiveMealType] = useState<string | null>(null);
 
   async function loadDashboard() {
     if (!user?.id) {
@@ -245,6 +247,27 @@ export default function DashboardPage() {
     }
   }
 
+  const mealTypes = ["Breakfast", "Lunch", "Snack", "Dinner"] as const;
+  const mealGroups = mealTypes.map((type) => ({
+    type,
+    items: mealPlanItems.filter((item) => item.meal_type === type)
+  }));
+  const firstIncompleteMeal = mealGroups.find((group) => group.items.length > 0 && !group.items.every((item) => item.status === "done" || skippedIds.has(item.id)));
+  const currentMealType = activeMealType ?? firstIncompleteMeal?.type ?? null;
+
+  function skipFood(itemId: string) {
+    setSkippedIds((prev) => new Set(prev).add(itemId));
+  }
+
+  function skipMeal(mealType: string) {
+    const items = mealGroups.find((g) => g.type === mealType)?.items ?? [];
+    setSkippedIds((prev) => {
+      const next = new Set(prev);
+      items.forEach((item) => next.add(item.id));
+      return next;
+    });
+  }
+
   return (
     <>
       <WelcomePopup />
@@ -309,36 +332,57 @@ export default function DashboardPage() {
             <MetricCard icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} />
           </div>
 
-          {todayPlanDay ? (
-            <Card>
-              <CardContent className="p-4 sm:p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Dumbbell className="h-5 w-5 text-primary" />
-                      <p className="font-semibold">{todayPlanDay.day_name}</p>
-                      <span className="text-xs text-muted-foreground">{today}</span>
+          {activePlan ? (
+            todayPlanDay ? (
+              <Card>
+                <CardContent className="p-4 sm:p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Dumbbell className="h-5 w-5 shrink-0 text-primary" />
+                        <p className="font-semibold">{todayPlanDay.day_name}</p>
+                        <span className="text-xs text-muted-foreground">{today}</span>
+                      </div>
+                      <div className="mt-3 space-y-1.5">
+                        {todayPlanDay.exercises.slice(0, 5).map((ex, index) => (
+                          <p key={index} className="text-sm text-muted-foreground">
+                            {ex.sets ?? 1} × {ex.reps ?? "?"} {ex.exercise_name}
+                          </p>
+                        ))}
+                        {todayPlanDay.exercises.length > 5 && (
+                          <p className="text-xs text-muted-foreground">+{todayPlanDay.exercises.length - 5} more</p>
+                        )}
+                      </div>
                     </div>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {todayPlanDay.exercises.length} exercise{todayPlanDay.exercises.length === 1 ? "" : "s"} planned
-                    </p>
+                    {completedToday ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Done
+                      </span>
+                    ) : openSessionId ? (
+                      <Button asChild size="sm">
+                        <Link href={`/workouts/session/${openSessionId}`}>Resume</Link>
+                      </Button>
+                    ) : (
+                      <Button asChild size="sm">
+                        <Link href={`/workouts/session/day/${todayPlanDay.id}`}>Start</Link>
+                      </Button>
+                    )}
                   </div>
-                  {completedToday ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Done
-                    </span>
-                  ) : openSessionId ? (
-                    <Button asChild size="sm">
-                      <Link href={`/workouts/session/${openSessionId}`}>Resume</Link>
-                    </Button>
-                  ) : (
-                    <Button asChild size="sm">
-                      <Link href={`/workouts/session/day/${todayPlanDay.id}`}>Start</Link>
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="p-4 sm:p-5">
+                  <div className="flex items-center gap-3">
+                    <Dumbbell className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="font-semibold text-muted-foreground">Rest day</p>
+                      <p className="text-sm text-muted-foreground">No workout scheduled for today. Recover well.</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
           ) : (
             <Card>
               <CardContent className="p-4 sm:p-5">
@@ -359,27 +403,69 @@ export default function DashboardPage() {
           {mealPlanItems.length > 0 ? (
             <Card>
               <CardContent className="p-4 sm:p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <Utensils className="h-5 w-5 text-primary" />
-                    <p className="font-semibold">Today&apos;s meal plan</p>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{doneMealsCount}/{plannedMealsCount} done</p>
+                <div className="flex items-center gap-2">
+                  <Utensils className="h-5 w-5 text-primary" />
+                  <p className="font-semibold">Today&apos;s meal plan</p>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {mealPlanItems
-                    .filter((item) => item.status !== "done")
-                    .slice(0, 3)
-                    .map((item) => (
-                      <Button key={item.id} type="button" variant="outline" size="sm" onClick={() => quickMarkMealDone(item)}>
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Mark {item.meal_type}
+
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {mealGroups.filter((group) => group.items.length > 0).map((group) => {
+                    const allDone = group.items.every((item) => item.status === "done" || skippedIds.has(item.id));
+                    return (
+                      <Button
+                        key={group.type}
+                        type="button"
+                        variant={currentMealType === group.type ? "default" : allDone ? "ghost" : "outline"}
+                        size="sm"
+                        onClick={() => setActiveMealType(group.type)}
+                      >
+                        {group.type}
+                        {allDone && <CheckCircle2 className="ml-1 h-3.5 w-3.5" />}
                       </Button>
-                    ))}
-                  <Button asChild variant="ghost" size="sm">
-                    <Link href="/my-meal-plan">View plan</Link>
-                  </Button>
+                    );
+                  })}
                 </div>
+
+                {currentMealType ? (
+                  <div className="mt-4 space-y-3">
+                    {mealGroups
+                      .find((g) => g.type === currentMealType)
+                      ?.items.filter((item) => item.status !== "done" && !skippedIds.has(item.id))
+                      .map((item) => (
+                        <div key={item.id} className="flex items-start justify-between gap-3 rounded-md border border-border/70 bg-slate-50 p-3">
+                          <div className="min-w-0">
+                            <p className="font-medium">{item.food_name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {item.calories} kcal · {item.protein_g}g protein · {item.carbs_g}g carbs · {item.fat_g}g fat
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 gap-2">
+                            <Button type="button" variant="ghost" size="sm" onClick={() => skipFood(item.id)}>
+                              Skip
+                            </Button>
+                            <Button type="button" size="sm" onClick={() => quickMarkMealDone(item)}>
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Done
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+
+                    {mealGroups.find((g) => g.type === currentMealType)?.items.every((item) => item.status === "done" || skippedIds.has(item.id)) ? (
+                      <p className="text-center text-sm text-muted-foreground">
+                        All {currentMealType.toLowerCase()} items completed. {firstIncompleteMeal ? `Next: ${firstIncompleteMeal.type}` : "All meals done."}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-center text-sm text-muted-foreground">All meals completed today.</p>
+                )}
+
+                {currentMealType && mealGroups.find((g) => g.type === currentMealType)?.items.some((item) => item.status !== "done" && !skippedIds.has(item.id)) ? (
+                  <Button type="button" variant="ghost" size="sm" className="mt-3 w-full" onClick={() => skipMeal(currentMealType)}>
+                    Skip all {currentMealType.toLowerCase()}
+                  </Button>
+                ) : null}
               </CardContent>
             </Card>
           ) : null}
