@@ -258,7 +258,6 @@ export type WorkoutSession = {
   skipped_at?: string | null;
   duration_minutes: number | null;
   notes: string | null;
-  status: "started" | "completed" | "skipped";
 };
 
 export type Weekday = "Sunday" | "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday";
@@ -488,6 +487,7 @@ export type WelcomeSettings = {
   popup_enabled: boolean;
   show_frequency: "every_login" | "once_per_day";
   default_message: string;
+  is_custom_message?: boolean;
 };
 
 
