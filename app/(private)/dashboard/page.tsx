@@ -44,6 +44,7 @@ import { aggregateReport, buildWeekRange, reportMetrics, startOfWeek, type Aggre
 import { getFitnessHabitHistory, getSleepRecoveryHistory } from "@/services/wellness/wellness-data";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
 import type { FitnessHabit, FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryLog, SupplementLog, UserWorkoutPlan, WaterLog, WorkoutSession } from "@/types";
+import { useUserSettings } from "@/lib/settings/user-settings-context";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -58,6 +59,7 @@ function useIsMobile() {
 
 export default function DashboardPage() {
   const { user, profile, session } = useAuth();
+  const { settings } = useUserSettings();
   const router = useRouter();
   const { toast } = useToast();
   const [logs, setLogs] = useState<FoodLog[]>([]);
@@ -326,10 +328,14 @@ export default function DashboardPage() {
           ) : null}
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
-            <MetricCard icon={Flame} label="Calories" value={`${totals.calories} kcal`} detail={hasTargets ? `${remaining.calories} kcal left` : "No target"} progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined} />
+            {!settings.hideCaloriesOnDashboard ? (
+              <MetricCard icon={Flame} label="Calories" value={`${totals.calories} kcal`} detail={hasTargets ? `${remaining.calories} kcal left` : "No target"} progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined} />
+            ) : null}
             <MetricCard icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={hasTargets ? `${remaining.protein_g}g left` : "Set target"} progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined} />
             <MetricCard icon={Droplets} label="Water" value={waterTotalMl ? `${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
-            <MetricCard icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} />
+            {!settings.hideBodyWeightOnDashboard ? (
+              <MetricCard icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} />
+            ) : null}
           </div>
 
           {activePlan ? (

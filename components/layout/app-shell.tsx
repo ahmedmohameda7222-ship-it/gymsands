@@ -30,63 +30,66 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/use-translation";
+import type { TranslationKey } from "@/lib/i18n/types";
+import { useUserSettings } from "@/lib/settings/user-settings-context";
 
 type NavItem = {
   href: string;
-  label: string;
+  labelKey: TranslationKey;
   icon: ComponentType<{ className?: string }>;
   activePaths?: string[];
   exact?: boolean;
 };
 
-const navGroups: { label: string; items: NavItem[] }[] = [
-  { label: "Today", items: [{ href: "/dashboard", label: "Today", icon: Home }] },
+const navGroups: { labelKey: TranslationKey; items: NavItem[] }[] = [
+  { labelKey: "nav.today", items: [{ href: "/dashboard", labelKey: "nav.today", icon: Home }] },
   {
-    label: "Train",
+    labelKey: "nav.train",
     items: [
-      { href: "/my-workout/plans", label: "Workout Plans", icon: CalendarCheck, activePaths: ["/my-workout/plans", "/today-workout", "/workouts/session"] },
-      { href: "/workouts", label: "Exercise Library", icon: Dumbbell },
-      { href: "/workout-history", label: "Workout History", icon: History }
+      { href: "/my-workout/plans", labelKey: "nav.workoutPlans", icon: CalendarCheck, activePaths: ["/my-workout/plans", "/today-workout", "/workouts/session"] },
+      { href: "/workouts", labelKey: "nav.exerciseLibrary", icon: Dumbbell },
+      { href: "/workout-history", labelKey: "nav.workoutHistory", icon: History }
     ]
   },
   {
-    label: "Eat",
+    labelKey: "nav.eat",
     items: [
-      { href: "/calories", label: "Food Log", icon: Utensils, activePaths: ["/calories"], exact: true },
-      { href: "/calories/food-hub", label: "Food Hub", icon: ChefHat },
-      { href: "/my-meal-plan", label: "Meal Plan", icon: ClipboardList },
-      { href: "/calories/weekly-overview", label: "Nutrition Summary", icon: Soup }
+      { href: "/calories", labelKey: "nav.foodLog", icon: Utensils, activePaths: ["/calories"], exact: true },
+      { href: "/calories/food-hub", labelKey: "nav.foodHub", icon: ChefHat },
+      { href: "/my-meal-plan", labelKey: "nav.mealPlan", icon: ClipboardList },
+      { href: "/calories/weekly-overview", labelKey: "nav.nutritionSummary", icon: Soup }
     ]
   },
   {
-    label: "Progress",
+    labelKey: "nav.progress",
     items: [
-      { href: "/progress", label: "Progress", icon: BarChart3 },
-      { href: "/personal-records", label: "Personal Records", icon: Trophy }
+      { href: "/progress", labelKey: "nav.progress", icon: BarChart3 },
+      { href: "/personal-records", labelKey: "nav.personalRecords", icon: Trophy }
     ]
   },
   {
-    label: "Wellness",
+    labelKey: "nav.wellness",
     items: [
-      { href: "/wellness", label: "Wellness Dashboard", icon: CheckSquare },
-      { href: "/hydration", label: "Hydration", icon: Droplets },
-      { href: "/habits", label: "Habits", icon: CalendarCheck },
-      { href: "/sleep-recovery", label: "Sleep & Recovery", icon: BedDouble },
-      { href: "/supplements", label: "Supplements", icon: Pill },
-      { href: "/daily-fit-tasks", label: "Daily Fit Tasks", icon: CheckSquare }
+      { href: "/wellness", labelKey: "nav.wellnessDashboard", icon: CheckSquare },
+      { href: "/hydration", labelKey: "nav.hydration", icon: Droplets },
+      { href: "/habits", labelKey: "nav.habits", icon: CalendarCheck },
+      { href: "/sleep-recovery", labelKey: "nav.sleepRecovery", icon: BedDouble },
+      { href: "/supplements", labelKey: "nav.supplements", icon: Pill },
+      { href: "/daily-fit-tasks", labelKey: "nav.dailyFitTasks", icon: CheckSquare }
     ]
   },
-  { label: "Settings", items: [{ href: "/settings", label: "Settings", icon: Settings, activePaths: ["/settings", "/profile"] }] }
+  { labelKey: "nav.settings", items: [{ href: "/settings", labelKey: "nav.settings", icon: Settings, activePaths: ["/settings", "/profile"] }] }
 ];
 
 const mobilePrimaryItems: NavItem[] = [
-  { href: "/dashboard", label: "Today", icon: Home, activePaths: ["/dashboard"] },
-  { href: "/my-workout/plans", label: "Train", icon: Dumbbell, activePaths: ["/today-workout", "/my-workout", "/workouts", "/workout-history"] },
-  { href: "/calories", label: "Eat", icon: Utensils, activePaths: ["/calories", "/my-meal-plan"] }
+  { href: "/dashboard", labelKey: "nav.today", icon: Home, activePaths: ["/dashboard"] },
+  { href: "/my-workout/plans", labelKey: "nav.train", icon: Dumbbell, activePaths: ["/today-workout", "/my-workout", "/workouts", "/workout-history"] },
+  { href: "/calories", labelKey: "nav.eat", icon: Utensils, activePaths: ["/calories", "/my-meal-plan"] }
 ];
 
 const adminItems: NavItem[] = [
-  { href: "/admin", label: "Admin", icon: Shield }
+  { href: "/admin", labelKey: "settings.accountSession", icon: Shield }
 ];
 
 const moreActivePaths = [
@@ -104,11 +107,11 @@ const moreActivePaths = [
 ];
 
 const quickLogItems: NavItem[] = [
-  { href: "/calories", label: "Log food", icon: Utensils },
-  { href: "/hydration", label: "Add water", icon: Droplets },
-  { href: "/today-workout", label: "Start workout", icon: Dumbbell },
-  { href: "/progress", label: "Add progress", icon: BarChart3 },
-  { href: "/habits", label: "Add habit or task", icon: CheckSquare }
+  { href: "/calories", labelKey: "nav.logFood", icon: Utensils },
+  { href: "/hydration", labelKey: "nav.addWater", icon: Droplets },
+  { href: "/today-workout", labelKey: "nav.startWorkout", icon: Dumbbell },
+  { href: "/progress", labelKey: "nav.addProgress", icon: BarChart3 },
+  { href: "/habits", labelKey: "nav.addHabitTask", icon: CheckSquare }
 ];
 
 function isActivePath(pathname: string, item: NavItem) {
@@ -126,6 +129,9 @@ function isMoreActive(pathname: string) {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { profile, isAdmin, signOut } = useAuth();
+  const { settings } = useUserSettings();
+  const { t } = useTranslation();
+  const hideProfileDetails = settings.hideProfileDetails || settings.privateProfileMode;
 
   return (
     <div className="min-h-screen bg-transparent text-foreground">
@@ -135,10 +141,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <nav className="flex-1 space-y-5 overflow-y-auto px-4 pb-4" aria-label="Main navigation">
           {navGroups.map((group) => (
-            <div key={group.label}>
-              <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{group.label}</p>
+            <div key={group.labelKey}>
+              <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t(group.labelKey)}</p>
               <div className="space-y-1">
-                {group.items.map((item) => <SidebarLink key={`${item.href}-${item.label}`} item={item} active={isActivePath(pathname, item)} />)}
+                {group.items.map((item) => <SidebarLink key={`${item.href}-${item.labelKey}`} item={item} active={isActivePath(pathname, item)} />)}
               </div>
             </div>
           ))}
@@ -151,11 +157,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="border-t border-border/70 p-4">
           <div className="rounded-2xl bg-background/70 p-3">
-            <p className="truncate text-sm font-semibold text-foreground">{profile?.full_name || "FitLife Hub member"}</p>
-            <p className="truncate text-xs text-muted-foreground">{profile?.email}</p>
+            <p className="truncate text-sm font-semibold text-foreground">{hideProfileDetails ? t("nav.member") : profile?.full_name || t("nav.member")}</p>
+            {!hideProfileDetails ? <p className="truncate text-xs text-muted-foreground">{profile?.email}</p> : null}
             <Button variant="ghost" className="mt-3 w-full justify-start" onClick={signOut}>
               <LogOut className="h-4 w-4" />
-              Logout
+              {t("nav.logout")}
             </Button>
           </div>
         </div>
@@ -168,11 +174,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <div className="hidden lg:block">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">FitLife Hub</p>
-            <h1 className="text-base font-semibold text-foreground">Today, training, nutrition, progress</h1>
+            <h1 className="text-base font-semibold text-foreground">{t("nav.tagline")}</h1>
           </div>
           <Button variant="outline" size="sm" onClick={signOut} className="hidden lg:inline-flex">
             <LogOut className="h-4 w-4" />
-            Logout
+            {t("nav.logout")}
           </Button>
         </div>
       </header>
@@ -208,6 +214,7 @@ function MobilePrimaryNav({ pathname, isAdmin, signOut }: { pathname: string; is
 
 function MobileNavLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
+  const { t } = useTranslation();
   return (
     <Link
       href={item.href}
@@ -218,26 +225,27 @@ function MobileNavLink({ item, active }: { item: NavItem; active: boolean }) {
       )}
     >
       <Icon className="h-5 w-5" />
-      <span className="truncate">{item.label}</span>
+      <span className="truncate">{t(item.labelKey)}</span>
     </Link>
   );
 }
 
 function QuickLogSheet() {
+  const { t } = useTranslation();
   return (
     <Dialog>
       <DialogTrigger asChild>
         <Button
           size="icon"
           className="absolute left-1/2 top-0 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-background bg-primary text-primary-foreground shadow-luxe hover:bg-[#1F2A14]"
-          aria-label="Open quick log"
+          aria-label={t("nav.quickLog")}
         >
           <Plus className="h-6 w-6" />
         </Button>
       </DialogTrigger>
       <DialogContent className="rounded-t-2xl p-0 sm:max-w-sm">
         <DialogHeader className="border-b border-border/70 px-5 py-4 text-left">
-          <DialogTitle>Quick log</DialogTitle>
+          <DialogTitle>{t("nav.quickLog")}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-2 p-4">
           {quickLogItems.map((item) => {
@@ -248,7 +256,7 @@ function QuickLogSheet() {
                   <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <Icon className="h-4 w-4" />
                   </span>
-                  {item.label}
+                  {t(item.labelKey)}
                 </Link>
               </DialogClose>
             );
@@ -273,6 +281,7 @@ function MobileMenu({
   active?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
 
   function handleNavigate() {
     setOpen(false);
@@ -284,36 +293,36 @@ function MobileMenu({
         {asNavItem ? (
           <button
             type="button"
-            aria-label="Open more navigation"
+            aria-label={t("nav.more")}
             className={cn(
               "flex min-h-14 flex-col items-center justify-center gap-1 border-t-2 px-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring",
               active ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-primary"
             )}
           >
             <Settings className="h-5 w-5" />
-            <span>More</span>
+            <span>{t("nav.more")}</span>
           </button>
         ) : (
-          <Button variant="outline" size="icon" aria-label="Open navigation menu">
+          <Button variant="outline" size="icon" aria-label={t("nav.more")}>
             <Menu className="h-5 w-5" />
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="inset-y-0 left-0 right-auto top-0 h-dvh max-h-dvh w-[86vw] max-w-sm translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 border-r border-border/70 p-0 data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:slide-in-from-left data-[state=open]:duration-300 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:slide-out-to-left data-[state=closed]:duration-300 sm:left-0 sm:top-0 sm:max-w-sm sm:translate-x-0 sm:translate-y-0 sm:rounded-none">
         <DialogHeader className="border-b border-border/70 px-5 py-4 text-left">
-          <DialogTitle>More</DialogTitle>
+          <DialogTitle>{t("nav.more")}</DialogTitle>
         </DialogHeader>
         <div className="h-[calc(100dvh-4.5rem)] overflow-y-auto px-4 py-4">
           <div className="space-y-4">
             {navGroups.map((group) => {
-              const visibleInMore = group.label === "Today" ? group.items.slice(0, 0) : group.items;
+              const visibleInMore = group.labelKey === "nav.today" ? group.items.slice(0, 0) : group.items;
               if (visibleInMore.length === 0) return null;
               return (
-                <div key={group.label}>
-                  <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{group.label}</p>
+                <div key={group.labelKey}>
+                  <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t(group.labelKey)}</p>
                   <div className="space-y-1">
                     {visibleInMore.map((item) => (
-                      <SidebarLink key={`${item.href}-${item.label}`} item={item} active={isActivePath(pathname, item)} mobile onClick={handleNavigate} />
+                      <SidebarLink key={`${item.href}-${item.labelKey}`} item={item} active={isActivePath(pathname, item)} mobile onClick={handleNavigate} />
                     ))}
                   </div>
                 </div>
@@ -336,7 +345,7 @@ function MobileMenu({
               }}
             >
               <LogOut className="h-4 w-4" />
-              Logout
+              {t("nav.logout")}
             </Button>
           </div>
         </div>
@@ -347,6 +356,7 @@ function MobileMenu({
 
 function SidebarLink({ item, active, mobile = false, onClick }: { item: NavItem; active: boolean; mobile?: boolean; onClick?: () => void }) {
   const Icon = item.icon;
+  const { t } = useTranslation();
   return (
     <Link
       href={item.href}
@@ -359,7 +369,7 @@ function SidebarLink({ item, active, mobile = false, onClick }: { item: NavItem;
       )}
     >
       <Icon className="h-4 w-4 shrink-0" />
-      <span>{item.label}</span>
+      <span>{t(item.labelKey)}</span>
     </Link>
   );
 }

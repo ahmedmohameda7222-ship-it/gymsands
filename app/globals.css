@@ -131,6 +131,26 @@ body {
   font-size: 17px;
 }
 
+.compact-mode body {
+  --settings-row-padding: 0.6rem;
+}
+
+.compact-mode main .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.75rem;
+}
+
+.compact-mode main .space-y-3 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.5rem;
+}
+
+html[dir="rtl"] body {
+  text-align: right;
+}
+
+html[dir="rtl"] .group {
+  direction: rtl;
+}
+
 .reduce-motion,
 .reduce-motion * {
   scroll-behavior: auto !important;

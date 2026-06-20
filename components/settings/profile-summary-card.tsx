@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { ChevronRight, ExternalLink, UserRound } from "lucide-react";
+import { ExternalLink, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import type { OnboardingAnswers } from "@/types";
+import { useTranslation } from "@/lib/i18n/use-translation";
+import { useUserSettings } from "@/lib/settings/user-settings-context";
 
 type ProfileSummaryCardProps = {
   onboarding?: OnboardingAnswers | null;
@@ -14,22 +16,25 @@ type ProfileSummaryCardProps = {
 
 export function ProfileSummaryCard({ onboarding }: ProfileSummaryCardProps) {
   const { profile, isLoading } = useAuth();
+  const { settings } = useUserSettings();
+  const { t } = useTranslation();
+  const hideProfileDetails = settings.hideProfileDetails || settings.privateProfileMode;
 
   const initials = useMemo(() => {
-    const source = profile?.full_name || profile?.email || "FH";
+    const source = hideProfileDetails ? "FH" : profile?.full_name || profile?.email || "FH";
     return source
       .split(/[\s@.]+/)
       .filter(Boolean)
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase())
       .join("") || "FH";
-  }, [profile?.email, profile?.full_name]);
+  }, [hideProfileDetails, profile?.email, profile?.full_name]);
 
   const completionLabel = useMemo(() => {
-    if (!profile?.full_name) return "Profile incomplete";
-    if (!onboarding) return "Fitness profile not set";
-    return "Profile active";
-  }, [profile?.full_name, onboarding]);
+    if (!profile?.full_name) return t("profile.incomplete");
+    if (!onboarding) return t("profile.fitnessNotSet");
+    return t("profile.active");
+  }, [profile?.full_name, onboarding, t]);
 
   const goalLabel = onboarding?.goals?.length
     ? onboarding.goals.join(", ")
@@ -65,14 +70,16 @@ export function ProfileSummaryCard({ onboarding }: ProfileSummaryCardProps) {
               {completionLabel}
             </p>
             <h2 className="mt-1 truncate text-lg font-semibold tracking-tight text-foreground">
-              {profile?.full_name || "Complete your profile"}
+              {hideProfileDetails ? t("nav.member") : profile?.full_name || t("profile.complete")}
             </h2>
-            <p className="mt-0.5 truncate text-sm text-muted-foreground">
-              {profile?.email ?? "Email loading..."}
-            </p>
+            {!hideProfileDetails ? (
+              <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                {profile?.email ?? t("profile.emailLoading")}
+              </p>
+            ) : null}
             {goalLabel ? (
               <p className="mt-1 truncate text-sm text-primary">
-                Goal: {goalLabel}
+                {t("profile.goal")}: {goalLabel}
               </p>
             ) : null}
           </div>
@@ -93,13 +100,13 @@ export function ProfileSummaryCard({ onboarding }: ProfileSummaryCardProps) {
           <Button asChild variant="outline" className="w-full">
             <Link href="/profile">
               <UserRound className="h-4 w-4" />
-              Edit profile
+              {t("common.edit")} {t("settings.profile").toLowerCase()}
             </Link>
           </Button>
           <Button asChild variant="outline" className="w-full">
             <Link href="/onboarding?edit=true">
               <ExternalLink className="h-4 w-4" />
-              Fitness profile
+              {t("settings.fitnessProfile")}
             </Link>
           </Button>
         </div>

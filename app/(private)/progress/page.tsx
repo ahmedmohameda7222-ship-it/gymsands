@@ -24,6 +24,7 @@ import { deleteProgressPhoto, getProgressPhotos, uploadProgressPhoto, type Progr
 import type { BodyMeasurement, DailyNutritionSummary, ProgressEntry, WorkoutSession } from "@/types";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { addDays, daysBetween, startOfWeek, todayIso } from "@/lib/date-utils";
+import { useUserSettings } from "@/lib/settings/user-settings-context";
 
 const GOAL_WEIGHT_STORAGE_KEY = "fitlife_goal_weight_kg";
 const BODY_FAT_SETTINGS_KEY = "fitlife_body_fat_estimate_settings";
@@ -57,6 +58,7 @@ type ProgressFeedback = { label: string; value: string; detail: string };
 
 export default function ProgressPage() {
   const { user, profile, refreshProfile } = useAuth();
+  const { settings } = useUserSettings();
   const { toast } = useToast();
   const [entries, setEntries] = useState<ProgressEntry[]>([]);
   const [workoutActivity, setWorkoutActivity] = useState<WorkoutSession[]>([]);
@@ -80,10 +82,12 @@ export default function ProgressPage() {
         getProgressEntries(user.id),
         getWorkoutActivity(user.id),
         getNutritionWeek(user.id, currentWeekStart),
-        getProgressPhotos(user.id).catch((error) => {
-          console.warn("FitLife Hub could not load private progress photos.", error instanceof Error ? error.message : error);
-          return [] as ProgressPhoto[];
-        })
+        settings.hideProgressPhotos
+          ? Promise.resolve([] as ProgressPhoto[])
+          : getProgressPhotos(user.id).catch((error) => {
+              console.warn("FitLife Hub could not load private progress photos.", error instanceof Error ? error.message : error);
+              return [] as ProgressPhoto[];
+            })
       ]);
       setEntries(progressEntries);
       setWorkoutActivity(activity);
@@ -94,7 +98,7 @@ export default function ProgressPage() {
     loadProgress()
       .catch((error) => toast({ title: "Could not load progress", description: error instanceof Error ? error.message : "Please refresh and try again." }))
       .finally(() => setIsLoading(false));
-  }, [currentWeekStart, toast, user?.id]);
+  }, [currentWeekStart, settings.hideProgressPhotos, toast, user?.id]);
 
   useEffect(() => {
     // TODO(migration): Move goal weight to Supabase profile completely
@@ -115,6 +119,12 @@ export default function ProgressPage() {
       }
     }
   }, [profile?.target_weight_kg]);
+
+  useEffect(() => {
+    if (settings.hideProgressPhotos && activeTab === "photos") {
+      setActiveTab("overview");
+    }
+  }, [activeTab, settings.hideProgressPhotos]);
 
   const sortedEntries = [...entries].sort((a, b) => a.entry_date.localeCompare(b.entry_date));
   const weightEntries = sortedEntries.filter(hasBodyWeight);
@@ -257,7 +267,7 @@ export default function ProgressPage() {
         <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="measurements">Measurements</TabsTrigger>
-          <TabsTrigger value="photos">Photos</TabsTrigger>
+          {!settings.hideProgressPhotos ? <TabsTrigger value="photos">Photos</TabsTrigger> : null}
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
@@ -362,7 +372,7 @@ export default function ProgressPage() {
           )}
 
           {/* Photos shortcut */}
-          {photos.length > 0 && (
+          {!settings.hideProgressPhotos && photos.length > 0 && (
             <Card className="border-border/70 shadow-luxe">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
@@ -438,9 +448,11 @@ export default function ProgressPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="photos" className="space-y-4">
-          <ProgressPhotoManager userId={user?.id ?? null} photos={photos} setPhotos={setPhotos} />
-        </TabsContent>
+        {!settings.hideProgressPhotos ? (
+          <TabsContent value="photos" className="space-y-4">
+            <ProgressPhotoManager userId={user?.id ?? null} photos={photos} setPhotos={setPhotos} />
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="history" className="space-y-4">
           {editingEntry && editDraft ? <EditProgressCard draft={editDraft} setDraft={setEditDraft} onCancel={() => { setEditingEntry(null); setEditDraft(null); }} onSave={saveEdit} /> : null}
