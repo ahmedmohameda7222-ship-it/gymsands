@@ -244,6 +244,8 @@ export type ExerciseMetadata = {
   exercise_url: string;
 };
 
+export type WorkoutSessionStatus = "started" | "completed" | "skipped";
+
 export type WorkoutSession = {
   id: string;
   user_id: string;
@@ -258,6 +260,7 @@ export type WorkoutSession = {
   skipped_at?: string | null;
   duration_minutes: number | null;
   notes: string | null;
+  status: WorkoutSessionStatus;
 };
 
 export type Weekday = "Sunday" | "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday";
@@ -489,7 +492,6 @@ export type WelcomeSettings = {
   default_message: string;
   is_custom_message?: boolean;
 };
-
 
 export type UserAiPermissionSettings = {
   id: string;
