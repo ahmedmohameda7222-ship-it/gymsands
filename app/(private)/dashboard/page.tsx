@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, CheckCircle2, Compass, Droplets, Flame, MoreHorizontal, Plus, Scale, Soup } from "lucide-react";
+import { ArrowRight, CheckCircle2, Compass, Droplets, Flame, Plus, Scale, Soup } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +17,6 @@ import {
   MacroLine,
   QuickLinkGrid,
   WellnessSummary,
-  buildNextBestActions,
   buildWeeklyFocus,
   countCompletedTrainingStreak,
   getDashboardShortcuts
@@ -212,29 +211,10 @@ export default function DashboardPage() {
   const todayScore = Math.round((todayScoreChecks.filter(Boolean).length / todayScoreChecks.length) * 100);
   const trainingStreak = countCompletedTrainingStreak(history);
   const todayPlanDayId = todayPlanDay?.id ?? null;
-  const smartActions = buildNextBestActions({
-    logs,
-    targets,
-    totals,
-    remaining,
-    waterTotalMl,
-    mealPlanItems,
-    habits,
-    todayPlanDayId,
-    activePlanId: activePlan?.id ?? null,
-    openSessionId,
-    completedToday,
-    latestProgressDate: latestProgress?.entry_date ?? null,
-    sleepLoggedToday: Boolean(todaySleepLog),
-    supplements,
-    today
-  });
   const weeklyFocus = weeklyReport ? buildWeeklyFocus(weeklyReport) : null;
   const weeklyMetrics = weeklyReport ? reportMetrics(weeklyReport, "weekly").slice(0, 8) : [];
   const dashboardShortcuts = getDashboardShortcuts(todayPlanDayId);
   const visibleShortcuts = dashboardShortcuts.slice(0, 6);
-  const primaryAction = smartActions[0];
-  const secondaryActions = smartActions.slice(1, 3);
   const closedTodayCount = [
     completedToday || !todayPlanDay,
     plannedMealsCount > 0 && doneMealsCount === plannedMealsCount,
@@ -340,55 +320,6 @@ export default function DashboardPage() {
             <MetricCard icon={Droplets} label="Water" value={waterTotalMl ? `${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
             <MetricCard icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} />
           </div>
-
-          <Card className="overflow-hidden border-primary/15">
-            <CardHeader className="p-4 sm:p-5">
-              <CardTitle>Next best action</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1.25fr_0.75fr]">
-              <div className="rounded-lg border border-primary/15 bg-primary p-4 text-primary-foreground sm:p-5">
-                <p className="text-xs font-semibold uppercase tracking-normal text-primary-foreground/70">{primaryAction.label}</p>
-                <h2 className="mt-2 text-xl font-semibold tracking-normal sm:text-2xl">{primaryAction.title}</h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-primary-foreground/80">{primaryAction.reason}</p>
-                {primaryAction.waterAmountMl ? (
-                  <Button type="button" variant="secondary" className="mt-4 w-full sm:mt-5 sm:w-auto" onClick={() => quickAddWater(primaryAction.waterAmountMl!)}>
-                    <Droplets className="h-4 w-4" />
-                    {primaryAction.cta}
-                  </Button>
-                ) : primaryAction.href ? (
-                  <Button asChild variant="secondary" className="mt-4 w-full sm:mt-5 sm:w-auto">
-                    <Link href={primaryAction.href}>
-                      {primaryAction.cta}
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  </Button>
-                ) : null}
-              </div>
-              <div className="grid gap-3">
-                {secondaryActions.map((item) => (
-                  <div key={item.label} className="rounded-md border border-border/70 bg-card p-3">
-                    <div className="flex items-start gap-3">
-                      <MoreHorizontal className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{item.label}</p>
-                        <p className="mt-1 text-sm font-semibold sm:text-base">{item.title}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">{item.reason}</p>
-                        {item.waterAmountMl ? (
-                          <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => quickAddWater(item.waterAmountMl!)}>
-                            {item.cta}
-                          </Button>
-                        ) : item.href ? (
-                          <Button asChild variant="outline" size="sm" className="mt-3">
-                            <Link href={item.href}>{item.cta}</Link>
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
 
           <Card>
             <CardHeader className="p-4 sm:p-5">
