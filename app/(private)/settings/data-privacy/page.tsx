@@ -1,11 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import { Download, RotateCcw, Shield, Trash2, LogOut } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SettingsPageShell } from "@/components/settings/settings-page-shell";
+import { SettingsToggleRow } from "@/components/settings/settings-toggle-row";
+import { type PrivacySettings, usePrivacySettings } from "@/lib/settings/privacy-settings";
 
 export default function DataPrivacyPage() {
+  const { settings, setSettings } = usePrivacySettings();
+  const [hasSaved, setHasSaved] = useState(false);
+
+  function updateSetting<Key extends keyof PrivacySettings>(key: Key, value: PrivacySettings[Key]) {
+    setSettings((current) => ({ ...current, [key]: value }));
+    setHasSaved(true);
+  }
+
   return (
     <SettingsPageShell
       title="Data & Privacy"
@@ -139,20 +150,46 @@ export default function DataPrivacyPage() {
       <Card className="border-border/70">
         <CardHeader>
           <CardTitle className="text-base">Privacy</CardTitle>
-          <CardDescription>Manage your privacy settings.</CardDescription>
+          <CardDescription>Control what sensitive details should stay hidden.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="group flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3 transition-colors hover:border-primary/40 hover:bg-muted/45">
+          <div className="flex min-h-[56px] items-center gap-3 rounded-2xl border bg-card p-3">
             <span className="flex min-w-0 items-center gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 <Shield className="h-5 w-5" />
               </span>
               <span className="min-w-0">
                 <span className="block font-semibold text-foreground">Privacy controls</span>
-                <span className="mt-1 block text-sm leading-5 text-muted-foreground">Coming soon</span>
+                <span className="mt-1 block text-sm leading-5 text-muted-foreground">Saved on this device.</span>
               </span>
             </span>
           </div>
+          <SettingsToggleRow
+            label="Hide body weight on dashboard"
+            defaultOn={settings.hideBodyWeightOnDashboard}
+            onChange={(value) => updateSetting("hideBodyWeightOnDashboard", value)}
+          />
+          <SettingsToggleRow
+            label="Hide calories on dashboard"
+            defaultOn={settings.hideCaloriesOnDashboard}
+            onChange={(value) => updateSetting("hideCaloriesOnDashboard", value)}
+          />
+          <SettingsToggleRow
+            label="Hide progress photos"
+            defaultOn={settings.hideProgressPhotos}
+            onChange={(value) => updateSetting("hideProgressPhotos", value)}
+          />
+          <SettingsToggleRow
+            label="Hide profile details"
+            defaultOn={settings.hideProfileDetails}
+            onChange={(value) => updateSetting("hideProfileDetails", value)}
+          />
+          <SettingsToggleRow
+            label="Private profile mode"
+            defaultOn={settings.privateProfileMode}
+            onChange={(value) => updateSetting("privateProfileMode", value)}
+          />
+          {hasSaved ? <p className="text-xs text-muted-foreground">Saved on this device.</p> : null}
         </CardContent>
       </Card>
 

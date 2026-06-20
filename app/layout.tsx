@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { ToastProvider } from "@/components/ui/toaster";
+import { AppPreferenceEffects } from "@/components/settings/app-preference-effects";
 
 export const metadata: Metadata = {
   title: "FitLife Hub",
@@ -15,8 +16,9 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className="font-sans">
+        <AppPreferenceEffects />
         <a
           href="#main-content"
           className="sr-only fixed left-4 top-4 z-[100] rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-luxe focus:not-sr-only"

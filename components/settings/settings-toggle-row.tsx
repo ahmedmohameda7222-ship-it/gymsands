@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export type SettingsToggleRowProps = {
@@ -13,6 +12,10 @@ export type SettingsToggleRowProps = {
 
 export function SettingsToggleRow({ label, description, defaultOn = false, onChange }: SettingsToggleRowProps) {
   const [on, setOn] = useState(defaultOn);
+
+  useEffect(() => {
+    setOn(defaultOn);
+  }, [defaultOn]);
 
   function toggle() {
     const next = !on;
@@ -34,22 +37,17 @@ export function SettingsToggleRow({ label, description, defaultOn = false, onCha
       </span>
       <span
         className={cn(
-          "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 transition-colors",
-          on ? "border-primary bg-primary" : "border-muted-foreground/30 bg-muted"
+          "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors",
+          on ? "bg-primary" : "bg-muted"
         )}
+        aria-hidden="true"
       >
         <span
           className={cn(
-            "inline-flex h-5 w-5 items-center justify-center rounded-full bg-white shadow transition-transform",
+            "h-5 w-5 rounded-full bg-white shadow transition-transform",
             on ? "translate-x-5" : "translate-x-0"
           )}
-        >
-          {on ? (
-            <Eye className="h-3 w-3 text-primary" />
-          ) : (
-            <EyeOff className="h-3 w-3 text-muted-foreground" />
-          )}
-        </span>
+        />
       </span>
     </button>
   );

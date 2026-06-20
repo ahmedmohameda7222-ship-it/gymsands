@@ -41,6 +41,69 @@
   --color-destructive: #9E2B2B;
 }
 
+.dark {
+  --background: 84 13% 9%;
+  --foreground: 45 24% 92%;
+  --card: 84 10% 13%;
+  --card-foreground: 45 24% 92%;
+  --popover: 84 10% 13%;
+  --popover-foreground: 45 24% 92%;
+  --primary: 78 25% 72%;
+  --primary-foreground: 84 20% 10%;
+  --secondary: 40 50% 55%;
+  --secondary-foreground: 84 20% 10%;
+  --muted: 84 8% 19%;
+  --muted-foreground: 45 10% 72%;
+  --accent: 40 50% 55%;
+  --accent-foreground: 84 20% 10%;
+  --destructive: 0 55% 58%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 84 8% 24%;
+  --input: 84 8% 24%;
+  --ring: 78 25% 72%;
+  --color-background: #151812;
+  --color-surface: #1E211A;
+  --color-elevated: #24271F;
+  --color-card: #1E211A;
+  --color-primary: #C4D09E;
+  --color-primary-hover: #D5DEB8;
+  --color-secondary: #C49A3B;
+  --color-secondary-hover: #D2AD56;
+  --color-text-primary: #F0EDE5;
+  --color-text-secondary: #BDB7AA;
+  --color-text-tertiary: #8F887B;
+  --color-border: #3A3D33;
+  --color-border-subtle: #2E3129;
+}
+
+html[data-accent="champagne"] {
+  --primary: 39 55% 50%;
+  --ring: 39 55% 50%;
+  --color-primary: #C49A3B;
+  --color-primary-hover: #A67E2E;
+}
+
+html[data-accent="sage"] {
+  --primary: 125 36% 36%;
+  --ring: 125 36% 36%;
+  --color-primary: #3A7D44;
+  --color-primary-hover: #2F6A38;
+}
+
+.dark[data-accent="champagne"] {
+  --primary: 42 64% 67%;
+  --ring: 42 64% 67%;
+  --color-primary: #D8B75E;
+  --color-primary-hover: #E4C979;
+}
+
+.dark[data-accent="sage"] {
+  --primary: 125 30% 62%;
+  --ring: 125 30% 62%;
+  --color-primary: #8FBE8B;
+  --color-primary-hover: #A4CEA0;
+}
+
 * {
   border-color: hsl(var(--border));
 }
@@ -56,6 +119,29 @@ body {
     #F8F6F1;
   color: hsl(var(--foreground));
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+.dark body {
+  background:
+    radial-gradient(circle at top left, rgba(196, 154, 59, 0.12), transparent 32rem),
+    hsl(var(--background));
+}
+
+.large-text {
+  font-size: 17px;
+}
+
+.reduce-motion,
+.reduce-motion * {
+  scroll-behavior: auto !important;
+}
+
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
 }
 
 :focus-visible {
