@@ -2,9 +2,21 @@
 
 import { supabase } from "@/lib/supabase/client";
 import type { WelcomeSettings } from "@/types";
-import { adminUpdateWelcomeSettings, adminUpsertWelcomeMessage } from "./settings";
+import {
+  adminGetWelcomeSettings,
+  adminListWelcomeMessages,
+  adminUpdateWelcomeSettings,
+  adminUpsertWelcomeMessage,
+  type AdminWelcomeMessage
+} from "./settings";
 
-export { adminUpdateWelcomeSettings, adminUpsertWelcomeMessage };
+export {
+  adminGetWelcomeSettings,
+  adminListWelcomeMessages,
+  adminUpdateWelcomeSettings,
+  adminUpsertWelcomeMessage,
+  type AdminWelcomeMessage
+};
 
 export async function adminListUsers() {
   if (!supabase) throw new Error("Database not connected");
