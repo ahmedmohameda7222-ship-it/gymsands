@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, CheckCircle2, Compass, Droplets, Flame, Plus, Scale, Soup } from "lucide-react";
+import { ArrowRight, CheckCircle2, Compass, Dumbbell, Droplets, Flame, Plus, Scale, Soup, Utensils } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,14 +8,11 @@ import { Progress } from "@/components/ui/progress";
 import { CardGridSkeleton, EmptyState, ErrorState } from "@/components/ui/state-views";
 import { PageHeading } from "@/components/layout/page-heading";
 import { MetricCard } from "@/components/dashboard/metric-card";
-import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
+
 import {
   ChecklistLine,
   CollapsibleSection,
-  CompactRecentActivity,
   CompactSetupChecklist,
-  MacroLine,
-  QuickLinkGrid,
   WellnessSummary,
   buildWeeklyFocus,
   countCompletedTrainingStreak,
@@ -248,15 +245,6 @@ export default function DashboardPage() {
     }
   }
 
-  const nutritionPreview = targets
-    ? `${Math.round(percent(totals.protein_g, targets.protein_g))}% protein · ${waterLiters} L water`
-    : "Set targets to unlock full snapshot";
-  const progressPreview = `${todayScore}% today · ${closedTodayCount}/5 closed · ${trainingStreak} day streak`;
-  const activityPreview = logs.length > 0 || history.length > 0
-    ? `${logs.length} meal${logs.length === 1 ? "" : "s"} · ${history.length} workout${history.length === 1 ? "" : "s"}`
-    : "No recent activity";
-  const weeklyPreview = weeklyReport ? `${weeklyMetrics.filter((m) => !m.empty).length} metrics tracked` : "No weekly data";
-
   return (
     <>
       <WelcomePopup />
@@ -321,14 +309,97 @@ export default function DashboardPage() {
             <MetricCard icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} />
           </div>
 
-          <Card>
-            <CardHeader className="p-4 sm:p-5">
-              <CardTitle>Quick links</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 pt-0 sm:p-5 sm:pt-0">
-              <QuickLinkGrid shortcuts={visibleShortcuts} />
-            </CardContent>
-          </Card>
+          {todayPlanDay ? (
+            <Card>
+              <CardContent className="p-4 sm:p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Dumbbell className="h-5 w-5 text-primary" />
+                      <p className="font-semibold">{todayPlanDay.day_name}</p>
+                      <span className="text-xs text-muted-foreground">{today}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {todayPlanDay.exercises.length} exercise{todayPlanDay.exercises.length === 1 ? "" : "s"} planned
+                    </p>
+                  </div>
+                  {completedToday ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Done
+                    </span>
+                  ) : openSessionId ? (
+                    <Button asChild size="sm">
+                      <Link href={`/workouts/session/${openSessionId}`}>Resume</Link>
+                    </Button>
+                  ) : (
+                    <Button asChild size="sm">
+                      <Link href={`/workouts/session/day/${todayPlanDay.id}`}>Start</Link>
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="p-4 sm:p-5">
+                <div className="flex items-center gap-3">
+                  <Dumbbell className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-semibold text-muted-foreground">No workout planned</p>
+                    <p className="text-sm text-muted-foreground">Import a plan to see today&apos;s workout here.</p>
+                  </div>
+                </div>
+                <Button asChild variant="outline" size="sm" className="mt-3">
+                  <Link href="/my-workout/plans">Import plan</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {mealPlanItems.length > 0 ? (
+            <Card>
+              <CardContent className="p-4 sm:p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Utensils className="h-5 w-5 text-primary" />
+                    <p className="font-semibold">Today&apos;s meal plan</p>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{doneMealsCount}/{plannedMealsCount} done</p>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {mealPlanItems
+                    .filter((item) => item.status !== "done")
+                    .slice(0, 3)
+                    .map((item) => (
+                      <Button key={item.id} type="button" variant="outline" size="sm" onClick={() => quickMarkMealDone(item)}>
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Mark {item.meal_type}
+                      </Button>
+                    ))}
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href="/my-meal-plan">View plan</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          <div className="rounded-md border border-border/70 bg-card p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-normal text-muted-foreground">Quick links</p>
+            <div className="flex flex-wrap gap-2">
+              {visibleShortcuts.map((shortcut) => {
+                const Icon = shortcut.icon;
+                return (
+                  <Button key={shortcut.href} asChild variant="outline" size="sm">
+                    <Link href={shortcut.href}>
+                      <Icon className="h-3.5 w-3.5" />
+                      {shortcut.label}
+                    </Link>
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
 
           {hasWellnessData ? (
             <CollapsibleSection
