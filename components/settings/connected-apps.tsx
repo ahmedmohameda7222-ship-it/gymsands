@@ -163,7 +163,7 @@ export function ConnectedApps() {
               <span className="font-medium text-foreground">AI Permissions</span>
             </div>
             <p className="mt-1 text-muted-foreground">
-              Control what ChatGPT can read and manage in your FitLife account. Review and update permissions in the <Link href="#ai-permissions" className="text-primary underline">AI Permissions</Link> section above.
+              Control what ChatGPT can read and manage in your FitLife account. Review and update permissions in the <Link href="/settings/ai-imports" className="text-primary underline">AI Permissions</Link> section.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

@@ -192,7 +192,7 @@ export default function DashboardPage() {
   const setupChecklist = [
     { label: "Finish profile", done: Boolean(profile?.full_name), href: "/profile", action: "Edit profile" },
     { label: "Set calorie and water targets", done: hasTargets, href: "/calories", action: "Set targets" },
-    { label: "Connect ChatGPT import", done: chatGptConnected, href: "/settings", action: "Connect ChatGPT" },
+    { label: "Connect ChatGPT import", done: chatGptConnected, href: "/settings/ai-imports", action: "Connect ChatGPT" },
     { label: "Import workout plan", done: Boolean(activePlan), href: "/my-workout/plans", action: "Import plan" },
     { label: "Add meal plan or log first meal", done: mealPlanItems.length > 0 || logs.length > 0, href: "/my-meal-plan", action: "Plan meal" },
     { label: "Add first progress entry", done: progressEntries.length > 0, href: "/progress", action: "Add progress" },
