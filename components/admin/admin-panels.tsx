@@ -15,8 +15,10 @@ import {
   adminListWelcomeMessages,
   adminUpdateUserRole,
   adminUpdateWelcomeSettings,
-  adminUpsertWelcomeMessage
+  adminUpsertWelcomeMessage,
+  type AdminUser
 } from "@/services/database/admin";
+import type { UserRole } from "@/types";
 
 type WelcomeFrequency = "every_login" | "once_per_day";
 
@@ -32,7 +34,7 @@ function errorMessage(error: unknown, fallback: string) {
 
 export function AdminUsersPanel() {
   const { toast } = useToast();
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [defaultMessage, setDefaultMessage] = useState("Welcome back to FitLife Hub. Ready for today?");
   const [defaultFrequency, setDefaultFrequency] = useState<WelcomeFrequency>("once_per_day");
   const [userMessages, setUserMessages] = useState<Record<string, UserMessageDraft>>({});
@@ -81,7 +83,7 @@ export function AdminUsersPanel() {
     };
   }, [toast]);
 
-  async function setRole(id: string, role: "member" | "admin") {
+  async function setRole(id: string, role: UserRole) {
     try {
       await adminUpdateUserRole(id, role);
       setUsers((current) => current.map((user) => (user.id === id ? { ...user, role } : user)));
@@ -91,7 +93,7 @@ export function AdminUsersPanel() {
     }
   }
 
-  async function saveUserMessage(userId: string, email: string) {
+  async function saveUserMessage(userId: string, email: string | null) {
     const payload = userMessages[userId];
     if (!payload?.message.trim()) return;
     try {
@@ -101,8 +103,15 @@ export function AdminUsersPanel() {
         popup_enabled: true,
         show_frequency: payload.frequency
       });
-      setUserMessages((current) => ({ ...current, [userId]: { ...current[userId], message: payload.message.trim(), saved: true } }));
-      toast({ title: "Welcome message saved", description: `Custom message set for ${email}.` });
+      setUserMessages((current) => ({
+        ...current,
+        [userId]: {
+          ...(current[userId] ?? { message: "", frequency: "once_per_day", saved: false }),
+          message: payload.message.trim(),
+          saved: true
+        }
+      }));
+      toast({ title: "Welcome message saved", description: `Custom message set for ${email ?? "this user"}.` });
     } catch (error) {
       toast({ title: "Could not save welcome message", description: errorMessage(error, "The custom message was not saved.") });
     }
@@ -168,7 +177,7 @@ export function AdminUsersPanel() {
               <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
               <div className="mt-4">
                 <Label>Role</Label>
-                <Select value={user.role ?? "member"} onValueChange={(value) => setRole(user.id, value as "member" | "admin")}>
+                <Select value={user.role ?? "member"} onValueChange={(value) => setRole(user.id, value as UserRole)}>
                   <SelectTrigger className="mt-2">
                     <SelectValue />
                   </SelectTrigger>
