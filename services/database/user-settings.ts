@@ -1,9 +1,11 @@
 import { supabase } from "@/lib/supabase/client";
+import { defaultThemeId, isThemeId, type ThemeId } from "@/lib/themes";
 import { isUuid } from "@/lib/utils";
 
 export type UserAppSettings = {
   id?: string;
   userId: string;
+  themeId: ThemeId;
   theme: "light" | "dark" | "system";
   accentColor: "olive" | "champagne" | "sage";
   language: "en" | "de" | "ar" | "system";
@@ -63,6 +65,7 @@ export type UserAppSettings = {
 type UserAppSettingsRow = {
   id: string;
   user_id: string;
+  theme_id: string;
   theme: string;
   accent_color: string;
   language: string;
@@ -121,6 +124,7 @@ type UserAppSettingsRow = {
 
 export const defaultUserAppSettings: UserAppSettings = {
   userId: "",
+  themeId: defaultThemeId,
   theme: "system",
   accentColor: "olive",
   language: "en",
@@ -198,6 +202,7 @@ function normalizeSettings(value: Partial<UserAppSettings>, userId: string): Use
     ...defaultUserAppSettings,
     ...value,
     userId,
+    themeId: isThemeId(value.themeId) ? value.themeId : defaultUserAppSettings.themeId,
     theme: pick(value.theme, ["light", "dark", "system"], defaultUserAppSettings.theme),
     accentColor: pick(value.accentColor, ["olive", "champagne", "sage"], defaultUserAppSettings.accentColor),
     language: pick(value.language, ["en", "de", "ar", "system"], defaultUserAppSettings.language),
@@ -240,6 +245,7 @@ function rowToSettings(row: UserAppSettingsRow): UserAppSettings {
   return normalizeSettings(
     {
       id: row.id,
+      themeId: row.theme_id as UserAppSettings["themeId"],
       theme: row.theme as UserAppSettings["theme"],
       accentColor: row.accent_color as UserAppSettings["accentColor"],
       language: row.language as UserAppSettings["language"],
@@ -302,6 +308,7 @@ function rowToSettings(row: UserAppSettingsRow): UserAppSettings {
 function settingsToDatabase(settings: UserAppSettings) {
   return {
     user_id: settings.userId,
+    theme_id: settings.themeId,
     theme: settings.theme,
     accent_color: settings.accentColor,
     language: settings.language,

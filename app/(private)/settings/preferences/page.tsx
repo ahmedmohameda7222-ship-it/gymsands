@@ -2,8 +2,8 @@
 
 import { type ComponentType, useState } from "react";
 import {
-  Accessibility,
   CalendarDays,
+  CheckCircle2,
   Globe,
   LayoutDashboard,
   Palette,
@@ -16,6 +16,7 @@ import { SettingsToggleRow } from "@/components/settings/settings-toggle-row";
 import { type UserAppSettings } from "@/services/database/user-settings";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { useTranslation } from "@/lib/i18n/use-translation";
+import { appThemes, type ThemeId } from "@/lib/themes";
 
 type IconComponent = ComponentType<{ className?: string }>;
 
@@ -60,6 +61,58 @@ function SaveStatus({ hasSaved }: { hasSaved: boolean }) {
   );
 }
 
+function ThemePicker({
+  selectedThemeId,
+  onSelect
+}: {
+  selectedThemeId: ThemeId;
+  onSelect: (themeId: ThemeId) => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {appThemes.map((theme) => {
+        const isSelected = theme.id === selectedThemeId;
+
+        return (
+          <button
+            key={theme.id}
+            type="button"
+            aria-pressed={isSelected}
+            onClick={() => onSelect(theme.id)}
+            className={`flex min-h-[132px] flex-col justify-between rounded-2xl border p-4 text-start transition hover:-translate-y-0.5 hover:border-primary hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+              isSelected ? "border-primary bg-primary/10 shadow-sm" : "border-border bg-card"
+            }`}
+          >
+            <span className="flex items-start justify-between gap-3">
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-foreground">{theme.name}</span>
+              </span>
+              {isSelected ? (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {t("common.selected")}
+                </span>
+              ) : null}
+            </span>
+            <span className="mt-4 flex h-8 overflow-hidden rounded-full border border-border/70">
+              {theme.palette.map((color) => (
+                <span
+                  key={`${theme.id}-${color}`}
+                  className="min-w-0 flex-1"
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </span>
+            <span className="mt-3 text-xs text-muted-foreground">{isSelected ? t("common.savedAccount") : t("common.select")}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function PreferencesPage() {
   const { settings, isLoadingSettings, updateSettings } = useUserSettings();
   const { t } = useTranslation();
@@ -89,27 +142,18 @@ export default function PreferencesPage() {
           <CardDescription>{t("settings.appearanceDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <SelectPreferenceRow
-            icon={Palette}
-            label={t("settings.theme")}
-            value={settings.theme}
-            onChange={(value) => void updatePreference("theme", value as UserAppSettings["theme"])}
-            options={[
-              { value: "light", label: t("settings.light") },
-              { value: "dark", label: t("settings.dark") },
-              { value: "system", label: t("settings.system") }
-            ]}
-          />
-          <SelectPreferenceRow
-            icon={Palette}
-            label={t("settings.accentColor")}
-            value={settings.accentColor}
-            onChange={(value) => void updatePreference("accentColor", value as UserAppSettings["accentColor"])}
-            options={[
-              { value: "olive", label: t("settings.olive") },
-              { value: "champagne", label: t("settings.champagne") },
-              { value: "sage", label: t("settings.sage") }
-            ]}
+          <div className="flex items-center gap-3 rounded-2xl border bg-card p-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Palette className="h-5 w-5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block font-semibold text-foreground">{t("settings.theme")}</span>
+              <span className="block text-sm text-muted-foreground">{t("common.syncedDevices")}</span>
+            </span>
+          </div>
+          <ThemePicker
+            selectedThemeId={settings.themeId}
+            onSelect={(themeId) => void updatePreference("themeId", themeId)}
           />
         </CardContent>
       </Card>
