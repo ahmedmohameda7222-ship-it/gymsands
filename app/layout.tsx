@@ -4,6 +4,7 @@ import { AuthProvider } from "@/components/auth/auth-provider";
 import { ToastProvider } from "@/components/ui/toaster";
 import { AppPreferenceEffects } from "@/components/settings/app-preference-effects";
 import { UserSettingsProvider } from "@/lib/settings/user-settings-context";
+import { createThemeBootstrapScript } from "@/lib/themes";
 
 export const metadata: Metadata = {
   title: "FitLife Hub",
@@ -18,6 +19,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: createThemeBootstrapScript() }} />
+      </head>
       <body className="font-sans">
         <a
           href="#main-content"

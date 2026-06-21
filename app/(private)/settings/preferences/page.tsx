@@ -4,6 +4,7 @@ import { type ComponentType, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   Globe,
   LayoutDashboard,
   Palette,
@@ -16,7 +17,7 @@ import { SettingsToggleRow } from "@/components/settings/settings-toggle-row";
 import { type UserAppSettings } from "@/services/database/user-settings";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { useTranslation } from "@/lib/i18n/use-translation";
-import { appThemes, type ThemeId } from "@/lib/themes";
+import { appThemes, getThemeById, type ThemeId } from "@/lib/themes";
 
 type IconComponent = ComponentType<{ className?: string }>;
 
@@ -88,6 +89,7 @@ function ThemePicker({
             <span className="flex items-start justify-between gap-3">
               <span className="min-w-0">
                 <span className="block text-sm font-semibold text-foreground">{theme.name}</span>
+                <span className="mt-1 block text-xs text-muted-foreground">{theme.description}</span>
               </span>
               {isSelected ? (
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground">
@@ -117,6 +119,8 @@ export default function PreferencesPage() {
   const { settings, isLoadingSettings, updateSettings } = useUserSettings();
   const { t } = useTranslation();
   const [hasSaved, setHasSaved] = useState(false);
+  const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
+  const selectedTheme = getThemeById(settings.themeId);
 
   async function updatePreference<Key extends keyof UserAppSettings>(key: Key, value: UserAppSettings[Key]) {
     await updateSettings({ [key]: value } as Partial<UserAppSettings>);
@@ -142,19 +146,36 @@ export default function PreferencesPage() {
           <CardDescription>{t("settings.appearanceDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-center gap-3 rounded-2xl border bg-card p-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Palette className="h-5 w-5" />
+          <button
+            type="button"
+            aria-expanded={isThemePickerOpen}
+            onClick={() => setIsThemePickerOpen((current) => !current)}
+            className="flex w-full items-center justify-between gap-3 rounded-2xl border bg-card p-3 text-start transition-colors hover:border-primary/40 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Palette className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block font-semibold text-foreground">{t("settings.theme")}</span>
+                <span className="block text-sm text-muted-foreground">{selectedTheme.name}</span>
+              </span>
             </span>
-            <span className="min-w-0">
-              <span className="block font-semibold text-foreground">{t("settings.theme")}</span>
-              <span className="block text-sm text-muted-foreground">{t("common.syncedDevices")}</span>
+            <span className="flex shrink-0 items-center gap-3">
+              <span className="hidden h-6 w-28 overflow-hidden rounded-full border border-border/70 sm:flex">
+                {selectedTheme.palette.map((color) => (
+                  <span key={`${selectedTheme.id}-summary-${color}`} className="min-w-0 flex-1" style={{ backgroundColor: color }} />
+                ))}
+              </span>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isThemePickerOpen ? "rotate-180" : ""}`} />
             </span>
-          </div>
-          <ThemePicker
-            selectedThemeId={settings.themeId}
-            onSelect={(themeId) => void updatePreference("themeId", themeId)}
-          />
+          </button>
+          {isThemePickerOpen ? (
+            <ThemePicker
+              selectedThemeId={settings.themeId}
+              onSelect={(themeId) => void updatePreference("themeId", themeId)}
+            />
+          ) : null}
         </CardContent>
       </Card>
 
