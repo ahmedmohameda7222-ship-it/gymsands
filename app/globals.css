@@ -39,6 +39,16 @@
   --color-success: #3A7D44;
   --color-warning: #B85C00;
   --color-destructive: #9E2B2B;
+  --app-bg: #F8F6F1;
+  --surface: #FFFFFF;
+  --surface-elevated: #FDFCFA;
+  --primary-soft: #E8EDE0;
+  --text-primary: #1A1A1A;
+  --text-secondary: #6B6B6B;
+  --button-text: #FFFFFF;
+  --success: #3A7D44;
+  --danger: #9E2B2B;
+  --warning: #B85C00;
 }
 
 .dark {
@@ -74,6 +84,13 @@
   --color-text-tertiary: #8F887B;
   --color-border: #3A3D33;
   --color-border-subtle: #2E3129;
+  --app-bg: #151812;
+  --surface: #1E211A;
+  --surface-elevated: #24271F;
+  --primary-soft: #2E3129;
+  --text-primary: #F0EDE5;
+  --text-secondary: #BDB7AA;
+  --button-text: #151812;
 }
 
 html[data-accent="champagne"] {
@@ -115,15 +132,15 @@ html {
 body {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(196, 154, 59, 0.08), transparent 32rem),
-    #F8F6F1;
+    radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 70%, transparent), transparent 32rem),
+    var(--app-bg);
   color: hsl(var(--foreground));
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
 .dark body {
   background:
-    radial-gradient(circle at top left, rgba(196, 154, 59, 0.12), transparent 32rem),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 65%, transparent), transparent 32rem),
     hsl(var(--background));
 }
 
@@ -180,22 +197,22 @@ textarea,
 }
 
 .blue-surface {
-  background: linear-gradient(135deg, #FFFFFF, #FDFCFA);
+  background: linear-gradient(135deg, var(--surface), var(--surface-elevated));
 }
 
 .luxury-surface {
-  background: linear-gradient(180deg, #FFFFFF, #FDFCFA);
+  background: linear-gradient(180deg, var(--surface), var(--surface-elevated));
 }
 
 .premium-surface {
-  background: linear-gradient(180deg, #FFFFFF 0%, #FDFCFA 100%);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-elevated) 100%);
   border: 1px solid var(--color-border);
   box-shadow: 0 10px 30px rgba(26, 26, 26, 0.06);
 }
 
 .premium-field {
   border: 1px solid var(--color-border);
-  background: #FFFFFF;
+  background: var(--surface);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 

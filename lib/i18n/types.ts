@@ -11,6 +11,7 @@ export type TranslationKey =
   | "common.syncedDevices"
   | "common.loadingSettings"
   | "common.saveFailed"
+  | "common.selected"
   | "nav.today"
   | "nav.train"
   | "nav.eat"
