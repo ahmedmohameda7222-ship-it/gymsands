@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { isThemeId, themeCacheKey } from "@/lib/themes";
 import {
   defaultUserAppSettings,
   getUserAppSettings,
@@ -22,14 +23,38 @@ type UserSettingsContextValue = {
 
 const UserSettingsContext = createContext<UserSettingsContextValue | null>(null);
 
+function readCachedThemeId() {
+  if (typeof window === "undefined") return null;
+  try {
+    const cached = window.localStorage.getItem(themeCacheKey);
+    return isThemeId(cached) ? cached : null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheThemeId(themeId: UserAppSettings["themeId"]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(themeCacheKey, themeId);
+  } catch {
+    // Local storage is only a paint cache; Supabase remains the source of truth.
+  }
+}
+
 function withUser(settings: UserAppSettings, userId: string | null | undefined) {
   return { ...settings, userId: userId ?? settings.userId };
+}
+
+function withCachedTheme(settings: UserAppSettings) {
+  const cachedThemeId = readCachedThemeId();
+  return cachedThemeId ? { ...settings, themeId: cachedThemeId } : settings;
 }
 
 export function UserSettingsProvider({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   const { toast } = useToast();
-  const [settings, setSettings] = useState<UserAppSettings>(defaultUserAppSettings);
+  const [settings, setSettings] = useState<UserAppSettings>(() => withCachedTheme(defaultUserAppSettings));
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -40,7 +65,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
     async function load() {
       if (isLoading) return;
       if (!user?.id) {
-        setSettings(defaultUserAppSettings);
+        setSettings(withCachedTheme(defaultUserAppSettings));
         setIsLoadingSettings(false);
         return;
       }
@@ -49,11 +74,12 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
       setSaveError(null);
       try {
         const loaded = await getUserAppSettings(user.id);
+        cacheThemeId(loaded.themeId);
         if (mounted) setSettings(loaded);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Settings could not be loaded.";
         if (mounted) {
-          setSettings(withUser(defaultUserAppSettings, user.id));
+          setSettings(withUser(withCachedTheme(defaultUserAppSettings), user.id));
           setSaveError(message);
         }
         toast({ title: "Settings could not be loaded", description: message, variant: "error" });
@@ -76,15 +102,18 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
       const optimistic = withUser({ ...settings, ...patch }, user.id);
 
       setSettings(optimistic);
+      cacheThemeId(optimistic.themeId);
       setIsSavingSettings(true);
       setSaveError(null);
       try {
         const saved = await upsertUserAppSettings(user.id, patch);
+        cacheThemeId(saved.themeId);
         setSettings(saved);
         return saved;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Settings could not be saved.";
         setSettings(previous);
+        cacheThemeId(previous.themeId);
         setSaveError(message);
         toast({ title: "Settings could not be saved", description: message, variant: "error" });
         throw error;
@@ -101,15 +130,18 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
     const optimistic = withUser(defaultUserAppSettings, user.id);
 
     setSettings(optimistic);
+    cacheThemeId(optimistic.themeId);
     setIsSavingSettings(true);
     setSaveError(null);
     try {
       const saved = await resetUserAppSettings(user.id);
+      cacheThemeId(saved.themeId);
       setSettings(saved);
       return saved;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Settings could not be reset.";
       setSettings(previous);
+      cacheThemeId(previous.themeId);
       setSaveError(message);
       toast({ title: "Settings could not be reset", description: message, variant: "error" });
       throw error;

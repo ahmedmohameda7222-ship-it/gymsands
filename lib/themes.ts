@@ -36,6 +36,7 @@ export type AppTheme = {
 };
 
 export const defaultThemeId: ThemeId = "olive";
+export const themeCacheKey = "fitlife-theme-id";
 
 export const appThemes: AppTheme[] = [
   {
@@ -280,6 +281,83 @@ export function isThemeId(value: unknown): value is ThemeId {
 
 export function getThemeById(themeId: unknown): AppTheme {
   return appThemes.find((theme) => theme.id === themeId) ?? appThemes[0];
+}
+
+export function themeCssVariables(theme: AppTheme) {
+  return {
+    "--app-bg": theme.appBackground,
+    "--surface": theme.surface,
+    "--surface-elevated": theme.surfaceElevated,
+    "--primary-soft": theme.primarySoft,
+    "--text-primary": theme.textPrimary,
+    "--text-secondary": theme.textSecondary,
+    "--button-text": theme.buttonText,
+    "--success": theme.success,
+    "--danger": theme.danger,
+    "--warning": theme.warning,
+    "--background": hexToHslParts(theme.appBackground),
+    "--foreground": hexToHslParts(theme.textPrimary),
+    "--card": hexToHslParts(theme.surface),
+    "--card-foreground": hexToHslParts(theme.textPrimary),
+    "--popover": hexToHslParts(theme.surfaceElevated),
+    "--popover-foreground": hexToHslParts(theme.textPrimary),
+    "--primary": hexToHslParts(theme.primary),
+    "--primary-foreground": hexToHslParts(theme.buttonText),
+    "--secondary": hexToHslParts(theme.warning),
+    "--secondary-foreground": hexToHslParts(theme.buttonText),
+    "--muted": hexToHslParts(theme.primarySoft),
+    "--muted-foreground": hexToHslParts(theme.textSecondary),
+    "--accent": hexToHslParts(theme.primarySoft),
+    "--accent-foreground": hexToHslParts(theme.textPrimary),
+    "--destructive": hexToHslParts(theme.danger),
+    "--destructive-foreground": hexToHslParts(theme.buttonText),
+    "--border": hexToHslParts(theme.border),
+    "--input": hexToHslParts(theme.border),
+    "--ring": hexToHslParts(theme.primary),
+    "--color-background": theme.appBackground,
+    "--color-surface": theme.surface,
+    "--color-elevated": theme.surfaceElevated,
+    "--color-card": theme.surface,
+    "--color-primary": theme.primary,
+    "--color-primary-hover": theme.primary,
+    "--color-secondary": theme.warning,
+    "--color-secondary-hover": theme.warning,
+    "--color-text-primary": theme.textPrimary,
+    "--color-text-secondary": theme.textSecondary,
+    "--color-text-tertiary": theme.textSecondary,
+    "--color-border": theme.border,
+    "--color-border-subtle": theme.border,
+    "--color-success": theme.success,
+    "--color-warning": theme.warning,
+    "--color-destructive": theme.danger
+  };
+}
+
+export function createThemeBootstrapScript() {
+  const themePayload = Object.fromEntries(
+    appThemes.map((theme) => [
+      theme.id,
+      {
+        dark: isDarkTheme(theme),
+        vars: themeCssVariables(theme)
+      }
+    ])
+  );
+
+  return `
+(() => {
+  try {
+    const themeId = window.localStorage.getItem(${JSON.stringify(themeCacheKey)});
+    const themes = ${JSON.stringify(themePayload)};
+    const selected = themeId ? themes[themeId] : null;
+    if (!selected) return;
+    const root = document.documentElement;
+    Object.entries(selected.vars).forEach(([key, value]) => root.style.setProperty(key, value));
+    root.classList.toggle("dark", Boolean(selected.dark));
+    root.dataset.theme = themeId;
+  } catch (_) {}
+})();
+`;
 }
 
 export function hexToHslParts(hex: string) {
