@@ -59,7 +59,7 @@ export function CompactCalendar({
   const days = calendarDays(month);
   const planned = new Set(plannedDates);
   return (
-    <div className="rounded-md border bg-white p-3">
+    <div className="rounded-md border bg-card p-3 text-card-foreground">
       <div className="mb-3 flex items-center justify-between">
         <Button size="icon" variant="ghost" type="button" onClick={() => onMonthChange(addMonths(month, -1))}>
           <ChevronLeft className="h-4 w-4" />
