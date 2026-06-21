@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { Bot, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, RefreshCcw, Shield, Trash2 } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import {
@@ -14,22 +13,12 @@ import {
   ALL_AI_PERMISSION_SECTIONS
 } from "@/services/database/ai-permissions";
 
-type Connection = {
-  id: string;
-  scopes: string[];
-  is_active: boolean;
-  created_at: string;
-  last_used_at: string | null;
-  revoked_at: string | null;
-};
-
 export function AiPermissionsCard() {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [config, setConfig] = useState<AiPermissionConfig | null>(null);
-  const [connections, setConnections] = useState<Connection[]>([]);
   const [hasSavedSettings, setHasSavedSettings] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -39,22 +28,12 @@ export function AiPermissionsCard() {
       const settings = await getAiPermissionSettings(user.id);
       setConfig(settings);
       setHasSavedSettings(Boolean(settings));
-
-      if (session?.access_token) {
-        const res = await fetch("/api/mcp/connections", {
-          headers: { Authorization: `Bearer ${session.access_token}` }
-        });
-        const data = res.ok ? await res.json() : null;
-        setConnections(Array.isArray(data?.connections) ? data.connections : []);
-      } else {
-        setConnections([]);
-      }
     } catch (error) {
       console.warn("Could not load AI permissions:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [user, session]);
+  }, [user]);
 
   useEffect(() => {
     void loadData();
@@ -74,17 +53,6 @@ export function AiPermissionsCard() {
     }
   }
 
-  async function handleRevoke() {
-    if (!user?.id) return;
-    const res = await fetch("/api/mcp/connections", { method: "DELETE" });
-    if (res.ok) {
-      toast({ title: "Connections revoked", description: "All active ChatGPT connections were revoked." });
-      setConnections([]);
-    } else {
-      toast({ title: "Could not revoke", description: "Please try again." });
-    }
-  }
-
   if (isLoading) {
     return (
       <Card className="border-border/70">
@@ -95,8 +63,6 @@ export function AiPermissionsCard() {
       </Card>
     );
   }
-
-  const activeConnections = connections.filter((c) => c.is_active && !c.revoked_at);
 
   return (
     <div className="space-y-4">
@@ -233,44 +199,6 @@ export function AiPermissionsCard() {
               </div>
             </div>
           ) : null}
-
-          {/* Active connections */}
-          <div className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Bot className="h-4 w-4 text-primary" />
-                <p className="font-semibold text-foreground">Active AI connections</p>
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={() => void loadData()} className="min-h-10">
-                <RefreshCcw className="h-4 w-4" /> Refresh
-              </Button>
-            </div>
-            <div className="mt-3 space-y-2">
-              {activeConnections.length > 0 ? (
-                activeConnections.map((connection) => (
-                  <div key={connection.id} className="rounded-xl border border-border/70 bg-muted/30 p-3 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-medium text-foreground">Active connection</span>
-                      <Badge variant="default" className="text-xs">Connected</Badge>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Created: {new Date(connection.created_at).toLocaleString()}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Last used: {connection.last_used_at ? new Date(connection.last_used_at).toLocaleString() : "Never"}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">No active AI connections.</p>
-              )}
-            </div>
-            {activeConnections.length > 0 ? (
-              <Button type="button" variant="destructive" size="sm" onClick={() => void handleRevoke()} className="mt-3 min-h-10">
-                <Trash2 className="h-4 w-4" /> Revoke all connections
-              </Button>
-            ) : null}
-          </div>
 
           {/* Trust message */}
           <p className="text-sm text-muted-foreground">

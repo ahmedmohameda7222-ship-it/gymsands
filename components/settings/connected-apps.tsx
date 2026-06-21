@@ -1,33 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Shield, Bot, CheckCircle2, Copy, ExternalLink, KeyRound, RefreshCcw, Settings2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  AlertCircle,
+  Bot,
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  KeyRound,
+  Link2,
+  RefreshCcw,
+  Shield,
+  Trash2
+} from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toaster";
 import { env } from "@/lib/env";
 
-const fitlifeDescription = "ChatGPT creates the plan externally. FitLife stores, schedules, edits, and tracks the approved imported plan.";
-
-const importPrompts = [
-  {
-    id: "workout",
-    label: "Workout plan prompt",
-    text:
-      "Create a workout plan for me outside FitLife Hub, then import the final approved plan into FitLife Hub. Include plan name, goal, duration, days per week, workout days, exercises, sets, reps, rest, notes, and any exercise instructions. FitLife Hub must only store, schedule, edit, display, and track the plan; do not ask FitLife Hub to generate the plan internally."
-  },
-  {
-    id: "meal",
-    label: "Meal plan prompt",
-    text:
-      "Create a meal plan for me outside FitLife Hub, then import the final approved meals into FitLife Hub. Include dates or weekdays, meal type, food names, serving sizes, quantities, calories, protein, carbs, fat, and notes when known. Do not invent unknown nutrition values; mark anything uncertain clearly so I can review it before tracking."
-  }
-];
+const chatGptUrl = "https://chatgpt.com";
+const appDescription =
+  "FitLife imports approved workout and meal plans from ChatGPT into the user's FitLife Hub account.";
 
 type ChatGptConnection = {
   id: string;
@@ -38,54 +35,221 @@ type ChatGptConnection = {
   revoked_at: string | null;
 };
 
-export function ConnectedApps() {
-  const { session } = useAuth();
-  const { toast } = useToast();
-  const [isBusy, setIsBusy] = useState<string | null>(null);
-  const [isChatGptModalOpen, setIsChatGptModalOpen] = useState(false);
-  const [copiedUrl, setCopiedUrl] = useState(false);
-  const [copiedToken, setCopiedToken] = useState(false);
-  const [connectionToken, setConnectionToken] = useState("");
-  const [connections, setConnections] = useState<ChatGptConnection[]>([]);
-  const [showAdvancedSetup, setShowAdvancedSetup] = useState(false);
-  const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
+type CopyKind = "url" | "token" | "description";
+
+type SetupStepProps = {
+  title: string;
+  body: string;
+  children?: React.ReactNode;
+};
+
+type NumberedInstructionsProps = {
+  items: string[];
+};
+
+function getConnectionStatus(connections: ChatGptConnection[]) {
+  return connections.find((connection) => connection.is_active && !connection.revoked_at) ?? connections[0] ?? null;
+}
+
+function formatConnectionDate(value: string | null) {
+  return value ? new Date(value).toLocaleString() : "Never";
+}
+
+function SetupStep({ title, body, children }: SetupStepProps) {
+  return (
+    <Card className="border-border/70">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription className="leading-6">{body}</CardDescription>
+      </CardHeader>
+      {children ? <CardContent className="space-y-3">{children}</CardContent> : null}
+    </Card>
+  );
+}
+
+function NumberedInstructions({ items }: NumberedInstructionsProps) {
+  return (
+    <ol className="ml-5 list-decimal space-y-2 text-sm leading-6 text-muted-foreground">
+      {items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ol>
+  );
+}
+
+export function ChatGptSetupCard() {
   const mcpServerUrl = env.fitlifeMcpServerUrl.trim();
   const hasMcpServerUrl = Boolean(mcpServerUrl);
 
-  function authHeaders() {
-    return { Authorization: `Bearer ${session?.access_token ?? ""}`, "Content-Type": "application/json" };
+  return (
+    <Card className="border-border/70">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Bot className="h-5 w-5 text-primary" /> Set up ChatGPT import
+        </CardTitle>
+        <CardDescription>
+          Create the FitLife app inside ChatGPT, then connect it with your FitLife connection code.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!hasMcpServerUrl ? (
+          <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            ChatGPT import is not ready for this deployment. The FitLife connection URL is missing.
+          </p>
+        ) : null}
+        <Button asChild className="w-full sm:w-auto">
+          <Link href="/settings/ai-imports/chatgpt-setup">
+            <ExternalLink className="h-4 w-4" /> Set up ChatGPT import
+          </Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function ConnectionStatusCard() {
+  const { session } = useAuth();
+  const { toast } = useToast();
+  const [connections, setConnections] = useState<ChatGptConnection[]>([]);
+  const [isBusy, setIsBusy] = useState<string | null>(null);
+
+  const authHeaders = useCallback(
+    () => ({ Authorization: `Bearer ${session?.access_token ?? ""}`, "Content-Type": "application/json" }),
+    [session?.access_token]
+  );
+
+  const loadConnections = useCallback(async () => {
+    if (!session?.access_token) {
+      setConnections([]);
+      return;
+    }
+
+    const response = await fetch("/api/mcp/connections", { headers: authHeaders() });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) setConnections(data.connections ?? []);
+  }, [authHeaders, session?.access_token]);
+
+  useEffect(() => {
+    void loadConnections();
+  }, [loadConnections]);
+
+  async function revokeConnectionToken() {
+    if (!session?.access_token) {
+      toast({ title: "Sign in required", description: "Sign in to FitLife before revoking a ChatGPT connection." });
+      return;
+    }
+
+    setIsBusy("chatgpt-revoke");
+    const response = await fetch("/api/mcp/connections", { method: "DELETE", headers: authHeaders() });
+    const data = await response.json().catch(() => ({}));
+    setIsBusy(null);
+
+    if (!response.ok) {
+      toast({ title: "Could not revoke connection", description: data.error ?? "Please try again." });
+      return;
+    }
+
+    await loadConnections();
+    toast({ title: "Connection revoked", description: "Active ChatGPT connections were revoked for this account." });
   }
 
-  async function loadConnections() {
+  const currentConnection = getConnectionStatus(connections);
+  const isConnected = Boolean(currentConnection?.is_active && !currentConnection.revoked_at);
+
+  return (
+    <Card className="border-border/70">
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Link2 className="h-5 w-5 text-primary" /> Connection status
+            </CardTitle>
+            <CardDescription>Recent ChatGPT connections for this FitLife account.</CardDescription>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadConnections()} className="w-full sm:w-auto">
+            <RefreshCcw className="h-4 w-4" /> Refresh
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="rounded-md border border-border/70 bg-muted/30 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold text-foreground">{isConnected ? "Connected" : "Not connected"}</p>
+            <Badge variant={isConnected ? "success" : "outline"}>{isConnected ? "Connected" : "Not connected"}</Badge>
+          </div>
+          <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+            <p>Created: {formatConnectionDate(currentConnection?.created_at ?? null)}</p>
+            <p>Last used: {formatConnectionDate(currentConnection?.last_used_at ?? null)}</p>
+          </div>
+          {currentConnection?.scopes?.length ? (
+            <details className="mt-3 rounded-md border border-border/70 bg-card p-3 text-xs text-muted-foreground">
+              <summary className="cursor-pointer font-semibold text-foreground">Technical details</summary>
+              <p className="mt-2">Scopes: {currentConnection.scopes.join(", ")}</p>
+            </details>
+          ) : null}
+        </div>
+
+        <Button
+          type="button"
+          variant="destructive"
+          onClick={revokeConnectionToken}
+          disabled={!isConnected || isBusy === "chatgpt-revoke"}
+          className="w-full sm:w-auto"
+        >
+          <Trash2 className="h-4 w-4" /> Revoke connection
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function ChatGptSetupFlow() {
+  const { session } = useAuth();
+  const { toast } = useToast();
+  const [isBusy, setIsBusy] = useState<string | null>(null);
+  const [copied, setCopied] = useState<CopyKind | null>(null);
+  const [connectionToken, setConnectionToken] = useState("");
+  const [connections, setConnections] = useState<ChatGptConnection[]>([]);
+  const mcpServerUrl = env.fitlifeMcpServerUrl.trim();
+  const hasMcpServerUrl = Boolean(mcpServerUrl);
+
+  const authHeaders = useCallback(
+    () => ({ Authorization: `Bearer ${session?.access_token ?? ""}`, "Content-Type": "application/json" }),
+    [session?.access_token]
+  );
+
+  const loadConnections = useCallback(async () => {
     if (!session?.access_token) return;
     const response = await fetch("/api/mcp/connections", { headers: authHeaders() });
     const data = await response.json().catch(() => ({}));
     if (response.ok) setConnections(data.connections ?? []);
-  }
+  }, [authHeaders, session?.access_token]);
 
-  async function copyText(value: string, type: "url" | "token") {
+  useEffect(() => {
+    void loadConnections();
+  }, [loadConnections]);
+
+  async function copyText(value: string, type: CopyKind) {
     if (!value) return;
     await navigator.clipboard.writeText(value);
-    if (type === "url") {
-      setCopiedUrl(true);
-      window.setTimeout(() => setCopiedUrl(false), 2000);
-    } else {
-      setCopiedToken(true);
-      window.setTimeout(() => setCopiedToken(false), 2000);
-    }
-    toast({ title: "Copied", description: type === "url" ? "FitLife import address copied." : "FitLife connection code copied." });
-  }
+    setCopied(type);
+    window.setTimeout(() => setCopied(null), 2000);
 
-  async function copyPrompt(promptId: string, value: string) {
-    await navigator.clipboard.writeText(value);
-    setCopiedPromptId(promptId);
-    window.setTimeout(() => setCopiedPromptId(null), 2000);
-    toast({ title: "Prompt copied", description: "Paste it into ChatGPT after connecting FitLife Hub." });
+    const description =
+      type === "url"
+        ? "FitLife connection URL copied."
+        : type === "description"
+          ? "FitLife app description copied."
+          : "FitLife connection code copied.";
+    toast({ title: "Copied", description });
   }
 
   async function copyMcpUrl() {
     if (!hasMcpServerUrl) {
-      toast({ title: "Import connection is not ready", description: "Ask support to finish ChatGPT import setup for this deployment." });
+      toast({
+        title: "Connection URL missing",
+        description: "ChatGPT import is not ready for this deployment. The FitLife connection URL is missing."
+      });
       return;
     }
     await copyText(mcpServerUrl, "url");
@@ -93,7 +257,7 @@ export function ConnectedApps() {
 
   async function generateConnectionToken() {
     if (!session?.access_token) {
-      toast({ title: "Sign in required", description: "Sign in to FitLife before generating a ChatGPT connection code." });
+      toast({ title: "Sign in required", description: "Sign in to FitLife before creating a ChatGPT connection code." });
       return;
     }
 
@@ -115,214 +279,244 @@ export function ConnectedApps() {
     toast({ title: "Connection code created", description: "Copy it now. FitLife shows this code only once." });
   }
 
-  async function revokeConnectionToken() {
-    if (!session?.access_token) {
-      toast({ title: "Sign in required", description: "Sign in to FitLife before revoking a ChatGPT connection." });
-      return;
-    }
-
-    setIsBusy("chatgpt-revoke");
-    const response = await fetch("/api/mcp/connections", { method: "DELETE", headers: authHeaders() });
-    const data = await response.json().catch(() => ({}));
-    setIsBusy(null);
-
-    if (!response.ok) {
-      toast({ title: "Could not revoke connection", description: data.error ?? "Please try again." });
-      return;
-    }
-
-    setConnectionToken("");
-    await loadConnections();
-    toast({ title: "Connection revoked", description: "Active ChatGPT connections were revoked for this account." });
-  }
-
   function openChatGpt() {
-    window.open("https://chatgpt.com", "_blank", "noopener,noreferrer");
+    window.open(chatGptUrl, "_blank", "noopener,noreferrer");
   }
+
+  const currentConnection = getConnectionStatus(connections);
 
   return (
-    <div className="grid gap-4">
+    <div className="space-y-4">
+      <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm leading-6 text-muted-foreground">
+        <p className="font-semibold text-foreground">Follow these steps carefully. The setup is done on the ChatGPT website.</p>
+        <p className="mt-2">
+          If ChatGPT uses slightly different wording, choose the option that means "Apps," "Connectors," "Developer mode," or "Create app."
+        </p>
+      </div>
+
+      <SetupStep
+        title="Step 1 — Create your FitLife connection code"
+        body="First, create a private code from FitLife. You will paste this code later inside ChatGPT."
+      >
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button type="button" onClick={generateConnectionToken} disabled={isBusy === "chatgpt-token"} className="w-full">
+            <KeyRound className="h-4 w-4" /> Create connection code
+          </Button>
+          <Button type="button" variant="outline" onClick={() => copyText(connectionToken, "token")} disabled={!connectionToken} className="w-full">
+            <Copy className="h-4 w-4" /> {copied === "token" ? "Copied" : "Copy connection code"}
+          </Button>
+        </div>
+        {connectionToken ? (
+          <div className="rounded-md border border-primary/20 bg-card p-3">
+            <label htmlFor="fitlife-connection-code" className="text-sm font-semibold text-foreground">
+              FitLife connection code
+            </label>
+            <Input id="fitlife-connection-code" readOnly value={connectionToken} className="mt-2 font-mono text-xs" />
+            <p className="mt-2 text-xs text-muted-foreground">Copy this code now. FitLife only shows it once.</p>
+          </div>
+        ) : null}
+      </SetupStep>
+
+      <SetupStep
+        title="Step 2 — Copy your FitLife connection URL"
+        body="ChatGPT needs this URL so it knows where your FitLife app connection lives."
+      >
+        {hasMcpServerUrl ? (
+          <div className="rounded-md border border-border/70 bg-card p-3">
+            <label htmlFor="fitlife-connection-url" className="text-sm font-semibold text-foreground">
+              FitLife connection URL
+            </label>
+            <Input id="fitlife-connection-url" readOnly value={mcpServerUrl} className="mt-2 font-mono text-xs" />
+          </div>
+        ) : (
+          <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            ChatGPT import is not ready for this deployment. The FitLife connection URL is missing.
+          </p>
+        )}
+        <Button type="button" variant="outline" onClick={copyMcpUrl} disabled={!hasMcpServerUrl} className="w-full sm:w-auto">
+          <Copy className="h-4 w-4" /> {copied === "url" ? "Copied" : "Copy connection URL"}
+        </Button>
+      </SetupStep>
+
+      <SetupStep
+        title="Step 3 — Open ChatGPT"
+        body="Now go to the ChatGPT website. Keep this FitLife page open because you will need the code and URL."
+      >
+        <Button type="button" onClick={openChatGpt} className="w-full sm:w-auto">
+          <ExternalLink className="h-4 w-4" /> Open ChatGPT
+        </Button>
+      </SetupStep>
+
+      <SetupStep title="Step 4 — Open ChatGPT settings" body="Open the settings window in ChatGPT.">
+        <NumberedInstructions
+          items={[
+            "In ChatGPT, look at the bottom-left corner.",
+            "Click your profile name or profile picture.",
+            "Click Settings.",
+            "A settings window should open."
+          ]}
+        />
+        <p className="text-sm leading-6 text-muted-foreground">
+          If the menu looks different, open the menu where ChatGPT keeps account and app settings.
+        </p>
+      </SetupStep>
+
+      <SetupStep title="Step 5 — Open Apps or Connectors" body="Find the ChatGPT area where apps or connectors are managed.">
+        <NumberedInstructions
+          items={[
+            "Inside ChatGPT Settings, look for Apps.",
+            "If you do not see Apps, look for Connectors.",
+            "If you do not see Connectors, look for Developer or Developer Mode.",
+            "Open that section."
+          ]}
+        />
+        <p className="text-sm leading-6 text-muted-foreground">
+          ChatGPT may use different names. The correct section is the one where you can create or manage apps/connectors.
+        </p>
+      </SetupStep>
+
+      <SetupStep title="Step 6 — Turn on Developer Mode" body="Developer Mode lets you add FitLife as a private/manual connection.">
+        <NumberedInstructions
+          items={[
+            "Find Developer Mode.",
+            "Turn Developer Mode on.",
+            "If ChatGPT asks for confirmation, confirm it.",
+            "After Developer Mode is on, look for Create app or Create connector."
+          ]}
+        />
+        <p className="text-sm leading-6 text-muted-foreground">
+          Developer Mode is needed because FitLife is a private/manual connection, not an App Store app.
+        </p>
+      </SetupStep>
+
+      <SetupStep
+        title="Step 7 — Create the FitLife app inside ChatGPT"
+        body="Create the private FitLife app and give ChatGPT a clear description."
+      >
+        <NumberedInstructions
+          items={[
+            "Click Create app.",
+            "If ChatGPT says Create connector instead, click that.",
+            "In the app name field, type: FitLife",
+            `In the description field, paste this: ${appDescription}`,
+            "Continue to the connection/server setup step."
+          ]}
+        />
+        <Button type="button" variant="outline" onClick={() => copyText(appDescription, "description")} className="w-full sm:w-auto">
+          <Copy className="h-4 w-4" /> {copied === "description" ? "Copied" : "Copy app description"}
+        </Button>
+      </SetupStep>
+
+      <SetupStep
+        title="Step 8 — Add the FitLife connection URL"
+        body="This URL tells ChatGPT where to send the approved workout or meal plan."
+      >
+        <NumberedInstructions
+          items={[
+            "Find the field called Connection URL, Server URL, MCP URL, or Endpoint URL.",
+            "Paste the FitLife connection URL you copied from Step 2.",
+            "Click Continue or Next."
+          ]}
+        />
+        <Button type="button" variant="outline" onClick={copyMcpUrl} disabled={!hasMcpServerUrl} className="w-full sm:w-auto">
+          <Copy className="h-4 w-4" /> {copied === "url" ? "Copied" : "Copy connection URL"}
+        </Button>
+      </SetupStep>
+
+      <SetupStep title="Step 9 — Choose OAuth authentication" body="ChatGPT must connect with OAuth authentication.">
+        <NumberedInstructions
+          items={[
+            "In ChatGPT app setup, look for Authentication.",
+            "Choose OAuth.",
+            "Do not choose \"No authentication.\"",
+            "Do not choose API key unless ChatGPT does not show OAuth.",
+            "Continue to OAuth settings."
+          ]}
+        />
+      </SetupStep>
+
+      <SetupStep title="Step 10 — Open Advanced OAuth settings" body="This is the real setup path for the current FitLife connection.">
+        <NumberedInstructions
+          items={[
+            "In the OAuth section, look for Advanced settings.",
+            "Click Advanced settings.",
+            "Look for OAuth client type.",
+            "Choose User-defined OAuth client."
+          ]}
+        />
+        <p className="text-sm leading-6 text-muted-foreground">
+          If ChatGPT says "client configuration," "custom client," or "user-defined client," choose that option.
+        </p>
+      </SetupStep>
+
+      <SetupStep
+        title="Step 11 — Paste your FitLife connection code"
+        body="Use the FitLife connection code, not your ChatGPT password."
+      >
+        <NumberedInstructions
+          items={[
+            "Find the field where ChatGPT asks for a token, client code, client secret, or authentication value.",
+            "Paste the FitLife connection code you copied from Step 1.",
+            "If ChatGPT calls it a token, that is okay. The FitLife connection code is the token.",
+            "Click Save, Connect, or Finish."
+          ]}
+        />
+        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800">
+          Use the FitLife connection code, not your ChatGPT password.
+        </p>
+        <Button type="button" variant="outline" onClick={() => copyText(connectionToken, "token")} disabled={!connectionToken} className="w-full sm:w-auto">
+          <Copy className="h-4 w-4" /> {copied === "token" ? "Copied" : "Copy connection code"}
+        </Button>
+      </SetupStep>
+
+      <SetupStep title="Step 12 — Test the connection" body="After saving the app in ChatGPT, test one import before relying on it.">
+        <NumberedInstructions
+          items={[
+            "Start a new chat in ChatGPT.",
+            "Select or mention the FitLife app.",
+            "Ask ChatGPT: Create a workout plan for me and import it into FitLife after I approve it.",
+            "Review the plan in ChatGPT.",
+            "Only approve the import when the plan looks correct.",
+            "Go back to FitLife and check your workout or meal plan."
+          ]}
+        />
+      </SetupStep>
+
+      <div className="rounded-md border border-border/70 bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
+        <div className="flex items-start gap-2">
+          <Shield className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <p>ChatGPT can only access what you allow in AI Permissions. You can change permissions anytime from Settings → AI & Imports.</p>
+        </div>
+      </div>
+
       <Card className="border-border/70">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Bot className="h-5 w-5 text-primary" /> Import from ChatGPT
+            {currentConnection?.is_active && !currentConnection.revoked_at ? (
+              <CheckCircle2 className="h-5 w-5 text-primary" />
+            ) : (
+              <AlertCircle className="h-5 w-5 text-muted-foreground" />
+            )}
+            Connection status
           </CardTitle>
           <CardDescription>
-            {fitlifeDescription}
+            {currentConnection?.is_active && !currentConnection.revoked_at ? "Connected" : "Not connected"}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {!hasMcpServerUrl ? (
-            <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-              ChatGPT import is not ready for this deployment yet. Ask support to finish the connection setup.
-            </p>
-          ) : null}
-          <div className="rounded-2xl border border-border/70 bg-muted/30 p-3 text-sm">
-            <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary" />
-              <span className="font-medium text-foreground">AI Permissions</span>
-            </div>
-            <p className="mt-1 text-muted-foreground">
-              Control what ChatGPT can read and manage in your FitLife account. Review and update permissions in the <Link href="/settings/ai-imports" className="text-primary underline">AI Permissions</Link> section.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => { setIsChatGptModalOpen(true); void loadConnections(); }} className="min-h-12">
-              <ExternalLink className="h-4 w-4" /> {hasMcpServerUrl ? "Set up ChatGPT import" : "Import setup unavailable"}
-            </Button>
-            <Button variant="outline" onClick={revokeConnectionToken} disabled={isBusy === "chatgpt-revoke"} className="min-h-12">
-              Revoke active connection
-            </Button>
-          </div>
+        <CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+          <p>Created: {formatConnectionDate(currentConnection?.created_at ?? null)}</p>
+          <p>Last used: {formatConnectionDate(currentConnection?.last_used_at ?? null)}</p>
         </CardContent>
       </Card>
+    </div>
+  );
+}
 
-      <Dialog open={isChatGptModalOpen} onOpenChange={setIsChatGptModalOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Connect FitLife to ChatGPT</DialogTitle>
-            <DialogDescription>
-              Use ChatGPT to create your plan, then let FitLife save and track the approved plan.
-            </DialogDescription>
-          </DialogHeader>
-
-          {!hasMcpServerUrl ? (
-            <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-              ChatGPT import is not available yet. Please try again after the connection has been enabled.
-            </p>
-          ) : null}
-
-          <div className="space-y-5">
-            <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4 sm:p-5">
-              <p className="font-semibold text-foreground">Simple import wizard</p>
-              <ol className="mt-3 ml-5 list-decimal space-y-2 text-sm leading-6 text-muted-foreground">
-                <li>Generate a FitLife connection code and copy it. Access is controlled by your AI Permissions.</li>
-                <li>Open ChatGPT and connect FitLife Hub when ChatGPT asks for an app or connector.</li>
-                <li>Paste one starter prompt below, review the plan in ChatGPT, then approve the import into FitLife Hub.</li>
-              </ol>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button type="button" onClick={generateConnectionToken} disabled={isBusy === "chatgpt-token" || !hasMcpServerUrl} className="min-h-12">
-                  <KeyRound className="h-4 w-4" /> Generate connection code
-                </Button>
-                <Button type="button" variant="outline" onClick={() => copyText(connectionToken, "token")} disabled={!connectionToken} className="min-h-12">
-                  <Copy className="h-4 w-4" /> {copiedToken ? "Copied" : "Copy code"}
-                </Button>
-                <Button type="button" variant="outline" onClick={openChatGpt} className="min-h-12">
-                  <ExternalLink className="h-4 w-4" /> Open ChatGPT
-                </Button>
-              </div>
-              {connectionToken ? (
-                <div className="mt-3 rounded-xl border border-primary/20 bg-card p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">One-time connection code</p>
-                  <Input readOnly value={connectionToken} className="mt-2 font-mono text-xs" aria-label="FitLife connection code" />
-                  <p className="mt-2 text-xs text-muted-foreground">Copy this now. FitLife only shows it once.</p>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              {importPrompts.map((prompt) => (
-                <div key={prompt.id} className="rounded-2xl border border-border/70 bg-card p-4">
-                  <p className="font-semibold text-foreground">{prompt.label}</p>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{prompt.text}</p>
-                  <Button type="button" className="mt-3 min-h-12" variant="outline" onClick={() => copyPrompt(prompt.id, prompt.text)}>
-                    <Copy className="h-4 w-4" />
-                    {copiedPromptId === prompt.id ? "Copied" : "Copy prompt"}
-                  </Button>
-                </div>
-              ))}
-            </div>
-
-            <div className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
-              <p className="flex items-center gap-2 font-semibold text-foreground">
-                <CheckCircle2 className="h-4 w-4 text-primary" />
-                After import, check quality
-              </p>
-              <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                <p>Workout plans should have days, exercises, sets, reps, rest, and clear scheduling fields.</p>
-                <p>Meal plans should keep planned meals separate from done meals and avoid invented nutrition values.</p>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button asChild variant="outline" className="min-h-12">
-                  <Link href="/my-workout/plans">Review workout plans</Link>
-                </Button>
-                <Button asChild variant="outline" className="min-h-12">
-                  <Link href="/my-meal-plan">Review meal plan</Link>
-                </Button>
-              </div>
-            </div>
-
-            <p className="rounded-2xl border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
-              FitLife is a responsive web app. Browser-supported features are used here; no Google Play or App Store behavior is assumed.
-            </p>
-
-            <div className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="font-semibold text-foreground">Advanced setup</p>
-                  <p className="text-sm text-muted-foreground">Only use these details if ChatGPT asks for manual connection fields.</p>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => setShowAdvancedSetup((current) => !current)} className="min-h-10">
-                  <Settings2 className="h-4 w-4" /> {showAdvancedSetup ? "Hide" : "Show"}
-                </Button>
-              </div>
-              {showAdvancedSetup ? (
-                <div className="mt-4 grid gap-3 text-sm md:grid-cols-[170px_1fr]">
-                  <p className="font-semibold text-foreground">Name:</p>
-                  <p>FitLife Hub</p>
-                  <p className="font-semibold text-foreground">Description:</p>
-                  <p>{fitlifeDescription}</p>
-                  <p className="font-semibold text-foreground">Server URL:</p>
-                  <div className="space-y-2">
-                    <Input readOnly value={mcpServerUrl || "Not configured"} className="font-mono text-xs" />
-                    <Button type="button" variant="outline" onClick={copyMcpUrl} disabled={!hasMcpServerUrl} className="min-h-12">
-                      <Copy className="h-4 w-4" /> {copiedUrl ? "Copied" : "Copy URL"}
-                    </Button>
-                  </div>
-                  <p className="font-semibold text-foreground">Authentication:</p>
-                  <p>Use the FitLife connection code if ChatGPT asks for authentication.</p>
-                  <p className="font-semibold text-foreground">Allowed access:</p>
-                  <div className="rounded-xl border border-border/70 bg-muted/30 p-3">
-                    <p className="text-sm font-semibold text-foreground">AI Permissions controlled access</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      What ChatGPT can access depends on your AI Permissions settings. Review the AI Permissions section in Settings to manage read and write access for workouts, nutrition, meal plans, hydration, progress, wellness, and profile. Admin tools are never available through normal user MCP access.
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-semibold text-foreground">Recent connections</p>
-                <Button type="button" variant="outline" size="sm" onClick={loadConnections} className="min-h-10">
-                  <RefreshCcw className="h-4 w-4" /> Refresh
-                </Button>
-              </div>
-              <div className="mt-3 space-y-2">
-                {connections.map((connection) => (
-                  <div key={connection.id} className="rounded-xl border border-border/70 bg-muted/30 p-3 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-medium text-foreground">{connection.is_active && !connection.revoked_at ? "Active connection" : "Revoked connection"}</span>
-                      <span className="text-xs text-muted-foreground">{new Date(connection.created_at).toLocaleString()}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Last used: {connection.last_used_at ? new Date(connection.last_used_at).toLocaleString() : "Never"}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">Scopes: {connection.scopes.join(", ") || "No scopes"}</p>
-                  </div>
-                ))}
-                {!connections.length ? <p className="text-sm text-muted-foreground">No previous ChatGPT connections yet.</p> : null}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsChatGptModalOpen(false)} className="min-h-12">Close</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
+export function ConnectedApps() {
+  return (
+    <div className="space-y-4">
+      <ChatGptSetupCard />
+      <ConnectionStatusCard />
     </div>
   );
 }
