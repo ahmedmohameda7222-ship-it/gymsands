@@ -438,9 +438,9 @@ export default function DashboardPage() {
                       .find((g) => g.type === currentMealType)
                       ?.items.filter((item) => item.status !== "done" && !skippedIds.has(item.id))
                       .map((item) => (
-                        <div key={item.id} className="flex items-start justify-between gap-3 rounded-md border border-border/70 bg-slate-50 p-3">
+                        <div key={item.id} className="flex items-start justify-between gap-3 rounded-md border border-border/70 bg-card p-3 shadow-sm">
                           <div className="min-w-0">
-                            <p className="font-medium">{item.food_name}</p>
+                            <p className="font-medium text-foreground">{item.food_name}</p>
                             <p className="text-xs text-muted-foreground">
                               {item.calories} kcal · {item.protein_g}g protein · {item.carbs_g}g carbs · {item.fat_g}g fat
                             </p>
