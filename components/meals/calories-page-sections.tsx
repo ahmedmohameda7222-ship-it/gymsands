@@ -52,7 +52,7 @@ export function SelectField({ label, value, values, onChange }: { label: string;
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <select value={value} onChange={(event) => onChange(event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {values.map((item) => <option key={item} value={item}>{item.replace("_", " ")}</option>)}
       </select>
     </div>
@@ -270,7 +270,7 @@ export function WaterMiniSummary({ waterTotal, waterGoal, onAddWater }: { waterT
         </div>
       </div>
       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-[#3A7D44] transition-all duration-500" style={{ width: `${Math.min(100, progress)}%` }} />
+        <div className="h-full rounded-full bg-[var(--success)] transition-all duration-500" style={{ width: `${Math.min(100, progress)}%` }} />
       </div>
     </div>
   );

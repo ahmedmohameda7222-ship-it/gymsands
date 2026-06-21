@@ -27,6 +27,8 @@ import {
 import type { CustomMeal, FoodItem, FoodKitchen, FoodLog, FoodSubcategory, MealType, UserFoodItem } from "@/types";
 
 const mealTypes: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
+const nativeSelectClassName = "h-11 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+const compactSelectClassName = "h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 type FoodDraft = {
   id?: string;
@@ -341,7 +343,7 @@ export function CustomNutritionManager({
                     const firstSubcategory = subcategories.find((subcategory) => subcategory.kitchen_id === kitchenId);
                     patchFoodDraft({ kitchenId, subcategoryId: firstSubcategory?.id ?? "" });
                   }}
-                  className="h-11 w-full rounded-md border bg-white px-3 text-sm"
+                  className={nativeSelectClassName}
                 >
                   {kitchens.map((kitchen) => (
                     <option key={kitchen.id} value={kitchen.id}>{kitchen.name}</option>
@@ -353,7 +355,7 @@ export function CustomNutritionManager({
                 <select
                   value={foodDraft.subcategoryId}
                   onChange={(event) => patchFoodDraft({ subcategoryId: event.target.value })}
-                  className="h-11 w-full rounded-md border bg-white px-3 text-sm"
+                  className={nativeSelectClassName}
                 >
                   {visibleSubcategories.map((subcategory) => (
                     <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
@@ -417,7 +419,7 @@ export function CustomNutritionManager({
                     <select
                       value={item.foodId}
                       onChange={(event) => setMealItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, foodId: event.target.value } : row))}
-                      className="h-11 rounded-md border bg-white px-3 text-sm"
+                      className={nativeSelectClassName}
                     >
                       <option value="">Choose food</option>
                       {allFoods.map((food) => (
@@ -443,7 +445,7 @@ export function CustomNutritionManager({
                   Add Food To Meal
                 </Button>
               </div>
-              <div className="rounded-md bg-slate-50 p-3 text-sm">
+              <div className="rounded-md border border-border/70 bg-card p-3 text-sm">
                 <p className="font-semibold">Totals</p>
                 <p className="mt-1 text-muted-foreground">
                   {mealTotals.calories} kcal | {mealTotals.protein_g}g protein | {mealTotals.carbs_g}g carbs | {mealTotals.fat_g}g fat
@@ -458,7 +460,7 @@ export function CustomNutritionManager({
             <div className="grid gap-2">
               <div className="flex items-center gap-2">
                 <Label>Log saved meals as</Label>
-                <select value={mealType} onChange={(event) => setMealType(event.target.value as MealType)} className="h-10 rounded-md border bg-white px-3 text-sm">
+                <select value={mealType} onChange={(event) => setMealType(event.target.value as MealType)} className={compactSelectClassName}>
                   {mealTypes.map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
               </div>

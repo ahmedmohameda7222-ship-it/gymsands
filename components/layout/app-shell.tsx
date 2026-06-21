@@ -237,7 +237,7 @@ function QuickLogSheet() {
       <DialogTrigger asChild>
         <Button
           size="icon"
-          className="absolute left-1/2 top-0 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-background bg-primary text-primary-foreground shadow-luxe hover:bg-[#1F2A14]"
+          className="absolute left-1/2 top-0 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-background bg-primary text-primary-foreground shadow-luxe hover:bg-primary/90"
           aria-label={t("nav.quickLog")}
         >
           <Plus className="h-6 w-6" />
