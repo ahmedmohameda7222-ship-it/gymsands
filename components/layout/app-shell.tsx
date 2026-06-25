@@ -134,8 +134,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const hideProfileDetails = settings.hideProfileDetails || settings.privateProfileMode;
 
   return (
-    <div className="min-h-screen bg-transparent text-foreground">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-border/70 bg-card/80 shadow-soft backdrop-blur-xl lg:flex lg:flex-col">
+    <div className="premium-page-bg min-h-screen text-foreground">
+      <aside className="glass-shell fixed inset-y-0 left-0 z-40 hidden w-72 border-y-0 border-l-0 lg:flex lg:flex-col">
         <div className="flex h-20 items-center px-6">
           <Brand href="/dashboard" />
         </div>
@@ -155,8 +155,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           ) : null}
         </nav>
-        <div className="border-t border-border/70 p-4">
-          <div className="rounded-2xl bg-background/70 p-3">
+        <div className="border-t border-white/40 p-4 dark:border-white/10">
+          <div className="glass-card-strong p-3 shadow-none">
             <p className="truncate text-sm font-semibold text-foreground">{hideProfileDetails ? t("nav.member") : profile?.full_name || t("nav.member")}</p>
             {!hideProfileDetails ? <p className="truncate text-xs text-muted-foreground">{profile?.email}</p> : null}
             <Button variant="ghost" className="mt-3 w-full justify-start" onClick={signOut}>
@@ -166,8 +166,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </aside>
-      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/75 backdrop-blur-xl lg:ml-72">
-        <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+      <header className="glass-shell sticky top-0 z-30 border-x-0 border-t-0 lg:ml-72">
+        <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:h-[72px] lg:px-8">
           <div className="flex min-w-0 items-center gap-3 lg:hidden">
             <MobileMenu pathname={pathname} isAdmin={isAdmin} signOut={signOut} />
             <Brand href="/dashboard" />
@@ -202,7 +202,7 @@ function MobilePrimaryNav({ pathname, isAdmin, signOut }: { pathname: string; is
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 lg:hidden">
       <QuickLogSheet />
-      <nav className="grid grid-cols-4 border-t border-border/70 bg-card/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-1 shadow-luxe backdrop-blur-xl" aria-label="Primary mobile navigation">
+      <nav className="glass-shell grid grid-cols-4 border-x-0 border-b-0 px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-1" aria-label="Primary mobile navigation">
         {mobilePrimaryItems.map((item) => (
           <MobileNavLink key={item.href} item={item} active={isActivePath(pathname, item)} />
         ))}
@@ -220,7 +220,7 @@ function MobileNavLink({ item, active }: { item: NavItem; active: boolean }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex min-h-14 flex-col items-center justify-center gap-1 border-t-2 px-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+        "flex min-h-14 flex-col items-center justify-center gap-1 border-t-2 px-1 text-[11px] font-bold leading-[14px] transition-colors focus-visible:ring-2 focus-visible:ring-ring",
         active ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-primary"
       )}
     >
@@ -237,14 +237,14 @@ function QuickLogSheet() {
       <DialogTrigger asChild>
         <Button
           size="icon"
-          className="absolute left-1/2 top-0 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-background bg-primary text-primary-foreground shadow-luxe hover:bg-primary/90"
+          className="absolute left-1/2 top-0 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-[var(--app-bg)] bg-primary text-primary-foreground shadow-[var(--shadow-floating)] hover:bg-primary/90"
           aria-label={t("nav.quickLog")}
         >
           <Plus className="h-6 w-6" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="rounded-t-2xl p-0 sm:max-w-sm">
-        <DialogHeader className="border-b border-border/70 px-5 py-4 text-left">
+      <DialogContent className="glass-shell rounded-t-[24px] p-0 sm:max-w-sm">
+        <DialogHeader className="border-b border-white/40 px-5 py-4 text-left dark:border-white/10">
           <DialogTitle>{t("nav.quickLog")}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-2 p-4">
@@ -252,7 +252,7 @@ function QuickLogSheet() {
             const Icon = item.icon;
             return (
               <DialogClose key={item.href} asChild>
-                <Link href={item.href} className="flex min-h-12 items-center gap-3 rounded-xl border border-border/70 bg-card px-3 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-muted/60">
+                <Link href={item.href} className="solid-row flex min-h-12 items-center gap-3 px-3 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-muted/60">
                   <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <Icon className="h-4 w-4" />
                   </span>
@@ -295,7 +295,7 @@ function MobileMenu({
             type="button"
             aria-label={t("nav.more")}
             className={cn(
-              "flex min-h-14 flex-col items-center justify-center gap-1 border-t-2 px-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+            "flex min-h-14 flex-col items-center justify-center gap-1 border-t-2 px-1 text-[11px] font-bold leading-[14px] transition-colors focus-visible:ring-2 focus-visible:ring-ring",
               active ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-primary"
             )}
           >
@@ -308,8 +308,8 @@ function MobileMenu({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="inset-y-0 left-0 right-auto top-0 h-dvh max-h-dvh w-[86vw] max-w-sm translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 border-r border-border/70 p-0 data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:slide-in-from-left data-[state=open]:duration-300 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:slide-out-to-left data-[state=closed]:duration-300 sm:left-0 sm:top-0 sm:max-w-sm sm:translate-x-0 sm:translate-y-0 sm:rounded-none">
-        <DialogHeader className="border-b border-border/70 px-5 py-4 text-left">
+      <DialogContent className="glass-shell inset-y-0 left-0 right-auto top-0 h-dvh max-h-dvh w-[86vw] max-w-sm translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 border-r p-0 data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:slide-in-from-left data-[state=open]:duration-300 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:slide-out-to-left data-[state=closed]:duration-300 sm:left-0 sm:top-0 sm:max-w-sm sm:translate-x-0 sm:translate-y-0 sm:rounded-none">
+        <DialogHeader className="border-b border-white/40 px-5 py-4 text-left dark:border-white/10">
           <DialogTitle>{t("nav.more")}</DialogTitle>
         </DialogHeader>
         <div className="h-[calc(100dvh-4.5rem)] overflow-y-auto px-4 py-4">
@@ -329,7 +329,7 @@ function MobileMenu({
               );
             })}
             {isAdmin ? (
-              <div className="border-t border-border/70 pt-4">
+              <div className="border-t border-white/40 pt-4 dark:border-white/10">
                 <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Admin</p>
                 {adminItems.map((item) => (
                   <SidebarLink key={item.href} item={item} active={isActivePath(pathname, item)} mobile onClick={handleNavigate} />
@@ -363,8 +363,8 @@ function SidebarLink({ item, active, mobile = false, onClick }: { item: NavItem;
       onClick={onClick}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-ring",
-        active ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:bg-muted/60 hover:text-primary",
+        "flex items-center gap-3 rounded-2xl px-3 py-2 text-sm font-semibold transition focus-visible:ring-2 focus-visible:ring-ring",
+        active ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:bg-white/35 hover:text-primary dark:hover:bg-white/10",
         mobile && "min-h-12 py-3"
       )}
     >

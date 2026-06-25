@@ -231,12 +231,12 @@ export function ApiFoodTools({
   }, [session?.access_token]);
 
   return (
-    <Card>
+    <Card className="solid-tracking-card">
       <CardHeader>
         <CardTitle>Barcode meals</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <div className="rounded-md border p-3">
+        <div className="solid-row p-3">
           <p className="mb-2 flex items-center gap-2 font-semibold"><Barcode className="h-4 w-4 text-primary" /> Barcode lookup</p>
           <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
             <Input value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder="Barcode" />
@@ -251,7 +251,7 @@ export function ApiFoodTools({
           </div>
           {scannerMessage ? <p className="mt-2 text-sm text-muted-foreground">{scannerMessage}</p> : null}
           {barcodeFood ? (
-            <div className="mt-3 rounded-md border bg-card p-3 text-sm">
+            <div className="solid-row mt-3 p-3 text-sm">
               <p className="font-semibold">{barcodeFood.name}</p>
               <p className="text-muted-foreground">{barcodeFood.brand ?? "Unknown brand"} | {macroLine(barcodeFood)}</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">

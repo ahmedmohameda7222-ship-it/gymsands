@@ -37,11 +37,11 @@ export function TrackerCard({ label, value, target, unit, hasTarget }: { label: 
   const progressValue = percent(value, target);
   const isCalories = label.toLowerCase() === "calories";
   return (
-    <Card className="border-border/70">
+    <Card className="glass-card">
       <CardContent className="pt-5">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="mt-2 text-2xl font-bold">{value}{unit}</p>
-        <p className="mt-1 text-sm text-muted-foreground">{hasTarget ? `Target ${target}${unit}` : "No target set"}</p>
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
+        <p className="mt-2 text-[28px] font-extrabold leading-none tracking-[-0.055em]">{value}{unit}</p>
+        <p className="mt-1 text-xs font-medium text-muted-foreground">{hasTarget ? `Target ${target}${unit}` : "No target set"}</p>
         <Progress value={hasTarget ? progressValue : 0} className="mt-4" indicatorStyle={isCalories ? { background: calorieProgressColor(progressValue) } : undefined} />
       </CardContent>
     </Card>
@@ -52,7 +52,7 @@ export function SelectField({ label, value, values, onChange }: { label: string;
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <select value={value} onChange={(event) => onChange(event.target.value)} className="flex h-11 w-full rounded-[14px] border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {values.map((item) => <option key={item} value={item}>{item.replace("_", " ")}</option>)}
       </select>
     </div>
@@ -60,12 +60,12 @@ export function SelectField({ label, value, values, onChange }: { label: string;
 }
 
 export function SavedTarget({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-md border border-border/70 bg-card p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p><p className="mt-1 font-semibold">{value}</p></div>;
+  return <div className="solid-row p-3"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</p><p className="mt-1 font-semibold">{value}</p></div>;
 }
 
 export function WeeklyTracker({ selectedDate, weekData, onSelectDate, onMoveWeek }: { selectedDate: string; weekData: DailyNutritionSummary[]; onSelectDate: (date: string) => void; onMoveWeek: (days: number) => void }) {
   return (
-    <Card className="mt-4 border-border/70">
+    <Card className="glass-card-strong mt-4">
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
         <CardTitle>Weekly tracker</CardTitle>
         <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => onMoveWeek(-7)}><ChevronLeft className="h-4 w-4" /> Previous</Button><Button variant="outline" size="sm" onClick={() => onMoveWeek(7)}>Next <ChevronRight className="h-4 w-4" /></Button></div>
@@ -73,7 +73,7 @@ export function WeeklyTracker({ selectedDate, weekData, onSelectDate, onMoveWeek
       <CardContent>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
           {weekData.map((day) => (
-            <button key={day.date} type="button" onClick={() => onSelectDate(day.date)} className={`rounded-md border border-border/70 p-3 text-left transition-colors hover:border-primary/45 hover:bg-muted/40 ${day.date === selectedDate ? "border-primary bg-primary/10" : "bg-card"}`}>
+            <button key={day.date} type="button" onClick={() => onSelectDate(day.date)} className={`rounded-2xl border p-3 text-left transition-colors hover:border-primary/45 hover:bg-white/45 ${day.date === selectedDate ? "border-primary bg-primary/10" : "border-white/50 bg-white/35 dark:border-white/10 dark:bg-white/5"}`}>
               <p className="font-semibold">{formatDay(day.date)}</p>
               <p className="mt-2 text-sm text-muted-foreground">{day.has_targets ? `${day.calories} / ${day.planned_calories} kcal` : `${day.calories} kcal logged`}</p>
               <p className="mt-1 text-xs text-muted-foreground">P {day.protein_g}g | C {day.carbs_g}g | F {day.fat_g}g</p>
@@ -95,13 +95,13 @@ export function FastFoodFlowCard({ selectedDateLabel, hasFoodLogs, hasTargets, o
     { icon: Star, label: "Targets", detail: hasTargets ? "Targets are active for remaining macros." : "Set targets to unlock remaining macros.", href: "#daily-targets" }
   ];
   return (
-    <Card className="mt-4 border-border/70">
+    <Card className="glass-card mt-4">
       <CardHeader><CardTitle>Fast food logging</CardTitle></CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {steps.map((step) => {
           const Icon = step.icon;
           const content = <><span className="flex items-center gap-2 font-semibold"><Icon className="h-4 w-4 text-primary" />{step.label}</span><span className="mt-1 block text-sm text-muted-foreground">{step.detail}</span></>;
-          return step.href ? <Link key={step.label} href={step.href} className="rounded-md border border-border/70 bg-card p-3 transition hover:border-primary">{content}</Link> : <button key={step.label} type="button" onClick={step.onClick} className="rounded-md border border-border/70 bg-card p-3 text-left transition hover:border-primary">{content}</button>;
+          return step.href ? <Link key={step.label} href={step.href} className="glass-chip p-3 transition hover:border-primary">{content}</Link> : <button key={step.label} type="button" onClick={step.onClick} className="glass-chip p-3 text-left transition hover:border-primary">{content}</button>;
         })}
       </CardContent>
     </Card>
@@ -111,10 +111,10 @@ export function FastFoodFlowCard({ selectedDateLabel, hasFoodLogs, hasTargets, o
 export function NutritionCoachCard({ weekData, targets, totals, waterTotal }: { weekData: DailyNutritionSummary[]; targets: SavedTargets; totals: ReturnType<typeof sumFoodLogs>; waterTotal: number }) {
   const insights = buildNutritionInsights({ weekData, targets, totals, waterTotal });
   return (
-    <Card className="mt-4 border-border/70">
-      <CardHeader><CardTitle>Nutrition coaching</CardTitle></CardHeader>
+    <Card className="glass-card mt-4">
+      <CardHeader><CardTitle>Nutrition summary</CardTitle></CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {insights.map((insight) => <div key={insight.label} className="rounded-md border border-border/70 bg-card p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{insight.label}</p><p className="mt-1 font-semibold text-foreground">{insight.value}</p><p className="mt-1 text-sm text-muted-foreground">{insight.detail}</p></div>)}
+        {insights.map((insight) => <div key={insight.label} className="solid-row p-3"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{insight.label}</p><p className="mt-1 font-semibold text-foreground">{insight.value}</p><p className="mt-1 text-sm text-muted-foreground">{insight.detail}</p></div>)}
       </CardContent>
     </Card>
   );
@@ -151,7 +151,7 @@ export function WeeklyOverview({ weekData, waterGoalMl }: { weekData: DailyNutri
   const status = Math.abs(deviation) <= 5 ? "On track" : deviation < -15 ? "Large deficit" : deviation < -5 ? "Slight deficit" : deviation > 15 ? "Large surplus" : "Slight surplus";
   const maxCalories = Math.max(1, ...weekData.map((day) => Math.max(day.planned_calories, day.calories)));
   return (
-    <Card className="mt-4 border-border/70">
+    <Card className="glass-card-strong mt-4">
       <CardHeader><CardTitle>Weekly Summary</CardTitle></CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -161,13 +161,13 @@ export function WeeklyOverview({ weekData, waterGoalMl }: { weekData: DailyNutri
         </div>
         <div><div className="mb-2 flex items-center justify-between text-sm"><span className="font-semibold">Weekly progress</span><span className="text-muted-foreground">{actual} / {planned} kcal</span></div><Progress value={percent(actual, planned)} /></div>
         <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="rounded-md border border-border/70 bg-card p-3">
+          <div className="solid-tracking-card p-3">
             <p className="text-sm font-semibold">Daily comparison</p>
             <div className="mt-3 space-y-2">
               {weekData.map((day) => <div key={day.date} className="grid grid-cols-[76px_1fr] items-center gap-3 text-xs"><span>{formatDay(day.date).split(",")[0]}</span><div className="space-y-1"><div className="h-2 rounded bg-primary/30"><div className="h-2 rounded bg-primary" style={{ width: `${Math.min(100, (day.planned_calories / maxCalories) * 100)}%` }} /></div><div className="h-2 rounded bg-success/15"><div className="h-2 rounded bg-success" style={{ width: `${Math.min(100, (day.calories / maxCalories) * 100)}%` }} /></div></div></div>)}
             </div>
           </div>
-          <div className="rounded-md border border-border/70 bg-card p-3">
+          <div className="solid-tracking-card p-3">
             <p className="text-sm font-semibold">Macro distribution</p>
             <div className="mt-3 space-y-3"><MacroBar label="Protein" value={protein} total={protein + carbs + fat} /><MacroBar label="Carbs" value={carbs} total={protein + carbs + fat} /><MacroBar label="Fat" value={fat} total={protein + carbs + fat} /><div className="pt-2"><div className="mb-2 flex items-center justify-between text-sm"><span className="flex items-center gap-1"><Droplets className="h-4 w-4" /> Water</span><span>{Math.round(water / 100) / 10} L</span></div><Progress value={percent(water, waterGoalMl * 7)} /></div></div>
           </div>
@@ -178,7 +178,7 @@ export function WeeklyOverview({ weekData, waterGoalMl }: { weekData: DailyNutri
 }
 
 function OverviewMetric({ label, value, detail }: { label: string; value: string | number; detail?: string }) {
-  return <div className="rounded-md border border-border/70 bg-card p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p><p className="mt-1 text-lg font-semibold text-foreground">{value}</p>{detail ? <p className="mt-1 text-xs text-muted-foreground">{detail}</p> : null}</div>;
+  return <div className="solid-row p-3"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</p><p className="mt-1 text-lg font-semibold text-foreground">{value}</p>{detail ? <p className="mt-1 text-xs text-muted-foreground">{detail}</p> : null}</div>;
 }
 
 function MacroBar({ label, value, total }: { label: string; value: number; total: number }) {
@@ -187,13 +187,13 @@ function MacroBar({ label, value, total }: { label: string; value: number; total
 
 export function WaterCard({ waterTotal, waterGoal, customWaterMl, setCustomWaterMl, waterLogs, onAddWater, onRemoveWater }: { waterTotal: number; waterGoal: number; customWaterMl: string; setCustomWaterMl: (value: string) => void; waterLogs: WaterLog[]; onAddWater: (amount: number) => void; onRemoveWater: (log: WaterLog) => void }) {
   return (
-    <Card className="border-border/70">
+    <Card className="glass-card">
       <CardHeader><CardTitle>Water intake</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         <div><p className="text-2xl font-bold">{waterTotal} ml</p><p className="text-sm text-muted-foreground">Goal {waterGoal} ml</p><Progress value={percent(waterTotal, waterGoal)} className="mt-3" /></div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[250, 500, 750, 1000].map((amount) => <Button key={amount} type="button" variant="outline" size="sm" onClick={() => onAddWater(amount)}>+{amount === 1000 ? "1 L" : `${amount} ml`}</Button>)}</div>
         <div className="grid gap-2 sm:grid-cols-[1fr_auto]"><Input type="number" min="1" inputMode="numeric" enterKeyHint="done" value={customWaterMl} onChange={(event) => setCustomWaterMl(event.target.value)} /><Button type="button" onClick={() => onAddWater(Number(customWaterMl))}>Add water</Button></div>
-        <div className="space-y-2">{waterLogs.map((log) => <div key={log.id} className="flex items-center justify-between rounded-md border border-border/70 bg-card p-2 text-sm"><span>{log.amount_ml} ml</span><Button type="button" variant="ghost" size="icon" onClick={() => onRemoveWater(log)} aria-label="Delete water log"><Trash2 className="h-4 w-4" /></Button></div>)}</div>
+        <div className="space-y-2">{waterLogs.map((log) => <div key={log.id} className="solid-row flex items-center justify-between p-2 text-sm"><span>{log.amount_ml} ml</span><Button type="button" variant="ghost" size="icon" onClick={() => onRemoveWater(log)} aria-label="Delete water log"><Trash2 className="h-4 w-4" /></Button></div>)}</div>
       </CardContent>
     </Card>
   );
@@ -208,7 +208,7 @@ export function CompactNutritionSummary({ totals, targets, waterTotal }: { total
   const hasAnyTargets = targets.daily_calories > 0 || targets.protein_g > 0;
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="glass-card-strong overflow-hidden">
       <CardContent className="p-4">
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-center gap-1">
@@ -255,7 +255,7 @@ function MacroMiniBar({ label, value, target, progress, color, unit = "g" }: { l
 export function WaterMiniSummary({ waterTotal, waterGoal, onAddWater }: { waterTotal: number; waterGoal: number; onAddWater: (amount: number) => void }) {
   const progress = percent(waterTotal, waterGoal);
   return (
-    <div className="rounded-lg border border-border/70 bg-card p-3 shadow-soft">
+    <div className="glass-card-strong p-3 shadow-soft">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium text-muted-foreground">Water</p>

@@ -90,7 +90,7 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
   }
 
   return (
-    <Card className="border-dashed">
+    <Card className="glass-card border-dashed">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between gap-2 text-sm">
           <span className="flex items-center gap-2">
@@ -167,7 +167,7 @@ function FoodChip({
   onFavorite: () => void;
 }) {
   return (
-    <div className="flex w-full flex-col gap-2 rounded-lg border bg-card p-2 shadow-soft transition hover:border-primary/40">
+    <div className="solid-row flex w-full flex-col gap-2 p-2 shadow-soft transition hover:border-primary/40">
       <div className="flex items-center justify-between gap-2">
         <p className="min-w-0 flex-1 truncate text-xs font-semibold">{log.food_name}</p>
         <button

@@ -22,7 +22,7 @@ export function SettingsSectionCard({
   rows: SettingsRow[];
 }) {
   return (
-    <Card className="h-full border-border/70">
+    <Card className="solid-tracking-card h-full">
       <CardHeader>
         <CardTitle className="text-base">{title}</CardTitle>
         {description ? (
@@ -36,7 +36,7 @@ export function SettingsSectionCard({
             <Link
               key={row.title}
               href={row.href}
-              className="group flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3 transition-colors hover:border-primary/40 hover:bg-muted/45"
+              className="solid-row group flex min-h-[56px] items-center justify-between gap-3 p-3 transition-colors hover:border-primary/40 hover:bg-muted/45"
             >
               <span className="flex min-w-0 items-start gap-3">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">

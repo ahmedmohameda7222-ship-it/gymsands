@@ -9,6 +9,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { getOnboarding } from "@/services/database/profile";
 import { getAllUserWorkoutPlans } from "@/services/database/workout-plan-loader";
+import { cn } from "@/lib/utils";
 import type { OnboardingAnswers, UserWorkoutPlan } from "@/types";
 
 function isChatGptPlan(plan: UserWorkoutPlan | null) {
@@ -122,10 +123,10 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
   const noun = mode === "workout" ? "workout plan" : "meal plan";
 
   return (
-    <Card className={className}>
+    <Card className={cn("glass-card-strong", className)}>
       <CardContent className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
         <div className="flex gap-3">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-soft">
             <Bot className="h-5 w-5" />
           </div>
           <div>

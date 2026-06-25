@@ -4,12 +4,12 @@ import { Suspense } from "react";
 
 export default function RegisterPage() {
   return (
-    <main className="grid min-h-screen lg:grid-cols-[0.9fr_1.1fr]">
-      <section className="blue-surface hidden p-10 text-white lg:flex lg:flex-col lg:justify-between">
-        <Brand className="text-white" />
+    <main className="premium-page-bg grid min-h-screen lg:grid-cols-[0.9fr_1.1fr]">
+      <section className="glass-shell m-6 hidden rounded-[32px] p-10 text-foreground lg:flex lg:flex-col lg:justify-between">
+        <Brand />
         <div>
           <h1 className="max-w-lg text-5xl font-bold tracking-normal">Plaivra</h1>
-          <p className="mt-4 max-w-md text-lg text-[#f4efe6]/80">Create an account, answer a quick onboarding, then track your day.</p>
+          <p className="mt-4 max-w-md text-lg text-muted-foreground">Create an account, answer a quick onboarding, then track your day.</p>
         </div>
       </section>
       <section className="flex min-h-screen items-center justify-center p-4">

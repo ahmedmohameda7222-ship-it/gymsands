@@ -23,7 +23,7 @@ const features = [
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="premium-page-bg min-h-screen text-foreground">
       <PublicNav />
       <main>
         <section className="relative min-h-[88vh] overflow-hidden">
@@ -37,7 +37,6 @@ export default function LandingPage() {
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(26,26,26,0.78),rgba(45,58,30,0.54),rgba(248,246,241,0.12)),linear-gradient(180deg,rgba(248,246,241,0.04),#F8F6F1)]" />
           <div className="container relative flex min-h-[88vh] items-center pb-16 pt-14">
             <div className="max-w-3xl">
-              <p className="text-sm font-semibold uppercase tracking-wide text-primary">Luxury wellness dashboard</p>
               <h1 className="mt-4 text-5xl font-bold tracking-normal sm:text-7xl">Plaivra</h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-[#f4efe6]/85">
                 A calm premium space for ChatGPT-exported workout plans, exercise guidance, meal planning, calorie tracking, recovery, habits, supplements, and personal records.
@@ -52,7 +51,7 @@ export default function LandingPage() {
               </div>
               <div className="mt-8 flex flex-wrap gap-2">
                 {["ChatGPT plan export", "Workout tracking", "Exercise library", "Meal planning", "Progress tracking", "Sleep & recovery", "Habits", "Supplements", "Personal records"].map((item) => (
-                  <span key={item} className="rounded-md border border-primary/25 bg-card/50 px-3 py-1 text-sm text-[#f4efe6]/85 backdrop-blur">
+                  <span key={item} className="glass-chip px-3 py-1 text-sm text-[#f4efe6]/85">
                     {item}
                   </span>
                 ))}
@@ -66,7 +65,7 @@ export default function LandingPage() {
             {features.map((feature) => {
               const Icon = feature.icon;
               return (
-                <Card key={feature.title}>
+                <Card key={feature.title} className="glass-card">
                   <CardContent className="pt-5">
                     <Icon className="h-8 w-8 text-primary" />
                     <h2 className="mt-4 text-lg font-semibold">{feature.title}</h2>

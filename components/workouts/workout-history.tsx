@@ -193,18 +193,18 @@ export function WorkoutHistory() {
     <div className="space-y-5">
       {stats && !isLoading ? (
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-md border border-border/70 bg-card p-3 shadow-soft">
+          <div className="glass-card p-3 shadow-soft">
             <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">This week</p>
             <p className="mt-1 text-xl font-bold">{stats.thisWeek} <span className="text-sm font-normal text-muted-foreground">workouts</span></p>
           </div>
-          <div className="rounded-md border border-border/70 bg-card p-3 shadow-soft">
+          <div className="glass-card p-3 shadow-soft">
             <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">This month</p>
             <p className="mt-1 text-xl font-bold">{stats.thisMonth} <span className="text-sm font-normal text-muted-foreground">workouts</span></p>
           </div>
         </div>
       ) : null}
 
-      <Card>
+      <Card className="solid-tracking-card">
         <CardHeader className="space-y-4">
           <div>
             <CardTitle className="flex items-center gap-2">
@@ -259,7 +259,7 @@ export function WorkoutHistory() {
             const sessionDate = new Date(session.date);
             const totalSets = session.exercises.reduce((sum, ex) => sum + parseSetCount(ex.sets), 0);
             return (
-              <div key={session.id} className="rounded-md border border-border/70 bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/30">
+              <div key={session.id} className="solid-row p-4 transition-colors hover:border-primary/40 hover:bg-muted/30">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-foreground">{session.title}</p>
@@ -275,7 +275,7 @@ export function WorkoutHistory() {
                 </div>
 
                 <details className="mt-3 group">
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-md bg-muted/40 px-3 text-sm transition hover:bg-muted/60">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-xl bg-muted/40 px-3 text-sm transition hover:bg-muted/60">
                     <span className="flex items-center gap-2 text-muted-foreground">
                       <Dumbbell className="h-4 w-4" />
                       {session.exercises.length} exercises · {totalSets} sets · {session.durationMinutes} min
@@ -288,7 +288,7 @@ export function WorkoutHistory() {
                         return (
                           <div
                             key={`${session.id}-${exercise.id}`}
-                            className={cn("grid gap-3 rounded-md bg-muted/40 p-3 text-sm", "lg:grid-cols-[1.1fr_1.5fr_0.8fr]")}
+                            className={cn("solid-row grid gap-3 p-3 text-sm", "lg:grid-cols-[1.1fr_1.5fr_0.8fr]")}
                           >
                             <div>
                               <p className="font-medium text-foreground">{exercise.name}</p>
@@ -308,7 +308,7 @@ export function WorkoutHistory() {
                       })}
                     </div>
                   ) : (
-                    <p className="mt-2 rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">No set details were logged for this workout.</p>
+                    <p className="solid-row mt-2 p-3 text-sm text-muted-foreground">No set details were logged for this workout.</p>
                   )}
                   {session.notes ? <p className="mt-2 text-sm text-muted-foreground">Notes: {session.notes}</p> : null}
                 </details>

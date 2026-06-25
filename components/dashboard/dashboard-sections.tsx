@@ -202,13 +202,13 @@ export function MacroLine({ label, value, target }: { label: string; value: numb
 }
 
 export function ChecklistLine({ label, done, emptyLabel }: { label: string; done: boolean; emptyLabel: string }) {
-  return <div className="flex items-center justify-between rounded-md border border-border/70 bg-card p-3"><span className="font-medium">{label}</span><span className={done ? "text-sm font-semibold text-primary" : "text-sm text-muted-foreground"}>{done ? "Done" : emptyLabel}</span></div>;
+  return <div className="solid-row flex items-center justify-between p-3"><span className="font-medium">{label}</span><span className={done ? "text-sm font-semibold text-primary" : "text-sm text-muted-foreground"}>{done ? "Done" : emptyLabel}</span></div>;
 }
 
 export function RingMetric({ icon: Icon, label, value, detail, progress }: { icon: typeof CheckCircle2; label: string; value: string; detail: string; progress: number }) {
   const safeProgress = Math.max(0, Math.min(100, progress));
   return (
-    <div className="flex items-center gap-3 rounded-md border border-border/70 bg-card p-3">
+    <div className="glass-card flex items-center gap-3 p-3">
       <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(hsl(var(--primary)) ${safeProgress}%, hsl(var(--muted)) 0)` }} aria-hidden="true"><div className="grid h-12 w-12 place-items-center rounded-full bg-card"><Icon className="h-5 w-5 text-primary" /></div></div>
       <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p><p className="mt-1 text-lg font-bold">{value}</p><p className="text-sm text-muted-foreground">{detail}</p></div>
     </div>
@@ -243,7 +243,7 @@ export function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className={cn("rounded-lg border border-border bg-card text-card-foreground shadow-soft", className)}>
+    <div className={cn("glass-card-strong text-card-foreground", className)}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -256,7 +256,7 @@ export function CollapsibleSection({
         </div>
         <ChevronDown className={cn("h-5 w-5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
-      {open ? <div className="border-t border-border/70 p-4 sm:p-5">{children}</div> : null}
+      {open ? <div className="border-t border-white/40 p-4 sm:p-5 dark:border-white/10">{children}</div> : null}
     </div>
   );
 }
@@ -273,7 +273,7 @@ export function CompactSetupChecklist({
   totalCount: number;
 }) {
   return (
-    <details className="group rounded-lg border border-primary/20 bg-primary/5">
+    <details className="glass-card-strong group">
       <summary className="flex cursor-pointer list-none items-center gap-3 p-3 sm:p-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -293,7 +293,7 @@ export function CompactSetupChecklist({
           </Button>
         ) : null}
       </summary>
-      <div className="border-t border-primary/10 p-3 sm:p-4">
+      <div className="border-t border-white/40 p-3 sm:p-4 dark:border-white/10">
         <div className="space-y-2">
           {checklist.map((item) => (
             <div key={item.label} className="flex items-center justify-between gap-2 text-sm">
@@ -327,7 +327,7 @@ export function QuickLinkGrid({
           <Link
             key={shortcut.key}
             href={shortcut.href}
-            className="flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-lg border border-border/70 bg-card px-1 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-muted/60 sm:min-h-[56px] sm:flex-row sm:gap-2 sm:text-sm"
+            className="glass-chip flex min-h-[48px] flex-col items-center justify-center gap-1 px-1 py-2 text-xs font-bold text-foreground transition-colors hover:border-primary/40 hover:bg-white/55 sm:min-h-[56px] sm:flex-row sm:gap-2 sm:text-sm"
           >
             <Icon className="h-4 w-4 shrink-0 text-primary" />
             <span className="truncate">{shortcut.shortLabel}</span>
@@ -352,13 +352,13 @@ export function CompactRecentActivity({
   return (
     <div className="flex gap-2 overflow-x-auto pb-1 mobile-card-scroll">
       {logs.slice(0, 4).map((log) => (
-        <div key={log.id} className="min-w-[160px] rounded-md border border-border/70 bg-card p-2.5 sm:min-w-[180px] sm:p-3">
+        <div key={log.id} className="solid-row min-w-[160px] p-2.5 sm:min-w-[180px] sm:p-3">
           <p className="text-sm font-semibold">{log.food_name}</p>
           <p className="text-xs text-muted-foreground">{log.calories} kcal · {log.protein_g}g protein</p>
         </div>
       ))}
       {history.slice(0, 4).map((session) => (
-        <div key={session.id} className="min-w-[160px] rounded-md border border-border/70 bg-card p-2.5 sm:min-w-[180px] sm:p-3">
+        <div key={session.id} className="solid-row min-w-[160px] p-2.5 sm:min-w-[180px] sm:p-3">
           <p className="text-sm font-semibold">{session.workout_name}</p>
           <p className="text-xs text-muted-foreground">{session.status} · {session.duration_minutes ?? 0} min</p>
         </div>
@@ -386,7 +386,7 @@ export function WellnessSummary({
   return (
     <div className="grid grid-cols-3 gap-2 sm:gap-3">
       {habits.length > 0 ? (
-        <div className="rounded-md border bg-card p-2.5 sm:p-3">
+        <div className="solid-row p-2.5 sm:p-3">
           <div className="flex items-center gap-1.5">
             <Zap className="h-3.5 w-3.5 text-primary" />
             <p className="text-xs text-muted-foreground">Habits</p>
@@ -395,7 +395,7 @@ export function WellnessSummary({
         </div>
       ) : null}
       {supplements.length > 0 ? (
-        <div className="rounded-md border bg-card p-2.5 sm:p-3">
+        <div className="solid-row p-2.5 sm:p-3">
           <div className="flex items-center gap-1.5">
             <Pill className="h-3.5 w-3.5 text-primary" />
             <p className="text-xs text-muted-foreground">Supps</p>
@@ -404,7 +404,7 @@ export function WellnessSummary({
         </div>
       ) : null}
       {latestSleep ? (
-        <div className="rounded-md border bg-card p-2.5 sm:p-3">
+        <div className="solid-row p-2.5 sm:p-3">
           <div className="flex items-center gap-1.5">
             <Moon className="h-3.5 w-3.5 text-primary" />
             <p className="text-xs text-muted-foreground">Sleep</p>
