@@ -101,7 +101,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   }
 
   return (
-    <Card className="w-full max-w-md">
+    <Card className="solid-tracking-card w-full max-w-md rounded-[24px]">
       <CardHeader>
         <CardTitle>{mode === "login" ? "Login to Plaivra" : "Create your Plaivra account"}</CardTitle>
         <CardDescription>
@@ -159,7 +159,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
               </Button>
             </div>
           </div>
-          <label className="flex min-h-11 items-center gap-3 rounded-md border bg-primary/10 px-3 text-sm">
+          <label className="solid-row flex min-h-11 items-center gap-3 px-3 text-sm">
             <input
               type="checkbox"
               checked={remember}
@@ -175,7 +175,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         </form>
 
         {mode === "login" ? (
-          <div className="mt-4 rounded-md bg-muted/40 p-3">
+          <div className="solid-row mt-4 p-3">
             <Label htmlFor="reset-email" className="text-xs">
               Password reset
             </Label>

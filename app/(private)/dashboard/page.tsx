@@ -327,14 +327,14 @@ export default function DashboardPage() {
             />
           ) : null}
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
+          <div className="bento-grid">
             {!settings.hideCaloriesOnDashboard ? (
-              <MetricCard icon={Flame} label="Calories" value={`${totals.calories} kcal`} detail={hasTargets ? `${remaining.calories} kcal left` : "No target"} progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined} />
+              <MetricCard className="col-span-1 sm:col-span-3 xl:col-span-3" icon={Flame} label="Calories" value={`${totals.calories} kcal`} detail={hasTargets ? `${remaining.calories} kcal left` : "No target"} progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined} />
             ) : null}
-            <MetricCard icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={hasTargets ? `${remaining.protein_g}g left` : "Set target"} progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined} />
-            <MetricCard icon={Droplets} label="Water" value={waterTotalMl ? `${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
+            <MetricCard className="col-span-1 sm:col-span-3 xl:col-span-3" icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={hasTargets ? `${remaining.protein_g}g left` : "Set target"} progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined} />
+            <MetricCard className="col-span-1 sm:col-span-3 xl:col-span-3" icon={Droplets} label="Water" value={waterTotalMl ? `${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
             {!settings.hideBodyWeightOnDashboard ? (
-              <MetricCard icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} />
+              <MetricCard className="col-span-1 sm:col-span-3 xl:col-span-3" icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} />
             ) : null}
           </div>
 
@@ -438,7 +438,7 @@ export default function DashboardPage() {
                       .find((g) => g.type === currentMealType)
                       ?.items.filter((item) => item.status !== "done" && !skippedIds.has(item.id))
                       .map((item) => (
-                        <div key={item.id} className="flex items-start justify-between gap-3 rounded-md border border-border/70 bg-card p-3 shadow-sm">
+                        <div key={item.id} className="solid-row flex items-start justify-between gap-3 p-3">
                           <div className="min-w-0">
                             <p className="font-medium text-foreground">{item.food_name}</p>
                             <p className="text-xs text-muted-foreground">
@@ -476,8 +476,8 @@ export default function DashboardPage() {
             </Card>
           ) : null}
 
-          <div className="rounded-md border border-border/70 bg-card p-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-normal text-muted-foreground">Quick links</p>
+          <div className="glass-card p-4 sm:p-5">
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Quick links</p>
             <div className="flex flex-wrap gap-2">
               {visibleShortcuts.map((shortcut) => {
                 const Icon = shortcut.icon;

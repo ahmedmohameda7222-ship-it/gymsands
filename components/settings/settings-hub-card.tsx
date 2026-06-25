@@ -16,7 +16,7 @@ export function SettingsHubCard({ icon: Icon, title, description, href }: Settin
   return (
     <Link
       href={href}
-      className="group flex min-h-[72px] items-center gap-4 rounded-2xl border border-border/70 bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/45"
+      className="solid-row group flex min-h-[72px] items-center gap-4 p-4 transition-colors hover:border-primary/40 hover:bg-muted/45"
     >
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
         <Icon className="h-5 w-5" />

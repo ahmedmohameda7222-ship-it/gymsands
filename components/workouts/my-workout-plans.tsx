@@ -202,7 +202,7 @@ export function MyWorkoutPlans() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="glass-card flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Workout Plans</h2>
         </div>
@@ -234,7 +234,7 @@ export function MyWorkoutPlans() {
 
           {/* Today's Workout Card - prominent on mobile */}
           {todayDay ? (
-            <Card className="overflow-hidden border-primary/20 shadow-luxe lg:hidden">
+            <Card className="solid-tracking-card overflow-hidden border-primary/20 shadow-luxe lg:hidden">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2">
                   <Badge>Today</Badge>
@@ -270,7 +270,7 @@ export function MyWorkoutPlans() {
             const sourceLabel = sourceBadge(plan);
             const meta = plan as PlanMeta;
             return (
-              <Card key={plan.id} className="overflow-hidden border-border/70">
+              <Card key={plan.id} className="glass-card overflow-hidden">
                 <CardContent className="space-y-4 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -318,11 +318,11 @@ export function MyWorkoutPlans() {
       ) : null}
 
       {!isLoading && !loadError && archivedPlans.length ? (
-        <Card>
+        <Card className="glass-card-strong">
           <CardHeader><CardTitle>Archived plans</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {archivedPlans.map((plan) => (
-              <div key={plan.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm">
+              <div key={plan.id} className="solid-row flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
                 <div>
                   <p className="font-semibold">{plan.name}</p>
                   <p className="text-muted-foreground">{plan.archived_at ? new Date(plan.archived_at).toLocaleDateString() : "Archived"}</p>
@@ -353,7 +353,7 @@ function planDurationLabel(plan: UserWorkoutPlan) {
 }
 
 function PlanFact({ label, value, icon: Icon }: { label: string; value: string; icon: typeof CalendarDays }) {
-  return <div className="rounded-xl bg-muted/40 p-3"><Icon className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-lg font-semibold text-foreground">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div>;
+  return <div className="glass-chip p-3"><Icon className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-lg font-semibold text-foreground">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div>;
 }
 
 function PlanActions({ plan, isDefault, busyPlanId, onDefault, onDuplicate, onArchive, onDelete, onEdit }: { plan: UserWorkoutPlan; isDefault: boolean; busyPlanId: string | null; onDefault: (plan: UserWorkoutPlan) => void; onDuplicate: (plan: UserWorkoutPlan) => void; onArchive: (plan: UserWorkoutPlan) => void; onDelete: (plan: UserWorkoutPlan) => void; onEdit: (plan: UserWorkoutPlan) => void }) {
@@ -362,7 +362,7 @@ function PlanActions({ plan, isDefault, busyPlanId, onDefault, onDuplicate, onAr
       <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-xl border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${plan.name}`}>
         <MoreHorizontal className="h-4 w-4" />
       </summary>
-      <div className="absolute right-0 z-20 mt-2 grid w-64 gap-1 rounded-xl border bg-card p-2 shadow-luxe">
+      <div className="solid-tracking-card absolute right-0 z-20 mt-2 grid w-64 gap-1 p-2">
         <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={() => onDefault(plan)} disabled={isDefault || busyPlanId === plan.id}>
           <Star className="h-4 w-4" /> {isDefault ? "Default plan" : "Set as default"}
         </Button>

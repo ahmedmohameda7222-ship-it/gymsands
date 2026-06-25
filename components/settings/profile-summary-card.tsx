@@ -44,7 +44,7 @@ export function ProfileSummaryCard({ onboarding }: ProfileSummaryCardProps) {
 
   if (isLoading) {
     return (
-      <Card className="border-border/70">
+      <Card className="glass-card">
         <CardContent className="p-5">
           <div className="flex items-center gap-4">
             <div className="h-16 w-16 shrink-0 animate-pulse rounded-3xl bg-muted" />
@@ -59,7 +59,7 @@ export function ProfileSummaryCard({ onboarding }: ProfileSummaryCardProps) {
   }
 
   return (
-    <Card className="overflow-hidden border-border/70 bg-card">
+    <Card className="glass-card-strong overflow-hidden">
       <CardContent className="p-5">
         <div className="flex items-center gap-4">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-primary/10 text-xl font-semibold text-primary">

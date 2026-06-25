@@ -279,7 +279,7 @@ export default function CaloriesPage() {
           <select
             value={activeTab}
             onChange={(e) => setActiveTab(e.target.value)}
-            className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="glass-card-strong h-11 w-full rounded-[14px] px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Select tab"
           >
             <option value="today">Today — Food log & summary</option>
@@ -289,7 +289,7 @@ export default function CaloriesPage() {
           </select>
         </div>
 
-        <TabsList className="hidden sm:inline-flex w-full justify-start overflow-x-auto sm:w-auto">
+        <TabsList className="glass-shell hidden w-full justify-start overflow-x-auto rounded-2xl border-0 p-1 sm:inline-flex sm:w-auto">
           <TabsTrigger value="today">Today</TabsTrigger>
           <TabsTrigger value="week">Week</TabsTrigger>
           <TabsTrigger value="targets">Targets</TabsTrigger>
@@ -324,7 +324,7 @@ export default function CaloriesPage() {
 
             <WaterMiniSummary waterTotal={waterTotal} waterGoal={displayTargets.water_ml} onAddWater={addWater} />
 
-            <details className="rounded-lg border border-border/70 bg-card">
+            <details className="glass-card-strong">
               <summary className="flex cursor-pointer items-center justify-between p-4 text-sm font-semibold">
                 <span>More tools</span>
                 <span className="text-xs text-muted-foreground">Tap to expand</span>
@@ -405,7 +405,7 @@ export default function CaloriesPage() {
         </TabsContent>
 
         <TabsContent value="targets" className="space-y-4">
-          <Card id="daily-targets" className="scroll-mt-24">
+          <Card id="daily-targets" className="solid-tracking-card scroll-mt-24">
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
               <div>
                 <CardTitle>Daily target</CardTitle>
@@ -421,7 +421,7 @@ export default function CaloriesPage() {
             <CardContent>
               {showTargetEditor || !hasTargets ? (
                 <div className="grid gap-3 md:grid-cols-6">
-                  <div className="rounded-md border border-border/70 bg-card p-3 md:col-span-6">
+                  <div className="solid-row p-3 md:col-span-6">
                     <p className="font-semibold">Goal-based target setup</p>
                     <div className="mt-3 grid gap-3 md:grid-cols-6">
                       <TargetField label="Age" value={wizard.age} onChange={(age) => setWizard((current) => ({ ...current, age }))} />

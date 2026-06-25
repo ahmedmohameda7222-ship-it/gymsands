@@ -57,7 +57,7 @@ export function WorkoutCalendar({
   }
 
   return (
-    <Card>
+    <Card className="glass-card">
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
         <div>
           <CardTitle className="flex items-center gap-2">
@@ -94,7 +94,7 @@ export function WorkoutCalendar({
                 type="button"
                 onClick={() => planIndex >= 0 && onSelectDay(planIndex)}
                 className={cn(
-                  "min-h-36 rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary/45 hover:bg-muted/40",
+                  "min-h-36 rounded-2xl border bg-white/35 p-3 text-left transition-colors hover:border-primary/45 hover:bg-white/55 dark:bg-white/5 dark:hover:bg-white/10",
                   isToday ? "border-primary ring-2 ring-primary/10" : "border-border",
                   isActive ? "bg-primary/5" : "",
                   status === "completed" ? "border-success/40 bg-success/10 hover:bg-success/10" : "",

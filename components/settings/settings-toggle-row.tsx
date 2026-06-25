@@ -27,7 +27,7 @@ export function SettingsToggleRow({ label, description, defaultOn = false, onCha
     <button
       type="button"
       onClick={toggle}
-      className="flex min-h-[56px] w-full items-center justify-between gap-3 rounded-2xl border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/45"
+      className="solid-row flex min-h-[56px] w-full items-center justify-between gap-3 p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/45"
     >
       <span className="min-w-0">
         <span className="block font-semibold text-foreground">{label}</span>

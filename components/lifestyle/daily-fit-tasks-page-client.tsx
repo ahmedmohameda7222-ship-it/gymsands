@@ -107,7 +107,7 @@ export function DailyFitTasksPageClient() {
   const progress = items.length ? Math.round((doneCount / items.length) * 100) : 0;
 
   return (
-    <Card className="border-border/70 shadow-luxe">
+    <Card className="solid-tracking-card shadow-luxe">
       <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
         <CardTitle>Daily Fit Tasks</CardTitle>
         <p className="text-sm text-muted-foreground">Today's fitness to-do list for movement, meals, recovery, and consistency.</p>
@@ -137,7 +137,7 @@ export function DailyFitTasksPageClient() {
         {isLoading ? <p className="text-sm text-muted-foreground">Loading today's tasks...</p> : null}
 
         {loadError ? (
-          <div className="rounded-md border border-destructive bg-destructive/10 p-4 text-sm text-destructive">
+          <div className="solid-row border-destructive bg-destructive/10 p-4 text-sm text-destructive">
             <p className="font-semibold">Daily Fit Tasks could not load</p>
             <p className="mt-1">{loadError}</p>
             <Button type="button" variant="outline" size="sm" className="mt-3 h-10" onClick={loadTasks}>
@@ -162,7 +162,7 @@ export function DailyFitTasksPageClient() {
         {!loadError ? (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {items.map((item) => (
-              <div key={item.id} className="rounded-md border border-border/70 bg-card p-3">
+              <div key={item.id} className="solid-row p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-semibold text-sm sm:text-base">{item.title}</p>

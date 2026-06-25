@@ -63,7 +63,7 @@ export function FoodLogList({
                 {items.map((log) => (
                   <div
                     key={log.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-card p-3 transition-colors hover:border-primary/40 hover:bg-muted/20"
+                    className="solid-row flex items-center justify-between gap-3 p-3 transition-colors hover:border-primary/40 hover:bg-muted/20"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -89,7 +89,7 @@ export function FoodLogList({
             );
           })
         ) : (
-          <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed bg-card/80 p-5">
+          <div className="solid-row flex flex-col items-start gap-3 border-dashed p-5">
             <div>
               <p className="text-sm font-semibold text-foreground">No food logged yet</p>
               <p className="mt-1 text-sm text-muted-foreground">Log your first meal to start tracking today.</p>

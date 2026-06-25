@@ -30,7 +30,7 @@ export function EmptyState({
     : null;
 
   return (
-    <Card className={cn("border-dashed bg-card/80", className)}>
+    <Card className={cn("glass-card-strong border-dashed", className)}>
       <CardContent className="flex flex-col items-start gap-4 p-5 sm:p-6">
         <div>
           <p className="text-lg font-semibold text-foreground">{title}</p>
@@ -95,7 +95,7 @@ export function ErrorState({
 
 export function CardSkeleton({ rows = 3, className }: { rows?: number; className?: string }) {
   return (
-    <Card className={className} aria-busy="true" aria-label="Loading content">
+    <Card className={cn("glass-card", className)} aria-busy="true" aria-label="Loading content">
       <CardHeader>
         <SkeletonLine className="h-5 w-1/2" />
       </CardHeader>

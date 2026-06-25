@@ -345,7 +345,7 @@ export function WorkoutBrowser() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3">
+      <div className="glass-card flex flex-col gap-3 p-4 sm:p-5">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -372,7 +372,7 @@ export function WorkoutBrowser() {
       </div>
 
       {showCustomForm ? (
-        <Card>
+        <Card className="solid-tracking-card">
           <CardHeader><CardTitle>Create custom exercise</CardTitle></CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
             <Field label="Name" value={customDraft.name} onChange={(value) => setCustomDraft((current) => ({ ...current, name: value }))} placeholder="Example: Cable lateral raise" />
@@ -383,7 +383,7 @@ export function WorkoutBrowser() {
             <Field label="Video URL" value={customDraft.videoUrl} onChange={(value) => setCustomDraft((current) => ({ ...current, videoUrl: value }))} placeholder="https://..." />
             <div className="space-y-1 md:col-span-2">
               <Label>Instructions</Label>
-              <textarea value={customDraft.instructions} onChange={(event) => setCustomDraft((current) => ({ ...current, instructions: event.target.value }))} className="min-h-24 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder="Setup, execution, tempo, and safety notes." />
+              <textarea value={customDraft.instructions} onChange={(event) => setCustomDraft((current) => ({ ...current, instructions: event.target.value }))} className="min-h-24 w-full rounded-[14px] border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder="Setup, execution, tempo, and safety notes." />
             </div>
             <div className="flex gap-2 md:col-span-2">
               <Button onClick={createCustomExercise}>Save custom exercise</Button>
@@ -393,7 +393,7 @@ export function WorkoutBrowser() {
         </Card>
       ) : null}
 
-      <div className="hidden rounded-md border border-border/70 bg-card p-4 lg:block">
+      <div className="glass-card hidden p-4 lg:block">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="h-5 w-5 text-primary" />
@@ -408,7 +408,7 @@ export function WorkoutBrowser() {
       </div>
 
       <Dialog open={showFiltersDialog} onOpenChange={setShowFiltersDialog}>
-        <DialogContent className="max-h-[85dvh] overflow-y-auto">
+        <DialogContent className="glass-shell max-h-[85dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Filters</DialogTitle>
             <DialogDescription>{filteredWorkouts.length} exercises match your selection</DialogDescription>
@@ -422,7 +422,7 @@ export function WorkoutBrowser() {
       </Dialog>
 
       {profile?.role === "admin" ? (
-        <Card>
+        <Card className="glass-card-strong">
           <CardHeader>
             <CardTitle className="text-base">Exercise library quality</CardTitle>
             <p className="text-sm text-muted-foreground">Quality checks flag missing guidance and duplicates for review. Nothing is deleted automatically.</p>
@@ -458,7 +458,7 @@ export function WorkoutBrowser() {
           const favorite = favoriteIds.includes(workout.id);
           const quality = exerciseQuality(workout, duplicateExerciseNames.has(normalizeText(workout.name)));
           return (
-            <Card key={workout.id} className="border-border/70 shadow-luxe">
+            <Card key={workout.id} className="glass-card shadow-luxe">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -511,7 +511,7 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
 
 function QualityMetric({ label, value, detail }: { label: string; value: number; detail: string }) {
   return (
-    <div className="rounded-md border border-border/70 p-3">
+    <div className="solid-row p-3">
       <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p>
       <p className="mt-1 text-xl font-bold">{value}</p>
       <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
@@ -555,7 +555,7 @@ function summarizeExerciseQuality(workouts: Workout[], duplicates: Set<string>) 
 
 function FilterGroup({ title, values, selected, open, onOpenChange, onToggle }: { title: string; values: string[]; selected: string[]; open: boolean; onOpenChange: () => void; onToggle: (value: string) => void; }) {
   return (
-    <div className="rounded-md bg-muted/40 p-3">
+    <div className="solid-row p-3">
       <button type="button" onClick={onOpenChange} aria-expanded={open} className="flex min-h-10 w-full items-center justify-between gap-2 rounded-md px-1 text-left">
         <span className="min-w-0 text-sm font-semibold text-foreground">{title}</span>
         <span className="flex items-center gap-2">{selected.length ? <Badge variant="outline">{selected.length}</Badge> : null}<ChevronDown className={cn("h-4 w-4 text-muted-foreground transition", open && "rotate-180")} /></span>
@@ -563,7 +563,7 @@ function FilterGroup({ title, values, selected, open, onOpenChange, onToggle }: 
       {open ? (
         <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto pr-1">
           {values.map((value) => (
-            <label key={value} className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-sm transition hover:bg-card">
+            <label key={value} className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 text-sm transition hover:bg-card">
               <input type="checkbox" checked={selected.includes(value)} onChange={() => onToggle(value)} className="h-4 w-4 rounded border-border text-primary" />
               <span className="min-w-0 truncate">{value}</span>
             </label>

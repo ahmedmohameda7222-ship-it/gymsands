@@ -114,14 +114,14 @@ export function WellnessDashboard() {
         <Metric title="Readiness" value={readiness.value === null ? "Not enough data" : `${readiness.value}%`} detail={readiness.detail} />
         <Metric title="Notifications" value={notificationState} detail="Browser-only reminders, no native push logic" />
       </div>
-      <Card className="border-border/70 shadow-luxe">
+      <Card className="glass-card shadow-luxe">
         <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
           <CardTitle className="text-sm font-medium">Recovery-aware suggestions</CardTitle>
         </CardHeader>
         <CardContent className="p-4 sm:p-5">
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {recoverySuggestions.map((item) => (
-              <div key={item.title} className="rounded-md border border-border/70 bg-card p-3">
+              <div key={item.title} className="solid-row p-3">
                 <p className="text-sm font-semibold">{item.title}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{item.detail}</p>
               </div>
@@ -129,18 +129,18 @@ export function WellnessDashboard() {
           </div>
         </CardContent>
       </Card>
-      <Card className="border-border/70 shadow-luxe">
+      <Card className="glass-card shadow-luxe">
         <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
           <CardTitle className="text-sm font-medium">Habit streak rescue</CardTitle>
         </CardHeader>
         <CardContent className="p-4 sm:p-5">
-          <div className="rounded-md border border-border/70 bg-card p-3">
+          <div className="solid-row p-3">
             <p className="text-sm font-semibold">{habitRescue.title}</p>
             <p className="mt-1 text-sm text-muted-foreground">{habitRescue.detail}</p>
           </div>
         </CardContent>
       </Card>
-      <Card className="border-border/70 shadow-luxe">
+      <Card className="glass-card-strong shadow-luxe">
         <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
           <CardTitle className="flex items-center gap-2 text-sm font-medium">
             <ShieldCheck className="h-4 w-4 text-primary" />
@@ -150,7 +150,7 @@ export function WellnessDashboard() {
         <CardContent className="p-4 sm:p-5">
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {checklist.map((item) => (
-              <div key={item.label} className="rounded-md border border-border/70 bg-card p-3">
+              <div key={item.label} className="solid-row p-3">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-semibold">{item.label}</p>
                   <Badge variant={item.complete ? "success" : "outline"} className="shrink-0 text-xs">{item.complete ? "Done" : "Missing"}</Badge>
@@ -161,7 +161,7 @@ export function WellnessDashboard() {
           </div>
         </CardContent>
       </Card>
-      <Card className="border-border/70 shadow-luxe">
+      <Card className="solid-tracking-card shadow-luxe">
         <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
           <CardTitle className="flex items-center gap-2 text-sm font-medium">
             <Bell className="h-4 w-4 text-primary" />
@@ -176,7 +176,7 @@ export function WellnessDashboard() {
           )}
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
             {reminders.map((reminder, index) => (
-              <div key={reminder.type} className="rounded-md border border-border/70 bg-card p-3">
+              <div key={reminder.type} className="solid-row p-3">
                 <label className="flex items-center justify-between gap-2 text-sm font-semibold">
                   <span>{reminder.label}</span>
                   <input
@@ -566,7 +566,7 @@ export function SupplementsTracker() {
 
       <div className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {adherence.map((item) => (
-          <div key={item.name} className="rounded-md border border-border/70 bg-card p-3">
+          <div key={item.name} className="solid-row p-3">
             <p className="text-sm font-semibold">{item.name}</p>
             <p className="text-sm text-muted-foreground">
               Taken {item.taken}/{item.total} logged days | {item.adherence}% adherence
@@ -638,7 +638,7 @@ export function SleepRecoveryTracker() {
       </div>
 
       {latest ? (
-        <div className="rounded-md border border-border/70 bg-card p-3">
+        <div className="solid-row p-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold">Latest log</p>
             <p className="text-xs text-muted-foreground">{latest.log_date}</p>
@@ -780,11 +780,11 @@ export function PersonalRecordsTracker() {
 
       <div className="space-y-4">
         {groupedRecords.map((group) => (
-          <div key={group.name} className="rounded-xl border border-border/70 bg-card p-4 shadow-soft">
+          <div key={group.name} className="solid-tracking-card p-4 shadow-soft">
             <p className="text-sm font-semibold text-foreground">{group.name}</p>
             <div className="mt-2 space-y-2">
               {group.records.map((item) => (
-                <div key={item.id} className="flex items-center justify-between rounded-lg border border-border/70 bg-card p-3">
+                <div key={item.id} className="solid-row flex items-center justify-between p-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold">{item.record_type}</span>
@@ -827,7 +827,7 @@ export function PersonalRecordsTracker() {
 
 function Metric({ title, value, detail }: { title: string; value: string; detail: string }) {
   return (
-    <Card className="border-border/70 shadow-luxe">
+    <Card className="glass-card shadow-luxe">
       <CardContent className="p-4 sm:p-5">
         <p className="text-sm text-muted-foreground">{title}</p>
         <p className="mt-2 text-2xl font-bold">{value}</p>
@@ -839,7 +839,7 @@ function Metric({ title, value, detail }: { title: string; value: string; detail
 
 function TrackerShell({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
-    <Card className="border-border/70 shadow-luxe">
+    <Card className="solid-tracking-card shadow-luxe">
       <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
         <CardTitle>{title}</CardTitle>
         <p className="text-sm text-muted-foreground">{description}</p>
@@ -855,7 +855,7 @@ function ItemGrid({ children }: { children: React.ReactNode }) {
 
 function ActionCard({ title, detail, done, onToggle, onEdit, onDelete }: { title: string; detail: string; done?: boolean; onToggle?: () => void; onEdit: () => void; onDelete: () => void }) {
   return (
-    <div className="rounded-md border border-border/70 bg-card p-3">
+    <div className="solid-row p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-semibold text-foreground text-sm sm:text-base">{title}</p>
@@ -873,10 +873,10 @@ function ActionCard({ title, detail, done, onToggle, onEdit, onDelete }: { title
           </Button>
         ) : null}
         <details className="relative ml-auto">
-          <summary className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${title}`}>
+          <summary className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-xl border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${title}`}>
             <MoreHorizontal className="h-4 w-4" />
           </summary>
-          <div className="absolute right-0 z-20 mt-2 grid w-36 gap-1 rounded-md border bg-card p-2 shadow-luxe">
+          <div className="solid-tracking-card absolute right-0 z-20 mt-2 grid w-36 gap-1 p-2">
             <Button size="sm" variant="ghost" className="justify-start h-10" onClick={onEdit}>
               <Pencil className="h-4 w-4" />
               Edit
@@ -908,7 +908,7 @@ function SelectField({ label, value, values, onChange }: { label: string; value:
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="flex h-11 w-full rounded-md border bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex h-11 w-full rounded-[14px] border bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <option value="">Choose</option>
         {values.map((item) => <option key={item} value={item}>{item}</option>)}

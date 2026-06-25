@@ -110,7 +110,7 @@ export function ProgressEntryModal({ onSaved, buttonClassName }: { onSaved?: (en
           Add progress entry
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="solid-tracking-card">
         <DialogHeader>
           <DialogTitle>Add progress entry</DialogTitle>
           <DialogDescription>Track body weight and real body measurements. Progress photos are managed privately on the Progress page.</DialogDescription>
