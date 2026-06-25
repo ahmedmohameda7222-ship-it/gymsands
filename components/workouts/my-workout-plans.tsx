@@ -227,7 +227,9 @@ export function MyWorkoutPlans() {
               <div className="bg-primary p-5 text-primary-foreground sm:p-6">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">Active plan</Badge>
-                  {isChatGptPlan(activePlan) ? <Badge variant="outline" className="border-primary-foreground/30 text-primary-foreground">Imported</Badge> : <Badge variant="outline" className="border-primary-foreground/30 text-primary-foreground">{sourceBadge(activePlan)}</Badge>}
+                  <Badge variant="outline" className="border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground">
+                    {sourceBadge(activePlan)}
+                  </Badge>
                 </div>
                 <h2 className="mt-4 text-2xl font-semibold tracking-tight">{activePlan.name}</h2>
                 <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
