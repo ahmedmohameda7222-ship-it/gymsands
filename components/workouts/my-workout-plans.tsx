@@ -51,7 +51,6 @@ export function MyWorkoutPlans() {
   const [plans, setPlans] = useState<UserWorkoutPlan[]>([]);
   const [activePlan, setActivePlan] = useState<UserWorkoutPlan | null>(null);
   const [activity, setActivity] = useState<WorkoutSession[]>([]);
-  const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
@@ -82,7 +81,6 @@ export function MyWorkoutPlans() {
       setPlans(nextPlans);
       setActivePlan(nextActivePlan);
       setActivity(nextActivity);
-      setActiveDayIndex(0);
     } catch (error) {
       logRecoverableError("workout-plans.load", error);
       const message = userSafeError(error, "Workout plans could not be loaded. Retry without losing any saved plan data.");
@@ -121,6 +119,7 @@ export function MyWorkoutPlans() {
   const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
   const todayIndex = activeCalendarDays.findIndex((day) => day.weekday === today && day.exercises.length > 0);
   const todayDay = todayIndex >= 0 ? activeCalendarDays[todayIndex] : null;
+  const activeCalendarDayIndex = todayIndex >= 0 ? todayIndex : 0;
 
   function startToday() {
     if (!todayDay) {
@@ -128,6 +127,12 @@ export function MyWorkoutPlans() {
       return;
     }
     if (todayDay.id) router.push(`/workouts/session/day/${todayDay.id}`);
+  }
+
+  function openCalendarDay(index: number) {
+    const day = activeCalendarDays[index];
+    if (!day?.id) return;
+    router.push(`/my-workout/day/${day.id}`);
   }
 
   async function duplicatePlan(plan: UserWorkoutPlan) {
@@ -195,8 +200,6 @@ export function MyWorkoutPlans() {
     }
   }
 
-  const activeExerciseCount = activePlan ? activePlan.days.reduce((sum, day) => sum + day.exercises.length, 0) : 0;
-
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -221,36 +224,13 @@ export function MyWorkoutPlans() {
 
       {!isLoading && !loadError && activePlan ? (
         <div className="space-y-4">
-          {/* Active Plan Summary */}
-          <Card className="overflow-hidden border-primary/20">
-            <CardContent className="grid gap-5 p-0 lg:grid-cols-[0.9fr_1.1fr]">
-              <div className="bg-primary p-5 text-primary-foreground sm:p-6">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">Active plan</Badge>
-                  <Badge variant="outline" className="border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground">
-                    {sourceBadge(activePlan)}
-                  </Badge>
-                </div>
-                <h2 className="mt-4 text-2xl font-semibold tracking-tight">{activePlan.name}</h2>
-                <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
-                  <MiniStat label="Days" value={String(activePlan.days.length)} />
-                  <MiniStat label="Exercises" value={String(activeExerciseCount)} />
-                  <MiniStat label="Source" value={sourceBadge(activePlan)} />
-                </div>
-                <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                  <Button type="button" variant="secondary" onClick={startToday} className="h-12 text-base">
-                    <Play className="h-5 w-5" /> Start today
-                  </Button>
-                  <Button asChild variant="outline" className="border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10">
-                    <Link href={`/my-workout/plans/${activePlan.id}`}>Open active plan</Link>
-                  </Button>
-                </div>
-              </div>
-              <div className="p-4 sm:p-5">
-                <WorkoutCalendar days={activeCalendarDays} activity={activity} activeDayIndex={activeDayIndex} onSelectDay={setActiveDayIndex} onStartToday={startToday} />
-              </div>
-            </CardContent>
-          </Card>
+          <WorkoutCalendar
+            days={activeCalendarDays}
+            activity={activity}
+            activeDayIndex={activeCalendarDayIndex}
+            onSelectDay={openCalendarDay}
+            onStartToday={startToday}
+          />
 
           {/* Today's Workout Card - prominent on mobile */}
           {todayDay ? (
@@ -370,10 +350,6 @@ function planDurationLabel(plan: UserWorkoutPlan) {
   const weeks = meta.program_duration_weeks ?? meta.duration_weeks;
   if (weeks) return `${weeks}w`;
   return `${plan.days.length}d`;
-}
-
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl border border-primary-foreground/15 bg-primary-foreground/10 p-3"><p className="text-xs text-primary-foreground/70">{label}</p><p className="mt-1 truncate font-semibold">{value}</p></div>;
 }
 
 function PlanFact({ label, value, icon: Icon }: { label: string; value: string; icon: typeof CalendarDays }) {
