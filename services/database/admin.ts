@@ -30,7 +30,7 @@ export async function adminListUsers(): Promise<AdminUser[]> {
   if (!supabase) throw new Error("Database not connected");
   const { data, error } = await supabase!.from("profiles").select("id,email,full_name,role,created_at").order("created_at", { ascending: false });
   if (error) {
-    console.warn("FitLife Hub could not load admin users.", error.message);
+    console.warn("Plaivra could not load admin users.", error.message);
     return [];
   }
   return (data ?? []) as AdminUser[];

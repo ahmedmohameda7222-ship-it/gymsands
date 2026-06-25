@@ -7,7 +7,7 @@ import { UserSettingsProvider } from "@/lib/settings/user-settings-context";
 import { createThemeBootstrapScript } from "@/lib/themes";
 
 export const metadata: Metadata = {
-  title: "FitLife Hub",
+  title: "Plaivra",
   description: "Simple workout, meal, and progress tracking for real life."
 };
 

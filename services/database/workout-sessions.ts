@@ -204,7 +204,7 @@ export async function startWorkoutSession(userId: string, workout: Workout) {
     error = compatible.error;
   }
   if (error) {
-    console.warn("FitLife Hub could not start a Supabase workout session.", error.message);
+    console.warn("Plaivra could not start a Supabase workout session.", error.message);
     throw error;
   }
   return normalizeWorkoutSession(data as WorkoutSession);
@@ -234,7 +234,7 @@ export async function startWorkoutDaySession(userId: string, day: WorkoutPlanDay
     error = compatible.error;
   }
   if (error) {
-    console.warn("FitLife Hub could not start a workout day session.", error.message);
+    console.warn("Plaivra could not start a workout day session.", error.message);
     throw error;
   }
   return normalizeWorkoutSession(data as WorkoutSession);
@@ -253,7 +253,7 @@ export async function getOpenWorkoutDaySession(userId: string, planDayId: string
     .maybeSingle();
 
   if (error) {
-    console.warn("FitLife Hub could not load the open workout session.", error.message);
+    console.warn("Plaivra could not load the open workout session.", error.message);
     return null;
   }
 
@@ -275,7 +275,7 @@ export async function getWorkoutSessionLogs(sessionId: string) {
     .order("created_at", { ascending: true });
 
   if (error) {
-    console.warn("FitLife Hub could not load workout session logs.", error.message);
+    console.warn("Plaivra could not load workout session logs.", error.message);
     return [];
   }
 
@@ -290,7 +290,7 @@ export async function updateWorkoutSessionDuration(sessionId: string, durationMi
     .eq("id", sessionId)
     .eq("status", "started");
   if (error) {
-    console.warn("FitLife Hub could not update workout duration.", error.message);
+    console.warn("Plaivra could not update workout duration.", error.message);
   }
   return true;
 }
@@ -409,7 +409,7 @@ export async function completeWorkoutSession(sessionId: string, notes: string, d
     .update({ status: "completed", completed_at: new Date().toISOString(), notes, duration_minutes: durationMinutes })
     .eq("id", sessionId);
   if (error) {
-    console.warn("FitLife Hub could not complete this workout session.", error.message);
+    console.warn("Plaivra could not complete this workout session.", error.message);
     throw error;
   }
   return true;
@@ -492,7 +492,7 @@ export async function skipWorkoutDay(userId: string, day: SkipWorkoutDayInput, n
     error = compatible.error;
   }
   if (error) {
-    console.warn("FitLife Hub could not skip this workout day.", error.message);
+    console.warn("Plaivra could not skip this workout day.", error.message);
     throw error;
   }
   return normalizeWorkoutSession(data as WorkoutSession);
@@ -519,7 +519,7 @@ export async function getWorkoutHistory(userId: string) {
     error = compatible.error;
   }
   if (error) {
-    console.warn("FitLife Hub could not load workout history.", error.message);
+    console.warn("Plaivra could not load workout history.", error.message);
     return getScheduledWorkoutActivity(userId, 20);
   }
   const legacyHistory = ((data ?? []) as WorkoutSession[]).map(normalizeWorkoutSession);
@@ -539,7 +539,7 @@ export async function getWorkoutHistoryDetailed(userId: string, limit = 100) {
     .order("started_at", { ascending: false })
     .limit(limit);
   if (error) {
-    console.warn("FitLife Hub could not load workout history details.", error.message);
+    console.warn("Plaivra could not load workout history details.", error.message);
     return [];
   }
   return ((data ?? []) as WorkoutSessionSummary[])
@@ -572,7 +572,7 @@ export async function getWorkoutActivity(userId: string, limit = 180) {
   }
 
   if (error) {
-    console.warn("FitLife Hub could not load workout activity.", error.message);
+    console.warn("Plaivra could not load workout activity.", error.message);
     return getScheduledWorkoutActivity(userId, limit);
   }
 
@@ -596,7 +596,7 @@ export async function getScheduledWorkoutHistory(userId: string, limit = 100) {
     .limit(limit);
 
   if (error) {
-    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load workout history.", error.message);
+    if (!isMissingTemplateSchemaError(error)) console.warn("Plaivra could not load workout history.", error.message);
     return [];
   }
 
@@ -614,7 +614,7 @@ export async function getScheduledWorkoutActivity(userId: string, limit = 180) {
     .limit(limit);
 
   if (error) {
-    if (!isMissingTemplateSchemaError(error)) console.warn("FitLife Hub could not load workout activity.", error.message);
+    if (!isMissingTemplateSchemaError(error)) console.warn("Plaivra could not load workout activity.", error.message);
     return [];
   }
 

@@ -761,10 +761,10 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         return ok({ ok: false, deprecated: true, message: `${toolName} is not enabled in the ChatGPT-created-plan workflow.` });
 
       default:
-        return fail("unknown_tool", `Unknown FitLife MCP tool: ${toolName}`);
+        return fail("unknown_tool", `Unknown Plaivra MCP tool: ${toolName}`);
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "FitLife MCP tool failed.";
+    const message = error instanceof Error ? error.message : "Plaivra MCP tool failed.";
     if (message === "not_admin") return fail("not_admin", "Admin access is required.");
     return fail("tool_error", message);
   }

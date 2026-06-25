@@ -51,7 +51,7 @@ const emptyOptions: WorkoutFilterOptions = {
   secondaryMuscles: []
 };
 
-const filterStorageKey = "fitlife-hub-workout-browser-filters";
+const filterStorageKey = "plaivra-workout-browser-filters";
 const filterParamKeys: Record<FilterKey, string> = {
   muscleCategories: "muscle",
   primaryMuscles: "primary",

@@ -85,7 +85,7 @@ export default function ProgressPage() {
         settings.hideProgressPhotos
           ? Promise.resolve([] as ProgressPhoto[])
           : getProgressPhotos(user.id).catch((error) => {
-              console.warn("FitLife Hub could not load private progress photos.", error instanceof Error ? error.message : error);
+              console.warn("Plaivra could not load private progress photos.", error instanceof Error ? error.message : error);
               return [] as ProgressPhoto[];
             })
       ]);
@@ -167,7 +167,7 @@ export default function ProgressPage() {
       await updateProfile(profile.id, { targetWeightKg: numericGoalWeight });
       window.localStorage.removeItem(GOAL_WEIGHT_STORAGE_KEY);
       await refreshProfile();
-      toast({ title: "Goal weight saved", description: "The goal is synced to your FitLife profile." });
+      toast({ title: "Goal weight saved", description: "The goal is synced to your Plaivra profile." });
     } catch (error) {
       window.localStorage.setItem(GOAL_WEIGHT_STORAGE_KEY, String(numericGoalWeight));
       toast({

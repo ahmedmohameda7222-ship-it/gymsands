@@ -1,10 +1,10 @@
-# FitLife Hub implementation notes
+# Plaivra implementation notes
 
-This repository is the source of truth for the FitLife Hub responsive web app.
+This repository is the source of truth for the Plaivra responsive web app.
 
 ## Product boundary
 
-FitLife Hub does not generate workout or meal plans internally. Users create plans with ChatGPT or another external tool, then import/save them into FitLife Hub. FitLife Hub stores, schedules, edits, and tracks imported plans.
+Plaivra does not generate workout or meal plans internally. Users create plans with ChatGPT or another external tool, then import/save them into Plaivra. Plaivra stores, schedules, edits, and tracks imported plans.
 
 ## Current primary private routes
 
@@ -55,7 +55,7 @@ Use the canonical migration order in `README.md`. The previously colliding `014_
 
 ## Removed internal generator modules
 
-The old rule-based workout generator modules were removed because FitLife Hub no longer generates workout plans internally:
+The old rule-based workout generator modules were removed because Plaivra no longer generates workout plans internally:
 
 - `lib/workouts/generator.ts`
 - `lib/workouts/cardio-generator.ts`

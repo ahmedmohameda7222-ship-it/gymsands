@@ -38,7 +38,7 @@ export default function LandingPage() {
           <div className="container relative flex min-h-[88vh] items-center pb-16 pt-14">
             <div className="max-w-3xl">
               <p className="text-sm font-semibold uppercase tracking-wide text-primary">Luxury wellness dashboard</p>
-              <h1 className="mt-4 text-5xl font-bold tracking-normal sm:text-7xl">FitLife Hub</h1>
+              <h1 className="mt-4 text-5xl font-bold tracking-normal sm:text-7xl">Plaivra</h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-[#f4efe6]/85">
                 A calm premium space for ChatGPT-exported workout plans, exercise guidance, meal planning, calorie tracking, recovery, habits, supplements, and personal records.
               </p>

@@ -25,7 +25,7 @@ export async function getPersonalRecords(userId: string, limit = 100) {
     .order("record_date", { ascending: false })
     .limit(limit);
   if (error) {
-    console.warn("FitLife Hub could not load personal records.", error.message);
+    console.warn("Plaivra could not load personal records.", error.message);
     return [];
   }
   return (data ?? []) as PersonalRecord[];
@@ -207,7 +207,7 @@ export async function getProgressEntries(userId: string) {
     .eq("user_id", userId)
     .order("entry_date", { ascending: true });
   if (error) {
-    console.warn("FitLife Hub could not load progress entries.", error.message);
+    console.warn("Plaivra could not load progress entries.", error.message);
     return [];
   }
 
@@ -221,7 +221,7 @@ export async function getProgressEntries(userId: string) {
     .order("measured_at", { ascending: true });
 
   if (measurementError) {
-    console.warn("FitLife Hub could not load body measurements.", measurementError.message);
+    console.warn("Plaivra could not load body measurements.", measurementError.message);
     return entries;
   }
 

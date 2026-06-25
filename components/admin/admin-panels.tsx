@@ -35,7 +35,7 @@ function errorMessage(error: unknown, fallback: string) {
 export function AdminUsersPanel() {
   const { toast } = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [defaultMessage, setDefaultMessage] = useState("Welcome back to FitLife Hub. Ready for today?");
+  const [defaultMessage, setDefaultMessage] = useState("Welcome back to Plaivra. Ready for today?");
   const [defaultFrequency, setDefaultFrequency] = useState<WelcomeFrequency>("once_per_day");
   const [userMessages, setUserMessages] = useState<Record<string, UserMessageDraft>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -87,7 +87,7 @@ export function AdminUsersPanel() {
     try {
       await adminUpdateUserRole(id, role);
       setUsers((current) => current.map((user) => (user.id === id ? { ...user, role } : user)));
-      toast({ title: "User role updated", description: "Passwords are never visible in FitLife Hub admin." });
+      toast({ title: "User role updated", description: "Passwords are never visible in Plaivra admin." });
     } catch (error) {
       toast({ title: "Could not update role", description: errorMessage(error, "The user role was not changed.") });
     }
@@ -149,7 +149,7 @@ export function AdminUsersPanel() {
         </CardHeader>
         <CardContent>
           <form className="space-y-3" onSubmit={saveDefault}>
-            <TextField label="Message" value={defaultMessage} onChange={setDefaultMessage} placeholder="Welcome back to FitLife Hub. Ready for today?" />
+            <TextField label="Message" value={defaultMessage} onChange={setDefaultMessage} placeholder="Welcome back to Plaivra. Ready for today?" />
             <Select value={defaultFrequency} onValueChange={(value) => setDefaultFrequency(value as WelcomeFrequency)}>
               <SelectTrigger>
                 <SelectValue />
@@ -173,7 +173,7 @@ export function AdminUsersPanel() {
         {users.map((user) => (
           <Card key={user.id}>
             <CardContent className="pt-5">
-              <p className="font-semibold">{user.full_name || "FitLife Hub member"}</p>
+              <p className="font-semibold">{user.full_name || "Plaivra member"}</p>
               <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
               <div className="mt-4">
                 <Label>Role</Label>

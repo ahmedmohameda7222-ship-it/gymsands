@@ -98,7 +98,7 @@ export function WorkoutPlanBuilder({
   const { user } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-  const [planName, setPlanName] = useState("My FitLife plan");
+  const [planName, setPlanName] = useState("My Plaivra plan");
   const [days, setDays] = useState<WeeklyPlanDay[]>(defaultDays);
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [filterOptions, setFilterOptions] = useState<WorkoutFilterOptions>(emptyOptions);

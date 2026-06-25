@@ -24,7 +24,7 @@ import { env } from "@/lib/env";
 
 const chatGptUrl = "https://chatgpt.com";
 const appDescription =
-  "FitLife imports approved workout and meal plans from ChatGPT into the user's FitLife Hub account.";
+  "Plaivra imports approved workout and meal plans from ChatGPT into the user's Plaivra account.";
 
 type ChatGptConnection = {
   id: string;
@@ -88,13 +88,13 @@ export function ChatGptSetupCard() {
           <Bot className="h-5 w-5 text-primary" /> Set up ChatGPT import
         </CardTitle>
         <CardDescription>
-          Create the FitLife app inside ChatGPT, then connect it with your FitLife connection code.
+          Create the Plaivra app inside ChatGPT, then connect it with your Plaivra connection code.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {!hasMcpServerUrl ? (
           <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-            ChatGPT import is not ready for this deployment. The FitLife connection URL is missing.
+            ChatGPT import is not ready for this deployment. The Plaivra connection URL is missing.
           </p>
         ) : null}
         <Button asChild className="w-full sm:w-auto">
@@ -135,7 +135,7 @@ export function ConnectionStatusCard() {
 
   async function revokeConnectionToken() {
     if (!session?.access_token) {
-      toast({ title: "Sign in required", description: "Sign in to FitLife before revoking a ChatGPT connection." });
+      toast({ title: "Sign in required", description: "Sign in to Plaivra before revoking a ChatGPT connection." });
       return;
     }
 
@@ -164,7 +164,7 @@ export function ConnectionStatusCard() {
             <CardTitle className="flex items-center gap-2 text-base">
               <Link2 className="h-5 w-5 text-primary" /> Connection status
             </CardTitle>
-            <CardDescription>Recent ChatGPT connections for this FitLife account.</CardDescription>
+            <CardDescription>Recent ChatGPT connections for this Plaivra account.</CardDescription>
           </div>
           <Button type="button" variant="outline" size="sm" onClick={() => void loadConnections()} className="w-full sm:w-auto">
             <RefreshCcw className="h-4 w-4" /> Refresh
@@ -237,10 +237,10 @@ export function ChatGptSetupFlow() {
 
     const description =
       type === "url"
-        ? "FitLife connection URL copied."
+        ? "Plaivra connection URL copied."
         : type === "description"
-          ? "FitLife app description copied."
-          : "FitLife connection code copied.";
+          ? "Plaivra app description copied."
+          : "Plaivra connection code copied.";
     toast({ title: "Copied", description });
   }
 
@@ -248,7 +248,7 @@ export function ChatGptSetupFlow() {
     if (!hasMcpServerUrl) {
       toast({
         title: "Connection URL missing",
-        description: "ChatGPT import is not ready for this deployment. The FitLife connection URL is missing."
+        description: "ChatGPT import is not ready for this deployment. The Plaivra connection URL is missing."
       });
       return;
     }
@@ -257,7 +257,7 @@ export function ChatGptSetupFlow() {
 
   async function generateConnectionToken() {
     if (!session?.access_token) {
-      toast({ title: "Sign in required", description: "Sign in to FitLife before creating a ChatGPT connection code." });
+      toast({ title: "Sign in required", description: "Sign in to Plaivra before creating a ChatGPT connection code." });
       return;
     }
 
@@ -276,7 +276,7 @@ export function ChatGptSetupFlow() {
 
     setConnectionToken(data.token ?? "");
     await loadConnections();
-    toast({ title: "Connection code created", description: "Copy it now. FitLife shows this code only once." });
+    toast({ title: "Connection code created", description: "Copy it now. Plaivra shows this code only once." });
   }
 
   function openChatGpt() {
@@ -295,8 +295,8 @@ export function ChatGptSetupFlow() {
       </div>
 
       <SetupStep
-        title="Step 1 — Create your FitLife connection code"
-        body="First, create a private code from FitLife. You will paste this code later inside ChatGPT."
+        title="Step 1 — Create your Plaivra connection code"
+        body="First, create a private code from Plaivra. You will paste this code later inside ChatGPT."
       >
         <div className="grid gap-2 sm:grid-cols-2">
           <Button type="button" onClick={generateConnectionToken} disabled={isBusy === "chatgpt-token"} className="w-full">
@@ -309,28 +309,28 @@ export function ChatGptSetupFlow() {
         {connectionToken ? (
           <div className="rounded-md border border-primary/20 bg-card p-3">
             <label htmlFor="fitlife-connection-code" className="text-sm font-semibold text-foreground">
-              FitLife connection code
+              Plaivra connection code
             </label>
             <Input id="fitlife-connection-code" readOnly value={connectionToken} className="mt-2 font-mono text-xs" />
-            <p className="mt-2 text-xs text-muted-foreground">Copy this code now. FitLife only shows it once.</p>
+            <p className="mt-2 text-xs text-muted-foreground">Copy this code now. Plaivra only shows it once.</p>
           </div>
         ) : null}
       </SetupStep>
 
       <SetupStep
-        title="Step 2 — Copy your FitLife connection URL"
-        body="ChatGPT needs this URL so it knows where your FitLife app connection lives."
+        title="Step 2 — Copy your Plaivra connection URL"
+        body="ChatGPT needs this URL so it knows where your Plaivra app connection lives."
       >
         {hasMcpServerUrl ? (
           <div className="rounded-md border border-border/70 bg-card p-3">
             <label htmlFor="fitlife-connection-url" className="text-sm font-semibold text-foreground">
-              FitLife connection URL
+              Plaivra connection URL
             </label>
             <Input id="fitlife-connection-url" readOnly value={mcpServerUrl} className="mt-2 font-mono text-xs" />
           </div>
         ) : (
           <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-            ChatGPT import is not ready for this deployment. The FitLife connection URL is missing.
+            ChatGPT import is not ready for this deployment. The Plaivra connection URL is missing.
           </p>
         )}
         <Button type="button" variant="outline" onClick={copyMcpUrl} disabled={!hasMcpServerUrl} className="w-full sm:w-auto">
@@ -340,7 +340,7 @@ export function ChatGptSetupFlow() {
 
       <SetupStep
         title="Step 3 — Open ChatGPT"
-        body="Now go to the ChatGPT website. Keep this FitLife page open because you will need the code and URL."
+        body="Now go to the ChatGPT website. Keep this Plaivra page open because you will need the code and URL."
       >
         <Button type="button" onClick={openChatGpt} className="w-full sm:w-auto">
           <ExternalLink className="h-4 w-4" /> Open ChatGPT
@@ -375,7 +375,7 @@ export function ChatGptSetupFlow() {
         </p>
       </SetupStep>
 
-      <SetupStep title="Step 6 — Turn on Developer Mode" body="Developer Mode lets you add FitLife as a private/manual connection.">
+      <SetupStep title="Step 6 — Turn on Developer Mode" body="Developer Mode lets you add Plaivra as a private/manual connection.">
         <NumberedInstructions
           items={[
             "Find Developer Mode.",
@@ -385,19 +385,19 @@ export function ChatGptSetupFlow() {
           ]}
         />
         <p className="text-sm leading-6 text-muted-foreground">
-          Developer Mode is needed because FitLife is a private/manual connection, not an App Store app.
+          Developer Mode is needed because Plaivra is a private/manual connection, not an App Store app.
         </p>
       </SetupStep>
 
       <SetupStep
-        title="Step 7 — Create the FitLife app inside ChatGPT"
-        body="Create the private FitLife app and give ChatGPT a clear description."
+        title="Step 7 — Create the Plaivra app inside ChatGPT"
+        body="Create the private Plaivra app and give ChatGPT a clear description."
       >
         <NumberedInstructions
           items={[
             "Click Create app.",
             "If ChatGPT says Create connector instead, click that.",
-            "In the app name field, type: FitLife",
+            "In the app name field, type: Plaivra",
             `In the description field, paste this: ${appDescription}`,
             "Continue to the connection/server setup step."
           ]}
@@ -408,13 +408,13 @@ export function ChatGptSetupFlow() {
       </SetupStep>
 
       <SetupStep
-        title="Step 8 — Add the FitLife connection URL"
+        title="Step 8 — Add the Plaivra connection URL"
         body="This URL tells ChatGPT where to send the approved workout or meal plan."
       >
         <NumberedInstructions
           items={[
             "Find the field called Connection URL, Server URL, MCP URL, or Endpoint URL.",
-            "Paste the FitLife connection URL you copied from Step 2.",
+            "Paste the Plaivra connection URL you copied from Step 2.",
             "Click Continue or Next."
           ]}
         />
@@ -435,7 +435,7 @@ export function ChatGptSetupFlow() {
         />
       </SetupStep>
 
-      <SetupStep title="Step 10 — Open Advanced OAuth settings" body="This is the real setup path for the current FitLife connection.">
+      <SetupStep title="Step 10 — Open Advanced OAuth settings" body="This is the real setup path for the current Plaivra connection.">
         <NumberedInstructions
           items={[
             "In the OAuth section, look for Advanced settings.",
@@ -450,19 +450,19 @@ export function ChatGptSetupFlow() {
       </SetupStep>
 
       <SetupStep
-        title="Step 11 — Paste your FitLife connection code"
-        body="Use the FitLife connection code, not your ChatGPT password."
+        title="Step 11 — Paste your Plaivra connection code"
+        body="Use the Plaivra connection code, not your ChatGPT password."
       >
         <NumberedInstructions
           items={[
             "Find the field where ChatGPT asks for a token, client code, client secret, or authentication value.",
-            "Paste the FitLife connection code you copied from Step 1.",
-            "If ChatGPT calls it a token, that is okay. The FitLife connection code is the token.",
+            "Paste the Plaivra connection code you copied from Step 1.",
+            "If ChatGPT calls it a token, that is okay. The Plaivra connection code is the token.",
             "Click Save, Connect, or Finish."
           ]}
         />
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800">
-          Use the FitLife connection code, not your ChatGPT password.
+          Use the Plaivra connection code, not your ChatGPT password.
         </p>
         <Button type="button" variant="outline" onClick={() => copyText(connectionToken, "token")} disabled={!connectionToken} className="w-full sm:w-auto">
           <Copy className="h-4 w-4" /> {copied === "token" ? "Copied" : "Copy connection code"}
@@ -473,11 +473,11 @@ export function ChatGptSetupFlow() {
         <NumberedInstructions
           items={[
             "Start a new chat in ChatGPT.",
-            "Select or mention the FitLife app.",
-            "Ask ChatGPT: Create a workout plan for me and import it into FitLife after I approve it.",
+            "Select or mention the Plaivra app.",
+            "Ask ChatGPT: Create a workout plan for me and import it into Plaivra after I approve it.",
             "Review the plan in ChatGPT.",
             "Only approve the import when the plan looks correct.",
-            "Go back to FitLife and check your workout or meal plan."
+            "Go back to Plaivra and check your workout or meal plan."
           ]}
         />
       </SetupStep>

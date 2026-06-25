@@ -1,6 +1,6 @@
 # Professional feature roadmap - 2026-06-14
 
-FitLife Hub is a responsive web app for storing, scheduling, editing, displaying, and tracking plans created outside the app. It must not become a native app project, app-store project, or internal workout-plan generator.
+Plaivra is a responsive web app for storing, scheduling, editing, displaying, and tracking plans created outside the app. It must not become a native app project, app-store project, or internal workout-plan generator.
 
 ## Read-only audit summary
 

@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   if (!to) return jsonError("A recipient email is required.");
   const html = String(
     body.html ??
-      `<h1>Your FitLife Hub weekly summary</h1><p>${body.summary ?? "Your weekly summary is ready inside FitLife Hub."}</p>`
+      `<h1>Your Plaivra weekly summary</h1><p>${body.summary ?? "Your weekly summary is ready inside Plaivra."}</p>`
   );
 
   try {
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       apiKey: serverEnv.resendApiKey,
       from: serverEnv.resendFromEmail,
       to,
-      subject: "Your FitLife Hub weekly summary",
+      subject: "Your Plaivra weekly summary",
       html
     });
     await context.supabase.from("email_logs").insert({

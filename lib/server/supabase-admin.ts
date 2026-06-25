@@ -7,7 +7,7 @@ export function hasSupabaseAdminConfig() {
 
 export function createSupabaseAdminClient() {
   if (!serverEnv.supabaseServiceRoleKey) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for server-side FitLife MCP actions.");
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for server-side Plaivra MCP actions.");
   }
 
   return createClient(serverEnv.supabaseUrl, serverEnv.supabaseServiceRoleKey, {

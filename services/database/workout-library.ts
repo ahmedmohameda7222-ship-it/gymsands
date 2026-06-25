@@ -238,7 +238,7 @@ export async function getWorkoutCategories() {
 
   if (workoutResult.error || videoResult.error) {
     console.warn(
-      "FitLife Hub could not load workout categories, using local fallback.",
+      "Plaivra could not load workout categories, using local fallback.",
       workoutResult.error?.message || videoResult.error?.message
     );
     return fallback;
@@ -280,7 +280,7 @@ export async function getWorkoutFilterOptions() {
 
   if (workoutResult.error || videoResult.error) {
     console.warn(
-      "FitLife Hub could not load workout filter metadata, using local fallback.",
+      "Plaivra could not load workout filter metadata, using local fallback.",
       workoutResult.error?.message || videoResult.error?.message
     );
     return fallback;
@@ -330,7 +330,7 @@ export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page
   const [workoutResult, videoResult, exerciseResult] = await Promise.all([workoutRequest, videoRequest, exerciseRequest]);
   if (workoutResult.error || videoResult.error) {
     console.warn(
-      "FitLife Hub could not load Supabase workouts, using local fallback.",
+      "Plaivra could not load Supabase workouts, using local fallback.",
       workoutResult.error?.message || videoResult.error?.message
     );
     return localMatches.slice(from, to + 1);
@@ -349,7 +349,7 @@ export async function getWorkout(id: string) {
   if (!supabase) throw new Error("Database not connected");
 
   const workoutResult = await supabase!.from("workouts").select("*").eq("id", id).maybeSingle();
-  if (workoutResult.error) console.warn("FitLife Hub could not load workout from workouts table.", workoutResult.error.message);
+  if (workoutResult.error) console.warn("Plaivra could not load workout from workouts table.", workoutResult.error.message);
   if (workoutResult.data) return hydrateWorkoutMetadata(workoutResult.data as Workout);
 
   const exerciseResult = await supabase!
@@ -358,12 +358,12 @@ export async function getWorkout(id: string) {
     .eq("id", id)
     .eq("is_approved", true)
     .maybeSingle();
-  if (exerciseResult.error) console.warn("FitLife Hub could not load workout from active exercises.", exerciseResult.error.message);
+  if (exerciseResult.error) console.warn("Plaivra could not load workout from active exercises.", exerciseResult.error.message);
   if (exerciseResult.data) return mapActiveExerciseToWorkout(exerciseResult.data as ActiveExerciseRow);
 
   const videoResult = await supabase!.from("exercise_videos").select("*").eq("id", id).maybeSingle();
   if (videoResult.error) {
-    console.warn("FitLife Hub could not load workout from exercise videos.", videoResult.error.message);
+    console.warn("Plaivra could not load workout from exercise videos.", videoResult.error.message);
     return local;
   }
   return videoResult.data ? mapVideoToWorkout(videoResult.data as ExerciseVideo) : local;
@@ -376,7 +376,7 @@ export async function getExerciseVideos(query = "") {
   if (query) request = request.ilike("exercise_name", `%${query}%`);
   const { data, error } = await request;
   if (error) {
-    console.warn("FitLife Hub could not load exercise videos, using local fallback.", error.message);
+    console.warn("Plaivra could not load exercise videos, using local fallback.", error.message);
     return localVideos;
   }
   return dedupeExerciseVideos([...((data ?? []) as ExerciseVideo[]), ...localVideos]);
@@ -391,7 +391,7 @@ export async function getUserExerciseVideo(userId: string, exerciseId: string) {
     .eq("exercise_id", exerciseId)
     .maybeSingle();
   if (error) {
-    console.warn("FitLife Hub could not load custom exercise video.", error.message);
+    console.warn("Plaivra could not load custom exercise video.", error.message);
     return null;
   }
   return data as UserExerciseVideo | null;

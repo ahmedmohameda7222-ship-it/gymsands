@@ -91,7 +91,7 @@ export function buildNextBestActions({
   if (breakfastOpen) {
     actions.push({ label: "Meal plan", title: "Breakfast is planned but not done", reason: `${breakfastOpen.food_name} is scheduled for today and has not created a food log yet.`, cta: "Open meal plan", href: "/my-meal-plan", priority: 84 });
   } else if (unfinishedMeals.length) {
-    actions.push({ label: "Meal plan", title: `${unfinishedMeals.length} planned meal${unfinishedMeals.length === 1 ? "" : "s"} left`, reason: "FitLife keeps planned meals separate from done food logs to avoid duplicate calories.", cta: "Review meals", href: "/my-meal-plan", priority: 70 });
+    actions.push({ label: "Meal plan", title: `${unfinishedMeals.length} planned meal${unfinishedMeals.length === 1 ? "" : "s"} left`, reason: "Plaivra keeps planned meals separate from done food logs to avoid duplicate calories.", cta: "Review meals", href: "/my-meal-plan", priority: 70 });
   }
 
   const waterAction = hydrationAction(targets?.water_ml ?? 0, waterTotalMl);

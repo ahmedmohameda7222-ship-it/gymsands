@@ -7,7 +7,7 @@ import { requireServerKeys, requireUser, serverEnv } from "@/lib/integrations/en
 export const runtime = "nodejs";
 
 function requireMcpConnectionConfig() {
-  return requireServerKeys("FitLife MCP", [
+  return requireServerKeys("Plaivra MCP", [
     ["SUPABASE_SERVICE_ROLE_KEY", serverEnv.supabaseServiceRoleKey],
     ["FITLIFE_MCP_TOKEN_SECRET", serverEnv.fitlifeMcpTokenSecret]
   ]);
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       .eq("user_id", context.user.id)
       .eq("is_active", true);
     if (revokeError) {
-      console.warn("FitLife MCP could not revoke previous connections:", revokeError.message);
+      console.warn("Plaivra MCP could not revoke previous connections:", revokeError.message);
     }
   } catch {
     // Non-blocking: continue to create new token even if revoke fails
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     token,
     connection: data,
-    message: "Copy this FitLife ChatGPT connection code now. It is shown only once."
+    message: "Copy this Plaivra ChatGPT connection code now. It is shown only once."
   });
 }
 
@@ -114,12 +114,12 @@ export async function DELETE(request: Request) {
       .eq("is_active", true);
 
     if (error) {
-      console.error("FitLife MCP revoke error:", error.message);
+      console.error("Plaivra MCP revoke error:", error.message);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error("FitLife MCP revoke unexpected error:", error);
+    console.error("Plaivra MCP revoke unexpected error:", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unexpected error" }, { status: 500 });
   }
 }

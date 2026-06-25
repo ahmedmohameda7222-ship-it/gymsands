@@ -265,7 +265,7 @@ function MyMealPlanBuilderInner() {
   }
 
   function printShoppingList() {
-    const html = `<!doctype html><html><head><title>FitLife Shopping List</title><style>body{font-family:Arial;padding:24px}li{margin:8px 0}</style></head><body><h1>Shopping list ${selectedWeekStart} to ${selectedWeekEnd}</h1><ul>${shoppingList.map((item) => `<li>${item.checked ? "✓" : "□"} ${item.food_name} — ${item.quantity === null ? "quantity not specified" : `${Math.round(item.quantity * 10) / 10}x`} ${item.serving_size ?? "serving info missing"} (${item.category})</li>`).join("")}</ul></body></html>`;
+    const html = `<!doctype html><html><head><title>Plaivra Shopping List</title><style>body{font-family:Arial;padding:24px}li{margin:8px 0}</style></head><body><h1>Shopping list ${selectedWeekStart} to ${selectedWeekEnd}</h1><ul>${shoppingList.map((item) => `<li>${item.checked ? "✓" : "□"} ${item.food_name} — ${item.quantity === null ? "quantity not specified" : `${Math.round(item.quantity * 10) / 10}x`} ${item.serving_size ?? "serving info missing"} (${item.category})</li>`).join("")}</ul></body></html>`;
     const win = window.open("", "_blank");
     if (!win) return setNotice({ type: "error", title: "Could not open print view", description: "Allow popups for this site and try again." });
     win.document.write(html);

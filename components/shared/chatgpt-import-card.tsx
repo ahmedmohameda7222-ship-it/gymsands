@@ -57,8 +57,8 @@ function buildWorkoutPrompt(onboarding: OnboardingAnswers | null, profile: { ful
   lines.push("REQUIREMENTS:");
   lines.push("- Create a complete weekly schedule with clear day names and weekday assignments.");
   lines.push("- For each exercise, include: name, sets, reps, rest seconds, equipment, and target muscle.");
-  lines.push("- Make the plan compatible with FitLife Hub import format.");
-  lines.push("- When you're satisfied with the plan, export it to FitLife Hub using the import tool.");
+  lines.push("- Make the plan compatible with Plaivra import format.");
+  lines.push("- When you're satisfied with the plan, export it to Plaivra using the import tool.");
   lines.push("");
   lines.push("You can adjust the plan with me before finalizing.");
 
@@ -133,7 +133,7 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
             <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
               {setupComplete
                 ? "Your profile is set up. Generate a personalized prompt and open ChatGPT to create your plan."
-                : "Complete your profile setup so FitLife can build a personalized prompt for ChatGPT."}
+                : "Complete your profile setup so Plaivra can build a personalized prompt for ChatGPT."}
             </p>
           </div>
         </div>

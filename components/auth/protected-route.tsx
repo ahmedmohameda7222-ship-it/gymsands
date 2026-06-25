@@ -26,7 +26,7 @@ export function ProtectedRoute({
   }, [isLoading, pathname, router, user]);
 
   if (isLoading) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading FitLife Hub...</div>;
+    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading Plaivra...</div>;
   }
 
   if (!user) return null;
@@ -38,7 +38,7 @@ export function ProtectedRoute({
           <CardContent className="pt-6 text-center">
             <ShieldCheck className="mx-auto mb-3 h-10 w-10 text-primary" />
             <h1 className="text-xl font-semibold">Admin access only</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Your FitLife Hub account can use the member dashboard.</p>
+            <p className="mt-2 text-sm text-muted-foreground">Your Plaivra account can use the member dashboard.</p>
             <Button asChild className="mt-5">
               <Link href="/dashboard">Go to dashboard</Link>
             </Button>

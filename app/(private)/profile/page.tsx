@@ -66,7 +66,7 @@ export default function ProfilePage() {
               {initials}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground/70">FitLife Hub member</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground/70">Plaivra member</p>
               <h2 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">{trimmedName || "Complete your profile"}</h2>
               <p className="mt-1 truncate text-sm text-primary-foreground/75">{profile?.email ?? "Email loading..."}</p>
             </div>

@@ -11,7 +11,7 @@ const adminLinks = [
 export default function AdminDashboardPage() {
   return (
     <>
-      <PageHeading title="Admin Dashboard" description="Manage FitLife Hub users and API integrations." />
+      <PageHeading title="Admin Dashboard" description="Manage Plaivra users and API integrations." />
       <div className="grid gap-4 md:grid-cols-2">
         {adminLinks.map((item) => {
           const Icon = item.icon;

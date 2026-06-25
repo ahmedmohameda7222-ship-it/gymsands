@@ -108,7 +108,7 @@ export function ChatGptWorkoutPlans() {
             <Bot className="h-5 w-5 text-primary" /> ChatGPT-created plans
           </CardTitle>
           <CardDescription>
-            FitLife does not create workout plans internally. Create plans in ChatGPT; FitLife stores, schedules, displays, and tracks them.
+            Plaivra does not create workout plans internally. Create plans in ChatGPT; Plaivra stores, schedules, displays, and tracks them.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -121,7 +121,7 @@ export function ChatGptWorkoutPlans() {
       {!plans.length && !isLoading ? (
         <Card>
           <CardContent className="pt-6 text-sm text-muted-foreground">
-            No saved workout plans yet. In ChatGPT, ask: "Using FitLife, create and save a 4-day Push Pull Legs Upper workout plan."
+            No saved workout plans yet. In ChatGPT, ask: "Using Plaivra, create and save a 4-day Push Pull Legs Upper workout plan."
           </CardContent>
         </Card>
       ) : null}

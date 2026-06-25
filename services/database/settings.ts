@@ -7,7 +7,7 @@ import type { WelcomeSettings } from "@/types";
 const fallbackWelcomeSettings: WelcomeSettings = {
   popup_enabled: true,
   show_frequency: "once_per_day",
-  default_message: "Welcome back to FitLife Hub. Ready for today?",
+  default_message: "Welcome back to Plaivra. Ready for today?",
   is_custom_message: false
 };
 
@@ -66,14 +66,14 @@ export async function getWelcomeSettings(userId: string): Promise<WelcomeSetting
   ]);
 
   if (settingsResult.error) {
-    console.warn("FitLife Hub could not load default welcome settings.", settingsResult.error.message);
+    console.warn("Plaivra could not load default welcome settings.", settingsResult.error.message);
   }
 
   const settingsRow = settingsResult.data as WelcomeSettingsRow | null;
   const parsed = normalizeWelcomeSettings(settingsRow?.value ?? null);
 
   if (customResult.error) {
-    console.warn("FitLife Hub could not load custom welcome message.", customResult.error.message);
+    console.warn("Plaivra could not load custom welcome message.", customResult.error.message);
     return parsed;
   }
 

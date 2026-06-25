@@ -55,7 +55,7 @@ export async function getProgressPhotos(userId: string) {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.warn("FitLife Hub could not load progress photos.", error.message);
+    console.warn("Plaivra could not load progress photos.", error.message);
     return [] as ProgressPhoto[];
   }
 
@@ -95,6 +95,6 @@ export async function deleteProgressPhoto(photo: ProgressPhoto) {
   const rowDelete = await client.from("progress_photos").delete().eq("id", photo.id).eq("user_id", photo.user_id);
   if (rowDelete.error) throw new Error(`Could not delete progress photo metadata. ${rowDelete.error.message}`);
   const storageDelete = await client.storage.from(bucket).remove([photo.storage_path]);
-  if (storageDelete.error) console.warn("FitLife Hub could not remove the progress photo file.", storageDelete.error.message);
+  if (storageDelete.error) console.warn("Plaivra could not remove the progress photo file.", storageDelete.error.message);
   return true;
 }

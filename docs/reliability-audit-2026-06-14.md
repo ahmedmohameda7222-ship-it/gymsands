@@ -1,6 +1,6 @@
 # Reliability audit - 2026-06-14
 
-This pass focused on low-risk cleanup, data trust, setup UX, and documentation. FitLife Hub remains a responsive web app that stores, schedules, edits, displays, and tracks imported plans. No internal workout or meal plan generation was added.
+This pass focused on low-risk cleanup, data trust, setup UX, and documentation. Plaivra remains a responsive web app that stores, schedules, edits, displays, and tracks imported plans. No internal workout or meal plan generation was added.
 
 ## Safe fixes implemented
 

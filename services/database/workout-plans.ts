@@ -177,7 +177,7 @@ export async function getActiveUserWorkoutPlan(userId: string) {
   }
 
   if (error) {
-    console.warn("FitLife Hub could not load the saved workout plan.", error.message);
+    console.warn("Plaivra could not load the saved workout plan.", error.message);
     return null;
   }
 
@@ -217,7 +217,7 @@ export async function getUserWorkoutPlans(userId: string) {
   }
 
   if (error) {
-    console.warn("FitLife Hub could not load Workout Plans.", error.message);
+    console.warn("Plaivra could not load Workout Plans.", error.message);
     return [];
   }
 
@@ -249,7 +249,7 @@ export async function getUserWorkoutPlan(userId: string, planId: string) {
     error = legacy.error;
   }
   if (error) {
-    console.warn("FitLife Hub could not load this plan.", error.message);
+    console.warn("Plaivra could not load this plan.", error.message);
     return null;
   }
   return data ? normalizeWorkoutPlan(data as unknown as RawWorkoutPlan) : null;
@@ -341,7 +341,7 @@ export async function getUserWorkoutPlanDay(dayId: string) {
   }
 
   if (error) {
-    console.warn("FitLife Hub could not load this workout day.", error.message);
+    console.warn("Plaivra could not load this workout day.", error.message);
     throw error;
   }
 

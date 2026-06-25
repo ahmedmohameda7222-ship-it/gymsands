@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { getWelcomeSettings } from "@/services/database/settings";
 import { useAuth } from "@/components/auth/auth-provider";
 
-const DEFAULT_MESSAGE = "Welcome back to FitLife Hub. Ready for today?";
+const DEFAULT_MESSAGE = "Welcome back to Plaivra. Ready for today?";
 const NEW_PROFILE_MESSAGE = "Start with the setup checklist, then import your first workout or meal plan when you are ready.";
 
 function messageFingerprint(value: string) {
@@ -25,7 +25,7 @@ export function WelcomePopup() {
   const [nowMs] = useState(() => Date.now());
   const createdAtMs = profile?.created_at ? Date.parse(profile.created_at) : Number.NaN;
   const isNewProfile = Number.isFinite(createdAtMs) && nowMs - createdAtMs < 24 * 60 * 60 * 1000;
-  const title = isNewProfile ? "Welcome to FitLife Hub" : `Welcome back, ${profile?.full_name || "FitLife Hub member"}`;
+  const title = isNewProfile ? "Welcome to Plaivra" : `Welcome back, ${profile?.full_name || "Plaivra member"}`;
   const displayMessage = isNewProfile && !isCustomMessage ? NEW_PROFILE_MESSAGE : message;
 
   useEffect(() => {
@@ -43,7 +43,7 @@ export function WelcomePopup() {
 
         const today = new Date().toISOString().slice(0, 10);
         const messageKey = messageFingerprint(`${settings.show_frequency}:${messageToShow}`);
-        const key = `fitlife-hub-welcome-${user.id}-${today}-${messageKey}`;
+        const key = `plaivra-welcome-${user.id}-${today}-${messageKey}`;
         const seenToday = window.localStorage.getItem(key);
 
         if (settings.show_frequency === "every_login" || !seenToday) {

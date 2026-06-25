@@ -19,7 +19,7 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}));
   const to = String(body.to ?? context.user.email ?? "").trim();
-  const subject = String(body.subject ?? "FitLife Hub").trim();
+  const subject = String(body.subject ?? "Plaivra").trim();
   const html = String(body.html ?? body.message ?? "").trim();
   const emailType = String(body.emailType ?? "member_message").replace(/[^a-z0-9_-]/gi, "").slice(0, 64) || "member_message";
   if (!to || !subject || !html) return jsonError("to, subject, and html/message are required.");
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     const { data, error } = await context.supabase.from("profiles").select("role").eq("id", context.user.id).maybeSingle();
     if (error) return jsonError(error.message, 400);
     if (data?.role !== "admin") {
-      return jsonError("Only admins can send FitLife email to another address.", 403);
+      return jsonError("Only admins can send Plaivra email to another address.", 403);
     }
   }
 

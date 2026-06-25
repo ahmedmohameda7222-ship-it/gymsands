@@ -122,7 +122,7 @@ export default function OnboardingPage() {
         }));
       })
       .catch((error) => {
-        console.warn("FitLife Hub could not load saved onboarding answers.", error);
+        console.warn("Plaivra could not load saved onboarding answers.", error);
         toast({ title: "Could not load saved setup", description: "You can still review and save this setup again." });
       });
   }, [toast, user?.id, router, searchParams]);
@@ -142,7 +142,7 @@ export default function OnboardingPage() {
       await saveAiPermissionSettings(user.id, aiPermissions);
       toast({
         title: "Profile saved",
-        description: "Create your plan in ChatGPT, then export it to FitLife Hub for tracking."
+        description: "Create your plan in ChatGPT, then export it to Plaivra for tracking."
       });
       router.push("/my-workout/plans");
     } catch (error) {
@@ -156,7 +156,7 @@ export default function OnboardingPage() {
 
   return (
     <>
-      <PageHeading title="Profile Setup" description="A clean setup flow for real imported plans. FitLife Hub uses this profile to store, schedule, edit, display, and track plans created outside the app." />
+      <PageHeading title="Profile Setup" description="A clean setup flow for real imported plans. Plaivra uses this profile to store, schedule, edit, display, and track plans created outside the app." />
 
       <Card className="mx-auto max-w-4xl overflow-hidden border-primary/15">
         <CardHeader className="space-y-4 border-b border-border/70 bg-muted/25">
@@ -287,7 +287,7 @@ export default function OnboardingPage() {
 
           {step === 5 ? (
             <section className="space-y-4">
-              <StepIntro title="AI Permissions" detail="Choose what access AI should have to your FitLife account during setup." />
+              <StepIntro title="AI Permissions" detail="Choose what access AI should have to your Plaivra account during setup." />
               <div className="space-y-4">
                 <div className="space-y-3">
                   <ChoiceGroup
@@ -389,7 +389,7 @@ export default function OnboardingPage() {
               <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
                 <h2 className="text-lg font-semibold">Review before saving</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  FitLife Hub will not generate plans internally. Create workout and meal plans externally, then import them for storage, scheduling, editing, display, and tracking.
+                  Plaivra will not generate plans internally. Create workout and meal plans externally, then import them for storage, scheduling, editing, display, and tracking.
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">

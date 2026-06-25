@@ -1,6 +1,6 @@
 {
   "repository": "ahmedmohameda7222-ship-it/gymsands",
-  "purpose": "External ChatGPT MCP connector foundation for FitLife Hub",
+  "purpose": "External ChatGPT MCP connector foundation for Plaivra",
   "files": [
     ".env.example",
     "IMPLEMENTATION_NOTES.md",

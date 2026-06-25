@@ -190,7 +190,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
       await completeWorkoutSession(session.id, notes, duration);
       clearStoredValue(timerKey);
       clearStoredValue(restTimerKey);
-      toast({ title: "Workout completed", description: `${workout.name} was saved to your FitLife Hub history.` });
+      toast({ title: "Workout completed", description: `${workout.name} was saved to your Plaivra history.` });
       router.push("/workout-history");
     } catch (error) {
       logRecoverableError("workout-session.complete", error);

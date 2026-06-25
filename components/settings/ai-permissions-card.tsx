@@ -71,7 +71,7 @@ export function AiPermissionsCard() {
           <CardTitle className="flex items-center gap-2 text-base">
             <Shield className="h-5 w-5 text-primary" /> AI Permissions
           </CardTitle>
-          <CardDescription>Choose what AI can read and manage in your FitLife account.</CardDescription>
+          <CardDescription>Choose what AI can read and manage in your Plaivra account.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           {/* Mode selection */}
@@ -95,7 +95,7 @@ export function AiPermissionsCard() {
               <div>
                 <p className="font-semibold">Full AI Access</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Give AI full permission to manage your FitLife account, including workouts, nutrition, meal plans, hydration, wellness, progress, and profile data.
+                  Give AI full permission to manage your Plaivra account, including workouts, nutrition, meal plans, hydration, wellness, progress, and profile data.
                 </p>
               </div>
             </button>

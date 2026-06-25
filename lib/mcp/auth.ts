@@ -55,13 +55,13 @@ function protectedResourceUrl(request: Request) {
   return `${url.origin}/.well-known/oauth-protected-resource`;
 }
 
-export function unauthorizedMcpResponse(request: Request, message = "FitLife ChatGPT connection is required.", status = 401) {
+export function unauthorizedMcpResponse(request: Request, message = "Plaivra ChatGPT connection is required.", status = 401) {
   return NextResponse.json(
     { error: message },
     {
       status,
       headers: {
-        "WWW-Authenticate": `Bearer realm="FitLife MCP", resource_metadata="${protectedResourceUrl(request)}"`
+        "WWW-Authenticate": `Bearer realm="Plaivra MCP", resource_metadata="${protectedResourceUrl(request)}"`
       }
     }
   );
@@ -141,14 +141,14 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
   if (!token) return unauthorizedMcpResponse(request);
 
   if (!serverEnv.supabaseServiceRoleKey) {
-    return serviceUnavailable("Supabase service role is required for FitLife MCP.");
+    return serviceUnavailable("Supabase service role is required for Plaivra MCP.");
   }
 
   let tokenHash = "";
   try {
     tokenHash = hashConnectionToken(token);
   } catch (error) {
-    return serviceUnavailable("FitLife MCP token configuration is incomplete.", error);
+    return serviceUnavailable("Plaivra MCP token configuration is incomplete.", error);
   }
 
   const supabase = createSupabaseAdminClient();

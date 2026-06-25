@@ -113,7 +113,7 @@ export async function getRecentFoodLogs(userId: string, limit = 80) {
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) {
-    console.warn("FitLife Hub could not load recent food logs.", error.message);
+    console.warn("Plaivra could not load recent food logs.", error.message);
     return [];
   }
   return ((data ?? []) as Record<string, unknown>[]).map(normalizeFoodLog);
@@ -215,7 +215,7 @@ export async function getFavoriteFoodKeysAsync(userId: string | null | undefined
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error) {
-    console.warn("FitLife Hub could not load synced food favorites.", error.message);
+    console.warn("Plaivra could not load synced food favorites.", error.message);
     return local;
   }
   return (data ?? []).map((item) => String(item.food_key));
@@ -231,7 +231,7 @@ export async function setFavoriteFoodAsync(userId: string | null | undefined, ke
     : await supabase!.from("user_food_favorites").delete().eq("user_id", userId).eq("food_key", key);
 
   if (result.error) {
-    console.warn("FitLife Hub could not update synced food favorite.", result.error.message);
+    console.warn("Plaivra could not update synced food favorite.", result.error.message);
     return setFavoriteFood(userId, key, favorite);
   }
   return getFavoriteFoodKeysAsync(userId);
@@ -307,7 +307,7 @@ async function migrateLocalRecipes(userId: string, local: SavedRecipe[]) {
       .select("id")
       .single();
     if (error || !savedRecipe) {
-      console.warn("FitLife Hub could not migrate a saved recipe.", error?.message);
+      console.warn("Plaivra could not migrate a saved recipe.", error?.message);
       continue;
     }
 
@@ -324,7 +324,7 @@ async function migrateLocalRecipes(userId: string, local: SavedRecipe[]) {
     }));
     if (rows.length) {
       const ingredientResult = await supabase!.from("saved_recipe_ingredients").insert(rows);
-      if (ingredientResult.error) console.warn("FitLife Hub could not migrate recipe ingredients.", ingredientResult.error.message);
+      if (ingredientResult.error) console.warn("Plaivra could not migrate recipe ingredients.", ingredientResult.error.message);
     }
   }
   if (canUseStorage()) window.localStorage.removeItem(storageKey(recipePrefix, userId));
@@ -345,7 +345,7 @@ export async function getSavedRecipesAsync(userId: string | null | undefined) {
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error) {
-    console.warn("FitLife Hub could not load synced recipes.", error.message);
+    console.warn("Plaivra could not load synced recipes.", error.message);
     return local;
   }
 
@@ -354,7 +354,7 @@ export async function getSavedRecipesAsync(userId: string | null | undefined) {
     ? await supabase!.from("saved_recipe_ingredients").select("*").in("recipe_id", recipeIds)
     : { data: [], error: null };
   if (ingredientsResult.error) {
-    console.warn("FitLife Hub could not load synced recipe ingredients.", ingredientsResult.error.message);
+    console.warn("Plaivra could not load synced recipe ingredients.", ingredientsResult.error.message);
     return local;
   }
 

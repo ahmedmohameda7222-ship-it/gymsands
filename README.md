@@ -1,15 +1,15 @@
-# FitLife Hub
+# Plaivra
 
-FitLife Hub is a private fitness dashboard for storing, editing, and tracking workout plans, meal plans, calories, hydration, progress, habits, recovery, supplements, and personal records.
+Plaivra is a private fitness dashboard for storing, editing, and tracking workout plans, meal plans, calories, hydration, progress, habits, recovery, supplements, and personal records.
 
-FitLife Hub does not generate workout or meal plans inside the app. Users create plans with ChatGPT, then export them to FitLife Hub for tracking.
+Plaivra does not generate workout or meal plans inside the app. Users create plans with ChatGPT, then export them to Plaivra for tracking.
 
 ## Product model
 
 - ChatGPT creates personalized workout and meal plans.
-- FitLife Hub stores exported plans.
-- FitLife Hub lets users edit saved plans after import.
-- FitLife Hub tracks workout completion, skipped days, sets, reps, weight, notes, duration, meals, macros, water, and progress.
+- Plaivra stores exported plans.
+- Plaivra lets users edit saved plans after import.
+- Plaivra tracks workout completion, skipped days, sets, reps, weight, notes, duration, meals, macros, water, and progress.
 
 ## Included
 
@@ -94,7 +94,7 @@ Run SQL in this canonical order. Some legacy files share numeric prefixes; do no
 
 For projects that already imported legacy exercise data, back up the database first, then review the cleanup SQL under `supabase/cleanup`.
 
-FitLife Hub does not generate workout plans internally. Do not add or run workout-template recommendation seeds; plans should be imported from ChatGPT or created manually by the user.
+Plaivra does not generate workout plans internally. Do not add or run workout-template recommendation seeds; plans should be imported from ChatGPT or created manually by the user.
 
 See `docs/reliability-audit-2026-06-14.md` for migration-collision notes, local-storage audit findings, and recommended account-level persistence tables.
 
@@ -123,8 +123,8 @@ The old `/meals` page was removed because food logging already lives under `/cal
 ## ChatGPT plan export workflow
 
 1. User creates a workout or meal plan with ChatGPT.
-2. ChatGPT exports the structured plan to FitLife Hub through the connector.
-3. FitLife Hub saves the plan to the user's account.
+2. ChatGPT exports the structured plan to Plaivra through the connector.
+3. Plaivra saves the plan to the user's account.
 4. User tracks sessions, sets, reps, weights, skipped days, planned meals, completed meals, calories, and progress.
 
 ## Exercise library
@@ -152,4 +152,4 @@ npm run typecheck
 
 ## Safety
 
-FitLife Hub is for general fitness tracking and coaching support. It is not medical advice. Users should avoid training through serious pain and consult a qualified professional for medical concerns.
+Plaivra is for general fitness tracking and coaching support. It is not medical advice. Users should avoid training through serious pain and consult a qualified professional for medical concerns.

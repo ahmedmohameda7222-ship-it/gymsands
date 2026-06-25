@@ -37,7 +37,7 @@ export default function DataPrivacyPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `fitlife-settings-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `plaivra-settings-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();

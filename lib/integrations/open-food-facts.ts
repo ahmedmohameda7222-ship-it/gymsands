@@ -43,7 +43,7 @@ export function normalizeOpenFoodFactsProduct(product: any, barcode: string): No
 export async function lookupOpenFoodFactsBarcode(barcode: string) {
   const response = await fetch(
     `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=code,product_name,generic_name,brands,serving_size,nutriments`,
-    { headers: { "User-Agent": "FitLifeHub/1.0" } }
+    { headers: { "User-Agent": "Plaivra/1.0" } }
   );
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.status === 0 || !data.product) {

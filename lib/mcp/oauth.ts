@@ -22,7 +22,7 @@ function base64UrlDecode(value: string) {
 
 function sign(value: string) {
   if (!serverEnv.fitlifeMcpTokenSecret) {
-    throw new Error("FITLIFE_MCP_TOKEN_SECRET is required for FitLife MCP OAuth.");
+    throw new Error("FITLIFE_MCP_TOKEN_SECRET is required for Plaivra MCP OAuth.");
   }
 
   return crypto.createHmac("sha256", serverEnv.fitlifeMcpTokenSecret).update(value).digest("base64url");
@@ -204,17 +204,17 @@ export async function handleOAuthAuthorize(request: Request) {
   }
 
   if (responseType !== "code") {
-    return oauthErrorRedirect(redirectUri, state, "unsupported_response_type", "FitLife MCP supports only authorization_code OAuth.");
+    return oauthErrorRedirect(redirectUri, state, "unsupported_response_type", "Plaivra MCP supports only authorization_code OAuth.");
   }
 
   if (!clientId) {
-    return oauthErrorRedirect(redirectUri, state, "invalid_client", "Use your FitLife connection token as the OAuth Client ID.");
+    return oauthErrorRedirect(redirectUri, state, "invalid_client", "Use your Plaivra connection token as the OAuth Client ID.");
   }
 
   try {
     const connection = await getConnectionForClientId(clientId);
     if (!connection) {
-      return oauthErrorRedirect(redirectUri, state, "access_denied", "FitLife connection token is invalid or revoked.");
+      return oauthErrorRedirect(redirectUri, state, "access_denied", "Plaivra connection token is invalid or revoked.");
     }
 
     const userScopes = await getUserAiScopes(connection.user_id);
@@ -232,7 +232,7 @@ export async function handleOAuthAuthorize(request: Request) {
     if (state) callback.searchParams.set("state", state);
     return NextResponse.redirect(callback);
   } catch (error) {
-    return oauthErrorRedirect(redirectUri, state, "server_error", error instanceof Error ? error.message : "FitLife OAuth authorization failed.");
+    return oauthErrorRedirect(redirectUri, state, "server_error", error instanceof Error ? error.message : "Plaivra OAuth authorization failed.");
   }
 }
 
@@ -254,7 +254,7 @@ export async function handleOAuthToken(request: Request) {
   try {
     const connection = await getConnectionForClientId(clientId);
     if (!connection) {
-      return NextResponse.json({ error: "invalid_client", error_description: "FitLife connection token is invalid or revoked." }, { status: 401, headers: metadataHeaders() });
+      return NextResponse.json({ error: "invalid_client", error_description: "Plaivra connection token is invalid or revoked." }, { status: 401, headers: metadataHeaders() });
     }
 
     const payload = verifyAuthorizationCode(code);
@@ -286,7 +286,7 @@ export async function handleOAuthToken(request: Request) {
 export async function handleOAuthRegister() {
   return NextResponse.json(
     {
-      client_id: "Paste your FitLife fitlife_mcp_ token here as OAuth Client ID",
+      client_id: "Paste your Plaivra fitlife_mcp_ token here as OAuth Client ID",
       client_id_issued_at: Math.floor(Date.now() / 1000),
       token_endpoint_auth_method: "none",
       grant_types: ["authorization_code"],

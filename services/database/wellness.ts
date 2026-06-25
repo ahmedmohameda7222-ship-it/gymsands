@@ -27,7 +27,7 @@ export async function getDailyFitTasks(userId: string, date = todayIso()) {
     .eq("task_date", date)
     .order("created_at", { ascending: true });
   if (error) {
-    console.warn("FitLife Hub could not load daily fit tasks.", error.message);
+    console.warn("Plaivra could not load daily fit tasks.", error.message);
     return [];
   }
   return (data ?? []) as DailyFitTask[];
@@ -58,7 +58,7 @@ export async function getFitnessHabits(userId: string, date = todayIso()) {
     .eq("habit_date", date)
     .order("created_at", { ascending: true });
   if (error) {
-    console.warn("FitLife Hub could not load fitness habits.", error.message);
+    console.warn("Plaivra could not load fitness habits.", error.message);
     return [];
   }
   return (data ?? []) as FitnessHabit[];
@@ -89,7 +89,7 @@ export async function getSleepRecoveryLogs(userId: string, limit = 30) {
     .order("log_date", { ascending: false })
     .limit(limit);
   if (error) {
-    console.warn("FitLife Hub could not load sleep and recovery logs.", error.message);
+    console.warn("Plaivra could not load sleep and recovery logs.", error.message);
     return [];
   }
   return (data ?? []) as SleepRecoveryLog[];
@@ -119,7 +119,7 @@ export async function getSupplementLogs(userId: string, date = todayIso()) {
     .eq("supplement_date", date)
     .order("created_at", { ascending: true });
   if (error) {
-    console.warn("FitLife Hub could not load supplements.", error.message);
+    console.warn("Plaivra could not load supplements.", error.message);
     return [];
   }
   return (data ?? []) as SupplementLog[];

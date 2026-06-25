@@ -1,8 +1,8 @@
-# FitLife ChatGPT MCP Connector
+# Plaivra ChatGPT MCP Connector
 
 ## What this does
 
-This feature lets a FitLife user connect their FitLife account to ChatGPT once, then use ChatGPT itself to log and manage FitLife data through controlled MCP tools.
+This feature lets a FitLife user connect their Plaivra account to ChatGPT once, then use ChatGPT itself to log and manage FitLife data through controlled MCP tools.
 
 Example ChatGPT messages:
 
@@ -11,7 +11,7 @@ Example ChatGPT messages:
 - "I benched 80kg for 6 reps."
 - "Save this 4-day muscle gain workout plan to FitLife."
 
-ChatGPT creates or edits the plan externally, then calls the FitLife MCP endpoint to save, schedule, and track the exact user-approved data. FitLife authenticates the linked connection, maps it to the correct Supabase user, validates typed tool input, writes only through safe server-side actions, and stores the result in Supabase.
+ChatGPT creates or edits the plan externally, then calls the Plaivra MCP endpoint to save, schedule, and track the exact user-approved data. FitLife authenticates the linked connection, maps it to the correct Supabase user, validates typed tool input, writes only through safe server-side actions, and stores the result in Supabase.
 
 ## What this does not do
 
@@ -48,11 +48,11 @@ This implementation uses secure token linking as the development foundation:
 1. User logs in to FitLife.
 2. User opens Settings > Connected Apps.
 3. User creates a ChatGPT connection.
-4. FitLife shows a one-time token.
+4. Plaivra shows a one-time token.
 5. User configures ChatGPT/MCP with:
    - MCP URL: `https://your-domain.com/api/mcp`
    - Authorization: `Bearer <one-time-token>`
-6. FitLife stores only the token hash.
+6. Plaivra stores only the token hash.
 7. User can revoke access anytime.
 
 ## Production OAuth upgrade path

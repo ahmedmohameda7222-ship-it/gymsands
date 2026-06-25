@@ -88,7 +88,7 @@ export function ReportingDashboard() {
 
   function exportCsv() {
     if (!report) return;
-    downloadCsv(`fitlife-${mode}-report-${report.range.start}-to-${report.range.end}.csv`, reportToCsv(report));
+    downloadCsv(`plaivra-${mode}-report-${report.range.start}-to-${report.range.end}.csv`, reportToCsv(report));
   }
 
   function printReport() {

@@ -4,7 +4,7 @@ import { AdminUsersPanel } from "@/components/admin/admin-panels";
 export default function AdminUsersPage() {
   return (
     <>
-      <PageHeading title="Manage Users" description="View FitLife Hub users by email/profile only. Passwords are never visible." />
+      <PageHeading title="Manage Users" description="View Plaivra users by email/profile only. Passwords are never visible." />
       <AdminUsersPanel />
     </>
   );

@@ -218,7 +218,7 @@ export async function handleMcpGet(request: Request) {
   const auth = await authenticateMcpRequest(request);
   if (auth instanceof NextResponse) return auth;
 
-  return NextResponse.json({ name: "FitLife Hub MCP", version: "1.0.0", transport: "http-json-rpc", ...toolListPayload() }, { headers: corsHeaders(request) });
+  return NextResponse.json({ name: "Plaivra MCP", version: "1.0.0", transport: "http-json-rpc", ...toolListPayload() }, { headers: corsHeaders(request) });
 }
 
 export async function handleMcpPost(request: Request) {
@@ -230,7 +230,7 @@ export async function handleMcpPost(request: Request) {
   }
 
   if (body.method === "initialize") {
-    return rpcResult(body.id, { protocolVersion: "2024-11-05", serverInfo: { name: "FitLife Hub", version: "1.0.0" }, capabilities: { tools: {} } }, request);
+    return rpcResult(body.id, { protocolVersion: "2024-11-05", serverInfo: { name: "Plaivra", version: "1.0.0" }, capabilities: { tools: {} } }, request);
   }
 
   const auth = await authenticateMcpRequest(request);
@@ -247,7 +247,7 @@ export async function handleMcpPost(request: Request) {
 
     if (!canUseTool(auth, tool)) {
       const required = requiredScopesForTool(tool).join(", ");
-      const message = `This FitLife connection is missing the required scope for ${tool.name}: ${required}. Reconnect FitLife from Settings to refresh permissions.`;
+      const message = `This Plaivra connection is missing the required scope for ${tool.name}: ${required}. Reconnect Plaivra from Settings to refresh permissions.`;
       await auditDeniedToolCall(auth, tool, body.params?.arguments ?? {}, message);
       return rpcError(body.id, -32003, message, request);
     }

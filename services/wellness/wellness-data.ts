@@ -77,7 +77,7 @@ export async function getFitnessHabitHistory(userId: string, days = 30) {
     .order("created_at", { ascending: true })
     .limit(safeDays * 20);
   if (error) {
-    console.warn("FitLife Hub could not load habit history.", error.message);
+    console.warn("Plaivra could not load habit history.", error.message);
     return [];
   }
   return (data ?? []) as FitnessHabit[];
@@ -93,7 +93,7 @@ export async function getSupplementHistory(userId: string, days = 30) {
     .order("supplement_date", { ascending: false })
     .order("created_at", { ascending: true });
   if (error) {
-    console.warn("FitLife Hub could not load supplement history.", error.message);
+    console.warn("Plaivra could not load supplement history.", error.message);
     return [];
   }
   return (data ?? []) as SupplementLog[];
@@ -108,7 +108,7 @@ export async function getSleepRecoveryHistory(userId: string, limit = 30) {
     .order("log_date", { ascending: false })
     .limit(limit);
   if (error) {
-    console.warn("FitLife Hub could not load sleep and recovery history.", error.message);
+    console.warn("Plaivra could not load sleep and recovery history.", error.message);
     return [];
   }
   return (data ?? []) as EnhancedSleepRecoveryLog[];

@@ -1,8 +1,8 @@
 {
-  "name": "fitlife-hub",
+  "name": "plaivra",
   "version": "1.0.0",
   "private": true,
-  "description": "FitLife Hub private workout, meal, and progress tracking app.",
+  "description": "Plaivra private workout, meal, and progress tracking app.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

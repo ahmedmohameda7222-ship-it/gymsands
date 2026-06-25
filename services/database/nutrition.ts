@@ -107,7 +107,7 @@ export async function getFoodCategories() {
     .limit(250)
     .then(({ data, error }) => {
       if (error) {
-        console.warn("FitLife Hub could not load food categories, using local fallback.", error.message);
+        console.warn("Plaivra could not load food categories, using local fallback.", error.message);
         return fallback;
       }
 
@@ -149,7 +149,7 @@ export async function getGlobalFoods(
   const result = await withTimeout(
     request.then(({ data, error }) => {
       if (error) {
-        console.warn("FitLife Hub could not load Supabase foods, using local fallback.", error.message);
+        console.warn("Plaivra could not load Supabase foods, using local fallback.", error.message);
         return fallback;
       }
       return ((data?.length ? data : fallback) ?? []) as FoodItem[];
@@ -172,7 +172,7 @@ export async function getCalorieTargets(userId: string) {
     .maybeSingle();
 
   if (error) {
-    console.warn("FitLife Hub could not load calorie targets.", error.message);
+    console.warn("Plaivra could not load calorie targets.", error.message);
     return null;
   }
 
@@ -224,7 +224,7 @@ export async function getTodayFoodLogs(userId: string, date = todayIso()) {
     .eq("log_date", date)
     .order("created_at", { ascending: false });
   if (error) {
-    console.warn("FitLife Hub could not load today's food logs.", error.message);
+    console.warn("Plaivra could not load today's food logs.", error.message);
     return [];
   }
   return (data ?? []) as FoodLog[];
@@ -265,7 +265,7 @@ export async function addGlobalFoodToToday({
   if (!canUseUserData(userId)) throw new Error("User session invalid");
   const { data, error } = await supabase!.from("food_logs").insert(payload).select("*").single();
   if (error) {
-    console.warn("FitLife Hub could not add this food log.", error.message);
+    console.warn("Plaivra could not add this food log.", error.message);
     throw error;
   }
   return data as FoodLog;
@@ -384,7 +384,7 @@ export async function getFoodKitchens(userId: string) {
 
   if (kitchensResult.error || subcategoriesResult.error) {
     console.warn(
-      "FitLife Hub could not load food kitchens.",
+      "Plaivra could not load food kitchens.",
       kitchensResult.error?.message || subcategoriesResult.error?.message
     );
     return { kitchens: [fallbackKitchen], subcategories: fallbackSubcategories };
@@ -436,7 +436,7 @@ export async function getUserFoods(userId: string) {
   if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!.from("user_food_items").select("*").eq("user_id", userId).order("food_name");
   if (error) {
-    console.warn("FitLife Hub could not load custom foods.", error.message);
+    console.warn("Plaivra could not load custom foods.", error.message);
     return [];
   }
   return (data ?? []).map((row) => normalizeUserFood(row as Record<string, unknown>));
@@ -497,7 +497,7 @@ export async function getWaterLogs(userId: string, date: string) {
     .eq("log_date", date)
     .order("created_at", { ascending: false });
   if (error) {
-    console.warn("FitLife Hub could not load water logs.", error.message);
+    console.warn("Plaivra could not load water logs.", error.message);
     return [];
   }
   return (data ?? []) as WaterLog[];
@@ -551,8 +551,8 @@ export async function getNutritionWeek(userId: string, weekStart: string) {
       : Promise.resolve({ data: [], error: null })
   ]);
 
-  if (logsResult.error) console.warn("FitLife Hub could not load weekly calorie logs.", logsResult.error.message);
-  if (waterResult.error) console.warn("FitLife Hub could not load weekly water logs.", waterResult.error.message);
+  if (logsResult.error) console.warn("Plaivra could not load weekly calorie logs.", logsResult.error.message);
+  if (waterResult.error) console.warn("Plaivra could not load weekly water logs.", waterResult.error.message);
 
   const logs = ((logsResult.data ?? []) as FoodLog[]).reduce<Record<string, FoodLog[]>>((byDate, log) => {
     byDate[log.log_date] = [...(byDate[log.log_date] ?? []), log];
@@ -611,8 +611,8 @@ async function foodsById(foodIds: string[], userFoodIds: string[]) {
     foodIds.length ? supabase!.from("food_items").select("*").in("id", foodIds) : Promise.resolve({ data: [], error: null }),
     userFoodIds.length ? supabase!.from("user_food_items").select("*").in("id", userFoodIds) : Promise.resolve({ data: [], error: null })
   ]);
-  if (globalResult.error) console.warn("FitLife Hub could not hydrate meal foods.", globalResult.error.message);
-  if (userResult.error) console.warn("FitLife Hub could not hydrate custom meal foods.", userResult.error.message);
+  if (globalResult.error) console.warn("Plaivra could not hydrate meal foods.", globalResult.error.message);
+  if (userResult.error) console.warn("Plaivra could not hydrate custom meal foods.", userResult.error.message);
 
   const map = new Map<string, FoodItem>();
   ((globalResult.data ?? []) as FoodItem[]).forEach((food) => map.set(food.id, food));
@@ -629,7 +629,7 @@ export async function getCustomMeals(userId: string) {
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error) {
-    console.warn("FitLife Hub could not load custom meals.", error.message);
+    console.warn("Plaivra could not load custom meals.", error.message);
     return [];
   }
   const mealRows = meals ?? [];
@@ -814,7 +814,7 @@ export async function getTodayMealPlanItems(userId: string, date = todayIso()) {
     .order("created_at", { ascending: true });
 
   if (error) {
-    console.warn("FitLife Hub could not load today's meal plan.", error.message);
+    console.warn("Plaivra could not load today's meal plan.", error.message);
     return [];
   }
 
@@ -858,7 +858,7 @@ export async function addFoodToMealPlan({
 
   const { data, error } = await supabase!.from("user_meal_plan_items").insert(payload).select("*").single();
   if (error) {
-    console.warn("FitLife Hub could not add this food to My Meal Plan.", error.message);
+    console.warn("Plaivra could not add this food to My Meal Plan.", error.message);
     throw error;
   }
   return data as MealPlanItem;
@@ -998,7 +998,7 @@ export async function updateMealPlanItem(
       })
       .eq("id", item.food_log_id)
       .eq("user_id", item.user_id);
-    if (logUpdate.error) console.warn("FitLife Hub could not sync the linked calorie log.", logUpdate.error.message);
+    if (logUpdate.error) console.warn("Plaivra could not sync the linked calorie log.", logUpdate.error.message);
   }
 
   return data as MealPlanItem;
@@ -1034,7 +1034,7 @@ export async function deleteFoodLog(id: string) {
   if (!supabase) throw new Error("Database not connected");
   const { error } = await supabase!.from("food_logs").delete().eq("id", id);
   if (error) {
-    console.warn("FitLife Hub could not delete this food log.", error.message);
+    console.warn("Plaivra could not delete this food log.", error.message);
     throw error;
   }
   return true;
@@ -1047,7 +1047,7 @@ export async function copyYesterdaysMeals(userId: string, targetDate = todayIso(
   const sourceDate = yesterday.toLocaleDateString("en-CA");
   const { data, error } = await supabase!.from("food_logs").select("*").eq("user_id", userId).eq("log_date", sourceDate);
   if (error) {
-    console.warn("FitLife Hub could not copy yesterday's meals.", error.message);
+    console.warn("Plaivra could not copy yesterday's meals.", error.message);
     return [];
   }
   const copies = (data ?? []).map(({ id: _id, created_at: _created, ...log }) => ({ ...log, log_date: targetDate }));

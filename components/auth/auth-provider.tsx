@@ -22,7 +22,7 @@ const mockAuthEnabled = env.useMockAuth && !isProduction;
 
 const mockUser = {
   id: "mock-user",
-  email: "member@fitlife.test"
+  email: "member@plaivra.test"
 } as User;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -38,8 +38,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (mockAuthEnabled) {
       setProfile({
         id: "mock-user",
-        email: "member@fitlife.test",
-        full_name: "FitLife Hub Member",
+        email: "member@plaivra.test",
+        full_name: "Plaivra Member",
         role: "admin",
         avatar_url: null,
         created_at: new Date().toISOString(),
@@ -49,14 +49,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (!supabase) {
-      console.warn("FitLife Hub Supabase configuration is missing. Mock auth is disabled.");
+      console.warn("Plaivra Supabase configuration is missing. Mock auth is disabled.");
       setProfile(null);
       return;
     }
 
     const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
     if (error) {
-      console.warn("FitLife Hub could not load profile.", error.message);
+      console.warn("Plaivra could not load profile.", error.message);
       setProfile(null);
       return;
     }
@@ -71,13 +71,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .insert({
         id: userId,
         email: email ?? null,
-        full_name: email?.split("@")[0] ?? "FitLife Hub Member"
+        full_name: email?.split("@")[0] ?? "Plaivra Member"
       })
       .select("*")
       .maybeSingle();
 
     if (inserted.error) {
-      console.warn("FitLife Hub could not create the missing profile.", inserted.error.message);
+      console.warn("Plaivra could not create the missing profile.", inserted.error.message);
       setProfile(null);
       return;
     }
@@ -104,14 +104,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (!supabase) {
-          console.warn("FitLife Hub Supabase configuration is missing. Sign in is disabled until it is configured.");
+          console.warn("Plaivra Supabase configuration is missing. Sign in is disabled until it is configured.");
           setSession(null);
           setProfile(null);
           return;
         }
 
         const { data, error } = await supabase.auth.getSession();
-        if (error) console.warn("FitLife Hub could not read the current auth session.", error.message);
+        if (error) console.warn("Plaivra could not read the current auth session.", error.message);
         if (!mounted) return;
         setSession(data.session);
         if (data.session?.user) {
