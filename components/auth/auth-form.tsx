@@ -33,6 +33,8 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
 
@@ -40,6 +42,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     event.preventDefault();
     if (!email.trim()) return toast({ title: "Email is required", description: "Use the email for your Plaivra account." });
     if (password.length < 6) return toast({ title: "Password is too short", description: "Use at least 6 characters." });
+    if (mode === "register" && password !== confirmPassword) {
+      return toast({ title: "Passwords do not match", description: "Make sure both password fields match." });
+    }
 
     setIsLoading(true);
     setRememberSession(remember);
@@ -129,7 +134,6 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
               autoComplete="email"
               required
             />
@@ -142,7 +146,6 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="At least 6 characters"
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
                 required
                 className="pr-12"
@@ -159,6 +162,32 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
               </Button>
             </div>
           </div>
+          {mode === "register" ? (
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirm password</Label>
+              <div className="relative">
+                <Input
+                  id="confirm-password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  autoComplete="new-password"
+                  required
+                  className="pr-12"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-11"
+                  onClick={() => setShowConfirmPassword((value) => !value)}
+                  aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+          ) : null}
           <label className="solid-row flex min-h-11 items-center gap-3 px-3 text-sm">
             <input
               type="checkbox"
