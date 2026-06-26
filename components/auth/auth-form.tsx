@@ -134,8 +134,8 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              placeholder={mode === "register" ? "you@example.com" : undefined}
               autoComplete="email"
-              required
             />
           </div>
           <div className="space-y-2">
@@ -147,6 +147,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
+                placeholder={mode === "register" ? "At least 6 characters" : undefined}
                 required
                 className="pr-12"
               />
