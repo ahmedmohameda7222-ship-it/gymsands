@@ -40,16 +40,16 @@ interface LauncherCardProps {
 }
 
 function LauncherCard({ href, icon: Icon, label, status, detail, progress, accent = "default" }: LauncherCardProps) {
-  const accentBorder = accent === "success" ? "border-primary/40" : accent === "warning" ? "border-warning/40" : "border-border/70";
-  const accentBg = accent === "success" ? "bg-primary/5" : accent === "warning" ? "bg-warning/10" : "bg-card";
+  const accentBorder = accent === "success" ? "border-primary/40" : accent === "warning" ? "border-warning/40" : "border-white/50 dark:border-white/10";
+  const accentBg = accent === "success" ? "bg-primary/5" : accent === "warning" ? "bg-warning/10" : "bg-white/35 dark:bg-white/5";
   const statusColor = accent === "success" ? "text-primary" : accent === "warning" ? "text-warning" : "text-muted-foreground";
 
   return (
     <Link
       href={href}
-      className={`group flex items-center gap-3 rounded-lg border ${accentBorder} ${accentBg} p-3 transition hover:border-primary/50 hover:shadow-luxe sm:p-4`}
+      className={`group flex items-center gap-3 rounded-[var(--radius-card)] border ${accentBorder} ${accentBg} p-3 shadow-soft backdrop-blur-md transition hover:border-primary/50 hover:shadow-luxe sm:p-4`}
     >
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border bg-card shadow-soft">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/50 bg-white/40 shadow-soft backdrop-blur-md dark:border-white/10 dark:bg-white/10">
         <Icon className="h-5 w-5 text-primary" />
       </div>
       <div className="min-w-0 flex-1">
@@ -217,7 +217,7 @@ export default function WellnessPage() {
         </div>
 
         {/* Quick actions */}
-        <Card className="border-border/70 shadow-luxe">
+        <Card variant="glass">
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -249,7 +249,7 @@ export default function WellnessPage() {
         </Card>
 
         {/* Collapsible: detailed wellness checklist */}
-        <Card className="border-border/70 shadow-luxe">
+        <Card variant="glass">
           <button
             type="button"
             onClick={() => setShowDetails((s) => !s)}
@@ -280,7 +280,7 @@ export default function WellnessPage() {
 
 function CheckItem({ done, label, detail }: { done: boolean; label: string; detail: string }) {
   return (
-    <div className="flex items-start gap-2.5 rounded-md border border-border/70 bg-card p-2.5">
+    <div className="solid-row flex items-start gap-2.5 p-2.5">
       <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${done ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-muted-foreground"}`}>
         <CheckCircle2 className="h-3.5 w-3.5" />
       </div>

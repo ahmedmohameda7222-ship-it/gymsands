@@ -36,22 +36,22 @@ export default function LandingPage() {
           ))}
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(26,26,26,0.78),rgba(45,58,30,0.54),rgba(248,246,241,0.12)),linear-gradient(180deg,rgba(248,246,241,0.04),#F8F6F1)]" />
           <div className="container relative flex min-h-[88vh] items-center pb-16 pt-14">
-            <div className="max-w-3xl">
+            <div className="glass-card-strong max-w-3xl p-5 sm:p-8">
               <h1 className="mt-4 text-5xl font-bold tracking-normal sm:text-7xl">Plaivra</h1>
-              <p className="mt-5 max-w-2xl text-lg leading-8 text-[#f4efe6]/85">
+              <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
                 A calm premium space for ChatGPT-exported workout plans, exercise guidance, meal planning, calorie tracking, recovery, habits, supplements, and personal records.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Button asChild size="lg">
                   <Link href="/register">Create account</Link>
                 </Button>
-                <Button asChild variant="outline" size="lg" className="border-primary/60 bg-card/50 text-foreground hover:bg-card/80">
+                <Button asChild variant="outline" size="lg" className="border-primary/60 bg-white/50 text-foreground hover:bg-white/75 dark:bg-white/10 dark:hover:bg-white/15">
                   <Link href="/login">Login</Link>
                 </Button>
               </div>
               <div className="mt-8 flex flex-wrap gap-2">
                 {["ChatGPT plan export", "Workout tracking", "Exercise library", "Meal planning", "Progress tracking", "Sleep & recovery", "Habits", "Supplements", "Personal records"].map((item) => (
-                  <span key={item} className="glass-chip px-3 py-1 text-sm text-[#f4efe6]/85">
+                  <span key={item} className="glass-chip px-3 py-1 text-sm">
                     {item}
                   </span>
                 ))}
@@ -65,7 +65,7 @@ export default function LandingPage() {
             {features.map((feature) => {
               const Icon = feature.icon;
               return (
-                <Card key={feature.title} className="glass-card">
+                <Card key={feature.title} variant="glass">
                   <CardContent className="pt-5">
                     <Icon className="h-8 w-8 text-primary" />
                     <h2 className="mt-4 text-lg font-semibold">{feature.title}</h2>

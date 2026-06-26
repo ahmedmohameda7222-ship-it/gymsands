@@ -105,7 +105,7 @@ export function ReportingDashboard() {
 
   return (
     <div className="space-y-5">
-      <Card>
+      <Card variant="glass">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-5">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -128,7 +128,7 @@ export function ReportingDashboard() {
 
       {report ? (
         <>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="solid-tracking-card flex flex-wrap justify-end gap-2 p-3">
             <Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4" /> Export CSV</Button>
             <Button variant="outline" onClick={printReport}><Printer className="h-4 w-4" /> Print report</Button>
           </div>
@@ -144,7 +144,7 @@ function MetricGrid({ metrics }: { metrics: ReportMetric[] }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
       {metrics.map((metric) => (
-        <Card key={metric.label} className={metric.empty ? "border-dashed" : undefined}>
+        <Card key={metric.label} variant="glass" className={metric.empty ? "border-dashed" : undefined}>
           <CardContent className="pt-5">
             <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{metric.label}</p>
             <p className="mt-2 text-xl font-bold text-foreground">{metric.value}</p>
@@ -159,7 +159,7 @@ function MetricGrid({ metrics }: { metrics: ReportMetric[] }) {
 function ReportDetails({ report, mode }: { report: AggregatedReport; mode: Mode }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-      <Card>
+      <Card variant="glassStrong">
         <CardHeader><CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /> Empty states / period checks</CardTitle></CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>{report.workoutsCompleted === null ? `No workouts logged ${mode === "weekly" ? "this week" : "this month"}.` : `${report.workoutsCompleted} completed and ${report.workoutsSkipped ?? 0} skipped workouts in this period.`}</p>
@@ -170,11 +170,11 @@ function ReportDetails({ report, mode }: { report: AggregatedReport; mode: Mode 
         </CardContent>
       </Card>
 
-      <Card>
+      <Card variant="glassStrong">
         <CardHeader><CardTitle>Measurement changes</CardTitle></CardHeader>
         <CardContent className="grid gap-2 sm:grid-cols-2">
           {report.measurementChanges.map((item) => (
-            <div key={item.label} className="rounded-md border p-3">
+            <div key={item.label} className="solid-row p-3">
               <p className="font-semibold">{item.label}</p>
               <p className="mt-1 text-sm text-muted-foreground">{item.value === null ? "Not enough data" : `${formatDelta(item.value)} ${item.unit}`}</p>
             </div>
@@ -182,11 +182,11 @@ function ReportDetails({ report, mode }: { report: AggregatedReport; mode: Mode 
         </CardContent>
       </Card>
 
-      <Card className="xl:col-span-2">
+      <Card variant="glassStrong" className="xl:col-span-2">
         <CardHeader><CardTitle className="flex items-center gap-2"><Trophy className="h-5 w-5 text-primary" /> PRs achieved in selected period</CardTitle></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {report.prs.map((record) => (
-            <div key={record.id} className="rounded-md border p-3">
+            <div key={record.id} className="solid-row p-3">
               <p className="font-semibold">{record.exercise_name}</p>
               <p className="text-sm text-muted-foreground">{record.record_type} | {record.record_date}</p>
               <p className="text-sm text-muted-foreground">{[record.weight_kg ? `${record.weight_kg} kg` : null, record.reps ? `${record.reps} reps` : null, record.notes].filter(Boolean).join(" | ") || "PR logged"}</p>

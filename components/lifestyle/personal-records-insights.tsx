@@ -24,7 +24,7 @@ export function PersonalRecordsInsights() {
   return (
     <div className="space-y-4">
       {/* Hero summary */}
-      <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-luxe">
+      <div className="glass-card-strong p-5">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium text-muted-foreground">Personal Records</p>
           <p className="text-xs text-muted-foreground">{records.length} record{records.length !== 1 ? 's' : ''}</p>
@@ -54,7 +54,7 @@ export function PersonalRecordsInsights() {
       {groupedByExercise.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {groupedByExercise.slice(0, 6).map((group) => (
-            <div key={group.exercise_name} className="rounded-xl border border-border/70 bg-card p-3 shadow-soft">
+            <div key={group.exercise_name} className="glass-card p-3">
               <p className="text-sm font-semibold text-foreground">{group.exercise_name}</p>
               <div className="mt-2 flex items-end gap-2">
                 <p className="text-lg font-bold">{group.bestWeight ? `${group.bestWeight} kg` : "—"}</p>

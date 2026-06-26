@@ -114,7 +114,7 @@ export function WellnessDashboard() {
         <Metric title="Readiness" value={readiness.value === null ? "Not enough data" : `${readiness.value}%`} detail={readiness.detail} />
         <Metric title="Notifications" value={notificationState} detail="Browser-only reminders, no native push logic" />
       </div>
-      <Card className="glass-card shadow-luxe">
+      <Card variant="glass" className="shadow-luxe">
         <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
           <CardTitle className="text-sm font-medium">Recovery-aware suggestions</CardTitle>
         </CardHeader>
@@ -129,7 +129,7 @@ export function WellnessDashboard() {
           </div>
         </CardContent>
       </Card>
-      <Card className="glass-card shadow-luxe">
+      <Card variant="glass" className="shadow-luxe">
         <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
           <CardTitle className="text-sm font-medium">Habit streak rescue</CardTitle>
         </CardHeader>
@@ -140,7 +140,7 @@ export function WellnessDashboard() {
           </div>
         </CardContent>
       </Card>
-      <Card className="glass-card-strong shadow-luxe">
+      <Card variant="glassStrong" className="shadow-luxe">
         <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
           <CardTitle className="flex items-center gap-2 text-sm font-medium">
             <ShieldCheck className="h-4 w-4 text-primary" />
@@ -161,7 +161,7 @@ export function WellnessDashboard() {
           </div>
         </CardContent>
       </Card>
-      <Card className="solid-tracking-card shadow-luxe">
+      <Card className="shadow-luxe">
         <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
           <CardTitle className="flex items-center gap-2 text-sm font-medium">
             <Bell className="h-4 w-4 text-primary" />
@@ -827,7 +827,7 @@ export function PersonalRecordsTracker() {
 
 function Metric({ title, value, detail }: { title: string; value: string; detail: string }) {
   return (
-    <Card className="glass-card shadow-luxe">
+    <Card variant="glass" className="shadow-luxe">
       <CardContent className="p-4 sm:p-5">
         <p className="text-sm text-muted-foreground">{title}</p>
         <p className="mt-2 text-2xl font-bold">{value}</p>
@@ -839,7 +839,7 @@ function Metric({ title, value, detail }: { title: string; value: string; detail
 
 function TrackerShell({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
-    <Card className="solid-tracking-card shadow-luxe">
+    <Card className="shadow-luxe">
       <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
         <CardTitle>{title}</CardTitle>
         <p className="text-sm text-muted-foreground">{description}</p>

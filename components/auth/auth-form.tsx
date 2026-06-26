@@ -101,7 +101,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   }
 
   return (
-    <Card className="solid-tracking-card w-full max-w-md rounded-[24px]">
+    <Card className="w-full max-w-md rounded-[24px]">
       <CardHeader>
         <CardTitle>{mode === "login" ? "Login to Plaivra" : "Create your Plaivra account"}</CardTitle>
         <CardDescription>

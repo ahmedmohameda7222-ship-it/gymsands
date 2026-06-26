@@ -234,7 +234,7 @@ export function MyWorkoutPlans() {
 
           {/* Today's Workout Card - prominent on mobile */}
           {todayDay ? (
-            <Card className="solid-tracking-card overflow-hidden border-primary/20 shadow-luxe lg:hidden">
+            <Card className="overflow-hidden border-primary/20 shadow-luxe lg:hidden">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2">
                   <Badge>Today</Badge>
@@ -270,7 +270,7 @@ export function MyWorkoutPlans() {
             const sourceLabel = sourceBadge(plan);
             const meta = plan as PlanMeta;
             return (
-              <Card key={plan.id} className="glass-card overflow-hidden">
+              <Card key={plan.id} variant="glass" className="overflow-hidden">
                 <CardContent className="space-y-4 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -318,7 +318,7 @@ export function MyWorkoutPlans() {
       ) : null}
 
       {!isLoading && !loadError && archivedPlans.length ? (
-        <Card className="glass-card-strong">
+        <Card variant="glassStrong">
           <CardHeader><CardTitle>Archived plans</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {archivedPlans.map((plan) => (

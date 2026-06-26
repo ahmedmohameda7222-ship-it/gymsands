@@ -405,7 +405,7 @@ export default function CaloriesPage() {
         </TabsContent>
 
         <TabsContent value="targets" className="space-y-4">
-          <Card id="daily-targets" className="solid-tracking-card scroll-mt-24">
+          <Card id="daily-targets" className="scroll-mt-24">
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
               <div>
                 <CardTitle>Daily target</CardTitle>

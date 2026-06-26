@@ -231,7 +231,7 @@ export function ApiFoodTools({
   }, [session?.access_token]);
 
   return (
-    <Card className="solid-tracking-card">
+    <Card>
       <CardHeader>
         <CardTitle>Barcode meals</CardTitle>
       </CardHeader>

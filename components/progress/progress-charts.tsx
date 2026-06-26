@@ -23,7 +23,7 @@ export function ProgressCharts({
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <Card className="glass-card-strong">
+      <Card variant="glassStrong">
         <CardHeader>
           <CardTitle>Body changes</CardTitle>
         </CardHeader>
@@ -47,7 +47,7 @@ export function ProgressCharts({
         </CardContent>
       </Card>
 
-      <Card className="glass-card-strong">
+      <Card variant="glassStrong">
         <CardHeader>
           <CardTitle>Workout consistency</CardTitle>
         </CardHeader>

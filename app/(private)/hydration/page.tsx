@@ -143,7 +143,7 @@ export default function HydrationPage() {
       {!loadError ? (
         <div className="space-y-4">
           {/* Today progress — mobile hero */}
-          <Card className="border-border/70 shadow-luxe">
+          <Card variant="glassStrong">
             <CardContent className="p-4 sm:p-5">
               <div className="flex items-center justify-between">
                 <div>
@@ -153,7 +153,7 @@ export default function HydrationPage() {
                     {target ? `${remainingMl} ml remaining` : "Set a water target in Calories / Macros."}
                   </p>
                 </div>
-                <div className="flex h-16 w-16 items-center justify-center rounded-full border bg-card sm:h-20 sm:w-20">
+                <div className="glass-card flex h-16 w-16 items-center justify-center rounded-full sm:h-20 sm:w-20">
                   <Droplets className="h-7 w-7 text-primary sm:h-8 sm:w-8" />
                 </div>
               </div>
@@ -201,7 +201,7 @@ export default function HydrationPage() {
           </Card>
 
           {/* Recent entries — compact list */}
-          <Card className="border-border/70 shadow-luxe">
+          <Card>
             <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
               <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-normal">Recent entries</CardTitle>
             </CardHeader>
@@ -219,7 +219,7 @@ export default function HydrationPage() {
                 {logs.map((log) => (
                   <div
                     key={log.id}
-                    className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-card p-3"
+                    className="solid-row flex items-center justify-between gap-3 p-3"
                   >
                     <div className="min-w-0">
                       <p className="font-semibold">{log.amount_ml} ml</p>
@@ -245,7 +245,7 @@ export default function HydrationPage() {
           </Card>
 
           {/* Weekly hydration — compact horizontal scroll on mobile */}
-          <Card className="border-border/70 shadow-luxe">
+          <Card variant="glassStrong">
             <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground uppercase tracking-normal">
                 <CalendarDays className="h-4 w-4 text-primary" />
@@ -284,7 +284,7 @@ export default function HydrationPage() {
                   return (
                     <div
                       key={day.date}
-                      className={`flex min-w-[4.5rem] flex-1 flex-col items-center rounded-md border p-2 text-center ${isToday ? "border-primary/40 bg-primary/5" : "border-border/70 bg-card"}`}
+                      className={`flex min-w-[4.5rem] flex-1 flex-col items-center rounded-[14px] border p-2 text-center ${isToday ? "border-primary/40 bg-primary/5" : "border-white/50 bg-white/35 dark:border-white/10 dark:bg-white/5"}`}
                     >
                       <p className={`text-[10px] font-semibold uppercase ${isToday ? "text-primary" : "text-muted-foreground"}`}>
                         {isToday ? "Today" : new Date(`${day.date}T00:00:00`).toLocaleDateString([], { weekday: "short" })}
@@ -310,7 +310,7 @@ export default function HydrationPage() {
                   return (
                     <div
                       key={day.date}
-                      className={`rounded-md border p-3 text-center ${isToday ? "border-primary/40 bg-primary/5" : "border-border/70 bg-card"}`}
+                      className={`rounded-[14px] border p-3 text-center ${isToday ? "border-primary/40 bg-primary/5" : "border-white/50 bg-white/35 dark:border-white/10 dark:bg-white/5"}`}
                     >
                       <p className={`text-xs font-semibold ${isToday ? "text-primary" : "text-muted-foreground"}`}>
                         {isToday ? "Today" : new Date(`${day.date}T00:00:00`).toLocaleDateString([], { weekday: "short" })}
@@ -352,7 +352,7 @@ export default function HydrationPage() {
 
 function HydrationMetric({ icon: Icon, label, value, detail }: { icon: typeof Droplets; label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-md border border-border/70 bg-card p-3">
+    <div className="glass-card p-3">
       <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-muted-foreground">
         <Icon className="h-4 w-4 text-primary" />
         {label}
