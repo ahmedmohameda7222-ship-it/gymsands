@@ -8,7 +8,11 @@ import { createThemeBootstrapScript } from "@/lib/themes";
 
 export const metadata: Metadata = {
   title: "Plaivra",
-  description: "Simple workout, meal, and progress tracking for real life."
+  description: "Simple workout, meal, and progress tracking for real life.",
+  icons: {
+    icon: [{ url: "/plaivra-logo.png", type: "image/png" }],
+    apple: [{ url: "/plaivra-logo.png", type: "image/png" }]
+  }
 };
 
 export const viewport: Viewport = {
