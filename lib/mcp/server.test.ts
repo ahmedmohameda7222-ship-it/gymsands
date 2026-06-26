@@ -165,7 +165,7 @@ describe("canUseTool - read tool section isolation", () => {
     }
   });
 
-  it("admin tools remain blocked for normal users even with fitlife.admin", () => {
+  it("admin tools remain blocked for normal users even with plaivra.admin", () => {
     const ctx = mockContext([MCP_SCOPES.admin, MCP_SCOPES.fullAccess], "member");
     const adminTools = mcpTools.filter((t) => t.risk === "admin");
     for (const tool of adminTools) {

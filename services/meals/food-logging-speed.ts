@@ -40,8 +40,8 @@ export type SavedRecipe = {
   updated_at: string;
 };
 
-const favoritePrefix = "fitlife-food-favorites";
-const recipePrefix = "fitlife-recipes";
+const favoritePrefix = "plaivra-food-favorites";
+const recipePrefix = "plaivra-recipes";
 
 function storageKey(prefix: string, userId: string | null | undefined) {
   return `${prefix}:${userId || "anonymous"}`;
@@ -55,7 +55,7 @@ function readJson<T>(key: string, fallback: T): T {
   // TODO(migration): Move favorite foods and recipes to Supabase
   if (!canUseStorage()) return fallback;
   try {
-    const raw = window.localStorage.getItem(key);
+    const raw = window.localStorage.getItem(key) ?? window.localStorage.getItem(key.replace("plaivra-", "fitlife-"));
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
@@ -65,6 +65,7 @@ function readJson<T>(key: string, fallback: T): T {
 function writeJson<T>(key: string, value: T) {
   if (!canUseStorage()) return;
   window.localStorage.setItem(key, JSON.stringify(value));
+  window.localStorage.removeItem(key.replace("plaivra-", "fitlife-"));
 }
 
 function toNumber(value: unknown) {

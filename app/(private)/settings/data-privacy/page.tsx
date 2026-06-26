@@ -30,7 +30,7 @@ export default function DataPrivacyPage() {
   function exportSettings() {
     const payload = {
       exportedAt: new Date().toISOString(),
-      type: "fitlife_user_app_settings",
+      type: "plaivra_user_app_settings",
       settings
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });

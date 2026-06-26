@@ -40,14 +40,14 @@ function getBearerToken(request: Request) {
 }
 
 export function createConnectionToken() {
-  return `fitlife_mcp_${crypto.randomBytes(32).toString("base64url")}`;
+  return `plaivra_mcp_${crypto.randomBytes(32).toString("base64url")}`;
 }
 
 export function hashConnectionToken(token: string) {
-  if (!serverEnv.fitlifeMcpTokenSecret) {
-    throw new Error("FITLIFE_MCP_TOKEN_SECRET is required to hash ChatGPT connection tokens.");
+  if (!serverEnv.plaivraMcpTokenSecret) {
+    throw new Error("PLAIVRA_MCP_TOKEN_SECRET is required to hash ChatGPT connection tokens.");
   }
-  return crypto.createHmac("sha256", serverEnv.fitlifeMcpTokenSecret).update(token).digest("hex");
+  return crypto.createHmac("sha256", serverEnv.plaivraMcpTokenSecret).update(token).digest("hex");
 }
 
 function protectedResourceUrl(request: Request) {

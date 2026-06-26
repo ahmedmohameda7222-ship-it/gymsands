@@ -2,16 +2,16 @@
 
 ## What this does
 
-This feature lets a FitLife user connect their Plaivra account to ChatGPT once, then use ChatGPT itself to log and manage FitLife data through controlled MCP tools.
+This feature lets a Plaivra user connect their Plaivra account to ChatGPT once, then use ChatGPT itself to log and manage Plaivra data through controlled MCP tools.
 
 Example ChatGPT messages:
 
 - "I ate 2 boiled eggs for breakfast today."
 - "I drank 750ml water."
 - "I benched 80kg for 6 reps."
-- "Save this 4-day muscle gain workout plan to FitLife."
+- "Save this 4-day muscle gain workout plan to Plaivra."
 
-ChatGPT creates or edits the plan externally, then calls the Plaivra MCP endpoint to save, schedule, and track the exact user-approved data. FitLife authenticates the linked connection, maps it to the correct Supabase user, validates typed tool input, writes only through safe server-side actions, and stores the result in Supabase.
+ChatGPT creates or edits the plan externally, then calls the Plaivra MCP endpoint to save, schedule, and track the exact user-approved data. Plaivra authenticates the linked connection, maps it to the correct Supabase user, validates typed tool input, writes only through safe server-side actions, and stores the result in Supabase.
 
 ## What this does not do
 
@@ -19,11 +19,11 @@ ChatGPT creates or edits the plan externally, then calls the Plaivra MCP endpoin
 - It does not use Gemini.
 - It does not require `GEMINI_API_KEY`.
 - It does not require `OPENAI_API_KEY`.
-- It does not generate workout plans inside FitLife.
+- It does not generate workout plans inside Plaivra.
 - It does not let ChatGPT run SQL.
 - It does not expose Supabase service-role keys to the browser.
 
-FitLife remains the real account identity. ChatGPT is only an external client after the user explicitly links FitLife.
+Plaivra remains the real account identity. ChatGPT is only an external client after the user explicitly links Plaivra.
 
 ## Added architecture
 
@@ -45,7 +45,7 @@ components/settings/connected-apps.tsx
 
 This implementation uses secure token linking as the development foundation:
 
-1. User logs in to FitLife.
+1. User logs in to Plaivra.
 2. User opens Settings > Connected Apps.
 3. User creates a ChatGPT connection.
 4. Plaivra shows a one-time token.
@@ -62,9 +62,9 @@ The code already separates the resource server, protected-resource metadata, use
 1. Add an OAuth authorization server or identity provider.
 2. Publish authorization-server metadata.
 3. Support PKCE and the `resource` parameter.
-4. Issue access tokens scoped to the linked FitLife user.
+4. Issue access tokens scoped to the linked Plaivra user.
 5. Replace the token-hash lookup in `lib/mcp/auth.ts` with issuer token validation.
-6. Keep the same MCP tool schemas and server-side FitLife actions.
+6. Keep the same MCP tool schemas and server-side Plaivra actions.
 
 ## Required environment variables
 
@@ -74,14 +74,14 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_APP_URL=https://your-vercel-domain.vercel.app
 
-FITLIFE_MCP_BASE_URL=https://your-vercel-domain.vercel.app/api/mcp
-FITLIFE_MCP_TOKEN_SECRET=replace-with-a-long-random-secret
-FITLIFE_MCP_OAUTH_CLIENT_ID=
-FITLIFE_MCP_OAUTH_CLIENT_SECRET=
-FITLIFE_MCP_ALLOWED_ORIGINS=https://chatgpt.com,https://chat.openai.com
+PLAIVRA_MCP_BASE_URL=https://your-vercel-domain.vercel.app/api/mcp
+PLAIVRA_MCP_TOKEN_SECRET=replace-with-a-long-random-secret
+PLAIVRA_MCP_OAUTH_CLIENT_ID=
+PLAIVRA_MCP_OAUTH_CLIENT_SECRET=
+PLAIVRA_MCP_ALLOWED_ORIGINS=https://chatgpt.com,https://chat.openai.com
 ```
 
-Use a long random value for `FITLIFE_MCP_TOKEN_SECRET`. Do not expose it in frontend code.
+Use a long random value for `PLAIVRA_MCP_TOKEN_SECRET`. Do not expose it in frontend code.
 
 ## Supabase setup
 
@@ -102,7 +102,7 @@ Security behavior:
 - plaintext token is shown only once
 - users can view/revoke only their own connections
 - MCP execution uses service role only on the server
-- every action manually scopes data to the authenticated FitLife user
+- every action manually scopes data to the authenticated Plaivra user
 
 ## MCP tools
 
@@ -149,14 +149,14 @@ npm run build
 
 ```bash
 curl -X POST "http://localhost:3000/api/mcp" \
-  -H "Authorization: Bearer fitlife_mcp_your_token" \
+  -H "Authorization: Bearer plaivra_mcp_your_token" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
 
 ```bash
 curl -X POST "http://localhost:3000/api/mcp" \
-  -H "Authorization: Bearer fitlife_mcp_your_token" \
+  -H "Authorization: Bearer plaivra_mcp_your_token" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"add_water_log","arguments":{"amount_ml":750,"date":"today"}}}'
 ```
@@ -164,8 +164,8 @@ curl -X POST "http://localhost:3000/api/mcp" \
 ## Troubleshooting
 
 - `401`: token missing, invalid, or revoked.
-- `503`: `SUPABASE_SERVICE_ROLE_KEY` or `FITLIFE_MCP_TOKEN_SECRET` missing.
+- `503`: `SUPABASE_SERVICE_ROLE_KEY` or `PLAIVRA_MCP_TOKEN_SECRET` missing.
 - `ambiguous_food_match`: call `search_foods` and ask user to choose.
-- `not_admin`: linked FitLife profile is not admin.
+- `not_admin`: linked Plaivra profile is not admin.
 - `target_record_not_found`: record does not belong to linked user or does not exist.
 - `requires_confirmation`: ask the user for explicit confirmation, then call again with `confirm: true`.

@@ -8,11 +8,11 @@ export const serverEnv = {
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
   appUrl: publicEnv.appUrl,
   wgerApiKey: process.env.WGER_API_KEY || "",
-  fitlifeMcpBaseUrl: process.env.FITLIFE_MCP_BASE_URL || `${publicEnv.appUrl}/api/mcp`,
-  fitlifeMcpTokenSecret: process.env.FITLIFE_MCP_TOKEN_SECRET || "",
-  fitlifeMcpOAuthClientId: process.env.FITLIFE_MCP_OAUTH_CLIENT_ID || "",
-  fitlifeMcpOAuthClientSecret: process.env.FITLIFE_MCP_OAUTH_CLIENT_SECRET || "",
-  fitlifeMcpAllowedOrigins: process.env.FITLIFE_MCP_ALLOWED_ORIGINS || "",
+  plaivraMcpBaseUrl: process.env.PLAIVRA_MCP_BASE_URL || process.env.FITLIFE_MCP_BASE_URL || `${publicEnv.appUrl}/api/mcp`,
+  plaivraMcpTokenSecret: process.env.PLAIVRA_MCP_TOKEN_SECRET || process.env.FITLIFE_MCP_TOKEN_SECRET || "",
+  plaivraMcpOAuthClientId: process.env.PLAIVRA_MCP_OAUTH_CLIENT_ID || process.env.FITLIFE_MCP_OAUTH_CLIENT_ID || "",
+  plaivraMcpOAuthClientSecret: process.env.PLAIVRA_MCP_OAUTH_CLIENT_SECRET || process.env.FITLIFE_MCP_OAUTH_CLIENT_SECRET || "",
+  plaivraMcpAllowedOrigins: process.env.PLAIVRA_MCP_ALLOWED_ORIGINS || process.env.FITLIFE_MCP_ALLOWED_ORIGINS || "",
   resendApiKey: process.env.RESEND_API_KEY || "",
   resendFromEmail: process.env.RESEND_FROM_EMAIL || ""
 };
@@ -67,7 +67,7 @@ export function configuredProviders() {
   return [
     { provider: "Open Food Facts", configured: true },
     { provider: "wger", configured: Boolean(serverEnv.wgerApiKey) },
-    { provider: "ChatGPT MCP Connector", configured: Boolean(serverEnv.fitlifeMcpBaseUrl && serverEnv.fitlifeMcpTokenSecret && serverEnv.supabaseServiceRoleKey) },
+    { provider: "ChatGPT MCP Connector", configured: Boolean(serverEnv.plaivraMcpBaseUrl && serverEnv.plaivraMcpTokenSecret && serverEnv.supabaseServiceRoleKey) },
     { provider: "Resend", configured: Boolean(serverEnv.resendApiKey && serverEnv.resendFromEmail) }
   ];
 }

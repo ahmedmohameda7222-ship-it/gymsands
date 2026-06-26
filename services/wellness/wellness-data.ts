@@ -25,7 +25,7 @@ export type BrowserReminder = {
   enabled: boolean;
 };
 
-const reminderPrefix = "fitlife-browser-reminders";
+const reminderPrefix = "plaivra-browser-reminders";
 
 function canUseUserData(userId: string | null | undefined) {
   return Boolean(supabase && userId && isUuid(userId));
@@ -43,7 +43,7 @@ function readJson<T>(key: string, fallback: T): T {
   // TODO(migration): Move wellness history to Supabase
   if (!canUseStorage()) return fallback;
   try {
-    const raw = window.localStorage.getItem(key);
+    const raw = window.localStorage.getItem(key) ?? window.localStorage.getItem(key.replace("plaivra-", "fitlife-"));
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
@@ -53,6 +53,7 @@ function readJson<T>(key: string, fallback: T): T {
 function writeJson<T>(key: string, value: T) {
   if (!canUseStorage()) return;
   window.localStorage.setItem(key, JSON.stringify(value));
+  window.localStorage.removeItem(key.replace("plaivra-", "fitlife-"));
 }
 
 function daysAgoIso(days: number) {

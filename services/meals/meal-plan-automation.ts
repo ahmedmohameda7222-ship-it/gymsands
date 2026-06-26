@@ -14,7 +14,7 @@ export type ShoppingListItem = {
   checked: boolean;
 };
 
-const shoppingPrefix = "fitlife-shopping-checks";
+const shoppingPrefix = "plaivra-shopping-checks";
 
 function storageKey(prefix: string, userId: string | null | undefined) {
   return `${prefix}:${userId || "anonymous"}`;
@@ -31,7 +31,7 @@ function canUseUserData(userId: string | null | undefined): userId is string {
 function readJson<T>(key: string, fallback: T): T {
   if (!canStore()) return fallback;
   try {
-    const raw = window.localStorage.getItem(key);
+    const raw = window.localStorage.getItem(key) ?? window.localStorage.getItem(key.replace("plaivra-", "fitlife-"));
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
@@ -41,6 +41,7 @@ function readJson<T>(key: string, fallback: T): T {
 function writeJson<T>(key: string, value: T) {
   if (!canStore()) return;
   window.localStorage.setItem(key, JSON.stringify(value));
+  window.localStorage.removeItem(key.replace("plaivra-", "fitlife-"));
 }
 
 const migratedShoppingKeys = new Set<string>();

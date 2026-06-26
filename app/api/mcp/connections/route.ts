@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 function requireMcpConnectionConfig() {
   return requireServerKeys("Plaivra MCP", [
     ["SUPABASE_SERVICE_ROLE_KEY", serverEnv.supabaseServiceRoleKey],
-    ["FITLIFE_MCP_TOKEN_SECRET", serverEnv.fitlifeMcpTokenSecret]
+    ["PLAIVRA_MCP_TOKEN_SECRET", serverEnv.plaivraMcpTokenSecret]
   ]);
 }
 

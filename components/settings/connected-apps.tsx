@@ -78,7 +78,7 @@ function NumberedInstructions({ items }: NumberedInstructionsProps) {
 }
 
 export function ChatGptSetupCard() {
-  const mcpServerUrl = env.fitlifeMcpServerUrl.trim();
+  const mcpServerUrl = env.plaivraMcpServerUrl.trim();
   const hasMcpServerUrl = Boolean(mcpServerUrl);
 
   return (
@@ -210,7 +210,7 @@ export function ChatGptSetupFlow() {
   const [copied, setCopied] = useState<CopyKind | null>(null);
   const [connectionToken, setConnectionToken] = useState("");
   const [connections, setConnections] = useState<ChatGptConnection[]>([]);
-  const mcpServerUrl = env.fitlifeMcpServerUrl.trim();
+  const mcpServerUrl = env.plaivraMcpServerUrl.trim();
   const hasMcpServerUrl = Boolean(mcpServerUrl);
 
   const authHeaders = useCallback(
@@ -308,10 +308,10 @@ export function ChatGptSetupFlow() {
         </div>
         {connectionToken ? (
           <div className="rounded-md border border-primary/20 bg-card p-3">
-            <label htmlFor="fitlife-connection-code" className="text-sm font-semibold text-foreground">
+            <label htmlFor="plaivra-connection-code" className="text-sm font-semibold text-foreground">
               Plaivra connection code
             </label>
-            <Input id="fitlife-connection-code" readOnly value={connectionToken} className="mt-2 font-mono text-xs" />
+            <Input id="plaivra-connection-code" readOnly value={connectionToken} className="mt-2 font-mono text-xs" />
             <p className="mt-2 text-xs text-muted-foreground">Copy this code now. Plaivra only shows it once.</p>
           </div>
         ) : null}
@@ -323,10 +323,10 @@ export function ChatGptSetupFlow() {
       >
         {hasMcpServerUrl ? (
           <div className="rounded-md border border-border/70 bg-card p-3">
-            <label htmlFor="fitlife-connection-url" className="text-sm font-semibold text-foreground">
+            <label htmlFor="plaivra-connection-url" className="text-sm font-semibold text-foreground">
               Plaivra connection URL
             </label>
-            <Input id="fitlife-connection-url" readOnly value={mcpServerUrl} className="mt-2 font-mono text-xs" />
+            <Input id="plaivra-connection-url" readOnly value={mcpServerUrl} className="mt-2 font-mono text-xs" />
           </div>
         ) : (
           <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">

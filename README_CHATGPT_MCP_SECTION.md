@@ -1,6 +1,6 @@
 ## ChatGPT External Connector / MCP Server
 
-FitLife includes a secure external MCP connector so ChatGPT can call controlled FitLife tools after a user links their Plaivra account.
+Plaivra includes a secure external MCP connector so ChatGPT can call controlled Plaivra tools after a user links their Plaivra account.
 
 This is not an in-app chatbot.
 
@@ -9,17 +9,17 @@ ChatGPT flow:
 ```text
 User opens ChatGPT
 ↓
-User connects FitLife once
+User connects Plaivra once
 ↓
 User writes naturally in ChatGPT
 ↓
 ChatGPT calls Plaivra MCP tools
 ↓
-FitLife validates the linked user
+Plaivra validates the linked user
 ↓
-FitLife saves structured data in Supabase
+Plaivra saves structured data in Supabase
 ↓
-User opens FitLife and sees the update
+User opens Plaivra and sees the update
 ```
 
 Supported areas:
@@ -43,9 +43,9 @@ Important:
 - No `GEMINI_API_KEY` is needed.
 - No `OPENAI_API_KEY` is needed for this feature.
 - Plaivra does not call OpenAI for this connector.
-- ChatGPT calls FitLife through `/api/mcp`.
+- ChatGPT calls Plaivra through `/api/mcp`.
 - ChatGPT never receives Supabase service-role keys.
 - ChatGPT never writes raw SQL.
-- All MCP writes are typed, validated, audited, and scoped to the linked FitLife user.
+- All MCP writes are typed, validated, audited, and scoped to the linked Plaivra user.
 
 Documentation: `docs/chatgpt-mcp.md`

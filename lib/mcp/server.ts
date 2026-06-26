@@ -15,7 +15,7 @@ type JsonRpcRequest = {
 function corsHeaders(request?: Request) {
   const allowed = Array.from(
     new Set([
-      ...serverEnv.fitlifeMcpAllowedOrigins.split(",").map((origin) => origin.trim()).filter(Boolean),
+      ...serverEnv.plaivraMcpAllowedOrigins.split(",").map((origin) => origin.trim()).filter(Boolean),
       serverEnv.appUrl
     ].filter(Boolean))
   );
@@ -57,14 +57,14 @@ function mcpHasAnyScope(ctx: McpContext, scopes: string[]) {
 /**
  * Map each MCP tool to its required scope(s).
  * Write access implies read within the same section only.
- * Admin tools require fitlife.admin AND an admin role.
+ * Admin tools require plaivra.admin AND an admin role.
  */
 export function requiredScopesForTool(tool: McpToolDefinition): string[] {
   if (tool.risk === "admin") return [MCP_SCOPES.admin];
 
   const name = tool.name;
 
-  // Profile / identity read tools
+  // Profile / identity read tools (get_fitlife_status kept for ChatGPT compatibility)
   if (name === "get_fitlife_status" || name === "get_user_profile") {
     return [MCP_SCOPES.profileRead];
   }

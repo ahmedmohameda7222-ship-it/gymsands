@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Never allow normal users to save fitlife.admin
+    // Never allow normal users to save plaivra.admin
     if (candidateScopes.includes(MCP_SCOPES.admin)) {
       return NextResponse.json(
         { error: "Admin scope is not allowed for normal users." },

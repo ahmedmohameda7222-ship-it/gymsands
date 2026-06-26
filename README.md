@@ -16,7 +16,7 @@ Plaivra does not generate workout or meal plans inside the app. Users create pla
 - Next.js App Router, React, and TypeScript
 - Tailwind CSS luxury wellness design tokens
 - Supabase Auth, database, RLS, and Storage
-- ChatGPT/FitLife connector URL support
+- ChatGPT/Plaivra connector URL support
 - Workout plan storage and tracking
 - Manual workout plan builder for advanced editing
 - Exercise library based on the real 600-exercise SQL seed
@@ -47,7 +47,7 @@ Public browser variables:
 - `NEXT_PUBLIC_APP_URL`
 - `NEXT_PUBLIC_USE_MOCK_AUTH`
 - `NEXT_PUBLIC_CHATGPT_CONNECT_URL`
-- `NEXT_PUBLIC_FITLIFE_MCP_SERVER_URL`
+- `NEXT_PUBLIC_PLAIVRA_MCP_SERVER_URL`
 
 Server-side provider keys:
 
