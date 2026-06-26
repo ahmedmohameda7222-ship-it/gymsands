@@ -45,7 +45,7 @@ export default function LandingPage() {
             <div className="glass-card-strong max-w-3xl p-5 sm:p-8">
               <h1 className="mt-4 text-5xl font-bold tracking-normal sm:text-7xl">Plaivra</h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-                A calm premium space for ChatGPT-exported workout plans, exercise guidance, meal planning, calorie tracking, recovery, habits, supplements, and personal records.
+                AI plans it. Plaivra tracks it.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Button asChild size="lg">
