@@ -26,8 +26,10 @@ import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { addDays, daysBetween, startOfWeek, todayIso } from "@/lib/date-utils";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 
-const GOAL_WEIGHT_STORAGE_KEY = "fitlife_goal_weight_kg";
-const BODY_FAT_SETTINGS_KEY = "fitlife_body_fat_estimate_settings";
+const GOAL_WEIGHT_STORAGE_KEY = "plaivra_goal_weight_kg";
+const LEGACY_GOAL_WEIGHT_STORAGE_KEY = "fitlife_goal_weight_kg";
+const BODY_FAT_SETTINGS_KEY = "plaivra_body_fat_estimate_settings";
+const LEGACY_BODY_FAT_SETTINGS_KEY = "fitlife_body_fat_estimate_settings";
 const photoTypes: ProgressPhotoType[] = ["front", "side", "back"];
 
 const editableMeasurementFields: Array<[keyof BodyMeasurement, string]> = [
@@ -102,14 +104,14 @@ export default function ProgressPage() {
 
   useEffect(() => {
     // TODO(migration): Move goal weight to Supabase profile completely
-    const storedGoal = window.localStorage.getItem(GOAL_WEIGHT_STORAGE_KEY);
+    const storedGoal = window.localStorage.getItem(GOAL_WEIGHT_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_GOAL_WEIGHT_STORAGE_KEY);
     if (profile?.target_weight_kg) {
       setGoalWeight(String(profile.target_weight_kg));
     } else if (storedGoal) {
       setGoalWeight(storedGoal);
     }
     // TODO(migration): Move body fat settings to Supabase
-    const storedEstimate = window.localStorage.getItem(BODY_FAT_SETTINGS_KEY);
+    const storedEstimate = window.localStorage.getItem(BODY_FAT_SETTINGS_KEY) ?? window.localStorage.getItem(LEGACY_BODY_FAT_SETTINGS_KEY);
     if (storedEstimate) {
       try {
         const parsed = JSON.parse(storedEstimate) as { heightCm?: string; sex?: "male" | "female" };
@@ -170,6 +172,7 @@ export default function ProgressPage() {
       toast({ title: "Goal weight saved", description: "The goal is synced to your Plaivra profile." });
     } catch (error) {
       window.localStorage.setItem(GOAL_WEIGHT_STORAGE_KEY, String(numericGoalWeight));
+      window.localStorage.removeItem(LEGACY_GOAL_WEIGHT_STORAGE_KEY);
       toast({
         title: "Goal saved on this device",
         description: error instanceof Error ? `${error.message} The local fallback was kept.` : "Profile sync failed, so the local fallback was kept."
@@ -179,6 +182,7 @@ export default function ProgressPage() {
 
   function saveEstimateSettings() {
     window.localStorage.setItem(BODY_FAT_SETTINGS_KEY, JSON.stringify(estimateSettings));
+    window.localStorage.removeItem(LEGACY_BODY_FAT_SETTINGS_KEY);
     toast({ title: "Estimate settings saved", description: "Used only for the clearly labeled body-fat estimate." });
   }
 

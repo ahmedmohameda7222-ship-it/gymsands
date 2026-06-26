@@ -20,8 +20,8 @@ type StoredCustomExercise = Workout & {
   updated_at: string;
 };
 
-const favoritesPrefix = "fitlife-exercise-favorites";
-const customPrefix = "fitlife-custom-exercises";
+const favoritesPrefix = "plaivra-exercise-favorites";
+const customPrefix = "plaivra-custom-exercises";
 
 function canUseBrowserStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
@@ -46,7 +46,7 @@ function readJson<T>(key: string, fallback: T): T {
   // TODO(migration): Move exercise favorites and custom exercises to Supabase
   if (!canUseBrowserStorage()) return fallback;
   try {
-    const raw = window.localStorage.getItem(key);
+    const raw = window.localStorage.getItem(key) ?? window.localStorage.getItem(key.replace("plaivra-", "fitlife-"));
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;

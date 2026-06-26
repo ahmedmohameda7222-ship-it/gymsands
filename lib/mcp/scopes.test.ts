@@ -19,7 +19,7 @@ describe("expandMcpScopes", () => {
     }
   });
 
-  it("expands legacy fitlife.all to all normal user scopes", () => {
+  it("expands plaivra.all to all normal user scopes", () => {
     const expanded = expandMcpScopes([MCP_SCOPES.all]);
     for (const scope of MCP_NORMAL_USER_SCOPES) {
       expect(expanded).toContain(scope);
@@ -104,7 +104,7 @@ describe("readScopeAllowed", () => {
 
 describe("migrateLegacyScopes", () => {
   it("migrates fitlife.all to full_access + normal scopes", () => {
-    const migrated = migrateLegacyScopes([MCP_SCOPES.all]);
+    const migrated = migrateLegacyScopes(["fitlife.all"]);
     expect(migrated).toContain(MCP_SCOPES.fullAccess);
     for (const scope of MCP_NORMAL_USER_SCOPES) {
       expect(migrated).toContain(scope);

@@ -21,11 +21,11 @@ function base64UrlDecode(value: string) {
 }
 
 function sign(value: string) {
-  if (!serverEnv.fitlifeMcpTokenSecret) {
-    throw new Error("FITLIFE_MCP_TOKEN_SECRET is required for Plaivra MCP OAuth.");
+  if (!serverEnv.plaivraMcpTokenSecret) {
+    throw new Error("PLAIVRA_MCP_TOKEN_SECRET is required for Plaivra MCP OAuth.");
   }
 
-  return crypto.createHmac("sha256", serverEnv.fitlifeMcpTokenSecret).update(value).digest("base64url");
+  return crypto.createHmac("sha256", serverEnv.plaivraMcpTokenSecret).update(value).digest("base64url");
 }
 
 function safeEqual(a: string, b: string) {
@@ -36,15 +36,15 @@ function safeEqual(a: string, b: string) {
 
 function createAuthorizationCode(payload: AuthorizationCodePayload) {
   const encoded = base64UrlEncode(JSON.stringify(payload));
-  return `fitlife_code_${encoded}.${sign(encoded)}`;
+  return `plaivra_code_${encoded}.${sign(encoded)}`;
 }
 
 function verifyAuthorizationCode(code: string): AuthorizationCodePayload {
-  if (!code.startsWith("fitlife_code_")) {
+  if (!code.startsWith("plaivra_code_")) {
     throw new Error("Invalid authorization code.");
   }
 
-  const body = code.slice("fitlife_code_".length);
+  const body = code.slice("plaivra_code_".length);
   const [encoded, signature] = body.split(".");
   if (!encoded || !signature || !safeEqual(sign(encoded), signature)) {
     throw new Error("Invalid authorization code signature.");
@@ -109,7 +109,7 @@ async function readTokenRequestForm(request: Request) {
 }
 
 async function getConnectionForClientId(clientId: string) {
-  if (!clientId.startsWith("fitlife_mcp_")) {
+  if (!clientId.startsWith("plaivra_mcp_")) {
     return null;
   }
 
@@ -163,7 +163,7 @@ export function oauthAuthorizationServerMetadata(request: Request) {
 
 export function oauthProtectedResourceMetadata(request: Request) {
   const origin = originFromRequest(request);
-  const resource = serverEnv.fitlifeMcpBaseUrl || `${origin}/api/mcp`;
+  const resource = serverEnv.plaivraMcpBaseUrl || `${origin}/api/mcp`;
 
   return NextResponse.json(
     {
@@ -286,7 +286,7 @@ export async function handleOAuthToken(request: Request) {
 export async function handleOAuthRegister() {
   return NextResponse.json(
     {
-      client_id: "Paste your Plaivra fitlife_mcp_ token here as OAuth Client ID",
+      client_id: "Paste your Plaivra plaivra_mcp_ token here as OAuth Client ID",
       client_id_issued_at: Math.floor(Date.now() / 1000),
       token_endpoint_auth_method: "none",
       grant_types: ["authorization_code"],

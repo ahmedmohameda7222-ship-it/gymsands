@@ -1,32 +1,32 @@
 export const MCP_SCOPES = {
-  fullAccess: "fitlife.full_access",
+  fullAccess: "plaivra.full_access",
 
-  workoutsRead: "fitlife.workouts.read",
-  workoutsWrite: "fitlife.workouts.write",
+  workoutsRead: "plaivra.workouts.read",
+  workoutsWrite: "plaivra.workouts.write",
 
-  nutritionRead: "fitlife.nutrition.read",
-  nutritionWrite: "fitlife.nutrition.write",
+  nutritionRead: "plaivra.nutrition.read",
+  nutritionWrite: "plaivra.nutrition.write",
 
-  mealPlansRead: "fitlife.meal_plans.read",
-  mealPlansWrite: "fitlife.meal_plans.write",
+  mealPlansRead: "plaivra.meal_plans.read",
+  mealPlansWrite: "plaivra.meal_plans.write",
 
-  hydrationRead: "fitlife.hydration.read",
-  hydrationWrite: "fitlife.hydration.write",
+  hydrationRead: "plaivra.hydration.read",
+  hydrationWrite: "plaivra.hydration.write",
 
-  progressRead: "fitlife.progress.read",
-  progressWrite: "fitlife.progress.write",
+  progressRead: "plaivra.progress.read",
+  progressWrite: "plaivra.progress.write",
 
-  wellnessRead: "fitlife.wellness.read",
-  wellnessWrite: "fitlife.wellness.write",
+  wellnessRead: "plaivra.wellness.read",
+  wellnessWrite: "plaivra.wellness.write",
 
-  profileRead: "fitlife.profile.read",
-  profileWrite: "fitlife.profile.write",
+  profileRead: "plaivra.profile.read",
+  profileWrite: "plaivra.profile.write",
 
-  settingsRead: "fitlife.settings.read",
-  settingsWrite: "fitlife.settings.write",
+  settingsRead: "plaivra.settings.read",
+  settingsWrite: "plaivra.settings.write",
 
-  admin: "fitlife.admin",
-  all: "fitlife.all" // legacy alias, prefer fullAccess
+  admin: "plaivra.admin",
+  all: "plaivra.all" // legacy alias, prefer fullAccess
 } as const;
 
 // Normal user scopes (non-admin)
@@ -78,13 +78,13 @@ export function normalizeMcpScopes(input: unknown, fallback: readonly string[] =
 
 /**
  * Expand a set of scopes so that write scopes imply read scopes within the same section.
- * Example: fitlife.nutrition.write implies fitlife.nutrition.read
- * Does NOT cross sections: fitlife.nutrition.write does NOT imply fitlife.workouts.read
+ * Example: plaivra.nutrition.write implies plaivra.nutrition.read
+ * Does NOT cross sections: plaivra.nutrition.write does NOT imply plaivra.workouts.read
  */
 export function expandMcpScopes(scopes: string[]): string[] {
   const expanded = new Set(scopes);
 
-  // fitlife.full_access implies all normal user scopes
+  // plaivra.full_access implies all normal user scopes
   if (expanded.has(MCP_SCOPES.fullAccess) || expanded.has(MCP_SCOPES.all)) {
     MCP_NORMAL_USER_SCOPES.forEach((s) => expanded.add(s));
   }
@@ -168,8 +168,15 @@ export function migrateLegacyScopes(scopes: string[]): string[] {
       migrated.add(MCP_SCOPES.settingsRead);
     } else if (scope === "fitlife.admin") {
       migrated.add(MCP_SCOPES.admin);
-    } else if (supportedScopeSet.has(scope)) {
-      migrated.add(scope);
+    } else {
+      // Generic migration: fitlife.* -> plaivra.* for all other canonical scopes
+      const plaivraScope = scope.replace(/^fitlife\./, "plaivra.");
+      if (plaivraScope !== scope && supportedScopeSet.has(plaivraScope)) {
+        migrated.add(plaivraScope);
+      } else if (supportedScopeSet.has(scope)) {
+        // Already a plaivra scope (or valid scope)
+        migrated.add(scope);
+      }
     }
   }
 

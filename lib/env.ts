@@ -1,9 +1,10 @@
 export const env = {
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
-  appUrl: process.env.NEXT_PUBLIC_APP_URL || "https://gymsands.vercel.app",
+  appUrl: process.env.NEXT_PUBLIC_APP_URL || "https://plaivra.vercel.app",
   chatgptConnectUrl: process.env.NEXT_PUBLIC_CHATGPT_CONNECT_URL || "",
-  fitlifeMcpServerUrl:
+  plaivraMcpServerUrl:
+    process.env.NEXT_PUBLIC_PLAIVRA_MCP_SERVER_URL ||
     process.env.NEXT_PUBLIC_FITLIFE_MCP_SERVER_URL ||
     process.env.VITE_FITLIFE_MCP_SERVER_URL ||
     process.env.REACT_APP_FITLIFE_MCP_SERVER_URL ||

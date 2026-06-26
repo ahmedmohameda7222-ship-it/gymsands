@@ -26,7 +26,7 @@ export type AiPermissionConfig = {
 };
 
 function scopesToConfig(scopes: string[]): AiPermissionConfig {
-  const isFull = scopes.includes("fitlife.full_access") || scopes.includes("fitlife.all");
+  const isFull = scopes.includes("plaivra.full_access") || scopes.includes("plaivra.all");
 
   const sections: AiPermissionConfig["sections"] = {
     workouts: { read: false, write: false },
@@ -45,7 +45,7 @@ function scopesToConfig(scopes: string[]): AiPermissionConfig {
     }
   } else {
     for (const scope of scopes) {
-      const match = scope.match(/^fitlife\.([a-z_]+)\.(read|write)$/);
+      const match = scope.match(/^plaivra\.([a-z_]+)\.(read|write)$/);
       if (match) {
         const section = match[1] as AiPermissionSection;
         const action = match[2] as "read" | "write";
@@ -66,23 +66,23 @@ function scopesToConfig(scopes: string[]): AiPermissionConfig {
 function configToScopes(config: AiPermissionConfig): string[] {
   if (config.accessMode === "full") {
     return [
-      "fitlife.full_access",
-      "fitlife.workouts.read",
-      "fitlife.workouts.write",
-      "fitlife.nutrition.read",
-      "fitlife.nutrition.write",
-      "fitlife.meal_plans.read",
-      "fitlife.meal_plans.write",
-      "fitlife.hydration.read",
-      "fitlife.hydration.write",
-      "fitlife.progress.read",
-      "fitlife.progress.write",
-      "fitlife.wellness.read",
-      "fitlife.wellness.write",
-      "fitlife.profile.read",
-      "fitlife.profile.write",
-      "fitlife.settings.read",
-      "fitlife.settings.write"
+      "plaivra.full_access",
+      "plaivra.workouts.read",
+      "plaivra.workouts.write",
+      "plaivra.nutrition.read",
+      "plaivra.nutrition.write",
+      "plaivra.meal_plans.read",
+      "plaivra.meal_plans.write",
+      "plaivra.hydration.read",
+      "plaivra.hydration.write",
+      "plaivra.progress.read",
+      "plaivra.progress.write",
+      "plaivra.wellness.read",
+      "plaivra.wellness.write",
+      "plaivra.profile.read",
+      "plaivra.profile.write",
+      "plaivra.settings.read",
+      "plaivra.settings.write"
     ];
   }
 
@@ -90,10 +90,10 @@ function configToScopes(config: AiPermissionConfig): string[] {
   for (const section of ALL_AI_PERMISSION_SECTIONS) {
     const perms = config.sections[section];
     if (perms.read || perms.write) {
-      scopes.push(`fitlife.${section}.read`);
+      scopes.push(`plaivra.${section}.read`);
     }
     if (perms.write) {
-      scopes.push(`fitlife.${section}.write`);
+      scopes.push(`plaivra.${section}.write`);
     }
   }
   return scopes;
@@ -101,23 +101,23 @@ function configToScopes(config: AiPermissionConfig): string[] {
 
 export function getDefaultAiPermissionConfig(): AiPermissionConfig {
   return scopesToConfig([
-    "fitlife.full_access",
-    "fitlife.workouts.read",
-    "fitlife.workouts.write",
-    "fitlife.nutrition.read",
-    "fitlife.nutrition.write",
-    "fitlife.meal_plans.read",
-    "fitlife.meal_plans.write",
-    "fitlife.hydration.read",
-    "fitlife.hydration.write",
-    "fitlife.progress.read",
-    "fitlife.progress.write",
-    "fitlife.wellness.read",
-    "fitlife.wellness.write",
-    "fitlife.profile.read",
-    "fitlife.profile.write",
-    "fitlife.settings.read",
-    "fitlife.settings.write"
+    "plaivra.full_access",
+    "plaivra.workouts.read",
+    "plaivra.workouts.write",
+    "plaivra.nutrition.read",
+    "plaivra.nutrition.write",
+    "plaivra.meal_plans.read",
+    "plaivra.meal_plans.write",
+    "plaivra.hydration.read",
+    "plaivra.hydration.write",
+    "plaivra.progress.read",
+    "plaivra.progress.write",
+    "plaivra.wellness.read",
+    "plaivra.wellness.write",
+    "plaivra.profile.read",
+    "plaivra.profile.write",
+    "plaivra.settings.read",
+    "plaivra.settings.write"
   ]);
 }
 
