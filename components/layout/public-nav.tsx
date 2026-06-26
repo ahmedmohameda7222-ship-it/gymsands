@@ -15,9 +15,14 @@ export function PublicNav() {
             Login
           </Link>
         </nav>
-        <Button asChild size="sm">
-          <Link href="/register">Create account</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="ghost" size="sm" className="sm:hidden">
+            <Link href="/about">About</Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href="/register">Create account</Link>
+          </Button>
+        </div>
       </div>
     </header>
   );

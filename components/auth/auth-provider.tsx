@@ -1,6 +1,7 @@
 "use client";
 
 import type { Session, User } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { env } from "@/lib/env";
@@ -33,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
   const loadProfile = useCallback(async (userId: string, email?: string | null) => {
     if (mockAuthEnabled) {
@@ -157,9 +159,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (supabase) await supabase.auth.signOut();
         setSession(null);
         setProfile(null);
+        router.replace("/");
       }
     }),
-    [session, profile, isLoading, refreshProfile]
+    [session, profile, isLoading, refreshProfile, router]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
