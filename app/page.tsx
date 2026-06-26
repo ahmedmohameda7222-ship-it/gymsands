@@ -34,7 +34,13 @@ export default function LandingPage() {
               style={{ backgroundImage: `url(${image})`, animationDelay: `${index * 6}s` }}
             />
           ))}
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(26,26,26,0.78),rgba(45,58,30,0.54),rgba(248,246,241,0.12)),linear-gradient(180deg,rgba(248,246,241,0.04),#F8F6F1)]" />
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(90deg, color-mix(in srgb, var(--color-text-primary) 78%, transparent), color-mix(in srgb, var(--color-primary) 54%, transparent), color-mix(in srgb, var(--surface) 12%, transparent)), linear-gradient(180deg, color-mix(in srgb, var(--surface) 4%, transparent), var(--app-bg))"
+            }}
+          />
           <div className="container relative flex min-h-[88vh] items-center pb-16 pt-14">
             <div className="glass-card-strong max-w-3xl p-5 sm:p-8">
               <h1 className="mt-4 text-5xl font-bold tracking-normal sm:text-7xl">Plaivra</h1>
@@ -45,7 +51,7 @@ export default function LandingPage() {
                 <Button asChild size="lg">
                   <Link href="/register">Create account</Link>
                 </Button>
-                <Button asChild variant="outline" size="lg" className="border-primary/60 bg-white/50 text-foreground hover:bg-white/75 dark:bg-white/10 dark:hover:bg-white/15">
+                <Button asChild variant="outline" size="lg" className="border-primary/60 bg-[color-mix(in_srgb,var(--surface)_55%,transparent)] text-foreground hover:bg-[color-mix(in_srgb,var(--surface)_75%,transparent)]">
                   <Link href="/login">Login</Link>
                 </Button>
               </div>

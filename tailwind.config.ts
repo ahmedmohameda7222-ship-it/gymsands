@@ -49,26 +49,13 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))"
         },
-        navy: {
-          950: "#1A1A1A",
-          900: "#2D3A1E",
-          800: "#4B5A38"
-        },
-        champagne: {
-          500: "#C49A3B",
-          600: "#A67E2E"
-        },
-        sage: {
-          500: "#3A7D44",
-          600: "#2D3A1E"
-        },
         success: {
-          DEFAULT: "#3A7D44",
-          foreground: "#FFFFFF"
+          DEFAULT: "var(--color-success)",
+          foreground: "hsl(var(--primary-foreground))"
         },
         warning: {
-          DEFAULT: "#B85C00",
-          foreground: "#FFFFFF"
+          DEFAULT: "var(--color-warning)",
+          foreground: "hsl(var(--primary-foreground))"
         }
       },
       borderRadius: {

@@ -36,13 +36,14 @@ export type AppTheme = {
 };
 
 export const defaultThemeId: ThemeId = "olive";
-export const themeCacheKey = "fitlife-theme-id";
+export const themeCacheKey = "plaivra-theme-id";
+export const legacyThemeCacheKey = "fitlife-theme-id";
 
 export const appThemes: AppTheme[] = [
   {
     id: "olive",
     name: "Olive Default",
-    description: "The original FitLife olive theme with warm surfaces and calm contrast.",
+    description: "The original Plaivra olive theme with warm surfaces and calm contrast.",
     palette: ["#F8F6F1", "#FFFFFF", "#2D3A1E", "#C49A3B", "#3A7D44"],
     appBackground: "#F8F6F1",
     surface: "#FFFFFF",
@@ -347,7 +348,7 @@ export function createThemeBootstrapScript() {
   return `
 (() => {
   try {
-    const themeId = window.localStorage.getItem(${JSON.stringify(themeCacheKey)});
+    const themeId = window.localStorage.getItem(${JSON.stringify(themeCacheKey)}) || window.localStorage.getItem(${JSON.stringify(legacyThemeCacheKey)});
     const themes = ${JSON.stringify(themePayload)};
     const selected = themeId ? themes[themeId] : null;
     if (!selected) return;

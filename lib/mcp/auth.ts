@@ -172,8 +172,8 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
     .eq("id", connection.user_id)
     .maybeSingle();
 
-  if (profileError) return badMcpRequest("Could not load the linked FitLife profile.", profileError);
-  if (!profile) return unauthorizedMcpResponse(request, "Linked FitLife profile was not found.", 403);
+  if (profileError) return badMcpRequest("Could not load the linked Plaivra profile.", profileError);
+  if (!profile) return unauthorizedMcpResponse(request, "Linked Plaivra profile was not found.", 403);
 
   await supabase.from("chatgpt_connections").update({ last_used_at: new Date().toISOString() }).eq("id", connection.id);
 

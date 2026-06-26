@@ -62,7 +62,7 @@ export function requireConfirmation(input: JsonObject) {
   if (input.confirm !== true) {
     return {
       requires_confirmation: true,
-      message: "This is a high-risk FitLife action. Ask the user for explicit confirmation, then call again with confirm: true."
+      message: "This is a high-risk Plaivra action. Ask the user for explicit confirmation, then call again with confirm: true."
     };
   }
   return null;

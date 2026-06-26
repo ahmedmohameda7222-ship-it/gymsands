@@ -25,7 +25,7 @@ export function ExerciseVideoPlayer({ video }: { video: ExerciseVideo | null }) 
 
   return (
     <Card className="overflow-hidden">
-      <div className="aspect-video bg-navy-950">
+      <div className="aspect-video bg-foreground">
         {playableUrl && embeddable && embed ? (
           <iframe
             src={embed}
@@ -35,7 +35,7 @@ export function ExerciseVideoPlayer({ video }: { video: ExerciseVideo | null }) 
             allowFullScreen
           />
         ) : playableUrl ? (
-          <div className="flex h-full flex-col items-center justify-center p-6 text-center text-white">
+          <div className="flex h-full flex-col items-center justify-center p-6 text-center text-background">
             <PlayCircle className="h-12 w-12 text-primary" />
             <Button asChild className="mt-4" variant="outline">
               <a href={playableUrl} target="_blank" rel="noreferrer">
@@ -45,7 +45,7 @@ export function ExerciseVideoPlayer({ video }: { video: ExerciseVideo | null }) 
             </Button>
           </div>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center p-6 text-center text-white">
+          <div className="flex h-full flex-col items-center justify-center p-6 text-center text-background">
             <PlayCircle className="h-12 w-12 text-primary" />
             <p className="mt-3 font-semibold">No custom video added</p>
           </div>

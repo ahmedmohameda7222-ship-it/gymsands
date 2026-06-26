@@ -5,9 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function DashboardCharts({ macros }: { macros: { protein_g: number; carbs_g: number; fat_g: number } }) {
   const macroData = [
-    { name: "Protein", value: macros.protein_g, color: "#2D3A1E" },
-    { name: "Carbs", value: macros.carbs_g, color: "#C49A3B" },
-    { name: "Fat", value: macros.fat_g, color: "#6B6B6B" }
+    { name: "Protein", value: macros.protein_g, color: "var(--color-primary)" },
+    { name: "Carbs", value: macros.carbs_g, color: "var(--color-secondary)" },
+    { name: "Fat", value: macros.fat_g, color: "var(--color-text-secondary)" }
   ];
 
   return (

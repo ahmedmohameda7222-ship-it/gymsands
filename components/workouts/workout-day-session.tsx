@@ -702,7 +702,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="truncate text-sm font-semibold">{index + 1}. {item.exercise.exercise_name}</p>
-                    {group ? <Badge variant="navy">{group}</Badge> : null}
+                    {group ? <Badge>{group}</Badge> : null}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">{done}/{item.sets.length} sets</p>
                   <p className="mt-1 text-xs text-muted-foreground">{previous ? `Last: ${previous.lastWeightKg ?? 0} kg x ${previous.lastReps ?? 0}` : "No previous data"}</p>
@@ -730,7 +730,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center gap-2">
               {activeExercise.exercise.exercise_name}
-              {supersetLabel(activeExercise.exercise) ? <Badge variant="navy">Superset {supersetLabel(activeExercise.exercise)}</Badge> : null}
+              {supersetLabel(activeExercise.exercise) ? <Badge>Superset {supersetLabel(activeExercise.exercise)}</Badge> : null}
             </CardTitle>
             <div className="flex flex-wrap gap-2 pt-2">
               <Badge variant="outline">Planned {activeExercise.exercise.sets ?? activeExercise.sets.length} sets</Badge>
@@ -818,7 +818,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                 <Button variant="outline" size="sm" onClick={() => startRestTimer(90)}>90s</Button>
                 <Button variant="outline" size="sm" onClick={() => startRestTimer(180)}>3m</Button>
               </div>
-              <div className="rounded-md bg-navy-950 p-5 text-center text-white"><Clock className="mx-auto h-6 w-6" /><p className="mt-2 text-4xl font-bold">{formatTime(timerLeft)}</p></div>
+              <div className="rounded-md bg-foreground p-5 text-center text-background"><Clock className="mx-auto h-6 w-6" /><p className="mt-2 text-4xl font-bold">{formatTime(timerLeft)}</p></div>
               <div className="grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => startRestTimer(timerSeconds)}>Start timer</Button><Button variant="outline" onClick={stopRestTimer}>Stop</Button></div>
             </CardContent>
           </Card>

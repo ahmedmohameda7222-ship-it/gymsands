@@ -163,7 +163,7 @@ export function requiredScopesForTool(tool: McpToolDefinition): string[] {
 
 export function canUseTool(ctx: McpContext, tool: McpToolDefinition) {
   // Admin tools are NEVER available through normal MCP access, even if the user has the admin scope.
-  // Admin tools require the user to be an admin in the FitLife system AND have the admin scope.
+  // Admin tools require the user to be an admin in Plaivra AND have the admin scope.
   if (tool.risk === "admin") {
     return ctx.profile.role === "admin" && mcpHasAnyScope(ctx, requiredScopesForTool(tool));
   }

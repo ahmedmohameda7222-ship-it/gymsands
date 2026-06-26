@@ -35,10 +35,10 @@ export function ProgressCharts({
                 <XAxis dataKey="date" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} width={35} />
                 <Tooltip />
-                <Line dataKey="weight" name="Weight kg" stroke="#2D3A1E" strokeWidth={3} dot={{ r: 4 }} connectNulls />
-                <Line dataKey="waist" name="Waist cm" stroke="#C49A3B" strokeWidth={3} dot={{ r: 4 }} connectNulls />
-                <Line dataKey="hips" name="Hips cm" stroke="#6B6B6B" strokeWidth={3} dot={{ r: 4 }} connectNulls />
-                <Line dataKey="chest" name="Chest cm" stroke="#3A7D44" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+                <Line dataKey="weight" name="Weight kg" stroke="var(--color-primary)" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+                <Line dataKey="waist" name="Waist cm" stroke="var(--color-secondary)" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+                <Line dataKey="hips" name="Hips cm" stroke="var(--color-text-secondary)" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+                <Line dataKey="chest" name="Chest cm" stroke="var(--color-success)" strokeWidth={3} dot={{ r: 4 }} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -59,8 +59,8 @@ export function ProgressCharts({
                 <XAxis dataKey="date" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} width={30} allowDecimals={false} />
                 <Tooltip />
-                <Bar dataKey="completed" name="Completed" fill="#3A7D44" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="skipped" name="Skipped" fill="#B85C00" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="completed" name="Completed" fill="var(--color-success)" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="skipped" name="Skipped" fill="var(--color-warning)" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (

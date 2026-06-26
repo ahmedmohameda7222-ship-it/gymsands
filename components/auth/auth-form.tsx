@@ -164,7 +164,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
               type="checkbox"
               checked={remember}
               onChange={(event) => setRemember(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-300"
+              className="h-4 w-4 rounded border-border accent-primary"
             />
             Remember me / keep me logged in
           </label>

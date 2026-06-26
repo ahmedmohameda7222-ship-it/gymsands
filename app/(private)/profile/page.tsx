@@ -20,13 +20,13 @@ export default function ProfilePage() {
   const trimmedName = fullName.trim();
   const hasChanges = useMemo(() => trimmedName !== (profile?.full_name ?? "").trim(), [profile?.full_name, trimmedName]);
   const initials = useMemo(() => {
-    const source = trimmedName || profile?.email || "FH";
+    const source = trimmedName || profile?.email || "PL";
     return source
       .split(/[\s@.]+/)
       .filter(Boolean)
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase())
-      .join("") || "FH";
+      .join("") || "PL";
   }, [profile?.email, trimmedName]);
 
   useEffect(() => {

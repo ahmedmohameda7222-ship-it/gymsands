@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { resolveLanguagePreference } from "@/lib/i18n/translations";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
-import { getThemeById, isDarkTheme, themeCacheKey, themeCssVariables } from "@/lib/themes";
+import { getThemeById, isDarkTheme, legacyThemeCacheKey, themeCacheKey, themeCssVariables } from "@/lib/themes";
 
 export function AppPreferenceEffects() {
   const { settings } = useUserSettings();
@@ -26,6 +26,7 @@ export function AppPreferenceEffects() {
     root.dir = language === "ar" ? "rtl" : "ltr";
     try {
       window.localStorage.setItem(themeCacheKey, theme.id);
+      window.localStorage.removeItem(legacyThemeCacheKey);
     } catch {
       // The database setting still applies even when local storage is unavailable.
     }

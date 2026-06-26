@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { isThemeId, themeCacheKey } from "@/lib/themes";
+import { isThemeId, legacyThemeCacheKey, themeCacheKey } from "@/lib/themes";
 import {
   defaultUserAppSettings,
   getUserAppSettings,
@@ -26,7 +26,7 @@ const UserSettingsContext = createContext<UserSettingsContextValue | null>(null)
 function readCachedThemeId() {
   if (typeof window === "undefined") return null;
   try {
-    const cached = window.localStorage.getItem(themeCacheKey);
+    const cached = window.localStorage.getItem(themeCacheKey) ?? window.localStorage.getItem(legacyThemeCacheKey);
     return isThemeId(cached) ? cached : null;
   } catch {
     return null;
@@ -37,6 +37,7 @@ function cacheThemeId(themeId: UserAppSettings["themeId"]) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(themeCacheKey, themeId);
+    window.localStorage.removeItem(legacyThemeCacheKey);
   } catch {
     // Local storage is only a paint cache; Supabase remains the source of truth.
   }

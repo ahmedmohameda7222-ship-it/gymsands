@@ -21,13 +21,13 @@ export function ProfileSummaryCard({ onboarding }: ProfileSummaryCardProps) {
   const hideProfileDetails = settings.hideProfileDetails || settings.privateProfileMode;
 
   const initials = useMemo(() => {
-    const source = hideProfileDetails ? "FH" : profile?.full_name || profile?.email || "FH";
+    const source = hideProfileDetails ? "PL" : profile?.full_name || profile?.email || "PL";
     return source
       .split(/[\s@.]+/)
       .filter(Boolean)
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase())
-      .join("") || "FH";
+      .join("") || "PL";
   }, [hideProfileDetails, profile?.email, profile?.full_name]);
 
   const completionLabel = useMemo(() => {

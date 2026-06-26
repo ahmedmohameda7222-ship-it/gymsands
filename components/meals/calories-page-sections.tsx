@@ -12,17 +12,10 @@ import { percent, sumFoodLogs } from "@/services/nutrition/calculations";
 import type { SavedTargets } from "@/services/nutrition/targets";
 import type { DailyNutritionSummary, WaterLog } from "@/types";
 
-function mixColor(start: [number, number, number], end: [number, number, number], amount: number) {
-  const clamped = Math.min(1, Math.max(0, amount));
-  const [r, g, b] = start.map((value, index) => Math.round(value + (end[index] - value) * clamped));
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
 function calorieProgressColor(progressPercent: number) {
-  if (progressPercent <= 50) return "#2D3A1E";
-  if (progressPercent <= 80) return mixColor([45, 58, 30], [196, 154, 59], (progressPercent - 50) / 30);
-  if (progressPercent <= 95) return mixColor([196, 154, 59], [184, 92, 0], (progressPercent - 80) / 15);
-  return "#9E2B2B";
+  if (progressPercent <= 50) return "var(--color-primary)";
+  if (progressPercent <= 95) return "var(--color-warning)";
+  return "var(--color-destructive)";
 }
 
 export function formatDay(value: string) {
@@ -227,10 +220,10 @@ export function CompactNutritionSummary({ totals, targets, waterTotal }: { total
             <span className="text-[11px] text-muted-foreground">kcal</span>
           </div>
           <div className="flex-1 space-y-2">
-            <MacroMiniBar label="Protein" value={totals.protein_g} target={targets.protein_g} progress={proteinProgress} color="#4B5A38" />
-            <MacroMiniBar label="Carbs" value={totals.carbs_g} target={targets.carbs_g} progress={carbsProgress} color="#C49A3B" />
-            <MacroMiniBar label="Fat" value={totals.fat_g} target={targets.fat_g} progress={fatProgress} color="#2D3A1E" />
-            <MacroMiniBar label="Water" value={waterTotal} target={targets.water_ml} progress={waterProgress} color="#3A7D44" unit="ml" />
+            <MacroMiniBar label="Protein" value={totals.protein_g} target={targets.protein_g} progress={proteinProgress} color="var(--color-primary)" />
+            <MacroMiniBar label="Carbs" value={totals.carbs_g} target={targets.carbs_g} progress={carbsProgress} color="var(--color-secondary)" />
+            <MacroMiniBar label="Fat" value={totals.fat_g} target={targets.fat_g} progress={fatProgress} color="var(--color-text-secondary)" />
+            <MacroMiniBar label="Water" value={waterTotal} target={targets.water_ml} progress={waterProgress} color="var(--color-success)" unit="ml" />
           </div>
         </div>
       </CardContent>
@@ -270,7 +263,7 @@ export function WaterMiniSummary({ waterTotal, waterGoal, onAddWater }: { waterT
         </div>
       </div>
       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-[var(--success)] transition-all duration-500" style={{ width: `${Math.min(100, progress)}%` }} />
+        <div className="h-full rounded-full bg-success transition-all duration-500" style={{ width: `${Math.min(100, progress)}%` }} />
       </div>
     </div>
   );

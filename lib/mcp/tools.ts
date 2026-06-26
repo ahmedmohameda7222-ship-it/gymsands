@@ -81,7 +81,7 @@ const customFoodSchema = {
 };
 
 export const mcpTools: McpToolDefinition[] = [
-  { name: "get_fitlife_status", title: "Get FitLife status", description: "Validate the connection and return linked Plaivra account identity.", inputSchema: emptyInputSchema, risk: "read" },
+  { name: "get_fitlife_status", title: "Get Plaivra status", description: "Validate the connection and return linked Plaivra account identity.", inputSchema: emptyInputSchema, risk: "read" },
   { name: "get_user_profile", title: "Get user profile", description: "Return profile, onboarding, calorie targets, goal, training level, and water target.", inputSchema: emptyInputSchema, risk: "read" },
   { name: "get_today_summary", title: "Get today's summary", description: "Return today's calories, meals, workout, water, habits, tasks, recovery, supplements, and recent PRs.", inputSchema: emptyInputSchema, risk: "read" },
 

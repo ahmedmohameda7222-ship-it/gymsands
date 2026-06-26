@@ -167,7 +167,7 @@ export async function getAllUserWorkoutPlans(userId: string) {
     const result = await queryPlans(userId, select);
     if (result.plans) return result.plans;
     if (!isCompatibilityError(result.error)) {
-      console.warn("FitLife could not load workout plans.", result.error?.message);
+      console.warn("Plaivra could not load workout plans.", result.error?.message);
       return [];
     }
   }
@@ -354,7 +354,7 @@ async function getAllUserWorkoutPlansFromDay(dayId: string): Promise<WorkoutPlan
     .maybeSingle();
 
   if (dayError || !dayRow) {
-    if (dayError) console.warn("FitLife could not locate workout day.", dayError.message);
+    if (dayError) console.warn("Plaivra could not locate workout day.", dayError.message);
     return null;
   }
 
@@ -380,7 +380,7 @@ async function getAllUserWorkoutPlansFromDay(dayId: string): Promise<WorkoutPlan
     if (compatible.error) return null;
     plan = compatible.data ? normalizePlan(compatible.data as unknown as RawWorkoutPlan) : null;
   } else if (planError) {
-    console.warn("FitLife could not load workout day plan.", planError.message);
+    console.warn("Plaivra could not load workout day plan.", planError.message);
     return null;
   }
 
