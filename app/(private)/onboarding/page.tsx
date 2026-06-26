@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,7 +44,7 @@ const trainingCycles = [
 ];
 
 const defaultAnswers = {
-  age_range: "25-34",
+  age: null as number | null,
   gender: "Prefer not to say",
   height_cm: null as number | null,
   weight_kg: null as number | null,
@@ -156,7 +156,7 @@ export default function OnboardingPage() {
 
   return (
     <>
-      <PageHeading title="Profile Setup" description="A clean setup flow for real imported plans. Plaivra uses this profile to store, schedule, edit, display, and track plans created outside the app." />
+      <PageHeading title="Profile Setup" />
 
       <Card variant="glassStrong" className="mx-auto max-w-4xl overflow-hidden border-primary/15">
         <CardHeader className="space-y-4 border-b border-white/50 dark:border-white/10">
@@ -164,10 +164,6 @@ export default function OnboardingPage() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Step {step + 1} of {steps.length}</p>
               <CardTitle className="mt-1 text-2xl tracking-tight">{steps[step]}</CardTitle>
-            </div>
-            <div className="glass-chip flex items-center gap-2 px-3 py-1.5">
-              <Sparkles className="h-4 w-4 text-primary" />
-              Premium setup
             </div>
           </div>
           <Progress value={progressValue} />
@@ -188,11 +184,11 @@ export default function OnboardingPage() {
         <CardContent className="space-y-6 p-4 sm:p-6">
           {step === 0 ? (
             <section className="space-y-4">
-              <StepIntro title="Basic body profile" detail="Use real values when known. Leave optional values empty if you are not sure yet." />
+              <StepIntro title="Basic body profile" />
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Body stats</p>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <ChoiceGroup label="Age range" value={answers.age_range} values={["18-24", "25-34", "35-44", "45+"]} onChange={(age_range) => setAnswers((current) => ({ ...current, age_range }))} />
+                  <NumberField label="Age" value={answers.age} suffix="years" onChange={(age) => setAnswers((current) => ({ ...current, age }))} />
                   <ChoiceGroup label="Gender / sex" value={answers.gender} values={["Male", "Female", "Prefer not to say"]} onChange={(gender) => setAnswers((current) => ({ ...current, gender }))} />
                   <NumberField label="Height" value={answers.height_cm} suffix="cm" onChange={(height_cm) => setAnswers((current) => ({ ...current, height_cm }))} />
                   <NumberField label="Weight" value={answers.weight_kg} suffix="kg" onChange={(weight_kg) => setAnswers((current) => ({ ...current, weight_kg }))} />
@@ -203,14 +199,14 @@ export default function OnboardingPage() {
 
           {step === 1 ? (
             <section className="space-y-4">
-              <StepIntro title="Choose your goals" detail="Select one or more goals. These labels guide imported plans and dashboard priorities only." />
+              <StepIntro title="Choose your goals" />
               <MultiChoice label="Goals" values={goalOptions} selected={answers.goals} onChange={(goals) => setAnswers((current) => ({ ...current, goals, goal: goals.join(", ") || "General wellness" }))} />
             </section>
           ) : null}
 
           {step === 2 ? (
             <section className="space-y-4">
-              <StepIntro title="Training style" detail="Keep this focused on how you train. Schedule and session length are handled separately in the next step." />
+              <StepIntro title="Training style" />
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Experience & location</p>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -234,7 +230,7 @@ export default function OnboardingPage() {
 
           {step === 3 ? (
             <section className="space-y-4">
-              <StepIntro title="Schedule and duration" detail="This keeps imported workout plans realistic and prevents crowded sessions." />
+              <StepIntro title="Schedule and duration" />
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Weekly schedule</p>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -270,7 +266,7 @@ export default function OnboardingPage() {
 
           {step === 4 ? (
             <section className="space-y-4">
-              <StepIntro title="Nutrition preferences" detail="Use clear preferences and limitations. Unknown macros should stay reviewable, not invented." />
+              <StepIntro title="Nutrition preferences" />
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Diet preferences</p>
                 <MultiChoice label="Nutrition preferences" values={["Normal", "High protein", "Vegetarian", "Halal", "Egyptian food preferred", "Middle Eastern food preferred"]} selected={answers.nutrition_preferences} onChange={(nutrition_preferences) => setAnswers((current) => ({ ...current, nutrition_preferences }))} />
@@ -430,11 +426,11 @@ export default function OnboardingPage() {
   );
 }
 
-function StepIntro({ title, detail }: { title: string; detail: string }) {
+function StepIntro({ title, detail }: { title: string; detail?: string }) {
   return (
     <div className="glass-card p-4">
       <p className="font-semibold text-foreground">{title}</p>
-      <p className="mt-1 text-sm leading-6 text-muted-foreground">{detail}</p>
+      {detail ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{detail}</p> : null}
     </div>
   );
 }

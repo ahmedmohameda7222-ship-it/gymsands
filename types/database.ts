@@ -22,7 +22,8 @@ export type Profile = {
 export type OnboardingAnswers = {
   id?: string;
   user_id: string;
-  age_range: string;
+  age?: number | null;
+  age_range?: string;
   gender: string;
   height_cm: number | null;
   weight_kg: number | null;
