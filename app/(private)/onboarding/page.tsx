@@ -43,6 +43,15 @@ const trainingCycles = [
   "Wellness / Mobility"
 ];
 
+function ageToRange(age: number | null): string {
+  if (!age) return "Prefer not to say";
+  if (age < 18) return "Under 18";
+  if (age < 25) return "18-24";
+  if (age < 35) return "25-34";
+  if (age < 45) return "35-44";
+  return "45+";
+}
+
 const defaultAnswers = {
   age: null as number | null,
   gender: "Prefer not to say",
@@ -136,6 +145,7 @@ export default function OnboardingPage() {
     try {
       await saveOnboarding({
         ...answers,
+        age_range: ageToRange(answers.age),
         goal: answers.goals.join(", "),
         user_id: user.id
       });

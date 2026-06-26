@@ -81,6 +81,7 @@ export async function saveOnboarding(answers: OnboardingAnswers) {
   if (
     error &&
     (
+      error.message.toLowerCase().includes("age") ||
       error.message.toLowerCase().includes("available_equipment") ||
       error.message.toLowerCase().includes("desired_duration_weeks") ||
       error.message.toLowerCase().includes("goals") ||
@@ -90,6 +91,7 @@ export async function saveOnboarding(answers: OnboardingAnswers) {
     )
   ) {
     const {
+      age: _age,
       available_equipment: _availableEquipment,
       desired_duration_weeks: _desiredDurationWeeks,
       goals: _goals,
