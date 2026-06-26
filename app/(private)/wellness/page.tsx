@@ -47,7 +47,7 @@ function LauncherCard({ href, icon: Icon, label, status, detail, progress, accen
   return (
     <Link
       href={href}
-      className={`group flex items-center gap-3 rounded-[var(--radius-card)] border ${accentBorder} ${accentBg} p-3 shadow-soft backdrop-blur-md transition hover:border-primary/50 hover:shadow-luxe sm:p-4`}
+      className={`group flex items-center gap-3 rounded-[var(--radius-lg)] border ${accentBorder} ${accentBg} p-3 shadow-soft backdrop-blur-md transition hover:border-primary/50 hover:shadow-luxe sm:p-4`}
     >
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/50 bg-white/40 shadow-soft backdrop-blur-md dark:border-white/10 dark:bg-white/10">
         <Icon className="h-5 w-5 text-primary" />

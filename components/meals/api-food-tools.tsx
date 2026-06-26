@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Barcode, Camera, Save, Square } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -84,7 +84,7 @@ export function ApiFoodTools({
     toast({ title: "Barcode found", description: data.food?.name ?? cleanBarcode });
   }
 
-  function stopScanner() {
+  const stopScanner = useCallback(() => {
     if (scanTimerRef.current) window.clearInterval(scanTimerRef.current);
     scanTimerRef.current = null;
     zxingControlsRef.current?.stop();
@@ -93,7 +93,7 @@ export function ApiFoodTools({
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     setIsScanning(false);
-  }
+  }, []);
 
   async function openCameraStream(preferEnvironmentCamera: boolean) {
     return navigator.mediaDevices.getUserMedia({
@@ -224,11 +224,7 @@ export function ApiFoodTools({
 
 
 
-  useEffect(() => {
-
-    return stopScanner;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.access_token]);
+  useEffect(() => stopScanner, [stopScanner]);
 
   return (
     <Card>

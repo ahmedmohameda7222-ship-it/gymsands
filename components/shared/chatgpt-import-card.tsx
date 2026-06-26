@@ -67,6 +67,7 @@ function buildWorkoutPrompt(onboarding: OnboardingAnswers | null, profile: { ful
 
 export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal"; className?: string }) {
   const { user, profile } = useAuth();
+  const userId = user?.id;
   const { toast } = useToast();
   const [onboarding, setOnboarding] = useState<OnboardingAnswers | null>(null);
   const [plans, setPlans] = useState<UserWorkoutPlan[]>([]);
@@ -74,15 +75,16 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!user?.id) {
+    if (!userId) {
       setIsLoading(false);
       return;
     }
+    const currentUserId = userId;
     async function load() {
       try {
         const [onb, allPlans] = await Promise.all([
-          getOnboarding(user!.id),
-          getAllUserWorkoutPlans(user!.id)
+          getOnboarding(currentUserId),
+          getAllUserWorkoutPlans(currentUserId)
         ]);
         setOnboarding(onb);
         setPlans(allPlans);
@@ -93,7 +95,7 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
       }
     }
     load();
-  }, [user?.id]);
+  }, [userId]);
 
   const hasImportedPlan = plans.some(isChatGptPlan);
   const setupComplete = Boolean(onboarding);

@@ -165,7 +165,7 @@ export default function OnboardingPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Step {step + 1} of {steps.length}</p>
               <CardTitle className="mt-1 text-2xl tracking-tight">{steps[step]}</CardTitle>
             </div>
-            <div className="glass-chip flex items-center gap-2">
+            <div className="glass-chip flex items-center gap-2 px-3 py-1.5">
               <Sparkles className="h-4 w-4 text-primary" />
               Premium setup
             </div>

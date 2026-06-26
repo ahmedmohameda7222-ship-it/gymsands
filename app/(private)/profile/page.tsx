@@ -62,7 +62,7 @@ export default function ProfilePage() {
       <Card variant="glassStrong" className="mb-5 overflow-hidden border-primary/20">
         <CardContent className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[var(--radius-card)] bg-primary text-xl font-semibold text-primary-foreground shadow-soft">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[var(--radius-lg)] bg-primary text-xl font-semibold text-primary-foreground shadow-soft">
               {initials}
             </div>
             <div className="min-w-0">
