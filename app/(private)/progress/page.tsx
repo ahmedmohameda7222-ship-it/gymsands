@@ -273,7 +273,7 @@ export default function ProgressPage() {
 
         <TabsContent value="overview" className="space-y-4">
           {/* Hero Summary */}
-          <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-luxe">
+          <div className="glass-card-strong p-5">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-muted-foreground">Current weight</p>
               <p className="text-xs text-muted-foreground">{latestWeightEntry?.entry_date ?? "No entry yet"}</p>
@@ -346,14 +346,14 @@ export default function ProgressPage() {
 
           {/* Latest measurements preview */}
           {latestMeasurement && (
-            <Card className="border-border/70 shadow-luxe">
+            <Card variant="glassStrong">
               <CardHeader className="p-4 pb-0">
                 <CardTitle className="text-sm font-medium">Latest measurements</CardTitle>
               </CardHeader>
               <CardContent className="p-4">
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                   {measurementTrends.filter(t => t.latest !== null).slice(0, 6).map(t => (
-                    <div key={t.label} className="rounded-lg border border-border/70 bg-card p-3">
+                    <div key={t.label} className="glass-card p-3">
                       <p className="text-xs text-muted-foreground">{t.label}</p>
                       <p className="mt-1 text-lg font-semibold">{t.latest}{t.unit}</p>
                       {t.delta !== null && (
@@ -373,7 +373,7 @@ export default function ProgressPage() {
 
           {/* Photos shortcut */}
           {!settings.hideProgressPhotos && photos.length > 0 && (
-            <Card className="border-border/70 shadow-luxe">
+            <Card variant="glass">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -390,14 +390,14 @@ export default function ProgressPage() {
 
           {/* Recent history preview */}
           {entries.length > 0 && (
-            <Card className="border-border/70 shadow-luxe">
+            <Card>
               <CardHeader className="p-4 pb-0">
                 <CardTitle className="text-sm font-medium">Recent entries</CardTitle>
               </CardHeader>
               <CardContent className="p-4">
                 <div className="space-y-2">
                   {sortedEntries.slice(-3).reverse().map(entry => (
-                    <div key={entry.id} className="flex items-center justify-between rounded-lg border border-border/70 bg-card p-3">
+                    <div key={entry.id} className="solid-row flex items-center justify-between p-3">
                       <div>
                         <p className="text-sm font-medium">{entry.entry_date}</p>
                         <p className="text-xs text-muted-foreground">
@@ -426,13 +426,13 @@ export default function ProgressPage() {
 
         <TabsContent value="measurements" className="space-y-4">
           <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-            <Card>
+            <Card variant="glassStrong">
               <CardHeader><CardTitle>Body-fat estimate</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-sm text-muted-foreground">Body-fat estimate is calculated from saved measurements and should be treated as a rough fitness estimate, not medical data.</p>
                 <div className="grid gap-3 sm:grid-cols-[1fr_160px_auto]">
                   <div className="space-y-2"><Label>Height cm for estimate</Label><Input type="number" value={estimateSettings.heightCm} onChange={(event) => setEstimateSettings((current) => ({ ...current, heightCm: event.target.value }))} placeholder="Example: 175" /></div>
-                  <div className="space-y-2"><Label>Sex for formula</Label><select value={estimateSettings.sex} onChange={(event) => setEstimateSettings((current) => ({ ...current, sex: event.target.value as "male" | "female" }))} className="h-10 w-full rounded-md border bg-card px-3 text-sm"><option value="male">male</option><option value="female">female</option></select></div>
+                  <div className="space-y-2"><Label>Sex for formula</Label><select value={estimateSettings.sex} onChange={(event) => setEstimateSettings((current) => ({ ...current, sex: event.target.value as "male" | "female" }))} className="h-10 w-full rounded-[14px] border bg-card px-3 text-sm"><option value="male">male</option><option value="female">female</option></select></div>
                   <Button className="self-end" variant="outline" onClick={saveEstimateSettings}>Save settings</Button>
                 </div>
                 <div className="rounded-md border bg-muted/40 p-3"><p className="font-semibold">{bodyFatEstimate.value}</p><p className="mt-1 text-sm text-muted-foreground">{bodyFatEstimate.detail}</p></div>
@@ -462,7 +462,7 @@ export default function ProgressPage() {
             </CardHeader>
             <CardContent className="p-4 space-y-2">
               {sortedEntries.slice().reverse().map((entry) => (
-                <details key={entry.id} className="group rounded-lg border border-border/70 bg-card">
+                <details key={entry.id} className="solid-row group">
                   <summary className="flex cursor-pointer items-center justify-between gap-3 p-3 list-none">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold">{entry.entry_date}</p>
@@ -545,7 +545,7 @@ function ProgressPhotoManager({ userId, photos, setPhotos }: { userId: string | 
   return (
     <div className="space-y-4">
       {dialog}
-      <Card className="border-border/70 shadow-luxe">
+      <Card>
         <CardHeader className="p-4 pb-0">
           <CardTitle className="flex items-center gap-2 text-sm font-medium">
             <Camera className="h-4 w-4 text-primary" />
@@ -560,7 +560,7 @@ function ProgressPhotoManager({ userId, photos, setPhotos }: { userId: string | 
             </div>
             <div className="space-y-1.5">
               <Label className="text-sm">Type</Label>
-              <select value={photoType} onChange={(event) => setPhotoType(event.target.value as ProgressPhotoType)} className="h-11 w-full rounded-md border bg-card px-3 text-sm">
+              <select value={photoType} onChange={(event) => setPhotoType(event.target.value as ProgressPhotoType)} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm">
                 {photoTypes.map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
             </div>
@@ -580,7 +580,7 @@ function ProgressPhotoManager({ userId, photos, setPhotos }: { userId: string | 
         </CardContent>
       </Card>
 
-      <Card className="border-border/70 shadow-luxe">
+      <Card variant="glassStrong">
         <CardHeader className="p-4 pb-0">
           <CardTitle className="flex items-center gap-2 text-sm font-medium">
             <ImageIcon className="h-4 w-4 text-primary" />
@@ -608,7 +608,7 @@ function ProgressPhotoManager({ userId, photos, setPhotos }: { userId: string | 
 
 function CompactStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-card p-3 shadow-soft">
+    <div className="glass-card p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-1 text-lg font-semibold">{value}</p>
     </div>
@@ -616,15 +616,15 @@ function CompactStat({ label, value }: { label: string; value: string }) {
 }
 
 function PhotoCard({ photo, onDelete }: { photo: ProgressPhoto; onDelete: (photo: ProgressPhoto) => void }) {
-  return <div className="rounded-lg border border-border/70 bg-card p-2"><ProgressPhotoImage url={photo.signed_url} label={`${photo.photo_type} progress ${photo.taken_on}`} unavailableLabel="Signed URL unavailable" /><div className="mt-2 flex items-center justify-between gap-2"><div><p className="font-semibold capitalize text-sm">{photo.photo_type}</p><p className="text-xs text-muted-foreground">{photo.taken_on}</p></div><Button size="icon" variant="ghost" className="h-10 w-10" onClick={() => onDelete(photo)}><Trash2 className="h-4 w-4" /></Button></div></div>;
+  return <div className="glass-card p-2"><ProgressPhotoImage url={photo.signed_url} label={`${photo.photo_type} progress ${photo.taken_on}`} unavailableLabel="Signed URL unavailable" /><div className="mt-2 flex items-center justify-between gap-2"><div><p className="font-semibold capitalize text-sm">{photo.photo_type}</p><p className="text-xs text-muted-foreground">{photo.taken_on}</p></div><Button size="icon" variant="ghost" className="h-10 w-10" onClick={() => onDelete(photo)}><Trash2 className="h-4 w-4" /></Button></div></div>;
 }
 
 function PhotoSelect({ label, value, photos, onChange }: { label: string; value: string; photos: ProgressPhoto[]; onChange: (value: string) => void }) {
-  return <div className="space-y-1.5"><Label className="text-sm">{label}</Label><select value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-md border bg-card px-3 text-sm"><option value="">Auto-select</option>{photos.map((photo) => <option key={photo.id} value={photo.id}>{photo.taken_on} — {photo.photo_type}</option>)}</select></div>;
+  return <div className="space-y-1.5"><Label className="text-sm">{label}</Label><select value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm"><option value="">Auto-select</option>{photos.map((photo) => <option key={photo.id} value={photo.id}>{photo.taken_on} — {photo.photo_type}</option>)}</select></div>;
 }
 
 function ComparisonPhoto({ label, photo }: { label: string; photo: ProgressPhoto }) {
-  return <div className="rounded-lg border border-border/70 bg-card p-3"><p className="mb-2 font-semibold text-sm">{label}: {photo.taken_on} ({photo.photo_type})</p><ProgressPhotoImage url={photo.signed_url} label={`${label} progress ${photo.taken_on}`} unavailableLabel="Photo unavailable" /></div>;
+  return <div className="glass-card p-3"><p className="mb-2 font-semibold text-sm">{label}: {photo.taken_on} ({photo.photo_type})</p><ProgressPhotoImage url={photo.signed_url} label={`${label} progress ${photo.taken_on}`} unavailableLabel="Photo unavailable" /></div>;
 }
 
 function ProgressPhotoImage({ url, label, unavailableLabel }: { url: string | null; label: string; unavailableLabel: string }) {
@@ -651,7 +651,7 @@ function Field({ label, value, onChange, type = "number" }: { label: string; val
 }
 
 function TrendCard({ trend }: { trend: MeasurementTrend }) {
-  return <div className="rounded-lg border border-border/70 bg-card p-3 shadow-soft"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{trend.label}</p><p className="mt-1 font-semibold">{trend.latest === null ? "No data" : `${trend.latest}${trend.unit}`}</p><p className="mt-1 text-xs text-muted-foreground">{trend.delta === null ? "No trend yet" : `${formatDelta(trend.delta)}${trend.unit} from first entry`}</p></div>;
+  return <div className="glass-card p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{trend.label}</p><p className="mt-1 font-semibold">{trend.latest === null ? "No data" : `${trend.latest}${trend.unit}`}</p><p className="mt-1 text-xs text-muted-foreground">{trend.delta === null ? "No trend yet" : `${formatDelta(trend.delta)}${trend.unit} from first entry`}</p></div>;
 }
 
 function MeasurementList({ entry }: { entry: ProgressEntry }) {
@@ -676,8 +676,8 @@ function MeasurementList({ entry }: { entry: ProgressEntry }) {
   return <div className="mt-2 flex flex-wrap gap-2">{values.map(([label, value, unit]) => <span key={label} className="rounded-md bg-primary/5 px-2.5 py-1 text-xs font-medium text-foreground">{label}: {value}{unit}</span>)}</div>;
 }
 
-function Insight({ text }: { text: string }) { return <div className="rounded-lg border border-border/70 bg-card p-3 text-sm text-muted-foreground shadow-soft">{text}</div>; }
-function ProgressFeedbackCard({ feedback }: { feedback: ProgressFeedback[] }) { return <Card className="border-border/70 shadow-luxe"><CardHeader className="p-4 pb-0"><CardTitle className="text-sm font-medium">Progress feedback</CardTitle></CardHeader><CardContent className="grid gap-3 p-4 md:grid-cols-3">{feedback.map((item) => <div key={item.label} className="rounded-lg border border-border/70 bg-card p-3 shadow-soft"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{item.label}</p><p className="mt-1 font-semibold text-foreground">{item.value}</p><p className="mt-1 text-sm text-muted-foreground">{item.detail}</p></div>)}</CardContent></Card>; }
+function Insight({ text }: { text: string }) { return <div className="glass-card p-3 text-sm text-muted-foreground">{text}</div>; }
+function ProgressFeedbackCard({ feedback }: { feedback: ProgressFeedback[] }) { return <Card variant="glass"><CardHeader className="p-4 pb-0"><CardTitle className="text-sm font-medium">Progress feedback</CardTitle></CardHeader><CardContent className="grid gap-3 p-4 md:grid-cols-3">{feedback.map((item) => <div key={item.label} className="glass-card p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{item.label}</p><p className="mt-1 font-semibold text-foreground">{item.value}</p><p className="mt-1 text-sm text-muted-foreground">{item.detail}</p></div>)}</CardContent></Card>; }
 function hasBodyWeight(entry: ProgressEntry): entry is ProgressEntry & { body_weight_kg: number } { return isFiniteNumber(entry.body_weight_kg); }
 function isFiniteNumber(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value); }
 function stringifyNullable(value: unknown) { return isFiniteNumber(value) ? String(value) : ""; }

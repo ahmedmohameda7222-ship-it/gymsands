@@ -19,7 +19,7 @@ export function MetricCard({
   className?: string;
 }) {
   return (
-    <Card className={cn("glass-card overflow-hidden", className)}>
+    <Card variant="glass" className={cn("overflow-hidden", className)}>
       <CardContent className="p-3.5 pt-3.5 sm:p-5 sm:pt-5">
         <div className="flex items-start justify-between gap-2 sm:gap-3">
           <div className="min-w-0">

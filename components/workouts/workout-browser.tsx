@@ -372,7 +372,7 @@ export function WorkoutBrowser() {
       </div>
 
       {showCustomForm ? (
-        <Card className="solid-tracking-card">
+        <Card>
           <CardHeader><CardTitle>Create custom exercise</CardTitle></CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
             <Field label="Name" value={customDraft.name} onChange={(value) => setCustomDraft((current) => ({ ...current, name: value }))} placeholder="Example: Cable lateral raise" />
@@ -408,7 +408,7 @@ export function WorkoutBrowser() {
       </div>
 
       <Dialog open={showFiltersDialog} onOpenChange={setShowFiltersDialog}>
-        <DialogContent className="glass-shell max-h-[85dvh] overflow-y-auto">
+        <DialogContent variant="glass" className="max-h-[85dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Filters</DialogTitle>
             <DialogDescription>{filteredWorkouts.length} exercises match your selection</DialogDescription>
@@ -422,7 +422,7 @@ export function WorkoutBrowser() {
       </Dialog>
 
       {profile?.role === "admin" ? (
-        <Card className="glass-card-strong">
+        <Card variant="glassStrong">
           <CardHeader>
             <CardTitle className="text-base">Exercise library quality</CardTitle>
             <p className="text-sm text-muted-foreground">Quality checks flag missing guidance and duplicates for review. Nothing is deleted automatically.</p>
@@ -458,7 +458,7 @@ export function WorkoutBrowser() {
           const favorite = favoriteIds.includes(workout.id);
           const quality = exerciseQuality(workout, duplicateExerciseNames.has(normalizeText(workout.name)));
           return (
-            <Card key={workout.id} className="glass-card shadow-luxe">
+            <Card key={workout.id} variant="glass" className="shadow-luxe">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">

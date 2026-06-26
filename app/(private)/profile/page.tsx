@@ -59,16 +59,16 @@ export default function ProfilePage() {
     <>
       <PageHeading title="Profile" description="Your account identity and safety notes for a real fitness-tracking web app." />
 
-      <Card className="mb-5 overflow-hidden border-primary/15 bg-primary text-primary-foreground">
+      <Card variant="glassStrong" className="mb-5 overflow-hidden border-primary/20">
         <CardContent className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-primary-foreground/15 text-xl font-semibold">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[var(--radius-card)] bg-primary text-xl font-semibold text-primary-foreground shadow-soft">
               {initials}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground/70">Plaivra member</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Plaivra member</p>
               <h2 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">{trimmedName || "Complete your profile"}</h2>
-              <p className="mt-1 truncate text-sm text-primary-foreground/75">{profile?.email ?? "Email loading..."}</p>
+              <p className="mt-1 truncate text-sm text-muted-foreground">{profile?.email ?? "Email loading..."}</p>
             </div>
           </div>
           <Button asChild variant="secondary">

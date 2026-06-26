@@ -22,7 +22,7 @@ export function SettingsSectionCard({
   rows: SettingsRow[];
 }) {
   return (
-    <Card className="solid-tracking-card h-full">
+    <Card className="h-full">
       <CardHeader>
         <CardTitle className="text-base">{title}</CardTitle>
         {description ? (

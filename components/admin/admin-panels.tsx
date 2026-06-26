@@ -142,7 +142,7 @@ export function AdminUsersPanel() {
 
   return (
     <div className="space-y-4">
-      <Card className="solid-tracking-card">
+      <Card>
         <CardHeader>
           <CardTitle>Default welcome message</CardTitle>
           <CardDescription>Users without a custom message will see this default.</CardDescription>
@@ -171,7 +171,7 @@ export function AdminUsersPanel() {
 
       <div className="grid gap-4 md:grid-cols-2">
         {users.map((user) => (
-          <Card key={user.id} className="solid-tracking-card">
+          <Card key={user.id}>
             <CardContent className="pt-5">
               <p className="font-semibold">{user.full_name || "Plaivra member"}</p>
               <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
@@ -242,7 +242,7 @@ export function AdminApiStatusPanel() {
   }, [session?.access_token]);
 
   return (
-    <Card className="solid-tracking-card">
+    <Card>
       <CardHeader>
         <CardTitle>API Status</CardTitle>
         <CardDescription>Secrets are never displayed. Only configured state is shown.</CardDescription>

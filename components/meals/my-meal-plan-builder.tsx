@@ -308,7 +308,7 @@ function MyMealPlanBuilderInner() {
         </TabsList>
 
         <TabsContent value="day" className="space-y-3 sm:space-y-4">
-          <div className="rounded-lg border border-border bg-card p-3 sm:p-5 shadow-soft">
+          <div className="glass-card p-3 sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-base font-semibold sm:text-lg">{longDate(selectedDate)}</h2>
@@ -331,8 +331,8 @@ function MyMealPlanBuilderInner() {
                     type="button"
                     onClick={() => changeDate(day)}
                     className={cn(
-                      "min-w-[72px] rounded-md border px-2 py-1.5 text-left text-xs transition-colors sm:min-w-[92px] sm:px-3 sm:py-2 sm:text-sm",
-                      isSelected ? "border-primary bg-primary text-primary-foreground" : isToday ? "border-primary/40 bg-primary/5" : "bg-card hover:border-primary/40"
+                      "min-w-[72px] rounded-[14px] border px-2 py-1.5 text-left text-xs transition-colors sm:min-w-[92px] sm:px-3 sm:py-2 sm:text-sm",
+                      isSelected ? "border-primary bg-primary text-primary-foreground" : isToday ? "border-primary/40 bg-primary/5" : "border-white/50 bg-white/35 hover:border-primary/40 dark:border-white/10 dark:bg-white/5"
                     )}
                   >
                     <span className="block font-semibold">{displayDate(day)}</span>
@@ -375,8 +375,8 @@ function MyMealPlanBuilderInner() {
                       type="button"
                       onClick={() => setActiveMealType(type)}
                       className={cn(
-                        "flex min-w-[80px] shrink-0 items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-xs font-semibold transition-colors",
-                        isActive ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:border-primary/40"
+                        "flex min-w-[80px] shrink-0 items-center justify-center gap-1.5 rounded-[14px] border px-2 py-2 text-xs font-semibold transition-colors",
+                        isActive ? "border-primary bg-primary text-primary-foreground" : "border-white/50 bg-white/35 hover:border-primary/40 dark:border-white/10 dark:bg-white/5"
                       )}
                     >
                       <Utensils className="h-3.5 w-3.5" />
@@ -425,7 +425,7 @@ function MyMealPlanBuilderInner() {
         </TabsContent>
 
         <TabsContent value="week" className="space-y-3 sm:space-y-4">
-          <Card>
+          <Card variant="glass">
             <CardHeader className="p-4 sm:p-5">
               <CardTitle className="flex items-center gap-2 text-base"><CalendarDays className="h-5 w-5" /> Meal calendar</CardTitle>
             </CardHeader>
@@ -460,7 +460,7 @@ function WeeklyPlanner({ weekDays, selectedDate, weekItems, onSelectDate }: { we
           const planned = dayItems.filter((item) => item.status === "planned").reduce(addItemToTotals, emptyTotals());
           const done = dayItems.filter((item) => item.status === "done").reduce(addItemToTotals, emptyTotals());
           return (
-            <button key={day} type="button" onClick={() => onSelectDate(day)} className={cn("rounded-md border p-2.5 text-left transition-colors hover:border-primary/45 sm:p-3", day === selectedDate ? "border-primary bg-primary/10" : "bg-card")}>
+            <button key={day} type="button" onClick={() => onSelectDate(day)} className={cn("rounded-[14px] border p-2.5 text-left transition-colors hover:border-primary/45 sm:p-3", day === selectedDate ? "border-primary bg-primary/10" : "border-white/50 bg-white/35 dark:border-white/10 dark:bg-white/5")}>
               <p className="text-sm font-semibold">{displayDate(day)}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">{dayItems.length} meals · {Math.round(done.calories)}/{Math.round(planned.calories + done.calories)} kcal</p>
               <p className="text-[11px] text-muted-foreground">P {Math.round(planned.protein_g + done.protein_g)}g · C {Math.round(planned.carbs_g + done.carbs_g)}g · F {Math.round(planned.fat_g + done.fat_g)}g</p>
@@ -495,7 +495,7 @@ function ShoppingListPanel({ items, onToggle, onPrint, checkedCount }: { items: 
   }, [items]);
 
   return (
-    <Card>
+    <Card variant="glass">
       <CardHeader className="p-4 sm:p-5">
         <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
           <span className="flex items-center gap-2"><ShoppingCart className="h-5 w-5" /> Shopping list</span>
@@ -553,7 +553,7 @@ function MealForm({ title, draft, setDraft, onSave, onCancel, saving }: { title:
       {title ? <h3 className="text-base font-semibold">{title}</h3> : null}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Input value={draft.foodName} onChange={(e) => setDraft((d) => ({ ...d, foodName: e.target.value }))} placeholder="Food name" />
-        <select value={draft.mealType} onChange={(e) => setDraft((d) => ({ ...d, mealType: normalizeMealPlanType(e.target.value) }))} className="h-10 rounded-md border bg-card px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring">{mealTypes.map((type) => <option key={type} value={type}>{displayMealType(type)}</option>)}</select>
+        <select value={draft.mealType} onChange={(e) => setDraft((d) => ({ ...d, mealType: normalizeMealPlanType(e.target.value) }))} className="h-10 rounded-[14px] border bg-card px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring">{mealTypes.map((type) => <option key={type} value={type}>{displayMealType(type)}</option>)}</select>
         <Input type="number" min="0.1" step="0.1" inputMode="decimal" enterKeyHint="done" value={draft.quantity} onChange={(e) => setDraft((d) => ({ ...d, quantity: e.target.value }))} placeholder="Quantity" />
         <Input value={draft.servingInfo} onChange={(e) => setDraft((d) => ({ ...d, servingInfo: e.target.value }))} placeholder="Serving info" />
         <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.calories} onChange={(e) => setDraft((d) => ({ ...d, calories: e.target.value }))} placeholder="Calories" />
@@ -572,7 +572,7 @@ function MealForm({ title, draft, setDraft, onSave, onCancel, saving }: { title:
 
 function SummaryCard({ label, value, detail, suffix = " kcal" }: { label: string; value: number; detail: string; suffix?: string }) {
   return (
-    <Card>
+    <Card variant="glass">
       <CardContent className="p-3 pt-3 sm:p-5 sm:pt-5">
         <p className="text-xs text-muted-foreground sm:text-sm">{label}</p>
         <p className="mt-1 text-lg font-bold sm:mt-2 sm:text-2xl">{Math.round(toNumber(value))}{suffix}</p>
@@ -589,7 +589,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
   const doneCount = items.filter((i) => i.status === "done").length;
 
   return (
-    <Card className="h-full">
+    <Card variant="glass" className="h-full">
       <CardHeader className="p-3 sm:p-5">
         <CardTitle className="flex items-center justify-between gap-2 text-sm sm:text-base">
           <span className="flex items-center gap-2"><Utensils className="h-4 w-4" /> {displayMealType(type)}</span>
@@ -607,7 +607,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
         {items.map((item) => {
           const isEditing = editingId === item.id;
           return (
-            <div key={item.id} className="rounded-md border bg-card p-2.5 sm:p-3">
+            <div key={item.id} className="solid-row p-2.5 sm:p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold leading-5">{item.food_name}</p>
@@ -629,10 +629,10 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
                     {item.status === "done" ? "Done" : "Mark done"}
                   </Button>
                   <details className="relative">
-                    <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary sm:h-10 sm:w-10" aria-label={`More actions for ${item.food_name}`}>
+                    <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-[14px] border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary sm:h-10 sm:w-10" aria-label={`More actions for ${item.food_name}`}>
                       <MoreHorizontal className="h-4 w-4" />
                     </summary>
-                    <div className="absolute right-0 z-20 mt-1 grid w-48 gap-0.5 rounded-md border bg-card p-2 shadow-luxe">
+                    <div className="solid-tracking-card absolute right-0 z-20 mt-1 grid w-48 gap-0.5 p-2">
                       <Button type="button" size="sm" variant="ghost" className="justify-start" onClick={() => onStartEdit(item)} disabled={updatingId === item.id}><Edit3 className="h-4 w-4" /> Edit</Button>
                       <Button type="button" size="sm" variant="ghost" className="justify-start text-destructive hover:text-destructive" onClick={() => onDelete(item)} disabled={updatingId === item.id}><Trash2 className="h-4 w-4" /> Delete</Button>
                     </div>

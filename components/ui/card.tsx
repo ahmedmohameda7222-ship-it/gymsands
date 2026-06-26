@@ -1,8 +1,22 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("solid-tracking-card text-card-foreground", className)} {...props} />;
+type CardVariant = "solid" | "glass" | "glassStrong";
+
+const cardVariants: Record<CardVariant, string> = {
+  solid: "solid-tracking-card",
+  glass: "glass-card",
+  glassStrong: "glass-card-strong"
+};
+
+export function Card({
+  variant = "solid",
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & {
+  variant?: CardVariant;
+}) {
+  return <div className={cn(cardVariants[variant], "text-card-foreground", className)} {...props} />;
 }
 
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

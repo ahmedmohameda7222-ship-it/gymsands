@@ -90,7 +90,7 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
   }
 
   return (
-    <Card className="glass-card border-dashed">
+    <Card variant="glass" className="border-dashed">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between gap-2 text-sm">
           <span className="flex items-center gap-2">

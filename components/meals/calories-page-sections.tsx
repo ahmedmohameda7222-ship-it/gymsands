@@ -37,7 +37,7 @@ export function TrackerCard({ label, value, target, unit, hasTarget }: { label: 
   const progressValue = percent(value, target);
   const isCalories = label.toLowerCase() === "calories";
   return (
-    <Card className="glass-card">
+    <Card variant="glass">
       <CardContent className="pt-5">
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
         <p className="mt-2 text-[28px] font-extrabold leading-none tracking-[-0.055em]">{value}{unit}</p>
@@ -65,7 +65,7 @@ export function SavedTarget({ label, value }: { label: string; value: string }) 
 
 export function WeeklyTracker({ selectedDate, weekData, onSelectDate, onMoveWeek }: { selectedDate: string; weekData: DailyNutritionSummary[]; onSelectDate: (date: string) => void; onMoveWeek: (days: number) => void }) {
   return (
-    <Card className="glass-card-strong mt-4">
+    <Card variant="glassStrong" className="mt-4">
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
         <CardTitle>Weekly tracker</CardTitle>
         <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => onMoveWeek(-7)}><ChevronLeft className="h-4 w-4" /> Previous</Button><Button variant="outline" size="sm" onClick={() => onMoveWeek(7)}>Next <ChevronRight className="h-4 w-4" /></Button></div>
@@ -95,7 +95,7 @@ export function FastFoodFlowCard({ selectedDateLabel, hasFoodLogs, hasTargets, o
     { icon: Star, label: "Targets", detail: hasTargets ? "Targets are active for remaining macros." : "Set targets to unlock remaining macros.", href: "#daily-targets" }
   ];
   return (
-    <Card className="glass-card mt-4">
+    <Card variant="glass" className="mt-4">
       <CardHeader><CardTitle>Fast food logging</CardTitle></CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {steps.map((step) => {
@@ -111,7 +111,7 @@ export function FastFoodFlowCard({ selectedDateLabel, hasFoodLogs, hasTargets, o
 export function NutritionCoachCard({ weekData, targets, totals, waterTotal }: { weekData: DailyNutritionSummary[]; targets: SavedTargets; totals: ReturnType<typeof sumFoodLogs>; waterTotal: number }) {
   const insights = buildNutritionInsights({ weekData, targets, totals, waterTotal });
   return (
-    <Card className="glass-card mt-4">
+    <Card variant="glass" className="mt-4">
       <CardHeader><CardTitle>Nutrition summary</CardTitle></CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {insights.map((insight) => <div key={insight.label} className="solid-row p-3"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{insight.label}</p><p className="mt-1 font-semibold text-foreground">{insight.value}</p><p className="mt-1 text-sm text-muted-foreground">{insight.detail}</p></div>)}
@@ -151,7 +151,7 @@ export function WeeklyOverview({ weekData, waterGoalMl }: { weekData: DailyNutri
   const status = Math.abs(deviation) <= 5 ? "On track" : deviation < -15 ? "Large deficit" : deviation < -5 ? "Slight deficit" : deviation > 15 ? "Large surplus" : "Slight surplus";
   const maxCalories = Math.max(1, ...weekData.map((day) => Math.max(day.planned_calories, day.calories)));
   return (
-    <Card className="glass-card-strong mt-4">
+    <Card variant="glassStrong" className="mt-4">
       <CardHeader><CardTitle>Weekly Summary</CardTitle></CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -187,7 +187,7 @@ function MacroBar({ label, value, total }: { label: string; value: number; total
 
 export function WaterCard({ waterTotal, waterGoal, customWaterMl, setCustomWaterMl, waterLogs, onAddWater, onRemoveWater }: { waterTotal: number; waterGoal: number; customWaterMl: string; setCustomWaterMl: (value: string) => void; waterLogs: WaterLog[]; onAddWater: (amount: number) => void; onRemoveWater: (log: WaterLog) => void }) {
   return (
-    <Card className="glass-card">
+    <Card variant="glass">
       <CardHeader><CardTitle>Water intake</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         <div><p className="text-2xl font-bold">{waterTotal} ml</p><p className="text-sm text-muted-foreground">Goal {waterGoal} ml</p><Progress value={percent(waterTotal, waterGoal)} className="mt-3" /></div>
@@ -208,7 +208,7 @@ export function CompactNutritionSummary({ totals, targets, waterTotal }: { total
   const hasAnyTargets = targets.daily_calories > 0 || targets.protein_g > 0;
 
   return (
-    <Card className="glass-card-strong overflow-hidden">
+    <Card variant="glassStrong" className="overflow-hidden">
       <CardContent className="p-4">
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-center gap-1">

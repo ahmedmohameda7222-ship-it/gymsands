@@ -158,14 +158,14 @@ export default function OnboardingPage() {
     <>
       <PageHeading title="Profile Setup" description="A clean setup flow for real imported plans. Plaivra uses this profile to store, schedule, edit, display, and track plans created outside the app." />
 
-      <Card className="mx-auto max-w-4xl overflow-hidden border-primary/15">
-        <CardHeader className="space-y-4 border-b border-border/70 bg-muted/25">
+      <Card variant="glassStrong" className="mx-auto max-w-4xl overflow-hidden border-primary/15">
+        <CardHeader className="space-y-4 border-b border-white/50 dark:border-white/10">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Step {step + 1} of {steps.length}</p>
               <CardTitle className="mt-1 text-2xl tracking-tight">{steps[step]}</CardTitle>
             </div>
-            <div className="flex items-center gap-2 rounded-full border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
+            <div className="glass-chip flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
               Premium setup
             </div>
@@ -177,7 +177,7 @@ export default function OnboardingPage() {
                 key={item}
                 type="button"
                 onClick={() => setStep(index)}
-                className={`min-w-fit rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${index === step ? "border-primary bg-primary text-primary-foreground" : index < step ? "border-primary/30 bg-primary/10 text-primary" : "bg-card text-muted-foreground"}`}
+                className={`min-w-fit rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${index === step ? "border-primary bg-primary text-primary-foreground" : index < step ? "border-primary/30 bg-primary/10 text-primary" : "border-white/50 bg-white/35 text-muted-foreground dark:border-white/10 dark:bg-white/5"}`}
               >
                 {index < step ? "✓ " : ""}{item}
               </button>
@@ -304,7 +304,7 @@ export default function OnboardingPage() {
                 </div>
 
                 {aiPermissions.accessMode === "full" ? (
-                  <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+                  <div className="glass-card p-4 sm:p-5">
                     <p className="font-semibold text-foreground">Full AI Access</p>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
                       AI can read and manage your workouts, nutrition, meal plans, food logs, hydration, wellness, progress, and profile data.
@@ -315,7 +315,7 @@ export default function OnboardingPage() {
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Choose sections AI can access</p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {ALL_AI_PERMISSION_SECTIONS.map((section) => (
-                        <div key={section} className="rounded-2xl border bg-card p-4 space-y-3">
+                        <div key={section} className="solid-row p-4 space-y-3">
                           <div className="flex items-center justify-between">
                             <p className="text-sm font-semibold capitalize">{section.replace("_", " ")}</p>
                             <div className="flex gap-2">
@@ -377,7 +377,7 @@ export default function OnboardingPage() {
                   </div>
                 )}
 
-                <div className="rounded-2xl border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
+                <div className="glass-card p-3 text-sm text-muted-foreground">
                   You can change or revoke AI access anytime from Settings.
                 </div>
               </div>
@@ -386,7 +386,7 @@ export default function OnboardingPage() {
 
           {step === 6 ? (
             <section className="space-y-4">
-              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+              <div className="glass-card p-4 sm:p-5">
                 <h2 className="text-lg font-semibold">Review before saving</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   Plaivra will not generate plans internally. Create workout and meal plans externally, then import them for storage, scheduling, editing, display, and tracking.
@@ -432,7 +432,7 @@ export default function OnboardingPage() {
 
 function StepIntro({ title, detail }: { title: string; detail: string }) {
   return (
-    <div className="rounded-2xl border bg-muted/30 p-4">
+    <div className="glass-card p-4">
       <p className="font-semibold text-foreground">{title}</p>
       <p className="mt-1 text-sm leading-6 text-muted-foreground">{detail}</p>
     </div>
@@ -491,7 +491,7 @@ function NumberField({ label, value, suffix, onChange }: { label: string; value:
 
 function ReviewItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border bg-card p-4">
+    <div className="glass-card p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
       <p className="mt-2 text-sm font-semibold leading-6 text-foreground">{value}</p>
     </div>

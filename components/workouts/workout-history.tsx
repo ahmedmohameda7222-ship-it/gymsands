@@ -204,7 +204,7 @@ export function WorkoutHistory() {
         </div>
       ) : null}
 
-      <Card className="solid-tracking-card">
+      <Card>
         <CardHeader className="space-y-4">
           <div>
             <CardTitle className="flex items-center gap-2">

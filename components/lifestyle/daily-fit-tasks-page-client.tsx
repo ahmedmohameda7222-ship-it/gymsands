@@ -107,7 +107,7 @@ export function DailyFitTasksPageClient() {
   const progress = items.length ? Math.round((doneCount / items.length) * 100) : 0;
 
   return (
-    <Card className="solid-tracking-card shadow-luxe">
+    <Card className="shadow-luxe">
       <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
         <CardTitle>Daily Fit Tasks</CardTitle>
         <p className="text-sm text-muted-foreground">Today's fitness to-do list for movement, meals, recovery, and consistency.</p>
@@ -123,7 +123,7 @@ export function DailyFitTasksPageClient() {
         </div>
 
         {items.length > 0 && (
-          <div>
+          <div className="glass-card p-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{doneCount}/{items.length} completed</span>
               <span>{progress}%</span>

@@ -57,7 +57,7 @@ export function WorkoutCalendar({
   }
 
   return (
-    <Card className="glass-card">
+    <Card variant="glass">
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
         <div>
           <CardTitle className="flex items-center gap-2">
