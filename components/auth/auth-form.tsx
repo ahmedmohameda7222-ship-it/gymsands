@@ -117,7 +117,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                 id="full-name"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
-                placeholder="Your name, e.g. Ahmed"
+                placeholder="Your name"
                 autoComplete="name"
               />
             </div>
