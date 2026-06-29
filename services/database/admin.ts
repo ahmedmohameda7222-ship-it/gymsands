@@ -28,18 +28,27 @@ export {
 
 export async function adminListUsers(): Promise<AdminUser[]> {
   if (!supabase) throw new Error("Database not connected");
-  const { data, error } = await supabase!.from("profiles").select("id,email,full_name,role,created_at").order("created_at", { ascending: false });
-  if (error) {
-    console.warn("Plaivra could not load admin users.", error.message);
-    return [];
-  }
-  return (data ?? []) as AdminUser[];
+  const session = await supabase.auth.getSession();
+  const accessToken = session.data.session?.access_token;
+  if (!accessToken) throw new Error("Admin session expired.");
+  const response = await fetch("/api/admin/users", { headers: { Authorization: `Bearer ${accessToken}` } });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error ?? "Plaivra could not load admin users.");
+  return (data.users ?? []) as AdminUser[];
 }
 
 export async function adminUpdateUserRole(userId: string, role: UserRole) {
   if (!supabase) throw new Error("Database not connected");
-  const { error } = await supabase!.from("profiles").update({ role }).eq("id", userId);
-  if (error) throw error;
+  const session = await supabase.auth.getSession();
+  const accessToken = session.data.session?.access_token;
+  if (!accessToken) throw new Error("Admin session expired.");
+  const response = await fetch("/api/admin/users", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId, role })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error ?? "The user role was not changed.");
   return true;
 }
 

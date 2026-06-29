@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { serverEnv } from "@/lib/integrations/env";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { hashConnectionToken } from "@/lib/mcp/auth";
-import { MCP_DEFAULT_SCOPES, MCP_SUPPORTED_SCOPES, normalizeMcpScopes, expandMcpScopes, migrateLegacyScopes } from "@/lib/mcp/scopes";
+import { MCP_DEFAULT_SCOPES, MCP_SCOPES, MCP_SUPPORTED_SCOPES, normalizeMcpScopes, migrateLegacyScopes, resolveSavedAiPermissionScopes } from "@/lib/mcp/scopes";
 
 type AuthorizationCodePayload = {
   clientHash: string;
@@ -181,14 +181,14 @@ async function getUserAiScopes(userId: string): Promise<string[]> {
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from("user_ai_permission_settings")
-    .select("scopes")
+    .select("access_mode,scopes")
     .eq("user_id", userId)
     .maybeSingle();
 
   if (data && !error && Array.isArray(data.scopes) && data.scopes.length > 0) {
-    return expandMcpScopes(data.scopes);
+    return resolveSavedAiPermissionScopes(data.access_mode, data.scopes);
   }
-  return MCP_DEFAULT_SCOPES;
+  return [];
 }
 
 export async function handleOAuthAuthorize(request: Request) {
@@ -218,7 +218,14 @@ export async function handleOAuthAuthorize(request: Request) {
     }
 
     const userScopes = await getUserAiScopes(connection.user_id);
-    const scope = normalizeMcpScopes(requestedScope, userScopes).join(" ");
+    if (!userScopes.length) {
+      return oauthErrorRedirect(redirectUri, state, "access_denied", "Review and save Plaivra AI Permissions before connecting ChatGPT.");
+    }
+    const allowedScopes = new Set(userScopes);
+    const permittedRequestedScopes = normalizeMcpScopes(requestedScope, userScopes).filter(
+      (scope) => scope !== MCP_SCOPES.admin && scope !== MCP_SCOPES.all && allowedScopes.has(scope)
+    );
+    const scope = (permittedRequestedScopes.length ? permittedRequestedScopes : userScopes).join(" ");
 
     const code = createAuthorizationCode({
       clientHash: connection.tokenHash,

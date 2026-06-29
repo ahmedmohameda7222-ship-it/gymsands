@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createConnectionToken, hashConnectionToken } from "@/lib/mcp/auth";
-import { MCP_DEFAULT_SCOPES, expandMcpScopes } from "@/lib/mcp/scopes";
+import { resolveSavedAiPermissionScopes } from "@/lib/mcp/scopes";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { requireServerKeys, requireUser, serverEnv } from "@/lib/integrations/env";
 
@@ -13,24 +13,18 @@ function requireMcpConnectionConfig() {
   ]);
 }
 
-async function getOrCreateUserAiScopes(supabase: ReturnType<typeof createSupabaseAdminClient>, userId: string): Promise<string[]> {
-  const { data: settings } = await supabase
+async function getUserAiScopes(supabase: ReturnType<typeof createSupabaseAdminClient>, userId: string): Promise<string[] | null> {
+  const { data: settings, error } = await supabase
     .from("user_ai_permission_settings")
-    .select("scopes")
+    .select("access_mode,scopes")
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (settings && Array.isArray(settings.scopes) && settings.scopes.length > 0) {
-    return expandMcpScopes(settings.scopes);
-  }
+  if (error) throw error;
+  if (!settings || !Array.isArray(settings.scopes) || settings.scopes.length === 0) return null;
 
-  // Default: create explicit full access settings for backward compatibility
-  const defaultScopes = MCP_DEFAULT_SCOPES;
-  await supabase
-    .from("user_ai_permission_settings")
-    .upsert({ user_id: userId, access_mode: "full", scopes: defaultScopes }, { onConflict: "user_id" });
-
-  return defaultScopes;
+  const resolved = resolveSavedAiPermissionScopes(settings.access_mode, settings.scopes);
+  return resolved.length ? resolved : null;
 }
 
 export async function GET(request: Request) {
@@ -59,9 +53,26 @@ export async function POST(request: Request) {
   const missingConfig = requireMcpConnectionConfig();
   if (missingConfig) return missingConfig;
 
+  const supabase = createSupabaseAdminClient();
+  let userScopes: string[] | null;
+  try {
+    userScopes = await getUserAiScopes(supabase, context.user.id);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Could not load AI permissions." },
+      { status: 400 }
+    );
+  }
+
+  if (!userScopes?.length) {
+    return NextResponse.json(
+      { error: "AI permissions required. Review and save AI Permissions before creating a ChatGPT connection code." },
+      { status: 409 }
+    );
+  }
+
   const token = createConnectionToken();
   const tokenHash = hashConnectionToken(token);
-  const supabase = createSupabaseAdminClient();
 
   try {
     const { error: revokeError } = await supabase
@@ -75,8 +86,6 @@ export async function POST(request: Request) {
   } catch {
     // Non-blocking: continue to create new token even if revoke fails
   }
-
-  const userScopes = await getOrCreateUserAiScopes(supabase, context.user.id);
 
   const { data, error } = await supabase
     .from("chatgpt_connections")

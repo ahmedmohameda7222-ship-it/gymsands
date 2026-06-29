@@ -1,4 +1,5 @@
 import { PublicNav } from "@/components/layout/public-nav";
+import { PublicFooter } from "@/components/layout/public-footer";
 
 export default function AboutPage() {
   return (
@@ -61,6 +62,7 @@ export default function AboutPage() {
           </div>
         </section>
       </main>
+      <PublicFooter />
     </div>
   );
 }

@@ -26,7 +26,7 @@ export type AiPermissionConfig = {
 };
 
 function scopesToConfig(scopes: string[]): AiPermissionConfig {
-  const isFull = scopes.includes("plaivra.full_access") || scopes.includes("plaivra.all");
+  const isFull = scopes.includes("plaivra.full_access");
 
   const sections: AiPermissionConfig["sections"] = {
     workouts: { read: false, write: false },
@@ -63,7 +63,7 @@ function scopesToConfig(scopes: string[]): AiPermissionConfig {
   };
 }
 
-function configToScopes(config: AiPermissionConfig): string[] {
+export function configToScopes(config: AiPermissionConfig): string[] {
   if (config.accessMode === "full") {
     return [
       "plaivra.full_access",
@@ -100,25 +100,7 @@ function configToScopes(config: AiPermissionConfig): string[] {
 }
 
 export function getDefaultAiPermissionConfig(): AiPermissionConfig {
-  return scopesToConfig([
-    "plaivra.full_access",
-    "plaivra.workouts.read",
-    "plaivra.workouts.write",
-    "plaivra.nutrition.read",
-    "plaivra.nutrition.write",
-    "plaivra.meal_plans.read",
-    "plaivra.meal_plans.write",
-    "plaivra.hydration.read",
-    "plaivra.hydration.write",
-    "plaivra.progress.read",
-    "plaivra.progress.write",
-    "plaivra.wellness.read",
-    "plaivra.wellness.write",
-    "plaivra.profile.read",
-    "plaivra.profile.write",
-    "plaivra.settings.read",
-    "plaivra.settings.write"
-  ]);
+  return scopesToConfig([]);
 }
 
 export async function getAiPermissionSettings(userId: string): Promise<AiPermissionConfig | null> {

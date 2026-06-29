@@ -25,6 +25,31 @@ create index if not exists user_welcome_messages_active_user_idx on public.user_
 alter table public.admin_settings enable row level security;
 alter table public.user_welcome_messages enable row level security;
 
+-- Non-sensitive member-readable welcome defaults live outside admin_settings.
+-- Keep this migration aligned with 202606290001_germany_privacy_security_hardening.sql.
+create table if not exists public.public_app_settings (
+  key text primary key,
+  value jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+insert into public.public_app_settings (key, value)
+select key, value from public.admin_settings where key = 'welcome_settings'
+on conflict (key) do update set value = excluded.value;
+
+alter table public.public_app_settings enable row level security;
+grant select, insert, update, delete on public.public_app_settings to authenticated;
+
+drop policy if exists "public_app_settings_read_authenticated" on public.public_app_settings;
+drop policy if exists "public_app_settings_admin_manage" on public.public_app_settings;
+create policy "public_app_settings_read_authenticated" on public.public_app_settings
+  for select to authenticated using (true);
+create policy "public_app_settings_admin_manage" on public.public_app_settings
+  for all to authenticated
+  using ((select public.is_admin()))
+  with check ((select public.is_admin()));
+
 drop policy if exists "welcome_settings_read" on public.admin_settings;
 drop policy if exists "welcome_settings_admin_insert" on public.admin_settings;
 drop policy if exists "welcome_settings_admin_update" on public.admin_settings;
@@ -33,49 +58,23 @@ drop policy if exists "welcome_settings_admin_delete" on public.admin_settings;
 create policy "welcome_settings_read" on public.admin_settings
   for select
   to authenticated
-  using (
-    key = 'welcome_settings'
-    or exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid() and p.role = 'admin'
-    )
-  );
+  using ((select public.is_admin()));
 
 create policy "welcome_settings_admin_insert" on public.admin_settings
   for insert
   to authenticated
-  with check (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid() and p.role = 'admin'
-    )
-  );
+  with check ((select public.is_admin()));
 
 create policy "welcome_settings_admin_update" on public.admin_settings
   for update
   to authenticated
-  using (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid() and p.role = 'admin'
-    )
-  )
-  with check (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid() and p.role = 'admin'
-    )
-  );
+  using ((select public.is_admin()))
+  with check ((select public.is_admin()));
 
 create policy "welcome_settings_admin_delete" on public.admin_settings
   for delete
   to authenticated
-  using (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid() and p.role = 'admin'
-    )
-  );
+  using ((select public.is_admin()));
 
 drop policy if exists "user_welcome_messages_read_own_or_admin" on public.user_welcome_messages;
 drop policy if exists "user_welcome_messages_admin_insert" on public.user_welcome_messages;

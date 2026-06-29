@@ -58,9 +58,12 @@ export const MCP_SUPPORTED_SCOPES = [
 
 export const MCP_FULL_ACCESS_SCOPES = [MCP_SCOPES.fullAccess, ...MCP_NORMAL_USER_SCOPES];
 
-export const MCP_DEFAULT_SCOPES = MCP_FULL_ACCESS_SCOPES;
+// No MCP permission is implicit. Full access is available only through an
+// explicitly saved access_mode="full" preference.
+export const MCP_DEFAULT_SCOPES: readonly string[] = [];
 
 export const supportedScopeSet = new Set<string>(MCP_SUPPORTED_SCOPES);
+const normalUserScopeSet = new Set<string>(MCP_NORMAL_USER_SCOPES);
 
 export function normalizeMcpScopes(input: unknown, fallback: readonly string[] = MCP_DEFAULT_SCOPES) {
   const raw = Array.isArray(input)
@@ -136,9 +139,17 @@ export function migrateLegacyScopes(scopes: string[]): string[] {
   const migrated = new Set<string>();
 
   for (const scope of scopes) {
-    if (scope === "fitlife.all") {
-      migrated.add(MCP_SCOPES.fullAccess);
-      MCP_NORMAL_USER_SCOPES.forEach((s) => migrated.add(s));
+    if (
+      scope === "fitlife.all" ||
+      scope === "fitlife.admin" ||
+      scope === "fitlife.full_access" ||
+      scope === MCP_SCOPES.admin ||
+      scope === MCP_SCOPES.all ||
+      scope === MCP_SCOPES.fullAccess
+    ) {
+      // Legacy blanket/admin scopes cannot prove explicit, current consent.
+      // Drop them; section-level scopes in the same array are migrated below.
+      continue;
     } else if (scope === "fitlife.training.write") {
       migrated.add(MCP_SCOPES.workoutsWrite);
       migrated.add(MCP_SCOPES.workoutsRead);
@@ -166,8 +177,6 @@ export function migrateLegacyScopes(scopes: string[]): string[] {
       // dashboard-level data.
       migrated.add(MCP_SCOPES.profileRead);
       migrated.add(MCP_SCOPES.settingsRead);
-    } else if (scope === "fitlife.admin") {
-      migrated.add(MCP_SCOPES.admin);
     } else {
       // Generic migration: fitlife.* -> plaivra.* for all other canonical scopes
       const plaivraScope = scope.replace(/^fitlife\./, "plaivra.");
@@ -180,7 +189,25 @@ export function migrateLegacyScopes(scopes: string[]): string[] {
     }
   }
 
-  return normalizeMcpScopes(Array.from(migrated));
+  return normalizeMcpScopes(Array.from(migrated), []);
+}
+
+export function resolveSavedAiPermissionScopes(accessMode: unknown, input: unknown): string[] {
+  const scopes = Array.isArray(input) ? input.map(String) : [];
+  const hasBlockedBlanketScope = scopes.some((scope) =>
+    [MCP_SCOPES.admin, MCP_SCOPES.all, "fitlife.admin", "fitlife.all", "fitlife.full_access"].includes(scope)
+  );
+
+  if (accessMode === "full") {
+    if (hasBlockedBlanketScope || !scopes.includes(MCP_SCOPES.fullAccess)) return [];
+    return expandMcpScopes([MCP_SCOPES.fullAccess, ...scopes.filter((scope) => normalUserScopeSet.has(scope))]);
+  }
+
+  if (accessMode === "custom") {
+    return expandMcpScopes(scopes.filter((scope) => normalUserScopeSet.has(scope)));
+  }
+
+  return [];
 }
 
 /**

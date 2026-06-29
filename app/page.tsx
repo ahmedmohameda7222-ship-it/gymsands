@@ -3,6 +3,7 @@ import { Activity, BedDouble, Dumbbell, LineChart, Pill, Soup, Trophy, Utensils 
 import { PublicNav } from "@/components/layout/public-nav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PublicFooter } from "@/components/layout/public-footer";
 
 const heroImages = [
   "https://images.unsplash.com/photo-1571902943202-507ec2618e8f?auto=format&fit=crop&w=1800&q=85",
@@ -83,6 +84,7 @@ export default function LandingPage() {
           </div>
         </section>
       </main>
+      <PublicFooter />
     </div>
   );
 }

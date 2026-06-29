@@ -4,10 +4,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { serverEnv } from "@/lib/integrations/env";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import {
-  MCP_SCOPES,
-  MCP_DEFAULT_SCOPES,
   expandMcpScopes,
-  migrateLegacyScopes
+  migrateLegacyScopes,
+  resolveSavedAiPermissionScopes
 } from "@/lib/mcp/scopes";
 
 export type McpProfile = {
@@ -187,7 +186,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
 
   if (permissionSettings && !permissionError) {
     // Use stored user AI permission settings as the source of truth
-    resolvedScopes = expandMcpScopes(permissionSettings.scopes ?? []);
+    resolvedScopes = resolveSavedAiPermissionScopes(permissionSettings.access_mode, permissionSettings.scopes);
   } else if (connection.scopes && Array.isArray(connection.scopes) && connection.scopes.length > 0) {
     // Fallback: migrate legacy connection scopes for backward compatibility
     resolvedScopes = expandMcpScopes(migrateLegacyScopes(connection.scopes));

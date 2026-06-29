@@ -13,10 +13,13 @@ export type ProgressPhoto = {
   taken_on: string;
   storage_path: string;
   created_at: string;
+  updated_at?: string;
   signed_url: string | null;
 };
 
 const bucket = "progress-photos";
+const maxPhotoBytes = 10 * 1024 * 1024;
+const allowedPhotoMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function safeFileName(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9.]+/g, "-").replace(/^-+|-+$/g, "") || "progress-photo.jpg";
@@ -72,7 +75,8 @@ export async function getProgressPhotos(userId: string) {
 
 export async function uploadProgressPhoto({ userId, type, takenOn, file }: { userId: string; type: ProgressPhotoType; takenOn: string; file: File }) {
   const client = requireStorage(userId);
-  if (!file.type.startsWith("image/")) throw new Error("Upload an image file only.");
+  if (!allowedPhotoMimeTypes.has(file.type)) throw new Error("Upload a JPEG, PNG, or WebP image only.");
+  if (file.size > maxPhotoBytes) throw new Error("Progress photos must be 10 MB or smaller.");
   const path = `${userId}/${type}/${takenOn}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
   const upload = await client.storage.from(bucket).upload(path, file, { upsert: false, contentType: file.type });
   if (upload.error) throw new Error(`Could not upload progress photo. ${upload.error.message}`);

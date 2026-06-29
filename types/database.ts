@@ -37,6 +37,8 @@ export type OnboardingAnswers = {
   min_workout_duration_minutes?: number;
   max_workout_duration_minutes?: number;
   desired_duration_weeks?: number;
+  onboarding_duration?: number | null;
+  barcode_scan_enabled?: boolean;
   available_equipment?: string[];
   nutrition_preferences: string[];
   allergies_limitations?: string | null;
@@ -144,6 +146,7 @@ export type WaterLog = {
   log_date: string;
   amount_ml: number;
   created_at: string;
+  updated_at?: string;
 };
 
 export type DailyNutritionSummary = {
@@ -407,6 +410,9 @@ export type SleepRecoveryLog = {
   log_date: string;
   hours_slept: number | null;
   sleep_quality: string | null;
+  bedtime?: string | null;
+  wake_time?: string | null;
+  stress_level?: string | null;
   recovery_level: string | null;
   fatigue_level: string | null;
   soreness_level: string | null;
@@ -461,6 +467,7 @@ export type ProgressPhoto = {
   taken_on: string;
   storage_path: string;
   created_at: string;
+  updated_at?: string;
   signed_url?: string | null;
 };
 

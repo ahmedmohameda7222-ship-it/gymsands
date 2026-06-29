@@ -7,6 +7,7 @@ import {
   readScopeAllowed,
   migrateLegacyScopes,
   normalizeMcpScopes,
+  resolveSavedAiPermissionScopes,
   MCP_NORMAL_USER_SCOPES
 } from "./scopes";
 
@@ -103,12 +104,9 @@ describe("readScopeAllowed", () => {
 });
 
 describe("migrateLegacyScopes", () => {
-  it("migrates fitlife.all to full_access + normal scopes", () => {
+  it("drops fitlife.all because blanket legacy access is not explicit consent", () => {
     const migrated = migrateLegacyScopes(["fitlife.all"]);
-    expect(migrated).toContain(MCP_SCOPES.fullAccess);
-    for (const scope of MCP_NORMAL_USER_SCOPES) {
-      expect(migrated).toContain(scope);
-    }
+    expect(migrated).toEqual([]);
   });
 
   it("migrates fitlife.training.write to workouts.write + read", () => {
@@ -137,6 +135,10 @@ describe("migrateLegacyScopes", () => {
     const migrated = migrateLegacyScopes(["fitlife.unknown.scope"]);
     expect(migrated).not.toContain("fitlife.unknown.scope");
   });
+
+  it("drops legacy and canonical admin/all/full scopes", () => {
+    expect(migrateLegacyScopes(["fitlife.admin", "fitlife.full_access", MCP_SCOPES.admin, MCP_SCOPES.all, MCP_SCOPES.fullAccess])).toEqual([]);
+  });
 });
 
 describe("normalizeMcpScopes", () => {
@@ -152,5 +154,25 @@ describe("normalizeMcpScopes", () => {
   it("deduplicates scopes", () => {
     const result = normalizeMcpScopes([MCP_SCOPES.nutritionWrite, MCP_SCOPES.nutritionWrite]);
     expect(result.filter((s) => s === MCP_SCOPES.nutritionWrite).length).toBe(1);
+  });
+});
+
+describe("resolveSavedAiPermissionScopes", () => {
+  it("accepts explicit canonical full mode", () => {
+    const scopes = resolveSavedAiPermissionScopes("full", [MCP_SCOPES.fullAccess]);
+    expect(scopes).toContain(MCP_SCOPES.fullAccess);
+    expect(scopes).toContain(MCP_SCOPES.workoutsWrite);
+  });
+
+  it("does not allow full access from custom mode", () => {
+    expect(resolveSavedAiPermissionScopes("custom", [MCP_SCOPES.fullAccess])).toEqual([]);
+  });
+
+  it("drops admin/all scopes while retaining safe custom section scopes", () => {
+    const scopes = resolveSavedAiPermissionScopes("custom", [MCP_SCOPES.admin, MCP_SCOPES.all, MCP_SCOPES.nutritionWrite]);
+    expect(scopes).toContain(MCP_SCOPES.nutritionWrite);
+    expect(scopes).toContain(MCP_SCOPES.nutritionRead);
+    expect(scopes).not.toContain(MCP_SCOPES.admin);
+    expect(scopes).not.toContain(MCP_SCOPES.all);
   });
 });

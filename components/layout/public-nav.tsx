@@ -11,6 +11,9 @@ export function PublicNav() {
           <Link href="/about" className="hover:text-primary">
             About
           </Link>
+          <Link href="/legal/privacy" className="hover:text-primary">
+            Privacy
+          </Link>
           <Link href="/login" className="hover:text-primary">
             Login
           </Link>

@@ -40,7 +40,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const accessMode = body.access_mode === "custom" ? "custom" : "full";
+  if (body.access_mode !== "custom" && body.access_mode !== "full") {
+    return NextResponse.json({ error: "access_mode must be full or custom." }, { status: 400 });
+  }
+  const accessMode = body.access_mode;
 
   let scopes: string[];
   if (accessMode === "full") {
@@ -65,9 +68,13 @@ export async function POST(request: Request) {
     }
 
     // Never allow normal users to save plaivra.admin
-    if (candidateScopes.includes(MCP_SCOPES.admin)) {
+    if (
+      candidateScopes.includes(MCP_SCOPES.admin) ||
+      candidateScopes.includes(MCP_SCOPES.all) ||
+      candidateScopes.includes(MCP_SCOPES.fullAccess)
+    ) {
       return NextResponse.json(
-        { error: "Admin scope is not allowed for normal users." },
+        { error: "Full, all, and admin scopes are not allowed in custom mode." },
         { status: 400 }
       );
     }

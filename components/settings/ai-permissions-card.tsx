@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/toaster";
 import {
   getAiPermissionSettings,
   saveAiPermissionSettings,
+  getDefaultAiPermissionConfig,
   type AiPermissionConfig,
   ALL_AI_PERMISSION_SECTIONS
 } from "@/services/database/ai-permissions";
@@ -18,7 +19,7 @@ export function AiPermissionsCard() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [config, setConfig] = useState<AiPermissionConfig | null>(null);
+  const [config, setConfig] = useState<AiPermissionConfig>(() => getDefaultAiPermissionConfig());
   const [hasSavedSettings, setHasSavedSettings] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -26,7 +27,7 @@ export function AiPermissionsCard() {
     setIsLoading(true);
     try {
       const settings = await getAiPermissionSettings(user.id);
-      setConfig(settings);
+      setConfig(settings ?? getDefaultAiPermissionConfig());
       setHasSavedSettings(Boolean(settings));
     } catch (error) {
       console.warn("Could not load AI permissions:", error);
@@ -40,7 +41,7 @@ export function AiPermissionsCard() {
   }, [loadData]);
 
   async function handleSave() {
-    if (!user?.id || !config) return;
+    if (!user?.id) return;
     setIsSaving(true);
     try {
       await saveAiPermissionSettings(user.id, config);
@@ -78,7 +79,7 @@ export function AiPermissionsCard() {
           <div className="grid gap-3">
             <button
               type="button"
-              onClick={() => setConfig((c) => (c ? { ...c, accessMode: "full" } : c))}
+              onClick={() => setConfig((current) => ({ ...current, accessMode: "full" }))}
               className={`flex items-start gap-3 rounded-2xl border p-4 text-left transition ${
                 config?.accessMode === "full"
                   ? "border-primary bg-primary/10 text-primary shadow-soft"
@@ -95,14 +96,14 @@ export function AiPermissionsCard() {
               <div>
                 <p className="font-semibold">Full AI Access</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Give AI full permission to manage your Plaivra account, including workouts, nutrition, meal plans, hydration, wellness, progress, and profile data.
+                  Full AI Access lets ChatGPT read and manage workouts, nutrition, meal plans, hydration, wellness, progress, profile and settings data.
                 </p>
               </div>
             </button>
 
             <button
               type="button"
-              onClick={() => setConfig((c) => (c ? { ...c, accessMode: "custom" } : c))}
+              onClick={() => setConfig((current) => ({ ...current, accessMode: "custom" }))}
               className={`flex items-start gap-3 rounded-2xl border p-4 text-left transition ${
                 config?.accessMode === "custom"
                   ? "border-primary bg-primary/10 text-primary shadow-soft"
@@ -126,7 +127,7 @@ export function AiPermissionsCard() {
           </div>
 
           {/* Custom section toggles */}
-          {config?.accessMode === "custom" ? (
+          {config.accessMode === "custom" ? (
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Sections</p>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -140,17 +141,13 @@ export function AiPermissionsCard() {
                           <button
                             type="button"
                             onClick={() =>
-                              setConfig((c) =>
-                                c
-                                  ? {
-                                      ...c,
-                                      sections: {
-                                        ...c.sections,
-                                        [section]: { ...c.sections[section], read: !c.sections[section].read }
-                                      }
-                                    }
-                                  : c
-                              )
+                              setConfig((current) => ({
+                                ...current,
+                                sections: {
+                                  ...current.sections,
+                                  [section]: { ...current.sections[section], read: !current.sections[section].read }
+                                }
+                              }))
                             }
                             className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition ${
                               perms.read
@@ -164,15 +161,14 @@ export function AiPermissionsCard() {
                           <button
                             type="button"
                             onClick={() =>
-                              setConfig((c) => {
-                                if (!c) return c;
-                                const nextWrite = !c.sections[section].write;
+                              setConfig((current) => {
+                                const nextWrite = !current.sections[section].write;
                                 return {
-                                  ...c,
+                                  ...current,
                                   sections: {
-                                    ...c.sections,
+                                    ...current.sections,
                                     [section]: {
-                                      read: nextWrite ? true : c.sections[section].read,
+                                      read: nextWrite ? true : current.sections[section].read,
                                       write: nextWrite
                                     }
                                   }
@@ -213,7 +209,7 @@ export function AiPermissionsCard() {
 
           {/* Save button */}
           <div className="flex justify-end">
-            <Button onClick={() => void handleSave()} disabled={isSaving || !config} className="min-h-12">
+            <Button onClick={() => void handleSave()} disabled={isSaving} className="min-h-12">
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               {isSaving ? "Saving..." : "Save AI Permissions"}
             </Button>

@@ -13,7 +13,7 @@ create table public.user_ai_permission_settings (
 
 comment on table public.user_ai_permission_settings is 'Stores each user chosen AI permission mode and scopes for MCP/ChatGPT connections.';
 comment on column public.user_ai_permission_settings.access_mode is 'full = all normal user scopes, custom = only selected scopes';
-comment on column public.user_ai_permission_settings.scopes is 'Array of explicit fitlife.* scopes. For full access, includes fitlife.full_access.';
+comment on column public.user_ai_permission_settings.scopes is 'Array of explicit canonical plaivra.* scopes. Full access requires a user-saved plaivra.full_access scope.';
 
 -- Enable RLS
 alter table public.user_ai_permission_settings enable row level security;
@@ -47,36 +47,6 @@ create trigger user_ai_permission_settings_updated_at
   for each row
   execute function public.set_updated_at();
 
--- Migrate existing users who have active chatgpt_connections.
--- Give them explicit full access with normal-user scopes only.
--- Do NOT grant fitlife.admin through this migration.
-insert into public.user_ai_permission_settings (user_id, access_mode, scopes)
-select distinct on (c.user_id)
-  c.user_id,
-  'full',
-  array[
-    'fitlife.full_access',
-    'fitlife.workouts.read',
-    'fitlife.workouts.write',
-    'fitlife.nutrition.read',
-    'fitlife.nutrition.write',
-    'fitlife.meal_plans.read',
-    'fitlife.meal_plans.write',
-    'fitlife.hydration.read',
-    'fitlife.hydration.write',
-    'fitlife.progress.read',
-    'fitlife.progress.write',
-    'fitlife.wellness.read',
-    'fitlife.wellness.write',
-    'fitlife.profile.read',
-    'fitlife.profile.write',
-    'fitlife.settings.read'
-  ]
-from public.chatgpt_connections c
-where c.is_active = true
-  and c.revoked_at is null
-  and not exists (
-    select 1 from public.user_ai_permission_settings u
-    where u.user_id = c.user_id
-  )
-on conflict (user_id) do nothing;
+-- Existing connections are deliberately not granted settings here. The
+-- application-specific hardening migration maps only safe section-level legacy
+-- scopes and drops blanket/admin scopes. Users must explicitly save full mode.

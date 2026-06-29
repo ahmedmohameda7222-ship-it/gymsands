@@ -262,6 +262,18 @@ export function ChatGptSetupFlow() {
     }
 
     setIsBusy("chatgpt-token");
+    const permissionResponse = await fetch("/api/user/ai-permissions", { headers: authHeaders() });
+    const permissionData = await permissionResponse.json().catch(() => ({}));
+    const savedScopes = permissionData.settings?.scopes;
+    if (!permissionResponse.ok || !Array.isArray(savedScopes) || savedScopes.length === 0) {
+      setIsBusy(null);
+      toast({
+        title: "AI permissions required",
+        description: "Review and save AI Permissions before creating a ChatGPT connection code."
+      });
+      return;
+    }
+
     const response = await fetch("/api/mcp/connections", {
       method: "POST",
       headers: authHeaders()
@@ -270,7 +282,13 @@ export function ChatGptSetupFlow() {
     setIsBusy(null);
 
     if (!response.ok) {
-      toast({ title: "Could not create connection code", description: data.error ?? "Please try again. If this keeps happening, contact support." });
+      const permissionsRequired = response.status === 409 || String(data.error ?? "").includes("AI permissions required");
+      toast({
+        title: permissionsRequired ? "AI permissions required" : "Could not create connection code",
+        description: permissionsRequired
+          ? "Review and save AI Permissions before creating a ChatGPT connection code."
+          : data.error ?? "Please try again. If this keeps happening, contact support."
+      });
       return;
     }
 

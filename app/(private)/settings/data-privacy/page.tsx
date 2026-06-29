@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, RotateCcw, Shield } from "lucide-react";
+import { Download, FileArchive, RotateCcw, Shield, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SettingsPageShell } from "@/components/settings/settings-page-shell";
@@ -10,6 +10,7 @@ import { type UserAppSettings } from "@/services/database/user-settings";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { useTranslation } from "@/lib/i18n/use-translation";
 import { useToast } from "@/components/ui/toaster";
+import { useAuth } from "@/components/auth/auth-provider";
 
 function SaveStatus({ hasSaved }: { hasSaved: boolean }) {
   const { t } = useTranslation();
@@ -20,7 +21,36 @@ export default function DataPrivacyPage() {
   const { settings, isLoadingSettings, isSavingSettings, updateSettings, resetSettings } = useUserSettings();
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { session } = useAuth();
   const [hasSaved, setHasSaved] = useState(false);
+  const [submittingRequest, setSubmittingRequest] = useState<"export" | "deletion" | null>(null);
+
+  async function submitPrivacyRequest(requestType: "export" | "deletion") {
+    if (!session?.access_token) {
+      toast({ title: "Sign in required", description: "Sign in again before submitting a privacy request." });
+      return;
+    }
+    if (requestType === "deletion" && !window.confirm("Submit an account deletion request? Your account will not be deleted immediately.")) return;
+
+    setSubmittingRequest(requestType);
+    const response = await fetch("/api/user/privacy-requests", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ request_type: requestType })
+    });
+    const data = await response.json().catch(() => ({}));
+    setSubmittingRequest(null);
+    if (!response.ok) {
+      toast({ title: "Request not submitted", description: data.error ?? "Please try again." });
+      return;
+    }
+    toast({
+      title: data.already_exists ? "Request already pending" : "Request submitted",
+      description: requestType === "export"
+        ? "Your full data export request is now tracked."
+        : "Your account deletion request is now tracked for review."
+    });
+  }
 
   async function updateSetting<Key extends keyof UserAppSettings>(key: Key, value: UserAppSettings[Key]) {
     await updateSettings({ [key]: value } as Partial<UserAppSettings>);
@@ -107,6 +137,30 @@ export default function DataPrivacyPage() {
               </span>
             </span>
             <Button variant="outline" onClick={exportSettings}>{t("settings.exportSettings")}</Button>
+          </div>
+          <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3">
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <FileArchive className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block font-semibold text-foreground">Request full data export</span>
+                <span className="mt-1 block text-sm leading-5 text-muted-foreground">Submit a tracked request for a complete Plaivra data export.</span>
+              </span>
+            </span>
+            <Button variant="outline" disabled={submittingRequest !== null} onClick={() => void submitPrivacyRequest("export")}>Request export</Button>
+          </div>
+          <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border border-destructive/30 bg-card p-3">
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block font-semibold text-foreground">Request account deletion</span>
+                <span className="mt-1 block text-sm leading-5 text-muted-foreground">Creates a reviewable deletion request; it does not immediately delete your account.</span>
+              </span>
+            </span>
+            <Button variant="destructive" disabled={submittingRequest !== null} onClick={() => void submitPrivacyRequest("deletion")}>Request deletion</Button>
           </div>
           <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3">
             <span className="flex min-w-0 items-center gap-3">

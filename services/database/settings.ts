@@ -56,7 +56,7 @@ export async function getWelcomeSettings(userId: string): Promise<WelcomeSetting
   if (!canUseUserData(userId)) return fallbackWelcomeSettings;
 
   const [settingsResult, customResult] = await Promise.all([
-    supabase!.from("admin_settings").select("value").eq("key", "welcome_settings").maybeSingle(),
+    supabase!.from("public_app_settings").select("value").eq("key", "welcome_settings").maybeSingle(),
     supabase!
       .from("user_welcome_messages")
       .select("message,popup_enabled,show_frequency")
@@ -91,7 +91,7 @@ export async function getWelcomeSettings(userId: string): Promise<WelcomeSetting
 
 export async function adminGetWelcomeSettings(): Promise<WelcomeSettings> {
   if (!supabase) throw new Error("Database not connected");
-  const { data, error } = await supabase!.from("admin_settings").select("value").eq("key", "welcome_settings").maybeSingle();
+  const { data, error } = await supabase!.from("public_app_settings").select("value").eq("key", "welcome_settings").maybeSingle();
   if (error) throw error;
   const settingsRow = data as WelcomeSettingsRow | null;
   return normalizeWelcomeSettings(settingsRow?.value ?? null);
@@ -141,7 +141,7 @@ export async function adminUpdateWelcomeSettings(settings: WelcomeSettings) {
   if (!supabase) throw new Error("Database not connected");
   const normalized = normalizeWelcomeSettings(settings);
   const { data, error } = await supabase!
-    .from("admin_settings")
+    .from("public_app_settings")
     .upsert({ key: "welcome_settings", value: { ...normalized, is_custom_message: false } }, { onConflict: "key" })
     .select("*")
     .single();
