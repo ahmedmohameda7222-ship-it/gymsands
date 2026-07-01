@@ -76,10 +76,12 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({
-    token,
     client_id: connection.id,
+    ...(serverEnv.plaivraAllowLegacyMcpClientId ? { token } : {}),
     connection,
-    message: "Copy your Plaivra ChatGPT connection code now. It is shown only once. Use the client_id in your ChatGPT OAuth settings."
+    message: serverEnv.plaivraAllowLegacyMcpClientId
+      ? "Use client_id in ChatGPT OAuth settings. A temporary legacy setup code is also included for private compatibility."
+      : "Use client_id in ChatGPT OAuth settings and leave the client secret empty."
   });
 }
 

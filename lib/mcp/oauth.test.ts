@@ -6,7 +6,8 @@ import {
   handleOAuthAuthorize,
   handleOAuthToken,
   handleOAuthRegister,
-  getAccessTokenRecord
+  getAccessTokenRecord,
+  isAllowedRedirectUri
 } from "@/lib/mcp/oauth";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 
@@ -14,7 +15,8 @@ vi.mock("@/lib/server/supabase-admin");
 vi.mock("@/lib/integrations/env", () => ({
   serverEnv: {
     supabaseServiceRoleKey: "test-key",
-    plaivraMcpTokenSecret: "test-secret"
+    plaivraMcpTokenSecret: "test-secret",
+    plaivraAllowLegacyMcpClientId: false
   }
 }));
 
@@ -76,7 +78,8 @@ const createMockSupabase = (overrides?: Record<string, unknown>) => {
 
 const TEST_CONNECTION_ID = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11";
 const TEST_USER_ID = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12";
-const TEST_CLIENT_SECRET = "plaivra_mcp_testclientsecret";
+const TEST_CLIENT_SECRET = TEST_CONNECTION_ID;
+const TEST_LEGACY_CLIENT_SECRET = "plaivra_mcp_testclientsecret";
 
 const mockConnection = {
   id: TEST_CONNECTION_ID,
@@ -115,11 +118,86 @@ describe("OAuth authorization server metadata", () => {
     expect(json.code_challenge_methods_supported).toEqual(["S256"]);
     expect(json.code_challenge_methods_supported).not.toContain("plain");
   });
+
+  it("advertises only the implemented pre-registered public client model", async () => {
+    const request = new Request("https://plaivra.com/.well-known/oauth-authorization-server");
+    const response = oauthAuthorizationServerMetadata(request);
+    const json = await response.json() as Record<string, unknown>;
+    expect(json.token_endpoint_auth_methods_supported).toEqual(["none"]);
+    expect(json).not.toHaveProperty("registration_endpoint");
+    expect(json).not.toHaveProperty("client_id_metadata_document_supported");
+  });
+
+  it("does not pretend the static register route implements DCR", async () => {
+    const response = await handleOAuthRegister();
+    expect(response.status).toBe(404);
+    const json = await response.json() as { error: string; error_description: string };
+    expect(json.error).toBe("invalid_request");
+    expect(json.error_description).toContain("not supported");
+  });
+});
+
+describe("OAuth redirect URI policy", () => {
+  it("accepts only one exact ChatGPT connector callback path segment", () => {
+    expect(isAllowedRedirectUri("https://chatgpt.com/connector/oauth/callback_123-abc")).toBe(true);
+    expect(isAllowedRedirectUri("https://chatgpt.com/connector/oauth/callback/extra")).toBe(false);
+    expect(isAllowedRedirectUri("https://chatgpt.com/connector/oauth/callback?next=https://evil.example")).toBe(false);
+    expect(isAllowedRedirectUri("https://chat.openai.com/connector/oauth/callback")).toBe(false);
+    expect(isAllowedRedirectUri("http://chatgpt.com/connector/oauth/callback")).toBe(false);
+    expect(isAllowedRedirectUri("https://evil.example/connector/oauth/callback")).toBe(false);
+    expect(isAllowedRedirectUri(
+      "https://chatgpt.com/connector/oauth/callback_123-abc",
+      "https://chatgpt.com/connector/oauth/different"
+    )).toBe(false);
+    expect(isAllowedRedirectUri(
+      "https://chatgpt.com/connector/oauth/callback_123-abc",
+      "https://chatgpt.com/connector/oauth/callback_123-abc"
+    )).toBe(true);
+  });
 });
 
 describe("handleOAuthAuthorize", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("rejects legacy setup secrets as client_id when compatibility is disabled", async () => {
+    setupMockSupabase();
+    const url = new URL("https://plaivra.com/api/oauth/authorize");
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("client_id", TEST_LEGACY_CLIENT_SECRET);
+    url.searchParams.set("redirect_uri", "https://chatgpt.com/connector/oauth/callback");
+    url.searchParams.set("code_challenge", "challenge123");
+    url.searchParams.set("code_challenge_method", "S256");
+    const response = await handleOAuthAuthorize(new Request(url));
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toContain("error=invalid_client");
+  });
+
+  it("rejects unknown client_id formats before authorization", async () => {
+    setupMockSupabase();
+    const url = new URL("https://plaivra.com/api/oauth/authorize");
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("client_id", "unknown-client");
+    url.searchParams.set("redirect_uri", "https://chatgpt.com/connector/oauth/callback");
+    url.searchParams.set("code_challenge", "challenge123");
+    url.searchParams.set("code_challenge_method", "S256");
+    const response = await handleOAuthAuthorize(new Request(url));
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toContain("error=invalid_client");
+  });
+
+  it("rejects an unknown UUID client_id", async () => {
+    setupMockSupabase({ chatgpt_connections: { data: null, error: null } });
+    const url = new URL("https://plaivra.com/api/oauth/authorize");
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("client_id", "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11");
+    url.searchParams.set("redirect_uri", "https://chatgpt.com/connector/oauth/callback");
+    url.searchParams.set("code_challenge", "challenge123");
+    url.searchParams.set("code_challenge_method", "S256");
+    const response = await handleOAuthAuthorize(new Request(url));
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toContain("error=invalid_client");
   });
 
   it("rejects missing code_challenge", async () => {
@@ -292,6 +370,43 @@ describe("handleOAuthToken", () => {
     expect(response.status).toBe(400);
     const json = await response.json() as { error: string; error_description: string };
     expect(json.error).toBe("invalid_grant");
+    expect(json.error_description).toContain("not an allowed ChatGPT callback");
+  });
+
+  it("rejects a different but otherwise allowed redirect_uri at token exchange", async () => {
+    setupMockSupabase({
+      chatgpt_connections: { data: mockConnection, error: null },
+      mcp_oauth_authorization_codes: {
+        data: {
+          user_id: TEST_USER_ID,
+          connection_id: TEST_CONNECTION_ID,
+          client_id: TEST_CONNECTION_ID,
+          redirect_uri: "https://chatgpt.com/connector/oauth/callback",
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+          code_challenge_method: "S256",
+          scope: ["read:workouts"],
+          resource: "https://plaivra.com/api/mcp",
+          expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString()
+        },
+        error: null
+      }
+    });
+
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: "plaivra_ac_somecode",
+      client_id: TEST_CONNECTION_ID,
+      redirect_uri: "https://chatgpt.com/connector/oauth/different-callback",
+      code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+    });
+    const response = await handleOAuthToken(new Request("https://plaivra.com/api/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body
+    }));
+    expect(response.status).toBe(400);
+    const json = await response.json() as { error: string; error_description: string };
+    expect(json.error).toBe("invalid_grant");
     expect(json.error_description).toContain("redirect_uri does not match");
   });
 
@@ -405,8 +520,8 @@ describe("handleOAuthToken", () => {
     expect(json.error_description).toContain("already been used");
   });
 
-  it("returns a distinct access token, not the setup secret", async () => {
-    setupMockSupabase({
+  it("returns a distinct access token, not the public client ID", async () => {
+    const mock = setupMockSupabase({
       chatgpt_connections: { data: mockConnection, error: null },
       "mcp_oauth_authorization_codes": {
         data: {
@@ -446,6 +561,87 @@ describe("handleOAuthToken", () => {
     expect(json.access_token.startsWith("plaivra_mcp_at_")).toBe(true);
     expect(json.access_token).not.toBe(TEST_CLIENT_SECRET);
     expect(json.expires_in).toBe(7 * 24 * 60 * 60);
+    expect(JSON.stringify(mock.rpc.mock.calls)).not.toContain("plaivra_ac_somecode");
+  });
+
+  it("rejects omitted redirect_uri instead of bypassing code binding", async () => {
+    setupMockSupabase();
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: "plaivra_ac_somecode",
+      client_id: TEST_CONNECTION_ID,
+      code_verifier: "verifier"
+    });
+    const response = await handleOAuthToken(new Request("https://plaivra.com/api/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body
+    }));
+    expect(response.status).toBe(400);
+    const json = await response.json() as { error: string; error_description: string };
+    expect(json.error).toBe("invalid_request");
+    expect(json.error_description).toContain("redirect_uri is required");
+  });
+
+  it("rejects Basic client authentication because only public-client none is advertised", async () => {
+    setupMockSupabase();
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: "plaivra_ac_somecode",
+      client_id: TEST_CONNECTION_ID,
+      redirect_uri: "https://chatgpt.com/connector/oauth/callback",
+      code_verifier: "verifier"
+    });
+    const response = await handleOAuthToken(new Request("https://plaivra.com/api/oauth/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${Buffer.from(`${TEST_CONNECTION_ID}:ignored`).toString("base64")}`
+      },
+      body
+    }));
+    expect(response.status).toBe(401);
+    const json = await response.json() as { error: string };
+    expect(json.error).toBe("invalid_client");
+  });
+
+  it("rejects unimplemented client_secret_post authentication", async () => {
+    setupMockSupabase();
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: "plaivra_ac_somecode",
+      client_id: TEST_CONNECTION_ID,
+      client_secret: "ignored-secret",
+      redirect_uri: "https://chatgpt.com/connector/oauth/callback",
+      code_verifier: "verifier"
+    });
+    const response = await handleOAuthToken(new Request("https://plaivra.com/api/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body
+    }));
+    expect(response.status).toBe(401);
+    const json = await response.json() as { error: string };
+    expect(json.error).toBe("invalid_client");
+  });
+
+  it("rejects legacy setup secrets as token-endpoint client_id when compatibility is disabled", async () => {
+    setupMockSupabase();
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: "plaivra_ac_somecode",
+      client_id: TEST_LEGACY_CLIENT_SECRET,
+      redirect_uri: "https://chatgpt.com/connector/oauth/callback",
+      code_verifier: "verifier"
+    });
+    const response = await handleOAuthToken(new Request("https://plaivra.com/api/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body
+    }));
+    expect(response.status).toBe(401);
+    const json = await response.json() as { error: string };
+    expect(json.error).toBe("invalid_client");
   });
 });
 
@@ -506,7 +702,7 @@ describe("authenticateMcpRequest (via auth.ts)", () => {
   it("rejects legacy connection secrets as access tokens", async () => {
     const { authenticateMcpRequest } = await import("@/lib/mcp/auth");
     const request = new Request("https://plaivra.com/api/mcp", {
-      headers: { Authorization: `Bearer ${TEST_CLIENT_SECRET}` }
+      headers: { Authorization: `Bearer ${TEST_LEGACY_CLIENT_SECRET}` }
     });
 
     const response = await authenticateMcpRequest(request);

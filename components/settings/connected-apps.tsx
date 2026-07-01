@@ -35,7 +35,7 @@ type ChatGptConnection = {
   revoked_at: string | null;
 };
 
-type CopyKind = "url" | "token" | "description";
+type CopyKind = "url" | "clientId" | "description";
 
 type SetupStepProps = {
   title: string;
@@ -88,7 +88,7 @@ export function ChatGptSetupCard() {
           <Bot className="h-5 w-5 text-primary" /> Set up ChatGPT import
         </CardTitle>
         <CardDescription>
-          Create the Plaivra app inside ChatGPT, then connect it with your Plaivra connection code.
+          Create the Plaivra app inside ChatGPT, then connect it with your pre-registered Plaivra OAuth client ID.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -208,7 +208,7 @@ export function ChatGptSetupFlow() {
   const { toast } = useToast();
   const [isBusy, setIsBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState<CopyKind | null>(null);
-  const [connectionToken, setConnectionToken] = useState("");
+  const [connectionClientId, setConnectionClientId] = useState("");
   const [connections, setConnections] = useState<ChatGptConnection[]>([]);
   const mcpServerUrl = env.plaivraMcpServerUrl.trim();
   const hasMcpServerUrl = Boolean(mcpServerUrl);
@@ -240,7 +240,7 @@ export function ChatGptSetupFlow() {
         ? "Plaivra connection URL copied."
         : type === "description"
           ? "Plaivra app description copied."
-          : "Plaivra connection code copied.";
+          : "Plaivra OAuth client ID copied.";
     toast({ title: "Copied", description });
   }
 
@@ -257,7 +257,7 @@ export function ChatGptSetupFlow() {
 
   async function generateConnectionToken() {
     if (!session?.access_token) {
-      toast({ title: "Sign in required", description: "Sign in to Plaivra before creating a ChatGPT connection code." });
+      toast({ title: "Sign in required", description: "Sign in to Plaivra before creating a ChatGPT OAuth client." });
       return;
     }
 
@@ -269,7 +269,7 @@ export function ChatGptSetupFlow() {
       setIsBusy(null);
       toast({
         title: "AI permissions required",
-        description: "Review and save AI Permissions before creating a ChatGPT connection code."
+        description: "Review and save AI Permissions before creating a ChatGPT OAuth client."
       });
       return;
     }
@@ -284,17 +284,17 @@ export function ChatGptSetupFlow() {
     if (!response.ok) {
       const permissionsRequired = response.status === 409 || String(data.error ?? "").includes("AI permissions required");
       toast({
-        title: permissionsRequired ? "AI permissions required" : "Could not create connection code",
+        title: permissionsRequired ? "AI permissions required" : "Could not create OAuth client",
         description: permissionsRequired
-          ? "Review and save AI Permissions before creating a ChatGPT connection code."
+          ? "Review and save AI Permissions before creating a ChatGPT OAuth client."
           : data.error ?? "Please try again. If this keeps happening, contact support."
       });
       return;
     }
 
-    setConnectionToken(data.token ?? "");
+    setConnectionClientId(data.client_id ?? "");
     await loadConnections();
-    toast({ title: "Connection code created", description: "Copy it now. Plaivra shows this code only once." });
+    toast({ title: "OAuth client created", description: "Copy the client ID into ChatGPT OAuth settings and leave the client secret empty." });
   }
 
   function openChatGpt() {
@@ -313,24 +313,24 @@ export function ChatGptSetupFlow() {
       </div>
 
       <SetupStep
-        title="Step 1 — Create your Plaivra connection code"
-        body="First, create a private code from Plaivra. You will paste this code later inside ChatGPT."
+        title="Step 1 — Create your Plaivra OAuth client"
+        body="First, create a pre-registered OAuth client for this Plaivra account. You will paste its client ID inside ChatGPT."
       >
         <div className="grid gap-2 sm:grid-cols-2">
           <Button type="button" onClick={generateConnectionToken} disabled={isBusy === "chatgpt-token"} className="w-full">
-            <KeyRound className="h-4 w-4" /> Create connection code
+            <KeyRound className="h-4 w-4" /> Create OAuth client
           </Button>
-          <Button type="button" variant="outline" onClick={() => copyText(connectionToken, "token")} disabled={!connectionToken} className="w-full">
-            <Copy className="h-4 w-4" /> {copied === "token" ? "Copied" : "Copy connection code"}
+          <Button type="button" variant="outline" onClick={() => copyText(connectionClientId, "clientId")} disabled={!connectionClientId} className="w-full">
+            <Copy className="h-4 w-4" /> {copied === "clientId" ? "Copied" : "Copy OAuth client ID"}
           </Button>
         </div>
-        {connectionToken ? (
+        {connectionClientId ? (
           <div className="rounded-md border border-primary/20 bg-card p-3">
-            <label htmlFor="plaivra-connection-code" className="text-sm font-semibold text-foreground">
-              Plaivra connection code
+            <label htmlFor="plaivra-oauth-client-id" className="text-sm font-semibold text-foreground">
+              Plaivra OAuth client ID
             </label>
-            <Input id="plaivra-connection-code" readOnly value={connectionToken} className="mt-2 font-mono text-xs" />
-            <p className="mt-2 text-xs text-muted-foreground">Copy this code now. Plaivra only shows it once.</p>
+            <Input id="plaivra-oauth-client-id" readOnly value={connectionClientId} className="mt-2 font-mono text-xs" />
+            <p className="mt-2 text-xs text-muted-foreground">This is a client identifier, not a password or access token. Keep it within your connector setup.</p>
           </div>
         ) : null}
       </SetupStep>
@@ -468,22 +468,22 @@ export function ChatGptSetupFlow() {
       </SetupStep>
 
       <SetupStep
-        title="Step 11 — Paste your Plaivra connection code"
-        body="Use the Plaivra connection code, not your ChatGPT password."
+        title="Step 11 — Paste your Plaivra OAuth client ID"
+        body="Use the pre-registered Plaivra client ID and leave the client secret empty."
       >
         <NumberedInstructions
           items={[
-            "Find the field where ChatGPT asks for a token, client code, client secret, or authentication value.",
-            "Paste the Plaivra connection code you copied from Step 1.",
-            "If ChatGPT calls it a token, that is okay. The Plaivra connection code is the token.",
+            "Find the OAuth client ID field.",
+            "Paste the Plaivra OAuth client ID you copied from Step 1.",
+            "Leave the client secret field empty because Plaivra uses a public OAuth client with PKCE.",
             "Click Save, Connect, or Finish."
           ]}
         />
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800">
-          Use the Plaivra connection code, not your ChatGPT password.
+          The OAuth client ID is identification only. It is not a password, access token, or client secret.
         </p>
-        <Button type="button" variant="outline" onClick={() => copyText(connectionToken, "token")} disabled={!connectionToken} className="w-full sm:w-auto">
-          <Copy className="h-4 w-4" /> {copied === "token" ? "Copied" : "Copy connection code"}
+        <Button type="button" variant="outline" onClick={() => copyText(connectionClientId, "clientId")} disabled={!connectionClientId} className="w-full sm:w-auto">
+          <Copy className="h-4 w-4" /> {copied === "clientId" ? "Copied" : "Copy OAuth client ID"}
         </Button>
       </SetupStep>
 

@@ -9,7 +9,6 @@ const AUTH_CODE_EXPIRY_MS = 5 * 60 * 1000;
 const ACCESS_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 const AUTHORIZE_RATE_LIMIT = 10;
 const TOKEN_RATE_LIMIT = 10;
-const REGISTER_RATE_LIMIT = 10;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 function originFromRequest(request: Request) {
@@ -21,14 +20,23 @@ function getCanonicalResource(request: Request) {
   return serverEnv.plaivraMcpBaseUrl || `${originFromRequest(request)}/api/mcp`;
 }
 
-function isAllowedRedirectUri(value: string) {
+export function isAllowedRedirectUri(value: string, configuredRedirectUris = serverEnv.plaivraChatGptRedirectUris ?? "") {
   try {
     const url = new URL(value);
-    return (
+    const matchesStrictChatGptPattern = (
       url.protocol === "https:" &&
-      (url.hostname === "chatgpt.com" || url.hostname === "chat.openai.com") &&
-      url.pathname.startsWith("/connector/oauth/")
+      url.hostname === "chatgpt.com" &&
+      !url.port &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash &&
+      /^\/connector\/oauth\/[A-Za-z0-9._~-]{1,200}$/.test(url.pathname)
     );
+    if (!matchesStrictChatGptPattern) return false;
+
+    const exactRedirectUris = configuredRedirectUris.split(",").map((item) => item.trim()).filter(Boolean);
+    return exactRedirectUris.length === 0 || exactRedirectUris.includes(value);
   } catch {
     return false;
   }
@@ -95,6 +103,10 @@ function isValidUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function isLegacyClientIdFormat(value: string) {
+  return /^plaivra_mcp_[A-Za-z0-9_-]{32,128}$/.test(value);
+}
+
 type ResolvedConnection = {
   id: string;
   user_id: string;
@@ -123,8 +135,8 @@ async function resolveClientId(clientId: string): Promise<ResolvedConnection | n
     }
   }
 
-  // Fall back to legacy connection secret (backward compat)
-  if (clientId.startsWith("plaivra_mcp_")) {
+  // Temporary private/development compatibility only. Disabled by default.
+  if (serverEnv.plaivraAllowLegacyMcpClientId && isLegacyClientIdFormat(clientId)) {
     const tokenHash = hashConnectionToken(clientId);
     const { data, error } = await supabase
       .from("chatgpt_connections")
@@ -141,20 +153,16 @@ async function resolveClientId(clientId: string): Promise<ResolvedConnection | n
   return null;
 }
 
-function getClientIdFromTokenRequest(request: Request, form: URLSearchParams) {
-  const bodyClientId = form.get("client_id")?.trim();
-  if (bodyClientId) return bodyClientId;
+function getClientIdFromTokenRequest(form: URLSearchParams) {
+  return form.get("client_id")?.trim() ?? "";
+}
 
-  const authorization = request.headers.get("authorization") ?? "";
-  const match = authorization.match(/^Basic\s+(.+)$/i);
-  if (!match) return "";
+function supportedClientIdFormat(clientId: string) {
+  return isValidUuid(clientId) || (serverEnv.plaivraAllowLegacyMcpClientId && isLegacyClientIdFormat(clientId));
+}
 
-  try {
-    const decoded = Buffer.from(match[1], "base64").toString("utf8");
-    return decoded.split(":")[0] ?? "";
-  } catch {
-    return "";
-  }
+function rateLimitDigest(value: string) {
+  return crypto.createHash("sha256").update(value).digest("hex").slice(0, 32);
 }
 
 function oauthClientIp(request: Request) {
@@ -322,10 +330,9 @@ export function oauthAuthorizationServerMetadata(request: Request) {
       token_endpoint: `${origin}/api/oauth/token`,
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code"],
-      token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
+      token_endpoint_auth_methods_supported: ["none"],
       code_challenge_methods_supported: ["S256"],
-      scopes_supported: MCP_SUPPORTED_SCOPES,
-      registration_endpoint: `${origin}/api/oauth/register`
+      scopes_supported: MCP_SUPPORTED_SCOPES
     },
     { headers: metadataHeaders() }
   );
@@ -371,8 +378,12 @@ export async function handleOAuthAuthorize(request: Request) {
     return oauthErrorRedirect(redirectUri, state, "invalid_client", "OAuth client_id is required.");
   }
 
-  // Rate limit by client IP + client_id
-  const rateLimitKey = `authorize:${oauthClientIp(request)}:${clientId}`;
+  if (!supportedClientIdFormat(clientId)) {
+    return oauthErrorRedirect(redirectUri, state, "invalid_client", "OAuth client_id is unknown or unsupported.");
+  }
+
+  // Hash the client identifier so legacy setup secrets are never persisted in rate-limit keys.
+  const rateLimitKey = `authorize:${oauthClientIp(request)}:${rateLimitDigest(clientId)}`;
   const rateLimitError = await oauthRateLimit(rateLimitKey, AUTHORIZE_RATE_LIMIT, RATE_LIMIT_WINDOW_SECONDS);
   if (rateLimitError) {
     return NextResponse.json({ error: "invalid_request", error_description: "Too many authorization requests. Please try again later." }, { status: 429, headers: metadataHeaders() });
@@ -395,7 +406,7 @@ export async function handleOAuthAuthorize(request: Request) {
   try {
     const connection = await resolveClientId(clientId);
     if (!connection) {
-      return oauthErrorRedirect(redirectUri, state, "access_denied", "Plaivra connection is invalid or revoked.");
+      return oauthErrorRedirect(redirectUri, state, "invalid_client", "Plaivra OAuth client is unknown, inactive, or revoked.");
     }
 
     const userScopes = await getUserAiScopes(connection.user_id);
@@ -424,7 +435,7 @@ export async function handleOAuthToken(request: Request) {
   const grantType = form.get("grant_type");
   const code = form.get("code") ?? "";
   const redirectUri = form.get("redirect_uri") ?? "";
-  const clientId = getClientIdFromTokenRequest(request, form);
+  const clientId = getClientIdFromTokenRequest(form);
   const codeVerifier = form.get("code_verifier") ?? "";
   const requestedResource = form.get("resource")?.trim() ?? "";
   const canonicalResource = getCanonicalResource(request);
@@ -433,12 +444,33 @@ export async function handleOAuthToken(request: Request) {
     return NextResponse.json({ error: "unsupported_grant_type" }, { status: 400, headers: metadataHeaders() });
   }
 
+  if (request.headers.get("authorization")) {
+    return NextResponse.json({ error: "invalid_client", error_description: "This public OAuth client must send client_id in the request body without client authentication." }, { status: 401, headers: metadataHeaders() });
+  }
+
+  if (form.has("client_secret") || form.has("client_assertion") || form.has("client_assertion_type")) {
+    return NextResponse.json({ error: "invalid_client", error_description: "Client secrets and client assertions are not supported for this public OAuth client." }, { status: 401, headers: metadataHeaders() });
+  }
+
   if (!code || !clientId) {
     return NextResponse.json({ error: "invalid_request", error_description: "code and client_id are required." }, { status: 400, headers: metadataHeaders() });
   }
 
-  // Rate limit by client_id (and code hash prefix to avoid leaking code existence)
-  const rateLimitKey = `token:${clientId}:${code.slice(0, 8)}`;
+
+  if (!supportedClientIdFormat(clientId)) {
+    return NextResponse.json({ error: "invalid_client", error_description: "OAuth client_id is unknown or unsupported." }, { status: 401, headers: metadataHeaders() });
+  }
+
+  if (!redirectUri) {
+    return NextResponse.json({ error: "invalid_request", error_description: "redirect_uri is required." }, { status: 400, headers: metadataHeaders() });
+  }
+
+  if (!isAllowedRedirectUri(redirectUri)) {
+    return NextResponse.json({ error: "invalid_grant", error_description: "redirect_uri is not an allowed ChatGPT callback." }, { status: 400, headers: metadataHeaders() });
+  }
+
+  // Store only digests in rate-limit keys; never persist raw client secrets or authorization-code prefixes.
+  const rateLimitKey = `token:${rateLimitDigest(clientId)}:${rateLimitDigest(code)}`;
   const rateLimitError = await oauthRateLimit(rateLimitKey, TOKEN_RATE_LIMIT, RATE_LIMIT_WINDOW_SECONDS);
   if (rateLimitError) {
     return NextResponse.json({ error: "invalid_request", error_description: "Too many token requests. Please try again later." }, { status: 429, headers: metadataHeaders() });
@@ -481,15 +513,11 @@ export async function handleOAuthToken(request: Request) {
 }
 
 export async function handleOAuthRegister() {
-  // Rate limit by generic IP (best effort; no request object in this wrapper, so handled in route)
   return NextResponse.json(
     {
-      client_id: "Use your Plaivra connection ID as OAuth Client ID (found in Settings > ChatGPT Connection).",
-      client_id_issued_at: Math.floor(Date.now() / 1000),
-      token_endpoint_auth_method: "none",
-      grant_types: ["authorization_code"],
-      response_types: ["code"]
+      error: "invalid_request",
+      error_description: "Dynamic client registration is not supported. Use the pre-registered Plaivra OAuth client ID shown in Settings."
     },
-    { status: 201, headers: metadataHeaders() }
+    { status: 404, headers: metadataHeaders() }
   );
 }

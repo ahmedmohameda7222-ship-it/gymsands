@@ -12,6 +12,8 @@ export const serverEnv = {
   plaivraMcpTokenSecret: process.env.PLAIVRA_MCP_TOKEN_SECRET || process.env.FITLIFE_MCP_TOKEN_SECRET || "",
   plaivraMcpOAuthClientId: process.env.PLAIVRA_MCP_OAUTH_CLIENT_ID || process.env.FITLIFE_MCP_OAUTH_CLIENT_ID || "",
   plaivraMcpOAuthClientSecret: process.env.PLAIVRA_MCP_OAUTH_CLIENT_SECRET || process.env.FITLIFE_MCP_OAUTH_CLIENT_SECRET || "",
+  plaivraAllowLegacyMcpClientId: process.env.PLAIVRA_ALLOW_LEGACY_MCP_CLIENT_ID === "true",
+  plaivraChatGptRedirectUris: process.env.PLAIVRA_CHATGPT_REDIRECT_URIS || "",
   plaivraMcpAllowedOrigins: process.env.PLAIVRA_MCP_ALLOWED_ORIGINS || process.env.FITLIFE_MCP_ALLOWED_ORIGINS || "",
   resendApiKey: process.env.RESEND_API_KEY || "",
   resendFromEmail: process.env.RESEND_FROM_EMAIL || ""
