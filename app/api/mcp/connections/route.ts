@@ -3,6 +3,7 @@ import { createConnectionToken, hashConnectionToken } from "@/lib/mcp/auth";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { requireServerKeys, requireUser, serverEnv } from "@/lib/integrations/env";
 import { getSavedUserAiScopes, rotateMcpConnection } from "@/lib/mcp/connections";
+import { oauthRateLimit } from "@/lib/mcp/oauth";
 
 export const runtime = "nodejs";
 
@@ -39,6 +40,13 @@ export async function POST(request: Request) {
   const missingConfig = requireMcpConnectionConfig();
   if (missingConfig) return missingConfig;
 
+  // Rate limit connection creation by user_id
+  const rateLimitKey = `connection_create:${context.user.id}`;
+  const rateLimitError = await oauthRateLimit(rateLimitKey, 10, 60);
+  if (rateLimitError) {
+    return NextResponse.json({ error: "Too many connection requests. Please try again later." }, { status: 429 });
+  }
+
   const supabase = createSupabaseAdminClient();
 
   const userScopes = await getSavedUserAiScopes(supabase, context.user.id);
@@ -69,8 +77,9 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     token,
+    client_id: connection.id,
     connection,
-    message: "Copy this Plaivra ChatGPT connection code now. It is shown only once."
+    message: "Copy your Plaivra ChatGPT connection code now. It is shown only once. Use the client_id in your ChatGPT OAuth settings."
   });
 }
 
