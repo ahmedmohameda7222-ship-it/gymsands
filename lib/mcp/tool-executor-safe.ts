@@ -1,5 +1,5 @@
 import type { McpContext } from "@/lib/mcp/auth";
-import { asObject, cleanDate, getArray, getNumber, getOptionalNumber, getOptionalString, getString, type JsonObject } from "@/lib/mcp/schemas";
+import { asObject, cleanDate, getArray, getNumber, getOptionalNumber, getOptionalString, getString, requireConfirmation, type JsonObject } from "@/lib/mcp/schemas";
 import { executeMcpTool as executeOriginalMcpTool } from "@/lib/mcp/tool-executor";
 import { fail, num, ok, sumMacros, type DbRow, type MacroTotals, type McpToolResult } from "@/lib/mcp/tool-helpers";
 
@@ -389,6 +389,8 @@ async function updateMealPlanItem(ctx: McpContext, input: JsonObject) {
 }
 
 async function deleteMealPlanItem(ctx: McpContext, input: JsonObject) {
+  const confirmation = requireConfirmation(input);
+  if (confirmation) return ok(confirmation);
   const id = getString(input, "meal_plan_item_id");
   if (!id) throw new Error("meal_plan_item_id is required.");
   const { data: item, error: readError } = await ctx.supabase.from("user_meal_plan_items").select("*").eq("id", id).eq("user_id", ctx.userId).limit(1).maybeSingle();
