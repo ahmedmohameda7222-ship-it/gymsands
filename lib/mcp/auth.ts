@@ -4,8 +4,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { serverEnv } from "@/lib/integrations/env";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import {
-  expandMcpScopes,
-  migrateLegacyScopes,
   resolveSavedAiPermissionScopes
 } from "@/lib/mcp/scopes";
 
@@ -94,45 +92,34 @@ function inMemoryRateLimit(connectionId: string) {
   return null;
 }
 
-async function rateLimit(supabase: SupabaseClient, connectionId: string) {
-  const now = Date.now();
-  const nowIso = new Date(now).toISOString();
-  const resetIso = new Date(now + 60_000).toISOString();
+export async function rateLimit(supabase: SupabaseClient, connectionId: string) {
+  const { data, error } = await supabase.rpc("consume_mcp_rate_limit", {
+    p_connection_id: connectionId,
+    p_limit: MAX_REQUESTS_PER_MINUTE,
+    p_window_seconds: 60
+  });
 
-  const existing = await supabase
-    .from("mcp_rate_limits")
-    .select("connection_id,request_count,window_start,reset_at")
-    .eq("connection_id", connectionId)
-    .maybeSingle();
+  if (error) return inMemoryRateLimit(connectionId);
 
-  if (existing.error) {
-    return inMemoryRateLimit(connectionId);
-  }
+  const row = (Array.isArray(data) ? data[0] : data) as { allowed?: boolean; reset_at?: string | null } | null;
+  if (!row) return inMemoryRateLimit(connectionId);
+  if (row.allowed !== false) return null;
+  const resetAt = row.reset_at ? Date.parse(row.reset_at) : Date.now() + 60_000;
+  return `Rate limit exceeded. Try again after ${Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))} seconds.`;
+}
 
-  const row = existing.data as { request_count?: number | null; reset_at?: string | null } | null;
-  const resetAt = row?.reset_at ? Date.parse(row.reset_at) : 0;
-  if (!row || !Number.isFinite(resetAt) || resetAt <= now) {
-    const upsert = await supabase.from("mcp_rate_limits").upsert({
-      connection_id: connectionId,
-      request_count: 1,
-      window_start: nowIso,
-      reset_at: resetIso,
-      updated_at: nowIso
-    });
-    return upsert.error ? inMemoryRateLimit(connectionId) : null;
-  }
+export function connectionIsUsable<T extends { is_active?: boolean | null; revoked_at?: string | null }>(
+  connection: T | null
+): connection is T & { is_active: true } {
+  return Boolean(connection?.is_active && !connection.revoked_at);
+}
 
-  const nextCount = Number(row.request_count ?? 0) + 1;
-  const update = await supabase
-    .from("mcp_rate_limits")
-    .update({ request_count: nextCount, updated_at: nowIso })
-    .eq("connection_id", connectionId);
-  if (update.error) return inMemoryRateLimit(connectionId);
-
-  if (nextCount > MAX_REQUESTS_PER_MINUTE) {
-    return `Rate limit exceeded. Try again after ${Math.ceil((resetAt - now) / 1000)} seconds.`;
-  }
-  return null;
+export function resolveMcpPermissionScopes(
+  permissionSettings: { access_mode?: unknown; scopes?: unknown } | null,
+  permissionError?: unknown
+) {
+  if (permissionError || !permissionSettings || !Array.isArray(permissionSettings.scopes)) return [];
+  return resolveSavedAiPermissionScopes(permissionSettings.access_mode, permissionSettings.scopes);
 }
 
 export async function authenticateMcpRequest(request: Request): Promise<McpContext | NextResponse> {
@@ -153,12 +140,12 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
   const supabase = createSupabaseAdminClient();
   const { data: connection, error } = await supabase
     .from("chatgpt_connections")
-    .select("id,user_id,scopes,is_active,revoked_at")
+    .select("id,user_id,is_active,revoked_at")
     .eq("token_hash", tokenHash)
     .maybeSingle();
 
   if (error) return badMcpRequest("Could not verify the ChatGPT connection token.", error);
-  if (!connection || !connection.is_active || connection.revoked_at) {
+  if (!connectionIsUsable(connection)) {
     return unauthorizedMcpResponse(request, "ChatGPT connection token is invalid or revoked.");
   }
 
@@ -176,24 +163,16 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
 
   await supabase.from("chatgpt_connections").update({ last_used_at: new Date().toISOString() }).eq("id", connection.id);
 
-  // Source of truth: user_ai_permission_settings
-  let resolvedScopes: string[] = [];
+  // Sole authorization source of truth: user_ai_permission_settings.
   const { data: permissionSettings, error: permissionError } = await supabase
     .from("user_ai_permission_settings")
     .select("access_mode,scopes")
     .eq("user_id", connection.user_id)
     .maybeSingle();
 
-  if (permissionSettings && !permissionError) {
-    // Use stored user AI permission settings as the source of truth
-    resolvedScopes = resolveSavedAiPermissionScopes(permissionSettings.access_mode, permissionSettings.scopes);
-  } else if (connection.scopes && Array.isArray(connection.scopes) && connection.scopes.length > 0) {
-    // Fallback: migrate legacy connection scopes for backward compatibility
-    resolvedScopes = expandMcpScopes(migrateLegacyScopes(connection.scopes));
-  }
+  const resolvedScopes = resolveMcpPermissionScopes(permissionSettings, permissionError);
 
-  // Safety: if no valid permission settings and no legacy scopes, deny access
-  if (!resolvedScopes.length || resolvedScopes.length === 0) {
+  if (!resolvedScopes.length) {
     return unauthorizedMcpResponse(request, "AI permission settings are missing for this account. Please configure AI Permissions in Settings.", 403);
   }
 

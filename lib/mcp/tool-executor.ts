@@ -149,6 +149,18 @@ async function requireExercise(ctx: McpContext, exerciseId: string) {
   return data as Record<string, unknown>;
 }
 
+async function requireWorkoutSession(ctx: McpContext, sessionId: string) {
+  const { data, error } = await ctx.supabase
+    .from("workout_sessions")
+    .select("id,user_id")
+    .eq("id", sessionId)
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Workout session not found for this user.");
+  return data as Record<string, unknown>;
+}
+
 async function getFullPlan(ctx: McpContext, planId: string) {
   const plan = await requirePlan(ctx, planId);
   const { data: days, error: daysError } = await ctx.supabase.from("user_workout_plan_days").select("*").eq("plan_id", planId).order("day_number", { ascending: true });
@@ -611,7 +623,9 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
           if (error) throw new Error(error.message);
           return ok({ ok: true, session: data });
         }
-        const { data, error } = await ctx.supabase.from("workout_sessions").insert({ user_id: ctx.userId, plan_day_id: getOptionalString(input, "plan_day_id") ?? null, workout_name: "ChatGPT logged workout", status: "started" }).select("*").single();
+        const planDayId = getOptionalString(input, "plan_day_id");
+        if (planDayId) await requireDay(ctx, planDayId);
+        const { data, error } = await ctx.supabase.from("workout_sessions").insert({ user_id: ctx.userId, plan_day_id: planDayId ?? null, workout_name: "ChatGPT logged workout", status: "started" }).select("*").single();
         if (error) throw new Error(error.message);
         return ok({ ok: true, session: data });
       }
@@ -628,6 +642,7 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
           if (error) throw new Error(error.message);
           return ok({ ok: true, logs: data ?? [] });
         }
+        await requireWorkoutSession(ctx, sessionId);
         const rows = sets.map((set) => ({ workout_session_id: sessionId, exercise_name: exerciseName, set_number: getNumber(set, "set_number", 1), weight_kg: getOptionalNumber(set, "weight_kg") ?? null, reps: getOptionalNumber(set, "reps") ?? null, notes: getOptionalString(set, "notes") ?? null, completed_at: new Date().toISOString() }));
         const { data, error } = await ctx.supabase.from("exercise_logs").insert(rows).select("*");
         if (error) throw new Error(error.message);

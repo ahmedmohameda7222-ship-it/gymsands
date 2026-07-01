@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { createConnectionToken, hashConnectionToken } from "@/lib/mcp/auth";
-import { resolveSavedAiPermissionScopes } from "@/lib/mcp/scopes";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { requireServerKeys, requireUser, serverEnv } from "@/lib/integrations/env";
+import { getSavedUserAiScopes, rotateMcpConnection } from "@/lib/mcp/connections";
 
 export const runtime = "nodejs";
 
@@ -11,20 +11,6 @@ function requireMcpConnectionConfig() {
     ["SUPABASE_SERVICE_ROLE_KEY", serverEnv.supabaseServiceRoleKey],
     ["PLAIVRA_MCP_TOKEN_SECRET", serverEnv.plaivraMcpTokenSecret]
   ]);
-}
-
-async function getUserAiScopes(supabase: ReturnType<typeof createSupabaseAdminClient>, userId: string): Promise<string[] | null> {
-  const { data: settings, error } = await supabase
-    .from("user_ai_permission_settings")
-    .select("access_mode,scopes")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!settings || !Array.isArray(settings.scopes) || settings.scopes.length === 0) return null;
-
-  const resolved = resolveSavedAiPermissionScopes(settings.access_mode, settings.scopes);
-  return resolved.length ? resolved : null;
 }
 
 export async function GET(request: Request) {
@@ -54,55 +40,36 @@ export async function POST(request: Request) {
   if (missingConfig) return missingConfig;
 
   const supabase = createSupabaseAdminClient();
-  let userScopes: string[] | null;
-  try {
-    userScopes = await getUserAiScopes(supabase, context.user.id);
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not load AI permissions." },
-      { status: 400 }
-    );
-  }
 
-  if (!userScopes?.length) {
+  const userScopes = await getSavedUserAiScopes(supabase, context.user.id);
+  if (!userScopes.length) {
     return NextResponse.json(
-      { error: "AI permissions required. Review and save AI Permissions before creating a ChatGPT connection code." },
+      { error: "AI permission settings are missing. Configure AI Permissions in Settings before connecting ChatGPT." },
       { status: 409 }
     );
   }
 
   const token = createConnectionToken();
   const tokenHash = hashConnectionToken(token);
+  const { data, error } = await rotateMcpConnection(supabase, {
+    userId: context.user.id,
+    tokenHash,
+    scopes: userScopes
+  });
 
-  try {
-    const { error: revokeError } = await supabase
-      .from("chatgpt_connections")
-      .update({ is_active: false, revoked_at: new Date().toISOString() })
-      .eq("user_id", context.user.id)
-      .eq("is_active", true);
-    if (revokeError) {
-      console.warn("Plaivra MCP could not revoke previous connections:", revokeError.message);
-    }
-  } catch {
-    // Non-blocking: continue to create new token even if revoke fails
+  if (error || !data) {
+    console.error("Plaivra MCP secure rotation failed:", error?.message ?? "No connection returned");
+    return NextResponse.json({ error: "Could not securely rotate the ChatGPT connection. No new connection was created." }, { status: 409 });
   }
 
-  const { data, error } = await supabase
-    .from("chatgpt_connections")
-    .insert({
-      user_id: context.user.id,
-      token_hash: tokenHash,
-      scopes: userScopes,
-      is_active: true
-    })
-    .select("id,scopes,is_active,created_at")
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  const connection = Array.isArray(data) ? data[0] : data;
+  if (!connection) {
+    return NextResponse.json({ error: "Could not securely rotate the ChatGPT connection. No new connection was created." }, { status: 409 });
+  }
 
   return NextResponse.json({
     token,
-    connection: data,
+    connection,
     message: "Copy this Plaivra ChatGPT connection code now. It is shown only once."
   });
 }

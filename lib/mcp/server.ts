@@ -4,6 +4,7 @@ import { hasAnyScope, MCP_SCOPES } from "@/lib/mcp/scopes";
 import { executeMcpTool, type McpToolResult } from "@/lib/mcp/tool-executor-safe";
 import { mcpTools, type McpToolDefinition } from "@/lib/mcp/tools";
 import { serverEnv } from "@/lib/integrations/env";
+import { redactMcpAuditInput } from "@/lib/mcp/audit";
 
 type JsonRpcRequest = {
   jsonrpc?: string;
@@ -177,12 +178,12 @@ export function canUseTool(ctx: McpContext, tool: McpToolDefinition) {
   return mcpHasAnyScope(ctx, requiredScopesForTool(tool));
 }
 
-async function auditToolCall(ctx: McpContext, toolName: string, input: unknown, result: McpToolResult) {
+export async function auditToolCall(ctx: McpContext, toolName: string, input: unknown, result: McpToolResult) {
   await ctx.supabase.from("mcp_audit_logs").insert({
     user_id: ctx.userId,
     connection_id: ctx.connectionId,
     tool_name: toolName,
-    input,
+    input: redactMcpAuditInput(toolName, input),
     output_summary: {
       is_error: Boolean(result.isError),
       keys: Object.keys(result.structuredContent ?? {}).slice(0, 20),
@@ -193,12 +194,12 @@ async function auditToolCall(ctx: McpContext, toolName: string, input: unknown, 
   });
 }
 
-async function auditDeniedToolCall(ctx: McpContext, tool: McpToolDefinition, input: unknown, message: string) {
+export async function auditDeniedToolCall(ctx: McpContext, tool: McpToolDefinition, input: unknown, message: string) {
   await ctx.supabase.from("mcp_audit_logs").insert({
     user_id: ctx.userId,
     connection_id: ctx.connectionId,
     tool_name: tool.name,
-    input,
+    input: redactMcpAuditInput(tool.name, input),
     output_summary: {
       is_error: true,
       denied: true,
