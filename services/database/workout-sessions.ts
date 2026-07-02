@@ -498,6 +498,27 @@ export async function skipWorkoutDay(userId: string, day: SkipWorkoutDayInput, n
   return normalizeWorkoutSession(data as WorkoutSession);
 }
 
+export async function updateSkippedWorkoutFollowup(
+  userId: string,
+  sessionId: string,
+  input: {
+    reason: "no_time" | "low_energy" | "sick" | "pain" | "travel" | "gym_closed" | "too_sore" | "other";
+    action: "move_to_tomorrow" | "skip_and_continue" | "rebalance_week" | "reduce_next_session";
+  }
+) {
+  requireWorkoutPersistence(userId, "Skipped workout follow-up");
+  const { data, error } = await supabase!
+    .from("workout_sessions")
+    .update({ skip_reason: input.reason, skip_followup_action: input.action })
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .eq("status", "skipped")
+    .select("*")
+    .single();
+  if (error) throw error;
+  return normalizeWorkoutSession(data as WorkoutSession);
+}
+
 export async function getWorkoutHistory(userId: string) {
   if (!canUseUserData(userId)) return [];
   let { data, error } = await supabase!

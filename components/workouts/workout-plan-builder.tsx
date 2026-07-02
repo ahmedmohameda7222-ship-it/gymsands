@@ -22,7 +22,9 @@ import {
   workoutsFromPlanDay
 } from "@/services/database/workout-plans";
 import { getWorkoutActivity, skipWorkoutDay } from "@/services/database/workout-sessions";
+import { updateSkippedWorkoutFollowup } from "@/services/database/workout-sessions";
 import type { Weekday, Workout, WorkoutSession } from "@/types";
+import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 
 const defaultDays: WeeklyPlanDay[] = [
   { dayName: "Push day", weekday: "Sunday", notes: "", exercises: [] },
@@ -112,6 +114,8 @@ export function WorkoutPlanBuilder({
   const [isLoadingSavedPlan, setIsLoadingSavedPlan] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSkipping, setIsSkipping] = useState(false);
+  const [skippedSession, setSkippedSession] = useState<WorkoutSession | null>(null);
+  const [skipReason, setSkipReason] = useState<"no_time" | "low_energy" | "sick" | "pain" | "travel" | "gym_closed" | "too_sore" | "other">("no_time");
   const [savedMessage, setSavedMessage] = useState("");
   const [activity, setActivity] = useState<WorkoutSession[]>([]);
   const [showAll, setShowAll] = useState(false);
@@ -403,6 +407,7 @@ export function WorkoutPlanBuilder({
         skipped,
         ...current.filter((session) => !(session.plan_day_id === skipped.plan_day_id && isCurrentWeekSession(session)))
       ]);
+      setSkippedSession(skipped);
       const todayIndex = days.findIndex((day) => day.id === todaysDay.id);
       setActiveDayIndex(findNextWorkoutDayIndex(days, todayIndex));
       toast({ title: "Workout skipped", description: "The next workout day is ready." });
@@ -424,6 +429,49 @@ export function WorkoutPlanBuilder({
         onSkipToday={skipToday}
         isSkipping={isSkipping}
       />
+
+      {skippedSession ? (
+        <div className="solid-tracking-card space-y-4 border-warning/30 p-4 sm:p-5">
+          <div>
+            <p className="font-semibold">You skipped {skippedSession.workout_name}. What should happen next?</p>
+            <p className="text-sm text-muted-foreground">Choose a deterministic follow-up or prepare a request for ChatGPT. Plaivra will not silently rewrite the week.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+            <select value={skipReason} onChange={(event) => setSkipReason(event.target.value as typeof skipReason)} className="h-11 rounded-[14px] border bg-card px-3 text-sm" aria-label="Skip reason">
+              <option value="no_time">No time</option>
+              <option value="low_energy">Low energy</option>
+              <option value="sick">Sick</option>
+              <option value="pain">Pain</option>
+              <option value="travel">Travel</option>
+              <option value="gym_closed">Gym closed</option>
+              <option value="too_sore">Too sore</option>
+              <option value="other">Other</option>
+            </select>
+            <Button type="button" variant="outline" onClick={async () => {
+              if (!user?.id) return;
+              await updateSkippedWorkoutFollowup(user.id, skippedSession.id, { reason: skipReason, action: "move_to_tomorrow" });
+              setSkippedSession(null);
+              toast({ title: "Follow-up saved", description: "Move to tomorrow was recorded. Review the calendar before changing the plan schedule." });
+            }}>Move to tomorrow</Button>
+            <Button type="button" variant="outline" onClick={async () => {
+              if (!user?.id) return;
+              await updateSkippedWorkoutFollowup(user.id, skippedSession.id, { reason: skipReason, action: "skip_and_continue" });
+              setSkippedSession(null);
+              toast({ title: "Skip recorded", description: "The plan continues without an automatic rewrite." });
+            }}>Skip and continue</Button>
+          </div>
+          <AiActionRequestDialog
+            actions={[
+              { type: "rebalance_week", label: "Ask ChatGPT to rebalance this week", description: "Review the skipped workout and remaining sessions, then recommend a revised week." },
+              { type: "reduce_next_session", label: "Ask ChatGPT to reduce next session", description: "Recommend a lower-volume or lower-intensity next session using the skip reason and recent activity." }
+            ]}
+            sourceType="skipped_workout"
+            sourceId={skippedSession.id}
+            context={{ skipped_workout: skippedSession, skip_reason: skipReason, remaining_plan_days: days, recent_workout_activity: activity }}
+            title="Skipped workout follow-up"
+          />
+        </div>
+      ) : null}
 
       <div className="space-y-4">
         {isLoadingSavedPlan ? <p className="text-sm text-muted-foreground">Loading saved plan...</p> : null}

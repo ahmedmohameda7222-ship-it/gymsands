@@ -1,7 +1,7 @@
 "use client";
 
-import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Edit3, MoreHorizontal, PlusCircle, Printer, Save, ShoppingCart, Trash2, Utensils, X } from "lucide-react";
-import { Component, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Edit3, MoreHorizontal, PlusCircle, Save, ShoppingCart, Trash2, Utensils, X } from "lucide-react";
+import { Component, useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,6 @@ import {
   normalizeMealPlanType,
   updateDirectMealPlanItem
 } from "@/services/database/meal-plan";
-import { getCheckedShoppingKeys, buildShoppingList, setShoppingItemChecked, type ShoppingListItem } from "@/services/meals/meal-plan-automation";
 import {
   CompactCalendar,
   addDays,
@@ -36,6 +35,12 @@ import {
   weekStart
 } from "@/components/meals/meal-plan-calendar";
 import type { MealPlanItem, MealType } from "@/types";
+import { NutritionPreferenceCard } from "@/components/profile/execution-profiles";
+import { GroceryListPanel } from "@/components/meals/grocery-list-panel";
+import { MealAiActions } from "@/components/meals/meal-ai-actions";
+import { validateMealItem, validateMealPlanDay } from "@/services/meals/meal-validation";
+import { getGroceryItems, upsertGroceryItem } from "@/services/database/execution-layer";
+import { getCalorieTargets } from "@/services/database/nutrition";
 
 type MacroTotals = { calories: number; protein_g: number; carbs_g: number; fat_g: number };
 type Notice = { type: "success" | "error" | "info"; title: string; description?: string };
@@ -97,18 +102,18 @@ function MyMealPlanBuilderInner() {
   const [plannedDates, setPlannedDates] = useState<string[]>([]);
   const [items, setItems] = useState<MealPlanItem[]>([]);
   const [weekItems, setWeekItems] = useState<MealPlanItem[]>([]);
+  const [targetCalories, setTargetCalories] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
-  const [showAddForm, setShowAddForm] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(emptyDraft);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [checkedShoppingKeys, setCheckedShoppingKeys] = useState<string[]>([]);
+  const [shoppingStats, setShoppingStats] = useState({ count: 0, checked: 0 });
+  const [groceryRefreshKey, setGroceryRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState("day");
   const [activeMealType, setActiveMealType] = useState<MealType>("Breakfast");
   const [addMealDialogOpen, setAddMealDialogOpen] = useState(false);
-  const shoppingListRef = useRef<HTMLDivElement>(null);
   const { dialog } = useConfirm();
 
   const selectedWeekStart = useMemo(() => weekStart(selectedDate), [selectedDate]);
@@ -123,15 +128,6 @@ function MyMealPlanBuilderInner() {
 
   useEffect(() => {
     let active = true;
-    getCheckedShoppingKeys(user?.id, selectedWeekStart).then((shoppingKeys) => {
-      if (!active) return;
-      setCheckedShoppingKeys(shoppingKeys);
-    });
-    return () => { active = false; };
-  }, [selectedWeekStart, user?.id]);
-
-  useEffect(() => {
-    let active = true;
     async function loadPlan() {
       if (!user?.id) {
         if (active) setIsLoading(false);
@@ -140,15 +136,17 @@ function MyMealPlanBuilderInner() {
       setIsLoading(true);
       setNotice(null);
       try {
-        const [dayItems, weekPlanItems, dates] = await Promise.all([
+        const [dayItems, weekPlanItems, dates, calorieTargets] = await Promise.all([
           getMealPlanItemsForDate(user.id, selectedDate),
           getMealPlanItemsForRange(user.id, selectedWeekStart, selectedWeekEnd),
-          getMealPlanDatesWithItems(user.id, calendarRangeStart(calendarMonth), calendarRangeEnd(calendarMonth))
+          getMealPlanDatesWithItems(user.id, calendarRangeStart(calendarMonth), calendarRangeEnd(calendarMonth)),
+          getCalorieTargets(user.id)
         ]);
         if (!active) return;
         setItems(dayItems.map(normalizeMealPlanItem));
         setWeekItems(weekPlanItems.map(normalizeMealPlanItem));
         setPlannedDates(dates);
+        setTargetCalories(calorieTargets?.daily_calories ?? null);
       } catch (error) {
         if (!active) return;
         setItems([]);
@@ -166,7 +164,7 @@ function MyMealPlanBuilderInner() {
 
   const plannedTotals = useMemo(() => items.filter((item) => item.status === "planned").reduce(addItemToTotals, emptyTotals()), [items]);
   const doneTotals = useMemo(() => items.filter((item) => item.status === "done").reduce(addItemToTotals, emptyTotals()), [items]);
-  const shoppingList = useMemo(() => buildShoppingList(weekItems, checkedShoppingKeys), [checkedShoppingKeys, weekItems]);
+  const dayValidation = useMemo(() => validateMealPlanDay(items, targetCalories), [items, targetCalories]);
 
   const dayStats = useMemo(() => {
     const totalPlanned = items.filter((i) => i.status === "planned").length;
@@ -174,8 +172,9 @@ function MyMealPlanBuilderInner() {
     return { totalPlanned, totalDone };
   }, [items]);
 
-  const shoppingShortcutCount = shoppingList.length;
-  const shoppingCheckedCount = shoppingList.filter((i) => i.checked).length;
+  const shoppingShortcutCount = shoppingStats.count;
+  const shoppingCheckedCount = shoppingStats.checked;
+  const updateShoppingStats = useCallback((count: number, checked: number) => setShoppingStats({ count, checked }), []);
 
   function changeDate(nextDate: string) {
     setSelectedDate(nextDate);
@@ -195,7 +194,6 @@ function MyMealPlanBuilderInner() {
       const item = await createItemFromDraft(selectedDate, draft);
       upsertLocalItems([item]);
       setDraft(emptyDraft);
-      setShowAddForm(false);
       setAddMealDialogOpen(false);
       setNotice({ type: "success", title: "Planned food added", description: `${item.food_name} was added to ${displayDate(selectedDate)}.` });
     } catch (error) {
@@ -259,18 +257,29 @@ function MyMealPlanBuilderInner() {
     }
   }
 
-  async function toggleShoppingCheck(item: ShoppingListItem) {
-    const next = await setShoppingItemChecked(user?.id, selectedWeekStart, item.key, !item.checked);
-    setCheckedShoppingKeys(next);
-  }
-
-  function printShoppingList() {
-    const html = `<!doctype html><html><head><title>Plaivra Shopping List</title><style>body{font-family:Arial;padding:24px}li{margin:8px 0}</style></head><body><h1>Shopping list ${selectedWeekStart} to ${selectedWeekEnd}</h1><ul>${shoppingList.map((item) => `<li>${item.checked ? "✓" : "□"} ${item.food_name} — ${item.quantity === null ? "quantity not specified" : `${Math.round(item.quantity * 10) / 10}x`} ${item.serving_size ?? "serving info missing"} (${item.category})</li>`).join("")}</ul></body></html>`;
-    const win = window.open("", "_blank");
-    if (!win) return setNotice({ type: "error", title: "Could not open print view", description: "Allow popups for this site and try again." });
-    win.document.write(html);
-    win.document.close();
-    win.print();
+  async function addMealToGrocery(item: MealPlanItem) {
+    if (!user?.id) return;
+    try {
+      const existing = await getGroceryItems(user.id, selectedWeekStart);
+      if (existing.some((groceryItem) => groceryItem.source_meal_plan_item_id === item.id)) {
+        setNotice({ type: "info", title: "Already in grocery list", description: `${item.food_name} is already linked to this week’s list.` });
+        return;
+      }
+      await upsertGroceryItem(user.id, {
+        week_start: selectedWeekStart,
+        source_meal_plan_item_id: item.id,
+        item_name: item.food_name,
+        quantity: item.quantity,
+        unit: item.serving_size,
+        store_section: "Other",
+        notes: `From ${item.meal_type} on ${item.plan_date}`,
+        created_by: "meal_plan"
+      });
+      setGroceryRefreshKey((current) => current + 1);
+      setNotice({ type: "success", title: "Added to grocery list", description: `${item.food_name} is in the ${selectedWeekStart} list.` });
+    } catch (error) {
+      setNotice({ type: "error", title: "Could not add grocery item", description: error instanceof Error ? error.message : "Please try again." });
+    }
   }
 
   function openAddMeal(type: MealType) {
@@ -280,12 +289,15 @@ function MyMealPlanBuilderInner() {
 
   return (
     <div className="space-y-3 sm:space-y-4">
+      <NutritionPreferenceCard compact />
       <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4">
         <SummaryCard label="Planned" value={plannedTotals.calories} detail={`${Math.round(plannedTotals.protein_g)}g protein`} />
         <SummaryCard label="Done" value={doneTotals.calories} detail={`${Math.round(doneTotals.protein_g)}g protein`} />
         <SummaryCard label="Planned carbs" value={plannedTotals.carbs_g} suffix="g" detail={`${Math.round(plannedTotals.fat_g)}g fat`} />
         <SummaryCard label="Done carbs" value={doneTotals.carbs_g} suffix="g" detail={`${Math.round(plannedTotals.fat_g)}g fat`} />
       </div>
+
+      {dayValidation ? <div className={`rounded-[14px] border p-3 text-sm ${dayValidation.tone === "destructive" ? "border-destructive/30 bg-destructive/10" : "border-warning/30 bg-warning/10"}`}><p className="font-semibold">{dayValidation.label}</p><p className="text-muted-foreground">{dayValidation.detail}</p></div> : null}
 
       {notice ? <NoticeBox notice={notice} onClose={() => setNotice(null)} /> : null}
       {dialog}
@@ -392,6 +404,7 @@ function MyMealPlanBuilderInner() {
                 onAdd={() => openAddMeal(activeMealType)}
                 onDone={markDone}
                 onDelete={removeItem}
+                onAddToGrocery={addMealToGrocery}
                 onStartEdit={startEditing}
                 onSaveEdit={saveEdit}
                 onCancelEdit={() => setEditingId(null)}
@@ -411,6 +424,7 @@ function MyMealPlanBuilderInner() {
                   onAdd={() => openAddMeal(type)}
                   onDone={markDone}
                   onDelete={removeItem}
+                  onAddToGrocery={addMealToGrocery}
                   onStartEdit={startEditing}
                   onSaveEdit={saveEdit}
                   onCancelEdit={() => setEditingId(null)}
@@ -437,9 +451,13 @@ function MyMealPlanBuilderInner() {
         </TabsContent>
 
         <TabsContent value="shopping" className="space-y-3 sm:space-y-4">
-          <div ref={shoppingListRef}>
-            <ShoppingListPanel items={shoppingList} onToggle={toggleShoppingCheck} onPrint={printShoppingList} checkedCount={shoppingCheckedCount} />
-          </div>
+          <GroceryListPanel
+            weekStart={selectedWeekStart}
+            weekEnd={selectedWeekEnd}
+            mealItems={weekItems}
+            refreshKey={groceryRefreshKey}
+            onStats={updateShoppingStats}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -483,70 +501,6 @@ function WeeklyPlanner({ weekDays, selectedDate, weekItems, onSelectDate }: { we
   );
 }
 
-function ShoppingListPanel({ items, onToggle, onPrint, checkedCount }: { items: ShoppingListItem[]; onToggle: (item: ShoppingListItem) => void; onPrint: () => void; checkedCount: number }) {
-  const categories = useMemo(() => {
-    const map = new Map<string, ShoppingListItem[]>();
-    items.forEach((item) => {
-      const list = map.get(item.category) ?? [];
-      list.push(item);
-      map.set(item.category, list);
-    });
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [items]);
-
-  return (
-    <Card variant="glass">
-      <CardHeader className="p-4 sm:p-5">
-        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
-          <span className="flex items-center gap-2"><ShoppingCart className="h-5 w-5" /> Shopping list</span>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{checkedCount}/{items.length} checked</span>
-            <Button variant="outline" size="sm" onClick={onPrint} disabled={!items.length}><Printer className="h-4 w-4" /> Print</Button>
-          </div>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-4 pt-0 sm:p-5 sm:pt-0">
-        {!items.length ? (
-          <p className="text-sm text-muted-foreground">No shopping list yet. Add planned meals with serving data first.</p>
-        ) : (
-          <div className="space-y-4">
-            {categories.map(([category, categoryItems]) => (
-              <div key={category}>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{category}</p>
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {categoryItems.map((item) => (
-                    <label
-                      key={item.key}
-                      className={cn(
-                        "flex min-h-[48px] cursor-pointer items-center gap-3 rounded-md border p-3 text-sm transition-colors",
-                        item.checked ? "border-primary/30 bg-primary/5" : "bg-card hover:border-primary/40"
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={item.checked}
-                        onChange={() => onToggle(item)}
-                        className="h-5 w-5 shrink-0 accent-primary"
-                        aria-label={`Mark ${item.food_name} as ${item.checked ? "unchecked" : "checked"}`}
-                      />
-                      <span className="min-w-0">
-                        <span className={cn("block font-semibold", item.checked && "text-muted-foreground line-through")}>{item.food_name}</span>
-                        <span className="block text-xs text-muted-foreground">
-                          {item.quantity === null ? "Qty not specified" : `${Math.round(item.quantity * 10) / 10}x`} {item.serving_size ?? "serving info missing"}
-                        </span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function MealForm({ title, draft, setDraft, onSave, onCancel, saving }: { title: string; draft: Draft; setDraft: Dispatch<SetStateAction<Draft>>; onSave: () => void; onCancel: () => void; saving: boolean }) {
   return (
     <div className="space-y-3">
@@ -582,8 +536,8 @@ function SummaryCard({ label, value, detail, suffix = " kcal" }: { label: string
   );
 }
 
-function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () => void; onDone: (item: MealPlanItem) => void; onDelete: (item: MealPlanItem) => void; onStartEdit: (item: MealPlanItem) => void; onSaveEdit: (item: MealPlanItem) => void; onCancelEdit: () => void; editingId: string | null; editDraft: Draft; setEditDraft: Dispatch<SetStateAction<Draft>>; updatingId: string | null }) {
-  const { type, items, onAdd, onDone, onDelete, onStartEdit, onSaveEdit, onCancelEdit, editingId, editDraft, setEditDraft, updatingId } = props;
+function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () => void; onDone: (item: MealPlanItem) => void; onDelete: (item: MealPlanItem) => void; onAddToGrocery: (item: MealPlanItem) => void; onStartEdit: (item: MealPlanItem) => void; onSaveEdit: (item: MealPlanItem) => void; onCancelEdit: () => void; editingId: string | null; editDraft: Draft; setEditDraft: Dispatch<SetStateAction<Draft>>; updatingId: string | null }) {
+  const { type, items, onAdd, onDone, onDelete, onAddToGrocery, onStartEdit, onSaveEdit, onCancelEdit, editingId, editDraft, setEditDraft, updatingId } = props;
   const totals = items.reduce((sum, item) => addItemToTotals(sum, item), emptyTotals());
   const plannedCount = items.filter((i) => i.status === "planned").length;
   const doneCount = items.filter((i) => i.status === "done").length;
@@ -606,6 +560,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
         {!items.length ? <p className="text-sm text-muted-foreground">No food planned yet. Tap + to add.</p> : null}
         {items.map((item) => {
           const isEditing = editingId === item.id;
+          const validation = validateMealItem(item);
           return (
             <div key={item.id} className="solid-row p-2.5 sm:p-3">
               <div className="flex items-start justify-between gap-2">
@@ -616,7 +571,10 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
                     {Math.round(toNumber(item.calories))} kcal · {Math.round(toNumber(item.protein_g))}g protein · {Math.round(toNumber(item.carbs_g))}g carbs · {Math.round(toNumber(item.fat_g))}g fat
                   </p>
                 </div>
-                <Badge variant={item.status === "done" ? "success" : "outline"} className="text-[10px] shrink-0">{item.status}</Badge>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <Badge variant={item.status === "done" ? "success" : "outline"} className="text-[10px]">{item.status}</Badge>
+                  <Badge variant={validation.tone === "success" ? "success" : validation.tone === "destructive" ? "destructive" : "warning"} className="text-[10px]" title={validation.detail}>{validation.label}</Badge>
+                </div>
               </div>
               {isEditing ? (
                 <div className="mt-2 sm:mt-3">
@@ -639,6 +597,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
                   </details>
                 </div>
               )}
+              {!isEditing ? <MealAiActions item={item} onAddToGrocery={onAddToGrocery} /> : null}
             </div>
           );
         })}

@@ -13,6 +13,7 @@ import { createUserWorkoutPlanDay, getCurrentWeekday, getUserWorkoutPlan, weekDa
 import { getWorkoutActivity } from "@/services/database/workout-sessions";
 import { WorkoutCalendar, type WeeklyPlanDay } from "@/components/workouts/workout-calendar";
 import type { UserWorkoutPlan, WorkoutSession } from "@/types";
+import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
 
 function daysFromPlan(plan: UserWorkoutPlan): WeeklyPlanDay[] {
   return plan.days.map((day) => ({
@@ -187,6 +188,17 @@ export function WorkoutPlanDetail() {
           )}
         </CardContent>
       </Card>
+
+      <WorkoutAiActionPanel
+        sourceType="workout_plan"
+        sourceId={plan.id}
+        context={{ workout_plan: plan, selected_day: activeDay, recent_workout_activity: activity }}
+        actions={[
+          { type: "rebalance_week", label: "Rebalance this week", description: "Ask ChatGPT to review this plan and recent adherence before recommending a weekly adjustment." },
+          { type: "adjust_next_workout", label: "Adjust next workout", description: "Ask ChatGPT to recommend a change to the next planned workout without applying it automatically." },
+          { type: "explain_progression", label: "Explain progression", description: "Ask ChatGPT to explain progression options for the selected workout day." }
+        ]}
+      />
     </div>
   );
 }

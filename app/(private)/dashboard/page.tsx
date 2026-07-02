@@ -38,14 +38,16 @@ import {
 import { getPersonalRecords, getProgressEntries } from "@/services/database/progress";
 import { getFitnessHabits, getSleepRecoveryLogs, getSupplementLogs } from "@/services/database/wellness";
 import { getCurrentWeekday, getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
-import { getOpenWorkoutDaySession, getWorkoutActivity, getWorkoutHistory } from "@/services/database/workout-sessions";
+import { getOpenWorkoutDaySession, getWorkoutActivity, getWorkoutHistory, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
 import { percent, remainingMacros, sumFoodLogs } from "@/services/nutrition/calculations";
 import type { SavedTargets } from "@/services/nutrition/targets";
 import { aggregateReport, buildWeekRange, reportMetrics, startOfWeek, type AggregatedReport } from "@/services/reports/reporting";
 import { getFitnessHabitHistory, getSleepRecoveryHistory } from "@/services/wellness/wellness-data";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
-import type { FitnessHabit, FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryLog, SupplementLog, UserWorkoutPlan, WaterLog, WorkoutSession } from "@/types";
+import type { FitnessHabit, FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryLog, SupplementLog, UserWorkoutPlan, WaterLog, WorkoutSession, WorkoutSessionSummary } from "@/types";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
+import { DailyCheckins } from "@/components/wellness/daily-checkins";
+import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -65,6 +67,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [history, setHistory] = useState<WorkoutSession[]>([]);
+  const [detailedHistory, setDetailedHistory] = useState<WorkoutSessionSummary[]>([]);
   const [waterLogs, setWaterLogs] = useState<WaterLog[]>([]);
   const [progressEntries, setProgressEntries] = useState<ProgressEntry[]>([]);
   const [mealPlanItems, setMealPlanItems] = useState<MealPlanItem[]>([]);
@@ -111,7 +114,8 @@ export default function DashboardPage() {
         workoutActivity,
         habitHistory,
         sleepHistory,
-        personalRecords
+        personalRecords,
+        workoutDetails
       ] = await Promise.all([
         getTodayFoodLogs(user.id),
         getWorkoutHistory(user.id),
@@ -128,7 +132,8 @@ export default function DashboardPage() {
         getWorkoutActivity(user.id, 180),
         getFitnessHabitHistory(user.id, 30),
         getSleepRecoveryHistory(user.id, 30),
-        getPersonalRecords(user.id, 30)
+        getPersonalRecords(user.id, 30),
+        getWorkoutHistoryDetailed(user.id, 30)
       ]);
 
       if (!onboarding) {
@@ -138,6 +143,7 @@ export default function DashboardPage() {
 
       setLogs(foodLogs);
       setHistory(workoutHistory);
+      setDetailedHistory(workoutDetails);
       setWaterLogs(dailyWater);
       setProgressEntries(progress);
       setMealPlanItems(plannedMeals);
@@ -215,6 +221,12 @@ export default function DashboardPage() {
   const todayPlanDayId = todayPlanDay?.id ?? null;
   const weeklyFocus = weeklyReport ? buildWeeklyFocus(weeklyReport) : null;
   const weeklyMetrics = weeklyReport ? reportMetrics(weeklyReport, "weekly").slice(0, 8) : [];
+  const weeklyVolumeKg = weeklyReport ? detailedHistory
+    .filter((workout) => {
+      const date = (workout.completed_at || workout.started_at).slice(0, 10);
+      return date >= weeklyReport.range.start && date <= weeklyReport.range.end;
+    })
+    .reduce((total, workout) => total + workout.exercise_logs.reduce((sessionTotal, log) => sessionTotal + Number(log.weight_kg ?? 0) * Number(log.reps ?? 0), 0), 0) : 0;
   const dashboardShortcuts = getDashboardShortcuts(todayPlanDayId);
   const visibleShortcuts = dashboardShortcuts.slice(0, 6);
   const closedTodayCount = [
@@ -503,6 +515,21 @@ export default function DashboardPage() {
             </CollapsibleSection>
           ) : null}
           </BentoGrid>
+          <DailyCheckins compact />
+          {weeklyReport ? (
+            <Card variant="glass" className="border-primary/20">
+              <CardHeader><CardTitle className="text-base">Weekly ChatGPT review</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">Prepare this week’s real workout, nutrition, hydration, progress, habit, and recovery context for ChatGPT.</p>
+                <AiActionRequestDialog
+                  actions={[{ type: "review_week", label: "Ask ChatGPT to review my week", description: "Review the week and recommend the smallest useful changes for the next one." }]}
+                  sourceType="weekly_summary"
+                  sourceId={weeklyReport.range.start}
+                  context={{ weekly_report: weeklyReport, total_volume_kg: weeklyVolumeKg, workout_history: detailedHistory, sleep_recovery: sleepLogs, habits, user_notes: "Review adherence and blockers; do not rewrite plans without approval." }}
+                />
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
       ) : null}
     </>

@@ -84,6 +84,12 @@ export function requiredScopesForTool(tool: McpToolDefinition): string[] {
     return [MCP_SCOPES.fullAccess, MCP_SCOPES.all];
   }
 
+  // AI action requests can contain cross-domain context and therefore require
+  // the user's explicit full-access consent.
+  if (name === "get_ai_action_requests" || name === "create_ai_action_request" || name === "update_ai_action_request_status") {
+    return [MCP_SCOPES.fullAccess];
+  }
+
   // Nutrition read
   if (name === "search_foods" || name === "get_kitchens" || name === "get_foods_by_kitchen" || name === "get_food_logs_by_date" || name === "get_today_calories") {
     return [MCP_SCOPES.nutritionRead];
@@ -104,10 +110,14 @@ export function requiredScopesForTool(tool: McpToolDefinition): string[] {
     return [MCP_SCOPES.mealPlansRead];
   }
 
+  if (name === "get_grocery_items") return [MCP_SCOPES.mealPlansRead];
+
   // Meal plans write
   if (name === "create_meal_plan_item" || name === "create_day_meal_plan" || name === "create_week_meal_plan" || name === "update_meal_plan_item" || name === "replace_meal_plan_item" || name === "delete_meal_plan_item" || name === "mark_meal_plan_item_done") {
     return [MCP_SCOPES.mealPlansWrite];
   }
+
+  if (name === "upsert_grocery_item") return [MCP_SCOPES.mealPlansWrite];
 
   // Hydration read
   if (name === "get_water_summary") {
@@ -124,10 +134,14 @@ export function requiredScopesForTool(tool: McpToolDefinition): string[] {
     return [MCP_SCOPES.workoutsRead];
   }
 
+  if (name === "get_progression_targets" || name === "get_exercise_alternatives") return [MCP_SCOPES.workoutsRead];
+
   // Workouts write
   if (name === "create_custom_workout_plan" || name === "save_chatgpt_workout_plan" || name === "generate_workout_plan" || name === "create_workout_plan_day" || name === "update_workout_plan_day" || name === "add_exercise_to_plan_day" || name === "add_warmup_to_plan_day" || name === "add_cardio_to_plan_day" || name === "add_cooldown_to_plan_day" || name === "update_plan_exercise" || name === "start_workout" || name === "log_exercise_sets" || name === "complete_workout" || name === "skip_workout") {
     return [MCP_SCOPES.workoutsWrite];
   }
+
+  if (name === "update_progression_target" || name === "create_exercise_alternative") return [MCP_SCOPES.workoutsWrite];
 
   // Workouts destructive (still workouts, but requires confirmation)
   if (name === "delete_workout_plan_day" || name === "delete_plan_exercise" || name === "activate_workout_plan" || name === "delete_workout_plan") {
@@ -155,20 +169,30 @@ export function requiredScopesForTool(tool: McpToolDefinition): string[] {
     return [MCP_SCOPES.profileWrite];
   }
 
+  if (name === "get_safety_profile" || name === "get_nutrition_preference_profile") return [MCP_SCOPES.profileRead];
+  if (name === "update_safety_profile" || name === "update_nutrition_preference_profile") return [MCP_SCOPES.profileWrite];
+
   // Settings write (targets and safe settings)
   if (name === "update_calorie_target" || name === "update_water_target") {
     return [MCP_SCOPES.settingsWrite];
   }
+
+  if (name === "get_nutrition_target_profiles") return [MCP_SCOPES.nutritionRead];
+  if (name === "upsert_nutrition_target_profile") return [MCP_SCOPES.nutritionWrite];
 
   // Wellness read
   if (name === "get_daily_fit_tasks" || name === "get_habits" || name === "get_sleep_recovery_summary" || name === "get_today_supplements") {
     return [MCP_SCOPES.wellnessRead];
   }
 
+  if (name === "get_daily_checkins") return [MCP_SCOPES.wellnessRead];
+
   // Wellness write
   if (name === "create_daily_fit_task" || name === "mark_daily_fit_task_done" || name === "mark_daily_fit_task_skipped" || name === "create_habit" || name === "mark_habit_done" || name === "add_sleep_recovery_log" || name === "add_supplement_log" || name === "mark_supplement_taken") {
     return [MCP_SCOPES.wellnessWrite];
   }
+
+  if (name === "upsert_daily_checkin") return [MCP_SCOPES.wellnessWrite];
 
   // New tools must be mapped explicitly. An empty requirement fails closed in canUseTool.
   return [];

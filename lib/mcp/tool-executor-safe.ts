@@ -1,5 +1,5 @@
 import type { McpContext } from "@/lib/mcp/auth";
-import { asObject, cleanDate, getArray, getNumber, getOptionalNumber, getOptionalString, getString, requireConfirmation, type JsonObject } from "@/lib/mcp/schemas";
+import { asObject, cleanDate, getArray, getBoolean, getNumber, getOptionalNumber, getOptionalString, getString, requireConfirmation, type JsonObject } from "@/lib/mcp/schemas";
 import { executeMcpTool as executeOriginalMcpTool } from "@/lib/mcp/tool-executor";
 import { fail, num, ok, sumMacros, type DbRow, type MacroTotals, type McpToolResult } from "@/lib/mcp/tool-helpers";
 
@@ -543,8 +543,285 @@ async function getSafeTodayWorkout(ctx: McpContext, date: string) {
   return { active_plan: activePlan, workout, workout_day: workoutDay, exercises };
 }
 
+const aiActionTypes = new Set([
+  "replace_exercise", "adjust_next_workout", "rebalance_week", "review_workout_session",
+  "adjust_for_low_readiness", "explain_progression", "reduce_workout_volume",
+  "reduce_workout_intensity", "recovery_workout", "reduce_next_session", "regenerate_meal",
+  "make_meal_cheaper", "make_meal_faster", "make_meal_higher_protein",
+  "replace_meal_ingredient", "make_meal_dairy_free", "make_meal_gluten_free",
+  "make_meal_cuisine", "build_grocery_list", "review_week"
+]);
+const aiActionStatuses = new Set(["draft", "ready_for_chatgpt", "sent_to_chatgpt", "resolved", "cancelled"]);
+const alternativeReasons = new Set(["machine_taken", "no_equipment", "pain_or_discomfort", "too_hard", "home_alternative", "same_muscle", "lower_back_friendly", "knee_friendly", "shoulder_friendly", "other"]);
+
+function stringArray(input: JsonObject, key: string) {
+  return getArray(input, key).map(String).map((item) => item.trim()).filter(Boolean);
+}
+
+async function getAiActionRequests(ctx: McpContext, input: JsonObject) {
+  let query = ctx.supabase.from("ai_action_requests").select("*").eq("user_id", ctx.userId).order("created_at", { ascending: false }).limit(100);
+  const status = getOptionalString(input, "status");
+  if (status) query = query.eq("status", status);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, requests: data ?? [] });
+}
+
+async function createAiActionRequest(ctx: McpContext, input: JsonObject) {
+  const actionType = getString(input, "action_type");
+  if (!aiActionTypes.has(actionType)) return fail("invalid_action_type", "action_type is not supported.");
+  const contextJson = input.context_json;
+  if (!contextJson || typeof contextJson !== "object" || Array.isArray(contextJson)) return fail("invalid_context", "context_json must be an object.");
+  const { data, error } = await ctx.supabase.from("ai_action_requests").insert({
+    user_id: ctx.userId,
+    action_type: actionType,
+    source_type: getString(input, "source_type"),
+    source_id: getOptionalString(input, "source_id") ?? null,
+    status: "ready_for_chatgpt",
+    context_json: contextJson,
+    user_note: getOptionalString(input, "user_note") ?? null
+  }).select("*").single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, request: data, message: "Request stored. No plan data was changed." });
+}
+
+async function updateAiActionStatus(ctx: McpContext, input: JsonObject) {
+  const status = getString(input, "status");
+  if (!aiActionStatuses.has(status)) return fail("invalid_status", "Unsupported AI action request status.");
+  const { data, error } = await ctx.supabase.from("ai_action_requests").update({ status, resolved_at: status === "resolved" ? new Date().toISOString() : null }).eq("id", getString(input, "request_id")).eq("user_id", ctx.userId).select("*").single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, request: data });
+}
+
+async function getSingleUserRow(ctx: McpContext, table: string, key: string) {
+  const { data, error } = await ctx.supabase.from(table).select("*").eq("user_id", ctx.userId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, [key]: data ?? null });
+}
+
+async function updateSafetyProfile(ctx: McpContext, input: JsonObject) {
+  const riskLevel = getOptionalString(input, "risk_level") ?? "green";
+  if (!["green", "yellow", "red"].includes(riskLevel)) return fail("invalid_risk_level", "risk_level must be green, yellow, or red.");
+  const payload = {
+    user_id: ctx.userId,
+    injuries: stringArray(input, "injuries"),
+    pain_areas: stringArray(input, "pain_areas"),
+    medical_conditions: getOptionalString(input, "medical_conditions") ?? null,
+    doctor_restrictions: getOptionalString(input, "doctor_restrictions") ?? null,
+    medications_or_supplement_notes: getOptionalString(input, "medications_or_supplement_notes") ?? null,
+    pregnancy_or_postpartum: getOptionalString(input, "pregnancy_or_postpartum") ?? null,
+    eating_disorder_risk_acknowledged: getBoolean(input, "eating_disorder_risk_acknowledged"),
+    under_18_flag: getBoolean(input, "under_18_flag"),
+    movement_restrictions: getOptionalString(input, "movement_restrictions") ?? null,
+    nutrition_restrictions: getOptionalString(input, "nutrition_restrictions") ?? null,
+    risk_level: riskLevel,
+    emergency_warning_acknowledged: getBoolean(input, "emergency_warning_acknowledged")
+  };
+  const { data, error } = await ctx.supabase.from("user_safety_profiles").upsert(payload, { onConflict: "user_id" }).select("*").single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, safety_profile: data, medical_advice: false });
+}
+
+async function updateNutritionPreferences(ctx: McpContext, input: JsonObject) {
+  const payload = {
+    user_id: ctx.userId,
+    weekly_food_budget: getOptionalNumber(input, "weekly_food_budget") ?? null,
+    budget_currency: getOptionalString(input, "budget_currency") ?? null,
+    max_cooking_time_minutes: getOptionalNumber(input, "max_cooking_time_minutes") ?? null,
+    meal_prep_days: stringArray(input, "meal_prep_days"),
+    cooking_skill: getOptionalString(input, "cooking_skill") ?? null,
+    kitchen_equipment: stringArray(input, "kitchen_equipment"),
+    preferred_cuisines: stringArray(input, "preferred_cuisines"),
+    disliked_foods: stringArray(input, "disliked_foods"),
+    allergies: getOptionalString(input, "allergies") ?? null,
+    repeat_tolerance: getOptionalString(input, "repeat_tolerance") ?? null,
+    meals_per_day: getOptionalNumber(input, "meals_per_day") ?? null,
+    ingredient_reuse_preference: getOptionalString(input, "ingredient_reuse_preference") ?? null,
+    grocery_style_preference: getOptionalString(input, "grocery_style_preference") ?? null
+  };
+  const { data, error } = await ctx.supabase.from("user_nutrition_preference_profiles").upsert(payload, { onConflict: "user_id" }).select("*").single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, nutrition_preference_profile: data });
+}
+
+async function getOwnedPlanExercise(ctx: McpContext, exerciseId: string) {
+  const { data, error } = await ctx.supabase.from("user_workout_plan_exercises").select("*").eq("id", exerciseId).maybeSingle();
+  if (error) throw new Error(error.message);
+  const exercise = data as DbRow | null;
+  if (!exercise?.plan_day_id) return null;
+  const day = await getOwnedPlanDay(ctx, String(exercise.plan_day_id));
+  return day ? exercise : null;
+}
+
+async function getProgressionTargets(ctx: McpContext, input: JsonObject) {
+  let query = ctx.supabase.from("user_progression_targets").select("*").eq("user_id", ctx.userId).order("updated_at", { ascending: false });
+  const exerciseId = getOptionalString(input, "plan_exercise_id");
+  if (exerciseId) query = query.eq("plan_exercise_id", exerciseId);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, progression_targets: data ?? [] });
+}
+
+async function updateProgressionTarget(ctx: McpContext, input: JsonObject) {
+  const exerciseId = getString(input, "plan_exercise_id");
+  if (!await getOwnedPlanExercise(ctx, exerciseId)) return fail("not_found", "Plan exercise was not found for this user.");
+  const reviewedBy = getOptionalString(input, "last_reviewed_by") ?? "chatgpt";
+  const { data, error } = await ctx.supabase.from("user_progression_targets").upsert({
+    user_id: ctx.userId,
+    plan_exercise_id: exerciseId,
+    exercise_name: getString(input, "exercise_name"),
+    next_target_weight_kg: getOptionalNumber(input, "next_target_weight_kg") ?? null,
+    next_target_reps: getOptionalString(input, "next_target_reps") ?? null,
+    next_target_sets: getOptionalNumber(input, "next_target_sets") ?? null,
+    progression_note: getOptionalString(input, "progression_note") ?? null,
+    ai_recommendation: getOptionalString(input, "ai_recommendation") ?? null,
+    last_reviewed_at: new Date().toISOString(),
+    last_reviewed_by: reviewedBy
+  }, { onConflict: "user_id,plan_exercise_id" }).select("*").single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, progression_target: data });
+}
+
+async function getExerciseAlternatives(ctx: McpContext, input: JsonObject) {
+  let query = ctx.supabase.from("user_exercise_alternatives").select("*").eq("user_id", ctx.userId).order("created_at", { ascending: false });
+  const exerciseId = getOptionalString(input, "plan_exercise_id");
+  if (exerciseId) query = query.eq("plan_exercise_id", exerciseId);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, exercise_alternatives: data ?? [] });
+}
+
+async function createExerciseAlternative(ctx: McpContext, input: JsonObject) {
+  const exerciseId = getString(input, "plan_exercise_id");
+  if (!await getOwnedPlanExercise(ctx, exerciseId)) return fail("not_found", "Plan exercise was not found for this user.");
+  const reason = getString(input, "reason");
+  if (!alternativeReasons.has(reason)) return fail("invalid_reason", "Unsupported exercise replacement reason.");
+  const { data, error } = await ctx.supabase.from("user_exercise_alternatives").insert({
+    user_id: ctx.userId,
+    plan_exercise_id: exerciseId,
+    original_exercise_name: getString(input, "original_exercise_name"),
+    alternative_exercise_name: getString(input, "alternative_exercise_name"),
+    reason,
+    target_muscle: getOptionalString(input, "target_muscle") ?? null,
+    equipment: getOptionalString(input, "equipment") ?? null,
+    pain_friendly_note: getOptionalString(input, "pain_friendly_note") ?? null,
+    created_by: getOptionalString(input, "created_by") ?? "chatgpt"
+  }).select("*").single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, exercise_alternative: data, applied_to_plan: false });
+}
+
+async function getGroceryItems(ctx: McpContext, input: JsonObject) {
+  const weekStart = cleanDate(input.week_start);
+  const { data, error } = await ctx.supabase.from("user_grocery_items").select("*").eq("user_id", ctx.userId).eq("week_start", weekStart).order("store_section").order("item_name");
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, week_start: weekStart, grocery_items: data ?? [] });
+}
+
+async function upsertGroceryItem(ctx: McpContext, input: JsonObject) {
+  const sourceMealId = getOptionalString(input, "source_meal_plan_item_id");
+  if (sourceMealId) {
+    const owned = await ctx.supabase.from("user_meal_plan_items").select("id").eq("id", sourceMealId).eq("user_id", ctx.userId).maybeSingle();
+    if (owned.error) throw new Error(owned.error.message);
+    if (!owned.data) return fail("not_found", "Source meal-plan item was not found for this user.");
+  }
+  const payload = {
+    user_id: ctx.userId,
+    week_start: cleanDate(input.week_start),
+    source_meal_plan_item_id: sourceMealId ?? null,
+    item_name: getString(input, "item_name"),
+    quantity: getOptionalNumber(input, "quantity") ?? null,
+    unit: getOptionalString(input, "unit") ?? null,
+    store_section: getOptionalString(input, "store_section") ?? "Other",
+    checked: getBoolean(input, "checked"),
+    already_have: getBoolean(input, "already_have"),
+    notes: getOptionalString(input, "notes") ?? null,
+    created_by: getOptionalString(input, "created_by") ?? "chatgpt"
+  };
+  const itemId = getOptionalString(input, "grocery_item_id");
+  const query = itemId
+    ? ctx.supabase.from("user_grocery_items").update(payload).eq("id", itemId).eq("user_id", ctx.userId)
+    : ctx.supabase.from("user_grocery_items").insert(payload);
+  const { data, error } = await query.select("*").single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, grocery_item: data });
+}
+
+async function getDailyCheckins(ctx: McpContext, input: JsonObject) {
+  const startDate = cleanDate(input.start_date);
+  const endDate = cleanDate(input.end_date ?? startDate);
+  const { data, error } = await ctx.supabase.from("user_daily_checkins").select("*").eq("user_id", ctx.userId).gte("checkin_date", startDate).lte("checkin_date", endDate).order("checkin_date", { ascending: false });
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, start_date: startDate, end_date: endDate, checkins: data ?? [] });
+}
+
+async function upsertDailyCheckin(ctx: McpContext, input: JsonObject) {
+  const checkinType = getString(input, "checkin_type");
+  const { data, error } = await ctx.supabase.from("user_daily_checkins").upsert({
+    user_id: ctx.userId,
+    checkin_date: cleanDate(input.checkin_date),
+    checkin_type: checkinType,
+    sleep_hours: getOptionalNumber(input, "sleep_hours") ?? null,
+    energy_level: getOptionalString(input, "energy_level") ?? null,
+    soreness_level: getOptionalString(input, "soreness_level") ?? null,
+    stress_level: getOptionalString(input, "stress_level") ?? null,
+    motivation_level: getOptionalString(input, "motivation_level") ?? null,
+    workout_readiness: getOptionalString(input, "workout_readiness") ?? null,
+    today_main_goal: getOptionalString(input, "today_main_goal") ?? null,
+    today_blocker: getOptionalString(input, "today_blocker") ?? null,
+    workout_done: input.workout_done === undefined ? null : getBoolean(input, "workout_done"),
+    protein_hit: input.protein_hit === undefined ? null : getBoolean(input, "protein_hit"),
+    calories_hit: input.calories_hit === undefined ? null : getBoolean(input, "calories_hit"),
+    water_hit: input.water_hit === undefined ? null : getBoolean(input, "water_hit"),
+    steps_or_movement_done: input.steps_or_movement_done === undefined ? null : getBoolean(input, "steps_or_movement_done"),
+    meal_plan_followed: input.meal_plan_followed === undefined ? null : getBoolean(input, "meal_plan_followed"),
+    main_blocker: getOptionalString(input, "main_blocker") ?? null,
+    tomorrow_note: getOptionalString(input, "tomorrow_note") ?? null
+  }, { onConflict: "user_id,checkin_date,checkin_type" }).select("*").single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, checkin: data });
+}
+
+async function getNutritionTargetProfiles(ctx: McpContext) {
+  const { data, error } = await ctx.supabase.from("user_nutrition_target_profiles").select("*").eq("user_id", ctx.userId).order("target_type");
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, nutrition_target_profiles: data ?? [] });
+}
+
+async function upsertNutritionTargetProfile(ctx: McpContext, input: JsonObject) {
+  const { data, error } = await ctx.supabase.from("user_nutrition_target_profiles").upsert({
+    user_id: ctx.userId,
+    target_type: getString(input, "target_type"),
+    calories: getOptionalNumber(input, "calories") ?? null,
+    protein_g: getOptionalNumber(input, "protein_g") ?? null,
+    carbs_g: getOptionalNumber(input, "carbs_g") ?? null,
+    fat_g: getOptionalNumber(input, "fat_g") ?? null,
+    water_ml: getOptionalNumber(input, "water_ml") ?? null,
+    notes: getOptionalString(input, "notes") ?? null
+  }, { onConflict: "user_id,target_type" }).select("*").single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, nutrition_target_profile: data, generated_by_plaivra: false });
+}
+
 export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput: unknown): Promise<McpToolResult> {
   const input = asObject(rawInput);
+  if (toolName === "get_ai_action_requests") return getAiActionRequests(ctx, input);
+  if (toolName === "create_ai_action_request") return createAiActionRequest(ctx, input);
+  if (toolName === "update_ai_action_request_status") return updateAiActionStatus(ctx, input);
+  if (toolName === "get_safety_profile") return getSingleUserRow(ctx, "user_safety_profiles", "safety_profile");
+  if (toolName === "update_safety_profile") return updateSafetyProfile(ctx, input);
+  if (toolName === "get_nutrition_preference_profile") return getSingleUserRow(ctx, "user_nutrition_preference_profiles", "nutrition_preference_profile");
+  if (toolName === "update_nutrition_preference_profile") return updateNutritionPreferences(ctx, input);
+  if (toolName === "get_progression_targets") return getProgressionTargets(ctx, input);
+  if (toolName === "update_progression_target") return updateProgressionTarget(ctx, input);
+  if (toolName === "get_exercise_alternatives") return getExerciseAlternatives(ctx, input);
+  if (toolName === "create_exercise_alternative") return createExerciseAlternative(ctx, input);
+  if (toolName === "get_grocery_items") return getGroceryItems(ctx, input);
+  if (toolName === "upsert_grocery_item") return upsertGroceryItem(ctx, input);
+  if (toolName === "get_daily_checkins") return getDailyCheckins(ctx, input);
+  if (toolName === "upsert_daily_checkin") return upsertDailyCheckin(ctx, input);
+  if (toolName === "get_nutrition_target_profiles") return getNutritionTargetProfiles(ctx);
+  if (toolName === "upsert_nutrition_target_profile") return upsertNutritionTargetProfile(ctx, input);
   if (toolName === "create_meal_plan_item") return insertPlannedMeals(ctx, [{ ...input, date: cleanDate(input.date ?? input.plan_date ?? input.planned_date ?? "today") }], toolName);
   if (toolName === "create_day_meal_plan") return insertPlannedMeals(ctx, dayMealItems(input), toolName);
   if (toolName === "create_week_meal_plan") return insertPlannedMeals(ctx, weekMealItems(input), toolName);

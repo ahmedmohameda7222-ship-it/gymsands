@@ -28,6 +28,7 @@ import {
 } from "@/services/database/wellness";
 import { getSleepRecoveryHistory } from "@/services/wellness/wellness-data";
 import type { DailyFitTask, FitnessHabit, SupplementLog } from "@/types";
+import { DailyCheckins } from "@/components/wellness/daily-checkins";
 
 interface LauncherCardProps {
   href: string;
@@ -168,6 +169,7 @@ export default function WellnessPage() {
       />
 
       <div className="space-y-4">
+        <DailyCheckins />
         {/* Launcher cards — compact, mobile-first */}
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <LauncherCard

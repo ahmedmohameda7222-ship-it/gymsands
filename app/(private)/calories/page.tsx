@@ -43,6 +43,8 @@ import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { addDays, startOfWeek } from "@/lib/date-utils";
 
 import type { DailyNutritionSummary, FoodLog, WaterLog } from "@/types";
+import type { UserNutritionTargetProfile } from "@/types";
+import { NutritionTargetProfiles } from "@/components/meals/nutrition-target-profiles";
 
 export default function CaloriesPage() {
   const { user } = useAuth();
@@ -54,6 +56,7 @@ export default function CaloriesPage() {
   const [weekData, setWeekData] = useState<DailyNutritionSummary[]>([]);
   const [waterLogs, setWaterLogs] = useState<WaterLog[]>([]);
   const [targets, setTargets] = useState<SavedTargets | null>(null);
+  const [activeTargetProfile, setActiveTargetProfile] = useState<UserNutritionTargetProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [targetForm, setTargetForm] = useState({ dailyCalories: "", proteinG: "", carbsG: "", fatG: "", waterMl: "" });
@@ -120,9 +123,16 @@ export default function CaloriesPage() {
 
   const totals = useMemo(() => sumFoodLogs(logs), [logs]);
   const waterTotal = useMemo(() => waterLogs.reduce((sum, log) => sum + Number(log.amount_ml), 0), [waterLogs]);
-  const hasTargets = Boolean(targets);
+  const hasTargets = Boolean(targets || activeTargetProfile);
   const emptyTargets = { daily_calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, water_ml: 0 };
-  const displayTargets = targets ?? emptyTargets;
+  const baseTargets = targets ?? emptyTargets;
+  const displayTargets = activeTargetProfile ? {
+    daily_calories: activeTargetProfile.calories ?? baseTargets.daily_calories,
+    protein_g: activeTargetProfile.protein_g ?? baseTargets.protein_g,
+    carbs_g: activeTargetProfile.carbs_g ?? baseTargets.carbs_g,
+    fat_g: activeTargetProfile.fat_g ?? baseTargets.fat_g,
+    water_ml: activeTargetProfile.water_ml ?? baseTargets.water_ml
+  } : baseTargets;
 
   async function copyYesterday() {
     if (!user?.id) return toast({ title: "Sign in required", description: "Please sign in before copying meals." });
@@ -456,6 +466,7 @@ export default function CaloriesPage() {
               )}
             </CardContent>
           </Card>
+          <NutritionTargetProfiles onActiveTargetChange={setActiveTargetProfile} />
         </TabsContent>
 
         <TabsContent value="tools" className="space-y-4">

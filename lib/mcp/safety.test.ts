@@ -25,8 +25,8 @@ function context(scopes: string[], role: "member" | "admin" = "member"): McpCont
 }
 
 describe("Phase 3 MCP tool inventory and annotations", () => {
-  it("has a unique, fully annotated 80-tool inventory", () => {
-    expect(mcpTools).toHaveLength(80);
+  it("has a unique, fully annotated 97-tool inventory", () => {
+    expect(mcpTools).toHaveLength(97);
     expect(new Set(mcpTools.map((item) => item.name)).size).toBe(mcpTools.length);
     for (const item of mcpTools) {
       expect(item.name).toMatch(/^[a-z][a-z0-9_]*$/);

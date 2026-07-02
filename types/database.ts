@@ -519,3 +519,187 @@ export type AiPermissionSection =
   | "progress"
   | "profile"
   | "settings";
+
+export type AiActionRequestStatus = "draft" | "ready_for_chatgpt" | "sent_to_chatgpt" | "resolved" | "cancelled";
+
+export type AiActionType =
+  | "replace_exercise"
+  | "adjust_next_workout"
+  | "rebalance_week"
+  | "review_workout_session"
+  | "adjust_for_low_readiness"
+  | "explain_progression"
+  | "reduce_workout_volume"
+  | "reduce_workout_intensity"
+  | "recovery_workout"
+  | "reduce_next_session"
+  | "regenerate_meal"
+  | "make_meal_cheaper"
+  | "make_meal_faster"
+  | "make_meal_higher_protein"
+  | "replace_meal_ingredient"
+  | "make_meal_dairy_free"
+  | "make_meal_gluten_free"
+  | "make_meal_cuisine"
+  | "build_grocery_list"
+  | "review_week";
+
+export type AiActionRequest = {
+  id: string;
+  user_id: string;
+  action_type: AiActionType;
+  source_type: string;
+  source_id: string | null;
+  status: AiActionRequestStatus;
+  context_json: Record<string, unknown>;
+  user_note: string | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+};
+
+export type SafetyRiskLevel = "green" | "yellow" | "red";
+
+export type UserSafetyProfile = {
+  id: string;
+  user_id: string;
+  injuries: string[];
+  pain_areas: string[];
+  medical_conditions: string | null;
+  doctor_restrictions: string | null;
+  medications_or_supplement_notes: string | null;
+  pregnancy_or_postpartum: string | null;
+  eating_disorder_risk_acknowledged: boolean;
+  under_18_flag: boolean;
+  movement_restrictions: string | null;
+  nutrition_restrictions: string | null;
+  risk_level: SafetyRiskLevel;
+  emergency_warning_acknowledged: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserNutritionPreferenceProfile = {
+  id: string;
+  user_id: string;
+  weekly_food_budget: number | null;
+  budget_currency: string | null;
+  max_cooking_time_minutes: number | null;
+  meal_prep_days: string[];
+  cooking_skill: string | null;
+  kitchen_equipment: string[];
+  preferred_cuisines: string[];
+  disliked_foods: string[];
+  allergies: string | null;
+  repeat_tolerance: string | null;
+  meals_per_day: number | null;
+  ingredient_reuse_preference: string | null;
+  grocery_style_preference: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserProgressionTarget = {
+  id: string;
+  user_id: string;
+  plan_exercise_id: string;
+  exercise_name: string;
+  next_target_weight_kg: number | null;
+  next_target_reps: string | null;
+  next_target_sets: number | null;
+  progression_note: string | null;
+  ai_recommendation: string | null;
+  last_reviewed_at: string | null;
+  last_reviewed_by: "user" | "chatgpt" | "system" | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ExerciseAlternativeReason =
+  | "machine_taken"
+  | "no_equipment"
+  | "pain_or_discomfort"
+  | "too_hard"
+  | "home_alternative"
+  | "same_muscle"
+  | "lower_back_friendly"
+  | "knee_friendly"
+  | "shoulder_friendly"
+  | "other";
+
+export type UserExerciseAlternative = {
+  id: string;
+  user_id: string;
+  plan_exercise_id: string;
+  original_exercise_name: string;
+  alternative_exercise_name: string;
+  reason: ExerciseAlternativeReason;
+  target_muscle: string | null;
+  equipment: string | null;
+  pain_friendly_note: string | null;
+  created_by: "user" | "chatgpt";
+  created_at: string;
+  updated_at: string;
+};
+
+export type GroceryStoreSection = "Protein" | "Carbs" | "Vegetables" | "Fruits" | "Dairy" | "Pantry" | "Frozen" | "Drinks" | "Other";
+
+export type UserGroceryItem = {
+  id: string;
+  user_id: string;
+  week_start: string;
+  source_meal_plan_item_id: string | null;
+  item_name: string;
+  quantity: number | null;
+  unit: string | null;
+  store_section: GroceryStoreSection;
+  checked: boolean;
+  already_have: boolean;
+  notes: string | null;
+  created_by: "manual" | "meal_plan" | "chatgpt";
+  created_at: string;
+  updated_at: string;
+};
+
+export type DailyCheckinType = "morning" | "evening";
+
+export type UserDailyCheckin = {
+  id: string;
+  user_id: string;
+  checkin_date: string;
+  checkin_type: DailyCheckinType;
+  sleep_hours: number | null;
+  energy_level: string | null;
+  soreness_level: string | null;
+  stress_level: string | null;
+  motivation_level: string | null;
+  workout_readiness: string | null;
+  today_main_goal: string | null;
+  today_blocker: string | null;
+  workout_done: boolean | null;
+  protein_hit: boolean | null;
+  calories_hit: boolean | null;
+  water_hit: boolean | null;
+  steps_or_movement_done: boolean | null;
+  meal_plan_followed: boolean | null;
+  main_blocker: string | null;
+  tomorrow_note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NutritionTargetProfileType = "default_day" | "training_day" | "rest_day" | "high_activity_day";
+
+export type UserNutritionTargetProfile = {
+  id: string;
+  user_id: string;
+  target_type: NutritionTargetProfileType;
+  calories: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+  water_ml: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};

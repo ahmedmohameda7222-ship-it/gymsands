@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CheckCircle2, Clock, ExternalLink, RotateCcw, Save, Sparkles, TimerReset, Trophy } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, ExternalLink, RefreshCcw, RotateCcw, Save, Sparkles, TimerReset, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,11 @@ import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKe
 import Link from "next/link";
 import { completeWorkoutSession, getOrStartWorkoutDaySession, getWorkoutHistoryDetailed, getWorkoutSessionLogs, saveWorkoutSetLogs, updateWorkoutSessionDuration } from "@/services/database/workout-sessions";
 import type { ExerciseLog, UserWorkoutPlanExercise, WorkoutPlanDaySession, WorkoutSession, WorkoutSessionSummary } from "@/types";
+import type { ExerciseAlternativeReason, UserExerciseAlternative, UserProgressionTarget } from "@/types";
+import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
+import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
+import { getDailyCheckins, getExerciseAlternatives, getProgressionTargets } from "@/services/database/execution-layer";
+import { calculateReadiness, getSleepRecoveryHistory, type EnhancedSleepRecoveryLog } from "@/services/wellness/wellness-data";
 
 const defaultInstructions = "Use controlled form, keep the target muscle engaged, avoid rushing the eccentric part, and stop if the movement feels painful.";
 
@@ -119,6 +124,10 @@ function estimateOneRepMax(weightKg: number, reps: number) {
 
 function round(value: number) {
   return Math.round(value * 10) / 10;
+}
+
+function currentTimestamp() {
+  return Date.now();
 }
 
 function parseRepRangeTop(value: string | null | undefined) {
@@ -340,6 +349,12 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const [isStarting, setIsStarting] = useState(true);
   const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
   const [completedSummary, setCompletedSummary] = useState<WorkoutSummary | null>(null);
+  const [progressionTargets, setProgressionTargets] = useState<UserProgressionTarget[]>([]);
+  const [alternatives, setAlternatives] = useState<UserExerciseAlternative[]>([]);
+  const [recoveryLogs, setRecoveryLogs] = useState<EnhancedSleepRecoveryLog[]>([]);
+  const [morningReadiness, setMorningReadiness] = useState<string | null>(null);
+  const [readinessDismissed, setReadinessDismissed] = useState(false);
+  const [replacementReason, setReplacementReason] = useState<ExerciseAlternativeReason>("machine_taken");
   const workoutTimerKey = useMemo(() => workoutStorageKey(["workout-day-session", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const restTimerKey = useMemo(() => workoutStorageKey(["workout-day-rest-timer", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const [timerEndsAtMs, setTimerEndsAtMs] = useState<number | null>(null);
@@ -364,10 +379,23 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         setStartedAtMs(nextStartedAt);
         storeTimestamp(workoutTimerKey, nextStartedAt);
         setSessionNotes(nextSession.notes ?? "");
-        const [existingLogs, workoutHistory] = await Promise.all([getWorkoutSessionLogs(nextSession.id), getWorkoutHistoryDetailed(user.id, 100)]);
+        const today = new Date().toLocaleDateString("en-CA");
+        const exerciseIds = day.exercises.map((exercise) => exercise.id);
+        const [existingLogs, workoutHistory, targets, savedAlternatives, recovery, checkins] = await Promise.all([
+          getWorkoutSessionLogs(nextSession.id),
+          getWorkoutHistoryDetailed(user.id, 100),
+          getProgressionTargets(user.id, exerciseIds).catch(() => []),
+          getExerciseAlternatives(user.id).catch(() => []),
+          getSleepRecoveryHistory(user.id, 7),
+          getDailyCheckins(user.id, today).catch(() => [])
+        ]);
         if (active) {
           setExerciseStates((current) => hydrateStates(current, existingLogs));
           setHistory(workoutHistory.filter((item) => item.id !== nextSession.id));
+          setProgressionTargets(targets);
+          setAlternatives(savedAlternatives.filter((item) => exerciseIds.includes(item.plan_exercise_id)));
+          setRecoveryLogs(recovery);
+          setMorningReadiness(checkins.find((item) => item.checkin_type === "morning")?.workout_readiness ?? null);
         }
       })
       .catch((error) => {
@@ -438,6 +466,24 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const activePreviousPerformance = activeExercise ? previousPerformance(history, activeExercise.exercise.exercise_name) : null;
   const liveSuggestions = exerciseStates.map(buildProgressiveSuggestion);
   const previewPrs = buildPrs(exerciseStates, history);
+  const activeProgressionTarget = progressionTargets.find((target) => target.plan_exercise_id === activeExercise?.exercise.id) ?? null;
+  const activeAlternatives = alternatives.filter((alternative) => alternative.plan_exercise_id === activeExercise?.exercise.id);
+  const readiness = calculateReadiness(recoveryLogs);
+  const lowReadiness = (readiness.value !== null && readiness.value < 50) || morningReadiness === "low";
+  const latestRecovery = recoveryLogs[0] ?? null;
+  const workoutContext = {
+    plan: day.plan,
+    workout_day: { id: day.id, name: day.day_name, weekday: day.weekday, notes: day.notes },
+    planned_exercises: day.exercises,
+    active_exercise: activeExercise?.exercise ?? null,
+    logged_sets: buildLogRows(),
+    session: session ? { id: session.id, duration_minutes: durationMinutes, notes: sessionNotes } : null,
+    previous_performance: activePreviousPerformance,
+    possible_prs: previewPrs,
+    skipped_exercises: exerciseStates.filter((item) => !item.sets.some((set) => set.completedAt)).map((item) => item.exercise.exercise_name),
+    readiness: { estimate: readiness, morning_checkin: morningReadiness, latest_recovery: latestRecovery },
+    saved_progression_target: activeProgressionTarget
+  };
 
   function buildLogRows(states = exerciseStates) {
     return states.flatMap((item, exerciseIndex) =>
@@ -513,13 +559,13 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   async function persistProgress(states = exerciseStates) {
     if (!session) return;
     await saveWorkoutSetLogs(session.id, buildLogRows(states));
-    await updateWorkoutSessionDuration(session.id, Math.max(1, Math.ceil((Date.now() - startedAtMs) / 60000)));
+    await updateWorkoutSessionDuration(session.id, Math.max(1, Math.ceil(elapsedSeconds / 60)));
   }
 
   function startRestTimer(seconds: number) {
     const safeSeconds = Math.max(0, seconds);
     if (!safeSeconds) return;
-    const deadline = Date.now() + safeSeconds * 1000;
+    const deadline = currentTimestamp() + safeSeconds * 1000;
     setTimerSeconds(safeSeconds);
     setTimerLeft(safeSeconds);
     setTimerEndsAtMs(deadline);
@@ -647,6 +693,36 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
       {confirmDialog}
       {completedSummary ? <WorkoutSummaryCard summary={completedSummary} /> : null}
 
+      {lowReadiness && !readinessDismissed ? (
+        <Card className="border-warning/30 bg-warning/10">
+          <CardContent className="space-y-3 p-4 sm:p-5">
+            <div>
+              <p className="font-semibold">Readiness is low today</p>
+              <p className="text-sm text-muted-foreground">Ask ChatGPT for a lighter version using your saved sleep, soreness, fatigue, stress, workout, and safety context. This is general fitness guidance, not medical advice.</p>
+            </div>
+            <WorkoutAiActionPanel
+              compact
+              sourceType="workout_session"
+              sourceId={session?.id ?? day.id}
+              context={workoutContext}
+              actions={[
+                { type: "reduce_workout_volume", label: "Reduce volume", description: "Ask ChatGPT which sets or exercises to reduce today." },
+                { type: "reduce_workout_intensity", label: "Reduce intensity", description: "Ask ChatGPT for a lower-intensity version of today’s planned work." },
+                { type: "recovery_workout", label: "Recovery version", description: "Ask ChatGPT for a recovery-focused version without automatically changing the plan." }
+              ]}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setReadinessDismissed(true)}>
+                Continue normally
+              </Button>
+              <Button asChild type="button" variant="outline" size="sm">
+                <Link href="/settings/coaching-profile">Log pain or discomfort</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="outline">
           <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to plan</Link>
@@ -737,6 +813,31 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               <Badge variant="outline">Reps {activeExercise.exercise.reps ?? "custom"}</Badge>
               <Badge variant="outline">Rest {activeExercise.exercise.rest_seconds ?? timerSeconds}s</Badge>
             </div>
+            <div className="pt-2">
+              <AiActionRequestDialog
+                actions={[{ type: "replace_exercise", label: "Replace exercise", description: "Ask ChatGPT to recommend a suitable replacement using the selected reason and current workout context." }]}
+                sourceType="plan_exercise"
+                sourceId={activeExercise.exercise.id}
+                context={{ ...workoutContext, replacement_reason: replacementReason, exercise_alternatives: activeAlternatives }}
+                title="Exercise replacement"
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="replacement-reason">Why do you need a replacement?</Label>
+                  <select id="replacement-reason" value={replacementReason} onChange={(event) => setReplacementReason(event.target.value as ExerciseAlternativeReason)} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm">
+                    <option value="machine_taken">Machine taken</option>
+                    <option value="no_equipment">No equipment</option>
+                    <option value="pain_or_discomfort">Pain or discomfort</option>
+                    <option value="too_hard">Too hard today</option>
+                    <option value="home_alternative">Home alternative</option>
+                    <option value="same_muscle">Same muscle, different movement</option>
+                    <option value="lower_back_friendly">Lower-back friendly</option>
+                    <option value="knee_friendly">Knee friendly</option>
+                    <option value="shoulder_friendly">Shoulder friendly</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+              </AiActionRequestDialog>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-md bg-muted/40 p-3 text-sm leading-6 text-muted-foreground">
@@ -751,14 +852,25 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-3">
               <InfoBox title="Previous performance" lines={activePreviousPerformance ? [
                 `Last used: ${activePreviousPerformance.lastWeightKg ?? 0} kg x ${activePreviousPerformance.lastReps ?? 0}`,
                 `Last best set: ${activePreviousPerformance.lastBestSet ?? "No previous data"}`,
                 `Last performed: ${activePreviousPerformance.lastPerformedAt ? activePreviousPerformance.lastPerformedAt.slice(0, 10) : "No previous data"}`
               ] : ["No previous data"]} />
               <InfoBox title="Overload guidance" lines={[buildProgressiveSuggestion(activeExercise)]} />
+              <InfoBox title="Saved ChatGPT next target" lines={activeProgressionTarget ? [
+                `Target: ${activeProgressionTarget.next_target_weight_kg ?? "custom"} kg x ${activeProgressionTarget.next_target_reps ?? "custom reps"}${activeProgressionTarget.next_target_sets ? ` for ${activeProgressionTarget.next_target_sets} sets` : ""}`,
+                activeProgressionTarget.ai_recommendation || activeProgressionTarget.progression_note || "No note saved."
+              ] : ["No saved next-session target yet."]} />
             </div>
+
+            {activeAlternatives.length ? (
+              <div className="rounded-[14px] border border-primary/20 bg-primary/5 p-3 text-sm">
+                <p className="flex items-center gap-2 font-semibold"><RefreshCcw className="h-4 w-4" /> Saved alternatives</p>
+                {activeAlternatives.slice(0, 3).map((alternative) => <p key={alternative.id} className="mt-1 text-muted-foreground">{alternative.alternative_exercise_name} · {alternative.reason.replaceAll("_", " ")}</p>)}
+              </div>
+            ) : null}
 
             <div className="space-y-3">
               {activeExercise.sets.map((set, setIndex) => {
@@ -843,6 +955,8 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
           </Card>
         </div>
       </div>
+
+      <WorkoutAiActionPanel sourceType="workout_session" sourceId={session?.id ?? day.id} context={workoutContext} />
 
       <MobileStickyActions>
         <div className="flex items-center gap-3">

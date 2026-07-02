@@ -8,6 +8,7 @@ import {
   Bot,
   SlidersHorizontal,
   Shield,
+  ShieldAlert,
 } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -118,6 +119,12 @@ export default function SettingsPage() {
       title: t("settings.preferences"),
       description: t("settings.preferencesDesc"),
       href: "/settings/preferences",
+    },
+    {
+      icon: ShieldAlert,
+      title: "Coaching Context",
+      description: "Safety, budget, cooking time, and food preferences for ChatGPT requests.",
+      href: "/settings/coaching-profile",
     },
     {
       icon: Shield,
