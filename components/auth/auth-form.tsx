@@ -14,14 +14,14 @@ import { defaultStartPageToPath, getUserAppSettings } from "@/services/database/
 import { PENDING_CONSENTS_STORAGE_KEY, REQUIRED_CONSENTS } from "@/lib/legal/versions";
 import { safeInternalRedirectPath } from "@/lib/auth/redirect";
 
-type RequiredConsentKey = "terms" | "privacy" | "fitnessData" | "disclaimer" | "age18";
+type RequiredConsentKey = "terms" | "privacy" | "fitnessData" | "disclaimer" | "age16";
 
 const initialRequiredConsents: Record<RequiredConsentKey, boolean> = {
   terms: false,
   privacy: false,
   fitnessData: false,
   disclaimer: false,
-  age18: false
+  age16: false
 };
 
 async function saveRequiredConsents(accessToken: string) {
@@ -71,7 +71,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     if (mode === "register" && Object.values(requiredConsents).some((granted) => !granted)) {
       return toast({
         title: "Consent required",
-        description: "Review and accept all required terms, privacy, fitness-data, disclaimer, and age confirmations."
+        description: "Accept the Terms, acknowledge the Privacy Policy and health notice, give explicit fitness-data consent, and confirm that you are at least 16."
       });
     }
 
@@ -203,19 +203,19 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                 checked={requiredConsents.fitnessData}
                 onChange={(checked) => setRequiredConsents((current) => ({ ...current, fitnessData: checked }))}
               >
-                I understand Plaivra processes fitness, wellness, body and progress data.
+                I explicitly consent to Plaivra processing the fitness, nutrition, wellness, body and progress data I choose to provide so the requested app features can work. I can withdraw this consent with future effect by contacting the operator or requesting restriction/deletion.
               </ConsentCheckbox>
               <ConsentCheckbox
                 checked={requiredConsents.disclaimer}
                 onChange={(checked) => setRequiredConsents((current) => ({ ...current, disclaimer: checked }))}
               >
-                I understand Plaivra is not medical advice.
+                I have read and understood the <Link className="font-semibold text-primary underline" href="/legal/disclaimer" target="_blank">health and medical disclaimer</Link>.
               </ConsentCheckbox>
               <ConsentCheckbox
-                checked={requiredConsents.age18}
-                onChange={(checked) => setRequiredConsents((current) => ({ ...current, age18: checked }))}
+                checked={requiredConsents.age16}
+                onChange={(checked) => setRequiredConsents((current) => ({ ...current, age16: checked }))}
               >
-                I confirm I am 18 or older.
+                I confirm I am 16 or older and have any additional guardian consent required by applicable law.
               </ConsentCheckbox>
             </fieldset>
           ) : null}

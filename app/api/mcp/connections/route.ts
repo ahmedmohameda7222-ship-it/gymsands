@@ -4,6 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { requireServerKeys, requireUser, serverEnv } from "@/lib/integrations/env";
 import { getSavedUserAiScopes, rotateMcpConnection } from "@/lib/mcp/connections";
 import { oauthRateLimit } from "@/lib/mcp/oauth";
+import { CHATGPT_CONNECTION_CONSENT_VERSION } from "@/lib/legal/versions";
 
 export const runtime = "nodejs";
 
@@ -103,6 +104,16 @@ export async function DELETE(request: Request) {
     if (error) {
       console.error("Plaivra MCP revoke error:", error.message);
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    const revokedAt = new Date().toISOString();
+    const consentUpdate = await supabase
+      .from("user_consents")
+      .update({ granted: false, revoked_at: revokedAt })
+      .eq("user_id", context.user.id)
+      .eq("consent_type", "chatgpt_connection")
+      .eq("version", CHATGPT_CONNECTION_CONSENT_VERSION);
+    if (consentUpdate.error) {
+      console.error("Plaivra ChatGPT consent revocation audit failed:", consentUpdate.error.message);
     }
     return NextResponse.json({ ok: true });
   } catch (error) {

@@ -37,6 +37,10 @@ const createMockSupabase = (overrides?: Record<string, unknown>) => {
           query = { ...query, values, action: "insert" };
           return builder;
         }),
+        upsert: vi.fn((values: Record<string, unknown>) => {
+          query = { ...query, values, action: "upsert" };
+          return builder;
+        }),
         update: vi.fn((values: Record<string, unknown>) => {
           query = { ...query, values, action: "update" };
           return builder;

@@ -1,19 +1,27 @@
 import { LegalPage, LegalSection } from "@/components/legal/legal-page";
+import { LEGAL_OPERATOR } from "@/lib/legal/operator";
 
 export default function ImpressumPage() {
   return (
-    <LegalPage eyebrow="Legal" title="Impressum" intro="Provider identification template under German law.">
-      <LegalSection title="Service provider">
-        <p>[Legal name / company name]</p>
-        <p>[Street and house number], [postal code and city], Germany</p>
-        <p>Email: [legal contact email] · Phone: [phone number]</p>
+    <LegalPage
+      eyebrow="Rechtliche Angaben"
+      title="Impressum"
+      intro="Anbieterkennzeichnung für Plaivra als individuell betriebenen digitalen Dienst."
+    >
+      <LegalSection title="Angaben gemäß § 5 DDG">
+        <p>Plaivra wird von Ahmed Mohamed als individuellem Betreiber geführt.</p>
+        <address className="not-italic">
+          {LEGAL_OPERATOR.name}<br />
+          {LEGAL_OPERATOR.street}<br />
+          {LEGAL_OPERATOR.postalCode} {LEGAL_OPERATOR.city}<br />
+          {LEGAL_OPERATOR.countryDe}
+        </address>
       </LegalSection>
-      <LegalSection title="Responsible person and registrations">
-        <p>[Managing director / person responsible for content]</p>
-        <p>[Commercial register, register court, registration number, VAT ID—where applicable]</p>
+      <LegalSection title="Kontakt">
+        <p>E-Mail: <a href={`mailto:${LEGAL_OPERATOR.email}`}>{LEGAL_OPERATOR.email}</a></p>
       </LegalSection>
-      <LegalSection title="Dispute resolution">
-        <p>[Add the legally reviewed consumer dispute-resolution statement applicable to the operator.]</p>
+      <LegalSection title="Verbraucherstreitbeilegung">
+        <p>Der Betreiber ist nicht verpflichtet und nicht bereit, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.</p>
       </LegalSection>
     </LegalPage>
   );

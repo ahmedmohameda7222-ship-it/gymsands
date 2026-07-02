@@ -4,6 +4,7 @@ import { serverEnv } from "@/lib/integrations/env";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { hashConnectionToken } from "@/lib/mcp/auth";
 import { MCP_DEFAULT_SCOPES, MCP_SCOPES, MCP_SUPPORTED_SCOPES, normalizeMcpScopes, resolveSavedAiPermissionScopes } from "@/lib/mcp/scopes";
+import { CHATGPT_CONNECTION_CONSENT_VERSION } from "@/lib/legal/versions";
 
 const AUTH_CODE_EXPIRY_MS = 5 * 60 * 1000;
 const ACCESS_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
@@ -364,6 +365,21 @@ export async function getAccessTokenAuthenticationRecord(token: string) {
   return { ...data, expired: new Date(data.expires_at) < new Date() };
 }
 
+async function recordChatGptConnectionConsent(userId: string, request: Request) {
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase.from("user_consents").upsert({
+    user_id: userId,
+    consent_type: "chatgpt_connection",
+    version: CHATGPT_CONNECTION_CONSENT_VERSION,
+    granted: true,
+    granted_at: new Date().toISOString(),
+    revoked_at: null,
+    ip_address: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
+    user_agent: request.headers.get("user-agent") || null
+  }, { onConflict: "user_id,consent_type,version" });
+  if (error) throw new Error("ChatGPT connection consent could not be recorded.");
+}
+
 export async function getAccessTokenRecord(token: string) {
   const record = await getAccessTokenAuthenticationRecord(token);
   return record && !record.expired ? record : null;
@@ -575,6 +591,7 @@ export async function handleOAuthAuthorizeDecision(request: Request, authenticat
     }
     const scope = permittedRequestedScopes.join(" ");
     const code = await createAuthorizationCode(connection, params.redirectUri, params.codeChallenge, scope, resource);
+    await recordChatGptConnectionConsent(connection.user_id, request);
     callback.searchParams.set("code", code);
     return NextResponse.json({ redirect_to: callback.toString() }, { headers: metadataHeaders() });
   } catch (error) {
