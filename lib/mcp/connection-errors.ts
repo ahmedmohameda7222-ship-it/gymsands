@@ -25,6 +25,13 @@ export function connectionCreationErrorMessage(payload: unknown): ConnectionCrea
     };
   }
 
+  if (code === "ai_permissions_lookup_failed") {
+    return {
+      title: "Could not verify AI permissions",
+      description: serverMessage || "AI permission settings could not be loaded. Please try again."
+    };
+  }
+
   if (code === "mcp_not_configured") {
     return {
       title: "ChatGPT connection unavailable",
