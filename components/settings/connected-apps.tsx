@@ -313,10 +313,10 @@ export function ChatGptSetupFlow() {
     setIsBusy(null);
 
     if (!response.ok) {
-      const permissionsRequired = response.status === 409 || String(data.error ?? "").includes("AI permissions required");
+      const isPermissionsError = data.code === "missing_ai_permissions" || String(data.error ?? "").includes("AI permissions required");
       toast({
-        title: permissionsRequired ? "AI permissions required" : "Could not create OAuth client",
-        description: permissionsRequired
+        title: isPermissionsError ? "AI permissions required" : "Could not create OAuth client",
+        description: isPermissionsError
           ? "Review and save AI Permissions before creating a ChatGPT OAuth client."
           : data.error ?? "Please try again. If this keeps happening, contact support."
       });

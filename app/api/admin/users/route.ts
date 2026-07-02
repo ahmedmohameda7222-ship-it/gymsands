@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/integrations/env";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { isUuid } from "@/lib/utils";
+import { rateLimit } from "@/lib/integrations/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  const limited = rateLimit(request, "admin-users-list", 30, 60_000);
+  if (limited) return limited;
+
   const context = await requireAdmin(request);
   if (context instanceof NextResponse) return context;
 
@@ -31,6 +35,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const limited = rateLimit(request, "admin-users-update", 10, 60_000);
+  if (limited) return limited;
+
   const context = await requireAdmin(request);
   if (context instanceof NextResponse) return context;
 

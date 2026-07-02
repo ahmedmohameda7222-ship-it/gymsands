@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { requireUser } from "@/lib/integrations/env";
+import { rateLimit } from "@/lib/integrations/rate-limit";
 import {
   MCP_SCOPES,
   MCP_FULL_ACCESS_SCOPES,
@@ -30,6 +31,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const limited = rateLimit(request, "ai-permissions-save", 10, 60_000);
+  if (limited) return limited;
+
   const context = await requireUser(request);
   if (context instanceof NextResponse) return context;
 

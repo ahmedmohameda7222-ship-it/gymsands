@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/integrations/env";
 import { buildCurrentUserDataExport } from "@/lib/privacy/data-export";
+import { rateLimit } from "@/lib/integrations/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  const limited = rateLimit(request, "data-export", 3, 60_000);
+  if (limited) return limited;
+
   const context = await requireUser(request);
   if (context instanceof NextResponse) return context;
 

@@ -53,8 +53,8 @@ export async function POST(request: Request) {
   const userScopes = await getSavedUserAiScopes(supabase, context.user.id);
   if (!userScopes.length) {
     return NextResponse.json(
-      { error: "AI permission settings are missing. Configure AI Permissions in Settings before connecting ChatGPT." },
-      { status: 409 }
+      { error: "AI permission settings are missing. Configure AI Permissions in Settings before connecting ChatGPT.", code: "missing_ai_permissions" },
+      { status: 403 }
     );
   }
 
@@ -68,12 +68,12 @@ export async function POST(request: Request) {
 
   if (error || !data) {
     console.error("Plaivra MCP secure rotation failed:", error?.message ?? "No connection returned");
-    return NextResponse.json({ error: "Could not securely rotate the ChatGPT connection. No new connection was created." }, { status: 409 });
+    return NextResponse.json({ error: "Could not securely rotate the ChatGPT connection. No new connection was created.", code: "connection_rotation_failed" }, { status: 500 });
   }
 
   const connection = Array.isArray(data) ? data[0] : data;
   if (!connection) {
-    return NextResponse.json({ error: "Could not securely rotate the ChatGPT connection. No new connection was created." }, { status: 409 });
+    return NextResponse.json({ error: "Could not securely rotate the ChatGPT connection. No new connection was created.", code: "connection_rotation_failed" }, { status: 500 });
   }
 
   return NextResponse.json({

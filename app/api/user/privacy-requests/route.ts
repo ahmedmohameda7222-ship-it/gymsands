@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/integrations/env";
+import { rateLimit } from "@/lib/integrations/rate-limit";
 
 const allowedRequestTypes = new Set(["access", "export", "deletion", "portability", "correction", "restriction"]);
 
@@ -31,6 +32,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const limited = rateLimit(request, "privacy-request", 5, 60_000);
+  if (limited) return limited;
+
   const context = await requireUser(request);
   if (context instanceof NextResponse) return context;
 
