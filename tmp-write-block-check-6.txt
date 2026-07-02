@@ -1,0 +1,1 @@
+supabase.from(savedAccessSettingsTable).select("access_mode,scopes").maybeSingle();
