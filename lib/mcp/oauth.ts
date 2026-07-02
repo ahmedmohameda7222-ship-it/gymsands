@@ -10,6 +10,18 @@ const ACCESS_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 const AUTHORIZE_RATE_LIMIT = 10;
 const TOKEN_RATE_LIMIT = 10;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
+const OAUTH_CONTINUATION_EXPIRY_MS = 10 * 60 * 1000;
+
+type OAuthAuthorizationRequest = {
+  responseType: string;
+  clientId: string;
+  redirectUri: string;
+  state: string | null;
+  requestedScope: string;
+  codeChallenge: string;
+  codeChallengeMethod: string;
+  requestedResource: string;
+};
 
 function originFromRequest(request: Request) {
   const url = new URL(request.url);
@@ -101,6 +113,53 @@ function safeEqual(a: string, b: string) {
 
 function isValidUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function readOAuthAuthorizationRequest(request: Request): OAuthAuthorizationRequest {
+  const url = new URL(request.url);
+  return {
+    responseType: url.searchParams.get("response_type") ?? "",
+    clientId: url.searchParams.get("client_id")?.trim() ?? "",
+    redirectUri: url.searchParams.get("redirect_uri")?.trim() ?? "",
+    state: url.searchParams.get("state"),
+    requestedScope: url.searchParams.get("scope") || MCP_DEFAULT_SCOPES.join(" "),
+    codeChallenge: url.searchParams.get("code_challenge")?.trim() ?? "",
+    codeChallengeMethod: url.searchParams.get("code_challenge_method")?.trim() ?? "",
+    requestedResource: url.searchParams.get("resource")?.trim() ?? ""
+  };
+}
+
+function canonicalAuthorizationSearch(params: OAuthAuthorizationRequest) {
+  const search = new URLSearchParams();
+  search.set("response_type", params.responseType);
+  search.set("client_id", params.clientId);
+  search.set("redirect_uri", params.redirectUri);
+  if (params.state) search.set("state", params.state);
+  if (params.requestedScope) search.set("scope", params.requestedScope);
+  search.set("code_challenge", params.codeChallenge);
+  search.set("code_challenge_method", params.codeChallengeMethod);
+  if (params.requestedResource) search.set("resource", params.requestedResource);
+  return search;
+}
+
+export function createOAuthContinuation(params: OAuthAuthorizationRequest, issuedAt = Date.now()) {
+  const payload = `${issuedAt}.${canonicalAuthorizationSearch(params).toString()}`;
+  return `${issuedAt}.${hashValue(`oauth-continuation:${payload}`)}`;
+}
+
+export function verifyOAuthContinuation(
+  params: OAuthAuthorizationRequest,
+  continuation: string,
+  now = Date.now()
+) {
+  const [issuedAtValue, signature, ...extra] = continuation.split(".");
+  if (!issuedAtValue || !signature || extra.length) return false;
+  const issuedAt = Number(issuedAtValue);
+  if (!Number.isFinite(issuedAt) || issuedAt > now + 60_000 || now - issuedAt > OAUTH_CONTINUATION_EXPIRY_MS) {
+    return false;
+  }
+  const expected = createOAuthContinuation(params, issuedAt).split(".")[1];
+  return Boolean(expected && safeEqual(signature, expected));
 }
 
 function isLegacyClientIdFormat(value: string) {
@@ -290,7 +349,7 @@ async function createAccessToken(connection: ResolvedConnection, scope: string, 
   return rawToken;
 }
 
-export async function getAccessTokenRecord(token: string) {
+export async function getAccessTokenAuthenticationRecord(token: string) {
   if (!token.startsWith("plaivra_mcp_at_")) return null;
   const tokenHash = hashAccessToken(token);
   const supabase = createSupabaseAdminClient();
@@ -302,8 +361,12 @@ export async function getAccessTokenRecord(token: string) {
 
   if (error) throw new Error(error.message);
   if (!data) return null;
-  if (new Date(data.expires_at) < new Date()) return null;
-  return data;
+  return { ...data, expired: new Date(data.expires_at) < new Date() };
+}
+
+export async function getAccessTokenRecord(token: string) {
+  const record = await getAccessTokenAuthenticationRecord(token);
+  return record && !record.expired ? record : null;
 }
 
 async function getUserAiScopes(userId: string): Promise<string[]> {
@@ -318,6 +381,17 @@ async function getUserAiScopes(userId: string): Promise<string[]> {
     return resolveSavedAiPermissionScopes(data.access_mode, data.scopes);
   }
   return [];
+}
+
+function permittedOAuthScopes(requestedScope: string, userScopes: string[]) {
+  const requested = Array.from(new Set(requestedScope.split(/\s+/).map((scope) => scope.trim()).filter(Boolean)));
+  if (!requested.length) return userScopes;
+  const normalized = normalizeMcpScopes(requested, []);
+  if (normalized.length !== requested.length) return [];
+  const allowedScopes = new Set(userScopes);
+  return normalized.filter(
+    (scope) => scope !== MCP_SCOPES.admin && scope !== MCP_SCOPES.all && allowedScopes.has(scope)
+  );
 }
 
 export function oauthAuthorizationServerMetadata(request: Request) {
@@ -356,14 +430,17 @@ export function oauthProtectedResourceMetadata(request: Request) {
 
 export async function handleOAuthAuthorize(request: Request) {
   const url = new URL(request.url);
-  const responseType = url.searchParams.get("response_type");
-  const clientId = url.searchParams.get("client_id")?.trim() ?? "";
-  const redirectUri = url.searchParams.get("redirect_uri")?.trim() ?? "";
-  const state = url.searchParams.get("state");
-  const requestedScope = url.searchParams.get("scope") || MCP_DEFAULT_SCOPES.join(" ");
-  const codeChallenge = url.searchParams.get("code_challenge")?.trim() ?? "";
-  const codeChallengeMethod = url.searchParams.get("code_challenge_method")?.trim() ?? "";
-  const requestedResource = url.searchParams.get("resource")?.trim() ?? "";
+  const params = readOAuthAuthorizationRequest(request);
+  const {
+    responseType,
+    clientId,
+    redirectUri,
+    state,
+    requestedScope,
+    codeChallenge,
+    codeChallengeMethod,
+    requestedResource
+  } = params;
   const canonicalResource = getCanonicalResource(request);
 
   if (!redirectUri || !isAllowedRedirectUri(redirectUri)) {
@@ -413,20 +490,98 @@ export async function handleOAuthAuthorize(request: Request) {
     if (!userScopes.length) {
       return oauthErrorRedirect(redirectUri, state, "access_denied", "Review and save Plaivra AI Permissions before connecting ChatGPT.");
     }
-    const allowedScopes = new Set(userScopes);
-    const permittedRequestedScopes = normalizeMcpScopes(requestedScope, userScopes).filter(
-      (scope) => scope !== MCP_SCOPES.admin && scope !== MCP_SCOPES.all && allowedScopes.has(scope)
-    );
-    const scope = (permittedRequestedScopes.length ? permittedRequestedScopes : userScopes).join(" ");
+    const permittedRequestedScopes = permittedOAuthScopes(requestedScope, userScopes);
+    if (requestedScope.trim() && !permittedRequestedScopes.length) {
+      return oauthErrorRedirect(redirectUri, state, "invalid_scope", "The requested Plaivra permissions are unsupported or have not been granted by the user.");
+    }
+    const scope = permittedRequestedScopes.join(" ");
 
-    const code = await createAuthorizationCode(connection, redirectUri, codeChallenge, scope, resource);
-
-    const callback = new URL(redirectUri);
-    callback.searchParams.set("code", code);
-    if (state) callback.searchParams.set("state", state);
-    return NextResponse.redirect(callback);
+    const consentParams: OAuthAuthorizationRequest = {
+      ...params,
+      requestedScope: scope,
+      requestedResource: resource
+    };
+    const consentUrl = new URL("/oauth/authorize", url.origin);
+    const consentSearch = canonicalAuthorizationSearch(consentParams);
+    for (const [key, value] of consentSearch) consentUrl.searchParams.set(key, value);
+    consentUrl.searchParams.set("continuation", createOAuthContinuation(consentParams));
+    return NextResponse.redirect(consentUrl);
   } catch (error) {
     return oauthErrorRedirect(redirectUri, state, "server_error", error instanceof Error ? error.message : "Plaivra OAuth authorization failed.");
+  }
+}
+
+export async function handleOAuthAuthorizeDecision(request: Request, authenticatedUserId: string) {
+  const url = new URL(request.url);
+  const params = readOAuthAuthorizationRequest(request);
+  const continuation = url.searchParams.get("continuation") ?? "";
+  const canonicalResource = getCanonicalResource(request);
+
+  if (!params.redirectUri || !isAllowedRedirectUri(params.redirectUri)) {
+    return NextResponse.json({ error: "invalid_redirect_uri", error_description: "ChatGPT OAuth callback URL is required." }, { status: 400, headers: metadataHeaders() });
+  }
+  if (params.responseType !== "code" || !params.clientId || !supportedClientIdFormat(params.clientId)) {
+    return NextResponse.json({ error: "invalid_request", error_description: "OAuth authorization request is invalid." }, { status: 400, headers: metadataHeaders() });
+  }
+  if (!params.codeChallenge || params.codeChallengeMethod !== "S256") {
+    return NextResponse.json({ error: "invalid_request", error_description: "PKCE S256 is required." }, { status: 400, headers: metadataHeaders() });
+  }
+  if (!verifyOAuthContinuation(params, continuation)) {
+    return NextResponse.json({ error: "invalid_request", error_description: "Authorization continuation is invalid, expired, or was changed. Start the connection again from ChatGPT." }, { status: 400, headers: metadataHeaders() });
+  }
+
+  const resource = params.requestedResource || canonicalResource;
+  if (resource !== canonicalResource) {
+    return NextResponse.json({ error: "invalid_target", error_description: "The requested resource is not supported by this authorization server." }, { status: 400, headers: metadataHeaders() });
+  }
+
+  const rateLimitKey = `authorize_decision:${oauthClientIp(request)}:${rateLimitDigest(params.clientId)}`;
+  const rateLimitError = await oauthRateLimit(rateLimitKey, AUTHORIZE_RATE_LIMIT, RATE_LIMIT_WINDOW_SECONDS);
+  if (rateLimitError) {
+    return NextResponse.json({ error: "invalid_request", error_description: "Too many authorization requests. Please try again later." }, { status: 429, headers: metadataHeaders() });
+  }
+
+  let body: { decision?: unknown } = {};
+  try {
+    body = await request.json() as { decision?: unknown };
+  } catch {
+    return NextResponse.json({ error: "invalid_request", error_description: "A consent decision is required." }, { status: 400, headers: metadataHeaders() });
+  }
+  if (body.decision !== "approve" && body.decision !== "deny") {
+    return NextResponse.json({ error: "invalid_request", error_description: "Consent decision must be approve or deny." }, { status: 400, headers: metadataHeaders() });
+  }
+
+  try {
+    const connection = await resolveClientId(params.clientId);
+    if (!connection || connection.user_id !== authenticatedUserId) {
+      return NextResponse.json({ error: "access_denied", error_description: "This OAuth client belongs to a different Plaivra account or is no longer active." }, { status: 403, headers: metadataHeaders() });
+    }
+
+    const callback = new URL(params.redirectUri);
+    if (params.state) callback.searchParams.set("state", params.state);
+    if (body.decision === "deny") {
+      callback.searchParams.set("error", "access_denied");
+      callback.searchParams.set("error_description", "The Plaivra account owner declined ChatGPT access.");
+      return NextResponse.json({ redirect_to: callback.toString() }, { headers: metadataHeaders() });
+    }
+
+    const userScopes = await getUserAiScopes(connection.user_id);
+    if (!userScopes.length) {
+      return NextResponse.json({ error: "access_denied", error_description: "Review and save Plaivra AI Permissions before connecting ChatGPT." }, { status: 403, headers: metadataHeaders() });
+    }
+    const permittedRequestedScopes = permittedOAuthScopes(params.requestedScope, userScopes);
+    if (params.requestedScope.trim() && !permittedRequestedScopes.length) {
+      return NextResponse.json({ error: "invalid_scope", error_description: "The requested Plaivra permissions are unsupported or have not been granted by the user." }, { status: 400, headers: metadataHeaders() });
+    }
+    const scope = permittedRequestedScopes.join(" ");
+    const code = await createAuthorizationCode(connection, params.redirectUri, params.codeChallenge, scope, resource);
+    callback.searchParams.set("code", code);
+    return NextResponse.json({ redirect_to: callback.toString() }, { headers: metadataHeaders() });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "server_error", error_description: error instanceof Error ? error.message : "Plaivra OAuth authorization failed." },
+      { status: 500, headers: metadataHeaders() }
+    );
   }
 }
 

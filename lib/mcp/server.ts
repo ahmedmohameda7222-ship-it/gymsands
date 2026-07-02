@@ -182,17 +182,25 @@ export function canUseTool(ctx: McpContext, tool: McpToolDefinition) {
 }
 
 export async function auditToolCall(ctx: McpContext, toolName: string, input: unknown, result: McpToolResult) {
+  const confirmationRequired = Boolean(result.structuredContent?.requires_confirmation);
+  const resultCode = typeof result.structuredContent?.code === "string" && /^[a-z0-9_]{1,64}$/.test(result.structuredContent.code)
+    ? result.structuredContent.code
+    : confirmationRequired
+      ? "confirmation_required"
+      : null;
   await ctx.supabase.from("mcp_audit_logs").insert({
     user_id: ctx.userId,
     connection_id: ctx.connectionId,
     tool_name: toolName,
     input: redactMcpAuditInput(toolName, input),
     output_summary: {
-      is_error: Boolean(result.isError),
+      is_error: Boolean(result.isError) || confirmationRequired,
+      denied: confirmationRequired,
       keys: Object.keys(result.structuredContent ?? {}).slice(0, 20),
-      requires_confirmation: Boolean(result.structuredContent?.requires_confirmation)
+      requires_confirmation: confirmationRequired,
+      reason_code: resultCode
     },
-    status: result.isError ? "error" : "success",
+    status: result.isError || confirmationRequired ? "error" : "success",
     error_message: result.isError ? String(result.structuredContent.message ?? "Tool failed") : null
   });
 }
@@ -206,8 +214,9 @@ export async function auditDeniedToolCall(ctx: McpContext, tool: McpToolDefiniti
     output_summary: {
       is_error: true,
       denied: true,
+      reason_code: "missing_scope",
       required_scopes: requiredScopesForTool(tool),
-      current_scopes: ctx.scopes
+      current_scope_count: ctx.scopes.length
     },
     status: "error",
     error_message: message

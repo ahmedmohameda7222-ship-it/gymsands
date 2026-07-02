@@ -13,6 +13,7 @@ import {
   type AiPermissionConfig,
   ALL_AI_PERMISSION_SECTIONS
 } from "@/services/database/ai-permissions";
+import { AI_PERMISSION_SECTION_DETAILS, FULL_ACCESS_WARNING } from "@/lib/mcp/permission-presentation";
 
 export function AiPermissionsCard() {
   const { user } = useAuth();
@@ -72,7 +73,7 @@ export function AiPermissionsCard() {
           <CardTitle className="flex items-center gap-2 text-base">
             <Shield className="h-5 w-5 text-primary" /> AI Permissions
           </CardTitle>
-          <CardDescription>Choose what AI can read and manage in your Plaivra account.</CardDescription>
+          <CardDescription>Choose the Plaivra areas ChatGPT may read or manage. Permissions are off until you save them.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           {/* Mode selection */}
@@ -94,9 +95,9 @@ export function AiPermissionsCard() {
                 )}
               </div>
               <div>
-                <p className="font-semibold">Full AI Access</p>
+                <p className="font-semibold">Full AI Access — broad access</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Full AI Access lets ChatGPT read and manage workouts, nutrition, meal plans, hydration, wellness, progress, profile and settings data.
+                  {FULL_ACCESS_WARNING}
                 </p>
               </div>
             </button>
@@ -118,9 +119,9 @@ export function AiPermissionsCard() {
                 )}
               </div>
               <div>
-                <p className="font-semibold">Custom AI Access</p>
+                <p className="font-semibold">Custom AI Access — least privilege</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Choose exactly which sections AI can read or update.
+                  Choose only the areas and actions needed for how you use ChatGPT.
                 </p>
               </div>
             </button>
@@ -133,10 +134,14 @@ export function AiPermissionsCard() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {ALL_AI_PERMISSION_SECTIONS.map((section) => {
                   const perms = config.sections[section];
+                  const details = AI_PERMISSION_SECTION_DETAILS[section];
                   return (
                     <div key={section} className="rounded-2xl border bg-card p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold capitalize">{section.replace("_", " ")}</p>
+                        <div>
+                          <p className="text-sm font-semibold">{details.label}</p>
+                          {details.sensitive ? <p className="mt-1 text-xs font-medium text-amber-700">Contains sensitive fitness or wellness data</p> : null}
+                        </div>
                         <div className="flex gap-2">
                           <button
                             type="button"
@@ -186,6 +191,10 @@ export function AiPermissionsCard() {
                           </button>
                         </div>
                       </div>
+                      <div className="space-y-1 text-xs leading-5 text-muted-foreground">
+                        <p><span className="font-semibold text-foreground">Read:</span> {details.readDescription}</p>
+                        <p><span className="font-semibold text-foreground">Create & update:</span> {details.writeDescription}</p>
+                      </div>
                       {perms.write ? (
                         <p className="text-xs text-muted-foreground">Write access includes read access for this section.</p>
                       ) : null}
@@ -198,7 +207,7 @@ export function AiPermissionsCard() {
 
           {/* Trust message */}
           <p className="text-sm text-muted-foreground">
-            You can change or revoke AI access anytime from Settings. AI can only access what you allow.
+            You can disable a permission and save at any time. Missing or empty permissions fail closed, so ChatGPT cannot access Plaivra data until you explicitly allow it.
           </p>
 
           {!hasSavedSettings ? (

@@ -184,6 +184,18 @@ describe("MCP audit redaction", () => {
     expect(serialized).not.toContain("ignore prior instructions");
     expect(serialized).not.toContain("plaivra_mcp_super_secret_value");
   });
+
+  it("records missing destructive confirmation as a denied action", async () => {
+    let inserted: Record<string, unknown> | null = null;
+    const ctx = contextWith({ from: () => ({ insert: async (row: Record<string, unknown>) => { inserted = row; return { error: null }; } }) });
+    await auditToolCall(ctx, "delete_food_log", { confirm: false }, {
+      structuredContent: { requires_confirmation: true, message: "Confirmation required." },
+      content: []
+    });
+    const saved = inserted as unknown as Record<string, unknown>;
+    expect(saved.status).toBe("error");
+    expect(saved.output_summary).toMatchObject({ denied: true, reason_code: "confirmation_required" });
+  });
 });
 
 describe("atomic MCP rate-limit client", () => {

@@ -4,6 +4,7 @@ import {
   oauthAuthorizationServerMetadata,
   oauthProtectedResourceMetadata,
   handleOAuthAuthorize,
+  handleOAuthAuthorizeDecision,
   handleOAuthToken,
   handleOAuthRegister,
   getAccessTokenRecord,
@@ -236,7 +237,7 @@ describe("handleOAuthAuthorize", () => {
     expect(location).toContain("Only+S256+code_challenge_method+is+supported");
   });
 
-  it("requires S256 and stores an authorization code", async () => {
+  it("requires S256, continues to consent, and stores a code only after owner approval", async () => {
     const mock = setupMockSupabase({
       chatgpt_connections: { data: mockConnection, error: null },
       user_ai_permission_settings: { data: mockPermissionSettings, error: null },
@@ -254,12 +255,92 @@ describe("handleOAuthAuthorize", () => {
     const response = await handleOAuthAuthorize(request);
     expect(response.status).toBe(307);
     const location = response.headers.get("location") ?? "";
-    expect(location).toContain("code=plaivra_ac_");
+    expect(location).toContain("/oauth/authorize?");
+    expect(location).toContain("continuation=");
     expect(location).not.toContain("error=");
+    expect(mock.from.mock.calls.find((c: string[]) => c[0] === "mcp_oauth_authorization_codes")).toBeUndefined();
+
+    const consentUrl = new URL(location);
+    const decisionUrl = new URL("https://plaivra.com/api/oauth/authorize");
+    decisionUrl.search = consentUrl.search;
+    const decision = await handleOAuthAuthorizeDecision(new Request(decisionUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: "approve" })
+    }), TEST_USER_ID);
+    expect(decision.status).toBe(200);
+    const decisionBody = await decision.json() as { redirect_to: string };
+    expect(decisionBody.redirect_to).toContain("code=plaivra_ac_");
 
     // Verify insert was called with correct PKCE binding
     const authCodeInsert = mock.from.mock.calls.find((c: string[]) => c[0] === "mcp_oauth_authorization_codes");
     expect(authCodeInsert).toBeTruthy();
+  });
+
+  it("rejects a consent continuation changed after login", async () => {
+    setupMockSupabase({
+      chatgpt_connections: { data: mockConnection, error: null },
+      user_ai_permission_settings: { data: mockPermissionSettings, error: null }
+    });
+    const url = new URL("https://plaivra.com/api/oauth/authorize");
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("client_id", TEST_CLIENT_SECRET);
+    url.searchParams.set("redirect_uri", "https://chatgpt.com/connector/oauth/callback");
+    url.searchParams.set("code_challenge", "challenge123");
+    url.searchParams.set("code_challenge_method", "S256");
+    const start = await handleOAuthAuthorize(new Request(url));
+    const consentUrl = new URL(start.headers.get("location") ?? "");
+    consentUrl.searchParams.set("scope", "plaivra.profile.write");
+    const decisionUrl = new URL("https://plaivra.com/api/oauth/authorize");
+    decisionUrl.search = consentUrl.search;
+    const decision = await handleOAuthAuthorizeDecision(new Request(decisionUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: "approve" })
+    }), TEST_USER_ID);
+    expect(decision.status).toBe(400);
+    expect((await decision.json() as { error_description: string }).error_description).toContain("changed");
+  });
+
+  it("does not let another signed-in Plaivra user approve the client", async () => {
+    setupMockSupabase({
+      chatgpt_connections: { data: mockConnection, error: null },
+      user_ai_permission_settings: { data: mockPermissionSettings, error: null }
+    });
+    const url = new URL("https://plaivra.com/api/oauth/authorize");
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("client_id", TEST_CLIENT_SECRET);
+    url.searchParams.set("redirect_uri", "https://chatgpt.com/connector/oauth/callback");
+    url.searchParams.set("code_challenge", "challenge123");
+    url.searchParams.set("code_challenge_method", "S256");
+    const start = await handleOAuthAuthorize(new Request(url));
+    const consentUrl = new URL(start.headers.get("location") ?? "");
+    const decisionUrl = new URL("https://plaivra.com/api/oauth/authorize");
+    decisionUrl.search = consentUrl.search;
+    const decision = await handleOAuthAuthorizeDecision(new Request(decisionUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: "approve" })
+    }), "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12");
+    expect(decision.status).toBe(403);
+    expect((await decision.json() as { error: string }).error).toBe("access_denied");
+  });
+
+  it("does not broaden an unsupported or unsaved requested scope", async () => {
+    setupMockSupabase({
+      chatgpt_connections: { data: mockConnection, error: null },
+      user_ai_permission_settings: { data: mockPermissionSettings, error: null }
+    });
+    const url = new URL("https://plaivra.com/api/oauth/authorize");
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("client_id", TEST_CLIENT_SECRET);
+    url.searchParams.set("redirect_uri", "https://chatgpt.com/connector/oauth/callback");
+    url.searchParams.set("scope", "plaivra.profile.write");
+    url.searchParams.set("code_challenge", "challenge123");
+    url.searchParams.set("code_challenge_method", "S256");
+    const response = await handleOAuthAuthorize(new Request(url));
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toContain("error=invalid_scope");
   });
 });
 
@@ -893,7 +974,8 @@ describe("OAuth resource binding", () => {
     const response = await handleOAuthAuthorize(request);
     expect(response.status).toBe(307);
     const location = response.headers.get("location") ?? "";
-    expect(location).toContain("code=plaivra_ac_");
+    expect(location).toContain("/oauth/authorize?");
+    expect(location).toContain("resource=https%3A%2F%2Fplaivra.com%2Fapi%2Fmcp");
     expect(location).not.toContain("error=");
   });
 

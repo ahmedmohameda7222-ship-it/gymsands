@@ -2,7 +2,7 @@
 
 import { SettingsPageShell } from "@/components/settings/settings-page-shell";
 import { AiPermissionsCard } from "@/components/settings/ai-permissions-card";
-import { ChatGptSetupCard, ConnectionStatusCard } from "@/components/settings/connected-apps";
+import { ChatGptActivityCard, ChatGptSetupCard, ConnectionStatusCard } from "@/components/settings/connected-apps";
 import { useTranslation } from "@/lib/i18n/use-translation";
 
 export default function AiImportsSettingsPage() {
@@ -17,6 +17,7 @@ export default function AiImportsSettingsPage() {
         <ChatGptSetupCard />
         <AiPermissionsCard />
         <ConnectionStatusCard />
+        <ChatGptActivityCard />
       </div>
 
     </SettingsPageShell>

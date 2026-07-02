@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/toaster";
 import { supabase, setRememberSession } from "@/lib/supabase/client";
 import { defaultStartPageToPath, getUserAppSettings } from "@/services/database/user-settings";
 import { PENDING_CONSENTS_STORAGE_KEY, REQUIRED_CONSENTS } from "@/lib/legal/versions";
+import { safeInternalRedirectPath } from "@/lib/auth/redirect";
 
 type RequiredConsentKey = "terms" | "privacy" | "fitnessData" | "disclaimer" | "age18";
 
@@ -99,7 +100,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         toast({ title: "Welcome back to Plaivra", description: "Your session is ready." });
         const explicitNext = searchParams.get("next");
         const settings = explicitNext ? null : await getUserAppSettings(data.session.user.id).catch(() => null);
-        router.replace(explicitNext ?? defaultStartPageToPath(settings?.defaultStartPage ?? "today"));
+        router.replace(explicitNext
+          ? safeInternalRedirectPath(explicitNext)
+          : defaultStartPageToPath(settings?.defaultStartPage ?? "today"));
         router.refresh();
       } else {
         const { data, error } = await withAuthTimeout(supabase.auth.signUp({

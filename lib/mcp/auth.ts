@@ -6,7 +6,7 @@ import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import {
   resolveSavedAiPermissionScopes
 } from "@/lib/mcp/scopes";
-import { getAccessTokenRecord } from "@/lib/mcp/oauth";
+import { getAccessTokenAuthenticationRecord } from "@/lib/mcp/oauth";
 
 export type McpProfile = {
   id: string;
@@ -123,6 +123,24 @@ export function resolveMcpPermissionScopes(
   return resolveSavedAiPermissionScopes(permissionSettings.access_mode, permissionSettings.scopes);
 }
 
+async function auditMcpAuthenticationDenied(
+  supabase: SupabaseClient,
+  userId: string | null,
+  connectionId: string | null,
+  reasonCode: "expired_token" | "revoked_connection" | "invalid_resource" | "missing_permissions" | "stale_permissions"
+) {
+  if (!userId || !connectionId) return;
+  await supabase.from("mcp_audit_logs").insert({
+    user_id: userId,
+    connection_id: connectionId,
+    tool_name: "connection_authorization",
+    input: { version: 1, tool_name: "connection_authorization", input_keys: [], object_ids: {}, counts: {}, flags: {} },
+    output_summary: { is_error: true, denied: true, reason_code: reasonCode },
+    status: "error",
+    error_message: null
+  });
+}
+
 export async function authenticateMcpRequest(request: Request): Promise<McpContext | NextResponse> {
   const url = new URL(request.url);
   const token = getBearerToken(request);
@@ -142,12 +160,16 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
   // Phase 2: OAuth access tokens (plaivra_mcp_at_...)
   if (token.startsWith("plaivra_mcp_at_")) {
     try {
-      const accessRecord = await getAccessTokenRecord(token);
+      const accessRecord = await getAccessTokenAuthenticationRecord(token);
       if (!accessRecord) {
         return unauthorizedMcpResponse(request, "Access token is invalid or expired. Reconnect Plaivra from ChatGPT settings.");
       }
       connectionId = accessRecord.connection_id;
       userId = accessRecord.user_id;
+      if (accessRecord.expired) {
+        await auditMcpAuthenticationDenied(supabase, userId, connectionId, "expired_token");
+        return unauthorizedMcpResponse(request, "Access token is invalid or expired. Reconnect Plaivra from ChatGPT settings.");
+      }
       tokenScopes = Array.isArray(accessRecord.scope) ? accessRecord.scope : [];
       tokenResource = accessRecord.resource ?? null;
     } catch (error) {
@@ -171,6 +193,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
 
   if (connectionError) return badMcpRequest("Could not verify the ChatGPT connection.", connectionError);
   if (!connectionIsUsable(connection)) {
+    await auditMcpAuthenticationDenied(supabase, userId, connectionId, "revoked_connection");
     return unauthorizedMcpResponse(request, "ChatGPT connection is inactive or revoked. Reconnect in Plaivra Settings.");
   }
 
@@ -191,6 +214,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
   // Verify the token was minted for this protected resource.
   const canonicalResource = serverEnv.plaivraMcpBaseUrl || `${url.origin}/api/mcp`;
   if (!tokenResource || tokenResource !== canonicalResource) {
+    await auditMcpAuthenticationDenied(supabase, userId, connectionId, "invalid_resource");
     return unauthorizedMcpResponse(request, "Access token resource mismatch. Reconnect Plaivra from ChatGPT settings.", 401);
   }
 
@@ -204,6 +228,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
   const resolvedScopes = resolveMcpPermissionScopes(permissionSettings, permissionError);
 
   if (!resolvedScopes.length) {
+    await auditMcpAuthenticationDenied(supabase, userId, connectionId, "missing_permissions");
     return unauthorizedMcpResponse(request, "AI permission settings are missing for this account. Please configure AI Permissions in Settings.", 403);
   }
 
@@ -212,6 +237,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
   const effectiveScopes = tokenScopes?.filter((s) => allowedScopeSet.has(s)) ?? [];
 
   if (!effectiveScopes.length) {
+    await auditMcpAuthenticationDenied(supabase, userId, connectionId, "stale_permissions");
     return unauthorizedMcpResponse(request, "AI permission settings have changed. Reconnect Plaivra from ChatGPT settings to refresh permissions.", 403);
   }
 

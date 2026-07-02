@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
+  Activity,
   Bot,
   CheckCircle2,
   Copy,
   ExternalLink,
   KeyRound,
   Link2,
+  Loader2,
   RefreshCcw,
   Shield,
   Trash2
@@ -21,10 +23,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toaster";
 import { env } from "@/lib/env";
+import type { PublicMcpActivity } from "@/lib/mcp/activity";
 
 const chatGptUrl = "https://chatgpt.com";
 const appDescription =
   "Plaivra imports approved workout and meal plans from ChatGPT into the user's Plaivra account.";
+export const CHATGPT_SECURITY_RECONNECT_MESSAGE =
+  "ChatGPT connection updated for security. Please reconnect Plaivra from ChatGPT settings. Use your Client ID from Settings → ChatGPT Setup. Your old connection code is no longer used as an access token.";
 
 type ChatGptConnection = {
   id: string;
@@ -92,6 +97,12 @@ export function ChatGptSetupCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+          {CHATGPT_SECURITY_RECONNECT_MESSAGE}
+        </p>
+        <p className="text-sm leading-6 text-muted-foreground">
+          ChatGPT access follows your saved AI Permissions and fails closed when permissions are missing or disabled. You can revoke access at any time.
+        </p>
         {!hasMcpServerUrl ? (
           <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
             ChatGPT import is not ready for this deployment. The Plaivra connection URL is missing.
@@ -139,6 +150,11 @@ export function ConnectionStatusCard() {
       return;
     }
 
+    const confirmed = window.confirm(
+      "Revoke ChatGPT access now? Existing ChatGPT access tokens will stop working. Your Plaivra account and fitness data will not be deleted."
+    );
+    if (!confirmed) return;
+
     setIsBusy("chatgpt-revoke");
     const response = await fetch("/api/mcp/connections", { method: "DELETE", headers: authHeaders() });
     const data = await response.json().catch(() => ({}));
@@ -150,7 +166,7 @@ export function ConnectionStatusCard() {
     }
 
     await loadConnections();
-    toast({ title: "Connection revoked", description: "Active ChatGPT connections were revoked for this account." });
+    toast({ title: "ChatGPT access revoked", description: "Existing access tokens no longer work. Reconnect from ChatGPT when you are ready." });
   }
 
   const currentConnection = getConnectionStatus(connections);
@@ -172,6 +188,9 @@ export function ConnectionStatusCard() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+          {CHATGPT_SECURITY_RECONNECT_MESSAGE}
+        </p>
         <div className="rounded-md border border-border/70 bg-muted/30 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-semibold text-foreground">{isConnected ? "Connected" : "Not connected"}</p>
@@ -198,6 +217,14 @@ export function ConnectionStatusCard() {
         >
           <Trash2 className="h-4 w-4" /> Revoke connection
         </Button>
+        <p className="text-xs leading-5 text-muted-foreground">
+          Revoking stops ChatGPT access immediately. It does not delete your Plaivra account, plans, logs, or progress data.
+        </p>
+        {!isConnected ? (
+          <Button asChild variant="outline" className="w-full sm:w-auto">
+            <Link href="/settings/ai-imports/chatgpt-setup">Reconnect ChatGPT</Link>
+          </Button>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -222,7 +249,11 @@ export function ChatGptSetupFlow() {
     if (!session?.access_token) return;
     const response = await fetch("/api/mcp/connections", { headers: authHeaders() });
     const data = await response.json().catch(() => ({}));
-    if (response.ok) setConnections(data.connections ?? []);
+    if (response.ok) {
+      const nextConnections = data.connections ?? [];
+      setConnections(nextConnections);
+      setConnectionClientId(getConnectionStatus(nextConnections)?.id ?? "");
+    }
   }, [authHeaders, session?.access_token]);
 
   useEffect(() => {
@@ -308,8 +339,9 @@ export function ChatGptSetupFlow() {
       <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm leading-6 text-muted-foreground">
         <p className="font-semibold text-foreground">Follow these steps carefully. The setup is done on the ChatGPT website.</p>
         <p className="mt-2">
-          If ChatGPT uses slightly different wording, choose the option that means "Apps," "Connectors," "Developer mode," or "Create app."
+          If ChatGPT uses slightly different wording, choose the option that means "Apps," "Connectors," "Developer mode," or "Create app." Access remains limited by your saved AI Permissions.
         </p>
+        <p className="mt-2 font-medium text-foreground">{CHATGPT_SECURITY_RECONNECT_MESSAGE}</p>
       </div>
 
       <SetupStep
@@ -358,7 +390,7 @@ export function ChatGptSetupFlow() {
 
       <SetupStep
         title="Step 3 — Open ChatGPT"
-        body="Now go to the ChatGPT website. Keep this Plaivra page open because you will need the code and URL."
+        body="Now go to the ChatGPT website. Keep this Plaivra page open because you will need the Client ID and connection URL."
       >
         <Button type="button" onClick={openChatGpt} className="w-full sm:w-auto">
           <ExternalLink className="h-4 w-4" /> Open ChatGPT
@@ -447,7 +479,7 @@ export function ChatGptSetupFlow() {
             "In ChatGPT app setup, look for Authentication.",
             "Choose OAuth.",
             "Do not choose \"No authentication.\"",
-            "Do not choose API key unless ChatGPT does not show OAuth.",
+            "Do not choose API key.",
             "Continue to OAuth settings."
           ]}
         />
@@ -530,11 +562,81 @@ export function ChatGptSetupFlow() {
   );
 }
 
+export function ChatGptActivityCard() {
+  const { session } = useAuth();
+  const accessToken = session?.access_token;
+  const [activities, setActivities] = useState<PublicMcpActivity[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const loadActivity = useCallback(async () => {
+    if (!accessToken) {
+      setActivities([]);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/mcp/activity", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store"
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error ?? "ChatGPT activity could not be loaded.");
+      setActivities(Array.isArray(data.activities) ? data.activities : []);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "ChatGPT activity could not be loaded.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    void loadActivity();
+  }, [loadActivity]);
+
+  return (
+    <Card className="border-border/70">
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base"><Activity className="h-5 w-5 text-primary" /> Recent ChatGPT activity</CardTitle>
+            <CardDescription>Redacted connection and tool activity for this Plaivra account only.</CardDescription>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadActivity()} disabled={isLoading}>
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />} Refresh
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs leading-5 text-muted-foreground">Activity never displays raw prompts, tokens, authorization codes, private notes, or body measurements.</p>
+        {error ? <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p> : null}
+        {!isLoading && !error && activities.length === 0 ? <p className="text-sm text-muted-foreground">No ChatGPT activity has been recorded yet.</p> : null}
+        {activities.map((activity) => (
+          <div key={activity.id} className="rounded-xl border border-border/70 bg-card p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold">{activity.action}</p>
+              <div className="flex gap-2">
+                <Badge variant="outline">{activity.category}</Badge>
+                <Badge variant={activity.status === "allowed" ? "success" : activity.status === "denied" ? "warning" : "destructive"}>{activity.status}</Badge>
+              </div>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">{activity.summary}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{activity.connectionLabel} · {formatConnectionDate(activity.timestamp)}</p>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ConnectedApps() {
   return (
     <div className="space-y-4">
       <ChatGptSetupCard />
       <ConnectionStatusCard />
+      <ChatGptActivityCard />
     </div>
   );
 }
