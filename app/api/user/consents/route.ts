@@ -49,9 +49,17 @@ export async function POST(request: Request) {
     .upsert(rows, { onConflict: "user_id,consent_type,version" });
 
   if (error) {
+    console.error("Plaivra consent save failed:", error.message);
+    if (error.code === "23505") {
+      return NextResponse.json(
+        { error: "Consent records conflict with an existing saved consent. Sign in to retry.", code: "consent_conflict" },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json(
-      { error: "Your account was created, but consent records could not be saved yet. Sign in to retry." },
-      { status: 409 }
+      { error: "Your account was created, but consent records could not be saved yet. Sign in to retry.", code: "consent_save_failed" },
+      { status: 500 }
     );
   }
 
