@@ -1,0 +1,1 @@
+AI permission settings are missing. Configure AI Permissions in Settings before connecting ChatGPT.
