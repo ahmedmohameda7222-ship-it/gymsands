@@ -1,0 +1,1 @@
+...(serverEnv.plaivraAllowLegacyMcpClientId ? { token } : {})
