@@ -14,6 +14,12 @@ describe("ChatGPT connection creation error classification", () => {
       title: "Could not create OAuth client",
       description: "An active connection already exists."
     });
+
+    // Ensure 409 structure is not mapped to missing_ai_permissions
+    expect(connectionCreationErrorMessage({ status: 409, code: 409, error: "Conflict" })).toEqual({
+      title: "Could not create OAuth client",
+      description: "Conflict"
+    });
   });
 
   it("distinguishes deployment configuration, rate-limit, and rotation failures", () => {
