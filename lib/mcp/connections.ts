@@ -10,7 +10,9 @@ export async function getSavedUserAiScopes(supabase: SupabaseClient, userId: str
     .match({ user_id: userId })
     .maybeSingle();
 
-  if (error) throw new Error("Saved access lookup failed.");
+  if (error) {
+    throw new Error(`Saved access lookup failed: ${error.code ?? "unknown"} ${error.message}`);
+  }
   if (!settings || !Array.isArray(settings.scopes)) return [];
   return resolveSavedAiPermissionScopes(settings.access_mode, settings.scopes);
 }
