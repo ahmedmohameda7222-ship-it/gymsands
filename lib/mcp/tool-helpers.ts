@@ -2,6 +2,7 @@ export type McpToolResult = {
   structuredContent: Record<string, unknown>;
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
+  _meta?: { "mcp/www_authenticate"?: string[] };
 };
 
 export type MacroTotals = {

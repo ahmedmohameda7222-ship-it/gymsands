@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { serverEnv } from "@/lib/integrations/env";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { hashConnectionToken } from "@/lib/mcp/auth";
-import { MCP_DEFAULT_SCOPES, MCP_SCOPES, MCP_SUPPORTED_SCOPES, normalizeMcpScopes, resolveSavedAiPermissionScopes } from "@/lib/mcp/scopes";
+import { MCP_DEFAULT_SCOPES, MCP_PUBLIC_OAUTH_SCOPES, MCP_SCOPES, normalizeMcpScopes, resolveSavedAiPermissionScopes } from "@/lib/mcp/scopes";
 import { CHATGPT_CONNECTION_CONSENT_VERSION } from "@/lib/legal/versions";
 
 const AUTH_CODE_EXPIRY_MS = 5 * 60 * 1000;
@@ -422,7 +422,7 @@ export function oauthAuthorizationServerMetadata(request: Request) {
       grant_types_supported: ["authorization_code"],
       token_endpoint_auth_methods_supported: ["none"],
       code_challenge_methods_supported: ["S256"],
-      scopes_supported: MCP_SUPPORTED_SCOPES
+      scopes_supported: MCP_PUBLIC_OAUTH_SCOPES
     },
     { headers: metadataHeaders() }
   );
@@ -436,9 +436,9 @@ export function oauthProtectedResourceMetadata(request: Request) {
     {
       resource,
       authorization_servers: [origin],
-      scopes_supported: MCP_SUPPORTED_SCOPES,
+      scopes_supported: MCP_PUBLIC_OAUTH_SCOPES,
       bearer_methods_supported: ["header"],
-      resource_documentation: `${origin}/docs/chatgpt-mcp`
+      resource_documentation: `${origin}/legal/privacy`
     },
     { headers: metadataHeaders() }
   );

@@ -16,7 +16,7 @@ const planB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc";
 
 function queryResult(result: { data: unknown; error: unknown }) {
   const query: Record<string, ReturnType<typeof vi.fn>> = {};
-  for (const method of ["select", "eq", "limit", "order", "is", "neq", "in", "ilike", "gte", "lte"]) {
+  for (const method of ["select", "eq", "match", "limit", "order", "is", "neq", "in", "ilike", "gte", "lte"]) {
     query[method] = vi.fn(() => query);
   }
   query.maybeSingle = vi.fn(async () => result);

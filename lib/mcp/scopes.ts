@@ -56,6 +56,13 @@ export const MCP_SUPPORTED_SCOPES = [
   MCP_SCOPES.all
 ];
 
+// Scopes that a normal public OAuth client can request and receive. Keep
+// internal admin and legacy blanket scopes out of discovery metadata.
+export const MCP_PUBLIC_OAUTH_SCOPES = [
+  MCP_SCOPES.fullAccess,
+  ...MCP_NORMAL_USER_SCOPES
+];
+
 export const MCP_FULL_ACCESS_SCOPES = [MCP_SCOPES.fullAccess, ...MCP_NORMAL_USER_SCOPES];
 
 // No MCP permission is implicit. Full access is available only through an

@@ -133,6 +133,15 @@ describe("OAuth authorization server metadata", () => {
     expect(json).not.toHaveProperty("client_id_metadata_document_supported");
   });
 
+  it("advertises only publicly grantable user scopes", async () => {
+    const request = new Request("https://plaivra.com/.well-known/oauth-authorization-server");
+    const response = oauthAuthorizationServerMetadata(request);
+    const json = await response.json() as { scopes_supported: string[] };
+    expect(json.scopes_supported).toContain("plaivra.full_access");
+    expect(json.scopes_supported).not.toContain("plaivra.admin");
+    expect(json.scopes_supported).not.toContain("plaivra.all");
+  });
+
   it("does not pretend the static register route implements DCR", async () => {
     const response = await handleOAuthRegister();
     expect(response.status).toBe(404);
@@ -1051,5 +1060,14 @@ describe("OAuth resource binding", () => {
     expect(response.status).toBe(200);
     const json = await response.json() as { resource: string };
     expect(json.resource).toBe("https://plaivra.com/api/mcp");
+  });
+
+  it("publishes a stable public resource documentation URL and public scopes", async () => {
+    const request = new Request("https://plaivra.com/.well-known/oauth-protected-resource");
+    const response = oauthProtectedResourceMetadata(request);
+    const json = await response.json() as { resource_documentation: string; scopes_supported: string[] };
+    expect(json.resource_documentation).toBe("https://plaivra.com/legal/privacy");
+    expect(json.scopes_supported).not.toContain("plaivra.admin");
+    expect(json.scopes_supported).not.toContain("plaivra.all");
   });
 });

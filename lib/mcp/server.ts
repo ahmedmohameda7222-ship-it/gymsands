@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticateMcpRequest, type McpContext } from "@/lib/mcp/auth";
-import { hasAnyScope, MCP_SCOPES } from "@/lib/mcp/scopes";
+import { hasAnyScope, hasScope, MCP_SCOPES } from "@/lib/mcp/scopes";
 import { executeMcpTool, type McpToolResult } from "@/lib/mcp/tool-executor-safe";
 import { mcpTools, type McpToolDefinition } from "@/lib/mcp/tools";
 import { serverEnv } from "@/lib/integrations/env";
@@ -42,6 +42,7 @@ export function toolListPayload(ctx: McpContext) {
       title: tool.title,
       description: tool.description,
       inputSchema: tool.inputSchema,
+      securitySchemes: [{ type: "oauth2" as const, scopes: oauthSecurityScopesForTool(tool) }],
       annotations: tool.annotations
     }))
   };
@@ -57,6 +58,10 @@ function rpcError(id: JsonRpcRequest["id"], code: number, message: string, reque
 
 function mcpHasAnyScope(ctx: McpContext, scopes: string[]) {
   return hasAnyScope(ctx.scopes, scopes);
+}
+
+function mcpHasAllScopes(ctx: McpContext, scopes: string[]) {
+  return scopes.every((scope) => hasScope(ctx.scopes, scope));
 }
 
 /**
@@ -130,8 +135,14 @@ export function requiredScopesForTool(tool: McpToolDefinition): string[] {
   }
 
   // Progress read
-  if (name === "get_personal_records" || name === "get_progress_summary") {
+  if (name === "get_personal_records") {
     return [MCP_SCOPES.progressRead];
+  }
+
+  // Progress summary intentionally aggregates progress rows, workout
+  // adherence, and food-log macro totals, so all three reads are required.
+  if (name === "get_progress_summary") {
+    return [MCP_SCOPES.progressRead, MCP_SCOPES.workoutsRead, MCP_SCOPES.nutritionRead];
   }
 
   // Progress write
@@ -163,6 +174,12 @@ export function requiredScopesForTool(tool: McpToolDefinition): string[] {
   return [];
 }
 
+export function oauthSecurityScopesForTool(tool: McpToolDefinition): string[] {
+  // plaivra.all is a legacy alternative for internal authorization checks,
+  // never a public OAuth scope. The canonical declaration is full_access.
+  return requiredScopesForTool(tool).filter((scope) => scope !== MCP_SCOPES.all);
+}
+
 export function canUseTool(ctx: McpContext, tool: McpToolDefinition) {
   const requiredScopes = requiredScopesForTool(tool);
   if (!requiredScopes.length) return false;
@@ -172,6 +189,10 @@ export function canUseTool(ctx: McpContext, tool: McpToolDefinition) {
     return ctx.profile.role === "admin" && mcpHasAnyScope(ctx, requiredScopes);
   }
 
+  if (tool.name === "get_progress_summary") {
+    return mcpHasAllScopes(ctx, requiredScopes);
+  }
+
   // Read tools require the specific required scopes for that tool (write implies read within same section only)
   if (tool.risk === "read") {
     return mcpHasAnyScope(ctx, requiredScopes);
@@ -179,6 +200,35 @@ export function canUseTool(ctx: McpContext, tool: McpToolDefinition) {
 
   // Write / destructive tools require the specific scope
   return mcpHasAnyScope(ctx, requiredScopes);
+}
+
+function escapeAuthParameter(value: string) {
+  return value.replace(/[\\"]/g, "").replace(/[\r\n]/g, " ").slice(0, 300);
+}
+
+export function mcpAuthenticationErrorResult(
+  request: Request,
+  error: "invalid_token" | "insufficient_scope",
+  description: string,
+  requiredScopes: string[] = []
+): McpToolResult {
+  const resourceMetadata = `${new URL(request.url).origin}/.well-known/oauth-protected-resource`;
+  const safeDescription = escapeAuthParameter(description);
+  const publicScopes = requiredScopes.filter((scope) => scope !== MCP_SCOPES.all);
+  const scopeParameter = publicScopes.length ? `, scope="${publicScopes.join(" ")}"` : "";
+  const challenge = `Bearer resource_metadata="${resourceMetadata}", error="${error}", error_description="${safeDescription}"${scopeParameter}`;
+
+  return {
+    isError: true,
+    structuredContent: {
+      ok: false,
+      code: error,
+      message: safeDescription,
+      ...(publicScopes.length ? { required_scopes: publicScopes } : {})
+    },
+    content: [{ type: "text", text: safeDescription }],
+    _meta: { "mcp/www_authenticate": [challenge] }
+  };
 }
 
 export async function auditToolCall(ctx: McpContext, toolName: string, input: unknown, result: McpToolResult) {
@@ -246,8 +296,22 @@ export async function handleMcpPost(request: Request) {
     return rpcResult(body.id, { protocolVersion: "2024-11-05", serverInfo: { name: "Plaivra", version: "1.0.0" }, capabilities: { tools: {} }, instructions: MCP_SERVER_INSTRUCTIONS }, request);
   }
 
+  const requestedPublicTool = body.method === "tools/call"
+    ? mcpTools.find((tool) => tool.name === body.params?.name && tool.risk !== "admin")
+    : undefined;
+
   const auth = await authenticateMcpRequest(request);
-  if (auth instanceof NextResponse) return auth;
+  if (auth instanceof NextResponse) {
+    if (body.method === "tools/call" && (auth.status === 401 || auth.status === 403)) {
+      const error = auth.status === 403 ? "insufficient_scope" : "invalid_token";
+      const description = auth.status === 403
+        ? "The Plaivra connection does not have the permissions required for this tool. Reconnect after updating AI Permissions."
+        : "Plaivra authentication is required. Connect or reconnect Plaivra and try again.";
+      const requiredScopes = requestedPublicTool ? oauthSecurityScopesForTool(requestedPublicTool) : [];
+      return rpcResult(body.id, mcpAuthenticationErrorResult(request, error, description, requiredScopes), request);
+    }
+    return auth;
+  }
 
   if (body.method === "tools/list") return rpcResult(body.id, toolListPayload(auth), request);
 
@@ -259,10 +323,16 @@ export async function handleMcpPost(request: Request) {
     if (!tool) return rpcError(body.id, -32601, `Unknown MCP tool: ${toolName}.`, request);
 
     if (!canUseTool(auth, tool)) {
-      const required = requiredScopesForTool(tool).join(", ");
+      if (tool.risk === "admin") {
+        const message = "This internal Plaivra admin tool is not available through public OAuth.";
+        await auditDeniedToolCall(auth, tool, body.params?.arguments ?? {}, message);
+        return rpcError(body.id, -32003, message, request);
+      }
+      const requiredScopes = oauthSecurityScopesForTool(tool);
+      const required = requiredScopes.join(", ");
       const message = `This Plaivra connection is missing the required scope for ${tool.name}: ${required}. Reconnect Plaivra from Settings to refresh permissions.`;
       await auditDeniedToolCall(auth, tool, body.params?.arguments ?? {}, message);
-      return rpcError(body.id, -32003, message, request);
+      return rpcResult(body.id, mcpAuthenticationErrorResult(request, "insufficient_scope", message, requiredScopes), request);
     }
 
     const validation = validateMcpToolInput(tool, body.params?.arguments ?? {});
