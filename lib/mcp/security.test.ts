@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { redactMcpAuditInput } from "./audit";
 import { connectionIsUsable, rateLimit, resolveMcpPermissionScopes, type McpContext } from "./auth";
 import { getSavedUserAiScopes, rotateMcpConnection } from "./connections";
-import { MCP_SCOPES } from "./scopes";
+import { MCP_FULL_ACCESS_SCOPES, MCP_SCOPES } from "./scopes";
 import { auditDeniedToolCall, auditToolCall } from "./server";
 import { executeMcpTool } from "./tool-executor-safe";
 import { mcpTools } from "./tools";
@@ -11,6 +11,8 @@ import { mcpTools } from "./tools";
 const userA = "11111111-1111-4111-8111-111111111111";
 const userB = "22222222-2222-4222-8222-222222222222";
 const sessionB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const planA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab";
+const planB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc";
 
 function queryResult(result: { data: unknown; error: unknown }) {
   const query: Record<string, ReturnType<typeof vi.fn>> = {};
@@ -72,6 +74,41 @@ describe("MCP service-role ownership checks", () => {
     expect(result.structuredContent.message).toBe("Workout plan not found for this user.");
     expect(workoutInsert).not.toHaveBeenCalled();
   });
+
+  it("does not enrich User A's schedule with User B's plan day or exercises", async () => {
+    let planReads = 0;
+    const exerciseRead = vi.fn();
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === "user_workout_plans") {
+          planReads += 1;
+          return queryResult(planReads === 1
+            ? { data: { id: planA, user_id: userA, is_active: true }, error: null }
+            : { data: null, error: null });
+        }
+        if (table === "user_workout_sessions") {
+          return queryResult({
+            data: { id: sessionB, user_id: userA, user_workout_plan_id: planA, plan_day_id: sessionB },
+            error: null
+          });
+        }
+        if (table === "user_workout_plan_days") {
+          return queryResult({ data: { id: sessionB, plan_id: planB, day_name: "User B private day" }, error: null });
+        }
+        if (table === "user_workout_plan_exercises") {
+          exerciseRead();
+          return queryResult({ data: [{ notes: "User B private exercise" }], error: null });
+        }
+        throw new Error(`Unexpected table: ${table}`);
+      })
+    };
+
+    const result = await executeMcpTool(contextWith(supabase), "get_today_workout", {});
+    expect(result.structuredContent.workout_day).toBeNull();
+    expect(result.structuredContent.exercises).toEqual([]);
+    expect(JSON.stringify(result)).not.toContain("User B private");
+    expect(exerciseRead).not.toHaveBeenCalled();
+  });
 });
 
 describe("AI permissions fail closed", () => {
@@ -105,6 +142,29 @@ describe("AI permissions fail closed", () => {
       from: vi.fn(() => queryResult({ data: { scopes: [] }, error: null }))
     } as unknown as SupabaseClient;
     await expect(getSavedUserAiScopes(supabase, userA)).resolves.toEqual([]);
+  });
+
+  it("resolves a canonical Full Access row for connection creation", async () => {
+    const supabase = {
+      from: vi.fn(() => queryResult({
+        data: { access_mode: "full", scopes: [...MCP_FULL_ACCESS_SCOPES] },
+        error: null
+      }))
+    } as unknown as SupabaseClient;
+    const scopes = await getSavedUserAiScopes(supabase, userA);
+    expect(scopes).toEqual(MCP_FULL_ACCESS_SCOPES);
+  });
+
+  it("resolves only selected Custom Access scopes", async () => {
+    const supabase = {
+      from: vi.fn(() => queryResult({
+        data: { access_mode: "custom", scopes: [MCP_SCOPES.nutritionWrite] },
+        error: null
+      }))
+    } as unknown as SupabaseClient;
+    const scopes = await getSavedUserAiScopes(supabase, userA);
+    expect(scopes).toEqual([MCP_SCOPES.nutritionWrite, MCP_SCOPES.nutritionRead]);
+    expect(scopes).not.toContain(MCP_SCOPES.workoutsRead);
   });
 });
 

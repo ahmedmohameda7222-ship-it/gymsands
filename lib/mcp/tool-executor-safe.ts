@@ -494,6 +494,30 @@ async function getSafeActivePlan(ctx: McpContext) {
   return (data as DbRow | null) ?? null;
 }
 
+async function getOwnedPlanDay(ctx: McpContext, dayId: string, expectedPlanId?: string) {
+  const dayResult = await ctx.supabase
+    .from("user_workout_plan_days")
+    .select("*")
+    .eq("id", dayId)
+    .limit(1)
+    .maybeSingle();
+  if (dayResult.error) throw new Error(dayResult.error.message);
+  const day = (dayResult.data as DbRow | null) ?? null;
+  if (!day?.plan_id) return null;
+
+  const planId = String(day.plan_id);
+  if (expectedPlanId && planId !== expectedPlanId) return null;
+  const planResult = await ctx.supabase
+    .from("user_workout_plans")
+    .select("id")
+    .eq("id", planId)
+    .eq("user_id", ctx.userId)
+    .limit(1)
+    .maybeSingle();
+  if (planResult.error) throw new Error(planResult.error.message);
+  return planResult.data ? day : null;
+}
+
 async function getSafeTodayWorkout(ctx: McpContext, date: string) {
   const activePlan = await getSafeActivePlan(ctx);
   let request = ctx.supabase.from("user_workout_sessions").select("*").eq("user_id", ctx.userId).eq("scheduled_date", date).order("session_number", { ascending: true }).limit(1);
@@ -504,9 +528,12 @@ async function getSafeTodayWorkout(ctx: McpContext, date: string) {
   let workoutDay: DbRow | null = null;
   let exercises: unknown[] = [];
   if (workout?.plan_day_id) {
-    const dayResult = await ctx.supabase.from("user_workout_plan_days").select("*").eq("id", String(workout.plan_day_id)).limit(1).maybeSingle();
-    if (dayResult.error) throw new Error(dayResult.error.message);
-    workoutDay = (dayResult.data as DbRow | null) ?? null;
+    const expectedPlanId = activePlan?.id
+      ? String(activePlan.id)
+      : typeof workout.user_workout_plan_id === "string"
+        ? workout.user_workout_plan_id
+        : undefined;
+    workoutDay = await getOwnedPlanDay(ctx, String(workout.plan_day_id), expectedPlanId);
     if (workoutDay?.id) {
       const exerciseResult = await ctx.supabase.from("user_workout_plan_exercises").select("*").eq("plan_day_id", String(workoutDay.id)).order("sort_order", { ascending: true });
       if (exerciseResult.error) throw new Error(exerciseResult.error.message);

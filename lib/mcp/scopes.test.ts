@@ -159,9 +159,18 @@ describe("normalizeMcpScopes", () => {
 
 describe("resolveSavedAiPermissionScopes", () => {
   it("accepts explicit canonical full mode", () => {
-    const scopes = resolveSavedAiPermissionScopes("full", [MCP_SCOPES.fullAccess]);
+    const scopes = resolveSavedAiPermissionScopes("full", [MCP_SCOPES.fullAccess, ...MCP_NORMAL_USER_SCOPES]);
     expect(scopes).toContain(MCP_SCOPES.fullAccess);
     expect(scopes).toContain(MCP_SCOPES.workoutsWrite);
+    expect(scopes).toHaveLength(MCP_NORMAL_USER_SCOPES.length + 1);
+  });
+
+  it("fails closed when full mode is missing the explicit full-access marker", () => {
+    expect(resolveSavedAiPermissionScopes("full", MCP_NORMAL_USER_SCOPES)).toEqual([]);
+  });
+
+  it("fails closed for an empty custom permission row", () => {
+    expect(resolveSavedAiPermissionScopes("custom", [])).toEqual([]);
   });
 
   it("does not allow full access from custom mode", () => {

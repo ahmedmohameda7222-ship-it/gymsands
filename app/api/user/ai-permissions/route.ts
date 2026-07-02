@@ -24,7 +24,8 @@ export async function GET(request: Request) {
     .maybeSingle();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    console.error("Plaivra AI permissions load failed:", error.message);
+    return NextResponse.json({ error: "AI permissions could not be loaded.", code: "ai_permissions_load_failed" }, { status: 500 });
   }
 
   return NextResponse.json({ settings: data ?? null });
@@ -103,7 +104,8 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    console.error("Plaivra AI permissions save failed:", error.message);
+    return NextResponse.json({ error: "AI permissions could not be saved.", code: "ai_permissions_save_failed" }, { status: 500 });
   }
 
   return NextResponse.json({ settings: data });

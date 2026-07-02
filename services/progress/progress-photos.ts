@@ -18,11 +18,34 @@ export type ProgressPhoto = {
 };
 
 const bucket = "progress-photos";
-const maxPhotoBytes = 10 * 1024 * 1024;
-const allowedPhotoMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+export const maxProgressPhotoBytes = 10 * 1024 * 1024;
+export const allowedProgressPhotoMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const allowedProgressPhotoTypes = new Set<ProgressPhotoType>(["front", "side", "back"]);
 
 function safeFileName(name: string) {
-  return name.toLowerCase().replace(/[^a-z0-9.]+/g, "-").replace(/^-+|-+$/g, "") || "progress-photo.jpg";
+  const lower = name.toLowerCase();
+  const extension = lower.match(/\.(jpe?g|png|webp)$/)?.[1]?.replace("jpeg", "jpg") ?? "jpg";
+  const base = lower
+    .replace(/\.(jpe?g|png|webp)$/, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "progress-photo";
+  return `${base}.${extension}`;
+}
+
+export function validateProgressPhotoFile(file: Pick<File, "name" | "size" | "type">) {
+  if (!allowedProgressPhotoMimeTypes.has(file.type)) throw new Error("Upload a JPEG, PNG, or WebP image only.");
+  if (file.size <= 0) throw new Error("Progress photos cannot be empty.");
+  if (file.size > maxProgressPhotoBytes) throw new Error("Progress photos must be 10 MB or smaller.");
+}
+
+export function createProgressPhotoPath(
+  input: { userId: string; type: ProgressPhotoType; takenOn: string; fileName: string },
+  objectId = crypto.randomUUID()
+) {
+  if (!isUuid(input.userId)) throw new Error("A valid signed-in user is required for progress photos.");
+  if (!allowedProgressPhotoTypes.has(input.type)) throw new Error("Progress photo type must be front, side, or back.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.takenOn)) throw new Error("Choose a valid date for the progress photo.");
+  return `${input.userId}/${input.type}/${input.takenOn}/${objectId}-${safeFileName(input.fileName)}`;
 }
 
 function requireStorage(userId: string) {
@@ -75,9 +98,8 @@ export async function getProgressPhotos(userId: string) {
 
 export async function uploadProgressPhoto({ userId, type, takenOn, file }: { userId: string; type: ProgressPhotoType; takenOn: string; file: File }) {
   const client = requireStorage(userId);
-  if (!allowedPhotoMimeTypes.has(file.type)) throw new Error("Upload a JPEG, PNG, or WebP image only.");
-  if (file.size > maxPhotoBytes) throw new Error("Progress photos must be 10 MB or smaller.");
-  const path = `${userId}/${type}/${takenOn}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
+  validateProgressPhotoFile(file);
+  const path = createProgressPhotoPath({ userId, type, takenOn, fileName: file.name });
   const upload = await client.storage.from(bucket).upload(path, file, { upsert: false, contentType: file.type });
   if (upload.error) throw new Error(`Could not upload progress photo. ${upload.error.message}`);
 
@@ -96,9 +118,20 @@ export async function uploadProgressPhoto({ userId, type, takenOn, file }: { use
 
 export async function deleteProgressPhoto(photo: ProgressPhoto) {
   const client = requireStorage(photo.user_id);
+  const lookup = await client
+    .from("progress_photos")
+    .select("storage_path")
+    .eq("id", photo.id)
+    .eq("user_id", photo.user_id)
+    .maybeSingle();
+  if (lookup.error) throw new Error(`Could not verify progress photo ownership. ${lookup.error.message}`);
+  if (!lookup.data) throw new Error("Progress photo was not found for this user.");
+  const ownedPath = String(lookup.data.storage_path);
+  if (!ownedPath.startsWith(`${photo.user_id}/`)) throw new Error("Progress photo path is invalid for this user.");
+
+  const storageDelete = await client.storage.from(bucket).remove([ownedPath]);
+  if (storageDelete.error) throw new Error(`Could not remove the progress photo file. ${storageDelete.error.message}`);
   const rowDelete = await client.from("progress_photos").delete().eq("id", photo.id).eq("user_id", photo.user_id);
-  if (rowDelete.error) throw new Error(`Could not delete progress photo metadata. ${rowDelete.error.message}`);
-  const storageDelete = await client.storage.from(bucket).remove([photo.storage_path]);
-  if (storageDelete.error) console.warn("Plaivra could not remove the progress photo file.", storageDelete.error.message);
+  if (rowDelete.error) throw new Error(`The photo file was removed, but its metadata could not be deleted. ${rowDelete.error.message}`);
   return true;
 }

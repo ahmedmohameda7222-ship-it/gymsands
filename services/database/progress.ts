@@ -238,7 +238,6 @@ export async function getProgressEntries(userId: string) {
 
 export async function addProgressEntry(
   entry: Omit<ProgressEntry, "id">,
-  photos?: File[],
   measurements?: Record<string, number | null>
 ) {
   if (!canUseUserData(entry.user_id)) throw new Error("User session invalid");
@@ -246,22 +245,6 @@ export async function addProgressEntry(
   const { data, error } = await client.from("progress_entries").insert(entry).select("*").single();
   if (error) throw error;
   let savedMeasurement: BodyMeasurement | null = null;
-
-  if (photos?.length) {
-    await Promise.all(
-      photos.map(async (photo) => {
-        const path = `${entry.user_id}/${data.id}/${crypto.randomUUID()}-${photo.name}`;
-        const upload = await client.storage.from("progress-photos").upload(path, photo, { upsert: false });
-        if (upload.error) throw upload.error;
-        const { error: photoError } = await client.from("progress_photos").insert({
-          user_id: entry.user_id,
-          progress_entry_id: data.id,
-          storage_path: path
-        });
-        if (photoError) throw photoError;
-      })
-    );
-  }
 
   if (measurements && Object.values(measurements).some((value) => value !== null)) {
     const { data: measurementData, error: measurementError } = await client

@@ -21,23 +21,38 @@ export function findExerciseVideo(workout: Pick<Workout, "name" | "category" | "
 }
 
 export function isEmbeddableVideo(url: string | null | undefined) {
-  if (!url) return false;
-  return /youtube\.com|youtu\.be|vimeo\.com/.test(url);
+  return Boolean(toEmbedUrl(url));
 }
 
 export function toEmbedUrl(url: string | null | undefined) {
   if (!url) return null;
-  if (url.includes("youtube.com/watch")) {
-    const videoId = new URL(url).searchParams.get("v");
-    return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
   }
-  if (url.includes("youtu.be/")) {
-    const videoId = url.split("youtu.be/")[1]?.split("?")[0];
-    return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+  if (parsed.protocol !== "https:") return null;
+
+  const hostname = parsed.hostname.toLowerCase();
+  let videoId = "";
+  if (hostname === "youtube.com" || hostname === "www.youtube.com") {
+    videoId = parsed.pathname === "/watch"
+      ? parsed.searchParams.get("v") ?? ""
+      : parsed.pathname.match(/^\/embed\/([A-Za-z0-9_-]{6,})$/)?.[1] ?? "";
+    return /^[A-Za-z0-9_-]{6,}$/.test(videoId) ? `https://www.youtube.com/embed/${videoId}` : null;
   }
-  if (url.includes("vimeo.com/")) {
-    const videoId = url.split("vimeo.com/")[1]?.split("?")[0];
-    return videoId ? `https://player.vimeo.com/video/${videoId}` : url;
+  if (hostname === "youtu.be") {
+    videoId = parsed.pathname.match(/^\/([A-Za-z0-9_-]{6,})$/)?.[1] ?? "";
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
   }
-  return url;
+  if (hostname === "vimeo.com" || hostname === "www.vimeo.com") {
+    videoId = parsed.pathname.match(/^\/(\d+)$/)?.[1] ?? "";
+    return videoId ? `https://player.vimeo.com/video/${videoId}` : null;
+  }
+  if (hostname === "player.vimeo.com") {
+    videoId = parsed.pathname.match(/^\/video\/(\d+)$/)?.[1] ?? "";
+    return videoId ? `https://player.vimeo.com/video/${videoId}` : null;
+  }
+  return null;
 }

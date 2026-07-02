@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toaster";
 import { env } from "@/lib/env";
 import type { PublicMcpActivity } from "@/lib/mcp/activity";
+import { connectionCreationErrorMessage } from "@/lib/mcp/connection-errors";
 
 const chatGptUrl = "https://chatgpt.com";
 const appDescription =
@@ -293,18 +294,6 @@ export function ChatGptSetupFlow() {
     }
 
     setIsBusy("chatgpt-token");
-    const permissionResponse = await fetch("/api/user/ai-permissions", { headers: authHeaders() });
-    const permissionData = await permissionResponse.json().catch(() => ({}));
-    const savedScopes = permissionData.settings?.scopes;
-    if (!permissionResponse.ok || !Array.isArray(savedScopes) || savedScopes.length === 0) {
-      setIsBusy(null);
-      toast({
-        title: "AI permissions required",
-        description: "Review and save AI Permissions before creating a ChatGPT OAuth client."
-      });
-      return;
-    }
-
     const response = await fetch("/api/mcp/connections", {
       method: "POST",
       headers: authHeaders()
@@ -313,13 +302,7 @@ export function ChatGptSetupFlow() {
     setIsBusy(null);
 
     if (!response.ok) {
-      const isPermissionsError = data.code === "missing_ai_permissions" || String(data.error ?? "").includes("AI permissions required");
-      toast({
-        title: isPermissionsError ? "AI permissions required" : "Could not create OAuth client",
-        description: isPermissionsError
-          ? "Review and save AI Permissions before creating a ChatGPT OAuth client."
-          : data.error ?? "Please try again. If this keeps happening, contact support."
-      });
+      toast(connectionCreationErrorMessage(data));
       return;
     }
 

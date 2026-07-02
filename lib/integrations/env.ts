@@ -60,7 +60,10 @@ export async function requireAdmin(request: Request): Promise<RouteContext | Nex
   if (context instanceof NextResponse) return context;
 
   const { data, error } = await context.supabase.from("profiles").select("role").eq("id", context.user.id).maybeSingle();
-  if (error) return jsonError(error.message, 400);
+  if (error) {
+    console.error("Plaivra admin authorization check failed:", error.message);
+    return jsonError("Admin access could not be verified.", 500);
+  }
   if (data?.role !== "admin") return jsonError("Admin access is required for this action.", 403);
   return context;
 }

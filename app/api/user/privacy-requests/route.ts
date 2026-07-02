@@ -63,7 +63,10 @@ export async function POST(request: Request) {
     .limit(1)
     .maybeSingle();
 
-  if (existing.error) return NextResponse.json({ error: existing.error.message }, { status: 400 });
+  if (existing.error) {
+    console.error("Plaivra privacy request lookup failed:", existing.error.message);
+    return NextResponse.json({ error: "Privacy request status could not be checked." }, { status: 500 });
+  }
   if (existing.data) {
     const chatgptAccessRevoked = requestType === "deletion" ? await revokeChatGptForDeletion(context) : undefined;
     return NextResponse.json({ request: existing.data, already_exists: true, chatgpt_access_revoked: chatgptAccessRevoked });
@@ -80,7 +83,10 @@ export async function POST(request: Request) {
     .select("id,request_type,status,created_at")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) {
+    console.error("Plaivra privacy request creation failed:", error.message);
+    return NextResponse.json({ error: "The privacy request could not be submitted." }, { status: 500 });
+  }
   const chatgptAccessRevoked = requestType === "deletion" ? await revokeChatGptForDeletion(context) : undefined;
   return NextResponse.json({ request: data, already_exists: false, chatgpt_access_revoked: chatgptAccessRevoked }, { status: 201 });
 }

@@ -80,7 +80,6 @@ export function ProgressEntryModal({ onSaved, buttonClassName }: { onSaved?: (en
           waist_cm: waist && Number.isFinite(waistValue) ? waistValue : null,
           notes: notes || null
         },
-        [],
         extraMeasurements
       );
       onSaved?.(entry);

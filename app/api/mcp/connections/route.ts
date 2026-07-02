@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createConnectionToken, hashConnectionToken } from "@/lib/mcp/auth";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
-import { requireServerKeys, requireUser, serverEnv } from "@/lib/integrations/env";
+import { requireUser, serverEnv } from "@/lib/integrations/env";
 import { getSavedUserAiScopes, rotateMcpConnection } from "@/lib/mcp/connections";
 import { oauthRateLimit } from "@/lib/mcp/oauth";
 import { CHATGPT_CONNECTION_CONSENT_VERSION } from "@/lib/legal/versions";
@@ -9,10 +9,11 @@ import { CHATGPT_CONNECTION_CONSENT_VERSION } from "@/lib/legal/versions";
 export const runtime = "nodejs";
 
 function requireMcpConnectionConfig() {
-  return requireServerKeys("Plaivra MCP", [
-    ["SUPABASE_SERVICE_ROLE_KEY", serverEnv.supabaseServiceRoleKey],
-    ["PLAIVRA_MCP_TOKEN_SECRET", serverEnv.plaivraMcpTokenSecret]
-  ]);
+  if (serverEnv.supabaseServiceRoleKey && serverEnv.plaivraMcpTokenSecret) return null;
+  return NextResponse.json(
+    { error: "ChatGPT connection setup is not configured for this deployment.", code: "mcp_not_configured" },
+    { status: 503 }
+  );
 }
 
 export async function GET(request: Request) {
@@ -30,7 +31,10 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .limit(10);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) {
+    console.error("Plaivra MCP connection list failed:", error.message);
+    return NextResponse.json({ error: "ChatGPT connections could not be loaded.", code: "connection_list_failed" }, { status: 500 });
+  }
   return NextResponse.json({ connections: data ?? [] });
 }
 
@@ -45,7 +49,10 @@ export async function POST(request: Request) {
   const rateLimitKey = `connection_create:${context.user.id}`;
   const rateLimitError = await oauthRateLimit(rateLimitKey, 10, 60);
   if (rateLimitError) {
-    return NextResponse.json({ error: "Too many connection requests. Please try again later." }, { status: 429 });
+    return NextResponse.json(
+      { error: "Too many connection requests. Please try again later.", code: "connection_rate_limited" },
+      { status: 429 }
+    );
   }
 
   const supabase = createSupabaseAdminClient();
@@ -103,7 +110,7 @@ export async function DELETE(request: Request) {
 
     if (error) {
       console.error("Plaivra MCP revoke error:", error.message);
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "ChatGPT access could not be revoked.", code: "connection_revoke_failed" }, { status: 500 });
     }
     const revokedAt = new Date().toISOString();
     const consentUpdate = await supabase
@@ -117,7 +124,7 @@ export async function DELETE(request: Request) {
     }
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error("Plaivra MCP revoke unexpected error:", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unexpected error" }, { status: 500 });
+    console.error("Plaivra MCP revoke unexpected error:", error instanceof Error ? error.message : "Unknown error");
+    return NextResponse.json({ error: "ChatGPT access could not be revoked.", code: "connection_revoke_failed" }, { status: 500 });
   }
 }
