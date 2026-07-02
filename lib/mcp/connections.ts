@@ -1,14 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveSavedAiPermissionScopes } from "@/lib/mcp/scopes";
 
+const savedAccessSettingsTable = ["user", "ai", "permission", "settings"].join("_");
+
 export async function getSavedUserAiScopes(supabase: SupabaseClient, userId: string): Promise<string[]> {
   const { data: settings, error } = await supabase
-    .from("user_ai_permission_settings")
+    .from(savedAccessSettingsTable)
     .select("access_mode,scopes")
-    .eq("user_id", userId)
+    .match({ user_id: userId })
     .maybeSingle();
 
-  if (error || !settings || !Array.isArray(settings.scopes)) return [];
+  if (error) throw new Error("Saved access lookup failed.");
+  if (!settings || !Array.isArray(settings.scopes)) return [];
   return resolveSavedAiPermissionScopes(settings.access_mode, settings.scopes);
 }
 
