@@ -57,7 +57,17 @@ export async function POST(request: Request) {
 
   const supabase = createSupabaseAdminClient();
 
-  const userScopes = await getSavedUserAiScopes(supabase, context.user.id);
+  let userScopes: string[];
+  try {
+    userScopes = await getSavedUserAiScopes(supabase, context.user.id);
+  } catch (error) {
+    console.error("Plaivra MCP AI permission lookup failed:", error instanceof Error ? error.message : "Unknown error");
+    return NextResponse.json(
+      { error: "AI permission settings could not be loaded. Please try again.", code: "ai_permissions_lookup_failed" },
+      { status: 500 }
+    );
+  }
+
   if (!userScopes.length) {
     return NextResponse.json(
       { error: "AI permission settings are missing. Configure AI Permissions in Settings before connecting ChatGPT.", code: "missing_ai_permissions" },
