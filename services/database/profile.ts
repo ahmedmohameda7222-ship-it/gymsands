@@ -43,12 +43,13 @@ function cleanNumber(value: number | null | undefined) {
 }
 
 function ageToRange(age: number | null | undefined) {
-  if (!Number.isFinite(age)) return undefined;
-  if (age < 18) return "Under 18";
-  if (age <= 24) return "18-24";
-  if (age <= 34) return "25-34";
-  if (age <= 44) return "35-44";
-  if (age <= 54) return "45-54";
+  const cleanAge = typeof age === "number" ? age : NaN;
+  if (!Number.isFinite(cleanAge)) return undefined;
+  if (cleanAge < 18) return "Under 18";
+  if (cleanAge <= 24) return "18-24";
+  if (cleanAge <= 34) return "25-34";
+  if (cleanAge <= 44) return "35-44";
+  if (cleanAge <= 54) return "45-54";
   return "55+";
 }
 
