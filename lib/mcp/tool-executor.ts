@@ -187,6 +187,9 @@ function exerciseRow(planDayId: string, input: JsonObject, blockType: string) {
     rest_seconds: getOptionalNumber(input, "rest_seconds") ?? null,
     tempo: getOptionalString(input, "tempo") ?? null,
     instructions: getOptionalString(input, "instructions") ?? null,
+    exercise_url: getOptionalString(input, "exercise_url") ?? null,
+    video_url: getOptionalString(input, "custom_video_url") ?? null,
+    custom_video_url: getOptionalString(input, "custom_video_url") ?? null,
     sort_order: order,
     order_index: order,
     notes: getOptionalString(input, "notes") ?? null

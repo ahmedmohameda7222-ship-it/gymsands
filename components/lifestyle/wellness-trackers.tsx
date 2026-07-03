@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bell, CheckCircle2, MoreHorizontal, Pencil, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { Bell, CheckCircle2, MoreHorizontal, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +34,6 @@ import {
 } from "@/services/database/wellness";
 import { getWorkoutActivity } from "@/services/database/workout-sessions";
 import {
-  buildDailyChecklist,
   calculateReadiness,
   calculateStreakStats,
   calculateSupplementAdherence,
@@ -90,9 +89,7 @@ export function WellnessDashboard() {
     load().catch((error) => toast({ title: "Could not load wellness dashboard", description: error instanceof Error ? error.message : "Please try again." }));
   }, [toast, today, user?.id]);
 
-  const checklist = buildDailyChecklist({ nutrition, habits, supplements, sleep: sleepLogs, workoutActivity: workouts });
   const readiness = calculateReadiness(sleepLogs);
-  const completedCount = checklist.filter((item) => item.complete).length;
   const recoverySuggestions = buildRecoverySuggestions(readiness, sleepLogs);
   const habitRescue = buildHabitRescue(habits);
 
@@ -109,8 +106,7 @@ export function WellnessDashboard() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Metric title="Daily checklist" value={`${completedCount}/${checklist.length}`} detail="Real wellness items completed today" />
+      <div className="grid gap-3 sm:grid-cols-2">
         <Metric title="Readiness" value={readiness.value === null ? "Not enough data" : `${readiness.value}%`} detail={readiness.detail} />
         <Metric title="Notifications" value={notificationState} detail="Browser-only reminders, no native push logic" />
       </div>
@@ -137,27 +133,6 @@ export function WellnessDashboard() {
           <div className="solid-row p-3">
             <p className="text-sm font-semibold">{habitRescue.title}</p>
             <p className="mt-1 text-sm text-muted-foreground">{habitRescue.detail}</p>
-          </div>
-        </CardContent>
-      </Card>
-      <Card variant="glassStrong" className="shadow-luxe">
-        <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            Consolidated daily wellness checklist
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 sm:p-5">
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {checklist.map((item) => (
-              <div key={item.label} className="solid-row p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-semibold">{item.label}</p>
-                  <Badge variant={item.complete ? "success" : "outline"} className="shrink-0 text-xs">{item.complete ? "Done" : "Missing"}</Badge>
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">{item.detail}</p>
-              </div>
-            ))}
           </div>
         </CardContent>
       </Card>

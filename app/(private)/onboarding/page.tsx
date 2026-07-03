@@ -6,21 +6,23 @@ import { CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { WheelPicker } from "@/components/ui/wheel-picker";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { getOnboarding, saveOnboarding } from "@/services/database/profile";
+import { getOnboarding, saveOnboarding, updateProfile } from "@/services/database/profile";
 import {
   getDefaultAiPermissionConfig,
+  getAiPermissionSettings,
   saveAiPermissionSettings,
   type AiPermissionConfig,
   ALL_AI_PERMISSION_SECTIONS
 } from "@/services/database/ai-permissions";
-import { getWorkoutPlanDurationOptions, getWorkoutPlanWeekOptions } from "@/services/database/workout-plans";
+import { NutritionPreferenceCard } from "@/components/profile/execution-profiles";
+import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 
-const steps = ["Basic info", "Goals", "Training", "Schedule", "Nutrition", "AI Permissions", "Review"];
+const steps = ["Basic info", "Goals", "Training", "Schedule", "Food preferences", "Coaching context", "AI Permissions", "Review"];
 const goalOptions = [
   "Lose fat",
   "Build muscle",
@@ -40,8 +42,15 @@ const trainingCycles = [
   "Strength Split",
   "Hybrid",
   "Cardio + Strength",
-  "Wellness / Mobility"
+  "Wellness / Mobility",
+  "I don't know"
 ];
+const ageOptions = Array.from({ length: 88 }, (_, index) => index + 13);
+const heightOptions = Array.from({ length: 131 }, (_, index) => index + 120);
+const weightOptions = Array.from({ length: 216 }, (_, index) => index + 35);
+const dayOptions = Array.from({ length: 7 }, (_, index) => index + 1);
+const weekOptions = Array.from({ length: 52 }, (_, index) => index + 1);
+const minuteOptions = Array.from({ length: 120 }, (_, index) => index + 1);
 
 function ageToRange(age: number | null): string {
   if (!age) return "Prefer not to say";
@@ -54,9 +63,10 @@ function ageToRange(age: number | null): string {
 
 const defaultAnswers = {
   age: null as number | null,
-  gender: "Prefer not to say",
+  gender: "",
   height_cm: null as number | null,
   weight_kg: null as number | null,
+  goal_weight_kg: null as number | null,
   goal: "General wellness",
   goals: ["General wellness"],
   training_cycle: "Full Body",
@@ -69,51 +79,32 @@ const defaultAnswers = {
   desired_duration_weeks: 4,
   available_equipment: ["Full gym"],
   nutrition_preferences: ["Egyptian food preferred"],
-  allergies_limitations: ""
+  allergies_limitations: "",
+  injuries_limitations: "",
+  training_preferences: "",
+  food_preferences: "",
+  lifestyle_notes: "",
+  workout_constraints: "",
+  coaching_notes: ""
 };
 
 export default function OnboardingPage() {
-  const { user } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const { celebrate } = useSuccessFeedback();
   const searchParams = useSearchParams();
   const [step, setStep] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [answers, setAnswers] = useState(defaultAnswers);
   const [aiPermissions, setAiPermissions] = useState<AiPermissionConfig>(getDefaultAiPermissionConfig);
-  const [weekOptions, setWeekOptions] = useState<number[]>([1, 2, 3, 4]);
-  const [durationOptions, setDurationOptions] = useState<number[]>([20, 30, 45, 60, 75]);
-
-  useEffect(() => {
-    Promise.all([getWorkoutPlanWeekOptions(), getWorkoutPlanDurationOptions()]).then(([weekData, durationData]) => {
-      setWeekOptions(weekData.values);
-      setDurationOptions(durationData.values);
-      setAnswers((current) => {
-        const minDuration = durationData.values.includes(current.min_workout_duration_minutes)
-          ? current.min_workout_duration_minutes
-          : durationData.min;
-        const maxDuration = durationData.values.includes(current.max_workout_duration_minutes)
-          ? current.max_workout_duration_minutes
-          : durationData.max;
-        return {
-          ...current,
-          desired_duration_weeks: weekData.values.includes(current.desired_duration_weeks)
-            ? current.desired_duration_weeks
-            : weekData.min,
-          workout_duration_minutes: Math.round((minDuration + maxDuration) / 2),
-          min_workout_duration_minutes: minDuration,
-          max_workout_duration_minutes: Math.max(minDuration, maxDuration)
-        };
-      });
-    });
-  }, []);
-
   useEffect(() => {
     if (!user?.id) return;
     const isEdit = searchParams.get("edit") === "true";
 
-    getOnboarding(user.id)
-      .then((saved) => {
+    Promise.all([getOnboarding(user.id), getAiPermissionSettings(user.id)])
+      .then(([saved, permissions]) => {
+        if (permissions) setAiPermissions(permissions);
         if (!saved) return;
         if (!isEdit) {
           router.replace("/dashboard");
@@ -123,18 +114,25 @@ export default function OnboardingPage() {
         setAnswers((current) => ({
           ...current,
           ...saved,
+          goal_weight_kg: saved.goal_weight_kg ?? profile?.target_weight_kg ?? null,
           goals: goals.length ? goals : defaultAnswers.goals,
           training_cycle: saved.training_cycle || current.training_cycle,
           available_equipment: saved.available_equipment?.length ? saved.available_equipment : current.available_equipment,
           nutrition_preferences: saved.nutrition_preferences?.length ? saved.nutrition_preferences : current.nutrition_preferences,
-          allergies_limitations: saved.allergies_limitations ?? ""
+          allergies_limitations: saved.allergies_limitations ?? "",
+          injuries_limitations: saved.injuries_limitations ?? "",
+          training_preferences: saved.training_preferences ?? "",
+          food_preferences: saved.food_preferences ?? "",
+          lifestyle_notes: saved.lifestyle_notes ?? "",
+          workout_constraints: saved.workout_constraints ?? "",
+          coaching_notes: saved.coaching_notes ?? ""
         }));
       })
       .catch((error) => {
         console.warn("Plaivra could not load saved onboarding answers.", error);
         toast({ title: "Could not load saved setup", description: "You can still review and save this setup again." });
       });
-  }, [toast, user?.id, router, searchParams]);
+  }, [profile?.target_weight_kg, toast, user?.id, router, searchParams]);
 
   async function finish() {
     if (!user?.id) {
@@ -143,17 +141,22 @@ export default function OnboardingPage() {
     }
     setIsSaving(true);
     try {
-      await saveOnboarding({
-        ...answers,
-        age_range: ageToRange(answers.age),
-        goal: answers.goals.join(", "),
-        user_id: user.id
-      });
-      await saveAiPermissionSettings(user.id, aiPermissions);
+      await Promise.all([
+        saveOnboarding({
+          ...answers,
+          age_range: ageToRange(answers.age),
+          goal: answers.goals.join(", "),
+          user_id: user.id
+        }),
+        updateProfile(user.id, { targetWeightKg: answers.goal_weight_kg, bodyGoal: answers.goals.join(", ") }),
+        saveAiPermissionSettings(user.id, aiPermissions)
+      ]);
+      await refreshProfile();
       toast({
         title: "Profile saved",
         description: "Create your plan in ChatGPT, then export it to Plaivra for tracking."
       });
+      celebrate("Profile setup saved");
       router.push("/my-workout/plans");
     } catch (error) {
       toast({ title: "Could not save profile", description: error instanceof Error ? error.message : "Please try again." });
@@ -197,11 +200,13 @@ export default function OnboardingPage() {
               <StepIntro title="Basic body profile" />
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Body stats</p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <NumberField label="Age" value={answers.age} suffix="years" onChange={(age) => setAnswers((current) => ({ ...current, age }))} />
+                <div className="grid gap-4 md:grid-cols-3">
+                  <WheelPicker label="Age" value={answers.age} values={ageOptions} suffix="years" onChange={(age) => setAnswers((current) => ({ ...current, age }))} />
+                  <WheelPicker label="Height" value={answers.height_cm} values={heightOptions} suffix="cm" onChange={(height_cm) => setAnswers((current) => ({ ...current, height_cm }))} />
+                  <WheelPicker label="Weight" value={answers.weight_kg} values={weightOptions} suffix="kg" onChange={(weight_kg) => setAnswers((current) => ({ ...current, weight_kg }))} />
+                </div>
+                <div className="pt-2">
                   <ChoiceGroup label="Gender / sex" value={answers.gender} values={["Male", "Female", "Prefer not to say"]} onChange={(gender) => setAnswers((current) => ({ ...current, gender }))} />
-                  <NumberField label="Height" value={answers.height_cm} suffix="cm" onChange={(height_cm) => setAnswers((current) => ({ ...current, height_cm }))} />
-                  <NumberField label="Weight" value={answers.weight_kg} suffix="kg" onChange={(weight_kg) => setAnswers((current) => ({ ...current, weight_kg }))} />
                 </div>
               </div>
             </section>
@@ -211,6 +216,9 @@ export default function OnboardingPage() {
             <section className="space-y-4">
               <StepIntro title="Choose your goals" />
               <MultiChoice label="Goals" values={goalOptions} selected={answers.goals} onChange={(goals) => setAnswers((current) => ({ ...current, goals, goal: goals.join(", ") || "General wellness" }))} />
+              <div className="max-w-sm">
+                <WheelPicker label="Goal weight" value={answers.goal_weight_kg} values={weightOptions} suffix="kg" onChange={(goal_weight_kg) => setAnswers((current) => ({ ...current, goal_weight_kg }))} />
+              </div>
             </section>
           ) : null}
 
@@ -231,7 +239,7 @@ export default function OnboardingPage() {
                     <ChoiceGroup label="Preferred split" value={answers.training_cycle} values={trainingCycles} onChange={(training_cycle) => setAnswers((current) => ({ ...current, training_cycle }))} />
                   </div>
                   <div className="sm:col-span-2">
-                    <MultiChoice label="Available equipment" values={["Full gym", "Bodyweight", "Dumbbells", "Barbell", "Machines", "Cables", "Kettle Bells", "EZ Bar", "Bands", "Medicine Ball", "Exercise Ball"]} selected={answers.available_equipment} onChange={(available_equipment) => setAnswers((current) => ({ ...current, available_equipment }))} />
+                    <MultiChoice label="Available equipment" values={["Full gym", "Bodyweight", "Dumbbells", "Barbell", "Cables", "Kettle Bells", "EZ Bar", "Bands", "Medicine Ball", "Exercise Ball"]} selected={answers.available_equipment} onChange={(available_equipment) => setAnswers((current) => ({ ...current, available_equipment }))} />
                   </div>
                 </div>
               </div>
@@ -244,15 +252,14 @@ export default function OnboardingPage() {
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Weekly schedule</p>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <ChoiceGroup label="Training availability" value={`${answers.training_days_per_week} days/week`} values={["2 days/week", "3 days/week", "4 days/week", "5 days/week", "6 days/week"]} onChange={(value) => setAnswers((current) => ({ ...current, training_days_per_week: Number(value[0]) }))} />
-                  <ChoiceGroup label="Plan duration" value={`${answers.desired_duration_weeks} weeks`} values={weekOptions.map((week) => `${week} weeks`)} onChange={(value) => setAnswers((current) => ({ ...current, desired_duration_weeks: Number(value.split(" ")[0]) }))} />
+                  <WheelPicker label="Training availability" value={answers.training_days_per_week} values={dayOptions} suffix="days/week" onChange={(training_days_per_week) => setAnswers((current) => ({ ...current, training_days_per_week }))} />
+                  <WheelPicker label="Plan duration" value={answers.desired_duration_weeks} values={weekOptions} suffix="weeks" onChange={(desired_duration_weeks) => setAnswers((current) => ({ ...current, desired_duration_weeks }))} />
                 </div>
               </div>
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Session length</p>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <ChoiceGroup label="Minimum session" value={`${answers.min_workout_duration_minutes} minutes`} values={durationOptions.map((duration) => `${duration} minutes`)} onChange={(value) => {
-                    const min = Number(value.split(" ")[0]);
+                  <WheelPicker label="Minimum session" value={answers.min_workout_duration_minutes} values={minuteOptions} suffix="minutes" onChange={(min) => {
                     setAnswers((current) => ({
                       ...current,
                       min_workout_duration_minutes: min,
@@ -260,8 +267,7 @@ export default function OnboardingPage() {
                       workout_duration_minutes: Math.round((min + Math.max(min, current.max_workout_duration_minutes)) / 2)
                     }));
                   }} />
-                  <ChoiceGroup label="Maximum session" value={`${answers.max_workout_duration_minutes} minutes`} values={durationOptions.map((duration) => `${duration} minutes`)} onChange={(value) => {
-                    const max = Number(value.split(" ")[0]);
+                  <WheelPicker label="Maximum session" value={answers.max_workout_duration_minutes} values={minuteOptions} suffix="minutes" onChange={(max) => {
                     setAnswers((current) => ({
                       ...current,
                       min_workout_duration_minutes: Math.min(current.min_workout_duration_minutes, max),
@@ -276,22 +282,26 @@ export default function OnboardingPage() {
 
           {step === 4 ? (
             <section className="space-y-4">
-              <StepIntro title="Nutrition preferences" />
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Diet preferences</p>
-                <MultiChoice label="Nutrition preferences" values={["Normal", "High protein", "Vegetarian", "Halal", "Egyptian food preferred", "Middle Eastern food preferred"]} selected={answers.nutrition_preferences} onChange={(nutrition_preferences) => setAnswers((current) => ({ ...current, nutrition_preferences }))} />
-              </div>
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Limitations / allergies</p>
-                <div className="space-y-2">
-                  <Label htmlFor="limitations">Allergies and limitations</Label>
-                  <Input id="limitations" value={answers.allergies_limitations} onChange={(event) => setAnswers((current) => ({ ...current, allergies_limitations: event.target.value }))} placeholder="Optional allergies, injuries, weak areas, or foods to avoid" />
-                </div>
-              </div>
+              <StepIntro title="Food preferences" detail="Use the same preference workspace as Meal Plan so your saved tastes, allergies, budget, and kitchen constraints stay consistent." />
+              <NutritionPreferenceCard />
             </section>
           ) : null}
 
           {step === 5 ? (
+            <section className="space-y-4">
+              <StepIntro title="Coaching context" detail="Tell ChatGPT what makes a plan practical for your life. Everything here is optional and stays under your approval." />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ContextField label="Injuries or limitations" value={answers.injuries_limitations} onChange={(injuries_limitations) => setAnswers((current) => ({ ...current, injuries_limitations }))} placeholder="Movements, pain, or limitations to consider" />
+                <ContextField label="Training preferences" value={answers.training_preferences} onChange={(training_preferences) => setAnswers((current) => ({ ...current, training_preferences }))} placeholder="Styles, exercises, or pacing you enjoy" />
+                <ContextField label="Food preferences" value={answers.food_preferences} onChange={(food_preferences) => setAnswers((current) => ({ ...current, food_preferences }))} placeholder="Foods, cuisines, or routines that work for you" />
+                <ContextField label="Lifestyle notes" value={answers.lifestyle_notes} onChange={(lifestyle_notes) => setAnswers((current) => ({ ...current, lifestyle_notes }))} placeholder="Work, family, sleep, travel, or schedule context" />
+                <ContextField label="Workout constraints" value={answers.workout_constraints} onChange={(workout_constraints) => setAnswers((current) => ({ ...current, workout_constraints }))} placeholder="Time, space, equipment, or recovery limits" />
+                <ContextField label="Personal coaching notes" value={answers.coaching_notes} onChange={(coaching_notes) => setAnswers((current) => ({ ...current, coaching_notes }))} placeholder="Anything ChatGPT should consider when helping" />
+              </div>
+            </section>
+          ) : null}
+
+          {step === 6 ? (
             <section className="space-y-4">
               <StepIntro title="AI Permissions" detail="Choose what access AI should have to your Plaivra account during setup." />
               <div className="space-y-4">
@@ -390,7 +400,7 @@ export default function OnboardingPage() {
             </section>
           ) : null}
 
-          {step === 6 ? (
+          {step === 7 ? (
             <section className="space-y-4">
               <div className="glass-card p-4 sm:p-5">
                 <h2 className="text-lg font-semibold">Review before saving</h2>
@@ -400,17 +410,19 @@ export default function OnboardingPage() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <ReviewItem label="Goals" value={answers.goals.join(", ")} />
+                <ReviewItem label="Goal weight" value={answers.goal_weight_kg ? `${answers.goal_weight_kg} kg` : "Not added"} />
                 <ReviewItem label="Training" value={`${answers.training_level} · ${answers.training_place} · ${answers.training_cycle}`} />
                 <ReviewItem label="Schedule" value={`${answers.training_days_per_week} days/week · ${answers.min_workout_duration_minutes}-${answers.max_workout_duration_minutes} min · ${answers.desired_duration_weeks} weeks`} />
                 <ReviewItem label="Equipment" value={answers.available_equipment.join(", ")} />
                 <ReviewItem label="Nutrition" value={answers.nutrition_preferences.join(", ")} />
                 <ReviewItem label="Limitations" value={answers.allergies_limitations || "None added"} />
+                <ReviewItem label="Coaching context" value={answers.coaching_notes || answers.lifestyle_notes || "None added"} />
                 <ReviewItem label="AI Access" value={aiPermissions.accessMode === "full" ? "Full AI Access" : "Custom AI Access"} />
               </div>
             </section>
           ) : null}
 
-          <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] z-20 -mx-4 flex items-center justify-between gap-3 border-t border-border/70 bg-card/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-t sm:bg-transparent sm:px-0 sm:pb-0 sm:backdrop-blur-none">
+          <div className="sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 border-t border-border/70 bg-card/95 px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur sm:static sm:mx-0 sm:border-t sm:bg-transparent sm:px-0 sm:pb-0 sm:backdrop-blur-none">
             <Button variant="outline" disabled={step === 0} onClick={() => setStep((current) => Math.max(0, current - 1))} className="min-h-12">
               <ChevronLeft className="h-4 w-4" />
               Back
@@ -430,8 +442,7 @@ export default function OnboardingPage() {
         </CardContent>
       </Card>
 
-      {/* Mobile bottom spacer for nav */}
-      <div className="h-24 lg:hidden" />
+      <div className="h-[calc(env(safe-area-inset-bottom)+1rem)]" aria-hidden="true" />
     </>
   );
 }
@@ -483,14 +494,11 @@ function MultiChoice({ label, values, selected, onChange }: { label: string; val
   );
 }
 
-function NumberField({ label, value, suffix, onChange }: { label: string; value: number | null; suffix: string; onChange: (value: number | null) => void }) {
+function ContextField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <div className="grid grid-cols-[1fr_auto] gap-2">
-        <Input type="text" inputMode="decimal" value={value ?? ""} onChange={(event) => { const nextValue = event.target.value.trim(); onChange(nextValue ? Math.max(0, Number(nextValue) || 0) : null); }} placeholder={label} />
-        <span className="flex h-11 items-center rounded-xl border bg-card px-3 text-sm font-semibold text-muted-foreground">{suffix}</span>
-      </div>
+      <textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="min-h-28 w-full resize-y rounded-[14px] border border-input bg-card px-3 py-3 text-base outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring" />
     </div>
   );
 }

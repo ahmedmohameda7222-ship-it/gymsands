@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError } from "@/lib/error-formatting";
 import type { FoodLog, MealType } from "@/types";
+import { barcodeValidationMessage, normalizeProductBarcode } from "@/lib/barcodes";
 
 type DetectedBarcode = { rawValue?: string };
 type BarcodeDetectorInstance = { detect: (source: HTMLVideoElement) => Promise<DetectedBarcode[]> };
@@ -59,11 +60,13 @@ export function ApiFoodTools({
   const [addToLog, setAddToLog] = useState(true);
   const [addToMealPlan, setAddToMealPlan] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [scannerMessage, setScannerMessage] = useState("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const zxingControlsRef = useRef<ScannerControls | null>(null);
   const scanTimerRef = useRef<number | null>(null);
+  const scanCandidateRef = useRef<{ value: string; count: number; at: number } | null>(null);
 
 
   function authHeaders(contentType = false) {
@@ -74,8 +77,8 @@ export function ApiFoodTools({
   }
 
   async function lookupBarcode(nextBarcode = barcode) {
-    const cleanBarcode = nextBarcode.trim();
-    if (!cleanBarcode) return toast({ title: "Barcode required", description: "Scan or enter a barcode first." });
+    const cleanBarcode = normalizeProductBarcode(nextBarcode);
+    if (!cleanBarcode) return toast({ title: "Check barcode", description: barcodeValidationMessage(nextBarcode), variant: "error" });
     setBarcode(cleanBarcode);
     const response = await fetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(cleanBarcode)}`, { headers: authHeaders() });
     const data = await response.json().catch(() => ({}));
@@ -111,13 +114,29 @@ export function ApiFoodTools({
     video.srcObject = stream;
     video.muted = true;
     video.playsInline = true;
+    const track = stream.getVideoTracks()[0];
+    const capabilities = track?.getCapabilities() as MediaTrackCapabilities & { focusMode?: string[] };
+    if (track && capabilities?.focusMode?.includes("continuous")) {
+      await track.applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] }).catch(() => undefined);
+    }
     await video.play();
     return waitForFrame(video);
   }
 
   function handleDetectedBarcode(value: string) {
-    const cleanBarcode = value.trim();
-    if (!cleanBarcode) return;
+    const cleanBarcode = normalizeProductBarcode(value);
+    if (!cleanBarcode) {
+      setScannerMessage(barcodeValidationMessage(value));
+      return;
+    }
+    const now = Date.now();
+    const prior = scanCandidateRef.current;
+    const count = prior?.value === cleanBarcode && now - prior.at < 2500 ? prior.count + 1 : 1;
+    scanCandidateRef.current = { value: cleanBarcode, count, at: now };
+    if (count < 2) {
+      setScannerMessage(`Hold steady while Plaivra verifies ${cleanBarcode}…`);
+      return;
+    }
     setBarcode(cleanBarcode);
     setScannerMessage(`Barcode detected: ${cleanBarcode}`);
     stopScanner();
@@ -178,6 +197,7 @@ export function ApiFoodTools({
     try {
       stopScanner();
       setBarcodeFood(null);
+      scanCandidateRef.current = null;
       setIsScanning(true);
       setScannerMessage("Opening camera...");
       await nextAnimationFrame();
@@ -201,26 +221,22 @@ export function ApiFoodTools({
       return toast({ title: "Choose an action", description: "Save to foods, add to daily log, or add to meal plan." });
     }
 
-    const response = await fetch("/api/food/open-food-facts", {
-      method: "POST",
-      headers: authHeaders(true),
-      body: JSON.stringify({
-        barcode,
-        quantity: Number(quantity),
-        mealType,
-        date: selectedDate,
-        saveToLibrary,
-        addToLog,
-        addToMealPlan
-      })
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) return toast({ title: "Could not save food", description: data.error ?? "Please try again." });
-    if (data.log) onFoodLogged?.(data.log as FoodLog);
-    toast({
-      title: "Food saved",
-      description: addToLog ? `${data.food?.name ?? barcodeFood.name} added to ${mealType}.` : data.libraryFood?.food_name ?? data.food?.name ?? barcodeFood.name
-    });
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/food/open-food-facts", {
+        method: "POST",
+        headers: authHeaders(true),
+        body: JSON.stringify({ barcode, quantity: Number(quantity), mealType, date: selectedDate, saveToLibrary, addToLog, addToMealPlan })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error ?? "Please review the barcode and try again.");
+      if (data.log) onFoodLogged?.(data.log as FoodLog);
+      toast({ title: "Product saved", description: addToLog ? `${data.food?.name ?? barcodeFood.name} added to ${mealType}.` : data.libraryFood?.food_name ?? data.food?.name ?? barcodeFood.name });
+    } catch (error) {
+      toast({ title: "Product could not be saved", description: userSafeError(error, "Review the barcode or try again."), variant: "error" });
+    } finally {
+      setIsSaving(false);
+    }
   }
 
 
@@ -236,13 +252,14 @@ export function ApiFoodTools({
         <div className="solid-row p-3">
           <p className="mb-2 flex items-center gap-2 font-semibold"><Barcode className="h-4 w-4 text-primary" /> Barcode lookup</p>
           <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-            <Input value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder="Barcode" />
+            <Input value={barcode} inputMode="numeric" onChange={(event) => { setBarcode(event.target.value.replace(/\D/g, "")); setBarcodeFood(null); }} placeholder="Barcode numbers" aria-describedby="barcode-help" />
             <Button type="button" variant="outline" onClick={isScanning ? stopScanner : startScanner}>
               {isScanning ? <Square className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
               {isScanning ? "Stop" : "Scan"}
             </Button>
             <Button type="button" onClick={() => lookupBarcode()}>Lookup</Button>
           </div>
+          <p id="barcode-help" className="mt-2 text-xs text-muted-foreground">Review or correct the detected number before lookup. Supported formats: EAN-8, UPC-A, EAN-13, and GTIN-14.</p>
           <div className={`mt-3 overflow-hidden rounded-md border bg-black ${isScanning ? "" : "hidden"}`}>
             <video ref={videoRef} className="aspect-video w-full object-cover" muted playsInline autoPlay />
           </div>
@@ -259,9 +276,9 @@ export function ApiFoodTools({
                     {mealTypes.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Button type="button" onClick={saveBarcodeFood}>
+                <Button type="button" onClick={saveBarcodeFood} disabled={isSaving}>
                   <Save className="h-4 w-4" />
-                  Save
+                  {isSaving ? "Saving…" : "Save"}
                 </Button>
               </div>
               <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">

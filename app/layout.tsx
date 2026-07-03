@@ -5,6 +5,7 @@ import { ToastProvider } from "@/components/ui/toaster";
 import { AppPreferenceEffects } from "@/components/settings/app-preference-effects";
 import { UserSettingsProvider } from "@/lib/settings/user-settings-context";
 import { createThemeBootstrapScript } from "@/lib/themes";
+import { SuccessFeedbackProvider } from "@/components/feedback/success-feedback";
 
 export const metadata: Metadata = {
   title: "Plaivra",
@@ -36,8 +37,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ToastProvider>
           <AuthProvider>
             <UserSettingsProvider>
-              <AppPreferenceEffects />
-              {children}
+              <SuccessFeedbackProvider>
+                <AppPreferenceEffects />
+                {children}
+              </SuccessFeedbackProvider>
             </UserSettingsProvider>
           </AuthProvider>
         </ToastProvider>

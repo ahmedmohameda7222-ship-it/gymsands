@@ -69,10 +69,10 @@ describe("Phase 5 user-visible MCP activity", () => {
     expect(builder.select).toHaveBeenCalledWith("id,tool_name,output_summary,status,created_at");
   });
 
-  it("shows the Client ID, reconnect notice, revoke effect, and no legacy setup secret", () => {
+  it("shows the Client ID and revoke effect without legacy setup or security-banner copy", () => {
     const source = readFileSync("components/settings/connected-apps.tsx", "utf8");
     expect(source).toContain("Plaivra OAuth client ID");
-    expect(source).toContain("ChatGPT connection updated for security");
+    expect(source).not.toContain("ChatGPT connection updated for security");
     expect(source).toContain("Existing ChatGPT access tokens will stop working");
     expect(source).not.toContain("data.token");
   });

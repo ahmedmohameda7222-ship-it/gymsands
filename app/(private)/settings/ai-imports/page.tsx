@@ -21,7 +21,7 @@ export default function AiImportsSettingsPage() {
         <Card className="border-primary/25 bg-primary/5">
           <CardContent className="space-y-3 p-4 sm:p-5">
             <p className="flex items-center gap-2 font-semibold text-foreground"><ShieldCheck className="h-5 w-5 text-primary" /> You decide what reaches ChatGPT</p>
-            <p className="text-sm leading-6 text-muted-foreground">Plaivra can share only the categories you allow, such as workouts, nutrition, meal plans, hydration, progress, or wellness. Request dialogs show a plain-language preview before you copy anything.</p>
+            <p className="text-sm leading-6 text-muted-foreground">Plaivra can use only the categories you allow, such as workouts, nutrition, meal plans, hydration, progress, or wellness.</p>
             <ul className="grid gap-2 text-sm text-foreground sm:grid-cols-3">
               <li className="rounded-[12px] border bg-card p-3"><span className="font-semibold">Permissions</span><span className="mt-1 block text-muted-foreground">Control what ChatGPT may view or change.</span></li>
               <li className="rounded-[12px] border bg-card p-3"><span className="font-semibold">Your approval</span><span className="mt-1 block text-muted-foreground">Plaivra never changes plans or logs silently.</span></li>

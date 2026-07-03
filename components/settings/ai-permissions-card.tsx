@@ -15,6 +15,7 @@ import {
 } from "@/services/database/ai-permissions";
 import { AI_PERMISSION_SECTION_DETAILS, FULL_ACCESS_WARNING } from "@/lib/mcp/permission-presentation";
 import { userSafeError } from "@/lib/error-formatting";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 const permissionExamples: Record<string, string> = {
   workouts: "Example: Review today’s workout or save an approved set change.",
@@ -30,6 +31,7 @@ const permissionExamples: Record<string, string> = {
 export function AiPermissionsCard() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { dialog: confirmDialog, ask: confirmAsk } = useConfirm();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [config, setConfig] = useState<AiPermissionConfig>(() => getDefaultAiPermissionConfig());
@@ -69,6 +71,46 @@ export function AiPermissionsCard() {
     }
   }
 
+  function toggleRead(section: (typeof ALL_AI_PERMISSION_SECTIONS)[number]) {
+    const enabled = config.sections[section].read;
+    const apply = () => setConfig((current) => ({
+      ...current,
+      sections: {
+        ...current.sections,
+        [section]: enabled ? { read: false, write: false } : { ...current.sections[section], read: true }
+      }
+    }));
+    if (!enabled) return apply();
+    confirmAsk({
+      title: `Remove ChatGPT read access for ${AI_PERMISSION_SECTION_DETAILS[section].label}?`,
+      description: "ChatGPT will no longer be able to view this section. Write access will also be removed.",
+      confirmLabel: "Remove access",
+      variant: "destructive",
+      onConfirm: apply
+    });
+  }
+
+  function toggleWrite(section: (typeof ALL_AI_PERMISSION_SECTIONS)[number]) {
+    const enabled = config.sections[section].write;
+    const apply = () => setConfig((current) => ({
+      ...current,
+      sections: {
+        ...current.sections,
+        [section]: enabled
+          ? { ...current.sections[section], write: false }
+          : { read: true, write: true }
+      }
+    }));
+    if (!enabled) return apply();
+    confirmAsk({
+      title: `Remove ChatGPT write access for ${AI_PERMISSION_SECTION_DETAILS[section].label}?`,
+      description: "ChatGPT will no longer be able to save changes in this section. Read access will remain enabled.",
+      confirmLabel: "Remove write access",
+      variant: "destructive",
+      onConfirm: apply
+    });
+  }
+
   const summary = useMemo(() => {
     const labels = ALL_AI_PERMISSION_SECTIONS.map((section) => ({ section, label: AI_PERMISSION_SECTION_DETAILS[section].label }));
     if (config.accessMode === "full") return { view: labels.map((item) => item.label), change: labels.map((item) => item.label), denied: [] as string[] };
@@ -92,6 +134,7 @@ export function AiPermissionsCard() {
 
   return (
     <div className="space-y-4">
+      {confirmDialog}
       <Card className="border-border/70">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -180,15 +223,7 @@ export function AiPermissionsCard() {
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             type="button"
-                            onClick={() =>
-                              setConfig((current) => ({
-                                ...current,
-                                sections: {
-                                  ...current.sections,
-                                  [section]: { ...current.sections[section], read: !current.sections[section].read }
-                                }
-                              }))
-                            }
+                            onClick={() => toggleRead(section)}
                             aria-pressed={perms.read}
                             className={`inline-flex min-h-11 items-center gap-1 rounded-xl border-2 px-3 py-2 text-xs font-semibold transition ${
                               perms.read
@@ -201,21 +236,7 @@ export function AiPermissionsCard() {
                           </button>
                           <button
                             type="button"
-                            onClick={() =>
-                              setConfig((current) => {
-                                const nextWrite = !current.sections[section].write;
-                                return {
-                                  ...current,
-                                  sections: {
-                                    ...current.sections,
-                                    [section]: {
-                                      read: nextWrite ? true : current.sections[section].read,
-                                      write: nextWrite
-                                    }
-                                  }
-                                };
-                              })
-                            }
+                            onClick={() => toggleWrite(section)}
                             aria-pressed={perms.write}
                             className={`inline-flex min-h-11 items-center gap-1 rounded-xl border-2 px-3 py-2 text-xs font-semibold transition ${
                               perms.write

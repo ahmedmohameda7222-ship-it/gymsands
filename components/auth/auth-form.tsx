@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Loader2, XCircle } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,8 @@ import { supabase, setRememberSession } from "@/lib/supabase/client";
 import { defaultStartPageToPath, getUserAppSettings } from "@/services/database/user-settings";
 import { PENDING_CONSENTS_STORAGE_KEY, REQUIRED_CONSENTS } from "@/lib/legal/versions";
 import { safeInternalRedirectPath } from "@/lib/auth/redirect";
+import { useTranslation } from "@/lib/i18n/use-translation";
+import { getPublicCopy } from "@/lib/i18n/public-copy";
 
 type RequiredConsentKey = "terms" | "privacy" | "fitnessData" | "disclaimer" | "age16";
 
@@ -50,6 +52,8 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const { language } = useTranslation();
+  const copy = getPublicCopy(language);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
@@ -58,13 +62,29 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [resetEmail, setResetEmail] = useState("");
   const [requiredConsents, setRequiredConsents] = useState(initialRequiredConsents);
+  const passwordRequirements = {
+    minLength: password.length >= 8,
+    uppercase: /\p{Lu}/u.test(password),
+    lowercase: /\p{Ll}/u.test(password),
+    special: /[^\p{L}\p{N}\s]/u.test(password)
+  };
+  const passwordIsValid = Object.values(passwordRequirements).every(Boolean);
+  const registerIsValid = mode === "login" || (
+    passwordIsValid &&
+    password === confirmPassword &&
+    Object.values(requiredConsents).every(Boolean)
+  );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!email.trim()) return toast({ title: "Email is required", description: "Use the email for your Plaivra account." });
-    if (password.length < 6) return toast({ title: "Password is too short", description: "Use at least 6 characters." });
+    if (mode === "login" && password.length < 1) {
+      return toast({ title: "Password is required", description: "Enter your Plaivra account password." });
+    }
+    if (mode === "register" && !passwordIsValid) {
+      return toast({ title: "Password requirements are not complete", description: "Use at least 8 characters with uppercase, lowercase, and a special character." });
+    }
     if (mode === "register" && password !== confirmPassword) {
       return toast({ title: "Passwords do not match", description: "Make sure both password fields match." });
     }
@@ -81,7 +101,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     try {
       if (!supabase) {
         toast({ title: "Welcome", description: "You can continue to the dashboard." });
-        router.push("/dashboard");
+        router.push(mode === "register" ? "/welcome" : "/dashboard");
         return;
       }
 
@@ -112,7 +132,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             data: {
               full_name: fullName
             },
-            emailRedirectTo: `${window.location.origin}/onboarding`
+            emailRedirectTo: `${window.location.origin}/welcome`
           }
         }));
         if (error) throw error;
@@ -135,7 +155,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             ? "Your consent choices were recorded. Finish onboarding next."
             : "Check your email if confirmation is enabled. Plaivra will save your consent record after sign-in."
         });
-        router.replace("/onboarding");
+        router.replace("/welcome");
         router.refresh();
       }
     } catch (error) {
@@ -148,79 +168,29 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     }
   }
 
-  async function handlePasswordReset() {
-    const targetEmail = resetEmail || email;
-    if (!targetEmail.trim()) return toast({ title: "Email is required", description: "Enter your Plaivra account email first." });
-    if (!supabase) return toast({ title: "Password reset unavailable", description: "Please try again later." });
-    const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
-      redirectTo: `${window.location.origin}/profile`
-    });
-    if (error) {
-      toast({ title: "Reset email failed", description: error.message });
-    } else {
-      toast({ title: "Password reset email sent", description: "Open your email to continue." });
-    }
-  }
-
   return (
     <Card className="w-full max-w-md rounded-[24px]">
       <CardHeader>
-        <CardTitle>{mode === "login" ? "Login to Plaivra" : "Create your Plaivra account"}</CardTitle>
+        <CardTitle>{mode === "login" ? copy.loginTitle : copy.registerTitle}</CardTitle>
         <CardDescription>
-          {mode === "login" ? "Continue to your private fitness dashboard." : "Start with a quick, simple onboarding."}
+          {mode === "login" ? copy.loginDescription : copy.registerDescription}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={handleSubmit}>
           {mode === "register" ? (
             <div className="space-y-2">
-              <Label htmlFor="full-name">Full name</Label>
+              <Label htmlFor="full-name">{copy.name}</Label>
               <Input
                 id="full-name"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
-                placeholder="Your name"
                 autoComplete="name"
               />
             </div>
           ) : null}
-          {mode === "register" ? (
-            <fieldset className="space-y-3 rounded-2xl border border-border/70 p-4">
-              <legend className="px-1 text-sm font-semibold">Required agreements</legend>
-              <ConsentCheckbox
-                checked={requiredConsents.terms}
-                onChange={(checked) => setRequiredConsents((current) => ({ ...current, terms: checked }))}
-              >
-                I agree to the <Link className="font-semibold text-primary underline" href="/legal/terms" target="_blank">Terms</Link>.
-              </ConsentCheckbox>
-              <ConsentCheckbox
-                checked={requiredConsents.privacy}
-                onChange={(checked) => setRequiredConsents((current) => ({ ...current, privacy: checked }))}
-              >
-                I have read the <Link className="font-semibold text-primary underline" href="/legal/privacy" target="_blank">Privacy Policy</Link>.
-              </ConsentCheckbox>
-              <ConsentCheckbox
-                checked={requiredConsents.fitnessData}
-                onChange={(checked) => setRequiredConsents((current) => ({ ...current, fitnessData: checked }))}
-              >
-                I explicitly consent to Plaivra processing the fitness, nutrition, wellness, body and progress data I choose to provide so the requested app features can work. I can withdraw this consent with future effect by contacting the operator or requesting restriction/deletion.
-              </ConsentCheckbox>
-              <ConsentCheckbox
-                checked={requiredConsents.disclaimer}
-                onChange={(checked) => setRequiredConsents((current) => ({ ...current, disclaimer: checked }))}
-              >
-                I have read and understood the <Link className="font-semibold text-primary underline" href="/legal/disclaimer" target="_blank">health and medical disclaimer</Link>.
-              </ConsentCheckbox>
-              <ConsentCheckbox
-                checked={requiredConsents.age16}
-                onChange={(checked) => setRequiredConsents((current) => ({ ...current, age16: checked }))}
-              >
-                I confirm I am 16 or older and have any additional guardian consent required by applicable law.
-              </ConsentCheckbox>
-            </fieldset>
-          ) : null}
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{copy.email}</Label>
             <Input
               id="email"
               type="email"
@@ -231,7 +201,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{copy.password}</Label>
             <div className="relative">
               <Input
                 id="password"
@@ -239,7 +209,6 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
-                placeholder={mode === "register" ? "At least 6 characters" : undefined}
                 required
                 className="pr-12"
               />
@@ -254,10 +223,18 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
+            {mode === "register" ? (
+              <div className="grid gap-1.5 pt-1" aria-live="polite">
+                <PasswordRequirement met={passwordRequirements.minLength} label={copy.minEight} />
+                <PasswordRequirement met={passwordRequirements.uppercase} label={copy.uppercase} />
+                <PasswordRequirement met={passwordRequirements.lowercase} label={copy.lowercase} />
+                <PasswordRequirement met={passwordRequirements.special} label={copy.special} />
+              </div>
+            ) : null}
           </div>
           {mode === "register" ? (
             <div className="space-y-2">
-              <Label htmlFor="confirm-password">Confirm password</Label>
+              <Label htmlFor="confirm-password">{copy.confirmPassword}</Label>
               <div className="relative">
                 <Input
                   id="confirm-password"
@@ -286,44 +263,54 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
               type="checkbox"
               checked={remember}
               onChange={(event) => setRemember(event.target.checked)}
-              className="h-4 w-4 rounded border-border accent-primary"
+            className="h-4 w-4 rounded border-border accent-primary"
             />
-            Remember me / keep me logged in
+            {copy.rememberMe}
           </label>
-          <Button type="submit" className="w-full" disabled={isLoading}>
+          {mode === "register" ? (
+            <fieldset className="space-y-3 rounded-2xl border border-border/70 p-4">
+              <legend className="px-1 text-sm font-semibold">{copy.requiredAgreements}</legend>
+              <ConsentCheckbox checked={requiredConsents.terms} onChange={(checked) => setRequiredConsents((current) => ({ ...current, terms: checked }))}>
+                {language === "ar" ? "أوافق على " : "I agree to the "}<Link className="font-semibold text-primary underline" href="/legal/terms" target="_blank">{language === "ar" ? "شروط الاستخدام" : "Terms"}</Link>.
+              </ConsentCheckbox>
+              <ConsentCheckbox checked={requiredConsents.privacy} onChange={(checked) => setRequiredConsents((current) => ({ ...current, privacy: checked }))}>
+                {language === "ar" ? "قرأت " : "I have read the "}<Link className="font-semibold text-primary underline" href="/legal/privacy" target="_blank">{language === "ar" ? "سياسة الخصوصية" : "Privacy Policy"}</Link>.
+              </ConsentCheckbox>
+              <ConsentCheckbox checked={requiredConsents.fitnessData} onChange={(checked) => setRequiredConsents((current) => ({ ...current, fitnessData: checked }))}>
+                {language === "ar" ? "أوافق صراحةً على معالجة بيانات اللياقة والتغذية والعافية والجسم والتقدم التي أختار تقديمها لتشغيل الميزات المطلوبة." : "I explicitly consent to Plaivra processing the fitness, nutrition, wellness, body, and progress data I choose to provide for the features I request."}
+              </ConsentCheckbox>
+              <ConsentCheckbox checked={requiredConsents.disclaimer} onChange={(checked) => setRequiredConsents((current) => ({ ...current, disclaimer: checked }))}>
+                {language === "ar" ? "قرأت وفهمت " : "I have read and understood the "}<Link className="font-semibold text-primary underline" href="/legal/disclaimer" target="_blank">{language === "ar" ? "إخلاء المسؤولية الصحية والطبية" : "health and medical disclaimer"}</Link>.
+              </ConsentCheckbox>
+              <ConsentCheckbox checked={requiredConsents.age16} onChange={(checked) => setRequiredConsents((current) => ({ ...current, age16: checked }))}>
+                {language === "ar" ? "أؤكد أن عمري 16 عامًا أو أكثر وأن لدي أي موافقة إضافية مطلوبة قانونًا." : "I confirm I am 16 or older and have any additional guardian consent required by applicable law."}
+              </ConsentCheckbox>
+            </fieldset>
+          ) : null}
+          <Button type="submit" className="w-full" disabled={isLoading || !registerIsValid}>
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {mode === "login" ? "Login" : "Register"}
+            {mode === "login" ? copy.login : copy.createAccount}
           </Button>
         </form>
-
-        {mode === "login" ? (
-          <div className="solid-row mt-4 p-3">
-            <Label htmlFor="reset-email" className="text-xs">
-              Password reset
-            </Label>
-            <div className="mt-2 flex gap-2">
-              <Input
-                id="reset-email"
-                type="email"
-                value={resetEmail}
-                onChange={(event) => setResetEmail(event.target.value)}
-                placeholder="Email for reset link"
-              />
-              <Button type="button" variant="outline" onClick={handlePasswordReset}>
-                Send
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
         <p className="mt-5 text-center text-sm text-muted-foreground">
-          {mode === "login" ? "New to Plaivra?" : "Already have an account?"}{" "}
+          {mode === "login" ? copy.newToPlaivra : copy.alreadyAccount}{" "}
           <Link href={mode === "login" ? "/register" : "/login"} className="font-semibold text-primary">
-            {mode === "login" ? "Create account" : "Login"}
+            {mode === "login" ? copy.createAccount : copy.login}
           </Link>
+          {mode === "login" ? <><span aria-hidden="true"> · </span><Link href="/forgot-password" className="font-semibold text-primary">{copy.forgotPassword}</Link></> : null}
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+function PasswordRequirement({ met, label }: { met: boolean; label: string }) {
+  const Icon = met ? CheckCircle2 : XCircle;
+  return (
+    <p className={`flex items-center gap-2 text-xs font-medium ${met ? "text-success" : "text-destructive"}`}>
+      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      {label}
+    </p>
   );
 }
 

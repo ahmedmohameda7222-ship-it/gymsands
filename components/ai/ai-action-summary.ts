@@ -14,6 +14,7 @@ export type AiActionPresentation = {
 };
 
 const presentations: Record<AiActionType, AiActionPresentation> = {
+  build_meal_plan: { label: "Import meal plan", description: "Discuss a personalized meal plan, approve the final version, then import it into Plaivra.", goal: "Create an approved meal plan for Plaivra" },
   replace_exercise: { label: "Replace exercise", description: "Find a practical alternative for the current exercise.", goal: "Suggest a suitable replacement" },
   adjust_next_workout: { label: "Adjust next workout", description: "Review the next workout and recommend a sensible change.", goal: "Adjust the next workout" },
   rebalance_week: { label: "Rebalance this week", description: "Review the remaining week without changing it automatically.", goal: "Rebalance the training week" },
@@ -90,6 +91,32 @@ export function buildChatGptActionPrompt(
   request: Pick<AiActionRequest, "action_type" | "context_json" | "user_note">,
   presentation = getAiActionPresentation(request.action_type)
 ) {
+  if (request.action_type === "build_meal_plan") {
+    const context = record(request.context_json);
+    const planning = record(context.planning_profile);
+    const nutrition = record(context.nutrition_preference_profile);
+    const list = (value: unknown) => Array.isArray(value) && value.length ? value.join(", ") : "Not specified";
+    const value = (...values: unknown[]) => text(...values) || "Not specified";
+    return [
+      "Act as a practical, evidence-informed meal-planning assistant. Help me discuss and refine a meal plan before anything is imported into Plaivra.",
+      "MY PLANNING CONTEXT",
+      `Goal: ${value(planning.goal)}.`,
+      `Goal weight: ${value(planning.goal_weight_kg)}${planning.goal_weight_kg ? " kg" : ""}.`,
+      `Training schedule: ${value(planning.training_days_per_week)} days per week, ${value(planning.session_duration)} minutes per session, for ${value(planning.plan_duration_weeks)} weeks.`,
+      `Nutrition preferences: ${list(planning.nutrition_preferences)}.`,
+      `Food preferences: ${value(planning.food_preferences, list(nutrition.preferred_cuisines))}.`,
+      `Disliked foods: ${list(nutrition.disliked_foods)}.`,
+      `Allergies or limitations: ${value(planning.allergies_limitations, nutrition.allergies)}.`,
+      `Lifestyle constraints: ${value(planning.lifestyle_notes)}.`,
+      `Workout constraints: ${value(planning.workout_constraints)}.`,
+      `Other coaching context: ${value(planning.coaching_notes)}.`,
+      `Cooking and shopping context: budget ${value(nutrition.weekly_food_budget)} ${value(nutrition.budget_currency)}, maximum cooking time ${value(nutrition.max_cooking_time_minutes)} minutes, kitchen equipment ${list(nutrition.kitchen_equipment)}.`,
+      "First ask any essential questions and explain your recommendation. Do not finalize or import a plan until I explicitly approve it.",
+      "For the approved final plan, provide each meal with: day or date, meal type, food name, serving or quantity, calories, protein, carbohydrates, fat, and practical notes. Keep totals realistic and internally consistent.",
+      "After I approve the final version, use the Plaivra connection to import only that approved plan. Do not alter any other Plaivra data.",
+      request.user_note ? `My additional note: ${request.user_note.trim()}` : null
+    ].filter(Boolean).join("\n\n");
+  }
   const summary = buildAiActionSummary(request.action_type, request.context_json);
   const details = summary.map((row) => `${row.label}: ${row.value}.`);
   return [

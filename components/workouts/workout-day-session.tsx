@@ -14,6 +14,7 @@ import { MobileStickyActions, MobileStickyActionsSpacer } from "@/components/lay
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
+import { clearActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
 import { userSafeError } from "@/lib/error-formatting";
 import Link from "next/link";
 import { completeWorkoutSession, getOrStartWorkoutDaySession, getWorkoutHistoryDetailed, getWorkoutSessionLogs, saveWorkoutSetLogs, updateWorkoutSessionDuration } from "@/services/database/workout-sessions";
@@ -23,6 +24,7 @@ import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog"
 import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
 import { createExerciseAlternative, getDailyCheckins, getExerciseAlternatives, getProgressionTargets } from "@/services/database/execution-layer";
 import { calculateReadiness, getSleepRecoveryHistory, type EnhancedSleepRecoveryLog } from "@/services/wellness/wellness-data";
+import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 
 const defaultInstructions = "Use controlled form, keep the target muscle engaged, avoid rushing the eccentric part, and stop if the movement feels painful.";
 
@@ -336,6 +338,7 @@ function setNote(set: SetState) {
 export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { celebrate } = useSuccessFeedback();
   const { dialog: confirmDialog, ask: confirmAsk } = useConfirm();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [startedAtMs, setStartedAtMs] = useState(() => Date.now());
@@ -384,6 +387,14 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         const nextStartedAt = storedStartedAt ?? (Number.isFinite(parsedStartedAt) ? parsedStartedAt : Date.now());
         setStartedAtMs(nextStartedAt);
         storeTimestamp(workoutTimerKey, nextStartedAt);
+        writeActiveWorkoutState(user.id, {
+          sessionId: nextSession.id,
+          route: `/workouts/session/day/${day.id}`,
+          label: day.day_name,
+          startedAtMs: nextStartedAt,
+          elapsedSeconds: Math.max(0, Number(nextSession.duration_minutes ?? 0) * 60),
+          paused: false
+        });
         setSessionNotes(nextSession.notes ?? "");
         const today = new Date().toLocaleDateString("en-CA");
         const exerciseIds = day.exercises.map((exercise) => exercise.id);
@@ -651,11 +662,13 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
       const summary = buildSummary(exerciseStates, history, durationMinutes, sessionNotes);
       await saveWorkoutSetLogs(session.id, buildLogRows());
       await completeWorkoutSession(session.id, sessionNotes, durationMinutes);
+      if (user?.id) clearActiveWorkoutState(user.id);
       clearStoredValue(workoutTimerKey);
       clearStoredValue(restTimerKey);
       setCompletedSummary(summary);
       setSetFeedback("Workout saved to history. You can review the summary here.");
       toast({ title: "Workout saved", description: `${day.day_name} was added to your workout history.` });
+      celebrate("Workout complete");
     } catch (error) {
       toast({ title: "Could not save workout", description: userSafeError(error) });
     } finally {

@@ -29,8 +29,6 @@ import { connectionCreationErrorMessage } from "@/lib/mcp/connection-errors";
 const chatGptUrl = "https://chatgpt.com";
 const appDescription =
   "Plaivra imports approved workout and meal plans from ChatGPT into the user's Plaivra account.";
-export const CHATGPT_SECURITY_RECONNECT_MESSAGE =
-  "ChatGPT connection updated for security. Please reconnect Plaivra from ChatGPT settings. Use your Client ID from Settings → ChatGPT Setup. Your old connection code is no longer used as an access token.";
 
 type ChatGptConnection = {
   id: string;
@@ -98,9 +96,6 @@ export function ChatGptSetupCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
-          {CHATGPT_SECURITY_RECONNECT_MESSAGE}
-        </p>
         <p className="text-sm leading-6 text-muted-foreground">
           ChatGPT can use only the Plaivra areas you allow. You can change permissions or disconnect at any time.
         </p>
@@ -189,9 +184,6 @@ export function ConnectionStatusCard() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
-          {CHATGPT_SECURITY_RECONNECT_MESSAGE}
-        </p>
         <div className="rounded-md border border-border/70 bg-muted/30 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-semibold text-foreground">{isConnected ? "Connected" : "Not connected"}</p>
@@ -318,7 +310,6 @@ export function ChatGptSetupFlow() {
         <p className="mt-2">
           If ChatGPT uses slightly different wording, choose the option for adding a private app or connector. Access remains limited by your saved permissions.
         </p>
-        <p className="mt-2 font-medium text-foreground">{CHATGPT_SECURITY_RECONNECT_MESSAGE}</p>
       </div>
 
       <SetupStep

@@ -9,8 +9,12 @@ export default function TermsPage() {
       eyebrow="Rechtliches / Legal"
       title="Nutzungsbedingungen"
       intro="Diese Bedingungen regeln die Nutzung von Plaivra. Die deutsche Fassung steht zuerst; eine englische Zusammenfassung folgt."
+      localizedCopy={{
+        en: { eyebrow: "Legal", title: "Terms of Use", intro: "These terms govern your use of Plaivra and its optional permission-controlled ChatGPT connection." },
+        ar: { eyebrow: "قانوني", title: "شروط الاستخدام", intro: "تنظم هذه الشروط استخدام Plaivra والربط الاختياري مع ChatGPT الخاضع لصلاحياتك." }
+      }}
     >
-      <div lang="de" className="space-y-8">
+      <div lang="de" data-legal-language className="space-y-8">
         <LegalSection title="1. Anbieter und Geltungsbereich">
           <p>Plaivra wird von Ahmed Mohamed als individuellem Betreiber angeboten. Kontakt: {LEGAL_OPERATOR.name}, {LEGAL_OPERATOR.street}, {LEGAL_OPERATOR.postalCode} {LEGAL_OPERATOR.city}, {LEGAL_OPERATOR.countryDe}, <a href={emailHref}>{LEGAL_OPERATOR.email}</a>.</p>
           <p>Diese Nutzungsbedingungen gelten für die Website, Web-Anwendung, Nutzerkonten, Tracking-Funktionen und optionalen ChatGPT-Verbindungen von Plaivra.</p>
@@ -62,7 +66,7 @@ export default function TermsPage() {
         </LegalSection>
       </div>
 
-      <div lang="en" className="space-y-8 border-t border-border/70 pt-8">
+      <div lang="en" data-legal-language className="space-y-8 border-t border-border/70 pt-8">
         <LegalSection title="English summary">
           <p>Plaivra is operated by Ahmed Mohamed as an individual operator. It provides personal fitness, nutrition, hydration, progress and wellness organization, including an optional permission-controlled ChatGPT connection. No fitness, weight-loss, health or AI-accuracy result is guaranteed.</p>
           <p>Plaivra is intended for users aged 16 or older, subject to any additional guardian-consent requirements under applicable law. Users must protect credentials, provide accurate account information and report unauthorized access.</p>
@@ -70,6 +74,23 @@ export default function TermsPage() {
           <p>ChatGPT access is optional, disabled by default, OAuth-connected, scope-controlled, revocable and redacted in audit records. Attempts to bypass security, AI permissions or user isolation are prohibited.</p>
           <p>Liability remains unlimited for intent, gross negligence, injury to life/body/health and mandatory statutory cases. For slight negligence involving essential obligations, liability is limited to typical foreseeable damage. German law applies without overriding mandatory consumer protections.</p>
           <p>Contact: {LEGAL_OPERATOR.name}, {LEGAL_OPERATOR.street}, {LEGAL_OPERATOR.postalCode} {LEGAL_OPERATOR.city}, {LEGAL_OPERATOR.countryEn}, <a href={emailHref}>{LEGAL_OPERATOR.email}</a>.</p>
+        </LegalSection>
+      </div>
+      <div lang="ar" dir="rtl" data-legal-language className="space-y-8">
+        <LegalSection title="الخدمة والحساب">
+          <p>تساعدك Plaivra على تنظيم التمارين والتغذية والماء والتقدم والعافية. يجب أن تكون بيانات الحساب صحيحة وأن تحافظ على سرية بيانات الدخول. الخدمة مخصصة لمن يبلغون 16 عامًا أو أكثر مع أي موافقات إضافية يطلبها القانون.</p>
+        </LegalSection>
+        <LegalSection title="الصحة والمحتوى المُنشأ بالذكاء الاصطناعي">
+          <p>Plaivra ليست خدمة طبية أو جهازًا طبيًا ولا تقدم تشخيصًا أو علاجًا. راجع أي خطة ينشئها ChatGPT قبل استخدامها واطلب رأي مختص عند وجود إصابة أو مرض أو حمل أو اضطراب أكل أو أسئلة تتعلق بالأدوية أو المكملات.</p>
+        </LegalSection>
+        <LegalSection title="الربط مع ChatGPT والتحكم">
+          <p>الربط اختياري ويمكن إلغاؤه. لا يصل ChatGPT إلا إلى الأقسام التي تمنحها صلاحية، وتبقى الموافقة على الاستيراد أو التغيير بيدك. يُحظر تجاوز الصلاحيات أو عزل بيانات المستخدمين.</p>
+        </LegalSection>
+        <LegalSection title="المسؤولية والإنهاء">
+          <p>لا نضمن نتيجة لياقة أو وزن أو صحة أو دقة مخرجات الذكاء الاصطناعي. تبقى المسؤولية القانونية الإلزامية دون تقييد. يمكنك إنهاء الاستخدام وطلب حذف الحساب من إعدادات الخصوصية.</p>
+        </LegalSection>
+        <LegalSection title="التواصل والقانون المطبق">
+          <p>يطبق القانون الألماني مع بقاء قواعد حماية المستهلك الإلزامية. للتواصل: <a href={emailHref}>{LEGAL_OPERATOR.email}</a>.</p>
         </LegalSection>
       </div>
     </LegalPage>

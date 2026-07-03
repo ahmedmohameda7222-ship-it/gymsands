@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Edit3, PlusCircle, RefreshCw, Save, ShoppingCart, Trash2, Utensils, X } from "lucide-react";
 import { Component, useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +35,7 @@ import {
   safeDate,
   weekStart
 } from "@/components/meals/meal-plan-calendar";
-import type { MealPlanItem, MealType } from "@/types";
+import type { MealPlanItem, MealType, OnboardingAnswers } from "@/types";
 import { NutritionPreferenceCard } from "@/components/profile/execution-profiles";
 import { GroceryListPanel } from "@/components/meals/grocery-list-panel";
 import { MealAiActions } from "@/components/meals/meal-ai-actions";
@@ -42,13 +43,16 @@ import { validateMealItem, validateMealPlanDay } from "@/services/meals/meal-val
 import { getGroceryItems, upsertGroceryItem } from "@/services/database/execution-layer";
 import { getCalorieTargets } from "@/services/database/nutrition";
 import { userSafeError } from "@/lib/error-formatting";
+import { getOnboarding } from "@/services/database/profile";
+import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
+import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 
 type MacroTotals = { calories: number; protein_g: number; carbs_g: number; fat_g: number };
 type Notice = { type: "success" | "error" | "info"; title: string; description?: string };
 type Draft = { foodName: string; mealType: MealType; quantity: string; servingInfo: string; calories: string; protein: string; carbs: string; fat: string; notes: string };
 
 const mealTypes: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
-const emptyDraft: Draft = { foodName: "", mealType: "Breakfast", quantity: "1", servingInfo: "1 serving", calories: "0", protein: "0", carbs: "0", fat: "0", notes: "" };
+const emptyDraft: Draft = { foodName: "", mealType: "Breakfast", quantity: "1", servingInfo: "1 serving", calories: "", protein: "", carbs: "", fat: "", notes: "" };
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -93,7 +97,8 @@ export function MyMealPlanBuilder() {
 }
 
 function MyMealPlanBuilderInner() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const today = useTodayDate();
@@ -116,7 +121,10 @@ function MyMealPlanBuilderInner() {
   const [activeTab, setActiveTab] = useState("day");
   const [activeMealType, setActiveMealType] = useState<MealType>("Breakfast");
   const [addMealDialogOpen, setAddMealDialogOpen] = useState(false);
+  const [addSourceDialogOpen, setAddSourceDialogOpen] = useState(false);
+  const [onboarding, setOnboarding] = useState<OnboardingAnswers | null>(null);
   const { dialog } = useConfirm();
+  const { celebrate } = useSuccessFeedback();
 
   const selectedWeekStart = useMemo(() => weekStart(selectedDate), [selectedDate]);
   const selectedWeekEnd = useMemo(() => addDays(selectedWeekStart, 6), [selectedWeekStart]);
@@ -140,17 +148,19 @@ function MyMealPlanBuilderInner() {
       setIsLoading(true);
       setNotice(null);
       try {
-        const [dayItems, weekPlanItems, dates, calorieTargets] = await Promise.all([
+        const [dayItems, weekPlanItems, dates, calorieTargets, onboardingAnswers] = await Promise.all([
           getMealPlanItemsForDate(user.id, selectedDate),
           getMealPlanItemsForRange(user.id, selectedWeekStart, selectedWeekEnd),
           getMealPlanDatesWithItems(user.id, calendarRangeStart(calendarMonth), calendarRangeEnd(calendarMonth)),
-          getCalorieTargets(user.id)
+          getCalorieTargets(user.id),
+          getOnboarding(user.id)
         ]);
         if (!active) return;
         setItems(dayItems.map(normalizeMealPlanItem));
         setWeekItems(weekPlanItems.map(normalizeMealPlanItem));
         setPlannedDates(dates);
         setTargetCalories(calorieTargets?.daily_calories ?? null);
+        setOnboarding(onboardingAnswers);
       } catch (error) {
         if (!active) return;
         setItems([]);
@@ -222,6 +232,7 @@ function MyMealPlanBuilderInner() {
       const normalized = normalizeMealPlanItem(result.item);
       upsertLocalItems([normalized]);
       setNotice({ type: "success", title: result.already_done ? "Meal already done" : "Meal marked done", description: result.already_done ? "No duplicate calorie log was created." : `${item.food_name} was added to logged calories.` });
+      if (!result.already_done) celebrate("Meal logged");
     } catch (error) {
       setNotice({ type: "error", title: "Could not mark meal done", description: userSafeError(error) });
     } finally {
@@ -290,8 +301,30 @@ function MyMealPlanBuilderInner() {
 
   function openAddMeal(type: MealType) {
     setDraft((current) => ({ ...current, mealType: type }));
+    setAddSourceDialogOpen(true);
+  }
+
+  function openQuickAdd() {
+    setAddSourceDialogOpen(false);
     setAddMealDialogOpen(true);
   }
+
+  const mealPlanRequestContext = {
+    planning_profile: {
+      goal: onboarding?.goals?.length ? onboarding.goals.join(", ") : onboarding?.goal ?? profile?.body_goal ?? "General wellness",
+      goal_weight_kg: onboarding?.goal_weight_kg ?? profile?.target_weight_kg ?? null,
+      training_days_per_week: onboarding?.training_days_per_week ?? null,
+      session_duration: onboarding ? `${onboarding.min_workout_duration_minutes ?? onboarding.workout_duration_minutes}-${onboarding.max_workout_duration_minutes ?? onboarding.workout_duration_minutes}` : null,
+      plan_duration_weeks: onboarding?.desired_duration_weeks ?? null,
+      nutrition_preferences: onboarding?.nutrition_preferences ?? [],
+      food_preferences: onboarding?.food_preferences ?? null,
+      allergies_limitations: onboarding?.allergies_limitations ?? null,
+      lifestyle_notes: onboarding?.lifestyle_notes ?? null,
+      workout_constraints: onboarding?.workout_constraints ?? null,
+      coaching_notes: onboarding?.coaching_notes ?? null
+    },
+    requested_start_date: selectedDate
+  };
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -315,6 +348,27 @@ function MyMealPlanBuilderInner() {
             <DialogDescription>Plan a meal for {displayDate(selectedDate)}. It will not count in calories until marked done.</DialogDescription>
           </DialogHeader>
           <MealForm title="" draft={draft} setDraft={setDraft} onSave={addPlannedFood} onCancel={() => setAddMealDialogOpen(false)} saving={isUpdatingId === "new"} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addSourceDialogOpen} onOpenChange={setAddSourceDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add a meal</DialogTitle>
+            <DialogDescription>Choose how you want to add food to this plan.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Button type="button" onClick={openQuickAdd}>Quick add</Button>
+            <Button asChild variant="outline" onClick={() => setAddSourceDialogOpen(false)}><Link href="/calories/food-hub">Add from Food Hub</Link></Button>
+            <AiActionRequestDialog
+              actions={[{ type: "build_meal_plan", label: "Import from ChatGPT", description: "Discuss, approve, and import a personalized meal plan." }]}
+              sourceType="meal_plan_empty"
+              context={mealPlanRequestContext}
+              permissionSection="meal_plans"
+              title="Import a meal plan with ChatGPT"
+              className="grid"
+            />
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -442,6 +496,24 @@ function MyMealPlanBuilderInner() {
               ))}
             </div>
           )}
+
+          {!isLoading && items.length === 0 ? (
+            <Card id="meal-plan-import" className="mt-5 border-dashed border-primary/30 bg-primary/5">
+              <CardContent className="grid gap-4 p-5 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div>
+                  <p className="font-semibold text-foreground">Import with ChatGPT</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">Prepare a professional request using your goals, schedule, food preferences, allergies, and coaching context. You review and approve the final plan before import.</p>
+                </div>
+                <AiActionRequestDialog
+                  actions={[{ type: "build_meal_plan", label: "Import with ChatGPT", description: "Discuss, approve, and import a personalized meal plan." }]}
+                  sourceType="meal_plan_empty"
+                  context={mealPlanRequestContext}
+                  permissionSection="meal_plans"
+                  title="Import a meal plan with ChatGPT"
+                />
+              </CardContent>
+            </Card>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="week" className="space-y-3 sm:space-y-4">

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Dumbbell, Droplets, Flame, Scale, Soup, Utensils } from "lucide-react";
+import { CheckCircle2, Dumbbell, Droplets, Flame, Scale, ShoppingCart, Soup, Utensils } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BentoGrid } from "@/components/ui/bento-grid";
@@ -38,7 +38,7 @@ import {
 import { getPersonalRecords, getProgressEntries } from "@/services/database/progress";
 import { getFitnessHabits, getSleepRecoveryLogs, getSupplementLogs } from "@/services/database/wellness";
 import { getCurrentWeekday, getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
-import { getNutritionTargetProfiles } from "@/services/database/execution-layer";
+import { getGroceryItems, getNutritionTargetProfiles } from "@/services/database/execution-layer";
 import { getActiveTargetOverride, resolveActiveNutritionTarget, type ActiveNutritionTarget } from "@/services/nutrition/active-target";
 import { getOpenWorkoutDaySession, getWorkoutActivity, getWorkoutHistory, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
 import { percent, remainingMacros, sumFoodLogs } from "@/services/nutrition/calculations";
@@ -46,11 +46,12 @@ import type { SavedTargets } from "@/services/nutrition/targets";
 import { aggregateReport, buildWeekRange, reportMetrics, startOfWeek, type AggregatedReport } from "@/services/reports/reporting";
 import { getFitnessHabitHistory, getSleepRecoveryHistory } from "@/services/wellness/wellness-data";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
-import type { FitnessHabit, FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryLog, SupplementLog, UserWorkoutPlan, WaterLog, WorkoutSession, WorkoutSessionSummary } from "@/types";
+import type { FitnessHabit, FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryLog, SupplementLog, UserGroceryItem, UserWorkoutPlan, WaterLog, WorkoutSession, WorkoutSessionSummary } from "@/types";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { DailyCheckins } from "@/components/wellness/daily-checkins";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { RecentAiActionRequests } from "@/components/ai/recent-ai-action-requests";
+import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -68,12 +69,14 @@ export default function DashboardPage() {
   const { settings } = useUserSettings();
   const router = useRouter();
   const { toast } = useToast();
+  const { celebrate } = useSuccessFeedback();
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [history, setHistory] = useState<WorkoutSession[]>([]);
   const [detailedHistory, setDetailedHistory] = useState<WorkoutSessionSummary[]>([]);
   const [waterLogs, setWaterLogs] = useState<WaterLog[]>([]);
   const [progressEntries, setProgressEntries] = useState<ProgressEntry[]>([]);
   const [mealPlanItems, setMealPlanItems] = useState<MealPlanItem[]>([]);
+  const [groceryItems, setGroceryItems] = useState<UserGroceryItem[]>([]);
   const [activePlan, setActivePlan] = useState<UserWorkoutPlan | null>(null);
   const [openSessionId, setOpenSessionId] = useState<string | null>(null);
   const [habits, setHabits] = useState<FitnessHabit[]>([]);
@@ -120,7 +123,8 @@ export default function DashboardPage() {
         habitHistory,
         sleepHistory,
         personalRecords,
-        workoutDetails
+        workoutDetails,
+        groceries
       ] = await Promise.all([
         getTodayFoodLogs(user.id),
         getWorkoutHistory(user.id),
@@ -142,7 +146,8 @@ export default function DashboardPage() {
         getFitnessHabitHistory(user.id, 30),
         getSleepRecoveryHistory(user.id, 30),
         getPersonalRecords(user.id, 30),
-        getWorkoutHistoryDetailed(user.id, 30)
+        getWorkoutHistoryDetailed(user.id, 30),
+        getGroceryItems(user.id, startOfWeek(today))
       ]);
 
       if (!onboarding) {
@@ -156,6 +161,7 @@ export default function DashboardPage() {
       setWaterLogs(dailyWater);
       setProgressEntries(progress);
       setMealPlanItems(plannedMeals);
+      setGroceryItems(groceries);
       setActivePlan(plan);
       const currentDay = plan?.days.find((day) => day.weekday === getCurrentWeekday() && day.exercises.length > 0) ?? null;
       const automaticType = currentDay ? "training_day" : "rest_day";
@@ -263,6 +269,10 @@ export default function DashboardPage() {
       setMealPlanItems((current) => current.map((meal) => (meal.id === result.item.id ? result.item : meal)));
       if (result.log) setLogs((current) => [result.log as FoodLog, ...current]);
       toast({ title: result.already_done ? "Meal already done" : "Meal marked done", description: result.already_done ? "No duplicate food log was created." : `${item.food_name} was added to Food Log.` });
+      if (!result.already_done) {
+        const allComplete = mealPlanItems.every((meal) => meal.id === item.id || meal.status === "done" || skippedIds.has(meal.id));
+        celebrate(allComplete ? "All meals complete" : "Meal logged");
+      }
     } catch (error) {
       logRecoverableError("dashboard.meal-done", error);
       toast({ title: "Could not mark meal done", description: userSafeError(error, "The meal was not logged. Retry when the connection is stable.") });
@@ -360,12 +370,12 @@ export default function DashboardPage() {
 
           <BentoGrid>
             {!settings.hideCaloriesOnDashboard ? (
-              <MetricCard className="order-2 col-span-1 sm:col-span-3 xl:col-span-3" icon={Flame} label="Calories" value={`${totals.calories} kcal`} detail={hasTargets ? `${remaining.calories} kcal left` : "No target"} progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined} />
+              <MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Flame} label="Calories" value={`${totals.calories} kcal`} detail={hasTargets ? `${remaining.calories} kcal left` : "No target"} progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined} />
             ) : null}
-            <MetricCard className="order-2 col-span-1 sm:col-span-3 xl:col-span-3" icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={hasTargets ? `${remaining.protein_g}g left` : "Set target"} progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined} />
-            <MetricCard className="order-2 col-span-1 sm:col-span-3 xl:col-span-3" icon={Droplets} label="Water" value={waterTotalMl ? `${waterTotalMl} ml / ${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${targets.water_ml} ml / ${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
+            <MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={hasTargets ? `${remaining.protein_g}g left` : "Set target"} progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined} />
+            <MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Droplets} label="Water" value={waterTotalMl ? `${waterTotalMl} ml / ${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${targets.water_ml} ml / ${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
             {!settings.hideBodyWeightOnDashboard ? (
-              <MetricCard className="order-2 col-span-1 sm:col-span-3 xl:col-span-3" icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} />
+              <MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} />
             ) : null}
           {activePlan ? (
             todayPlanDay ? (
@@ -395,7 +405,7 @@ export default function DashboardPage() {
                       </span>
                     ) : openSessionId ? (
                       <Button asChild size="sm">
-                        <Link href={`/workouts/session/${openSessionId}`}>Resume</Link>
+                        <Link href={`/workouts/session/day/${todayPlanDay.id}`}>Resume</Link>
                       </Button>
                     ) : (
                       <Button asChild size="sm">
@@ -436,7 +446,7 @@ export default function DashboardPage() {
           )}
 
           {mealPlanItems.length > 0 ? (
-            <Card className="order-3 col-span-2 sm:col-span-6 xl:col-span-7">
+              <Card className="order-2 col-span-2 sm:col-span-6 xl:col-span-12">
               <CardContent className="p-4 sm:p-5">
                 <div className="flex items-center gap-2">
                   <Utensils className="h-5 w-5 text-primary" />
@@ -505,7 +515,28 @@ export default function DashboardPage() {
             </Card>
           ) : null}
 
-          <div className="glass-card order-4 col-span-2 p-4 sm:col-span-6 sm:p-5 xl:col-span-5">
+          <CollapsibleSection
+            title="Shopping list"
+            preview={groceryItems.length ? `${groceryItems.filter((item) => !item.checked && !item.already_have).length} items left · ${groceryItems.filter((item) => item.checked || item.already_have).length} covered` : "No grocery items yet"}
+            defaultOpen={false}
+            className="order-3 col-span-2 sm:col-span-6 xl:col-span-12"
+          >
+            <div className="space-y-3">
+              {groceryItems.length ? (
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {groceryItems.slice(0, 9).map((item) => (
+                    <div key={item.id} className="solid-row flex items-center gap-3 p-3">
+                      <ShoppingCart className="h-4 w-4 shrink-0 text-primary" />
+                      <div className="min-w-0"><p className={item.checked ? "truncate text-sm line-through" : "truncate text-sm font-medium"}>{item.item_name}</p><p className="text-xs text-muted-foreground">{item.quantity ?? ""} {item.unit ?? ""}</p></div>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-sm text-muted-foreground">Build your list from the Shopping tab in Meal Plan.</p>}
+              <Button asChild variant="outline" size="sm"><Link href="/my-meal-plan">Open shopping list</Link></Button>
+            </div>
+          </CollapsibleSection>
+
+          <div className="glass-card order-5 col-span-2 p-4 sm:col-span-6 sm:p-5 xl:col-span-5">
             <p className="mb-3 text-sm font-semibold text-foreground">Next actions</p>
             <div className="flex flex-wrap gap-2">
               {visibleShortcuts.map((shortcut) => {
@@ -527,7 +558,7 @@ export default function DashboardPage() {
               title="Wellness summary"
               preview={`${habits.length} habits · ${supplements.length} supplements · ${sleepLogs.length} sleep logs`}
               defaultOpen={!isMobile}
-              className="order-5 col-span-2 sm:col-span-6 xl:col-span-7"
+              className="order-6 col-span-2 sm:col-span-6 xl:col-span-7"
             >
               <WellnessSummary habits={habits} supplements={supplements} sleepLogs={sleepLogs} />
             </CollapsibleSection>

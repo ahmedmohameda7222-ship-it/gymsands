@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
-import { Bot, Check, CheckCircle2, Clipboard, ExternalLink, Loader2, RotateCcw, Send, ShieldCheck, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Bot, CheckCircle2, Clipboard, ExternalLink, Loader2, RefreshCw, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
 import { buildAiActionSummary, buildChatGptActionPrompt } from "@/components/ai/ai-action-summary";
 import { getAiActionSafetyDecision, type AiActionSafetyDecision } from "@/components/ai/ai-action-safety";
@@ -18,6 +19,8 @@ import {
   updateAiActionRequestStatus
 } from "@/services/database/execution-layer";
 import type { AiActionRequest, AiActionType } from "@/types";
+import type { AiPermissionSection } from "@/types";
+import { getAiPermissionSettings, getDefaultAiPermissionConfig, saveAiPermissionSettings, type AiPermissionConfig } from "@/services/database/ai-permissions";
 
 export type AiActionOption = {
   type: AiActionType;
@@ -27,6 +30,25 @@ export type AiActionOption = {
 
 export { buildChatGptActionPrompt } from "@/components/ai/ai-action-summary";
 
+function inferPermissionSection(sourceType: string): AiPermissionSection {
+  if (sourceType.includes("workout") || sourceType.includes("exercise") || sourceType.includes("plan_exercise")) return "workouts";
+  if (sourceType.includes("grocery") || sourceType.includes("meal")) return "meal_plans";
+  if (sourceType.includes("food") || sourceType.includes("nutrition")) return "nutrition";
+  if (sourceType.includes("wellness") || sourceType.includes("sleep") || sourceType.includes("habit")) return "wellness";
+  return "progress";
+}
+
+const permissionLabels: Record<AiPermissionSection, string> = {
+  workouts: "workouts",
+  nutrition: "nutrition",
+  meal_plans: "meal plans",
+  hydration: "hydration",
+  wellness: "wellness",
+  progress: "progress",
+  profile: "profile",
+  settings: "settings"
+};
+
 const statusPresentation: Record<AiActionRequest["status"], { label: string; description: string }> = {
   draft: { label: "Draft", description: "Still being prepared." },
   ready_for_chatgpt: { label: "Ready to copy", description: "Prepared, but not sent to ChatGPT yet." },
@@ -34,8 +56,6 @@ const statusPresentation: Record<AiActionRequest["status"], { label: string; des
   resolved: { label: "Done", description: "You finished with this request." },
   cancelled: { label: "Cancelled", description: "You decided not to use this request." }
 };
-
-const handoffSteps = ["Review request", "Copy for ChatGPT", "Open ChatGPT", "Review answer", "Apply approved"];
 
 export function AiActionRequestDialog({
   actions,
@@ -45,6 +65,7 @@ export function AiActionRequestDialog({
   title = "Ask ChatGPT for help",
   children,
   buttonVariant = "outline",
+  permissionSection,
   className
 }: {
   actions: AiActionOption[];
@@ -54,9 +75,11 @@ export function AiActionRequestDialog({
   title?: string;
   children?: ReactNode;
   buttonVariant?: "default" | "outline" | "ghost";
+  permissionSection?: AiPermissionSection;
   className?: string;
 }) {
   const { user } = useAuth();
+  const router = useRouter();
   const { toast } = useToast();
   const [selected, setSelected] = useState<AiActionOption | null>(null);
   const [note, setNote] = useState("");
@@ -64,7 +87,28 @@ export function AiActionRequestDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [safetyDecision, setSafetyDecision] = useState<AiActionSafetyDecision>({ decision: "allow" });
+  const [permissionConfig, setPermissionConfig] = useState<AiPermissionConfig | null>(null);
+  const [isPermissionLoading, setIsPermissionLoading] = useState(true);
+  const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
   const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const section = permissionSection ?? inferPermissionSection(sourceType);
+  const sectionLabel = permissionLabels[section];
+  const sectionPermission = permissionConfig?.sections[section];
+  const hasSectionAccess = permissionConfig?.accessMode === "full" || Boolean(sectionPermission?.read || sectionPermission?.write);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!user?.id) {
+      setPermissionConfig(null);
+      setIsPermissionLoading(false);
+      return;
+    }
+    setIsPermissionLoading(true);
+    getAiPermissionSettings(user.id)
+      .then((saved) => { if (mounted) setPermissionConfig(saved); })
+      .finally(() => { if (mounted) setIsPermissionLoading(false); });
+    return () => { mounted = false; };
+  }, [user?.id]);
 
   const summary = useMemo(() => selected ? buildAiActionSummary(selected.type, context) : [], [context, selected]);
   const prompt = useMemo(
@@ -137,6 +181,38 @@ export function AiActionRequestDialog({
     }
   }
 
+  function refreshAppData() {
+    router.refresh();
+    window.location.reload();
+  }
+
+  async function grantAccess(mode: "read" | "write" | "both") {
+    if (!user?.id) return;
+    setIsSaving(true);
+    try {
+      const base = permissionConfig ?? getDefaultAiPermissionConfig();
+      const next: AiPermissionConfig = {
+        ...base,
+        accessMode: "custom",
+        sections: {
+          ...base.sections,
+          [section]: {
+            read: mode === "read" || mode === "write" || mode === "both",
+            write: mode === "write" || mode === "both"
+          }
+        }
+      };
+      await saveAiPermissionSettings(user.id, next);
+      setPermissionConfig(next);
+      setPermissionDialogOpen(false);
+      toast({ title: `ChatGPT access updated`, description: `Access for ${sectionLabel} is now available.` });
+    } catch (error) {
+      toast({ title: "Could not update ChatGPT access", description: userSafeError(error), variant: "error" });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function changeStatus(status: AiActionRequest["status"]) {
     if (!request || !user?.id) return;
     setIsSaving(true);
@@ -154,7 +230,35 @@ export function AiActionRequestDialog({
     }
   }
 
-  const requestFinished = request?.status === "resolved" || request?.status === "cancelled";
+  const requestFinished = request?.status === "cancelled";
+
+  if (isPermissionLoading) {
+    return <p className="text-xs text-muted-foreground">Checking ChatGPT access…</p>;
+  }
+
+  if (!hasSectionAccess) {
+    return (
+      <>
+        <button type="button" onClick={() => setPermissionDialogOpen(true)} className={cn("rounded-xl border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10", className)}>
+          Give ChatGPT access for {sectionLabel}
+        </button>
+        <Dialog open={permissionDialogOpen} onOpenChange={setPermissionDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Do you want to give ChatGPT access to {sectionLabel}?</DialogTitle>
+              <DialogDescription>Choose the access level you are comfortable with. You can remove it later from AI Permissions.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-2">
+              <Button type="button" variant="outline" onClick={() => void grantAccess("read")} disabled={isSaving}>Read access</Button>
+              <Button type="button" variant="outline" onClick={() => void grantAccess("write")} disabled={isSaving}>Write access</Button>
+              <Button type="button" onClick={() => void grantAccess("both")} disabled={isSaving}>Both read and write</Button>
+              <Button type="button" variant="ghost" onClick={() => setPermissionDialogOpen(false)} disabled={isSaving}>Do not give access</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
 
   return (
     <>
@@ -176,31 +280,11 @@ export function AiActionRequestDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div aria-label="Secure ChatGPT handoff steps">
-            <ol className="grid grid-cols-5 gap-1 sm:gap-2">
-              {handoffSteps.map((step, index) => (
-                <li key={step} className="text-center">
-                  <span className={cn("mx-auto flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold", index === 0 ? "border-primary bg-primary text-primary-foreground" : "border-primary/40 bg-card text-primary")}>{index + 1}</span>
-                  <span className="mt-1 block text-[9px] font-semibold leading-3 text-foreground sm:text-[11px] sm:leading-4">{step}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-
-          <div className="rounded-[16px] border border-primary/20 bg-primary/5 p-4">
-            <p className="flex items-center gap-2 font-semibold text-foreground"><ShieldCheck className="h-5 w-5 text-primary" /> Why copy and paste?</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">Plaivra prepares the smallest useful context. You choose when to copy it, review ChatGPT’s answer, and apply only changes you approve. Nothing is sent or changed automatically.</p>
-          </div>
-
           {!request ? (
             <div className="space-y-4">
               <div>
                 <p className="text-sm font-semibold text-foreground">What do you want help with?</p>
                 <p className="mt-1 text-sm text-muted-foreground">{selected?.description}</p>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">What will be shared</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">Only these human-readable details. Plaivra never includes raw JSON, database fields, internal IDs, tokens, or source identifiers.</p>
               </div>
               <div className="divide-y divide-border/70 rounded-[16px] border border-border/70 bg-muted/20 px-4">
                 {summary.map((row) => (
@@ -241,7 +325,7 @@ export function AiActionRequestDialog({
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{statusPresentation[request.status].description}</p>
                 <ol className="mt-3 space-y-2 text-sm text-muted-foreground">
-                  {["Copy the prepared request.", "Open ChatGPT and paste it.", "Review ChatGPT’s answer.", "Apply only the changes you approve."].map((step, index) => (
+                  {["Copy the prepared request.", "Open ChatGPT and paste it.", "Review ChatGPT’s answer.", "Apply only the changes you approve.", "Press refresh when you are done to apply the changes."].map((step, index) => (
                     <li key={step} className="flex gap-2"><span className="font-semibold text-primary">{index + 1}.</span>{step}</li>
                   ))}
                 </ol>
@@ -257,18 +341,14 @@ export function AiActionRequestDialog({
                 </div>
               ) : null}
               <div className="grid gap-2 sm:grid-cols-2">
-                <Button type="button" onClick={copyPrompt} disabled={request.status === "cancelled"}>{copyState === "copied" ? <CheckCircle2 className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />} {copyState === "copied" ? "Copied" : "Copy for ChatGPT"}</Button>
+                {copyState === "copied" ? (
+                  <Button type="button" onClick={refreshAppData}><RefreshCw className="h-4 w-4" /> Refresh</Button>
+                ) : (
+                  <Button type="button" onClick={copyPrompt} disabled={request.status === "cancelled"}><Clipboard className="h-4 w-4" /> Copy</Button>
+                )}
                 <Button asChild variant="outline" className={request.status === "cancelled" ? "pointer-events-none opacity-50" : ""}>
                   <a href="https://chatgpt.com/" target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open ChatGPT</a>
                 </Button>
-                {request.status === "ready_for_chatgpt" ? (
-                  <Button type="button" variant="outline" onClick={() => changeStatus("sent_to_chatgpt")} disabled={isSaving}><Send className="h-4 w-4" /> I pasted it into ChatGPT</Button>
-                ) : null}
-                {request.status === "sent_to_chatgpt" ? <Button type="button" variant="outline" onClick={() => changeStatus("ready_for_chatgpt")} disabled={isSaving}><RotateCcw className="h-4 w-4" /> Not sent yet</Button> : null}
-                {!requestFinished ? (
-                  <Button type="button" variant="outline" onClick={() => changeStatus("resolved")} disabled={isSaving}><Check className="h-4 w-4" /> Mark done</Button>
-                ) : null}
-                {request.status === "resolved" ? <Button type="button" variant="outline" onClick={() => changeStatus("ready_for_chatgpt")} disabled={isSaving}><RotateCcw className="h-4 w-4" /> Reopen request</Button> : null}
               </div>
               {!requestFinished ? (
                 <Button type="button" variant="ghost" className="w-full text-destructive hover:text-destructive" onClick={() => changeStatus("cancelled")} disabled={isSaving}><X className="h-4 w-4" /> Cancel request</Button>

@@ -2,6 +2,9 @@ import { supabase } from "@/lib/supabase/client";
 import { defaultThemeId, isThemeId, type ThemeId } from "@/lib/themes";
 import { isUuid } from "@/lib/utils";
 
+export type QuickLogSection = "water" | "meal" | "weight" | "workout" | "progress" | "sleep" | "supplements" | "wellness";
+const allQuickLogSections: QuickLogSection[] = ["water", "meal", "weight", "workout", "progress", "sleep", "supplements", "wellness"];
+
 export type UserAppSettings = {
   id?: string;
   userId: string;
@@ -58,6 +61,7 @@ export type UserAppSettings = {
   hideProgressPhotos: boolean;
   hideProfileDetails: boolean;
   privateProfileMode: boolean;
+  quickLogSections: QuickLogSection[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -118,6 +122,7 @@ type UserAppSettingsRow = {
   hide_progress_photos: boolean;
   hide_profile_details: boolean;
   private_profile_mode: boolean;
+  quick_log_sections?: string[];
   created_at: string;
   updated_at: string;
 };
@@ -176,7 +181,8 @@ export const defaultUserAppSettings: UserAppSettings = {
   hideCaloriesOnDashboard: false,
   hideProgressPhotos: false,
   hideProfileDetails: false,
-  privateProfileMode: false
+  privateProfileMode: false,
+  quickLogSections: [...allQuickLogSections]
 };
 
 function canUseUserSettings(userId: string | null | undefined) {
@@ -195,6 +201,12 @@ function stringOrNull(value: unknown) {
 
 function bool(value: unknown, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function quickLogSections(value: unknown) {
+  if (!Array.isArray(value)) return [...allQuickLogSections];
+  const selected = value.filter((item): item is QuickLogSection => typeof item === "string" && allQuickLogSections.includes(item as QuickLogSection));
+  return [...new Set(selected)];
 }
 
 function normalizeSettings(value: Partial<UserAppSettings>, userId: string): UserAppSettings {
@@ -237,7 +249,8 @@ function normalizeSettings(value: Partial<UserAppSettings>, userId: string): Use
     hideCaloriesOnDashboard: bool(value.hideCaloriesOnDashboard),
     hideProgressPhotos: bool(value.hideProgressPhotos),
     hideProfileDetails: bool(value.hideProfileDetails),
-    privateProfileMode: bool(value.privateProfileMode)
+    privateProfileMode: bool(value.privateProfileMode),
+    quickLogSections: quickLogSections(value.quickLogSections)
   };
 }
 
@@ -298,6 +311,7 @@ function rowToSettings(row: UserAppSettingsRow): UserAppSettings {
       hideProgressPhotos: row.hide_progress_photos,
       hideProfileDetails: row.hide_profile_details,
       privateProfileMode: row.private_profile_mode,
+      quickLogSections: quickLogSections(row.quick_log_sections),
       createdAt: row.created_at,
       updatedAt: row.updated_at
     },
@@ -360,7 +374,8 @@ function settingsToDatabase(settings: UserAppSettings) {
     hide_calories_on_dashboard: settings.hideCaloriesOnDashboard,
     hide_progress_photos: settings.hideProgressPhotos,
     hide_profile_details: settings.hideProfileDetails,
-    private_profile_mode: settings.privateProfileMode
+    private_profile_mode: settings.privateProfileMode,
+    quick_log_sections: settings.quickLogSections
   };
 }
 
