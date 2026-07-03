@@ -24,7 +24,7 @@ export const publicCopy = {
     sendResetLink: "Send reset link",
     backToLogin: "Back to login",
     forgotTitle: "Reset your password",
-    forgotDescription: "Enter your Plaivra account email and we’ll send a secure reset link.",
+    forgotDescription: "Enter your Plaivra account email and we'll send a secure reset link.",
     continueSetup: "Continue setup",
     welcomePrompt: "Create a lighter workout for today",
     workout: "Workout",
@@ -33,7 +33,9 @@ export const publicCopy = {
     minEight: "Minimum 8 characters",
     uppercase: "Uppercase letter",
     lowercase: "Lowercase letter",
-    special: "Special character"
+    special: "Special character",
+    continueWithGoogle: "Continue with Google",
+    or: "or"
   },
   ar: {
     about: "عن Plaivra",
@@ -67,7 +69,9 @@ export const publicCopy = {
     minEight: "8 أحرف على الأقل",
     uppercase: "حرف إنجليزي كبير",
     lowercase: "حرف إنجليزي صغير",
-    special: "رمز خاص"
+    special: "رمز خاص",
+    continueWithGoogle: "المتابعة باستخدام Google",
+    or: "أو"
   }
 } as const;
 
