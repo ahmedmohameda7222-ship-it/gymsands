@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Check, Settings2, Sparkles } from "lucide-react";
+import { Bot, Check, Settings2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,7 +12,6 @@ import { getOnboarding } from "@/services/database/profile";
 import { getAllUserWorkoutPlans } from "@/services/database/workout-plan-loader";
 import type { OnboardingAnswers, UserWorkoutPlan } from "@/types";
 import { getAiPermissionSettings, getDefaultAiPermissionConfig, saveAiPermissionSettings, type AiPermissionConfig } from "@/services/database/ai-permissions";
-import { ChatGptMark } from "@/components/icons/chatgpt-mark";
 
 function isChatGptPlan(plan: UserWorkoutPlan | null) {
   if (!plan) return false;
@@ -167,7 +166,7 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
       <CardContent className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
         <div className="flex gap-3">
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-soft">
-            <ChatGptMark className="h-5 w-5" />
+            <Bot className="h-5 w-5" />
           </div>
           <div>
             <p className="text-lg font-semibold">Import your {noun} from ChatGPT</p>
