@@ -55,6 +55,8 @@ const planExerciseInput = {
   rest_seconds: { type: "number" },
   tempo: { type: "string" },
   instructions: { type: "string" },
+  exercise_url: { type: "string", description: "Optional exercise guide URL" },
+  custom_video_url: { type: "string", description: "Optional user-approved custom demonstration video URL" },
   notes: { type: "string" },
   order_index: { type: "number" }
 };
@@ -100,7 +102,7 @@ const toolDefinitions: McpToolSource[] = [
   { name: "delete_kitchen", title: "Delete kitchen", description: "Permanently delete a user-owned food collection. Requires confirm:true.", inputSchema: objectSchema({ kitchen_id: { type: "string" }, confirm }, ["kitchen_id", "confirm"]), risk: "high" },
   { name: "assign_food_to_kitchen", title: "Assign food to kitchen", description: "Assign a user food item to a kitchen.", inputSchema: objectSchema({ user_food_item_id: { type: "string" }, kitchen_id: { type: "string" } }, ["user_food_item_id", "kitchen_id"]), risk: "low" },
   { name: "get_foods_by_kitchen", title: "Get foods by kitchen", description: "Return foods assigned to a kitchen.", inputSchema: objectSchema({ kitchen_id: { type: "string" } }, ["kitchen_id"]), risk: "read" },
-  { name: "add_food_log", title: "Add food log", description: "Log meal items using Plaivra nutrition data, not model-guessed calories. Returns candidates if ambiguous.", inputSchema: objectSchema({ meal_type: { type: "string", enum: ["Breakfast", "Lunch", "Dinner", "Snack"] }, date: isoDate, items: arrayOf(foodInput, ["food_name", "quantity"]), notes: { type: "string" } }, ["meal_type", "items"]), risk: "low" },
+  { name: "add_food_log", title: "Add eaten food to Food Log", description: "Use this when the user says they ate something. Add it directly to Food Log as completed using Plaivra nutrition data, not to the meal plan. Returns candidates if ambiguous.", inputSchema: objectSchema({ meal_type: { type: "string", enum: ["Breakfast", "Lunch", "Dinner", "Snack"] }, date: isoDate, items: arrayOf(foodInput, ["food_name", "quantity"]), notes: { type: "string" } }, ["meal_type", "items"]), risk: "low" },
   { name: "get_food_logs_by_date", title: "Get food logs by date", description: "List food logs for a date so ChatGPT can find duplicates before editing/deleting.", inputSchema: objectSchema({ date: isoDate }, ["date"]), risk: "read" },
   { name: "update_food_log", title: "Update food log", description: "Update a user-owned food log.", inputSchema: objectSchema({ food_log_id: { type: "string" }, meal_type: { type: "string" }, quantity: { type: "number" }, calories: { type: "number" }, protein_g: { type: "number" }, carbs_g: { type: "number" }, fat_g: { type: "number" }, notes: { type: "string" } }, ["food_log_id"]), risk: "medium" },
   { name: "move_food_log_meal_type", title: "Move food log meal type", description: "Move a food log to another meal type.", inputSchema: objectSchema({ food_log_id: { type: "string" }, meal_type: { type: "string", enum: ["Breakfast", "Lunch", "Dinner", "Snack"] } }, ["food_log_id", "meal_type"]), risk: "medium" },

@@ -12,9 +12,11 @@ import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
 import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
-import { completeWorkoutSession, getWorkoutHistoryDetailed, saveWorkoutSetLogs, startWorkoutSession } from "@/services/database/workout-sessions";
+import { clearActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
+import { completeWorkoutSession, getOrStartWorkoutSession, getWorkoutHistoryDetailed, saveWorkoutSetLogs } from "@/services/database/workout-sessions";
 import type { Workout, WorkoutSession, WorkoutSessionSummary } from "@/types";
 import { useConfirm, ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 
 type SetLog = {
   reps: number;
@@ -35,6 +37,7 @@ function formatTime(totalSeconds: number) {
 export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { celebrate } = useSuccessFeedback();
   const { dialog: confirmDialog, ask: confirmAsk } = useConfirm();
   const router = useRouter();
   const [session, setSession] = useState<WorkoutSession | null>(null);
@@ -86,7 +89,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
 
   useEffect(() => {
     if (!user?.id) return;
-    startWorkoutSession(user.id, workout)
+    getOrStartWorkoutSession(user.id, workout)
       .then((nextSession) => {
         setSession(nextSession);
         setSessionError(null);
@@ -95,6 +98,14 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         const nextStartedAt = storedStartedAt ?? (Number.isFinite(parsedStartedAt) ? parsedStartedAt : Date.now());
         setStartedAtMs(nextStartedAt);
         storeTimestamp(timerKey, nextStartedAt);
+        writeActiveWorkoutState(user.id, {
+          sessionId: nextSession.id,
+          route: `/workouts/session/${workout.id}`,
+          label: workout.name,
+          startedAtMs: nextStartedAt,
+          elapsedSeconds: Math.max(0, Number(nextSession.duration_minutes ?? 0) * 60),
+          paused: false
+        });
       })
       .catch((error) => {
         logRecoverableError("workout-session.start", error);
@@ -188,9 +199,11 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         }))
       );
       await completeWorkoutSession(session.id, notes, duration);
+      clearActiveWorkoutState(user.id);
       clearStoredValue(timerKey);
       clearStoredValue(restTimerKey);
       toast({ title: "Workout completed", description: `${workout.name} was saved to your Plaivra history.` });
+      celebrate("Workout complete");
       router.push("/workout-history");
     } catch (error) {
       logRecoverableError("workout-session.complete", error);

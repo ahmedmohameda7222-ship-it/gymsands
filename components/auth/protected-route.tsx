@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
+import { getOnboarding } from "@/services/database/profile";
 
 export function ProtectedRoute({
   children,
@@ -18,6 +19,7 @@ export function ProtectedRoute({
   const { user, isAdmin, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [isCheckingSetup, setIsCheckingSetup] = useState(pathname !== "/onboarding");
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -25,7 +27,30 @@ export function ProtectedRoute({
     }
   }, [isLoading, pathname, router, user]);
 
-  if (isLoading) {
+  useEffect(() => {
+    let mounted = true;
+    if (isLoading || !user?.id || pathname === "/onboarding" || adminOnly) {
+      setIsCheckingSetup(false);
+      return;
+    }
+    setIsCheckingSetup(true);
+    getOnboarding(user.id)
+      .then((setup) => {
+        if (!mounted) return;
+        if (!setup) {
+          router.replace("/onboarding");
+          return;
+        }
+        setIsCheckingSetup(false);
+      })
+      .catch((error) => {
+        console.warn("Plaivra could not verify profile setup.", error);
+        if (mounted) setIsCheckingSetup(false);
+      });
+    return () => { mounted = false; };
+  }, [adminOnly, isLoading, pathname, router, user?.id]);
+
+  if (isLoading || isCheckingSetup) {
     return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading Plaivra...</div>;
   }
 

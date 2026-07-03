@@ -5,11 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Bot, Check, Settings2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { getOnboarding } from "@/services/database/profile";
 import { getAllUserWorkoutPlans } from "@/services/database/workout-plan-loader";
 import type { OnboardingAnswers, UserWorkoutPlan } from "@/types";
+import { getAiPermissionSettings, getDefaultAiPermissionConfig, saveAiPermissionSettings, type AiPermissionConfig } from "@/services/database/ai-permissions";
 
 function isChatGptPlan(plan: UserWorkoutPlan | null) {
   if (!plan) return false;
@@ -57,6 +59,7 @@ function buildWorkoutPrompt(onboarding: OnboardingAnswers | null, profile: { ful
   lines.push("REQUIREMENTS:");
   lines.push("- Create a complete weekly schedule with clear day names and weekday assignments.");
   lines.push("- For each exercise, include: name, sets, reps, rest seconds, equipment, and target muscle.");
+  lines.push("- For each exercise, include an optional custom video URL when you have a suitable user-approved demonstration link.");
   lines.push("- Make the plan compatible with Plaivra import format.");
   lines.push("- When you're satisfied with the plan, export it to Plaivra using the import tool.");
   lines.push("");
@@ -73,6 +76,9 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
   const [plans, setPlans] = useState<UserWorkoutPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [permission, setPermission] = useState<AiPermissionConfig | null>(null);
+  const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
+  const [isSavingPermission, setIsSavingPermission] = useState(false);
 
   useEffect(() => {
     if (!userId) {
@@ -97,6 +103,11 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
     load();
   }, [userId]);
 
+  useEffect(() => {
+    if (!userId) return;
+    getAiPermissionSettings(userId).then(setPermission).catch(() => setPermission(null));
+  }, [userId]);
+
   const hasImportedPlan = plans.some(isChatGptPlan);
   const setupComplete = Boolean(onboarding);
 
@@ -118,10 +129,37 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
     window.open("https://chatgpt.com", "_blank", "noopener,noreferrer");
   }
 
+  async function grantWorkoutAccess(accessMode: "read" | "write" | "both") {
+    if (!userId) return;
+    const targetSection = mode === "workout" ? "workouts" : "meal_plans";
+    setIsSavingPermission(true);
+    try {
+      const base = permission ?? getDefaultAiPermissionConfig();
+      const next: AiPermissionConfig = {
+        ...base,
+        accessMode: "custom",
+        sections: {
+          ...base.sections,
+          [targetSection]: { read: true, write: accessMode === "write" || accessMode === "both" }
+        }
+      };
+      await saveAiPermissionSettings(userId, next);
+      setPermission(next);
+      setPermissionDialogOpen(false);
+      toast({ title: "ChatGPT access updated", description: "Workout access is now available." });
+    } catch (error) {
+      toast({ title: "Could not update ChatGPT access", description: error instanceof Error ? error.message : "Please try again.", variant: "error" });
+    } finally {
+      setIsSavingPermission(false);
+    }
+  }
+
   // Hide completely if user already has any imported plan
   if (!isLoading && hasImportedPlan) return null;
 
   const noun = mode === "workout" ? "workout plan" : "meal plan";
+  const sectionPermission = mode === "workout" ? permission?.sections.workouts : permission?.sections.meal_plans;
+  const hasChatGptAccess = permission?.accessMode === "full" || Boolean(sectionPermission?.read || sectionPermission?.write);
 
   return (
     <Card variant="glassStrong" className={className}>
@@ -147,6 +185,26 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
                 Set up import
               </Link>
             </Button>
+          ) : !hasChatGptAccess ? (
+            <>
+              <button type="button" onClick={() => setPermissionDialogOpen(true)} className="rounded-xl border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10">
+                Give ChatGPT access for {mode === "workout" ? "workouts" : "meal plans"}
+              </button>
+              <Dialog open={permissionDialogOpen} onOpenChange={setPermissionDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Do you want to give ChatGPT access to {mode === "workout" ? "workouts" : "meal plans"}?</DialogTitle>
+                    <DialogDescription>Choose the access level you are comfortable with. You can remove it later from AI Permissions.</DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-2">
+                    <Button type="button" variant="outline" onClick={() => void grantWorkoutAccess("read")} disabled={isSavingPermission}>Read access</Button>
+                    <Button type="button" variant="outline" onClick={() => void grantWorkoutAccess("write")} disabled={isSavingPermission}>Write access</Button>
+                    <Button type="button" onClick={() => void grantWorkoutAccess("both")} disabled={isSavingPermission}>Both read and write</Button>
+                    <Button type="button" variant="ghost" onClick={() => setPermissionDialogOpen(false)} disabled={isSavingPermission}>Do not give access</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
           ) : (
             <Button type="button" className="min-h-12" onClick={handleImportWorkout}>
               {copied ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}

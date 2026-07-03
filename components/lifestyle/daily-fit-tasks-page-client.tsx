@@ -15,6 +15,7 @@ import {
   type DailyFitTaskInput
 } from "@/services/database/wellness";
 import type { DailyFitTask } from "@/types";
+import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 
 const starterTasks = ["Drink water", "Take supplements", "Walk or move", "Stretch 10 min", "Hit protein goal"];
 const emptyDraft = { id: "", title: "", notes: "" };
@@ -23,6 +24,7 @@ export function DailyFitTasksPageClient() {
   const { user } = useAuth();
   const userId = user?.id;
   const { toast } = useToast();
+  const { celebrate } = useSuccessFeedback();
   const today = useTodayDate();
   const [items, setItems] = useState<DailyFitTask[]>([]);
   const [draft, setDraft] = useState(emptyDraft);
@@ -88,6 +90,7 @@ export function DailyFitTasksPageClient() {
     try {
       const saved = await upsertDailyFitTask({ ...item, completed: !item.completed });
       setItems((current) => current.map((task) => task.id === saved.id ? saved : task));
+      if (!item.completed) celebrate("Task complete");
     } catch (error) {
       toast({ title: "Could not update task", description: error instanceof Error ? error.message : "Please try again." });
     }

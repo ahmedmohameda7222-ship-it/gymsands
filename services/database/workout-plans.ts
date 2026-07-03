@@ -101,6 +101,7 @@ type RawWorkoutPlan = {
 function mapPlanExerciseToWorkout(exercise: RawPlanExercise): Workout {
   return hydrateWorkoutMetadata({
     id: exercise.source_workout_id || exercise.workout_id || exercise.id,
+    plan_exercise_id: exercise.id,
     name: exercise.exercise_name,
     category: exercise.category || "Exercise",
     target_muscle: exercise.target_muscle || "General",
@@ -606,4 +607,50 @@ export async function createUserWorkoutPlan({
 
 export function workoutsFromPlanDay(day: UserWorkoutPlan["days"][number] | null | undefined): Workout[] {
   return (day?.exercises ?? []).map((exercise) => mapPlanExerciseToWorkout(exercise as RawPlanExercise));
+}
+
+export async function getUserWorkoutPlanExerciseDetail(userId: string, exerciseId: string) {
+  if (!supabase || !isUuid(userId) || !isUuid(exerciseId)) return null;
+  const fullSelect = "id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes";
+  const fullResult = await supabase
+    .from("user_workout_plan_exercises")
+    .select(fullSelect)
+    .eq("id", exerciseId)
+    .maybeSingle();
+  let exercise = fullResult.data as unknown as RawPlanExercise | null;
+  let error = fullResult.error;
+  if (error && isMissingTemplateSchemaError(error)) {
+    const compatible = await supabase
+      .from("user_workout_plan_exercises")
+      .select("id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,video_url,sort_order,notes")
+      .eq("id", exerciseId)
+      .maybeSingle();
+    exercise = compatible.data as unknown as RawPlanExercise | null;
+    error = compatible.error;
+  }
+  if (error) throw error;
+  if (!exercise) return null;
+
+  const rawExercise = exercise as unknown as RawPlanExercise;
+  const { data: day, error: dayError } = await supabase
+    .from("user_workout_plan_days")
+    .select("id,plan_id,day_name")
+    .eq("id", rawExercise.plan_day_id)
+    .maybeSingle();
+  if (dayError) throw dayError;
+  if (!day) return null;
+  const { data: plan, error: planError } = await supabase
+    .from("user_workout_plans")
+    .select("id,user_id,name")
+    .eq("id", day.plan_id)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (planError) throw planError;
+  if (!plan) return null;
+
+  return {
+    exercise: mapPlanExerciseToWorkout(rawExercise),
+    dayName: day.day_name,
+    planName: plan.name
+  };
 }

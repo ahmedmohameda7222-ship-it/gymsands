@@ -8,18 +8,30 @@ import {
   Globe,
   LayoutDashboard,
   Palette,
-  Ruler
+  Ruler,
+  Zap
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, type SelectOption } from "@/components/ui/select-field";
 import { SettingsPageShell } from "@/components/settings/settings-page-shell";
 import { SettingsToggleRow } from "@/components/settings/settings-toggle-row";
-import { type UserAppSettings } from "@/services/database/user-settings";
+import { type QuickLogSection, type UserAppSettings } from "@/services/database/user-settings";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { useTranslation } from "@/lib/i18n/use-translation";
 import { appThemes, getThemeById, type ThemeId } from "@/lib/themes";
 
 type IconComponent = ComponentType<{ className?: string }>;
+
+const quickLogOptions: { id: QuickLogSection; label: string }[] = [
+  { id: "water", label: "Water" },
+  { id: "meal", label: "Meal" },
+  { id: "weight", label: "Weight" },
+  { id: "workout", label: "Workout" },
+  { id: "progress", label: "Progress" },
+  { id: "sleep", label: "Sleep" },
+  { id: "supplements", label: "Supplements" },
+  { id: "wellness", label: "Wellness" }
+];
 
 function SelectPreferenceRow({
   icon: Icon,
@@ -125,6 +137,13 @@ export default function PreferencesPage() {
   async function updatePreference<Key extends keyof UserAppSettings>(key: Key, value: UserAppSettings[Key]) {
     await updateSettings({ [key]: value } as Partial<UserAppSettings>);
     setHasSaved(true);
+  }
+
+  function toggleQuickLog(section: QuickLogSection, visible: boolean) {
+    const next = visible
+      ? [...settings.quickLogSections.filter((item) => item !== section), section]
+      : settings.quickLogSections.filter((item) => item !== section);
+    void updatePreference("quickLogSections", next);
   }
 
   if (isLoadingSettings) {
@@ -253,6 +272,18 @@ export default function PreferencesPage() {
               { value: "progress", label: t("nav.progress") }
             ]}
           />
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/70">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base"><Zap className="h-5 w-5 text-primary" /> Quick Log</CardTitle>
+          <CardDescription>Choose which shortcuts appear when you open Quick Log on mobile.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          {quickLogOptions.map((item) => (
+            <SettingsToggleRow key={item.id} label={item.label} defaultOn={settings.quickLogSections.includes(item.id)} onChange={(visible) => toggleQuickLog(item.id, visible)} />
+          ))}
         </CardContent>
       </Card>
 

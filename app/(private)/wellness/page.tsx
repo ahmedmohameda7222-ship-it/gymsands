@@ -3,14 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
-  CheckCircle2,
-  ChevronDown,
   Droplets,
   FlaskConical,
   ListChecks,
   Moon,
-  Repeat,
-  ShieldCheck
+  Repeat
 } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -65,7 +62,6 @@ function LauncherCard({ href, icon: Icon, label, status, detail, progress, accen
     </Link>
   );
 }
-
 export default function WellnessPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -77,7 +73,6 @@ export default function WellnessPage() {
   const [tasks, setTasks] = useState<DailyFitTask[]>([]);
   const [sleepExists, setSleepExists] = useState(false);
   const [sleepHours, setSleepHours] = useState<number | null>(null);
-  const [showDetails, setShowDetails] = useState(false);
 
   const waterProgress = useMemo(() => {
     if (!waterTarget) return 0;
@@ -215,46 +210,7 @@ export default function WellnessPage() {
           />
         </div>
 
-        {/* Collapsible: detailed wellness checklist */}
-        <Card variant="glass">
-          <button
-            type="button"
-            onClick={() => setShowDetails((s) => !s)}
-            className="flex w-full items-center justify-between p-4 text-left sm:p-5"
-          >
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-primary" />
-              <p className="text-sm font-semibold">Daily wellness checklist</p>
-            </div>
-            <ChevronDown className={`h-4 w-4 text-muted-foreground transition ${showDetails ? "rotate-180" : ""}`} />
-          </button>
-          {showDetails ? (
-            <CardContent className="px-4 pb-4 sm:px-5 sm:pb-5">
-              <div className="grid gap-2 sm:grid-cols-2">
-                <CheckItem done={waterTarget > 0 && waterTotal >= waterTarget} label="Hydration target" detail={waterDetail} />
-                <CheckItem done={habits.length > 0 && habitsDone === habits.length} label="Habits" detail={habitsDetail} />
-                <CheckItem done={sleepExists} label="Sleep logged" detail={sleepDetail} />
-                <CheckItem done={supplements.length > 0 && supplementsTaken === supplements.length} label="Supplements" detail={supplementsDetail} />
-                <CheckItem done={tasks.length > 0 && tasksDone === tasks.length} label="Daily Fit Tasks" detail={tasksDetail} />
-              </div>
-            </CardContent>
-          ) : null}
-        </Card>
       </div>
     </>
-  );
-}
-
-function CheckItem({ done, label, detail }: { done: boolean; label: string; detail: string }) {
-  return (
-    <div className="solid-row flex items-start gap-2.5 p-2.5">
-      <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${done ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-muted-foreground"}`}>
-        <CheckCircle2 className="h-3.5 w-3.5" />
-      </div>
-      <div className="min-w-0">
-        <p className={`text-sm font-semibold ${done ? "text-foreground" : "text-muted-foreground"}`}>{label}</p>
-        <p className="text-xs text-muted-foreground">{detail}</p>
-      </div>
-    </div>
   );
 }

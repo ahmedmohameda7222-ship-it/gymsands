@@ -14,6 +14,7 @@ export type NormalizedFood = {
   sodium?: number | null;
   raw_data?: unknown;
 };
+import { barcodeValidationMessage, normalizeProductBarcode } from "@/lib/barcodes";
 
 function numberValue(value: unknown) {
   const parsed = Number(value);
@@ -41,13 +42,15 @@ export function normalizeOpenFoodFactsProduct(product: any, barcode: string): No
 }
 
 export async function lookupOpenFoodFactsBarcode(barcode: string) {
+  const normalizedBarcode = normalizeProductBarcode(barcode);
+  if (!normalizedBarcode) throw new Error(barcodeValidationMessage(barcode));
   const response = await fetch(
-    `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=code,product_name,generic_name,brands,serving_size,nutriments`,
+    `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(normalizedBarcode)}.json?fields=code,product_name,generic_name,brands,serving_size,nutriments`,
     { headers: { "User-Agent": "Plaivra/1.0" } }
   );
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.status === 0 || !data.product) {
     throw new Error("No Open Food Facts product was found for that barcode.");
   }
-  return normalizeOpenFoodFactsProduct(data.product, barcode);
+  return normalizeOpenFoodFactsProduct(data.product, normalizedBarcode);
 }

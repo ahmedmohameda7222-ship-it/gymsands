@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDownUp, Check, CheckCircle2, Clipboard, ExternalLink, Loader2, RotateCcw, Search, Send, X } from "lucide-react";
+import { ArrowDownUp, Clipboard, ExternalLink, Loader2, RefreshCw, Search, X } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { buildChatGptActionPrompt, getAiActionPresentation } from "@/components/ai/ai-action-summary";
 import { Button } from "@/components/ui/button";
@@ -171,12 +171,12 @@ export function RecentAiActionRequests({ limit, compact = false }: { limit?: num
               <p className="mt-3 text-xs leading-5 text-muted-foreground">{status.description}</p>
               {!compact ? (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => void copyRequest(request)} disabled={busyId === request.id}>{copiedId === request.id ? <CheckCircle2 className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />} {copiedId === request.id ? "Copied" : "Copy request"}</Button>
+                  {copiedId === request.id ? (
+                    <Button type="button" size="sm" onClick={() => window.location.reload()}><RefreshCw className="h-4 w-4" /> Refresh</Button>
+                  ) : (
+                    <Button type="button" size="sm" variant="outline" onClick={() => void copyRequest(request)} disabled={busyId === request.id}><Clipboard className="h-4 w-4" /> Copy</Button>
+                  )}
                   <Button asChild size="sm" variant="outline"><a href="https://chatgpt.com/" target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open ChatGPT</a></Button>
-                  {request.status === "ready_for_chatgpt" ? <Button type="button" size="sm" variant="outline" onClick={() => void changeStatus(request, "sent_to_chatgpt")} disabled={busyId === request.id}><Send className="h-4 w-4" /> Mark sent</Button> : null}
-                  {request.status === "sent_to_chatgpt" ? <Button type="button" size="sm" variant="outline" onClick={() => void changeStatus(request, "ready_for_chatgpt")} disabled={busyId === request.id}><RotateCcw className="h-4 w-4" /> Not sent yet</Button> : null}
-                  {request.status !== "resolved" && request.status !== "cancelled" ? <Button type="button" size="sm" onClick={() => void changeStatus(request, "resolved")} disabled={busyId === request.id}><Check className="h-4 w-4" /> Mark done</Button> : null}
-                  {request.status === "resolved" || request.status === "cancelled" ? <Button type="button" size="sm" variant="outline" onClick={() => void changeStatus(request, "ready_for_chatgpt")} disabled={busyId === request.id}><RotateCcw className="h-4 w-4" /> Reopen</Button> : null}
                   {request.status !== "resolved" && request.status !== "cancelled" ? <Button type="button" size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => void changeStatus(request, "cancelled")} disabled={busyId === request.id}><X className="h-4 w-4" /> Cancel</Button> : null}
                 </div>
               ) : null}

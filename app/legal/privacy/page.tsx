@@ -9,8 +9,12 @@ export default function PrivacyPage() {
       eyebrow="Datenschutz / Privacy"
       title="Datenschutzerklärung"
       intro="Diese Datenschutzerklärung erläutert, wie Plaivra personenbezogene und gesundheitsnahe Daten verarbeitet. Die deutsche Fassung steht zuerst; eine englische Zusammenfassung folgt."
+      localizedCopy={{
+        en: { eyebrow: "Privacy", title: "Privacy Policy", intro: "This policy explains how Plaivra processes account, fitness, nutrition, body, wellness, and optional ChatGPT connection data." },
+        ar: { eyebrow: "الخصوصية", title: "سياسة الخصوصية", intro: "توضح هذه السياسة كيفية معالجة Plaivra لبيانات الحساب واللياقة والتغذية والجسم والعافية والربط الاختياري مع ChatGPT." }
+      }}
     >
-      <div lang="de" className="space-y-8">
+      <div lang="de" data-legal-language className="space-y-8">
         <LegalSection title="1. Verantwortlicher">
           <p>Plaivra wird von Ahmed Mohamed als individuellem Betreiber geführt. Verantwortlicher im Sinne der Datenschutz-Grundverordnung (DSGVO) ist:</p>
           <address className="not-italic">
@@ -107,7 +111,7 @@ export default function PrivacyPage() {
         </LegalSection>
       </div>
 
-      <div lang="en" className="space-y-8 border-t border-border/70 pt-8">
+      <div lang="en" data-legal-language className="space-y-8 border-t border-border/70 pt-8">
         <LegalSection title="English summary">
           <p>Plaivra is operated by Ahmed Mohamed as an individual operator. The controller responsible for Plaivra is Ahmed Mohamed, {LEGAL_OPERATOR.street}, {LEGAL_OPERATOR.postalCode} {LEGAL_OPERATOR.city}, {LEGAL_OPERATOR.countryEn}. Contact: <a href={emailHref}>{LEGAL_OPERATOR.email}</a>.</p>
           <p>Plaivra processes account, workout, nutrition, hydration, body, progress-photo, wellness, AI-permission, OAuth-connection and redacted activity data to provide user-requested features and secure the service. Fitness and body-related information can be sensitive and may qualify as special-category data; registration therefore includes a separate explicit consent for data the user chooses to provide.</p>
@@ -115,6 +119,23 @@ export default function PrivacyPage() {
           <p>Depending on active configuration, technical recipients include Supabase, the production hosting provider, Resend for enabled email functions, and OpenAI/ChatGPT only when the user activates the connection. International-transfer safeguards and processor terms must be finalized before public launch where required.</p>
           <p>Users may request access, correction, erasure, restriction, portability or object to qualifying processing, withdraw consent prospectively, and complain to a supervisory authority. Requests may be sent to <a href={emailHref}>{LEGAL_OPERATOR.email}</a>.</p>
           <p>Plaivra is not a medical service, healthcare provider, emergency service or medical device and does not provide diagnosis, treatment, clinical nutrition or medical advice.</p>
+        </LegalSection>
+      </div>
+      <div lang="ar" dir="rtl" data-legal-language className="space-y-8">
+        <LegalSection title="المسؤول عن البيانات">
+          <p>يدير Ahmed Mohamed تطبيق Plaivra بصفته مشغلًا فرديًا. للتواصل بشأن الخصوصية: <a href={emailHref}>{LEGAL_OPERATOR.email}</a>.</p>
+        </LegalSection>
+        <LegalSection title="البيانات والغرض من استخدامها">
+          <p>نعالج بيانات الحساب والتمارين والتغذية والماء وقياسات الجسم والتقدم والعافية والتفضيلات لتقديم الميزات التي تطلبها. قد تكون بعض هذه البيانات حساسة، ولذلك لا تُعالج إلا وفق الأساس القانوني المناسب وموافقتك الصريحة حين يلزم.</p>
+        </LegalSection>
+        <LegalSection title="ChatGPT والصلاحيات">
+          <p>الربط مع ChatGPT اختياري ومعطل افتراضيًا. يقتصر الوصول على الأقسام التي تسمح بها ويمكنك إلغاء الصلاحية. لا تتضمن سجلات النشاط الرموز السرية أو المطالبات الخام أو الملاحظات الخاصة أو قياسات الجسم التفصيلية.</p>
+        </LegalSection>
+        <LegalSection title="المستلمون والأمان والاحتفاظ">
+          <p>قد تشمل الجهات التقنية Supabase ومزود الاستضافة وResend عند تفعيل البريد وOpenAI فقط عندما تبدأ أنت الإجراء. نستخدم ضوابط وصول وعزل بيانات وتشفير نقل وسياسات صفوف. نحتفظ بالبيانات فقط للمدة اللازمة للغرض أو للالتزام القانوني.</p>
+        </LegalSection>
+        <LegalSection title="حقوقك">
+          <p>يمكنك طلب الوصول أو التصحيح أو الحذف أو التقييد أو النقل أو الاعتراض، وسحب الموافقة للمستقبل. يمكنك إرسال الطلب من إعدادات الخصوصية أو عبر <a href={emailHref}>{LEGAL_OPERATOR.email}</a>.</p>
         </LegalSection>
       </div>
     </LegalPage>

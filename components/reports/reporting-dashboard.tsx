@@ -1,7 +1,7 @@
 "use client";
 
 import { useTodayDate } from "@/lib/hooks/use-today-date";
-import { CalendarDays, ChevronLeft, ChevronRight, Download, Printer, Trophy } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Download, Trophy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,6 @@ import {
   datesInRange,
   downloadCsv,
   formatDelta,
-  printableReportHtml,
   reportMetrics,
   reportToCsv,
   startOfWeek,
@@ -91,18 +90,6 @@ export function ReportingDashboard() {
     downloadCsv(`plaivra-${mode}-report-${report.range.start}-to-${report.range.end}.csv`, reportToCsv(report));
   }
 
-  function printReport() {
-    if (!report) return;
-    const win = window.open("", "_blank");
-    if (!win) {
-      toast({ title: "Could not open print view", description: "Allow popups for this site and try again." });
-      return;
-    }
-    win.document.write(printableReportHtml(report, metrics));
-    win.document.close();
-    win.print();
-  }
-
   return (
     <div className="space-y-5">
       <Card variant="glass">
@@ -130,7 +117,6 @@ export function ReportingDashboard() {
         <>
           <div className="solid-tracking-card flex flex-wrap justify-end gap-2 p-3">
             <Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4" /> Export CSV</Button>
-            <Button variant="outline" onClick={printReport}><Printer className="h-4 w-4" /> Print report</Button>
           </div>
           <MetricGrid metrics={metrics} />
           <ReportDetails report={report} mode={mode} />

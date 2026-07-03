@@ -1,9 +1,13 @@
+"use client";
+
 import Link from "next/link";
 import { Activity, BedDouble, Dumbbell, LineChart, Pill, Soup, Trophy, Utensils } from "lucide-react";
 import { PublicNav } from "@/components/layout/public-nav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PublicFooter } from "@/components/layout/public-footer";
+import { useTranslation } from "@/lib/i18n/use-translation";
+import { getPublicCopy } from "@/lib/i18n/public-copy";
 
 const heroImages = [
   "https://images.unsplash.com/photo-1571902943202-507ec2618e8f?auto=format&fit=crop&w=1800&q=85",
@@ -11,7 +15,7 @@ const heroImages = [
   "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=1800&q=85"
 ];
 
-const features = [
+const englishFeatures = [
   { icon: Dumbbell, title: "Workout plans", text: "Track ChatGPT-exported plans and manually edited plans with active default selection." },
   { icon: Activity, title: "Exercise library", text: "Filter exercises by muscle, equipment, mechanics, level, and force type." },
   { icon: Soup, title: "Meal planning", text: "Plan meals, build custom foods, and track daily nutrition." },
@@ -22,7 +26,24 @@ const features = [
   { icon: Trophy, title: "Personal records", text: "Track best sets, max reps, 1RM, and custom milestones." }
 ];
 
+const arabicFeatures = [
+  { icon: Dumbbell, title: "خطط التمارين", text: "استورد الخطط التي وافقت عليها وعدّلها وتابع تنفيذها." },
+  { icon: Activity, title: "مكتبة التمارين", text: "ابحث حسب العضلة والمعدات والمستوى ونوع الحركة." },
+  { icon: Soup, title: "تخطيط الوجبات", text: "نظّم الوجبات والأطعمة المخصصة وخطط التغذية." },
+  { icon: Utensils, title: "سجل التغذية", text: "تابع السعرات والعناصر الغذائية والماء من مكان واحد." },
+  { icon: LineChart, title: "متابعة التقدم", text: "راجع قياسات الجسم والرسوم البيانية والاستمرارية." },
+  { icon: BedDouble, title: "النوم والتعافي", text: "سجّل النوم والإجهاد والتعافي والملاحظات." },
+  { icon: Pill, title: "العادات والمكملات", text: "تابع العادات اليومية والماء والمكملات." },
+  { icon: Trophy, title: "الأرقام الشخصية", text: "احتفظ بأفضل الأوزان والتكرارات والإنجازات." }
+];
+
 export default function LandingPage() {
+  const { language } = useTranslation();
+  const copy = getPublicCopy(language);
+  const features = language === "ar" ? arabicFeatures : englishFeatures;
+  const chips = language === "ar"
+    ? ["خطط ChatGPT", "متابعة التمارين", "تخطيط الوجبات", "التقدم", "النوم والتعافي"]
+    : ["ChatGPT planning", "Workout tracking", "Meal planning", "Progress tracking", "Sleep & recovery"];
   return (
     <div className="premium-page-bg min-h-screen text-foreground">
       <PublicNav />
@@ -46,18 +67,21 @@ export default function LandingPage() {
             <div className="glass-card-strong max-w-3xl p-5 sm:p-8">
               <h1 className="mt-4 text-5xl font-bold tracking-normal sm:text-7xl">Plaivra</h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-                AI plans it. Plaivra tracks it.
+                {copy.landingMotto}
+              </p>
+              <p className="mt-3 max-w-2xl text-lg leading-8 text-muted-foreground">
+                {copy.landingBody}
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Button asChild size="lg">
-                  <Link href="/register">Create account</Link>
+                  <Link href="/register">{copy.createAccount}</Link>
                 </Button>
                 <Button asChild variant="outline" size="lg" className="border-primary/60 bg-[color-mix(in_srgb,var(--surface)_55%,transparent)] text-foreground hover:bg-[color-mix(in_srgb,var(--surface)_75%,transparent)]">
-                  <Link href="/login">Login</Link>
+                  <Link href="/login">{copy.login}</Link>
                 </Button>
               </div>
               <div className="mt-8 flex flex-wrap gap-2">
-                {["ChatGPT plan export", "Workout tracking", "Exercise library", "Meal planning", "Progress tracking", "Sleep & recovery", "Habits", "Supplements", "Personal records"].map((item) => (
+                {chips.map((item) => (
                   <span key={item} className="glass-chip px-3 py-1 text-sm">
                     {item}
                   </span>

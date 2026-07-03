@@ -11,10 +11,12 @@ type ProfilePatch = {
 
 const onboardingAnswerColumns = new Set([
   "user_id",
+  "age",
   "age_range",
   "gender",
   "height_cm",
   "weight_kg",
+  "goal_weight_kg",
   "goal",
   "goals",
   "training_cycle",
@@ -29,7 +31,13 @@ const onboardingAnswerColumns = new Set([
   "barcode_scan_enabled",
   "available_equipment",
   "nutrition_preferences",
-  "allergies_limitations"
+  "allergies_limitations",
+  "injuries_limitations",
+  "training_preferences",
+  "food_preferences",
+  "lifestyle_notes",
+  "workout_constraints",
+  "coaching_notes"
 ]);
 
 function canUseUserData(userId: string | null | undefined) {
@@ -73,9 +81,10 @@ function mockOnboarding(userId: string): OnboardingAnswers {
   return {
     user_id: userId,
     age_range: "25-34",
-    gender: "Prefer not to say",
+    gender: "",
     height_cm: null,
     weight_kg: null,
+    goal_weight_kg: null,
     goal: "General fitness",
     goals: ["General fitness"],
     training_cycle: null,
@@ -88,7 +97,13 @@ function mockOnboarding(userId: string): OnboardingAnswers {
     desired_duration_weeks: 4,
     available_equipment: [],
     nutrition_preferences: [],
-    allergies_limitations: null
+    allergies_limitations: null,
+    injuries_limitations: null,
+    training_preferences: null,
+    food_preferences: null,
+    lifestyle_notes: null,
+    workout_constraints: null,
+    coaching_notes: null
   };
 }
 
@@ -131,26 +146,26 @@ export async function saveOnboarding(answers: OnboardingAnswers) {
   const payload = buildOnboardingAnswersPayload(answers);
   let { data, error } = await supabase!.from("onboarding_answers").upsert(payload, { onConflict: "user_id" }).select("*").single();
 
-  if (
-    error &&
-    (
-      error.message.toLowerCase().includes("available_equipment") ||
-      error.message.toLowerCase().includes("desired_duration_weeks") ||
-      error.message.toLowerCase().includes("goals") ||
-      error.message.toLowerCase().includes("training_cycle") ||
-      error.message.toLowerCase().includes("min_workout_duration_minutes") ||
-      error.message.toLowerCase().includes("max_workout_duration_minutes")
-    )
-  ) {
-    const {
-      available_equipment: _availableEquipment,
-      desired_duration_weeks: _desiredDurationWeeks,
-      goals: _goals,
-      training_cycle: _trainingCycle,
-      min_workout_duration_minutes: _minWorkoutDuration,
-      max_workout_duration_minutes: _maxWorkoutDuration,
-      ...compatiblePayload
-    } = payload;
+  const optionalColumns = [
+    "age",
+    "goal_weight_kg",
+    "available_equipment",
+    "desired_duration_weeks",
+    "goals",
+    "training_cycle",
+    "min_workout_duration_minutes",
+    "max_workout_duration_minutes",
+    "injuries_limitations",
+    "training_preferences",
+    "food_preferences",
+    "lifestyle_notes",
+    "workout_constraints",
+    "coaching_notes"
+  ];
+  const lowerErrorMessage = error?.message.toLowerCase() ?? "";
+  if (error && optionalColumns.some((column) => lowerErrorMessage.includes(column))) {
+    const compatiblePayload = { ...payload };
+    optionalColumns.forEach((column) => delete compatiblePayload[column]);
     const compatible = await supabase!.from("onboarding_answers").upsert(compatiblePayload, { onConflict: "user_id" }).select("*").single();
     data = compatible.data;
     error = compatible.error;

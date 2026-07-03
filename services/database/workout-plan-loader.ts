@@ -225,6 +225,7 @@ export function workoutFromLoadedPlanExercise(exercise: UserWorkoutPlanExercise)
   const blockType = extended.block_type ?? exercise.category ?? "strength";
   return {
     id: exercise.source_workout_id || exercise.workout_id || exercise.id,
+    plan_exercise_id: exercise.id,
     name: exercise.exercise_name,
     category: exercise.category || blockType || "Exercise",
     target_muscle: exercise.target_muscle || "General",

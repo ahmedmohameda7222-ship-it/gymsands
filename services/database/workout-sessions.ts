@@ -498,6 +498,34 @@ export async function skipWorkoutDay(userId: string, day: SkipWorkoutDayInput, n
   return normalizeWorkoutSession(data as WorkoutSession);
 }
 
+export async function getOpenWorkoutSession(userId: string, workoutId?: string | null) {
+  if (!canUseUserData(userId)) return null;
+  let query = supabase!
+    .from("workout_sessions")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "started");
+  if (workoutId && isUuid(workoutId)) query = query.eq("workout_id", workoutId);
+  const { data, error } = await query.order("started_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) {
+    console.warn("Plaivra could not load the active workout session.", error.message);
+    return null;
+  }
+  return data ? normalizeWorkoutSession(data as WorkoutSession) : null;
+}
+
+export async function getOrStartWorkoutSession(userId: string, workout: Workout) {
+  const open = await getOpenWorkoutSession(userId, workout.id);
+  return open ?? startWorkoutSession(userId, workout);
+}
+
+export async function cancelWorkoutSession(sessionId: string) {
+  if (!supabase || !isUuid(sessionId)) throw new Error("Workout session is invalid.");
+  const { error } = await supabase.from("workout_sessions").delete().eq("id", sessionId).eq("status", "started");
+  if (error) throw error;
+  return true;
+}
+
 export async function updateSkippedWorkoutFollowup(
   userId: string,
   sessionId: string,

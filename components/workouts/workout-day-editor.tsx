@@ -251,7 +251,7 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
 
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button asChild variant="ghost" size="sm">
-                      <Link href={`/workouts/${exercise.id}`}>Details</Link>
+                      <Link href={`/my-workout/exercises/${exercise.plan_exercise_id ?? exercise.id}`}>Details</Link>
                     </Button>
                     {guideUrl ? (
                       <Button asChild variant="ghost" size="sm">

@@ -3,6 +3,7 @@ import { logExternalApi } from "@/lib/integrations/api-logger";
 import { jsonError, requireUser } from "@/lib/integrations/env";
 import { lookupOpenFoodFactsBarcode, type NormalizedFood } from "@/lib/integrations/open-food-facts";
 import { rateLimit } from "@/lib/integrations/rate-limit";
+import { barcodeValidationMessage, normalizeProductBarcode } from "@/lib/barcodes";
 
 function numberValue(value: unknown, fallback = 0) {
   const parsed = Number(value);
@@ -52,8 +53,9 @@ export async function GET(request: Request) {
   const context = await requireUser(request);
   if (context instanceof NextResponse) return context;
 
-  const barcode = new URL(request.url).searchParams.get("barcode")?.trim();
-  if (!barcode) return jsonError("Barcode is required.");
+  const rawBarcode = new URL(request.url).searchParams.get("barcode")?.trim() ?? "";
+  const barcode = normalizeProductBarcode(rawBarcode);
+  if (!barcode) return jsonError(barcodeValidationMessage(rawBarcode));
 
   try {
     const food = await lookupOpenFoodFactsBarcode(barcode);
@@ -72,8 +74,9 @@ export async function POST(request: Request) {
   if (context instanceof NextResponse) return context;
 
   const body = await request.json().catch(() => ({}));
-  const barcode = String(body.barcode ?? "").trim();
-  if (!barcode) return jsonError("Barcode is required.");
+  const rawBarcode = String(body.barcode ?? "").trim();
+  const barcode = normalizeProductBarcode(rawBarcode);
+  if (!barcode) return jsonError(barcodeValidationMessage(rawBarcode));
   const saveToLibrary = body.saveToLibrary !== false;
   const addToLog = Boolean(body.addToLog);
   const addToMealPlan = Boolean(body.addToMealPlan);

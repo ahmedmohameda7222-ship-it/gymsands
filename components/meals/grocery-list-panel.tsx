@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Download, Plus, Printer, RefreshCw, Share2, ShoppingCart, Trash2, Undo2 } from "lucide-react";
+import { CheckCircle2, Download, FileDown, MoreHorizontal, Plus, RefreshCw, Share2, ShoppingCart, Trash2 } from "lucide-react";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -15,11 +15,10 @@ import { cn } from "@/lib/utils";
 import { userSafeError } from "@/lib/error-formatting";
 import { deleteGroceryItem, getGroceryItems, upsertGroceryItem } from "@/services/database/execution-layer";
 import type { GroceryStoreSection, MealPlanItem, UserGroceryItem } from "@/types";
+import type { PDFFont } from "pdf-lib";
 
 const sections: GroceryStoreSection[] = ["Protein", "Carbs", "Vegetables", "Fruits", "Dairy", "Pantry", "Frozen", "Drinks", "Other"];
 const commonUnits = ["g", "kg", "ml", "L", "pcs", "slices", "cups", "tbsp", "tsp", "pack", "can", "bottle", "bunch", "item"];
-
-type LastImport = { ids: string[]; added: number; skipped: number };
 
 export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, onStats }: { weekStart: string; weekEnd: string; mealItems: MealPlanItem[]; refreshKey: number; onStats: (count: number, checked: number) => void }) {
   const { user } = useAuth();
@@ -28,7 +27,8 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
   const { dialog: confirmDialog, ask: confirmAsk } = useConfirm();
   const [items, setItems] = useState<UserGroceryItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [lastImport, setLastImport] = useState<LastImport | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [loadError, setLoadError] = useState("");
   const [loadNonce, setLoadNonce] = useState(0);
@@ -65,12 +65,8 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
   useEffect(() => { onStats(items.length, items.filter((item) => item.checked).length); }, [items, onStats]);
 
   const grouped = useMemo(() => sections.map((section) => ({ section, items: items.filter((item) => item.store_section === section) })).filter((group) => group.items.length), [items]);
-  const importedItems = useMemo(() => items.filter((item) => item.created_by === "meal_plan"), [items]);
+  const importedItems = useMemo(() => items.filter((item) => item.created_by !== "manual"), [items]);
   const selectedItems = useMemo(() => items.filter((item) => selectedIds.has(item.id)), [items, selectedIds]);
-  const existingSourceIds = useMemo(() => new Set(items.map((item) => item.source_meal_plan_item_id).filter(Boolean)), [items]);
-  const existingNames = useMemo(() => new Set(items.map((item) => normalizedName(item.item_name))), [items]);
-  const importCandidates = useMemo(() => mealItems.filter((meal) => !existingSourceIds.has(meal.id) && !existingNames.has(normalizedName(meal.food_name))), [existingNames, existingSourceIds, mealItems]);
-  const importSkipped = mealItems.length - importCandidates.length;
 
   async function addItem() {
     if (!user?.id || !draft.itemName.trim()) return;
@@ -87,68 +83,10 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
       });
       setItems((current) => [...current, saved]);
       setDraft({ itemName: "", quantity: "", unit: "", customUnit: "", section: "Other", notes: "" });
+      setShowQuickAdd(false);
       setFeedback(`${saved.item_name} was added to this grocery list.`);
     } catch (error) {
       toast({ title: "Could not add grocery item", description: userSafeError(error) });
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  function confirmImport() {
-    if (!mealItems.length) return;
-    confirmAsk({
-      title: "Import a rough grocery list?",
-      description: `${importCandidates.length} meal name${importCandidates.length === 1 ? "" : "s"} can be added. This is a rough starting point, not an ingredient list, and ${importSkipped} duplicate${importSkipped === 1 ? "" : "s"} will be skipped.`,
-      confirmLabel: `Import ${importCandidates.length}`,
-      onConfirm: () => { void importMeals(); }
-    });
-  }
-
-  async function importMeals() {
-    if (!user?.id) return;
-    if (!importCandidates.length) {
-      const message = mealItems.length ? "Nothing was added because every meal is already represented in this list." : "There are no planned meals to import for this week.";
-      setFeedback(message);
-      toast({ title: "No new items to import", description: message });
-      return;
-    }
-    setIsBusy(true);
-    try {
-      const saved = await Promise.all(importCandidates.map((meal) => upsertGroceryItem(user.id, {
-        week_start: weekStart,
-        source_meal_plan_item_id: meal.id,
-        item_name: meal.food_name,
-        quantity: meal.quantity,
-        unit: meal.serving_size,
-        store_section: "Other",
-        notes: `From ${meal.meal_type} on ${meal.plan_date}`,
-        created_by: "meal_plan"
-      })));
-      const skipped = mealItems.length - saved.length;
-      setItems((current) => [...current, ...saved]);
-      setLastImport({ ids: saved.map((item) => item.id), added: saved.length, skipped });
-      setFeedback(`${saved.length} item${saved.length === 1 ? "" : "s"} imported. ${skipped} duplicate${skipped === 1 ? "" : "s"} skipped.`);
-      toast({ title: "Rough list imported", description: `${saved.length} added · ${skipped} skipped. You can undo this import below.` });
-    } catch (error) {
-      toast({ title: "Could not import meal-plan items", description: userSafeError(error) });
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  async function undoLastImport() {
-    if (!user?.id || !lastImport?.ids.length) return;
-    setIsBusy(true);
-    try {
-      await Promise.all(lastImport.ids.map((id) => deleteGroceryItem(user.id, id)));
-      setItems((current) => current.filter((item) => !lastImport.ids.includes(item.id)));
-      setSelectedIds((current) => new Set([...current].filter((id) => !lastImport.ids.includes(id))));
-      setFeedback(`Last import undone. ${lastImport.added} item${lastImport.added === 1 ? "" : "s"} removed.`);
-      setLastImport(null);
-      toast({ title: "Import undone", description: "Only items from the most recent import were removed." });
-    } catch (error) {
-      toast({ title: "Could not undo import", description: userSafeError(error) });
     } finally {
       setIsBusy(false);
     }
@@ -217,24 +155,6 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
 
   const textList = items.map((item) => `${item.checked ? "✓" : "□"} ${item.item_name}${item.quantity !== null ? ` - ${item.quantity} ${item.unit ?? ""}` : ""}${item.already_have ? " (already have)" : ""}`).join("\n");
 
-  function printList() {
-    try {
-      const win = window.open("", "_blank");
-      if (!win) {
-        setFeedback("The print window was blocked. Allow pop-ups for Plaivra and try again.");
-        toast({ title: "Print window blocked", description: "Allow pop-ups for Plaivra, then try again.", variant: "error" });
-        return;
-      }
-      win.document.write(`<!doctype html><html><head><title>Plaivra grocery list</title><style>body{font-family:Arial;padding:24px;white-space:pre-line}</style></head><body><h1>Grocery list ${weekStart} to ${weekEnd}</h1>${textList.replaceAll("&", "&amp;").replaceAll("<", "&lt;")}</body></html>`);
-      win.document.close();
-      win.print();
-      setFeedback("Print view opened successfully.");
-      toast({ title: "Print view opened", description: "Choose a printer or save as PDF in the browser dialog." });
-    } catch (error) {
-      toast({ title: "Could not print list", description: userSafeError(error), variant: "error" });
-    }
-  }
-
   async function shareList() {
     try {
       const canShare = typeof navigator.share === "function";
@@ -264,19 +184,126 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
     }
   }
 
+  async function downloadPdf() {
+    if (!items.length) return;
+    setIsBusy(true);
+    try {
+      const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+      const pdf = await PDFDocument.create();
+      const regular = await pdf.embedFont(StandardFonts.Helvetica);
+      const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+      const logoBytes = await fetch("/plaivra-logo.png").then((response) => response.arrayBuffer());
+      const logo = await pdf.embedPng(logoBytes);
+      const primary = rgb(0.176, 0.227, 0.118);
+      const gold = rgb(0.77, 0.60, 0.23);
+      const muted = rgb(0.38, 0.38, 0.38);
+      const border = rgb(0.88, 0.87, 0.83);
+      const pageSize: [number, number] = [595.28, 841.89];
+      let page = pdf.addPage(pageSize);
+      let y = page.getHeight() - 52;
+
+      function wrap(value: string, font: PDFFont, size: number, maxWidth: number) {
+        const lines: string[] = [];
+        let current = "";
+        value.split(/\s+/).forEach((word) => {
+          const candidate = current ? `${current} ${word}` : word;
+          if (font.widthOfTextAtSize(candidate, size) <= maxWidth) current = candidate;
+          else { if (current) lines.push(current); current = word; }
+        });
+        if (current) lines.push(current);
+        return lines;
+      }
+
+      function drawHeader() {
+        page.drawImage(logo, { x: 42, y: page.getHeight() - 83, width: 34, height: 34 });
+        page.drawText("PLAIVRA", { x: 90, y: page.getHeight() - 59, size: 11, font: bold, color: gold });
+        page.drawText("Grocery List", { x: 90, y: page.getHeight() - 79, size: 22, font: bold, color: primary });
+        page.drawText(`${weekStart} to ${weekEnd}`, { x: 42, y: page.getHeight() - 108, size: 10, font: regular, color: muted });
+        page.drawLine({ start: { x: 42, y: page.getHeight() - 122 }, end: { x: page.getWidth() - 42, y: page.getHeight() - 122 }, thickness: 1, color: border });
+        y = page.getHeight() - 150;
+      }
+
+      function ensureSpace(height: number) {
+        if (y - height > 48) return;
+        page = pdf.addPage(pageSize);
+        drawHeader();
+      }
+
+      drawHeader();
+      grouped.forEach((group) => {
+        ensureSpace(38);
+        page.drawText(group.section.toUpperCase(), { x: 42, y, size: 10, font: bold, color: gold });
+        y -= 19;
+        group.items.forEach((item) => {
+          const quantity = item.quantity !== null ? `${item.quantity} ${item.unit ?? ""}`.trim() : "";
+          const status = item.already_have ? "Already have" : item.checked ? "Checked" : "";
+          const detail = [quantity, status, item.notes ?? ""].filter(Boolean).join(" - ");
+          const nameLines = wrap(item.item_name, bold, 11, 360);
+          const detailLines = detail ? wrap(detail, regular, 9, 400) : [];
+          const rowHeight = Math.max(30, nameLines.length * 14 + detailLines.length * 12 + 8);
+          ensureSpace(rowHeight);
+          page.drawRectangle({ x: 44, y: y - 10, width: 10, height: 10, borderWidth: 1, borderColor: primary, color: item.checked || item.already_have ? primary : undefined });
+          nameLines.forEach((line, index) => page.drawText(line, { x: 65, y: y - index * 14, size: 11, font: bold, color: primary }));
+          detailLines.forEach((line, index) => page.drawText(line, { x: 65, y: y - nameLines.length * 14 - index * 12 + 2, size: 9, font: regular, color: muted }));
+          y -= rowHeight;
+          page.drawLine({ start: { x: 65, y: y + 8 }, end: { x: page.getWidth() - 42, y: y + 8 }, thickness: 0.5, color: border });
+        });
+        y -= 8;
+      });
+
+      pdf.getPages().forEach((pdfPage, index, pages) => {
+        pdfPage.drawText(`Plaivra - Plan. Import. Track.`, { x: 42, y: 25, size: 8, font: regular, color: muted });
+        pdfPage.drawText(`${index + 1} / ${pages.length}`, { x: pdfPage.getWidth() - 70, y: 25, size: 8, font: regular, color: muted });
+      });
+      const bytes = await pdf.save();
+      const pdfBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      const url = URL.createObjectURL(new Blob([pdfBuffer], { type: "application/pdf" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `plaivra-groceries-${weekStart}.pdf`;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      setFeedback("Plaivra grocery PDF downloaded.");
+      toast({ title: "Grocery PDF downloaded", description: anchor.download });
+    } catch (error) {
+      toast({ title: "Could not create grocery PDF", description: userSafeError(error), variant: "error" });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   return (
     <Card variant="glass">
       {confirmDialog}
       <CardHeader className="p-4 sm:p-5">
         <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
           <span className="flex items-center gap-2"><ShoppingCart className="h-5 w-5" /> Grocery list</span>
-          <span className="text-xs font-normal text-muted-foreground">{items.filter((item) => item.checked).length}/{items.length} checked</span>
+          <span className="flex items-center gap-2">
+            <span className="text-xs font-normal text-muted-foreground">{items.filter((item) => item.checked).length}/{items.length} checked{selectedIds.size ? ` · ${selectedIds.size} selected` : ""}</span>
+            <span className="relative">
+              <Button type="button" variant="ghost" size="icon" aria-label="Grocery actions" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal className="h-5 w-5" /></Button>
+              {menuOpen ? (
+                <span className="absolute end-0 top-12 z-50 grid w-56 gap-1 rounded-[16px] border border-border/80 bg-card p-2 text-sm shadow-xl">
+                  <button type="button" className="rounded-xl px-3 py-2 text-start hover:bg-muted" onClick={() => { setShowQuickAdd(true); setMenuOpen(false); }}>Quick add</button>
+                  <button type="button" className="rounded-xl px-3 py-2 text-start hover:bg-muted disabled:opacity-40" disabled={!items.length} onClick={() => { setSelectedIds(new Set(items.map((item) => item.id))); setMenuOpen(false); }}>Select all</button>
+                  <button type="button" className="rounded-xl px-3 py-2 text-start hover:bg-muted disabled:opacity-40" disabled={!importedItems.length} onClick={() => { setSelectedIds(new Set(importedItems.map((item) => item.id))); setMenuOpen(false); }}>Select imported</button>
+                  <button type="button" className="rounded-xl px-3 py-2 text-start hover:bg-muted disabled:opacity-40" disabled={!selectedIds.size} onClick={() => { setSelectedIds(new Set()); setMenuOpen(false); }}>Clear selection</button>
+                  <button type="button" className="rounded-xl px-3 py-2 text-start hover:bg-muted disabled:opacity-40" disabled={!selectedIds.size || isBusy} onClick={() => { void patchSelected({ already_have: true }, `${selectedItems.length} item${selectedItems.length === 1 ? "" : "s"} marked as already at home.`); setMenuOpen(false); }}>Mark already have</button>
+                  <span className="my-1 h-px bg-border" />
+                  <button type="button" className="rounded-xl px-3 py-2 text-start text-destructive hover:bg-destructive/10 disabled:opacity-40" disabled={!selectedIds.size || isBusy} onClick={() => { confirmDelete(selectedItems, "Delete selected items?", "Selected items deleted."); setMenuOpen(false); }}>Delete selected</button>
+                  <button type="button" className="rounded-xl px-3 py-2 text-start text-destructive hover:bg-destructive/10 disabled:opacity-40" disabled={!items.some((item) => item.checked) || isBusy} onClick={() => { confirmDelete(items.filter((item) => item.checked), "Clear checked items?", "Checked items cleared."); setMenuOpen(false); }}>Clear checked</button>
+                  <button type="button" className="rounded-xl px-3 py-2 text-start text-destructive hover:bg-destructive/10 disabled:opacity-40" disabled={!items.length || isBusy} onClick={() => { confirmDelete(items, "Clear the entire list?", "Grocery list cleared."); setMenuOpen(false); }}>Clear list</button>
+                </span>
+              ) : null}
+            </span>
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0 sm:p-5 sm:pt-0">
         {feedback ? <div className="flex items-start gap-2 rounded-[14px] border border-primary/25 bg-primary/5 p-3 text-sm" role="status"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><p>{feedback}</p></div> : null}
 
-        <div className="space-y-2">
+        {showQuickAdd ? <>
+        <div className="space-y-2 rounded-[14px] border border-border/70 bg-muted/20 p-3">
           <Label htmlFor="grocery-quick-add">Quick add</Label>
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem_auto]">
             <Input id="grocery-quick-add" value={draft.itemName} onChange={(event) => setDraft((current) => ({ ...current, itemName: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") void addItem(); }} placeholder="Item name" />
@@ -297,38 +324,14 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
             <div className="space-y-2"><Label>Notes</Label><Input value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional" /></div>
           </div>
         </Disclosure>
+        </> : null}
 
         <AiActionRequestDialog actions={[{ type: "build_grocery_list", label: "Build ingredient list with ChatGPT", description: "Ask ChatGPT to turn planned meals into an ingredient-level list grouped by store section." }]} sourceType="grocery_week" sourceId={weekStart} context={{ week_start: weekStart, week_end: weekEnd, grocery_items: items, meal_plan_items: mealItems }} title="Ask ChatGPT for help" buttonVariant="default" className="grid" />
 
-        <div className="rounded-[14px] border border-border/70 bg-muted/20 p-3">
-          <p className="text-sm font-semibold">Rough meal-name import</p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">Adds planned meal names as a starting point. It is not an ingredient list; duplicate names and already-imported meals are skipped.</p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <Button variant="outline" onClick={confirmImport} disabled={!mealItems.length || isBusy}>Import {importCandidates.length} new item{importCandidates.length === 1 ? "" : "s"}</Button>
-            <Button variant="ghost" onClick={undoLastImport} disabled={!lastImport || isBusy}><Undo2 className="h-4 w-4" /> Undo last import</Button>
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">Expected: {importCandidates.length} added · {importSkipped} skipped</p>
-        </div>
-
-        {items.length ? (
-          <div className="space-y-2 rounded-[14px] border border-border/70 p-3">
-            <p className="text-sm font-semibold">Bulk actions {selectedIds.size ? `· ${selectedIds.size} selected` : ""}</p>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set(items.map((item) => item.id)))}>Select all</Button>
-              <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set(importedItems.map((item) => item.id)))}>Select imported</Button>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())} disabled={!selectedIds.size}>Clear selection</Button>
-              <Button variant="outline" size="sm" onClick={() => void patchSelected({ already_have: true }, `${selectedItems.length} item${selectedItems.length === 1 ? "" : "s"} marked as already at home.`)} disabled={!selectedIds.size || isBusy}>Mark already have</Button>
-              <Button variant="destructive" size="sm" onClick={() => confirmDelete(selectedItems, "Delete selected items?", "Selected items deleted.")} disabled={!selectedIds.size || isBusy}>Delete selected</Button>
-              <Button variant="outline" size="sm" onClick={() => confirmDelete(items.filter((item) => item.checked), "Clear checked items?", "Checked items cleared.")} disabled={!items.some((item) => item.checked) || isBusy}>Clear checked</Button>
-              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => confirmDelete(items, "Clear the entire list?", "Grocery list cleared.")} disabled={isBusy}>Clear list</Button>
-            </div>
-          </div>
-        ) : null}
-
         <div className="flex flex-wrap gap-2 border-t border-border/60 pt-3">
-          <Button variant="outline" size="sm" onClick={printList} disabled={!items.length}><Printer className="h-4 w-4" /> Print</Button>
+          <Button variant="outline" size="sm" onClick={() => void downloadPdf()} disabled={!items.length || isBusy}><FileDown className="h-4 w-4" /> Download PDF</Button>
           <Button variant="outline" size="sm" onClick={() => void shareList()} disabled={!items.length}><Share2 className="h-4 w-4" /> Share</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!items.length}><Download className="h-4 w-4" /> Download list</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!items.length}><Download className="h-4 w-4" /> Download CSV</Button>
           <AiActionRequestDialog actions={[{ type: "make_meal_cheaper", label: "Find cheaper options", description: "Ask ChatGPT for lower-cost substitutions for this grocery list." }]} sourceType="grocery_week" sourceId={weekStart} context={{ week_start: weekStart, week_end: weekEnd, grocery_items: items, meal_plan_items: mealItems }} title="Ask ChatGPT for help" buttonVariant="ghost" />
         </div>
 
@@ -340,7 +343,7 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
             <Button className="mt-3" size="sm" onClick={() => setLoadNonce((current) => current + 1)}><RefreshCw className="h-4 w-4" /> Try again</Button>
           </div>
         ) : null}
-        {!isLoading && !loadError && !items.length ? <p className="rounded-[14px] border border-dashed p-4 text-sm leading-6 text-muted-foreground">Your list is empty. Add an item, import meal names as a rough start, or ask ChatGPT to prepare an ingredient-level list that you review.</p> : null}
+        {!isLoading && !loadError && !items.length ? <p className="rounded-[14px] border border-dashed p-4 text-sm leading-6 text-muted-foreground">Your list is empty. Use the actions menu for Quick add, or ask ChatGPT to prepare an ingredient-level list that you review.</p> : null}
 
         {grouped.map((group) => (
           <div key={group.section}>
@@ -368,8 +371,4 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
       </CardContent>
     </Card>
   );
-}
-
-function normalizedName(value: string) {
-  return value.trim().toLocaleLowerCase();
 }

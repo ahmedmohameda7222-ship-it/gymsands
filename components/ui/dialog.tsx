@@ -19,11 +19,11 @@ export function DialogContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-foreground/45" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-[100] bg-foreground/45" />
       <DialogPrimitive.Content
         className={cn(
           variant === "glass" ? "glass-shell" : "solid-tracking-card",
-          "fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] w-full max-w-full overflow-y-auto overscroll-contain rounded-t-[24px] border-x-0 border-b-0 p-4 shadow-luxe outline-none sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-[calc(100vw-1.5rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[24px] sm:p-6",
+          "fixed inset-x-0 bottom-0 z-[110] max-h-[92dvh] w-full max-w-full overflow-y-auto overscroll-contain rounded-t-[24px] border-x-0 border-b-0 p-4 shadow-luxe outline-none sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-[calc(100vw-1.5rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[24px] sm:p-6",
           className
         )}
         {...props}

@@ -224,6 +224,11 @@ html[dir="rtl"] .group {
   direction: rtl;
 }
 
+html[lang="en"] [data-legal-language]:not([lang="en"]),
+html[lang="ar"] [data-legal-language]:not([lang="ar"]) {
+  display: none;
+}
+
 .reduce-motion,
 .reduce-motion * {
   scroll-behavior: auto !important;

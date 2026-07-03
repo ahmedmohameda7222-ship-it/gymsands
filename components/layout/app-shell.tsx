@@ -34,6 +34,8 @@ import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/use-translation";
 import type { TranslationKey } from "@/lib/i18n/types";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
+import type { QuickLogSection } from "@/services/database/user-settings";
+import { ActiveWorkoutIndicator } from "@/components/workouts/active-workout-indicator";
 
 type NavItem = {
   href: string;
@@ -107,12 +109,15 @@ const moreActivePaths = [
   "/admin"
 ];
 
-const quickLogItems: NavItem[] = [
-  { href: "/calories", labelKey: "nav.logFood", icon: Utensils },
-  { href: "/hydration", labelKey: "nav.addWater", icon: Droplets },
-  { href: "/today-workout", labelKey: "nav.startWorkout", icon: Dumbbell },
-  { href: "/progress", labelKey: "nav.addProgress", icon: BarChart3 },
-  { href: "/habits", labelKey: "nav.addHabitTask", icon: CheckSquare }
+const quickLogItems: (NavItem & { id: QuickLogSection })[] = [
+  { id: "water", href: "/hydration", labelKey: "nav.addWater", icon: Droplets },
+  { id: "meal", href: "/calories", labelKey: "nav.logFood", icon: Utensils },
+  { id: "weight", href: "/progress", labelKey: "settings.weight", icon: BarChart3 },
+  { id: "workout", href: "/today-workout", labelKey: "nav.startWorkout", icon: Dumbbell },
+  { id: "progress", href: "/progress", labelKey: "nav.addProgress", icon: BarChart3 },
+  { id: "sleep", href: "/sleep-recovery", labelKey: "nav.sleepRecovery", icon: BedDouble },
+  { id: "supplements", href: "/supplements", labelKey: "nav.supplements", icon: Pill },
+  { id: "wellness", href: "/wellness", labelKey: "nav.wellnessDashboard", icon: CheckSquare }
 ];
 
 function isActivePath(pathname: string, item: NavItem) {
@@ -145,6 +150,16 @@ export function AppShell({ children }: { children: ReactNode }) {
       window.removeEventListener("offline", update);
     };
   }, []);
+
+  if (pathname === "/onboarding") {
+    return (
+      <div className="premium-page-bg min-h-dvh text-foreground">
+        <main id="main-content" className="mx-auto min-h-dvh w-full max-w-5xl overflow-x-clip px-4 pb-[calc(env(safe-area-inset-bottom)+2rem)] pt-5 sm:px-6 sm:py-8">
+          {children}
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="premium-page-bg min-h-screen text-foreground">
@@ -207,6 +222,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </motion.div>
       </main>
+      <ActiveWorkoutIndicator />
       <MobilePrimaryNav pathname={pathname} isAdmin={isAdmin} signOut={signOut} />
     </div>
   );
@@ -214,7 +230,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function MobilePrimaryNav({ pathname, isAdmin, signOut }: { pathname: string; isAdmin: boolean; signOut: () => Promise<void> }) {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 lg:hidden">
+    <div className="fixed inset-x-0 bottom-0 z-[80] isolate lg:hidden">
       <QuickLogSheet />
       <nav className="glass-shell grid grid-cols-4 !rounded-none border-x-0 border-b-0 !bg-card px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-1" aria-label="Primary mobile navigation">
         {mobilePrimaryItems.map((item) => (
@@ -246,12 +262,14 @@ function MobileNavLink({ item, active }: { item: NavItem; active: boolean }) {
 
 function QuickLogSheet() {
   const { t } = useTranslation();
+  const { settings } = useUserSettings();
+  const visibleItems = quickLogItems.filter((item) => settings.quickLogSections.includes(item.id));
   return (
     <Dialog>
       <DialogTrigger asChild>
         <Button
           size="icon"
-          className="absolute left-1/2 top-0 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-[var(--app-bg)] bg-primary text-primary-foreground shadow-[var(--shadow-floating)] hover:bg-primary/90"
+          className="absolute left-1/2 top-0 z-[90] h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-[var(--app-bg)] bg-primary text-primary-foreground shadow-[var(--shadow-floating)] hover:bg-primary/90"
           aria-label={t("nav.quickLog")}
         >
           <Plus className="h-6 w-6" />
@@ -261,11 +279,11 @@ function QuickLogSheet() {
         <DialogHeader className="border-b border-white/40 px-5 py-4 text-left dark:border-white/10">
           <DialogTitle>{t("nav.quickLog")}</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-2 p-4">
-          {quickLogItems.map((item) => {
+        <div className="grid gap-2 p-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
+          {visibleItems.map((item) => {
             const Icon = item.icon;
             return (
-              <DialogClose key={item.href} asChild>
+              <DialogClose key={item.id} asChild>
                 <Link href={item.href} className="solid-row flex min-h-12 items-center gap-3 px-3 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-muted/60">
                   <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <Icon className="h-4 w-4" />
@@ -275,6 +293,7 @@ function QuickLogSheet() {
               </DialogClose>
             );
           })}
+          {visibleItems.length === 0 ? <p className="p-3 text-center text-sm text-muted-foreground">Choose Quick Log items in Settings → Preferences.</p> : null}
         </div>
       </DialogContent>
     </Dialog>

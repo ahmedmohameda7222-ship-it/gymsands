@@ -27,6 +27,7 @@ export type OnboardingAnswers = {
   gender: string;
   height_cm: number | null;
   weight_kg: number | null;
+  goal_weight_kg?: number | null;
   goal: string;
   goals?: string[];
   training_cycle?: string | null;
@@ -42,6 +43,12 @@ export type OnboardingAnswers = {
   available_equipment?: string[];
   nutrition_preferences: string[];
   allergies_limitations?: string | null;
+  injuries_limitations?: string | null;
+  training_preferences?: string | null;
+  food_preferences?: string | null;
+  lifestyle_notes?: string | null;
+  workout_constraints?: string | null;
+  coaching_notes?: string | null;
 };
 
 export type FoodItem = {
@@ -196,6 +203,7 @@ export type MealPlanItem = {
 
 export type Workout = {
   id: string;
+  plan_exercise_id?: string | null;
   name: string;
   category: string;
   target_muscle: string;
@@ -523,6 +531,7 @@ export type AiPermissionSection =
 export type AiActionRequestStatus = "draft" | "ready_for_chatgpt" | "sent_to_chatgpt" | "resolved" | "cancelled";
 
 export type AiActionType =
+  | "build_meal_plan"
   | "replace_exercise"
   | "adjust_next_workout"
   | "rebalance_week"
