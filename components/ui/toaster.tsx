@@ -40,7 +40,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         if (current.some((item) => item.title === nextToast.title && item.description === nextToast.description)) return current;
         return [...current.slice(-2), { ...nextToast, id }];
       });
-      window.setTimeout(() => removeToast(id), 3500);
+      window.setTimeout(() => removeToast(id), nextToast.variant === "error" ? 9000 : 7000);
     },
     [removeToast]
   );
@@ -56,7 +56,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[70] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2 sm:bottom-6 sm:right-6">
+      <div className="fixed bottom-24 right-4 z-[70] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2 sm:bottom-6 sm:right-6" aria-live="polite" aria-relevant="additions removals">
         {toasts.map((item) => (
           (() => {
             const inferredVariant = /could not|failed|error|invalid/i.test(item.title)
@@ -64,12 +64,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               : /required|check|unavailable/i.test(item.title)
                 ? "warning"
                 : "success";
-            const variant = variants[item.variant ?? inferredVariant];
+            const variantName = item.variant ?? inferredVariant;
+            const variant = variants[variantName];
             const Icon = variant.icon;
             return (
           <div
             key={item.id}
             className={cn("rounded-lg border bg-card p-4 shadow-luxe", variant.className, "data-[state=open]:animate-in")}
+            role={variantName === "error" ? "alert" : "status"}
           >
             <div className="flex items-start gap-3">
               <Icon className={cn("mt-0.5 h-5 w-5 shrink-0", variant.iconClassName)} />
@@ -77,7 +79,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 <p className="text-sm font-semibold text-foreground">{item.title}</p>
                 {item.description ? <p className="mt-1 text-sm text-muted-foreground">{item.description}</p> : null}
               </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeToast(item.id)}>
+              <Button variant="ghost" size="icon" onClick={() => removeToast(item.id)} aria-label={`Dismiss ${item.title} notification`} title="Dismiss notification">
                 <X className="h-4 w-4" />
               </Button>
             </div>

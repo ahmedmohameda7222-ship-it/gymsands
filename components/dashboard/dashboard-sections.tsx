@@ -273,44 +273,42 @@ export function CompactSetupChecklist({
   totalCount: number;
 }) {
   return (
-    <details className="glass-card-strong group">
-      <summary className="flex cursor-pointer list-none items-center gap-3 p-3 sm:p-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-foreground">
-              {nextItem ? `Next: ${nextItem.label}` : "Setup complete"}
-            </span>
-            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-          </div>
-          <div className="mt-2 flex items-center gap-2">
-            <Progress value={(completedCount / totalCount) * 100} className="h-2 flex-1" />
-            <span className="text-xs text-muted-foreground">{completedCount}/{totalCount}</span>
-          </div>
-        </div>
-        {nextItem ? (
-          <Button asChild size="sm" className="shrink-0">
-            <Link href={nextItem.href}>{nextItem.action}</Link>
-          </Button>
-        ) : null}
-      </summary>
-      <div className="border-t border-white/40 p-3 sm:p-4 dark:border-white/10">
-        <div className="space-y-2">
-          {checklist.map((item) => (
-            <div key={item.label} className="flex items-center justify-between gap-2 text-sm">
-              <div className="flex items-center gap-2 min-w-0">
-                <CheckCircle2 className={cn("h-4 w-4 shrink-0", item.done ? "text-primary" : "text-muted-foreground")} />
-                <span className={cn("truncate", item.done ? "text-muted-foreground line-through" : "text-foreground")}>{item.label}</span>
-              </div>
-              {!item.done ? (
-                <Button asChild size="sm" variant="ghost" className="shrink-0">
-                  <Link href={item.href}>{item.action}</Link>
-                </Button>
-              ) : null}
+    <div className="glass-card-strong">
+      <details className="group">
+        <summary className="flex cursor-pointer list-none items-center gap-3 p-3 sm:p-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-foreground">
+                {nextItem ? `Next: ${nextItem.label}` : "Setup complete"}
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
             </div>
-          ))}
+            <div className="mt-2 flex items-center gap-2">
+              <Progress value={(completedCount / totalCount) * 100} className="h-2 flex-1" />
+              <span className="text-xs text-muted-foreground">{completedCount}/{totalCount}</span>
+            </div>
+          </div>
+        </summary>
+        <div className="border-t border-white/40 p-3 sm:p-4 dark:border-white/10">
+          <div className="space-y-2">
+            {checklist.map((item) => (
+              <div key={item.label} className="flex items-center justify-between gap-2 text-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  <CheckCircle2 className={cn("h-4 w-4 shrink-0", item.done ? "text-primary" : "text-muted-foreground")} />
+                  <span className={cn("truncate", item.done ? "text-muted-foreground line-through" : "text-foreground")}>{item.label}</span>
+                </div>
+                {!item.done ? (
+                  <Button asChild size="sm" variant="ghost" className="shrink-0">
+                    <Link href={item.href}>{item.action}</Link>
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-    </details>
+      </details>
+      {nextItem ? <div className="border-t border-white/40 p-3 dark:border-white/10"><Button asChild size="sm" className="w-full sm:w-auto"><Link href={nextItem.href}>{nextItem.action}</Link></Button></div> : null}
+    </div>
   );
 }
 

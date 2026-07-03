@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { Save, ShieldCheck, Utensils } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -40,8 +40,9 @@ function optionalNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function Field({ label, value, onChange, placeholder, type = "text" }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string }) {
-  return <div className="space-y-2"><Label>{label}</Label><Input type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} /></div>;
+function Field({ label, value, onChange, placeholder, type = "text", multiline = false }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string; multiline?: boolean }) {
+  const id = useId();
+  return <div className="space-y-2"><Label htmlFor={id}>{label}</Label>{multiline ? <textarea id={id} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="min-h-24 w-full rounded-[14px] border border-input bg-card px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring" /> : <Input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />}</div>;
 }
 
 function ProfileSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
@@ -60,20 +61,33 @@ export function SafetyProfileCard() {
   const [form, setForm] = useState<SafetyProfileInput>(emptySafety);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [savedForm, setSavedForm] = useState<SafetyProfileInput>(emptySafety);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const isDirty = JSON.stringify(form) !== JSON.stringify(savedForm);
 
   useEffect(() => {
     if (!user?.id) return;
     getSafetyProfile(user.id)
-      .then((saved) => { if (saved) setForm(saved); })
+      .then((saved) => { if (saved) { setForm(saved); setSavedForm(saved); } })
       .catch((error) => toast({ title: "Could not load coaching context", description: userSafeError(error, "Please refresh and try again.") }))
       .finally(() => setIsLoading(false));
   }, [toast, user?.id]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isDirty]);
 
   async function save() {
     if (!user?.id) return;
     setIsSaving(true);
     try {
-      setForm(await upsertSafetyProfile(user.id, form));
+      const saved = await upsertSafetyProfile(user.id, form);
+      setForm(saved);
+      setSavedForm(saved);
+      setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       toast({ title: "Training safety saved", description: "ChatGPT requests can use this only when you allow the relevant profile permission." });
     } catch (error) {
       toast({ title: "Could not save training safety", description: userSafeError(error) });
@@ -84,23 +98,23 @@ export function SafetyProfileCard() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-primary" /> Training safety</CardTitle>
-        <p className="text-sm text-muted-foreground">This helps ChatGPT understand your situation. Plaivra does not diagnose or give medical advice.</p>
+        <p className="text-sm text-muted-foreground">Help ChatGPT avoid suggestions that do not fit you. Everything is optional. Plaivra is not medical advice.</p>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? <p className="text-sm text-muted-foreground">Loading training safety...</p> : (
           <>
-            <ProfileSection title="Movement context" description="Share only the details that affect how you train.">
+            <ProfileSection title="Current limitations" description="Why this matters: it helps ChatGPT avoid movements that do not fit today.">
               <TagInput id="injuries" label="Injuries" value={form.injuries} onChange={(injuries) => setForm((current) => ({ ...current, injuries }))} placeholder="Add an injury" />
               <TagInput id="pain-areas" label="Pain areas" value={form.pain_areas} onChange={(pain_areas) => setForm((current) => ({ ...current, pain_areas }))} placeholder="Add a pain area" />
-              <Field label="Movement restrictions" value={form.movement_restrictions ?? ""} onChange={(value) => setForm((current) => ({ ...current, movement_restrictions: value || null }))} placeholder="For example: avoid overhead pressing" />
-              <Field label="Doctor restrictions" value={form.doctor_restrictions ?? ""} onChange={(value) => setForm((current) => ({ ...current, doctor_restrictions: value || null }))} placeholder="Only if a professional gave you restrictions" />
+              <Field multiline label="Movement restrictions" value={form.movement_restrictions ?? ""} onChange={(value) => setForm((current) => ({ ...current, movement_restrictions: value || null }))} placeholder="For example: avoid overhead pressing" />
+              <Field multiline label="Professional restrictions" value={form.doctor_restrictions ?? ""} onChange={(value) => setForm((current) => ({ ...current, doctor_restrictions: value || null }))} placeholder="Only if a qualified professional gave you restrictions" />
             </ProfileSection>
 
-            <ProfileSection title="Extra health context" description="Optional notes that can make a request more cautious.">
-              <Field label="Medical context" value={form.medical_conditions ?? ""} onChange={(value) => setForm((current) => ({ ...current, medical_conditions: value || null }))} />
-              <Field label="Medication or supplement notes" value={form.medications_or_supplement_notes ?? ""} onChange={(value) => setForm((current) => ({ ...current, medications_or_supplement_notes: value || null }))} />
-              <Field label="Pregnancy or postpartum context" value={form.pregnancy_or_postpartum ?? ""} onChange={(value) => setForm((current) => ({ ...current, pregnancy_or_postpartum: value || null }))} />
-              <Field label="Nutrition restrictions" value={form.nutrition_restrictions ?? ""} onChange={(value) => setForm((current) => ({ ...current, nutrition_restrictions: value || null }))} />
+            <ProfileSection title="Training safety" description="Why this matters: optional context can make workout and meal requests more cautious.">
+              <Field multiline label="Health context that affects training" value={form.medical_conditions ?? ""} onChange={(value) => setForm((current) => ({ ...current, medical_conditions: value || null }))} />
+              <Field multiline label="Medication or supplement notes" value={form.medications_or_supplement_notes ?? ""} onChange={(value) => setForm((current) => ({ ...current, medications_or_supplement_notes: value || null }))} />
+              <Field multiline label="Pregnancy or postpartum context" value={form.pregnancy_or_postpartum ?? ""} onChange={(value) => setForm((current) => ({ ...current, pregnancy_or_postpartum: value || null }))} />
+              <Field multiline label="Food-related restrictions" value={form.nutrition_restrictions ?? ""} onChange={(value) => setForm((current) => ({ ...current, nutrition_restrictions: value || null }))} />
             </ProfileSection>
 
             <ProfileSection title="Request caution" description="Choose how conservative workout and nutrition requests should be.">
@@ -114,7 +128,10 @@ export function SafetyProfileCard() {
             </ProfileSection>
 
             <p className="text-xs leading-5 text-muted-foreground">For urgent symptoms or questions about pain, medical conditions, pregnancy/postpartum, eating disorders, or medication, contact a qualified professional.</p>
-            <Button onClick={save} disabled={isSaving}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : "Save training safety"}</Button>
+            <div className="sticky bottom-20 z-10 flex flex-col gap-2 rounded-[14px] border bg-card/95 p-3 shadow-lg sm:bottom-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className={`text-sm font-medium ${isDirty ? "text-warning" : "text-primary"}`}>{isDirty ? "You have unsaved training safety changes." : savedAt ? `Training safety saved at ${savedAt}.` : "Training safety is up to date."}</p>
+              <Button onClick={save} disabled={isSaving || !isDirty}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : "Save training safety"}</Button>
+            </div>
           </>
         )}
       </CardContent>
@@ -129,22 +146,35 @@ export function NutritionPreferenceCard({ compact = false }: { compact?: boolean
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isOpen, setIsOpen] = useState(!compact);
+  const [savedForm, setSavedForm] = useState<NutritionPreferenceInput>(emptyNutrition);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const isDirty = JSON.stringify(form) !== JSON.stringify(savedForm);
 
   useEffect(() => {
     if (!user?.id) return;
     getNutritionPreferenceProfile(user.id)
-      .then((saved) => { if (saved) setForm(saved); })
+      .then((saved) => { if (saved) { setForm(saved); setSavedForm(saved); } })
       .catch((error) => {
         if (!compact) toast({ title: "Could not load food preferences", description: userSafeError(error, "Please refresh and try again.") });
       })
       .finally(() => setIsLoading(false));
   }, [compact, toast, user?.id]);
 
+  useEffect(() => {
+    if (!isDirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isDirty]);
+
   async function save() {
     if (!user?.id) return;
     setIsSaving(true);
     try {
-      setForm(await upsertNutritionPreferenceProfile(user.id, form));
+      const saved = await upsertNutritionPreferenceProfile(user.id, form);
+      setForm(saved);
+      setSavedForm(saved);
+      setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       toast({ title: "Food preferences saved", description: "They can be included in ChatGPT meal requests you prepare." });
       if (compact) setIsOpen(false);
     } catch (error) {
@@ -156,7 +186,7 @@ export function NutritionPreferenceCard({ compact = false }: { compact?: boolean
     <Card>
       <CardHeader className={compact ? "p-4" : undefined}>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><CardTitle className="flex items-center gap-2"><Utensils className="h-5 w-5 text-primary" /> Food preferences</CardTitle><p className="mt-1 text-sm text-muted-foreground">Make meal requests more practical for your taste, time, budget, and kitchen.</p></div>
+          <div><CardTitle className="flex items-center gap-2"><Utensils className="h-5 w-5 text-primary" /> Food preferences</CardTitle><p className="mt-1 text-sm text-muted-foreground">Everything is optional. Add only what helps ChatGPT make practical suggestions for your taste, time, budget, and kitchen.</p></div>
           {compact ? <Button type="button" variant="outline" size="sm" onClick={() => setIsOpen((current) => !current)}>{isOpen ? "Close" : "Edit"}</Button> : null}
         </div>
       </CardHeader>
@@ -164,13 +194,13 @@ export function NutritionPreferenceCard({ compact = false }: { compact?: boolean
         <CardContent className={compact ? "space-y-4 p-4 pt-0" : "space-y-4"}>
           {isLoading ? <p className="text-sm text-muted-foreground">Loading food preferences...</p> : (
             <>
-              <ProfileSection title="Food preferences" description="Share what you enjoy and what you want to avoid.">
+              <ProfileSection title="Food preferences" description="Why this matters: it helps ChatGPT avoid bad fits and suggest meals you will actually use.">
                 <TagInput id="preferred-cuisines" label="Preferred cuisines" value={form.preferred_cuisines} onChange={(preferred_cuisines) => setForm((current) => ({ ...current, preferred_cuisines }))} placeholder="Add a cuisine" />
                 <TagInput id="disliked-foods" label="Disliked foods" value={form.disliked_foods} onChange={(disliked_foods) => setForm((current) => ({ ...current, disliked_foods }))} placeholder="Add a food" />
                 <Field label="Allergies" value={form.allergies ?? ""} onChange={(value) => setForm((current) => ({ ...current, allergies: value || null }))} placeholder="List confirmed allergies" />
                 <Field label="How much repetition is okay?" value={form.repeat_tolerance ?? ""} onChange={(value) => setForm((current) => ({ ...current, repeat_tolerance: value || null }))} placeholder="For example: repeat lunch 3 times" />
               </ProfileSection>
-              <ProfileSection title="Budget & cooking" description="Set practical limits for meal and grocery suggestions.">
+              <ProfileSection title="Budget, prep time, and kitchen" description="Why this matters: practical limits keep meal and grocery suggestions realistic.">
                 <Field label="Weekly food budget" type="number" value={form.weekly_food_budget === null ? "" : String(form.weekly_food_budget)} onChange={(value) => setForm((current) => ({ ...current, weekly_food_budget: optionalNumber(value) }))} />
                 <Field label="Currency" value={form.budget_currency ?? ""} onChange={(value) => setForm((current) => ({ ...current, budget_currency: value || null }))} placeholder="EUR" />
                 <Field label="Maximum cooking time (minutes)" type="number" value={form.max_cooking_time_minutes === null ? "" : String(form.max_cooking_time_minutes)} onChange={(value) => setForm((current) => ({ ...current, max_cooking_time_minutes: optionalNumber(value) }))} />
@@ -180,7 +210,10 @@ export function NutritionPreferenceCard({ compact = false }: { compact?: boolean
                 <Field label="Cooking confidence" value={form.cooking_skill ?? ""} onChange={(value) => setForm((current) => ({ ...current, cooking_skill: value || null }))} placeholder="Beginner, comfortable, confident" />
                 <Field label="Shopping routine" value={form.grocery_style_preference ?? ""} onChange={(value) => setForm((current) => ({ ...current, grocery_style_preference: value || null }))} placeholder="For example: one weekly shop" />
               </ProfileSection>
-              <Button onClick={save} disabled={isSaving}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : "Save food preferences"}</Button>
+              <div className="sticky bottom-20 z-10 flex flex-col gap-2 rounded-[14px] border bg-card/95 p-3 shadow-lg sm:bottom-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className={`text-sm font-medium ${isDirty ? "text-warning" : "text-primary"}`}>{isDirty ? "You have unsaved food preference changes." : savedAt ? `Food preferences saved at ${savedAt}.` : "Food preferences are up to date."}</p>
+                <Button onClick={save} disabled={isSaving || !isDirty}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : "Save food preferences"}</Button>
+              </div>
             </>
           )}
         </CardContent>

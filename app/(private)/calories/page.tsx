@@ -46,6 +46,9 @@ import { addDays, startOfWeek } from "@/lib/date-utils";
 import type { DailyNutritionSummary, FoodLog, WaterLog } from "@/types";
 import type { UserNutritionTargetProfile } from "@/types";
 import { NutritionTargetProfiles } from "@/components/meals/nutrition-target-profiles";
+import { getNutritionTargetProfiles } from "@/services/database/execution-layer";
+import { getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
+import { getActiveTargetOverride, resolveActiveNutritionTarget, type ActiveNutritionTarget } from "@/services/nutrition/active-target";
 
 export default function CaloriesPage() {
   const { user } = useAuth();
@@ -57,7 +60,8 @@ export default function CaloriesPage() {
   const [weekData, setWeekData] = useState<DailyNutritionSummary[]>([]);
   const [waterLogs, setWaterLogs] = useState<WaterLog[]>([]);
   const [targets, setTargets] = useState<SavedTargets | null>(null);
-  const [activeTargetProfile, setActiveTargetProfile] = useState<UserNutritionTargetProfile | null>(null);
+  const [activeTarget, setActiveTarget] = useState<ActiveNutritionTarget | null>(null);
+  const [targetProfiles, setTargetProfiles] = useState<UserNutritionTargetProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [targetForm, setTargetForm] = useState({ dailyCalories: "", proteinG: "", carbsG: "", fatG: "", waterMl: "" });
@@ -65,6 +69,7 @@ export default function CaloriesPage() {
   const [isSavingTargets, setIsSavingTargets] = useState(false);
   const [showTargetEditor, setShowTargetEditor] = useState(false);
   const [activeTab, setActiveTab] = useState("today");
+  const [copyStatus, setCopyStatus] = useState("");
   const [wizard, setWizard] = useState({
     age: "",
     heightCm: "",
@@ -97,8 +102,12 @@ export default function CaloriesPage() {
     setLoadError("");
     Promise.all([
       loadDay(),
-      getCalorieTargets(user.id).then((savedTargets) => {
+      getCalorieTargets(user.id),
+      user.id === "mock-user" ? Promise.resolve([]) : getNutritionTargetProfiles(user.id).catch(() => []),
+      getDefaultUserWorkoutPlan(user.id)
+    ]).then(([, savedTargets, savedProfiles, plan]) => {
         setTargets(savedTargets);
+        setTargetProfiles(savedProfiles);
         setTargetForm({
           dailyCalories: savedTargets?.daily_calories ? String(savedTargets.daily_calories) : "",
           proteinG: savedTargets?.protein_g ? String(savedTargets.protein_g) : "",
@@ -106,8 +115,15 @@ export default function CaloriesPage() {
           fatG: savedTargets?.fat_g ? String(savedTargets.fat_g) : "",
           waterMl: savedTargets?.water_ml ? String(savedTargets.water_ml) : ""
         });
-      })
-    ]).catch((error) => {
+        const selectedWeekday = new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "long" });
+        const detectedType = plan?.days.some((day) => day.weekday === selectedWeekday && day.exercises.length > 0) ? "training_day" : "rest_day";
+        const override = getActiveTargetOverride(user.id, selectedDate);
+        setActiveTarget(resolveActiveNutritionTarget({
+          profiles: savedProfiles,
+          baseTarget: savedTargets,
+          requestedType: override === "auto" ? detectedType : override
+        }));
+    }).catch((error) => {
       setLoadError(userSafeError(error, "Could not load the calorie tracker. Please refresh and try again."));
     }).finally(() => {
       setIsLoading(false);
@@ -124,16 +140,10 @@ export default function CaloriesPage() {
 
   const totals = useMemo(() => sumFoodLogs(logs), [logs]);
   const waterTotal = useMemo(() => waterLogs.reduce((sum, log) => sum + Number(log.amount_ml), 0), [waterLogs]);
-  const hasTargets = Boolean(targets || activeTargetProfile);
+  const hasTargets = Boolean(targets || activeTarget?.hasTarget);
   const emptyTargets = { daily_calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, water_ml: 0 };
   const baseTargets = targets ?? emptyTargets;
-  const displayTargets = activeTargetProfile ? {
-    daily_calories: activeTargetProfile.calories ?? baseTargets.daily_calories,
-    protein_g: activeTargetProfile.protein_g ?? baseTargets.protein_g,
-    carbs_g: activeTargetProfile.carbs_g ?? baseTargets.carbs_g,
-    fat_g: activeTargetProfile.fat_g ?? baseTargets.fat_g,
-    water_ml: activeTargetProfile.water_ml ?? baseTargets.water_ml
-  } : baseTargets;
+  const displayTargets = activeTarget?.values ?? baseTargets;
 
   async function copyYesterday() {
     if (!user?.id) return toast({ title: "Sign in required", description: "Please sign in before copying meals." });
@@ -141,9 +151,15 @@ export default function CaloriesPage() {
       const copied = await copyYesterdaysMeals(user.id, selectedDate);
       await loadDay();
       await loadWeek();
-      toast({ title: "Yesterday copied", description: `${copied.length} food items added to ${formatDay(selectedDate)}.` });
+      const message = copied.length
+        ? `${copied.length} food item${copied.length === 1 ? "" : "s"} added to ${formatDay(selectedDate)}.`
+        : "There were no food items yesterday to copy.";
+      setCopyStatus(message);
+      toast({ title: copied.length ? "Yesterday copied" : "Nothing to copy", description: message });
     } catch (error) {
-      toast({ title: "Could not copy yesterday", description: userSafeError(error) });
+      const message = userSafeError(error);
+      setCopyStatus(message);
+      toast({ title: "Could not copy yesterday", description: message });
     }
   }
 
@@ -183,6 +199,9 @@ export default function CaloriesPage() {
         water_ml: Number(saved.water_ml ?? waterMl)
       };
       setTargets(normalized);
+      if (activeTarget) {
+        setActiveTarget(resolveActiveNutritionTarget({ profiles: targetProfiles, baseTarget: normalized, requestedType: activeTarget.requestedType }));
+      }
       setShowTargetEditor(false);
       await loadWeek();
       toast({ title: "Targets saved", description: `${normalized.daily_calories} kcal target is active.` });
@@ -308,6 +327,25 @@ export default function CaloriesPage() {
         </TabsList>
 
         <TabsContent value="today" className="space-y-4">
+          <Card className="border-primary/25 bg-primary/5">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Active today</p>
+                  <p className="mt-1 text-lg font-bold text-foreground">{activeTarget?.label ?? "Target not set"}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{activeTarget?.reason ?? "Add a base or day-type target to see today’s goal."}</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("targets")}>Review targets</Button>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">
+                <SavedTarget label="Calories" value={displayTargets.daily_calories ? `${displayTargets.daily_calories} kcal` : "-"} />
+                <SavedTarget label="Protein" value={displayTargets.protein_g ? `${displayTargets.protein_g}g` : "-"} />
+                <SavedTarget label="Carbs" value={displayTargets.carbs_g ? `${displayTargets.carbs_g}g` : "-"} />
+                <SavedTarget label="Fat" value={displayTargets.fat_g ? `${displayTargets.fat_g}g` : "-"} />
+                <SavedTarget label="Water" value={displayTargets.water_ml ? `${displayTargets.water_ml} ml / ${(displayTargets.water_ml / 1000).toFixed(2)} L` : "-"} />
+              </div>
+            </CardContent>
+          </Card>
           {/* Mobile today view */}
           <div className="space-y-4 sm:hidden">
             <div className="flex items-center justify-between">
@@ -331,6 +369,10 @@ export default function CaloriesPage() {
                 loadDay().catch(() => undefined);
               }}
               onAddAction={() => router.push("/calories/food-hub")}
+              onCustomFoodAction={() => router.push("/calories/custom-food-meal")}
+              onScanAction={() => setActiveTab("tools")}
+              onCopyPrevious={copyYesterday}
+              copyStatus={copyStatus}
             />
 
             <WaterMiniSummary waterTotal={waterTotal} waterGoal={displayTargets.water_ml} onAddWater={addWater} />
@@ -366,11 +408,11 @@ export default function CaloriesPage() {
           {/* Desktop today view */}
           <div className="hidden sm:block space-y-4">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <TrackerCard label="Calories" value={totals.calories} target={displayTargets.daily_calories} unit="kcal" hasTarget={Boolean(targets?.daily_calories)} />
-              <TrackerCard label="Protein" value={totals.protein_g} target={displayTargets.protein_g} unit="g" hasTarget={Boolean(targets?.protein_g)} />
-              <TrackerCard label="Carbs" value={totals.carbs_g} target={displayTargets.carbs_g} unit="g" hasTarget={Boolean(targets?.carbs_g)} />
-              <TrackerCard label="Fat" value={totals.fat_g} target={displayTargets.fat_g} unit="g" hasTarget={Boolean(targets?.fat_g)} />
-              <TrackerCard label="Water" value={Math.round(waterTotal / 1000 * 10) / 10} target={Math.round(displayTargets.water_ml / 1000 * 10) / 10} unit="L" hasTarget={Boolean(targets?.water_ml)} />
+              <TrackerCard label="Calories" value={totals.calories} target={displayTargets.daily_calories} unit="kcal" hasTarget={displayTargets.daily_calories > 0} />
+              <TrackerCard label="Protein" value={totals.protein_g} target={displayTargets.protein_g} unit="g" hasTarget={displayTargets.protein_g > 0} />
+              <TrackerCard label="Carbs" value={totals.carbs_g} target={displayTargets.carbs_g} unit="g" hasTarget={displayTargets.carbs_g > 0} />
+              <TrackerCard label="Fat" value={totals.fat_g} target={displayTargets.fat_g} unit="g" hasTarget={displayTargets.fat_g > 0} />
+              <TrackerCard label="Water" value={waterTotal} target={displayTargets.water_ml} unit=" ml" hasTarget={displayTargets.water_ml > 0} />
             </div>
 
             <RecentFoodStrip logDate={selectedDate} onFoodLogged={handleLogAdded} />
@@ -394,6 +436,11 @@ export default function CaloriesPage() {
                   setLogs((current) => current.filter((log) => log.id !== id));
                   loadWeek().catch(() => undefined);
                 }}
+                onAddAction={() => router.push("/calories/food-hub")}
+                onCustomFoodAction={() => router.push("/calories/custom-food-meal")}
+                onScanAction={() => setActiveTab("tools")}
+                onCopyPrevious={copyYesterday}
+                copyStatus={copyStatus}
               />
             </div>
           </div>
@@ -416,7 +463,7 @@ export default function CaloriesPage() {
         </TabsContent>
 
         <TabsContent value="targets" className="space-y-4">
-          <NutritionTargetProfiles onActiveTargetChange={setActiveTargetProfile} baseTarget={targets} />
+          <NutritionTargetProfiles onActiveTargetChange={setActiveTarget} baseTarget={targets} />
           <Card id="daily-targets" className="scroll-mt-24">
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
               <div>

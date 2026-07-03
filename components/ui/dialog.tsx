@@ -23,14 +23,14 @@ export function DialogContent({
       <DialogPrimitive.Content
         className={cn(
           variant === "glass" ? "glass-shell" : "solid-tracking-card",
-          "fixed inset-x-0 bottom-0 z-50 max-h-[90dvh] w-full overflow-y-auto rounded-t-[24px] border-x-0 border-b-0 p-4 shadow-luxe outline-none sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-[calc(100vw-1.5rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[24px] sm:p-6",
+          "fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] w-full max-w-full overflow-y-auto overscroll-contain rounded-t-[24px] border-x-0 border-b-0 p-4 shadow-luxe outline-none sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-[calc(100vw-1.5rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[24px] sm:p-6",
           className
         )}
         {...props}
       >
         {children}
         <DialogPrimitive.Close asChild>
-          <Button className="absolute right-3 top-3" variant="ghost" size="icon" aria-label="Close dialog">
+          <Button className="absolute right-3 top-3" variant="ghost" size="icon" aria-label="Close dialog" title="Close dialog">
             <X className="h-4 w-4" />
           </Button>
         </DialogPrimitive.Close>

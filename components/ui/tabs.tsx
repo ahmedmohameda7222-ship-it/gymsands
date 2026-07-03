@@ -17,7 +17,7 @@ export function TabsList({ className, ...props }: React.ComponentPropsWithoutRef
 export function TabsTrigger({ className, ...props }: React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>) {
   return (
     <TabsPrimitive.Trigger
-      className={cn("inline-flex min-h-9 items-center justify-center rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors data-[state=active]:bg-primary data-[state=active]:text-primary-foreground", className)}
+      className={cn("inline-flex min-h-11 items-center justify-center rounded-xl px-3 py-1.5 text-sm font-semibold text-foreground transition-colors data-[state=active]:bg-primary data-[state=active]:text-primary-foreground", className)}
       {...props}
     />
   );

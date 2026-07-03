@@ -5,7 +5,7 @@ export default function ChatGptRequestsPage() {
   return (
     <SettingsPageShell
       title="ChatGPT requests"
-      description="Find requests you prepared in Plaivra, copy them again, and keep their status up to date."
+      description="These are requests you prepared for ChatGPT. Copy them again, continue, mark them done, or hide completed ones."
     >
       <RecentAiActionRequests />
     </SettingsPageShell>

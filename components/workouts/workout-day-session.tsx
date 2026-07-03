@@ -359,6 +359,8 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const [replacementReason, setReplacementReason] = useState<ExerciseAlternativeReason>("machine_taken");
   const [manualReplacementName, setManualReplacementName] = useState("");
   const [isSavingAlternative, setIsSavingAlternative] = useState(false);
+  const [showReplacement, setShowReplacement] = useState(false);
+  const [setFeedback, setSetFeedback] = useState("");
   const workoutTimerKey = useMemo(() => workoutStorageKey(["workout-day-session", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const restTimerKey = useMemo(() => workoutStorageKey(["workout-day-rest-timer", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const [timerEndsAtMs, setTimerEndsAtMs] = useState<number | null>(null);
@@ -604,6 +606,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     
     try {
       await persistProgress(nextStates);
+      setSetFeedback(`Set ${targetSet.setNumber} saved: ${targetSet.reps || "-"} reps at ${targetSet.weightKg || "0"} kg.`);
     } catch (error) {
       toast({ title: "Could not save set", description: userSafeError(error, "Try finishing the workout again if it does not appear in history.") });
     } finally {
@@ -651,6 +654,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
       clearStoredValue(workoutTimerKey);
       clearStoredValue(restTimerKey);
       setCompletedSummary(summary);
+      setSetFeedback("Workout saved to history. You can review the summary here.");
       toast({ title: "Workout saved", description: `${day.day_name} was added to your workout history.` });
     } catch (error) {
       toast({ title: "Could not save workout", description: userSafeError(error) });
@@ -698,6 +702,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         ? { ...item, exercise: { ...item.exercise, exercise_name: saved.alternative_exercise_name } }
         : item));
       setManualReplacementName("");
+      setShowReplacement(false);
       toast({ title: "Replacement ready for today", description: `${saved.alternative_exercise_name} is now shown in this workout. Your plan was not changed.` });
     } catch (error) {
       toast({ title: "Could not save replacement", description: userSafeError(error) });
@@ -817,10 +822,13 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
       <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
         <Card>
           <CardHeader>
-            <CardTitle className="flex flex-wrap items-center gap-2">
-              {activeExercise.exercise.exercise_name}
-              {supersetLabel(activeExercise.exercise) ? <Badge>Superset {supersetLabel(activeExercise.exercise)}</Badge> : null}
-            </CardTitle>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <CardTitle className="flex flex-wrap items-center gap-2">
+                {activeExercise.exercise.exercise_name}
+                {supersetLabel(activeExercise.exercise) ? <Badge>Superset {supersetLabel(activeExercise.exercise)}</Badge> : null}
+              </CardTitle>
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowReplacement((current) => !current)} aria-expanded={showReplacement}><RefreshCcw className="h-4 w-4" /> Replace exercise</Button>
+            </div>
             <div className="flex flex-wrap gap-2 pt-2">
               <Badge variant="outline">Planned {activeExercise.exercise.sets ?? activeExercise.sets.length} sets</Badge>
               <Badge variant="outline">Reps {activeExercise.exercise.reps ?? "custom"}</Badge>
@@ -832,6 +840,21 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-primary/25 bg-primary/5 p-4">
                 <div><p className="text-sm font-semibold text-foreground">Rest</p><p className="text-2xl font-bold text-primary">{formatTime(timerLeft)}</p></div>
                 <div className="flex gap-2"><Button type="button" variant="outline" size="sm" onClick={() => startRestTimer(timerLeft + 30)}>+30 sec</Button><Button type="button" variant="ghost" size="sm" onClick={stopRestTimer}>Skip</Button></div>
+              </div>
+            ) : null}
+
+            {showReplacement ? (
+              <div className="rounded-[16px] border-2 border-primary/30 bg-primary/5 p-4">
+                <p className="font-semibold text-foreground">Replace for today</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">Use a known alternative now, or prepare a ChatGPT request. Your saved workout plan stays unchanged.</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2"><Label htmlFor="manual-replacement-visible">Replacement exercise</Label><Input id="manual-replacement-visible" value={manualReplacementName} onChange={(event) => setManualReplacementName(event.target.value)} placeholder="For example: Dumbbell bench press" /></div>
+                  <div className="space-y-2"><Label htmlFor="replacement-reason-visible">Reason</Label><select id="replacement-reason-visible" value={replacementReason} onChange={(event) => setReplacementReason(event.target.value as ExerciseAlternativeReason)} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm"><option value="machine_taken">Machine taken</option><option value="no_equipment">No equipment</option><option value="pain_or_discomfort">Pain or discomfort</option><option value="too_hard">Too hard today</option><option value="home_alternative">Home alternative</option><option value="same_muscle">Same muscle, different movement</option><option value="lower_back_friendly">Lower-back friendly</option><option value="knee_friendly">Knee friendly</option><option value="shoulder_friendly">Shoulder friendly</option><option value="other">Other</option></select></div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" onClick={useManualReplacement} disabled={!manualReplacementName.trim() || isSavingAlternative}><RefreshCcw className="h-4 w-4" /> {isSavingAlternative ? "Saving..." : "Use for today"}</Button>
+                  <AiActionRequestDialog actions={[{ type: "replace_exercise", label: "Ask ChatGPT", description: "Ask ChatGPT to recommend a suitable replacement using the selected reason and current workout." }]} sourceType="plan_exercise" sourceId={activeExercise.exercise.id} context={{ ...workoutContext, replacement_reason: replacementReason, exercise_alternatives: activeAlternatives }} />
+                </div>
               </div>
             ) : null}
 
@@ -869,18 +892,6 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               </div>
             ) : null}
 
-                <div className="rounded-[14px] border border-border/70 p-3">
-                  <p className="font-semibold text-foreground">Replace for today</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Use a known alternative now, or ask ChatGPT for help. Your saved plan stays unchanged.</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-2"><Label htmlFor="manual-replacement">Replacement exercise</Label><Input id="manual-replacement" value={manualReplacementName} onChange={(event) => setManualReplacementName(event.target.value)} placeholder="For example: Dumbbell bench press" /></div>
-                    <div className="space-y-2"><Label htmlFor="replacement-reason">Reason</Label><select id="replacement-reason" value={replacementReason} onChange={(event) => setReplacementReason(event.target.value as ExerciseAlternativeReason)} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm"><option value="machine_taken">Machine taken</option><option value="no_equipment">No equipment</option><option value="pain_or_discomfort">Pain or discomfort</option><option value="too_hard">Too hard today</option><option value="home_alternative">Home alternative</option><option value="same_muscle">Same muscle, different movement</option><option value="lower_back_friendly">Lower-back friendly</option><option value="knee_friendly">Knee friendly</option><option value="shoulder_friendly">Shoulder friendly</option><option value="other">Other</option></select></div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button type="button" size="sm" onClick={useManualReplacement} disabled={!manualReplacementName.trim() || isSavingAlternative}><RefreshCcw className="h-4 w-4" /> {isSavingAlternative ? "Saving..." : "Use for today"}</Button>
-                    <AiActionRequestDialog actions={[{ type: "replace_exercise", label: "Ask ChatGPT", description: "Ask ChatGPT to recommend a suitable replacement using the selected reason and current workout." }]} sourceType="plan_exercise" sourceId={activeExercise.exercise.id} context={{ ...workoutContext, replacement_reason: replacementReason, exercise_alternatives: activeAlternatives }} />
-                  </div>
-                </div>
                 <Button type="button" variant="ghost" size="sm" onClick={resetWorkoutTimer}><TimerReset className="h-4 w-4" /> Reset workout timer</Button>
               </div>
             </Disclosure>
@@ -912,13 +923,13 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                           <option value="drop">Drop set</option>
                         </select>
                       </div>
-                        <div className="space-y-1 sm:col-span-3"><Label>Notes</Label><Input className="h-14 lg:h-12" value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional" /></div>
+                        <div className="space-y-1 sm:col-span-3"><Label>Notes</Label><textarea className="min-h-24 w-full resize-y rounded-[14px] border border-input bg-card px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring" value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional notes about this set" /></div>
                       </div>
                     </Disclosure>
                     {previousSet ? <p className="mt-2 text-xs text-muted-foreground">Previous set: {previousSet.weightKg ?? 0} kg x {previousSet.reps ?? 0}{previousSet.performedAt ? ` on ${previousSet.performedAt.slice(0, 10)}` : ""}</p> : null}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button size="sm" variant="outline" onClick={() => applyPreviousSet(activeExerciseIndex, setIndex)} disabled={Boolean(set.completedAt) || !previousSet}><Sparkles className="h-4 w-4" /> Use previous</Button>
-                      <Button size="sm" onClick={() => finishSet(activeExerciseIndex, setIndex)} disabled={Boolean(set.completedAt)}><CheckCircle2 className="h-4 w-4" /> Finish Set</Button>
+                      <Button className="w-full sm:w-auto" onClick={() => finishSet(activeExerciseIndex, setIndex)} disabled={Boolean(set.completedAt)}><CheckCircle2 className="h-4 w-4" /> Finish set</Button>
                       <Button size="sm" variant="outline" onClick={() => restartSet(activeExerciseIndex, setIndex)} disabled={!set.completedAt}><RotateCcw className="h-4 w-4" /> Reopen</Button>
                     </div>
                   </div>
@@ -927,6 +938,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
             </div>
 
             <div className="lg:sticky lg:bottom-3 z-20 rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+              {setFeedback ? <p className="mb-3 rounded-[12px] border border-primary/25 bg-primary/5 p-3 text-sm font-medium text-foreground" role="status">{setFeedback}</p> : null}
               <div className="grid gap-2 sm:grid-cols-2">
                 <Button className="min-h-12" onClick={finishCurrentSet} disabled={!activeSet || Boolean(activeSet.completedAt)}><CheckCircle2 className="h-4 w-4" /> Finish current set</Button>
                 <Button className="min-h-12" variant="outline" onClick={restartCurrentSet} disabled={!activeSet?.completedAt}><RotateCcw className="h-4 w-4" /> Reopen set</Button>
@@ -964,6 +976,8 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
           <Card>
             <CardHeader><CardTitle>Finish workout</CardTitle></CardHeader>
             <CardContent className="space-y-3">
+              {isFinished && !completedSummary ? <div className="rounded-[14px] border border-primary/30 bg-primary/5 p-3"><p className="font-semibold text-foreground">All planned sets are complete.</p><p className="mt-1 text-sm text-muted-foreground">Review your note, then save the workout to history.</p></div> : null}
+              {completedSummary ? <div id="workout-finish-status" className="rounded-[14px] border border-primary/30 bg-primary/5 p-3" role="status"><p className="font-semibold text-foreground">Workout saved successfully.</p><p className="mt-1 text-sm text-muted-foreground">Your sets, duration, and notes are now in workout history.</p></div> : null}
               <textarea value={sessionNotes} onChange={(event) => setSessionNotes(event.target.value)} placeholder="How did this workout feel?" className="min-h-24 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
               <Button className="w-full hidden lg:inline-flex" onClick={askFinishWorkout} disabled={isSaving || !session}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : isFinished ? "Finish workout" : "Finish and save partial workout"}</Button>
               <p className="text-xs text-muted-foreground">Time spent: {formatTime(elapsedSeconds)}. Completed sets are already saved while the session is open.</p>

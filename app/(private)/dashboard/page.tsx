@@ -38,6 +38,8 @@ import {
 import { getPersonalRecords, getProgressEntries } from "@/services/database/progress";
 import { getFitnessHabits, getSleepRecoveryLogs, getSupplementLogs } from "@/services/database/wellness";
 import { getCurrentWeekday, getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
+import { getNutritionTargetProfiles } from "@/services/database/execution-layer";
+import { getActiveTargetOverride, resolveActiveNutritionTarget, type ActiveNutritionTarget } from "@/services/nutrition/active-target";
 import { getOpenWorkoutDaySession, getWorkoutActivity, getWorkoutHistory, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
 import { percent, remainingMacros, sumFoodLogs } from "@/services/nutrition/calculations";
 import type { SavedTargets } from "@/services/nutrition/targets";
@@ -78,6 +80,7 @@ export default function DashboardPage() {
   const [supplements, setSupplements] = useState<SupplementLog[]>([]);
   const [sleepLogs, setSleepLogs] = useState<SleepRecoveryLog[]>([]);
   const [targets, setTargets] = useState<SavedTargets | null>(null);
+  const [activeNutritionTarget, setActiveNutritionTarget] = useState<ActiveNutritionTarget | null>(null);
   const [weeklyReport, setWeeklyReport] = useState<AggregatedReport | null>(null);
   const [chatGptConnected, setChatGptConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -107,6 +110,7 @@ export default function DashboardPage() {
         plannedMeals,
         plan,
         calorieTargets,
+        nutritionTargetProfiles,
         supplementLogs,
         recoveryLogs,
         onboarding,
@@ -125,6 +129,10 @@ export default function DashboardPage() {
         getTodayMealPlanItems(user.id),
         getDefaultUserWorkoutPlan(user.id),
         getCalorieTargets(user.id),
+        (user.id === "mock-user" ? Promise.resolve([]) : getNutritionTargetProfiles(user.id)).catch((error) => {
+          logRecoverableError("dashboard.target-profiles", error);
+          return [];
+        }),
         getSupplementLogs(user.id),
         getSleepRecoveryLogs(user.id, 7),
         getOnboarding(user.id),
@@ -149,12 +157,21 @@ export default function DashboardPage() {
       setProgressEntries(progress);
       setMealPlanItems(plannedMeals);
       setActivePlan(plan);
-      setTargets(calorieTargets);
+      const currentDay = plan?.days.find((day) => day.weekday === getCurrentWeekday() && day.exercises.length > 0) ?? null;
+      const automaticType = currentDay ? "training_day" : "rest_day";
+      const override = getActiveTargetOverride(user.id, today);
+      const resolvedTarget = resolveActiveNutritionTarget({
+        profiles: nutritionTargetProfiles,
+        baseTarget: calorieTargets,
+        requestedType: override === "auto" ? automaticType : override
+      });
+      setTargets(resolvedTarget.hasTarget ? resolvedTarget.values : null);
+      setActiveNutritionTarget(resolvedTarget);
       setHabits(todayHabits);
       setSupplements(supplementLogs);
       setSleepLogs(recoveryLogs);
       setWeeklyReport(aggregateReport({ range: weekRange, nutrition: weekNutrition, workouts: workoutActivity, progressEntries: progress, habits: habitHistory, sleepLogs: sleepHistory, personalRecords }));
-      const todayDay = plan?.days.find((day) => day.weekday === getCurrentWeekday() && day.exercises.length > 0) ?? null;
+      const todayDay = currentDay;
       const open = todayDay ? await getOpenWorkoutDaySession(user.id, todayDay.id) : null;
       setOpenSessionId(open?.id ?? null);
       if (session?.access_token) {
@@ -328,12 +345,25 @@ export default function DashboardPage() {
             />
           ) : null}
 
+          {activeNutritionTarget?.hasTarget ? (
+            <Card className="border-primary/25 bg-primary/5">
+              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Active today · {activeNutritionTarget.label}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{activeNutritionTarget.reason}</p>
+                  <p className="mt-2 font-semibold text-foreground">{targets?.daily_calories ?? 0} kcal · P {targets?.protein_g ?? 0}g · C {targets?.carbs_g ?? 0}g · F {targets?.fat_g ?? 0}g · Water {targets?.water_ml ?? 0} ml / {((targets?.water_ml ?? 0) / 1000).toFixed(2)} L</p>
+                </div>
+                <Button asChild variant="outline" size="sm"><Link href="/calories">Review active target</Link></Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
           <BentoGrid>
             {!settings.hideCaloriesOnDashboard ? (
               <MetricCard className="order-2 col-span-1 sm:col-span-3 xl:col-span-3" icon={Flame} label="Calories" value={`${totals.calories} kcal`} detail={hasTargets ? `${remaining.calories} kcal left` : "No target"} progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined} />
             ) : null}
             <MetricCard className="order-2 col-span-1 sm:col-span-3 xl:col-span-3" icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={hasTargets ? `${remaining.protein_g}g left` : "Set target"} progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined} />
-            <MetricCard className="order-2 col-span-1 sm:col-span-3 xl:col-span-3" icon={Droplets} label="Water" value={waterTotalMl ? `${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
+            <MetricCard className="order-2 col-span-1 sm:col-span-3 xl:col-span-3" icon={Droplets} label="Water" value={waterTotalMl ? `${waterTotalMl} ml / ${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${targets.water_ml} ml / ${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
             {!settings.hideBodyWeightOnDashboard ? (
               <MetricCard className="order-2 col-span-1 sm:col-span-3 xl:col-span-3" icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} />
             ) : null}

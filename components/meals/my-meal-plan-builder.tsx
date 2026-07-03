@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Edit3, PlusCircle, Save, ShoppingCart, Trash2, Utensils, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Edit3, PlusCircle, RefreshCw, Save, ShoppingCart, Trash2, Utensils, X } from "lucide-react";
 import { Component, useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -110,6 +110,7 @@ function MyMealPlanBuilderInner() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(emptyDraft);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [shoppingStats, setShoppingStats] = useState({ count: 0, checked: 0 });
   const [groceryRefreshKey, setGroceryRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState("day");
@@ -122,10 +123,12 @@ function MyMealPlanBuilderInner() {
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(selectedWeekStart, index)), [selectedWeekStart]);
 
   useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(window.location.search);
     params.set("date", selectedDate);
-    window.history.replaceState(null, "", `${pathname}?${params.toString()}`);
-  }, [pathname, searchParams, selectedDate]);
+    const nextUrl = `${pathname}?${params.toString()}`;
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
+    if (currentUrl !== nextUrl) window.history.replaceState(null, "", nextUrl);
+  }, [pathname, selectedDate]);
 
   useEffect(() => {
     let active = true;
@@ -161,7 +164,7 @@ function MyMealPlanBuilderInner() {
     return () => {
       active = false;
     };
-  }, [user?.id, selectedDate, selectedWeekStart, selectedWeekEnd, calendarMonth]);
+  }, [user?.id, selectedDate, selectedWeekStart, selectedWeekEnd, calendarMonth, reloadNonce]);
 
   const plannedTotals = useMemo(() => items.filter((item) => item.status === "planned").reduce(addItemToTotals, emptyTotals()), [items]);
   const doneTotals = useMemo(() => items.filter((item) => item.status === "done").reduce(addItemToTotals, emptyTotals()), [items]);
@@ -302,7 +305,7 @@ function MyMealPlanBuilderInner() {
 
       {dayValidation ? <div className={`rounded-[14px] border p-3 text-sm ${dayValidation.tone === "destructive" ? "border-destructive/30 bg-destructive/10" : "border-warning/30 bg-warning/10"}`}><p className="font-semibold">{dayValidation.label}</p><p className="text-muted-foreground">{dayValidation.detail}</p></div> : null}
 
-      {notice ? <NoticeBox notice={notice} onClose={() => setNotice(null)} /> : null}
+      {notice ? <NoticeBox notice={notice} onClose={() => setNotice(null)} onRetry={notice.title === "Saved meal plan could not load" ? () => setReloadNonce((current) => current + 1) : undefined} /> : null}
       {dialog}
 
       <Dialog open={addMealDialogOpen} onOpenChange={setAddMealDialogOpen}>
@@ -552,7 +555,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
           <span className="flex items-center gap-2"><Utensils className="h-4 w-4" /> {displayMealType(type)}</span>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-[10px]">{plannedCount + doneCount}</Badge>
-            <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={onAdd} aria-label={`Add ${displayMealType(type)} item`}>
+            <Button type="button" size="icon" variant="ghost" className="h-11 w-11" onClick={onAdd} aria-label={`Add ${displayMealType(type)} item`}>
               <PlusCircle className="h-4 w-4" />
             </Button>
           </div>
@@ -603,9 +606,9 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
   );
 }
 
-function NoticeBox({ notice, onClose }: { notice: Notice; onClose: () => void }) {
+function NoticeBox({ notice, onClose, onRetry }: { notice: Notice; onClose: () => void; onRetry?: () => void }) {
   const styles = notice.type === "success" ? "border-success/30 bg-success/10 text-foreground" : notice.type === "error" ? "border-destructive/30 bg-destructive/10 text-foreground" : "border-primary/40 bg-primary/5 text-foreground";
-  return <div className={`rounded-md border p-3 text-sm sm:p-4 ${styles}`}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{notice.title}</p>{notice.description ? <p className="mt-1 break-words opacity-90">{notice.description}</p> : null}</div><button type="button" onClick={onClose} className="text-xs font-semibold underline">close</button></div></div>;
+  return <div className={`rounded-md border p-3 text-sm sm:p-4 ${styles}`} role={notice.type === "error" ? "alert" : "status"}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{notice.title}</p>{notice.description ? <p className="mt-1 break-words opacity-90">{notice.description}</p> : null}{onRetry ? <Button className="mt-3" size="sm" onClick={onRetry}><RefreshCw className="h-4 w-4" /> Try again</Button> : null}</div><button type="button" onClick={onClose} className="min-h-11 px-2 text-xs font-semibold underline">close</button></div></div>;
 }
 
 function emptyTotals(): MacroTotals { return { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }; }

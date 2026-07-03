@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   BarChart3,
@@ -23,7 +23,8 @@ import {
   Shield,
   Soup,
   Trophy,
-  Utensils
+  Utensils,
+  WifiOff
 } from "lucide-react";
 import { Brand } from "@/components/layout/brand";
 import { Button } from "@/components/ui/button";
@@ -132,9 +133,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { settings } = useUserSettings();
   const { t } = useTranslation();
   const hideProfileDetails = settings.hideProfileDetails || settings.privateProfileMode;
+  const [isOffline, setIsOffline] = useState(false);
+
+  useEffect(() => {
+    const update = () => setIsOffline(!navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
 
   return (
     <div className="premium-page-bg min-h-screen text-foreground">
+      {isOffline ? <div className="fixed inset-x-3 top-[4.5rem] z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg lg:left-72" role="status"><p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> You appear offline. Changes may not save until the connection returns.</p></div> : null}
       <aside className="glass-shell fixed inset-y-0 left-0 z-40 hidden w-72 border-y-0 border-l-0 lg:flex lg:flex-col">
         <div className="flex h-20 items-center px-6">
           <Brand href="/dashboard" />
