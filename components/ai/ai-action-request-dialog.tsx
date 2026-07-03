@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { CheckCircle2, Clipboard, ExternalLink, Loader2, RefreshCw, X } from "lucide-react";
+import { Bot, CheckCircle2, Clipboard, ExternalLink, Loader2, RefreshCw, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
 import { buildAiActionSummary, buildChatGptActionPrompt } from "@/components/ai/ai-action-summary";
@@ -12,7 +12,6 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError } from "@/lib/error-formatting";
 import { cn } from "@/lib/utils";
-import { ChatGptMark } from "@/components/icons/chatgpt-mark";
 import {
   createAiActionRequest,
   getNutritionPreferenceProfile,
@@ -266,7 +265,7 @@ export function AiActionRequestDialog({
       <div className={className ?? "flex flex-wrap gap-2"}>
         {actions.map((action) => (
           <Button key={action.type} type="button" variant={buttonVariant} size="sm" onClick={(event) => { lastTriggerRef.current = event.currentTarget; openAction(action); }}>
-            <ChatGptMark className="h-4 w-4" />
+            <Bot className="h-4 w-4" />
             {action.label}
           </Button>
         ))}
