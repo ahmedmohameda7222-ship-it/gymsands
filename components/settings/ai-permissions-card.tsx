@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Shield } from "lucide-react";
+import { useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
+import { Ban, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -16,6 +16,17 @@ import {
 import { AI_PERMISSION_SECTION_DETAILS, FULL_ACCESS_WARNING } from "@/lib/mcp/permission-presentation";
 import { userSafeError } from "@/lib/error-formatting";
 
+const permissionExamples: Record<string, string> = {
+  workouts: "Example: Review today’s workout or save an approved set change.",
+  nutrition: "Example: Review today’s food log or add an approved meal.",
+  meal_plans: "Example: Suggest a cheaper meal and save only the version you approve.",
+  hydration: "Example: Check today’s water progress or log an amount you confirm.",
+  wellness: "Example: Review saved readiness or update a habit you approve.",
+  progress: "Example: Summarize progress or save a measurement you provide.",
+  profile: "Example: Use your goals to tailor advice or update an approved preference.",
+  settings: "Example: Review targets or save an approved target change."
+};
+
 export function AiPermissionsCard() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -23,6 +34,7 @@ export function AiPermissionsCard() {
   const [isSaving, setIsSaving] = useState(false);
   const [config, setConfig] = useState<AiPermissionConfig>(() => getDefaultAiPermissionConfig());
   const [hasSavedSettings, setHasSavedSettings] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!user?.id) return;
@@ -49,12 +61,23 @@ export function AiPermissionsCard() {
       await saveAiPermissionSettings(user.id, config);
       toast({ title: "AI Permissions saved", description: "Your AI access settings have been updated." });
       setHasSavedSettings(true);
+      setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
     } catch (error) {
       toast({ title: "Could not save", description: userSafeError(error) });
     } finally {
       setIsSaving(false);
     }
   }
+
+  const summary = useMemo(() => {
+    const labels = ALL_AI_PERMISSION_SECTIONS.map((section) => ({ section, label: AI_PERMISSION_SECTION_DETAILS[section].label }));
+    if (config.accessMode === "full") return { view: labels.map((item) => item.label), change: labels.map((item) => item.label), denied: [] as string[] };
+    return {
+      view: labels.filter(({ section }) => config.sections[section].read).map((item) => item.label),
+      change: labels.filter(({ section }) => config.sections[section].write).map((item) => item.label),
+      denied: labels.filter(({ section }) => !config.sections[section].read && !config.sections[section].write).map((item) => item.label)
+    };
+  }, [config]);
 
   if (isLoading) {
     return (
@@ -97,7 +120,7 @@ export function AiPermissionsCard() {
               </div>
               <div>
                 <p className="font-semibold">All Plaivra areas</p>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                <p className={`mt-1 text-sm leading-6 ${config.accessMode === "full" ? "text-foreground" : "text-muted-foreground"}`}>
                   {FULL_ACCESS_WARNING}
                 </p>
               </div>
@@ -121,11 +144,22 @@ export function AiPermissionsCard() {
               </div>
               <div>
                 <p className="font-semibold">Choose specific areas</p>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                <p className={`mt-1 text-sm leading-6 ${config.accessMode === "custom" ? "text-foreground" : "text-muted-foreground"}`}>
                   Choose only the areas and actions needed for how you use ChatGPT.
                 </p>
               </div>
             </button>
+          </div>
+
+          <div className="grid gap-3 rounded-[16px] border border-border/70 bg-muted/20 p-4 sm:grid-cols-2">
+            <div className="flex gap-3"><Eye className="mt-0.5 h-5 w-5 shrink-0 text-primary" /><div><p className="font-semibold text-foreground">View only</p><p className="mt-1 text-sm leading-6 text-muted-foreground">ChatGPT can read this area and suggest changes in chat, but cannot save changes.</p></div></div>
+            <div className="flex gap-3"><KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-primary" /><div><p className="font-semibold text-foreground">Change</p><p className="mt-1 text-sm leading-6 text-muted-foreground">ChatGPT can save changes you explicitly approve. Change automatically includes View for that area only.</p></div></div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3" aria-label="Selected permission summary">
+            <PermissionSummary title="Can view" values={summary.view} icon={<Eye className="h-4 w-4" />} />
+            <PermissionSummary title="Can change" values={summary.change} icon={<KeyRound className="h-4 w-4" />} />
+            <PermissionSummary title="Not allowed" values={summary.denied} icon={<Ban className="h-4 w-4" />} />
           </div>
 
           {/* Custom section toggles */}
@@ -138,12 +172,12 @@ export function AiPermissionsCard() {
                   const details = AI_PERMISSION_SECTION_DETAILS[section];
                   return (
                     <div key={section} className="rounded-2xl border bg-card p-4 space-y-3">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-sm font-semibold">{details.label}</p>
                           {details.sensitive ? <p className="mt-1 text-xs font-medium text-amber-700">Contains sensitive fitness or wellness data</p> : null}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="grid grid-cols-2 gap-2">
                           <button
                             type="button"
                             onClick={() =>
@@ -155,14 +189,15 @@ export function AiPermissionsCard() {
                                 }
                               }))
                             }
-                            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition ${
+                            aria-pressed={perms.read}
+                            className={`inline-flex min-h-11 items-center gap-1 rounded-xl border-2 px-3 py-2 text-xs font-semibold transition ${
                               perms.read
                                 ? "border-primary bg-primary/10 text-primary"
-                                : "bg-muted text-muted-foreground"
+                                : "border-border bg-muted text-foreground"
                             }`}
                           >
                             {perms.read ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-                            View
+                            View {perms.read ? "ON" : "OFF"}
                           </button>
                           <button
                             type="button"
@@ -181,14 +216,15 @@ export function AiPermissionsCard() {
                                 };
                               })
                             }
-                            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition ${
+                            aria-pressed={perms.write}
+                            className={`inline-flex min-h-11 items-center gap-1 rounded-xl border-2 px-3 py-2 text-xs font-semibold transition ${
                               perms.write
                                 ? "border-primary bg-primary/10 text-primary"
-                                : "bg-muted text-muted-foreground"
+                                : "border-border bg-muted text-foreground"
                             }`}
                           >
                             <KeyRound className="h-3 w-3" />
-                            Change
+                            Change {perms.write ? "ON" : "OFF"}
                           </button>
                         </div>
                       </div>
@@ -196,6 +232,7 @@ export function AiPermissionsCard() {
                         <p><span className="font-semibold text-foreground">View:</span> {details.readDescription}</p>
                         <p><span className="font-semibold text-foreground">Make changes:</span> {details.writeDescription}</p>
                       </div>
+                      <p className="rounded-[10px] bg-muted/50 p-2 text-xs leading-5 text-foreground">{permissionExamples[section]}</p>
                       {perms.write ? (
                         <p className="text-xs text-muted-foreground">To make changes, ChatGPT also needs to view this area.</p>
                       ) : null}
@@ -217,6 +254,13 @@ export function AiPermissionsCard() {
             </p>
           ) : null}
 
+          {hasSavedSettings ? (
+            <div className="rounded-[14px] border border-primary/30 bg-primary/5 p-3 text-sm" role="status">
+              <p className="font-semibold text-foreground">Permissions saved{savedAt ? ` at ${savedAt}` : ""}</p>
+              <p className="mt-1 text-muted-foreground">These selections stay visible after refresh. Reconnect ChatGPT after changing permissions so the connection uses the latest choices.</p>
+            </div>
+          ) : null}
+
           {/* Save button */}
           <div className="flex justify-end">
             <Button onClick={() => void handleSave()} disabled={isSaving} className="min-h-12">
@@ -226,6 +270,15 @@ export function AiPermissionsCard() {
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function PermissionSummary({ title, values, icon }: { title: string; values: string[]; icon: ReactNode }) {
+  return (
+    <div className="rounded-[14px] border border-border/70 bg-card p-3">
+      <p className="flex items-center gap-2 text-sm font-semibold text-foreground">{icon}{title}</p>
+      <p className="mt-2 text-xs leading-5 text-muted-foreground">{values.length ? values.join(", ") : "None"}</p>
     </div>
   );
 }

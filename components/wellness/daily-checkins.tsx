@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { CheckCircle2, Moon, Save, Sun } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { userSafeError } from "@/lib/error-formatting";
+import { addDays } from "@/lib/date-utils";
 import { getDailyCheckins, upsertDailyCheckin } from "@/services/database/execution-layer";
 import type { UserDailyCheckin } from "@/types";
 
@@ -61,8 +62,9 @@ function RatingField({ label, value, onChange, options = ratingOptions }: { labe
   );
 }
 
-function TextField({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
-  return <div className="space-y-2"><Label>{label}</Label><Input type={type} value={value} onChange={(event) => onChange(event.target.value)} /></div>;
+function TextField({ label, value, onChange, type = "text", multiline = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; multiline?: boolean }) {
+  const id = useId();
+  return <div className="space-y-2"><Label htmlFor={id}>{label}</Label>{multiline ? <textarea id={id} value={value} onChange={(event) => onChange(event.target.value)} className="min-h-24 w-full resize-y rounded-[14px] border border-input bg-card px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring" /> : <Input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} />}</div>;
 }
 
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
@@ -79,13 +81,16 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
   const [eveningSaved, setEveningSaved] = useState(false);
   const [isOpen, setIsOpen] = useState(!compact);
   const [savingType, setSavingType] = useState<"morning" | "evening" | null>(null);
+  const [recentCheckins, setRecentCheckins] = useState<UserDailyCheckin[]>([]);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
-    getDailyCheckins(user.id, today)
+    getDailyCheckins(user.id, addDays(today, -6), today)
       .then((items) => {
-        const savedMorning = items.find((item) => item.checkin_type === "morning");
-        const savedEvening = items.find((item) => item.checkin_type === "evening");
+        setRecentCheckins(items);
+        const savedMorning = items.find((item) => item.checkin_date === today && item.checkin_type === "morning");
+        const savedEvening = items.find((item) => item.checkin_date === today && item.checkin_type === "evening");
         if (savedMorning) {
           setMorning(morningFromSaved(savedMorning));
           setMorningSaved(true);
@@ -104,7 +109,7 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
     if (!user?.id) return;
     setSavingType("morning");
     try {
-      await upsertDailyCheckin(user.id, {
+      const saved = await upsertDailyCheckin(user.id, {
         checkin_date: today,
         checkin_type: "morning",
         sleep_hours: morning.sleep_hours ? Number(morning.sleep_hours) : null,
@@ -116,7 +121,9 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
         today_main_goal: morning.today_main_goal || null,
         today_blocker: morning.today_blocker || null
       });
+      setRecentCheckins((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
       setMorningSaved(true);
+      setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       toast({ title: "Morning check-in saved", description: "Today’s readiness context is available for your ChatGPT requests." });
     } catch (error) {
       toast({ title: "Could not save morning check-in", description: userSafeError(error) });
@@ -129,14 +136,16 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
     if (!user?.id) return;
     setSavingType("evening");
     try {
-      await upsertDailyCheckin(user.id, {
+      const saved = await upsertDailyCheckin(user.id, {
         checkin_date: today,
         checkin_type: "evening",
         ...evening,
         main_blocker: evening.main_blocker || null,
         tomorrow_note: evening.tomorrow_note || null
       });
+      setRecentCheckins((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
       setEveningSaved(true);
+      setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       toast({ title: "Evening review saved", description: "Today’s accountability record is complete." });
     } catch (error) {
       toast({ title: "Could not save evening review", description: userSafeError(error) });
@@ -171,10 +180,11 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
               {!compact ? <RatingField label="Stress" value={morning.stress_level} onChange={(value) => setMorning((current) => ({ ...current, stress_level: value }))} /> : null}
               {!compact ? <RatingField label="Motivation" value={morning.motivation_level} onChange={(value) => setMorning((current) => ({ ...current, motivation_level: value }))} /> : null}
               <RatingField label="Ready to train?" value={morning.workout_readiness} options={readinessOptions} onChange={(value) => setMorning((current) => ({ ...current, workout_readiness: value }))} />
-              {!compact ? <TextField label="Main goal" value={morning.today_main_goal} onChange={(value) => setMorning((current) => ({ ...current, today_main_goal: value }))} /> : null}
-              {!compact ? <TextField label="Likely blocker" value={morning.today_blocker} onChange={(value) => setMorning((current) => ({ ...current, today_blocker: value }))} /> : null}
+              {!compact ? <TextField multiline label="Main goal" value={morning.today_main_goal} onChange={(value) => setMorning((current) => ({ ...current, today_main_goal: value }))} /> : null}
+              {!compact ? <TextField multiline label="Likely blocker" value={morning.today_blocker} onChange={(value) => setMorning((current) => ({ ...current, today_blocker: value }))} /> : null}
             </div>
             <Button onClick={saveMorning} disabled={savingType !== null}><Save className="h-4 w-4" /> {savingType === "morning" ? "Saving..." : compact ? "Save check-in" : "Save morning check-in"}</Button>
+            {morningSaved ? <p className="text-sm font-medium text-primary" role="status">Morning check-in saved{savedAt ? ` at ${savedAt}` : ""}.</p> : null}
           </div>
 
           {!compact ? <div className="solid-tracking-card space-y-3 p-4">
@@ -190,14 +200,40 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
               ] as const).map(([key, label]) => <Toggle key={key} label={label} checked={evening[key]} onChange={(checked) => setEvening((current) => ({ ...current, [key]: checked }))} />)}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <TextField label="Main blocker" value={evening.main_blocker} onChange={(value) => setEvening((current) => ({ ...current, main_blocker: value }))} />
-              <TextField label="Tomorrow note" value={evening.tomorrow_note} onChange={(value) => setEvening((current) => ({ ...current, tomorrow_note: value }))} />
+              <TextField multiline label="Main blocker" value={evening.main_blocker} onChange={(value) => setEvening((current) => ({ ...current, main_blocker: value }))} />
+              <TextField multiline label="Tomorrow note" value={evening.tomorrow_note} onChange={(value) => setEvening((current) => ({ ...current, tomorrow_note: value }))} />
             </div>
             <Button onClick={saveEvening} disabled={savingType !== null}><CheckCircle2 className="h-4 w-4" /> {savingType === "evening" ? "Saving..." : "Save evening review"}</Button>
+            {eveningSaved ? <p className="text-sm font-medium text-primary" role="status">Evening review saved{savedAt ? ` at ${savedAt}` : ""}.</p> : null}
           </div> : null}
         </CardContent>
       ) : null}
+      {!compact ? <CardContent className="pt-0"><RecentCheckinHistory items={recentCheckins} /></CardContent> : null}
     </Card>
+  );
+}
+
+function RecentCheckinHistory({ items }: { items: UserDailyCheckin[] }) {
+  const dates = Array.from(new Set(items.map((item) => item.checkin_date))).sort((a, b) => b.localeCompare(a));
+  return (
+    <section className="rounded-[16px] border border-border/70 bg-card p-4" aria-labelledby="recent-checkins-heading">
+      <h3 id="recent-checkins-heading" className="font-semibold text-foreground">Recent check-ins</h3>
+      <p className="mt-1 text-sm text-muted-foreground">Your last seven days of saved morning and evening context.</p>
+      {!dates.length ? <p className="mt-3 text-sm text-muted-foreground">No check-ins saved yet. Save today’s first check-in to start a history.</p> : null}
+      <div className="mt-3 divide-y divide-border/70">
+        {dates.map((date) => {
+          const morning = items.find((item) => item.checkin_date === date && item.checkin_type === "morning");
+          const evening = items.find((item) => item.checkin_date === date && item.checkin_type === "evening");
+          return (
+            <div key={date} className="grid gap-2 py-3 text-sm sm:grid-cols-[8rem_1fr_1fr]">
+              <p className="font-semibold text-foreground">{new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</p>
+              <p className="text-muted-foreground"><span className="font-medium text-foreground">Morning:</span> {morning ? `${morning.energy_level ?? "Energy not set"} energy · ${morning.workout_readiness ?? "readiness not set"}` : "Not saved"}</p>
+              <p className="text-muted-foreground"><span className="font-medium text-foreground">Evening:</span> {evening ? `${[evening.workout_done, evening.protein_hit, evening.water_hit].filter(Boolean).length}/3 key habits` : "Not saved"}</p>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

@@ -2,6 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+#main-content,
+#main-content > div,
+.grid > * {
+  min-width: 0;
+}
+
+#main-content {
+  overflow-x: clip;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
 :root {
   --background: 42 33% 96%;
   --foreground: 0 0% 10%;

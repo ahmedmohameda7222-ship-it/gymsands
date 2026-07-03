@@ -30,7 +30,8 @@ function contextFor(item: MealPlanItem) {
 export function MealAiActions({ item }: { item: MealPlanItem }) {
   return (
     <div className="mt-3 space-y-2">
-      <p className="text-xs font-semibold text-muted-foreground">Meal fixes with ChatGPT</p>
+      <p className="text-xs font-semibold text-foreground">ChatGPT help</p>
+      <p className="text-xs leading-5 text-muted-foreground">Plaivra prepares a request. You review ChatGPT’s answer before saving any change.</p>
       <AiActionRequestDialog
         actions={primaryFixes}
         sourceType="meal_plan_item"
@@ -39,7 +40,7 @@ export function MealAiActions({ item }: { item: MealPlanItem }) {
         buttonVariant="outline"
         className="grid grid-cols-3 gap-2"
       />
-      <Disclosure title="More meal fixes">
+      <Disclosure title="More ChatGPT help" description="Protein, ingredient, dietary, and cuisine options">
         <AiActionRequestDialog
           actions={moreFixes}
           sourceType="meal_plan_item"

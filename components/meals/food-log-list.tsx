@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2, Utensils } from "lucide-react";
+import { Barcode, ChefHat, Copy, Search, Trash2, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,11 +14,19 @@ export function FoodLogList({
   onDeleted,
   title = "Today's food log",
   onAddAction,
+  onCustomFoodAction,
+  onScanAction,
+  onCopyPrevious,
+  copyStatus,
 }: {
   logs?: FoodLog[];
   onDeleted?: (id: string) => void;
   title?: string;
   onAddAction?: () => void;
+  onCustomFoodAction?: () => void;
+  onScanAction?: () => void;
+  onCopyPrevious?: () => void;
+  copyStatus?: string;
 }) {
   const { toast } = useToast();
 
@@ -90,17 +98,18 @@ export function FoodLogList({
             );
           })
         ) : (
-          <div className="solid-row flex flex-col items-start gap-3 border-dashed p-5">
+          <div className="solid-row flex flex-col items-start gap-4 border-dashed p-5">
             <div>
               <p className="text-sm font-semibold text-foreground">No food logged yet</p>
-              <p className="mt-1 text-sm text-muted-foreground">Log your first meal to start tracking today.</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">Search for food, create something custom, scan a barcode, or copy yesterday when your routine repeats.</p>
             </div>
-            {onAddAction ? (
-              <Button className="min-h-11" onClick={onAddAction}>
-                <Utensils className="mr-2 h-4 w-4" />
-                Log food
-              </Button>
-            ) : null}
+            <div className="grid w-full gap-2 sm:grid-cols-2">
+              {onAddAction ? <Button onClick={onAddAction}><Search className="h-4 w-4" /> Search and add food</Button> : null}
+              {onCustomFoodAction ? <Button variant="outline" onClick={onCustomFoodAction}><ChefHat className="h-4 w-4" /> Custom food or meal</Button> : null}
+              {onScanAction ? <Button variant="outline" onClick={onScanAction}><Barcode className="h-4 w-4" /> Scan barcode</Button> : null}
+              {onCopyPrevious ? <Button variant="outline" onClick={onCopyPrevious}><Copy className="h-4 w-4" /> Copy previous day</Button> : null}
+            </div>
+            {copyStatus ? <p className="w-full rounded-[12px] border border-primary/25 bg-primary/5 p-3 text-sm text-foreground" role="status">{copyStatus}</p> : null}
           </div>
         )}
       </CardContent>

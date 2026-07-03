@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useId } from "react";
 import { ChefHat, ChevronLeft, ChevronRight, Copy, Droplets, PackageSearch, Star, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +24,8 @@ export function formatDay(value: string) {
 }
 
 export function TargetField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <div className="space-y-2"><Label>{label}</Label><Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={value} onChange={(event) => onChange(event.target.value)} /></div>;
+  const id = useId();
+  return <div className="space-y-2"><Label htmlFor={id}>{label}</Label><Input id={id} type="number" min="0" inputMode="decimal" enterKeyHint="done" value={value} onChange={(event) => onChange(event.target.value)} /></div>;
 }
 
 export function TrackerCard({ label, value, target, unit, hasTarget }: { label: string; value: number; target: number; unit: string; hasTarget: boolean }) {
@@ -42,10 +44,11 @@ export function TrackerCard({ label, value, target, unit, hasTarget }: { label: 
 }
 
 export function SelectField({ label, value, values, onChange }: { label: string; value: string; values: string[]; onChange: (value: string) => void }) {
+  const id = useId();
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="flex h-11 w-full rounded-[14px] border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <Label htmlFor={id}>{label}</Label>
+      <select id={id} value={value} onChange={(event) => onChange(event.target.value)} className="flex h-11 w-full rounded-[14px] border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {values.map((item) => <option key={item} value={item}>{item.replace("_", " ")}</option>)}
       </select>
     </div>
@@ -183,7 +186,7 @@ export function WaterCard({ waterTotal, waterGoal, customWaterMl, setCustomWater
     <Card variant="glass">
       <CardHeader><CardTitle>Water intake</CardTitle></CardHeader>
       <CardContent className="space-y-3">
-        <div><p className="text-2xl font-bold">{waterTotal} ml</p><p className="text-sm text-muted-foreground">Goal {waterGoal} ml</p><Progress value={percent(waterTotal, waterGoal)} className="mt-3" /></div>
+        <div><p className="text-2xl font-bold">{waterTotal} ml <span className="text-base font-semibold text-muted-foreground">/ {(waterTotal / 1000).toFixed(2)} L</span></p><p className="text-sm text-muted-foreground">Goal {waterGoal} ml / {(waterGoal / 1000).toFixed(2)} L</p><Progress value={percent(waterTotal, waterGoal)} className="mt-3" /></div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[250, 500, 750, 1000].map((amount) => <Button key={amount} type="button" variant="outline" size="sm" onClick={() => onAddWater(amount)}>+{amount === 1000 ? "1 L" : `${amount} ml`}</Button>)}</div>
         <div className="grid gap-2 sm:grid-cols-[1fr_auto]"><Input type="number" min="1" inputMode="numeric" enterKeyHint="done" value={customWaterMl} onChange={(event) => setCustomWaterMl(event.target.value)} /><Button type="button" onClick={() => onAddWater(Number(customWaterMl))}>Add water</Button></div>
         <div className="space-y-2">{waterLogs.map((log) => <div key={log.id} className="solid-row flex items-center justify-between p-2 text-sm"><span>{log.amount_ml} ml</span><Button type="button" variant="ghost" size="icon" onClick={() => onRemoveWater(log)} aria-label="Delete water log"><Trash2 className="h-4 w-4" /></Button></div>)}</div>
@@ -252,12 +255,12 @@ export function WaterMiniSummary({ waterTotal, waterGoal, onAddWater }: { waterT
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium text-muted-foreground">Water</p>
-          <p className="text-sm font-semibold">{waterTotal} <span className="text-xs font-normal text-muted-foreground">/ {waterGoal} ml</span></p>
+          <p className="text-sm font-semibold">{waterTotal} ml / {(waterTotal / 1000).toFixed(2)} L <span className="block text-xs font-normal text-muted-foreground">Goal {waterGoal} ml / {(waterGoal / 1000).toFixed(2)} L</span></p>
         </div>
         <div className="flex shrink-0 gap-1">
           {[250, 500].map((amount) => (
-            <Button key={amount} variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={() => onAddWater(amount)}>
-              +{amount}
+            <Button key={amount} variant="outline" size="sm" className="px-2 text-xs" onClick={() => onAddWater(amount)}>
+              +{amount} ml
             </Button>
           ))}
         </div>
