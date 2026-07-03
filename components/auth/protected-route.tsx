@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { getOnboarding } from "@/services/database/profile";
+import { hasRequiredConsents } from "@/services/database/consents";
 
 export function ProtectedRoute({
   children,
@@ -20,12 +21,37 @@ export function ProtectedRoute({
   const router = useRouter();
   const pathname = usePathname();
   const [isCheckingSetup, setIsCheckingSetup] = useState(pathname !== "/onboarding");
+  const [isCheckingConsents, setIsCheckingConsents] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) {
       router.replace(`/login?next=${encodeURIComponent(pathname)}`);
     }
   }, [isLoading, pathname, router, user]);
+  useEffect(() => {
+    let mounted = true;
+    const consentExemptPaths = new Set(["/auth/consent-completion", "/auth/oauth-complete"]);
+    if (isLoading || !user?.id || consentExemptPaths.has(pathname) || adminOnly) {
+      setIsCheckingConsents(false);
+      return;
+    }
+    setIsCheckingConsents(true);
+    hasRequiredConsents(user.id)
+      .then((ok) => {
+        if (!mounted) return;
+        if (!ok) {
+          router.replace(`/auth/consent-completion?next=${encodeURIComponent(pathname)}`);
+          return;
+        }
+        setIsCheckingConsents(false);
+      })
+      .catch((error) => {
+        console.warn("Plaivra could not verify consent records.", error);
+        if (mounted) setIsCheckingConsents(false);
+      });
+    return () => { mounted = false; };
+  }, [adminOnly, isLoading, pathname, router, user?.id]);
+
 
   useEffect(() => {
     let mounted = true;
@@ -50,7 +76,7 @@ export function ProtectedRoute({
     return () => { mounted = false; };
   }, [adminOnly, isLoading, pathname, router, user?.id]);
 
-  if (isLoading || isCheckingSetup) {
+  if (isLoading || isCheckingConsents || isCheckingSetup) {
     return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading Plaivra...</div>;
   }
 
