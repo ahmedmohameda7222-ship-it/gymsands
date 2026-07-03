@@ -202,7 +202,7 @@ function MobilePrimaryNav({ pathname, isAdmin, signOut }: { pathname: string; is
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 lg:hidden">
       <QuickLogSheet />
-      <nav className="glass-shell grid grid-cols-4 border-x-0 border-b-0 px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-1" aria-label="Primary mobile navigation">
+      <nav className="glass-shell grid grid-cols-4 !rounded-none border-x-0 border-b-0 !bg-card px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-1" aria-label="Primary mobile navigation">
         {mobilePrimaryItems.map((item) => (
           <MobileNavLink key={item.href} item={item} active={isActivePath(pathname, item)} />
         ))}

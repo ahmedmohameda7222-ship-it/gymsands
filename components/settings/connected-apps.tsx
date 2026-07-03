@@ -94,7 +94,7 @@ export function ChatGptSetupCard() {
           <Bot className="h-5 w-5 text-primary" /> Set up ChatGPT import
         </CardTitle>
         <CardDescription>
-          Create the Plaivra app inside ChatGPT, then connect it with your pre-registered Plaivra OAuth client ID.
+          Create the Plaivra app inside ChatGPT, then connect it using the details Plaivra prepares for you.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -102,7 +102,7 @@ export function ChatGptSetupCard() {
           {CHATGPT_SECURITY_RECONNECT_MESSAGE}
         </p>
         <p className="text-sm leading-6 text-muted-foreground">
-          ChatGPT access follows your saved AI Permissions and fails closed when permissions are missing or disabled. You can revoke access at any time.
+          ChatGPT can use only the Plaivra areas you allow. You can change permissions or disconnect at any time.
         </p>
         {!hasMcpServerUrl ? (
           <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
@@ -201,12 +201,6 @@ export function ConnectionStatusCard() {
             <p>Created: {formatConnectionDate(currentConnection?.created_at ?? null)}</p>
             <p>Last used: {formatConnectionDate(currentConnection?.last_used_at ?? null)}</p>
           </div>
-          {currentConnection?.scopes?.length ? (
-            <details className="mt-3 rounded-md border border-border/70 bg-card p-3 text-xs text-muted-foreground">
-              <summary className="cursor-pointer font-semibold text-foreground">Technical details</summary>
-              <p className="mt-2">Scopes: {currentConnection.scopes.join(", ")}</p>
-            </details>
-          ) : null}
         </div>
 
         <Button
@@ -322,7 +316,7 @@ export function ChatGptSetupFlow() {
       <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm leading-6 text-muted-foreground">
         <p className="font-semibold text-foreground">Follow these steps carefully. The setup is done on the ChatGPT website.</p>
         <p className="mt-2">
-          If ChatGPT uses slightly different wording, choose the option that means "Apps," "Connectors," "Developer mode," or "Create app." Access remains limited by your saved AI Permissions.
+          If ChatGPT uses slightly different wording, choose the option for adding a private app or connector. Access remains limited by your saved permissions.
         </p>
         <p className="mt-2 font-medium text-foreground">{CHATGPT_SECURITY_RECONNECT_MESSAGE}</p>
       </div>
@@ -446,7 +440,7 @@ export function ChatGptSetupFlow() {
       >
         <NumberedInstructions
           items={[
-            "Find the field called Connection URL, Server URL, MCP URL, or Endpoint URL.",
+            "Find the field called Connection URL, Server URL, or Endpoint URL.",
             "Paste the Plaivra connection URL you copied from Step 2.",
             "Click Continue or Next."
           ]}
@@ -585,7 +579,7 @@ export function ChatGptActivityCard() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2 text-base"><Activity className="h-5 w-5 text-primary" /> Recent ChatGPT activity</CardTitle>
-            <CardDescription>Redacted connection and tool activity for this Plaivra account only.</CardDescription>
+            <CardDescription>A simple history of what ChatGPT was allowed or unable to do in Plaivra.</CardDescription>
           </div>
           <Button type="button" variant="outline" size="sm" onClick={() => void loadActivity()} disabled={isLoading}>
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />} Refresh
@@ -593,7 +587,7 @@ export function ChatGptActivityCard() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-xs leading-5 text-muted-foreground">Activity never displays raw prompts, tokens, authorization codes, private notes, or body measurements.</p>
+        <p className="text-xs leading-5 text-muted-foreground">Private request details, sign-in details, notes, and body measurements are never shown here.</p>
         {error ? <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p> : null}
         {!isLoading && !error && activities.length === 0 ? <p className="text-sm text-muted-foreground">No ChatGPT activity has been recorded yet.</p> : null}
         {activities.map((activity) => (

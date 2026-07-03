@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { userSafeError } from "@/lib/error-formatting";
 import {
   addCustomMealToLog,
   createFoodKitchen,
@@ -133,7 +134,7 @@ export function CustomNutritionManager({
 
   useEffect(() => {
     loadData().catch((error) =>
-      toast({ title: "Could not load custom nutrition", description: error instanceof Error ? error.message : "Please refresh." })
+      toast({ title: "Could not load custom nutrition", description: userSafeError(error, "Please refresh and try again.") })
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
@@ -176,7 +177,7 @@ export function CustomNutritionManager({
       setNewKitchenName("");
       toast({ title: "Kitchen saved", description: `${kitchen.name} is ready for foods.` });
     } catch (error) {
-      toast({ title: "Could not save kitchen", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not save kitchen", description: userSafeError(error) });
     }
   }
 
@@ -189,7 +190,7 @@ export function CustomNutritionManager({
       setNewSubcategoryName("");
       toast({ title: "Subcategory saved", description: `${subcategory.name} is ready.` });
     } catch (error) {
-      toast({ title: "Could not save subcategory", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not save subcategory", description: userSafeError(error) });
     }
   }
 
@@ -240,7 +241,7 @@ export function CustomNutritionManager({
       setFoodDraft({ ...emptyFoodDraft, kitchenId: selectedKitchen.id, subcategoryId: selectedSubcategory.id });
       toast({ title: "Food saved", description: `${saved.food_name} is saved to your account.` });
     } catch (error) {
-      toast({ title: "Could not save food", description: error instanceof Error ? error.message : "Check required fields and macros." });
+      toast({ title: "Could not save food", description: userSafeError(error, "Check required fields and nutrition values.") });
     } finally {
       setIsSaving(false);
     }
@@ -254,7 +255,7 @@ export function CustomNutritionManager({
       setFoodLibrary((current) => current.filter((item) => item.id !== food.id));
       toast({ title: "Food deleted", description: `${food.food_name} was removed.` });
     } catch (error) {
-      toast({ title: "Could not delete food", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not delete food", description: userSafeError(error) });
     }
   }
 
@@ -289,7 +290,7 @@ export function CustomNutritionManager({
       setMealItems([]);
       toast({ title: "Meal saved", description: `${saved.meal_name} totals ${saved.totals.calories} kcal.` });
     } catch (error) {
-      toast({ title: "Could not save meal", description: error instanceof Error ? error.message : "Please add a name and foods." });
+      toast({ title: "Could not save meal", description: userSafeError(error, "Please add a name and foods.") });
     }
   }
 
@@ -300,7 +301,7 @@ export function CustomNutritionManager({
       setMeals((current) => current.filter((item) => item.id !== meal.id));
       toast({ title: "Meal deleted", description: `${meal.meal_name} was removed.` });
     } catch (error) {
-      toast({ title: "Could not delete meal", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not delete meal", description: userSafeError(error) });
     }
   }
 
@@ -311,7 +312,7 @@ export function CustomNutritionManager({
       onLogAdded?.(log);
       toast({ title: "Meal logged", description: `${meal.meal_name} was added to ${selectedDate}.` });
     } catch (error) {
-      toast({ title: "Could not log meal", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not log meal", description: userSafeError(error) });
     }
   }
 

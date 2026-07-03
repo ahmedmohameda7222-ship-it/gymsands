@@ -10,10 +10,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
+import { userSafeError } from "@/lib/error-formatting";
 import { getDailyCheckins, upsertDailyCheckin } from "@/services/database/execution-layer";
 import type { UserDailyCheckin } from "@/types";
 
-const ratings = ["low", "medium", "high"];
+const ratingOptions = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Okay" },
+  { value: "high", label: "High" }
+];
+
+const readinessOptions = [
+  { value: "high", label: "Ready" },
+  { value: "medium", label: "Maybe" },
+  { value: "low", label: "Not today" }
+];
 
 const morningDefaults = {
   sleep_hours: "",
@@ -37,8 +48,17 @@ const eveningDefaults = {
   tomorrow_note: ""
 };
 
-function RatingField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <div className="space-y-2"><Label>{label}</Label><select value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm"><option value="">Choose</option>{ratings.map((rating) => <option key={rating} value={rating}>{rating}</option>)}</select></div>;
+function RatingField({ label, value, onChange, options = ratingOptions }: { label: string; value: string; onChange: (value: string) => void; options?: Array<{ value: string; label: string }> }) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="grid grid-cols-3 overflow-hidden rounded-[14px] border bg-card" role="radiogroup" aria-label={label}>
+        {options.map((option) => (
+          <button key={option.value} type="button" role="radio" aria-checked={value === option.value} onClick={() => onChange(option.value)} className={`min-h-11 border-r px-2 text-xs font-semibold last:border-r-0 sm:text-sm ${value === option.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50"}`}>{option.label}</button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function TextField({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
@@ -75,8 +95,10 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
           setEveningSaved(true);
         }
       })
-      .catch((error) => toast({ title: "Could not load check-ins", description: error instanceof Error ? error.message : "Please try again." }));
-  }, [toast, today, user?.id]);
+      .catch((error) => {
+        if (!compact) toast({ title: "Could not load check-ins", description: userSafeError(error, "Please refresh and try again.") });
+      });
+  }, [compact, toast, today, user?.id]);
 
   async function saveMorning() {
     if (!user?.id) return;
@@ -97,7 +119,7 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
       setMorningSaved(true);
       toast({ title: "Morning check-in saved", description: "Today’s readiness context is available for your ChatGPT requests." });
     } catch (error) {
-      toast({ title: "Could not save morning check-in", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not save morning check-in", description: userSafeError(error) });
     } finally {
       setSavingType(null);
     }
@@ -117,7 +139,7 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
       setEveningSaved(true);
       toast({ title: "Evening review saved", description: "Today’s accountability record is complete." });
     } catch (error) {
-      toast({ title: "Could not save evening review", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not save evening review", description: userSafeError(error) });
     } finally {
       setSavingType(null);
     }
@@ -128,34 +150,34 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
       <CardHeader className={compact ? "p-4" : undefined}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <CardTitle className="text-base">Daily check-ins</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">A short morning plan and evening review for {today}.</p>
+            <CardTitle className="text-base">{compact ? "Quick check-in" : "Daily check-ins"}</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">{compact ? "Energy, soreness, and readiness for today." : `A morning plan and evening review for ${today}.`}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant={morningSaved ? "success" : "outline"}>Morning {morningSaved ? "done" : "open"}</Badge>
-            <Badge variant={eveningSaved ? "success" : "outline"}>Evening {eveningSaved ? "done" : "open"}</Badge>
+            <Badge variant={morningSaved ? "success" : "outline"}>{compact ? "Today" : "Morning"} {morningSaved ? "done" : "open"}</Badge>
+            {!compact ? <Badge variant={eveningSaved ? "success" : "outline"}>Evening {eveningSaved ? "done" : "open"}</Badge> : null}
             {compact ? <Button type="button" variant="outline" size="sm" onClick={() => setIsOpen((current) => !current)}>{isOpen ? "Close" : "Check in"}</Button> : null}
           </div>
         </div>
       </CardHeader>
       {isOpen ? (
-        <CardContent className={compact ? "grid gap-4 p-4 pt-0 lg:grid-cols-2" : "grid gap-4 lg:grid-cols-2"}>
+        <CardContent className={compact ? "p-4 pt-0" : "grid gap-4 lg:grid-cols-2"}>
           <div className="solid-tracking-card space-y-3 p-4">
-            <p className="flex items-center gap-2 font-semibold"><Sun className="h-4 w-4 text-warning" /> Morning check-in</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <TextField label="Sleep hours" type="number" value={morning.sleep_hours} onChange={(value) => setMorning((current) => ({ ...current, sleep_hours: value }))} />
+            <p className="flex items-center gap-2 font-semibold"><Sun className="h-4 w-4 text-warning" /> {compact ? "How are you feeling?" : "Morning check-in"}</p>
+            <div className={`grid gap-3 ${compact ? "lg:grid-cols-3" : "sm:grid-cols-2"}`}>
+              {!compact ? <TextField label="Sleep hours" type="number" value={morning.sleep_hours} onChange={(value) => setMorning((current) => ({ ...current, sleep_hours: value }))} /> : null}
               <RatingField label="Energy" value={morning.energy_level} onChange={(value) => setMorning((current) => ({ ...current, energy_level: value }))} />
               <RatingField label="Soreness" value={morning.soreness_level} onChange={(value) => setMorning((current) => ({ ...current, soreness_level: value }))} />
-              <RatingField label="Stress" value={morning.stress_level} onChange={(value) => setMorning((current) => ({ ...current, stress_level: value }))} />
-              <RatingField label="Motivation" value={morning.motivation_level} onChange={(value) => setMorning((current) => ({ ...current, motivation_level: value }))} />
-              <RatingField label="Workout readiness" value={morning.workout_readiness} onChange={(value) => setMorning((current) => ({ ...current, workout_readiness: value }))} />
-              <TextField label="Main goal" value={morning.today_main_goal} onChange={(value) => setMorning((current) => ({ ...current, today_main_goal: value }))} />
-              <TextField label="Likely blocker" value={morning.today_blocker} onChange={(value) => setMorning((current) => ({ ...current, today_blocker: value }))} />
+              {!compact ? <RatingField label="Stress" value={morning.stress_level} onChange={(value) => setMorning((current) => ({ ...current, stress_level: value }))} /> : null}
+              {!compact ? <RatingField label="Motivation" value={morning.motivation_level} onChange={(value) => setMorning((current) => ({ ...current, motivation_level: value }))} /> : null}
+              <RatingField label="Ready to train?" value={morning.workout_readiness} options={readinessOptions} onChange={(value) => setMorning((current) => ({ ...current, workout_readiness: value }))} />
+              {!compact ? <TextField label="Main goal" value={morning.today_main_goal} onChange={(value) => setMorning((current) => ({ ...current, today_main_goal: value }))} /> : null}
+              {!compact ? <TextField label="Likely blocker" value={morning.today_blocker} onChange={(value) => setMorning((current) => ({ ...current, today_blocker: value }))} /> : null}
             </div>
-            <Button onClick={saveMorning} disabled={savingType !== null}><Save className="h-4 w-4" /> {savingType === "morning" ? "Saving..." : "Save morning check-in"}</Button>
+            <Button onClick={saveMorning} disabled={savingType !== null}><Save className="h-4 w-4" /> {savingType === "morning" ? "Saving..." : compact ? "Save check-in" : "Save morning check-in"}</Button>
           </div>
 
-          <div className="solid-tracking-card space-y-3 p-4">
+          {!compact ? <div className="solid-tracking-card space-y-3 p-4">
             <p className="flex items-center gap-2 font-semibold"><Moon className="h-4 w-4 text-primary" /> Evening review</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {([
@@ -172,7 +194,7 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
               <TextField label="Tomorrow note" value={evening.tomorrow_note} onChange={(value) => setEvening((current) => ({ ...current, tomorrow_note: value }))} />
             </div>
             <Button onClick={saveEvening} disabled={savingType !== null}><CheckCircle2 className="h-4 w-4" /> {savingType === "evening" ? "Saving..." : "Save evening review"}</Button>
-          </div>
+          </div> : null}
         </CardContent>
       ) : null}
     </Card>

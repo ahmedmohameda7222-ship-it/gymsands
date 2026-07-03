@@ -43,11 +43,12 @@ describe("Phase 6 legal pages", () => {
     expect(source).not.toMatch(/\[(?:Controller|Company|Legal name|Phone|VAT|Commercial register)/i);
   });
 
-  it("explains sensitive data, OAuth/MCP, revocation, redacted logs, and medical limits", () => {
+  it("explains sensitive data, ChatGPT permissions, revocation, redacted logs, and medical limits in plain language", () => {
     const privacy = readFileSync("app/legal/privacy/page.tsx", "utf8");
     const terms = readFileSync("app/legal/terms/page.tsx", "utf8");
-    expect(privacy).toContain("ChatGPT, MCP und OAuth");
-    expect(privacy).toContain("PKCE");
+    expect(privacy).toContain("ChatGPT-Verbindung und Berechtigungen");
+    expect(privacy).toContain("ohne passende Berechtigung wird eine Aktion abgelehnt");
+    expect(privacy).not.toContain("MCP");
     expect(privacy).toContain("keine rohen Prompts");
     expect(privacy).toContain("besonders schutzbedürftig");
     expect(terms).toContain("kein Medizinprodukt");

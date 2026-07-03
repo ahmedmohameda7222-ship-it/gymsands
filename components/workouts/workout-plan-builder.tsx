@@ -12,6 +12,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { WorkoutCalendar, type WeeklyPlanDay } from "@/components/workouts/workout-calendar";
 import { clearStoredValue, workoutStorageKey } from "@/lib/workout-persistence";
+import { userSafeError } from "@/lib/error-formatting";
 import Link from "next/link";
 import { getWorkoutFilterOptions, getWorkouts, type WorkoutFilterOptions, type WorkoutFilters } from "@/services/database/workout-library";
 import {
@@ -125,7 +126,7 @@ export function WorkoutPlanBuilder({
       .then(setFilterOptions)
       .catch((error) => {
         setFilterOptions(emptyOptions);
-        toast({ title: "Could not load exercise filters", description: error instanceof Error ? error.message : "Please try again." });
+        toast({ title: "Could not load exercise filters", description: userSafeError(error, "Please refresh and try again.") });
       });
   }, [toast]);
 
@@ -150,7 +151,7 @@ export function WorkoutPlanBuilder({
       })
       .catch((error) => {
         if (!active) return;
-        toast({ title: "Could not load saved plan", description: error instanceof Error ? error.message : "Please try again." });
+        toast({ title: "Could not load saved plan", description: userSafeError(error, "Please refresh and try again.") });
       })
       .finally(() => {
         if (active) setIsLoadingSavedPlan(false);
@@ -171,7 +172,7 @@ export function WorkoutPlanBuilder({
       .catch((error) => {
         if (!active) return;
         setActivity([]);
-        toast({ title: "Could not load workout activity", description: error instanceof Error ? error.message : "Please try again." });
+        toast({ title: "Could not load workout activity", description: userSafeError(error, "Please refresh and try again.") });
       });
     return () => {
       active = false;
@@ -223,7 +224,7 @@ export function WorkoutPlanBuilder({
         .catch((error) => {
           if (!active) return;
           setAllResults([]);
-          toast({ title: "Could not load workouts", description: error instanceof Error ? error.message : "Try another filter." });
+          toast({ title: "Could not load workouts", description: userSafeError(error, "Try another filter.") });
         })
         .finally(() => {
           if (active) setIsLoading(false);
@@ -316,7 +317,7 @@ export function WorkoutPlanBuilder({
       toast({ title: "Workout plan saved", description: `${planName} saved with ${totalExercises} workouts.` });
       await onSaved?.();
     } catch (error) {
-      toast({ title: "Could not save plan", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not save plan", description: userSafeError(error) });
     } finally {
       setIsSaving(false);
     }
@@ -377,7 +378,7 @@ export function WorkoutPlanBuilder({
       setDisplayCount(nextDisplay);
       setHasMoreApi(items.length >= 500);
     } catch (error) {
-      toast({ title: "Could not load more workouts", description: error instanceof Error ? error.message : "Try again." });
+      toast({ title: "Could not load more workouts", description: userSafeError(error) });
     } finally {
       setIsLoadingMore(false);
     }
@@ -412,7 +413,7 @@ export function WorkoutPlanBuilder({
       setActiveDayIndex(findNextWorkoutDayIndex(days, todayIndex));
       toast({ title: "Workout skipped", description: "The next workout day is ready." });
     } catch (error) {
-      toast({ title: "Could not skip workout", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not skip workout", description: userSafeError(error) });
     } finally {
       setIsSkipping(false);
     }

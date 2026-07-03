@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/toaster";
+import { userSafeError } from "@/lib/error-formatting";
 
 type Plan = {
   id: string;
@@ -90,7 +91,7 @@ export function ChatGptWorkoutPlans() {
       if (exerciseResult.error) throw exerciseResult.error;
       setExercises((exerciseResult.data ?? []) as PlanExercise[]);
     } catch (error) {
-      toast({ title: "Could not load workout plans", description: error instanceof Error ? error.message : "Try again." });
+      toast({ title: "Could not load workout plans", description: userSafeError(error, "Please refresh and try again.") });
     } finally {
       setIsLoading(false);
     }

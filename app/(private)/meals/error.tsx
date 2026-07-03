@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-export default function MealsError({ error, reset }: { error: Error; reset: () => void }) {
+export default function MealsError({ reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
 
   return (
@@ -14,7 +14,6 @@ export default function MealsError({ error, reset }: { error: Error; reset: () =
         <p className="mx-auto max-w-2xl text-sm text-muted-foreground">
           Something interrupted the food browser. Try again or return to the dashboard.
         </p>
-        <p className="mx-auto max-w-2xl break-words text-xs text-muted-foreground">{error.message}</p>
         <div className="flex justify-center gap-2">
           <Button type="button" onClick={reset}>Try again</Button>
           <Button type="button" variant="outline" onClick={() => router.push("/dashboard")}>Dashboard</Button>

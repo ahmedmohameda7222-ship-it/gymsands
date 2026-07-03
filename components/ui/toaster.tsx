@@ -36,7 +36,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback(
     (nextToast: Omit<Toast, "id">) => {
       const id = crypto.randomUUID();
-      setToasts((current) => [...current.slice(-2), { ...nextToast, id }]);
+      setToasts((current) => {
+        if (current.some((item) => item.title === nextToast.title && item.description === nextToast.description)) return current;
+        return [...current.slice(-2), { ...nextToast, id }];
+      });
       window.setTimeout(() => removeToast(id), 3500);
     },
     [removeToast]
@@ -56,7 +59,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <div className="fixed bottom-4 right-4 z-[70] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2 sm:bottom-6 sm:right-6">
         {toasts.map((item) => (
           (() => {
-            const variant = variants[item.variant ?? "success"];
+            const inferredVariant = /could not|failed|error|invalid/i.test(item.title)
+              ? "error"
+              : /required|check|unavailable/i.test(item.title)
+                ? "warning"
+                : "success";
+            const variant = variants[item.variant ?? inferredVariant];
             const Icon = variant.icon;
             return (
           <div

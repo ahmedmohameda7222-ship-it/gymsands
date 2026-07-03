@@ -9,6 +9,7 @@ import { Zap } from "lucide-react";
 import type { MealType, FoodLog } from "@/types";
 import { quickAddManualFoodLog } from "@/services/meals/food-logging-speed";
 import { useToast } from "@/components/ui/toaster";
+import { userSafeError } from "@/lib/error-formatting";
 import { Select } from "@/components/ui/select-field";
 
 type QuickAddFoodDialogProps = {
@@ -78,7 +79,7 @@ export function QuickAddFoodDialog({ userId, logDate, onFoodLogged, trigger, ope
     } catch (error) {
       toast({
         title: "Could not log food",
-        description: error instanceof Error ? error.message : "Please try again.",
+        description: userSafeError(error),
       });
     } finally {
       setIsSubmitting(false);

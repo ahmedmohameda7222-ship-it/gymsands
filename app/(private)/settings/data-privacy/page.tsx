@@ -80,7 +80,7 @@ export default function DataPrivacyPage() {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      toast({ title: "Data export ready", description: "A current-user Plaivra JSON export was downloaded." });
+      toast({ title: "Data export ready", description: "A private copy of your Plaivra data was downloaded." });
     } catch (downloadError) {
       toast({ title: "Export failed", description: downloadError instanceof Error ? downloadError.message : "Please try again." });
     } finally {
@@ -181,7 +181,7 @@ export default function DataPrivacyPage() {
               </span>
               <span className="min-w-0">
                 <span className="block font-semibold text-foreground">Download current Plaivra data</span>
-                <span className="mt-1 block text-sm leading-5 text-muted-foreground">Downloads an authenticated JSON export without OAuth tokens, authorization codes, raw prompts or cross-user data.</span>
+                <span className="mt-1 block text-sm leading-5 text-muted-foreground">Downloads a private copy of your Plaivra data without sign-in details, private request text, or anyone else’s data.</span>
               </span>
             </span>
             <Button variant="outline" disabled={isDownloadingExport} onClick={() => void downloadDataExport()}>{isDownloadingExport ? "Preparing…" : "Download data"}</Button>

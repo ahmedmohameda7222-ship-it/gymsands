@@ -1,7 +1,7 @@
 import type { AiPermissionSection } from "@/types";
 
 export const FULL_ACCESS_WARNING =
-  "Broad access: ChatGPT can read and manage every listed Plaivra area. Choose this only when you need cross-area access.";
+  "Broad access: ChatGPT can view and update every area listed below when you ask it to. Choose this only if you want help across the full app.";
 
 export const AI_PERMISSION_SECTION_DETAILS: Record<
   AiPermissionSection,

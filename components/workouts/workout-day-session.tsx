@@ -8,18 +8,20 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Disclosure } from "@/components/ui/disclosure";
 import { useConfirm, ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { MobileStickyActions, MobileStickyActionsSpacer } from "@/components/layout/mobile-sticky-actions";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
+import { userSafeError } from "@/lib/error-formatting";
 import Link from "next/link";
 import { completeWorkoutSession, getOrStartWorkoutDaySession, getWorkoutHistoryDetailed, getWorkoutSessionLogs, saveWorkoutSetLogs, updateWorkoutSessionDuration } from "@/services/database/workout-sessions";
 import type { ExerciseLog, UserWorkoutPlanExercise, WorkoutPlanDaySession, WorkoutSession, WorkoutSessionSummary } from "@/types";
 import type { ExerciseAlternativeReason, UserExerciseAlternative, UserProgressionTarget } from "@/types";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
-import { getDailyCheckins, getExerciseAlternatives, getProgressionTargets } from "@/services/database/execution-layer";
+import { createExerciseAlternative, getDailyCheckins, getExerciseAlternatives, getProgressionTargets } from "@/services/database/execution-layer";
 import { calculateReadiness, getSleepRecoveryHistory, type EnhancedSleepRecoveryLog } from "@/services/wellness/wellness-data";
 
 const defaultInstructions = "Use controlled form, keep the target muscle engaged, avoid rushing the eccentric part, and stop if the movement feels painful.";
@@ -355,6 +357,8 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const [morningReadiness, setMorningReadiness] = useState<string | null>(null);
   const [readinessDismissed, setReadinessDismissed] = useState(false);
   const [replacementReason, setReplacementReason] = useState<ExerciseAlternativeReason>("machine_taken");
+  const [manualReplacementName, setManualReplacementName] = useState("");
+  const [isSavingAlternative, setIsSavingAlternative] = useState(false);
   const workoutTimerKey = useMemo(() => workoutStorageKey(["workout-day-session", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const restTimerKey = useMemo(() => workoutStorageKey(["workout-day-rest-timer", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const [timerEndsAtMs, setTimerEndsAtMs] = useState<number | null>(null);
@@ -399,7 +403,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         }
       })
       .catch((error) => {
-        toast({ title: "Could not start workout session", description: error instanceof Error ? error.message : "Please try again." });
+        toast({ title: "Could not start workout session", description: userSafeError(error, "Please refresh and try again.") });
       })
       .finally(() => {
         if (active) setIsStarting(false);
@@ -601,7 +605,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     try {
       await persistProgress(nextStates);
     } catch (error) {
-      toast({ title: "Could not save set", description: error instanceof Error ? error.message : "Try finishing the workout again if it does not appear in history." });
+      toast({ title: "Could not save set", description: userSafeError(error, "Try finishing the workout again if it does not appear in history.") });
     } finally {
       setIsSaving(false);
     }
@@ -649,7 +653,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
       setCompletedSummary(summary);
       toast({ title: "Workout saved", description: `${day.day_name} was added to your workout history.` });
     } catch (error) {
-      toast({ title: "Could not save workout", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not save workout", description: userSafeError(error) });
     } finally {
       setIsSaving(false);
     }
@@ -673,6 +677,33 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     setElapsedSeconds(0);
     storeTimestamp(workoutTimerKey, nextStartedAt);
     if (session) updateWorkoutSessionDuration(session.id, 1).catch(() => undefined);
+  }
+
+  async function useManualReplacement() {
+    if (!user?.id || !activeExercise || !manualReplacementName.trim()) return;
+    const originalName = activeExercise.exercise.exercise_name;
+    setIsSavingAlternative(true);
+    try {
+      const saved = await createExerciseAlternative(user.id, {
+        plan_exercise_id: activeExercise.exercise.id,
+        original_exercise_name: originalName,
+        alternative_exercise_name: manualReplacementName.trim(),
+        reason: replacementReason,
+        target_muscle: activeExercise.exercise.target_muscle,
+        equipment: activeExercise.exercise.equipment,
+        created_by: "user"
+      });
+      setAlternatives((current) => [saved, ...current]);
+      setExerciseStates((current) => current.map((item, index) => index === activeExerciseIndex
+        ? { ...item, exercise: { ...item.exercise, exercise_name: saved.alternative_exercise_name } }
+        : item));
+      setManualReplacementName("");
+      toast({ title: "Replacement ready for today", description: `${saved.alternative_exercise_name} is now shown in this workout. Your plan was not changed.` });
+    } catch (error) {
+      toast({ title: "Could not save replacement", description: userSafeError(error) });
+    } finally {
+      setIsSavingAlternative(false);
+    }
   }
 
   if (!exerciseStates.length) {
@@ -716,7 +747,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                 Continue normally
               </Button>
               <Button asChild type="button" variant="outline" size="sm">
-                <Link href="/settings/coaching-profile">Log pain or discomfort</Link>
+                <Link href={`/settings/coaching-profile?returnTo=${encodeURIComponent(`/workouts/session/day/${day.id}`)}`}>Log pain or discomfort</Link>
               </Button>
             </div>
           </CardContent>
@@ -733,10 +764,6 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
           <Badge variant="outline">{formatTime(elapsedSeconds)}</Badge>
           {isTimerRunning ? <Badge variant="success">Rest {formatTime(timerLeft)}</Badge> : null}
           {isStarting ? <Badge variant="outline">Saving session...</Badge> : null}
-          <Button variant="outline" size="sm" onClick={resetWorkoutTimer}>
-            <TimerReset className="h-4 w-4" />
-            Reset workout timer
-          </Button>
         </div>
       </div>
 
@@ -751,8 +778,6 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
             {exerciseStates.map((item, index) => {
               const done = item.sets.filter((set) => set.completedAt).length;
               const active = index === activeExerciseIndex;
-              const guideUrl = item.exercise.exercise_url || (item.exercise.notes?.startsWith("http") ? item.exercise.notes : null);
-              const customVideoUrl = item.exercise.custom_video_url || null;
               const group = supersetLabel(item.exercise);
               const previous = previousPerformance(history, item.exercise.exercise_name);
               return (
@@ -782,18 +807,6 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">{done}/{item.sets.length} sets</p>
                   <p className="mt-1 text-xs text-muted-foreground">{previous ? `Last: ${previous.lastWeightKg ?? 0} kg x ${previous.lastReps ?? 0}` : "No previous data"}</p>
-                  <div className="mt-3 grid gap-2">
-                    {guideUrl ? (
-                      <a href={guideUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border bg-card px-2 text-xs font-semibold text-foreground transition hover:bg-secondary">
-                        <ExternalLink className="h-3.5 w-3.5" /> Open Exercise Guide
-                      </a>
-                    ) : <span className="inline-flex min-h-9 items-center justify-center rounded-md border px-2 text-xs font-semibold text-muted-foreground">No guide added</span>}
-                    {customVideoUrl ? (
-                      <a href={customVideoUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border bg-card px-2 text-xs font-semibold text-foreground transition hover:bg-secondary">
-                        <ExternalLink className="h-3.5 w-3.5" /> Open Custom Video
-                      </a>
-                    ) : <span className="inline-flex min-h-9 items-center justify-center rounded-md border px-2 text-xs font-semibold text-muted-foreground">No custom video</span>}
-                  </div>
                 </div>
               );
             })}
@@ -813,42 +826,26 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               <Badge variant="outline">Reps {activeExercise.exercise.reps ?? "custom"}</Badge>
               <Badge variant="outline">Rest {activeExercise.exercise.rest_seconds ?? timerSeconds}s</Badge>
             </div>
-            <div className="pt-2">
-              <AiActionRequestDialog
-                actions={[{ type: "replace_exercise", label: "Replace exercise", description: "Ask ChatGPT to recommend a suitable replacement using the selected reason and current workout context." }]}
-                sourceType="plan_exercise"
-                sourceId={activeExercise.exercise.id}
-                context={{ ...workoutContext, replacement_reason: replacementReason, exercise_alternatives: activeAlternatives }}
-                title="Exercise replacement"
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="replacement-reason">Why do you need a replacement?</Label>
-                  <select id="replacement-reason" value={replacementReason} onChange={(event) => setReplacementReason(event.target.value as ExerciseAlternativeReason)} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm">
-                    <option value="machine_taken">Machine taken</option>
-                    <option value="no_equipment">No equipment</option>
-                    <option value="pain_or_discomfort">Pain or discomfort</option>
-                    <option value="too_hard">Too hard today</option>
-                    <option value="home_alternative">Home alternative</option>
-                    <option value="same_muscle">Same muscle, different movement</option>
-                    <option value="lower_back_friendly">Lower-back friendly</option>
-                    <option value="knee_friendly">Knee friendly</option>
-                    <option value="shoulder_friendly">Shoulder friendly</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-              </AiActionRequestDialog>
-            </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {isTimerRunning ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-primary/25 bg-primary/5 p-4">
+                <div><p className="text-sm font-semibold text-foreground">Rest</p><p className="text-2xl font-bold text-primary">{formatTime(timerLeft)}</p></div>
+                <div className="flex gap-2"><Button type="button" variant="outline" size="sm" onClick={() => startRestTimer(timerLeft + 30)}>+30 sec</Button><Button type="button" variant="ghost" size="sm" onClick={stopRestTimer}>Skip</Button></div>
+              </div>
+            ) : null}
+
+            <Disclosure title="Workout details" description="Progression, replacement, guide, alternatives, and timer settings">
+              <div className="space-y-4">
             <div className="rounded-md bg-muted/40 p-3 text-sm leading-6 text-muted-foreground">
               {currentInstructions}
               <div className="mt-3 flex flex-wrap gap-2">
                 {currentGuideUrl ? (
                   <Button asChild variant="outline" size="sm"><a href={currentGuideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open Exercise Guide</a></Button>
-                ) : <Button type="button" variant="outline" size="sm" disabled>No guide added</Button>}
+                ) : null}
                 {currentCustomVideoUrl ? (
                   <Button asChild variant="outline" size="sm"><a href={currentCustomVideoUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open Custom Video</a></Button>
-                ) : <Button type="button" variant="outline" size="sm" disabled>No custom video</Button>}
+                ) : null}
               </div>
             </div>
 
@@ -872,6 +869,22 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               </div>
             ) : null}
 
+                <div className="rounded-[14px] border border-border/70 p-3">
+                  <p className="font-semibold text-foreground">Replace for today</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Use a known alternative now, or ask ChatGPT for help. Your saved plan stays unchanged.</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2"><Label htmlFor="manual-replacement">Replacement exercise</Label><Input id="manual-replacement" value={manualReplacementName} onChange={(event) => setManualReplacementName(event.target.value)} placeholder="For example: Dumbbell bench press" /></div>
+                    <div className="space-y-2"><Label htmlFor="replacement-reason">Reason</Label><select id="replacement-reason" value={replacementReason} onChange={(event) => setReplacementReason(event.target.value as ExerciseAlternativeReason)} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm"><option value="machine_taken">Machine taken</option><option value="no_equipment">No equipment</option><option value="pain_or_discomfort">Pain or discomfort</option><option value="too_hard">Too hard today</option><option value="home_alternative">Home alternative</option><option value="same_muscle">Same muscle, different movement</option><option value="lower_back_friendly">Lower-back friendly</option><option value="knee_friendly">Knee friendly</option><option value="shoulder_friendly">Shoulder friendly</option><option value="other">Other</option></select></div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button type="button" size="sm" onClick={useManualReplacement} disabled={!manualReplacementName.trim() || isSavingAlternative}><RefreshCcw className="h-4 w-4" /> {isSavingAlternative ? "Saving..." : "Use for today"}</Button>
+                    <AiActionRequestDialog actions={[{ type: "replace_exercise", label: "Ask ChatGPT", description: "Ask ChatGPT to recommend a suitable replacement using the selected reason and current workout." }]} sourceType="plan_exercise" sourceId={activeExercise.exercise.id} context={{ ...workoutContext, replacement_reason: replacementReason, exercise_alternatives: activeAlternatives }} />
+                  </div>
+                </div>
+                <Button type="button" variant="ghost" size="sm" onClick={resetWorkoutTimer}><TimerReset className="h-4 w-4" /> Reset workout timer</Button>
+              </div>
+            </Disclosure>
+
             <div className="space-y-3">
               {activeExercise.sets.map((set, setIndex) => {
                 const previousSet = previousSetForExercise(history, activeExercise.exercise.exercise_name, set.setNumber);
@@ -881,9 +894,12 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                       <p className="font-semibold">Set {set.setNumber}</p>
                       {set.completedAt ? <Badge variant="success">Done</Badge> : <Badge variant="outline">Open</Badge>}
                     </div>
-                    <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+                    <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1"><Label>Actual reps</Label><Input className="h-14 text-xl lg:h-12 lg:text-lg" value={set.reps} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { reps: event.target.value })} inputMode="numeric" /></div>
                       <div className="space-y-1"><Label>Weight kg</Label><Input className="h-14 text-xl lg:h-12 lg:text-lg" value={set.weightKg} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { weightKg: event.target.value })} inputMode="decimal" placeholder="0" /></div>
+                    </div>
+                    <Disclosure title="Set details" description="RPE, RIR, set type, and notes" className="mt-3">
+                      <div className="grid gap-3 sm:grid-cols-3">
                       <div className="space-y-1"><Label>RPE</Label><Input className="h-14 lg:h-12" value={set.rpe} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" /></div>
                       <div className="space-y-1"><Label>RIR</Label><Input className="h-14 lg:h-12" value={set.rir} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" /></div>
                       <div className="space-y-1">
@@ -896,8 +912,9 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                           <option value="drop">Drop set</option>
                         </select>
                       </div>
-                      <div className="space-y-1 col-span-2 lg:col-span-5"><Label>Notes</Label><Input className="h-14 lg:h-12" value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional" /></div>
-                    </div>
+                        <div className="space-y-1 sm:col-span-3"><Label>Notes</Label><Input className="h-14 lg:h-12" value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional" /></div>
+                      </div>
+                    </Disclosure>
                     {previousSet ? <p className="mt-2 text-xs text-muted-foreground">Previous set: {previousSet.weightKg ?? 0} kg x {previousSet.reps ?? 0}{previousSet.performedAt ? ` on ${previousSet.performedAt.slice(0, 10)}` : ""}</p> : null}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button size="sm" variant="outline" onClick={() => applyPreviousSet(activeExerciseIndex, setIndex)} disabled={Boolean(set.completedAt) || !previousSet}><Sparkles className="h-4 w-4" /> Use previous</Button>
@@ -935,15 +952,14 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader><CardTitle>Live workout summary</CardTitle></CardHeader>
-            <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <Disclosure title="Workout summary" description="Volume, completed exercises, and possible records">
+            <div className="space-y-3 text-sm text-muted-foreground">
               <p>Total volume: {round(buildSessionSets(exerciseStates).reduce((sum, set) => sum + set.weightKg * set.reps, 0))} kg</p>
               <p>Exercises completed: {exerciseStates.filter((item) => item.sets.some((set) => set.completedAt)).length}/{exerciseStates.length}</p>
               {previewPrs.length ? <p className="font-semibold text-primary"><Trophy className="mr-1 inline h-4 w-4" /> {previewPrs.length} possible PR{previewPrs.length === 1 ? "" : "s"}</p> : <p>No PRs detected yet.</p>}
               <ul className="space-y-1">{liveSuggestions.slice(0, 4).map((suggestion) => <li key={suggestion}>• {suggestion}</li>)}</ul>
-            </CardContent>
-          </Card>
+            </div>
+          </Disclosure>
 
           <Card>
             <CardHeader><CardTitle>Finish workout</CardTitle></CardHeader>
@@ -956,7 +972,9 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         </div>
       </div>
 
-      <WorkoutAiActionPanel sourceType="workout_session" sourceId={session?.id ?? day.id} context={workoutContext} />
+      <Disclosure title="ChatGPT help" description="Review this workout, make today lighter, or plan the next step">
+        <WorkoutAiActionPanel compact sourceType="workout_session" sourceId={session?.id ?? day.id} context={workoutContext} />
+      </Disclosure>
 
       <MobileStickyActions>
         <div className="flex items-center gap-3">

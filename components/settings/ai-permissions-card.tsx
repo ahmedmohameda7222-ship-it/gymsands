@@ -14,6 +14,7 @@ import {
   ALL_AI_PERMISSION_SECTIONS
 } from "@/services/database/ai-permissions";
 import { AI_PERMISSION_SECTION_DETAILS, FULL_ACCESS_WARNING } from "@/lib/mcp/permission-presentation";
+import { userSafeError } from "@/lib/error-formatting";
 
 export function AiPermissionsCard() {
   const { user } = useAuth();
@@ -49,7 +50,7 @@ export function AiPermissionsCard() {
       toast({ title: "AI Permissions saved", description: "Your AI access settings have been updated." });
       setHasSavedSettings(true);
     } catch (error) {
-      toast({ title: "Could not save", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not save", description: userSafeError(error) });
     } finally {
       setIsSaving(false);
     }
@@ -73,7 +74,7 @@ export function AiPermissionsCard() {
           <CardTitle className="flex items-center gap-2 text-base">
             <Shield className="h-5 w-5 text-primary" /> AI Permissions
           </CardTitle>
-          <CardDescription>Choose the Plaivra areas ChatGPT may read or manage. Permissions are off until you save them.</CardDescription>
+          <CardDescription>Choose what ChatGPT can see or change after you connect Plaivra. Nothing is shared until you save a choice.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           {/* Mode selection */}
@@ -95,7 +96,7 @@ export function AiPermissionsCard() {
                 )}
               </div>
               <div>
-                <p className="font-semibold">Full AI Access — broad access</p>
+                <p className="font-semibold">All Plaivra areas</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
                   {FULL_ACCESS_WARNING}
                 </p>
@@ -119,7 +120,7 @@ export function AiPermissionsCard() {
                 )}
               </div>
               <div>
-                <p className="font-semibold">Custom AI Access — least privilege</p>
+                <p className="font-semibold">Choose specific areas</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
                   Choose only the areas and actions needed for how you use ChatGPT.
                 </p>
@@ -130,7 +131,7 @@ export function AiPermissionsCard() {
           {/* Custom section toggles */}
           {config.accessMode === "custom" ? (
             <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Sections</p>
+              <p className="text-sm font-semibold text-foreground">Choose what ChatGPT can do</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {ALL_AI_PERMISSION_SECTIONS.map((section) => {
                   const perms = config.sections[section];
@@ -161,7 +162,7 @@ export function AiPermissionsCard() {
                             }`}
                           >
                             {perms.read ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-                            Read
+                            View
                           </button>
                           <button
                             type="button"
@@ -187,16 +188,16 @@ export function AiPermissionsCard() {
                             }`}
                           >
                             <KeyRound className="h-3 w-3" />
-                            Write
+                            Change
                           </button>
                         </div>
                       </div>
                       <div className="space-y-1 text-xs leading-5 text-muted-foreground">
-                        <p><span className="font-semibold text-foreground">Read:</span> {details.readDescription}</p>
-                        <p><span className="font-semibold text-foreground">Create & update:</span> {details.writeDescription}</p>
+                        <p><span className="font-semibold text-foreground">View:</span> {details.readDescription}</p>
+                        <p><span className="font-semibold text-foreground">Make changes:</span> {details.writeDescription}</p>
                       </div>
                       {perms.write ? (
-                        <p className="text-xs text-muted-foreground">Write access includes read access for this section.</p>
+                        <p className="text-xs text-muted-foreground">To make changes, ChatGPT also needs to view this area.</p>
                       ) : null}
                     </div>
                   );
@@ -207,12 +208,12 @@ export function AiPermissionsCard() {
 
           {/* Trust message */}
           <p className="text-sm text-muted-foreground">
-            You can disable a permission and save at any time. Missing or empty permissions fail closed, so ChatGPT cannot access Plaivra data until you explicitly allow it.
+            You can change these choices at any time. ChatGPT cannot use a Plaivra area unless you have allowed it here.
           </p>
 
           {!hasSavedSettings ? (
             <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              Please review and save your AI permissions. Older connections may need to be regenerated after updating permissions.
+              Review and save your choices before connecting ChatGPT. If you change them later, reconnect ChatGPT so the new choices take effect.
             </p>
           ) : null}
 
@@ -220,7 +221,7 @@ export function AiPermissionsCard() {
           <div className="flex justify-end">
             <Button onClick={() => void handleSave()} disabled={isSaving} className="min-h-12">
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              {isSaving ? "Saving..." : "Save AI Permissions"}
+              {isSaving ? "Saving..." : "Save permissions"}
             </Button>
           </div>
         </CardContent>

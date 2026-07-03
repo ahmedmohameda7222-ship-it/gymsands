@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Bot, CheckCircle2, Clipboard, ExternalLink, Loader2, X } from "lucide-react";
+import { Bot, Check, CheckCircle2, Clipboard, ExternalLink, Loader2, Send, X } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { buildAiActionSummary, buildChatGptActionPrompt } from "@/components/ai/ai-action-summary";
+import { getAiActionSafetyDecision, type AiActionSafetyDecision } from "@/components/ai/ai-action-safety";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
+import { userSafeError } from "@/lib/error-formatting";
 import {
   createAiActionRequest,
   getNutritionPreferenceProfile,
@@ -21,30 +24,22 @@ export type AiActionOption = {
   description: string;
 };
 
-const redFlagBlockedActions = new Set<AiActionType>([
-  "adjust_next_workout",
-  "explain_progression"
-]);
+export { buildChatGptActionPrompt } from "@/components/ai/ai-action-summary";
 
-export function buildChatGptActionPrompt(request: AiActionRequest, action: AiActionOption) {
-  return [
-    `Plaivra action request: ${action.label}`,
-    action.description,
-    "Use the structured Plaivra context below. Explain your recommendation before changing anything.",
-    "If I approve a structured update, save it through the connected Plaivra tools. Do not invent missing measurements, diagnose a condition, or make destructive changes without confirmation.",
-    `Request ID: ${request.id}`,
-    `User note: ${request.user_note || "None"}`,
-    "Context:",
-    JSON.stringify(request.context_json, null, 2)
-  ].join("\n\n");
-}
+const statusLabels: Record<AiActionRequest["status"], string> = {
+  draft: "Draft",
+  ready_for_chatgpt: "Ready",
+  sent_to_chatgpt: "Sent",
+  resolved: "Resolved",
+  cancelled: "Cancelled"
+};
 
 export function AiActionRequestDialog({
   actions,
   sourceType,
   sourceId,
   context,
-  title = "Ask ChatGPT",
+  title = "Ask ChatGPT for help",
   children,
   buttonVariant = "outline",
   className
@@ -64,19 +59,26 @@ export function AiActionRequestDialog({
   const [note, setNote] = useState("");
   const [request, setRequest] = useState<AiActionRequest | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [safetyDecision, setSafetyDecision] = useState<AiActionSafetyDecision>({ decision: "allow" });
 
-  const prompt = useMemo(() => request && selected ? buildChatGptActionPrompt(request, selected) : "", [request, selected]);
+  const summary = useMemo(() => selected ? buildAiActionSummary(selected.type, context) : [], [context, selected]);
+  const prompt = useMemo(
+    () => request && selected ? buildChatGptActionPrompt(request, { label: selected.label, description: selected.description, goal: selected.label }) : "",
+    [request, selected]
+  );
 
   function openAction(action: AiActionOption) {
     setSelected(action);
     setRequest(null);
     setNote("");
+    setSafetyDecision({ decision: "allow" });
   }
 
   function closeDialog(open: boolean) {
     if (!open && !isSaving) {
       setSelected(null);
       setRequest(null);
+      setSafetyDecision({ decision: "allow" });
     }
   }
 
@@ -88,13 +90,10 @@ export function AiActionRequestDialog({
         getSafetyProfile(user.id).catch(() => null),
         getNutritionPreferenceProfile(user.id).catch(() => null)
       ]);
-      if (safetyProfile?.risk_level === "red" && redFlagBlockedActions.has(selected.type)) {
-        toast({
-          title: "Request paused for safety",
-          description: "Your safety profile is set to red. Review your restrictions and seek qualified guidance before asking for progression or a harder workout adjustment."
-        });
-        return;
-      }
+      const decision = getAiActionSafetyDecision(selected.type, safetyProfile);
+      setSafetyDecision(decision);
+      if (decision.decision === "block") return;
+
       const saved = await createAiActionRequest({
         userId: user.id,
         actionType: selected.type,
@@ -109,9 +108,9 @@ export function AiActionRequestDialog({
         }
       });
       setRequest(saved);
-      toast({ title: "ChatGPT request ready", description: "Review the context, then copy it or open ChatGPT." });
+      toast({ title: "Request ready", description: "Copy it or open ChatGPT when you are ready." });
     } catch (error) {
-      toast({ title: "Could not create request", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not prepare request", description: userSafeError(error, "Please try again. Your choices are still here.") });
     } finally {
       setIsSaving(false);
     }
@@ -123,20 +122,28 @@ export function AiActionRequestDialog({
       await navigator.clipboard.writeText(prompt);
       toast({ title: "Request copied", description: "Paste it into ChatGPT when you are ready." });
     } catch {
-      toast({ title: "Could not copy", description: "Select the request text and copy it manually." });
+      toast({ title: "Could not copy", description: "Please try again." });
     }
   }
 
-  async function cancelRequest() {
+  async function changeStatus(status: AiActionRequest["status"]) {
     if (!request || !user?.id) return;
+    setIsSaving(true);
     try {
-      const cancelled = await updateAiActionRequestStatus(user.id, request.id, "cancelled");
-      setRequest(cancelled);
-      toast({ title: "Request cancelled", description: "No workout or meal data was changed." });
+      const updated = await updateAiActionRequestStatus(user.id, request.id, status);
+      setRequest(updated);
+      toast({
+        title: status === "sent_to_chatgpt" ? "Marked as sent" : status === "resolved" ? "Request resolved" : "Request cancelled",
+        description: status === "cancelled" ? "No workout or meal data was changed." : "Your saved request is up to date."
+      });
     } catch (error) {
-      toast({ title: "Could not cancel request", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not update request", description: userSafeError(error) });
+    } finally {
+      setIsSaving(false);
     }
   }
+
+  const requestFinished = request?.status === "resolved" || request?.status === "cancelled";
 
   return (
     <>
@@ -150,55 +157,96 @@ export function AiActionRequestDialog({
       </div>
 
       <Dialog open={Boolean(selected)} onOpenChange={closeDialog}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>{title}: {selected?.label}</DialogTitle>
-            <DialogDescription>{selected?.description} Plaivra will save a request and context only; it will not change your plan automatically.</DialogDescription>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>
+              {request ? "Review the next steps and keep control of anything saved in Plaivra." : "Choose what you want help with. Plaivra will not change anything automatically."}
+            </DialogDescription>
           </DialogHeader>
 
           {!request ? (
             <div className="space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-foreground">What do you want help with?</p>
+                <p className="mt-1 text-sm text-muted-foreground">{selected?.description}</p>
+              </div>
+              <div className="divide-y divide-border/70 rounded-[16px] border border-border/70 bg-muted/20 px-4">
+                {summary.map((row) => (
+                  <div key={row.label} className="grid grid-cols-[7rem_1fr] gap-3 py-3 text-sm">
+                    <span className="font-medium text-muted-foreground">{row.label}</span>
+                    <span className="font-semibold text-foreground">{row.value}</span>
+                  </div>
+                ))}
+              </div>
               {children}
               <div className="space-y-2">
-                <Label htmlFor="ai-action-note">Anything ChatGPT should consider?</Label>
+                <Label htmlFor="ai-action-note">Optional note</Label>
                 <textarea
                   id="ai-action-note"
                   value={note}
                   onChange={(event) => setNote(event.target.value)}
                   className="min-h-24 w-full rounded-[14px] border bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  placeholder="Optional note, constraint, or preference"
+                  placeholder="Add a preference, constraint, or detail"
+                  maxLength={500}
                 />
               </div>
-              <div className="rounded-[14px] border bg-muted/30 p-3 text-xs text-muted-foreground">
-                <p className="font-semibold text-foreground">Context preview</p>
-                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words">{JSON.stringify(context, null, 2)}</pre>
+              {safetyDecision.message ? <SafetyMessage decision={safetyDecision} /> : null}
+              <p className="text-xs leading-5 text-muted-foreground">Plaivra is not medical advice. Stop if pain is sharp, unusual, or worsening, and seek qualified help for medical concerns.</p>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button type="button" variant="ghost" onClick={() => closeDialog(false)}>Cancel</Button>
+                <Button type="button" onClick={createRequest} disabled={isSaving || !user?.id}>
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  {isSaving ? "Preparing..." : "Prepare request"}
+                </Button>
               </div>
-              <p className="text-xs text-muted-foreground">Plaivra is not medical advice. Do not train through sharp, unusual, or worsening pain; seek qualified help for medical concerns.</p>
-              <Button type="button" className="w-full" onClick={createRequest} disabled={isSaving || !user?.id}>
-                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                {isSaving ? "Preparing request..." : "Prepare ChatGPT request"}
-              </Button>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="rounded-[14px] border border-primary/30 bg-primary/5 p-3">
-                <p className="text-sm font-semibold">Request {request.status === "cancelled" ? "cancelled" : "ready"}</p>
-                <p className="mt-1 text-xs text-muted-foreground">ID: {request.id}</p>
+              <div className="rounded-[16px] border border-primary/25 bg-primary/5 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-foreground">Your ChatGPT request is ready.</p>
+                  <span className="text-xs font-semibold text-primary">{statusLabels[request.status]}</span>
+                </div>
+                <ol className="mt-3 space-y-2 text-sm text-muted-foreground">
+                  {["Open ChatGPT.", "Ask ChatGPT to help with this request.", "Review the answer.", "Approve only the changes you want saved in Plaivra."].map((step, index) => (
+                    <li key={step} className="flex gap-2"><span className="font-semibold text-primary">{index + 1}.</span>{step}</li>
+                  ))}
+                </ol>
               </div>
-              <textarea readOnly value={prompt} className="min-h-64 w-full rounded-[14px] border bg-card px-3 py-2 font-mono text-xs outline-none" aria-label="ChatGPT request prompt" />
+              <div className="rounded-[16px] border border-border/70 bg-card p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Your request</p>
+                <p className="mt-3 whitespace-pre-line text-sm leading-6 text-foreground">{prompt}</p>
+              </div>
+              {safetyDecision.message ? <SafetyMessage decision={safetyDecision} /> : null}
               <div className="grid gap-2 sm:grid-cols-2">
                 <Button type="button" onClick={copyPrompt} disabled={request.status === "cancelled"}><Clipboard className="h-4 w-4" /> Copy request</Button>
                 <Button asChild variant="outline" className={request.status === "cancelled" ? "pointer-events-none opacity-50" : ""}>
                   <a href="https://chatgpt.com/" target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open ChatGPT</a>
                 </Button>
+                {request.status === "ready_for_chatgpt" ? (
+                  <Button type="button" variant="outline" onClick={() => changeStatus("sent_to_chatgpt")} disabled={isSaving}><Send className="h-4 w-4" /> Mark as sent</Button>
+                ) : null}
+                {!requestFinished ? (
+                  <Button type="button" variant="outline" onClick={() => changeStatus("resolved")} disabled={isSaving}><Check className="h-4 w-4" /> Mark as resolved</Button>
+                ) : null}
               </div>
-              {request.status !== "cancelled" ? (
-                <Button type="button" variant="ghost" className="w-full text-destructive hover:text-destructive" onClick={cancelRequest}><X className="h-4 w-4" /> Cancel request</Button>
+              {!requestFinished ? (
+                <Button type="button" variant="ghost" className="w-full text-destructive hover:text-destructive" onClick={() => changeStatus("cancelled")} disabled={isSaving}><X className="h-4 w-4" /> Cancel request</Button>
               ) : null}
             </div>
           )}
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function SafetyMessage({ decision }: { decision: AiActionSafetyDecision }) {
+  return (
+    <div className={`rounded-[14px] border p-3 text-sm leading-6 ${decision.decision === "block" ? "border-destructive/30 bg-destructive/10" : "border-warning/30 bg-warning/10"}`}>
+      <p className="font-semibold text-foreground">{decision.decision === "block" ? "Request paused for safety" : "A little extra caution"}</p>
+      <p className="mt-1 text-muted-foreground">{decision.message}</p>
+    </div>
   );
 }

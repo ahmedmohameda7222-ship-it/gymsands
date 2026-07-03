@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, CheckCircle2, Compass, Dumbbell, Droplets, Flame, Plus, Scale, Soup, Utensils } from "lucide-react";
+import { CheckCircle2, Dumbbell, Droplets, Flame, Scale, Soup, Utensils } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BentoGrid } from "@/components/ui/bento-grid";
@@ -48,6 +48,7 @@ import type { FitnessHabit, FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryL
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { DailyCheckins } from "@/components/wellness/daily-checkins";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
+import { RecentAiActionRequests } from "@/components/ai/recent-ai-action-requests";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -228,7 +229,7 @@ export default function DashboardPage() {
     })
     .reduce((total, workout) => total + workout.exercise_logs.reduce((sessionTotal, log) => sessionTotal + Number(log.weight_kg ?? 0) * Number(log.reps ?? 0), 0), 0) : 0;
   const dashboardShortcuts = getDashboardShortcuts(todayPlanDayId);
-  const visibleShortcuts = dashboardShortcuts.slice(0, 6);
+  const visibleShortcuts = dashboardShortcuts.slice(0, 3);
   const closedTodayCount = [
     completedToday || !todayPlanDay,
     plannedMealsCount > 0 && doneMealsCount === plannedMealsCount,
@@ -288,20 +289,7 @@ export default function DashboardPage() {
       <WelcomePopup />
       <PageHeading
         title={`Today${profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}`}
-        description="Your daily plan for training, food, hydration, and progress."
-        action={
-          <div className="hidden sm:flex sm:flex-row sm:gap-2">
-            <Button asChild>
-              <Link href="/calories">
-                <Plus className="h-4 w-4" />
-                Log Food
-              </Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/my-workout/plans">Import or Start Workout</Link>
-            </Button>
-          </div>
-        }
+        description="Your plan, in one place."
       />
 
       {isLoading ? <CardGridSkeleton count={4} rows={3} className="xl:grid-cols-4" /> : null}
@@ -342,16 +330,16 @@ export default function DashboardPage() {
 
           <BentoGrid>
             {!settings.hideCaloriesOnDashboard ? (
-              <MetricCard className="col-span-1 sm:col-span-3 xl:col-span-3" icon={Flame} label="Calories" value={`${totals.calories} kcal`} detail={hasTargets ? `${remaining.calories} kcal left` : "No target"} progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined} />
+              <MetricCard className="order-2 col-span-1 sm:col-span-3 xl:col-span-3" icon={Flame} label="Calories" value={`${totals.calories} kcal`} detail={hasTargets ? `${remaining.calories} kcal left` : "No target"} progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined} />
             ) : null}
-            <MetricCard className="col-span-1 sm:col-span-3 xl:col-span-3" icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={hasTargets ? `${remaining.protein_g}g left` : "Set target"} progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined} />
-            <MetricCard className="col-span-1 sm:col-span-3 xl:col-span-3" icon={Droplets} label="Water" value={waterTotalMl ? `${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
+            <MetricCard className="order-2 col-span-1 sm:col-span-3 xl:col-span-3" icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={hasTargets ? `${remaining.protein_g}g left` : "Set target"} progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined} />
+            <MetricCard className="order-2 col-span-1 sm:col-span-3 xl:col-span-3" icon={Droplets} label="Water" value={waterTotalMl ? `${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
             {!settings.hideBodyWeightOnDashboard ? (
-              <MetricCard className="col-span-1 sm:col-span-3 xl:col-span-3" icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} />
+              <MetricCard className="order-2 col-span-1 sm:col-span-3 xl:col-span-3" icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} />
             ) : null}
           {activePlan ? (
             todayPlanDay ? (
-              <Card className="col-span-2 sm:col-span-6 xl:col-span-7">
+              <Card className="order-1 col-span-2 sm:col-span-6 xl:col-span-12">
                 <CardContent className="p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
@@ -388,7 +376,7 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             ) : (
-              <Card className="col-span-2 sm:col-span-6 xl:col-span-7">
+              <Card className="order-1 col-span-2 sm:col-span-6 xl:col-span-12">
                 <CardContent className="p-4 sm:p-5">
                   <div className="flex items-center gap-3">
                     <Dumbbell className="h-5 w-5 text-muted-foreground" />
@@ -401,7 +389,7 @@ export default function DashboardPage() {
               </Card>
             )
           ) : (
-            <Card className="col-span-2 sm:col-span-6 xl:col-span-7">
+            <Card className="order-1 col-span-2 sm:col-span-6 xl:col-span-12">
               <CardContent className="p-4 sm:p-5">
                 <div className="flex items-center gap-3">
                   <Dumbbell className="h-5 w-5 text-muted-foreground" />
@@ -418,7 +406,7 @@ export default function DashboardPage() {
           )}
 
           {mealPlanItems.length > 0 ? (
-            <Card className="col-span-2 sm:col-span-6 xl:col-span-5">
+            <Card className="order-3 col-span-2 sm:col-span-6 xl:col-span-7">
               <CardContent className="p-4 sm:p-5">
                 <div className="flex items-center gap-2">
                   <Utensils className="h-5 w-5 text-primary" />
@@ -487,8 +475,8 @@ export default function DashboardPage() {
             </Card>
           ) : null}
 
-          <div className="glass-card col-span-2 p-4 sm:col-span-6 sm:p-5 xl:col-span-5">
-            <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Quick links</p>
+          <div className="glass-card order-4 col-span-2 p-4 sm:col-span-6 sm:p-5 xl:col-span-5">
+            <p className="mb-3 text-sm font-semibold text-foreground">Next actions</p>
             <div className="flex flex-wrap gap-2">
               {visibleShortcuts.map((shortcut) => {
                 const Icon = shortcut.icon;
@@ -509,13 +497,14 @@ export default function DashboardPage() {
               title="Wellness summary"
               preview={`${habits.length} habits · ${supplements.length} supplements · ${sleepLogs.length} sleep logs`}
               defaultOpen={!isMobile}
-              className="col-span-2 sm:col-span-6 xl:col-span-7"
+              className="order-5 col-span-2 sm:col-span-6 xl:col-span-7"
             >
               <WellnessSummary habits={habits} supplements={supplements} sleepLogs={sleepLogs} />
             </CollapsibleSection>
           ) : null}
           </BentoGrid>
           <DailyCheckins compact />
+          <RecentAiActionRequests limit={3} compact />
           {weeklyReport ? (
             <Card variant="glass" className="border-primary/20">
               <CardHeader><CardTitle className="text-base">Weekly ChatGPT review</CardTitle></CardHeader>

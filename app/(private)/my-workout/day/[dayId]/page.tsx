@@ -7,6 +7,7 @@ import { WorkoutDayEditor } from "@/components/workouts/workout-day-editor";
 import { useToast } from "@/components/ui/toaster";
 import { getUserWorkoutPlanDay } from "@/services/database/workout-plans";
 import type { WorkoutPlanDaySession } from "@/types";
+import { userSafeError } from "@/lib/error-formatting";
 
 export default function WorkoutDayEditorPage() {
   const params = useParams<{ dayId: string }>();
@@ -21,7 +22,7 @@ export default function WorkoutDayEditorPage() {
         setLoadError(nextDay ? "" : "Workout day was not found. Save your plan again and try opening it from Workout Plans.");
       })
       .catch((error) => {
-        const message = error instanceof Error ? error.message : "Could not load this workout day.";
+        const message = userSafeError(error, "Could not load this workout day. Please refresh and try again.");
         setLoadError(message);
         toast({ title: "Could not load workout day", description: message });
       });

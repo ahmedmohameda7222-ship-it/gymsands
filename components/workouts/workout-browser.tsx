@@ -15,6 +15,7 @@ import { getCustomExercises, getFavoriteExerciseIds, saveCustomExercise, setFavo
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
+import { userSafeError } from "@/lib/error-formatting";
 import type { Workout } from "@/types";
 
 const pageSize = 500;
@@ -198,7 +199,7 @@ export function WorkoutBrowser() {
       .then(setFilterOptions)
       .catch((error) => {
         setFilterOptions(emptyOptions);
-        toast({ title: "Could not load workout filters", description: error instanceof Error ? error.message : "Please try again." });
+        toast({ title: "Could not load workout filters", description: userSafeError(error, "Please refresh and try again.") });
       });
   }, [toast]);
 
@@ -233,7 +234,7 @@ export function WorkoutBrowser() {
         .catch((error) => {
           if (!active) return;
           setWorkouts([]);
-          toast({ title: "Could not load workouts", description: error instanceof Error ? error.message : "Try another search or filter." });
+          toast({ title: "Could not load workouts", description: userSafeError(error, "Try another search or filter.") });
         })
         .finally(() => {
           if (active) setIsLoading(false);
@@ -262,7 +263,7 @@ export function WorkoutBrowser() {
       setPage(nextPage);
       setHasMore(items.length >= pageSize);
     } catch (error) {
-      toast({ title: "Could not load more workouts", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not load more workouts", description: userSafeError(error) });
     } finally {
       setIsLoading(false);
     }
@@ -308,7 +309,7 @@ export function WorkoutBrowser() {
       setShowCustomForm(false);
       toast({ title: "Custom exercise created", description: `${saved.name} is now available in your exercise library.` });
     } catch (error) {
-      toast({ title: "Could not create exercise", description: error instanceof Error ? error.message : "Please check the fields." });
+      toast({ title: "Could not create exercise", description: userSafeError(error, "Please check the fields and try again.") });
     }
   }
 

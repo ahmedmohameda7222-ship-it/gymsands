@@ -202,18 +202,13 @@ export function MyWorkoutPlans() {
 
   return (
     <div className="space-y-5">
-      <div className="glass-card flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Workout Plans</h2>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={loadPlans} disabled={isLoading}>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={loadPlans} disabled={isLoading}>
             <RefreshCcw className="h-4 w-4" /> Refresh
           </Button>
-          <Button variant="outline" onClick={() => router.push("/my-workout/plans/builder")}>
+          <Button variant="outline" size="sm" onClick={() => router.push("/my-workout/plans/builder")}>
             <Plus className="h-4 w-4" /> Create manually
           </Button>
-        </div>
       </div>
 
       {isLoading ? <CardGridSkeleton count={3} rows={4} /> : null}
@@ -259,7 +254,7 @@ export function MyWorkoutPlans() {
       ) : null}
 
       {!isLoading && !loadError && !plans.length ? (
-        <EmptyState title="No workout plans yet" description="Import a workout plan from ChatGPT to start scheduling and tracking real saved exercises. The app will not show fake workout data here." actionLabel="Set up ChatGPT import" actionHref="/settings" />
+        <EmptyState title="No workout plans yet" description="Create one manually or import a plan you already reviewed in ChatGPT." actionLabel="Set up ChatGPT import" actionHref="/settings/ai-imports" secondaryLabel="Create manually" secondaryHref="/my-workout/plans/builder" />
       ) : null}
 
       {!isLoading && !loadError ? (

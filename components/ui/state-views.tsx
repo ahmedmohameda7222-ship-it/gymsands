@@ -54,7 +54,6 @@ export function ErrorState({
   retryLabel = "Try again",
   fallbackLabel,
   fallbackHref,
-  details,
   className
 }: {
   title?: string;
@@ -74,12 +73,6 @@ export function ErrorState({
           <div>
             <p className="font-semibold text-foreground">{title}</p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
-            {details ? (
-              <details className="mt-3 rounded-md border bg-background p-3 text-xs text-muted-foreground">
-                <summary className="cursor-pointer font-semibold text-foreground">Technical details</summary>
-                <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap">{details}</pre>
-              </details>
-            ) : null}
           </div>
         </div>
         {(onRetry || fallbackLabel) ? (

@@ -43,7 +43,7 @@ export default function WorkoutDaySessionPage() {
 
   return (
     <>
-      <PageHeading title={day ? `Start ${day.day_name}` : "Start workout day"} description="Follow your planned exercises, log actual sets, reps, and weight, then save the workout history." />
+      {!day ? <PageHeading title="Start workout" description="Loading your planned exercises and saved progress." /> : null}
       {isLoading ? <CardSkeleton rows={7} /> : null}
       {!isLoading && loadError ? <ErrorState title="Workout day could not load" description={loadError} onRetry={loadDay} fallbackLabel="Back to workout plans" fallbackHref="/my-workout/plans" details={loadErrorDetails} /> : null}
       {!isLoading && !loadError && !day ? <EmptyState title="Workout day not found" description="This workout day was not found. Save your plan again, then start it from the workout calendar." actionLabel="Back to workout plans" actionHref="/my-workout/plans" /> : null}

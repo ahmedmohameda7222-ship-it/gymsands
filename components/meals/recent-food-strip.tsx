@@ -13,6 +13,7 @@ import {
   setFavoriteFoodAsync,
 } from "@/services/meals/food-logging-speed";
 import { useToast } from "@/components/ui/toaster";
+import { userSafeError } from "@/lib/error-formatting";
 import type { FoodLog, MealType } from "@/types";
 
 type RecentFoodStripProps = {
@@ -71,7 +72,7 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
       onFoodLogged?.(added);
       setRecentLogs((current) => [added, ...current]);
     } catch (error) {
-      toast({ title: "Could not log", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not log", description: userSafeError(error) });
     }
   }
 

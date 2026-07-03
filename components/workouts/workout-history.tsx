@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { CardSkeleton, EmptyState } from "@/components/ui/state-views";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { userSafeError } from "@/lib/error-formatting";
 import { getScheduledWorkoutHistory, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
 import { cn } from "@/lib/utils";
 import type { ExerciseLog, UserWorkoutSession, WorkoutSessionSummary } from "@/types";
@@ -164,7 +165,7 @@ export function WorkoutHistory() {
       .catch((error) => {
         if (!active) return;
         setHistory([]);
-        toast({ title: "Could not load workout history", description: error instanceof Error ? error.message : "Please try again." });
+        toast({ title: "Could not load workout history", description: userSafeError(error, "Please refresh and try again.") });
       })
       .finally(() => {
         if (active) setIsLoading(false);

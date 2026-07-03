@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
   Shield,
   ShieldAlert,
+  MessageCircle,
 } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -122,9 +123,15 @@ export default function SettingsPage() {
     },
     {
       icon: ShieldAlert,
-      title: "Coaching Context",
-      description: "Safety, budget, cooking time, and food preferences for ChatGPT requests.",
+      title: "Coaching context",
+      description: "Training safety, food preferences, budget, and cooking routine for requests you prepare.",
       href: "/settings/coaching-profile",
+    },
+    {
+      icon: MessageCircle,
+      title: "ChatGPT requests",
+      description: "Return to requests you prepared and update their status.",
+      href: "/settings/chatgpt-requests",
     },
     {
       icon: Shield,

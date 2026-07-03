@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import type { FoodLog } from "@/types";
 import { deleteFoodLog } from "@/services/database/nutrition";
 import { useToast } from "@/components/ui/toaster";
+import { userSafeError } from "@/lib/error-formatting";
 
 export function FoodLogList({
   logs = [],
@@ -29,7 +30,7 @@ export function FoodLogList({
     } catch (error) {
       toast({
         title: "Could not delete food",
-        description: error instanceof Error ? error.message : "Please try again.",
+        description: userSafeError(error),
       });
     }
   }

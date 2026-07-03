@@ -14,6 +14,8 @@ import { getWorkoutActivity } from "@/services/database/workout-sessions";
 import { WorkoutCalendar, type WeeklyPlanDay } from "@/components/workouts/workout-calendar";
 import type { UserWorkoutPlan, WorkoutSession } from "@/types";
 import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
+import { Disclosure } from "@/components/ui/disclosure";
+import { userSafeError } from "@/lib/error-formatting";
 
 function daysFromPlan(plan: UserWorkoutPlan): WeeklyPlanDay[] {
   return plan.days.map((day) => ({
@@ -51,7 +53,7 @@ export function WorkoutPlanDetail() {
         setPlan(nextPlan);
         setActivity(nextActivity);
       } catch (error) {
-        toast({ title: "Could not load plan", description: error instanceof Error ? error.message : "Please try again." });
+        toast({ title: "Could not load plan", description: userSafeError(error, "Please refresh and try again.") });
       } finally {
         if (active) setIsLoading(false);
       }
@@ -100,7 +102,7 @@ export function WorkoutPlanDetail() {
       toast({ title: "Workout day added", description: "Add exercises to finish the new day." });
       router.push(`/my-workout/day/${day.id}/add-exercise`);
     } catch (error) {
-      toast({ title: "Could not add day", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not add day", description: userSafeError(error) });
     } finally {
       setIsAddingDay(false);
     }
@@ -189,16 +191,19 @@ export function WorkoutPlanDetail() {
         </CardContent>
       </Card>
 
-      <WorkoutAiActionPanel
-        sourceType="workout_plan"
-        sourceId={plan.id}
-        context={{ workout_plan: plan, selected_day: activeDay, recent_workout_activity: activity }}
-        actions={[
-          { type: "rebalance_week", label: "Rebalance this week", description: "Ask ChatGPT to review this plan and recent adherence before recommending a weekly adjustment." },
-          { type: "adjust_next_workout", label: "Adjust next workout", description: "Ask ChatGPT to recommend a change to the next planned workout without applying it automatically." },
-          { type: "explain_progression", label: "Explain progression", description: "Ask ChatGPT to explain progression options for the selected workout day." }
-        ]}
-      />
+      <Disclosure title="ChatGPT help" description="Rebalance the week, adjust the next workout, or explain progression">
+        <WorkoutAiActionPanel
+          compact
+          sourceType="workout_plan"
+          sourceId={plan.id}
+          context={{ workout_plan: plan, selected_day: activeDay, recent_workout_activity: activity }}
+          actions={[
+            { type: "rebalance_week", label: "Rebalance week", description: "Ask ChatGPT to review this plan and recent adherence before recommending a weekly adjustment." },
+            { type: "adjust_next_workout", label: "Adjust next", description: "Ask ChatGPT to recommend a change to the next planned workout without applying it automatically." },
+            { type: "explain_progression", label: "Explain progression", description: "Ask ChatGPT to explain progression options for the selected workout day." }
+          ]}
+        />
+      </Disclosure>
     </div>
   );
 }

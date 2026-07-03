@@ -30,7 +30,7 @@ export function WelcomePopup() {
 
   useEffect(() => {
     async function load() {
-      if (!user?.id) return;
+      if (!user?.id || user.id === "mock-user") return;
       try {
         const settings = await getWelcomeSettings(user.id);
         const hasCustomMessage = Boolean(settings.is_custom_message);
@@ -51,7 +51,8 @@ export function WelcomePopup() {
           window.localStorage.setItem(key, "true");
         }
       } catch {
-        setOpen(true);
+        // A non-essential greeting must never block the dashboard when settings are unavailable.
+        setOpen(false);
       }
     }
     load();

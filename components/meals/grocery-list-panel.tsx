@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Printer, Share2, ShoppingCart, Trash2 } from "lucide-react";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Disclosure } from "@/components/ui/disclosure";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
+import { userSafeError } from "@/lib/error-formatting";
 import { deleteGroceryItem, getGroceryItems, upsertGroceryItem } from "@/services/database/execution-layer";
 import type { GroceryStoreSection, MealPlanItem, UserGroceryItem } from "@/types";
 
@@ -23,19 +25,23 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
   const [isLoading, setIsLoading] = useState(true);
   const [draft, setDraft] = useState({ itemName: "", quantity: "", unit: "", section: "Other" as GroceryStoreSection, notes: "" });
 
-  const load = useCallback(async () => {
-    if (!userId) return;
-    setIsLoading(true);
-    try {
-      setItems(await getGroceryItems(userId, weekStart));
-    } catch (error) {
-      toast({ title: "Could not load grocery list", description: error instanceof Error ? error.message : "Please try again." });
-    } finally {
-      setIsLoading(false);
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      if (!userId) return;
+      setIsLoading(true);
+      try {
+        const savedItems = await getGroceryItems(userId, weekStart);
+        if (active) setItems(savedItems);
+      } catch (error) {
+        if (active) toast({ title: "Could not load grocery list", description: userSafeError(error, "Please refresh and try again.") });
+      } finally {
+        if (active) setIsLoading(false);
+      }
     }
-  }, [toast, userId, weekStart]);
-
-  useEffect(() => { void load(); }, [load, refreshKey]);
+    void load();
+    return () => { active = false; };
+  }, [refreshKey, toast, userId, weekStart]);
   useEffect(() => { onStats(items.length, items.filter((item) => item.checked).length); }, [items, onStats]);
 
   const grouped = useMemo(() => sections.map((section) => ({ section, items: items.filter((item) => item.store_section === section) })).filter((group) => group.items.length), [items]);
@@ -55,7 +61,7 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
       setItems((current) => [...current, saved]);
       setDraft({ itemName: "", quantity: "", unit: "", section: "Other", notes: "" });
     } catch (error) {
-      toast({ title: "Could not add grocery item", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not add grocery item", description: userSafeError(error) });
     }
   }
 
@@ -75,9 +81,9 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
         created_by: "meal_plan"
       })));
       setItems((current) => [...current, ...saved]);
-      toast({ title: "Meal-plan items added", description: `${saved.length} item${saved.length === 1 ? "" : "s"} added. Split them into ingredients or ask ChatGPT to rebuild the list.` });
+      toast({ title: "Rough list imported", description: `${saved.length} meal name${saved.length === 1 ? "" : "s"} added. Use ChatGPT when you want an ingredient-level list.` });
     } catch (error) {
-      toast({ title: "Could not import meal-plan items", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not import meal-plan items", description: userSafeError(error) });
     }
   }
 
@@ -87,7 +93,7 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
       const saved = await upsertGroceryItem(user.id, { ...item, ...patch });
       setItems((current) => current.map((currentItem) => currentItem.id === saved.id ? saved : currentItem));
     } catch (error) {
-      toast({ title: "Could not update grocery item", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not update grocery item", description: userSafeError(error) });
     }
   }
 
@@ -135,32 +141,49 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0 sm:p-5 sm:pt-0">
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-7">
-          <div className="space-y-2 xl:col-span-2"><Label>Item</Label><Input value={draft.itemName} onChange={(event) => setDraft((current) => ({ ...current, itemName: event.target.value }))} placeholder="Chicken breast" /></div>
-          <div className="space-y-2"><Label>Quantity</Label><Input type="number" value={draft.quantity} onChange={(event) => setDraft((current) => ({ ...current, quantity: event.target.value }))} /></div>
-          <div className="space-y-2"><Label>Unit</Label><Input value={draft.unit} onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value }))} placeholder="kg" /></div>
-          <div className="space-y-2"><Label>Section</Label><select value={draft.section} onChange={(event) => setDraft((current) => ({ ...current, section: event.target.value as GroceryStoreSection }))} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm">{sections.map((section) => <option key={section}>{section}</option>)}</select></div>
-          <div className="space-y-2"><Label>Notes</Label><Input value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional" /></div>
-          <Button className="self-end" onClick={addItem} disabled={!draft.itemName.trim()}><Plus className="h-4 w-4" /> Add item</Button>
+        <div className="space-y-2">
+          <Label>Quick add</Label>
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <Input value={draft.itemName} onChange={(event) => setDraft((current) => ({ ...current, itemName: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") void addItem(); }} placeholder="Item name" />
+            <Button onClick={addItem} disabled={!draft.itemName.trim()}><Plus className="h-4 w-4" /> Add</Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={importMeals} disabled={!mealItems.length}>Add meal-plan items</Button>
-          <Button variant="outline" size="sm" onClick={printList} disabled={!items.length}><Printer className="h-4 w-4" /> Print</Button>
-          <Button variant="outline" size="sm" onClick={shareList} disabled={!items.length}><Share2 className="h-4 w-4" /> Share</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!items.length}><Download className="h-4 w-4" /> Export CSV</Button>
-        </div>
+        <Disclosure title="Advanced details" description="Quantity, unit, store section, and notes">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-2"><Label>Quantity</Label><Input type="number" value={draft.quantity} onChange={(event) => setDraft((current) => ({ ...current, quantity: event.target.value }))} /></div>
+            <div className="space-y-2"><Label>Unit</Label><Input value={draft.unit} onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value }))} placeholder="kg" /></div>
+            <div className="space-y-2"><Label>Section</Label><select value={draft.section} onChange={(event) => setDraft((current) => ({ ...current, section: event.target.value as GroceryStoreSection }))} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm">{sections.map((section) => <option key={section}>{section}</option>)}</select></div>
+            <div className="space-y-2"><Label>Notes</Label><Input value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional" /></div>
+          </div>
+        </Disclosure>
         <AiActionRequestDialog
-          actions={[
-            { type: "make_meal_cheaper", label: "Cheaper alternatives", description: "Ask ChatGPT to suggest cheaper substitutions for this grocery list." },
-            { type: "build_grocery_list", label: "Rebuild grocery list", description: "Ask ChatGPT to return an ingredient-level grocery list grouped by store section." }
-          ]}
+          actions={[{ type: "build_grocery_list", label: "Build ingredient list with ChatGPT", description: "Ask ChatGPT to turn planned meals into an ingredient-level list grouped by store section." }]}
           sourceType="grocery_week"
           sourceId={weekStart}
           context={{ week_start: weekStart, week_end: weekEnd, grocery_items: items, meal_plan_items: mealItems }}
-          title="Grocery request"
+          title="Ask ChatGPT for help"
+          buttonVariant="default"
+          className="grid"
         />
+        <div className="rounded-[14px] border border-border/70 bg-muted/20 p-3">
+          <Button variant="outline" size="sm" className="w-full" onClick={importMeals} disabled={!mealItems.length}>Import meals as rough list</Button>
+          <p className="mt-2 text-center text-xs leading-5 text-muted-foreground">This imports meal names as a rough list. For ingredient-level groceries, use ChatGPT to build the list.</p>
+        </div>
+        <div className="flex flex-wrap gap-2 border-t border-border/60 pt-3">
+          <Button variant="outline" size="sm" onClick={printList} disabled={!items.length}><Printer className="h-4 w-4" /> Print</Button>
+          <Button variant="outline" size="sm" onClick={shareList} disabled={!items.length}><Share2 className="h-4 w-4" /> Share</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!items.length}><Download className="h-4 w-4" /> Download list</Button>
+          <AiActionRequestDialog
+            actions={[{ type: "make_meal_cheaper", label: "Find cheaper options", description: "Ask ChatGPT for lower-cost substitutions for this grocery list." }]}
+            sourceType="grocery_week"
+            sourceId={weekStart}
+            context={{ week_start: weekStart, week_end: weekEnd, grocery_items: items, meal_plan_items: mealItems }}
+            title="Ask ChatGPT for help"
+            buttonVariant="ghost"
+          />
+        </div>
         {isLoading ? <p className="text-sm text-muted-foreground">Loading grocery list...</p> : null}
-        {!isLoading && !items.length ? <p className="text-sm text-muted-foreground">No grocery items yet. Add one manually, import meal-plan items, or ask ChatGPT to build an ingredient-level list.</p> : null}
+        {!isLoading && !items.length ? <p className="text-sm text-muted-foreground">Your list is empty. Add an item, import meal names as a rough start, or ask ChatGPT to build an ingredient-level list.</p> : null}
         {grouped.map((group) => (
           <div key={group.section}>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.section}</p>

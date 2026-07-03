@@ -17,6 +17,7 @@ import { getExerciseVideos, getUserExerciseVideo, getWorkout, getWorkouts, reset
 import { getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
 import { getCustomExercise, getCustomExercises, getFavoriteExerciseIds, setFavoriteExercise } from "@/services/workouts/exercise-library-store";
 import { findExerciseVideo } from "@/services/workouts/video-matching";
+import { userSafeError } from "@/lib/error-formatting";
 import type { ExerciseLog, ExerciseVideo, Workout, WorkoutSessionSummary } from "@/types";
 
 function normalizeExerciseName(value: string) {
@@ -121,7 +122,7 @@ export default function WorkoutDetailsPage() {
         setFavoriteIds(favoriteIds);
         setLoadError("");
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Could not load workout details.";
+        const message = userSafeError(error, "Could not load workout details. Please refresh and try again.");
         setLoadError(message);
         toast({ title: "Could not load workout", description: message });
       }
@@ -154,7 +155,7 @@ export default function WorkoutDetailsPage() {
       setCustomVideoDraft(saved.custom_video_url);
       toast({ title: "Custom video saved", description: "This exercise now has your manually added custom video." });
     } catch (error) {
-      toast({ title: "Could not save video link", description: error instanceof Error ? error.message : "Please check the URL." });
+      toast({ title: "Could not save video link", description: userSafeError(error, "Please check the link and try again.") });
     } finally {
       setIsSavingVideo(false);
     }
@@ -169,7 +170,7 @@ export default function WorkoutDetailsPage() {
       setCustomVideoDraft("");
       toast({ title: "Custom video cleared", description: "The exercise guide remains separate from your custom video link." });
     } catch (error) {
-      toast({ title: "Could not reset video link", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not reset video link", description: userSafeError(error) });
     } finally {
       setIsSavingVideo(false);
     }

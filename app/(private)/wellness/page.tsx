@@ -10,16 +10,15 @@ import {
   ListChecks,
   Moon,
   Repeat,
-  ShieldCheck,
-  Zap
+  ShieldCheck
 } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { useAuth } from "@/components/auth/auth-provider";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/toaster";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
+import { userSafeError } from "@/lib/error-formatting";
 import { getCalorieTargets, getWaterLogs } from "@/services/database/nutrition";
 import {
   getDailyFitTasks,
@@ -78,7 +77,6 @@ export default function WellnessPage() {
   const [tasks, setTasks] = useState<DailyFitTask[]>([]);
   const [sleepExists, setSleepExists] = useState(false);
   const [sleepHours, setSleepHours] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [showDetails, setShowDetails] = useState(false);
 
   const waterProgress = useMemo(() => {
@@ -98,7 +96,6 @@ export default function WellnessPage() {
   useEffect(() => {
     async function load() {
       if (!user?.id) return;
-      setIsLoading(true);
       try {
         const [waterLogs, targets, todayHabits, todaySupplements, todayTasks, sleepHistory] = await Promise.all([
           getWaterLogs(user.id, today),
@@ -117,9 +114,9 @@ export default function WellnessPage() {
         setSleepExists(!!latestSleep);
         setSleepHours(typeof latestSleep?.hours_slept === "number" ? latestSleep.hours_slept : null);
       } catch (error) {
-        toast({ title: "Could not load wellness summary", description: error instanceof Error ? error.message : "Please try again." });
+        toast({ title: "Could not load wellness summary", description: userSafeError(error, "Please refresh and try again.") });
       } finally {
-        setIsLoading(false);
+        // Individual launchers keep their last known state if a refresh fails.
       }
     }
     load();
@@ -217,38 +214,6 @@ export default function WellnessPage() {
             accent={tasksAccent}
           />
         </div>
-
-        {/* Quick actions */}
-        <Card variant="glass">
-          <CardContent className="p-4 sm:p-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-primary" />
-                <p className="text-sm font-semibold">Quick actions</p>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {isLoading ? "Loading..." : `${habitsDone + supplementsTaken + tasksDone + (waterTotal > 0 ? 1 : 0) + (sleepExists ? 1 : 0)} wellness items tracked today`}
-              </p>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button asChild variant="outline" size="sm">
-                <Link href="/hydration">Log water</Link>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <Link href="/habits">Check habits</Link>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <Link href="/sleep-recovery">Log sleep</Link>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <Link href="/supplements">Take supplements</Link>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <Link href="/daily-fit-tasks">View tasks</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Collapsible: detailed wellness checklist */}
         <Card variant="glass">

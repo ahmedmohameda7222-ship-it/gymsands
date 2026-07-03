@@ -23,7 +23,7 @@ export default function PrivacyPage() {
         </LegalSection>
 
         <LegalSection title="2. Was Plaivra anbietet">
-          <p>Plaivra ist eine digitale Anwendung zur Verwaltung von Training, Ernährung, Mahlzeiten, Kalorien, Hydration, Fortschritt, Körperdaten, Fotos, Gewohnheiten, Schlaf und Erholung, Supplementen sowie persönlichen Rekorden. Nutzer können ChatGPT optional über eine OAuth-/MCP-Verbindung anbinden, um freigegebene Plaivra-Funktionen zu verwenden.</p>
+          <p>Plaivra ist eine digitale Anwendung zur Verwaltung von Training, Ernährung, Mahlzeiten, Kalorien, Hydration, Fortschritt, Körperdaten, Fotos, Gewohnheiten, Schlaf und Erholung, Supplementen sowie persönlichen Rekorden. Nutzer können ChatGPT optional über eine freigegebene Verbindung anbinden, um erlaubte Plaivra-Funktionen zu verwenden.</p>
         </LegalSection>
 
         <LegalSection title="3. Verarbeitete Datenkategorien">
@@ -33,7 +33,7 @@ export default function PrivacyPage() {
             <li>Ernährungsdaten wie Lebensmittel, Mahlzeiten, Kalorien, Makronährstoffe und Mahlzeitenpläne;</li>
             <li>Hydrationsdaten, Fortschritt, Körpergewicht, Körpermaße, persönliche Rekorde und hochgeladene Fortschrittsfotos;</li>
             <li>Wellnessdaten wie Gewohnheiten, Aufgaben, Schlaf, Erholung und Supplemente;</li>
-            <li>AI-Berechtigungen und ChatGPT-/OAuth-/MCP-Verbindungsmetadaten, einschließlich Scopes, Status, Ablauf- und Widerrufsinformationen;</li>
+            <li>AI-Berechtigungen und ChatGPT-Verbindungseinstellungen, einschließlich erlaubter Bereiche, Status, Ablauf- und Widerrufsinformationen;</li>
             <li>redigierte Aktivitäts- und Audit-Einträge zu erlaubten, verweigerten oder fehlgeschlagenen ChatGPT-Aktionen;</li>
             <li>technische Sicherheitsdaten wie Sitzungs-, Zugriffs-, Rate-Limit- und Fehlerereignisse;</li>
             <li>Kommunikationsdaten, wenn der Betreiber kontaktiert wird.</li>
@@ -55,8 +55,8 @@ export default function PrivacyPage() {
           </ul>
         </LegalSection>
 
-        <LegalSection title="6. ChatGPT, MCP und OAuth">
-          <p>Die ChatGPT-Verbindung ist optional und standardmäßig deaktiviert. Sie wird nur nach einer bewussten Verknüpfung, Anmeldung und Zustimmung des Nutzers aktiviert. Plaivra verwendet einen OAuth-Autorisierungscodefluss mit PKCE. Der Zugriff ist auf gespeicherte AI-Berechtigungen und angeforderte Scopes begrenzt und schlägt bei fehlenden Berechtigungen geschlossen fehl.</p>
+        <LegalSection title="6. ChatGPT-Verbindung und Berechtigungen">
+          <p>Die ChatGPT-Verbindung ist optional und standardmäßig deaktiviert. Sie wird nur nach einer bewussten Verknüpfung, Anmeldung und Zustimmung des Nutzers aktiviert. Der Zugriff ist auf gespeicherte AI-Berechtigungen und die vom Nutzer erlaubten Bereiche begrenzt; ohne passende Berechtigung wird eine Aktion abgelehnt.</p>
           <p>Wiederverwendbare Verbindungs- und Zugriffstoken sowie Autorisierungscodes werden in der Datenbank nicht im Klartext gespeichert, sondern als Hash bzw. notwendige Metadaten. Verbindungen können widerrufen werden. Schreibende oder destruktive Aktionen können eine zusätzliche Bestätigung erfordern. Aktivitätsprotokolle enthalten redigierte Zusammenfassungen, aber keine rohen Prompts, Token, Autorisierungscodes, privaten Notizen oder Körpermesswerte.</p>
           <p>OpenAI bzw. ChatGPT verarbeitet Informationen innerhalb des jeweiligen ChatGPT-Produkts nach den dort geltenden Bedingungen und Datenschutzhinweisen. Die konkrete datenschutzrechtliche Rolle von OpenAI hängt vom verwendeten Produkt- und Vertragskontext ab. Plaivra behauptet keine Freigabe oder Empfehlung durch OpenAI.</p>
         </LegalSection>

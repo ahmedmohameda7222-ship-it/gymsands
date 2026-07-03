@@ -16,7 +16,7 @@ export default function TermsPage() {
           <p>Diese Nutzungsbedingungen gelten für die Website, Web-Anwendung, Nutzerkonten, Tracking-Funktionen und optionalen ChatGPT-Verbindungen von Plaivra.</p>
         </LegalSection>
         <LegalSection title="2. Leistungsbeschreibung">
-          <p>Plaivra unterstützt die persönliche Verwaltung von Training, Ernährung, Mahlzeiten, Kalorien, Hydration, Fortschritt, Körperdaten, Fotos, Gewohnheiten, Schlaf, Erholung, Supplementen und persönlichen Rekorden. Optional können Nutzer Inhalte und Aktionen von ChatGPT über eine freigegebene OAuth-/MCP-Verbindung verwalten.</p>
+          <p>Plaivra unterstützt die persönliche Verwaltung von Training, Ernährung, Mahlzeiten, Kalorien, Hydration, Fortschritt, Körperdaten, Fotos, Gewohnheiten, Schlaf, Erholung, Supplementen und persönlichen Rekorden. Optional können Nutzer Inhalte und Aktionen von ChatGPT über eine freigegebene Verbindung verwalten.</p>
           <p>Plaivra garantiert keinen Muskelaufbau, Gewichtsverlust, Gesundheitsfortschritt oder sonstigen persönlichen Erfolg. Die Richtigkeit, Vollständigkeit und Eignung AI-generierter Inhalte wird nicht garantiert.</p>
         </LegalSection>
         <LegalSection title="3. Registrierung, Alter und Kontosicherheit">

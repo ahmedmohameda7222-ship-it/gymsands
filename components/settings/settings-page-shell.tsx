@@ -9,19 +9,21 @@ import { useTranslation } from "@/lib/i18n/use-translation";
 export type SettingsPageShellProps = {
   title: string;
   description?: string;
+  backHref?: string;
+  backLabel?: string;
   children: React.ReactNode;
 };
 
-export function SettingsPageShell({ title, description, children }: SettingsPageShellProps) {
+export function SettingsPageShell({ title, description, backHref = "/settings", backLabel, children }: SettingsPageShellProps) {
   const { t } = useTranslation();
 
   return (
     <>
       <div className="mb-4 flex items-center gap-2">
         <Button asChild variant="outline" size="sm">
-          <Link href="/settings">
+          <Link href={backHref}>
             <ArrowLeft className="h-4 w-4" />
-            {t("common.back")}
+            {backLabel ?? t("common.back")}
           </Link>
         </Button>
       </div>

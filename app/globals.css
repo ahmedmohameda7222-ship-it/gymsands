@@ -168,21 +168,13 @@ html {
 
 body {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--primary-soft) 92%, transparent), transparent 28rem),
-    radial-gradient(circle at 84% 7%, color-mix(in srgb, var(--color-secondary) 30%, transparent), transparent 25rem),
-    radial-gradient(circle at 55% 48%, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 30rem),
-    linear-gradient(135deg, var(--app-bg) 0%, color-mix(in srgb, var(--app-bg) 78%, var(--color-secondary)) 45%, var(--app-bg) 100%);
+  background: var(--app-bg);
   color: hsl(var(--foreground));
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
 .dark body {
-  background:
-    radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--primary-soft) 72%, transparent), transparent 28rem),
-    radial-gradient(circle at 84% 7%, color-mix(in srgb, var(--color-secondary) 16%, transparent), transparent 25rem),
-    radial-gradient(circle at 55% 48%, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 30rem),
-    linear-gradient(135deg, var(--app-bg) 0%, color-mix(in srgb, var(--app-bg) 84%, var(--color-primary)) 45%, var(--app-bg) 100%);
+  background: var(--app-bg);
 }
 
 .large-text {
@@ -252,41 +244,33 @@ textarea,
 }
 
 .premium-page-bg {
-  background:
-    radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--primary-soft) 92%, transparent), transparent 28rem),
-    radial-gradient(circle at 84% 7%, color-mix(in srgb, var(--color-secondary) 30%, transparent), transparent 25rem),
-    radial-gradient(circle at 55% 48%, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 30rem),
-    linear-gradient(135deg, var(--app-bg) 0%, color-mix(in srgb, var(--app-bg) 78%, var(--color-secondary)) 45%, var(--app-bg) 100%);
+  background: var(--app-bg);
 }
 
 .glass-shell {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 58%, transparent), color-mix(in srgb, var(--surface-elevated) 32%, transparent));
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
-  box-shadow: 0 14px 50px rgba(26, 26, 26, 0.07);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 8px 28px rgba(26, 26, 26, 0.05);
 }
 
 .glass-card {
-  background: linear-gradient(145deg, color-mix(in srgb, var(--surface) 58%, transparent), color-mix(in srgb, var(--surface-elevated) 30%, transparent));
-  border: 1px solid var(--glass-border);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow);
-  border-radius: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--solid-tracking-border);
+  box-shadow: var(--shadow-soft);
+  border-radius: 1.125rem;
 }
 
 .glass-card-strong {
-  background: linear-gradient(145deg, color-mix(in srgb, var(--surface) 74%, transparent), color-mix(in srgb, var(--surface-elevated) 46%, transparent));
-  border: 1px solid var(--glass-border-strong);
-  backdrop-filter: blur(24px) saturate(155%);
-  -webkit-backdrop-filter: blur(24px) saturate(155%);
-  box-shadow: 0 18px 52px rgba(26, 26, 26, 0.10);
-  border-radius: 1.5rem;
+  background: var(--surface-elevated);
+  border: 1px solid var(--solid-tracking-border);
+  box-shadow: var(--shadow-soft);
+  border-radius: 1.125rem;
 }
 
 .solid-tracking-card {
-  background: linear-gradient(180deg, var(--solid-tracking-bg-strong), var(--solid-tracking-elevated));
+  background: var(--solid-tracking-bg-strong);
   border: 1px solid var(--solid-tracking-border);
   box-shadow: var(--solid-tracking-shadow);
   border-radius: 1.25rem;

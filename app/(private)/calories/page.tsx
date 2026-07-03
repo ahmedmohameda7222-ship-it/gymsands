@@ -25,6 +25,7 @@ import {
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { CardGridSkeleton } from "@/components/ui/state-views";
+import { userSafeError } from "@/lib/error-formatting";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -107,7 +108,7 @@ export default function CaloriesPage() {
         });
       })
     ]).catch((error) => {
-      setLoadError(error instanceof Error ? error.message : "Could not load calorie tracker.");
+      setLoadError(userSafeError(error, "Could not load the calorie tracker. Please refresh and try again."));
     }).finally(() => {
       setIsLoading(false);
     });
@@ -116,7 +117,7 @@ export default function CaloriesPage() {
 
   useEffect(() => {
     loadWeek().catch((error) =>
-      toast({ title: "Could not load weekly tracker", description: error instanceof Error ? error.message : "Please try again." })
+      toast({ title: "Could not load weekly tracker", description: userSafeError(error, "Please refresh and try again.") })
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekStart, user?.id]);
@@ -142,7 +143,7 @@ export default function CaloriesPage() {
       await loadWeek();
       toast({ title: "Yesterday copied", description: `${copied.length} food items added to ${formatDay(selectedDate)}.` });
     } catch (error) {
-      toast({ title: "Could not copy yesterday", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not copy yesterday", description: userSafeError(error) });
     }
   }
 
@@ -186,7 +187,7 @@ export default function CaloriesPage() {
       await loadWeek();
       toast({ title: "Targets saved", description: `${normalized.daily_calories} kcal target is active.` });
     } catch (error) {
-      toast({ title: "Could not save targets", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not save targets", description: userSafeError(error) });
     } finally {
       setIsSavingTargets(false);
     }
@@ -199,7 +200,7 @@ export default function CaloriesPage() {
       setWaterLogs((current) => [log, ...current]);
       await loadWeek();
     } catch (error) {
-      toast({ title: "Could not add water", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not add water", description: userSafeError(error) });
     }
   }
 
@@ -210,7 +211,7 @@ export default function CaloriesPage() {
       setWaterLogs((current) => current.filter((item) => item.id !== log.id));
       await loadWeek();
     } catch (error) {
-      toast({ title: "Could not delete water log", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not delete water log", description: userSafeError(error) });
     }
   }
 
@@ -415,17 +416,18 @@ export default function CaloriesPage() {
         </TabsContent>
 
         <TabsContent value="targets" className="space-y-4">
+          <NutritionTargetProfiles onActiveTargetChange={setActiveTargetProfile} baseTarget={targets} />
           <Card id="daily-targets" className="scroll-mt-24">
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
               <div>
-                <CardTitle>Daily target</CardTitle>
+                <CardTitle>Base target</CardTitle>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {hasTargets ? "Targets are saved for calorie, macro, and water reporting." : "No targets saved yet. Set targets to unlock remaining macros and weekly adherence."}
+                  {hasTargets ? "This is your fallback when a day-type target is not saved." : "Set a base target to unlock remaining macros and weekly adherence."}
                 </p>
               </div>
               <Button variant={showTargetEditor || !hasTargets ? "default" : "outline"} onClick={() => setShowTargetEditor((current) => !current)}>
                 <Settings2 className="h-4 w-4" />
-                {showTargetEditor || !hasTargets ? "Hide setup" : "Edit targets"}
+                {showTargetEditor || !hasTargets ? "Hide setup" : "Edit base target"}
               </Button>
             </CardHeader>
             <CardContent>
@@ -466,7 +468,6 @@ export default function CaloriesPage() {
               )}
             </CardContent>
           </Card>
-          <NutritionTargetProfiles onActiveTargetChange={setActiveTargetProfile} />
         </TabsContent>
 
         <TabsContent value="tools" className="space-y-4">

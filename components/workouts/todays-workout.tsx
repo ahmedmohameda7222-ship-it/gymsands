@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { userSafeError } from "@/lib/error-formatting";
 import Link from "next/link";
 import { getTodayMealPlanItems, markMealPlanItemDone } from "@/services/database/nutrition";
 import { getCurrentWeekday, getDefaultUserWorkoutPlan, workoutsFromPlanDay } from "@/services/database/workout-plans";
@@ -47,7 +48,7 @@ export function TodaysWorkout() {
         setMealItems(meals);
       })
       .catch((error) => {
-        toast({ title: "Could not load today's workout", description: error instanceof Error ? error.message : "Please try again." });
+        toast({ title: "Could not load today's workout", description: userSafeError(error, "Please refresh and try again.") });
       })
       .finally(() => {
         if (active) setIsLoading(false);
@@ -66,7 +67,7 @@ export function TodaysWorkout() {
       setMealItems((current) => current.map((meal) => (meal.id === updated.id ? updated : meal)));
       toast({ title: "Meal marked done", description: `${updated.food_name} was added to today's calories.` });
     } catch (error) {
-      toast({ title: "Could not mark meal done", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not mark meal done", description: userSafeError(error) });
     } finally {
       setSavingMealId(null);
     }

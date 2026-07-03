@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { userSafeError } from "@/lib/error-formatting";
 import { clearStoredValue, readStoredJson, storeJson, workoutStorageKey } from "@/lib/workout-persistence";
 import Link from "next/link";
 import {
@@ -112,7 +113,7 @@ export function WorkoutDayEditor({ day }: { day: WorkoutPlanDaySession }) {
       toast({ title: "Workout day saved", description: `${draft.dayName} now has ${draft.exercises.length} exercises.` });
       router.push("/my-workout/plans");
     } catch (error) {
-      toast({ title: "Could not save workout day", description: error instanceof Error ? error.message : "Please try again." });
+      toast({ title: "Could not save workout day", description: userSafeError(error) });
     } finally {
       setIsSaving(false);
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Edit3, MoreHorizontal, PlusCircle, Save, ShoppingCart, Trash2, Utensils, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Edit3, PlusCircle, Save, ShoppingCart, Trash2, Utensils, X } from "lucide-react";
 import { Component, useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +41,7 @@ import { MealAiActions } from "@/components/meals/meal-ai-actions";
 import { validateMealItem, validateMealPlanDay } from "@/services/meals/meal-validation";
 import { getGroceryItems, upsertGroceryItem } from "@/services/database/execution-layer";
 import { getCalorieTargets } from "@/services/database/nutrition";
+import { userSafeError } from "@/lib/error-formatting";
 
 type MacroTotals = { calories: number; protein_g: number; carbs_g: number; fat_g: number };
 type Notice = { type: "success" | "error" | "info"; title: string; description?: string };
@@ -66,8 +67,8 @@ class MealPlanBoundary extends Component<{ children: ReactNode }, { message: str
     this.state = { message: null };
   }
 
-  static getDerivedStateFromError(error: unknown) {
-    return { message: error instanceof Error ? error.message : "My Meal Plan could not load." };
+  static getDerivedStateFromError() {
+    return { message: "Please refresh and try again." };
   }
 
   render() {
@@ -77,7 +78,7 @@ class MealPlanBoundary extends Component<{ children: ReactNode }, { message: str
           <CardContent className="space-y-3 pt-5 text-sm text-foreground">
             <div className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> My Meal Plan could not load</div>
             <p>The page stayed open, but one meal-plan widget could not load. Please try again.</p>
-            <p className="break-words text-xs text-muted-foreground">{this.state.message}</p>
+            <p className="text-xs text-muted-foreground">{this.state.message}</p>
             <Button variant="outline" size="sm" onClick={() => this.setState({ message: null })}>Try again</Button>
           </CardContent>
         </Card>
@@ -151,7 +152,7 @@ function MyMealPlanBuilderInner() {
         if (!active) return;
         setItems([]);
         setWeekItems([]);
-        setNotice({ type: "error", title: "Saved meal plan could not load", description: error instanceof Error ? error.message : "Please try again." });
+        setNotice({ type: "error", title: "Saved meal plan could not load", description: userSafeError(error, "Please refresh and try again.") });
       } finally {
         if (active) setIsLoading(false);
       }
@@ -174,7 +175,9 @@ function MyMealPlanBuilderInner() {
 
   const shoppingShortcutCount = shoppingStats.count;
   const shoppingCheckedCount = shoppingStats.checked;
-  const updateShoppingStats = useCallback((count: number, checked: number) => setShoppingStats({ count, checked }), []);
+  const updateShoppingStats = useCallback((count: number, checked: number) => {
+    setShoppingStats((current) => current.count === count && current.checked === checked ? current : { count, checked });
+  }, []);
 
   function changeDate(nextDate: string) {
     setSelectedDate(nextDate);
@@ -197,7 +200,7 @@ function MyMealPlanBuilderInner() {
       setAddMealDialogOpen(false);
       setNotice({ type: "success", title: "Planned food added", description: `${item.food_name} was added to ${displayDate(selectedDate)}.` });
     } catch (error) {
-      setNotice({ type: "error", title: "Could not add planned food", description: error instanceof Error ? error.message : "Please try again." });
+      setNotice({ type: "error", title: "Could not add planned food", description: userSafeError(error) });
     } finally {
       setIsUpdatingId(null);
     }
@@ -217,7 +220,7 @@ function MyMealPlanBuilderInner() {
       upsertLocalItems([normalized]);
       setNotice({ type: "success", title: result.already_done ? "Meal already done" : "Meal marked done", description: result.already_done ? "No duplicate calorie log was created." : `${item.food_name} was added to logged calories.` });
     } catch (error) {
-      setNotice({ type: "error", title: "Could not mark meal done", description: error instanceof Error ? error.message : "Please try again." });
+      setNotice({ type: "error", title: "Could not mark meal done", description: userSafeError(error) });
     } finally {
       setIsUpdatingId(null);
     }
@@ -231,7 +234,7 @@ function MyMealPlanBuilderInner() {
       setWeekItems((current) => current.filter((currentItem) => currentItem.id !== item.id));
       setNotice({ title: "Meal removed", type: "success", description: item.status === "done" ? "Linked food log was kept to avoid hiding eaten calories." : "Planned meal was removed." });
     } catch (error) {
-      setNotice({ title: "Could not remove meal", type: "error", description: error instanceof Error ? error.message : "Please try again." });
+      setNotice({ title: "Could not remove meal", type: "error", description: userSafeError(error) });
     } finally {
       setIsUpdatingId(null);
     }
@@ -251,7 +254,7 @@ function MyMealPlanBuilderInner() {
       setEditingId(null);
       setNotice({ title: "Meal updated", type: "success", description: `${updated.food_name} is now in ${displayMealType(updated.meal_type)}.` });
     } catch (error) {
-      setNotice({ title: "Could not update meal", type: "error", description: error instanceof Error ? error.message : "Please try again." });
+      setNotice({ title: "Could not update meal", type: "error", description: userSafeError(error) });
     } finally {
       setIsUpdatingId(null);
     }
@@ -278,7 +281,7 @@ function MyMealPlanBuilderInner() {
       setGroceryRefreshKey((current) => current + 1);
       setNotice({ type: "success", title: "Added to grocery list", description: `${item.food_name} is in the ${selectedWeekStart} list.` });
     } catch (error) {
-      setNotice({ type: "error", title: "Could not add grocery item", description: error instanceof Error ? error.message : "Please try again." });
+      setNotice({ type: "error", title: "Could not add grocery item", description: userSafeError(error) });
     }
   }
 
@@ -581,23 +584,17 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
                   <MealForm title="Edit planned food" draft={editDraft} setDraft={setEditDraft} onSave={() => onSaveEdit(item)} onCancel={onCancelEdit} saving={updatingId === item.id} />
                 </div>
               ) : (
-                <div className="mt-2 flex items-center gap-2 sm:mt-3">
-                  <Button type="button" size="sm" className="flex-1" onClick={() => onDone(item)} disabled={item.status === "done" || updatingId === item.id}>
+                <div className="mt-3 grid grid-cols-[1fr_1fr_1fr_auto] gap-1.5">
+                  <Button type="button" size="sm" onClick={() => onDone(item)} disabled={item.status === "done" || updatingId === item.id}>
                     <CheckCircle2 className="h-4 w-4" />
-                    {item.status === "done" ? "Done" : "Mark done"}
+                    Done
                   </Button>
-                  <details className="relative">
-                    <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-[14px] border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary sm:h-10 sm:w-10" aria-label={`More actions for ${item.food_name}`}>
-                      <MoreHorizontal className="h-4 w-4" />
-                    </summary>
-                    <div className="solid-tracking-card absolute right-0 z-20 mt-1 grid w-48 gap-0.5 p-2">
-                      <Button type="button" size="sm" variant="ghost" className="justify-start" onClick={() => onStartEdit(item)} disabled={updatingId === item.id}><Edit3 className="h-4 w-4" /> Edit</Button>
-                      <Button type="button" size="sm" variant="ghost" className="justify-start text-destructive hover:text-destructive" onClick={() => onDelete(item)} disabled={updatingId === item.id}><Trash2 className="h-4 w-4" /> Delete</Button>
-                    </div>
-                  </details>
+                  <Button type="button" size="sm" variant="outline" onClick={() => onStartEdit(item)} disabled={updatingId === item.id}><Edit3 className="h-4 w-4" /> Edit</Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => onAddToGrocery(item)} disabled={updatingId === item.id}><ShoppingCart className="h-4 w-4" /> <span className="hidden sm:inline">Grocery</span><span className="sm:hidden">Add</span></Button>
+                  <Button type="button" size="icon" variant="ghost" className="h-10 min-h-10 w-10 text-destructive hover:text-destructive" onClick={() => onDelete(item)} disabled={updatingId === item.id} aria-label={`Delete ${item.food_name}`}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               )}
-              {!isEditing ? <MealAiActions item={item} onAddToGrocery={onAddToGrocery} /> : null}
+              {!isEditing ? <MealAiActions item={item} /> : null}
             </div>
           );
         })}

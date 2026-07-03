@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { userSafeError } from "@/lib/error-formatting";
 import { readStoredJson, storeJson, workoutStorageKey } from "@/lib/workout-persistence";
 import Link from "next/link";
 import { getWorkoutFilterOptions, getWorkouts, type WorkoutFilterOptions, type WorkoutFilters } from "@/services/database/workout-library";
@@ -124,7 +125,7 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
       .then(setFilterOptions)
       .catch((error) => {
         setFilterOptions(emptyOptions);
-        toast({ title: "Could not load exercise filters", description: error instanceof Error ? error.message : "Please try again." });
+        toast({ title: "Could not load exercise filters", description: userSafeError(error, "Please refresh and try again.") });
       });
   }, [toast]);
 
@@ -154,7 +155,7 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
         .catch((error) => {
           if (!active) return;
           setResults([]);
-          toast({ title: "Could not load exercises", description: error instanceof Error ? error.message : "Please try another filter." });
+          toast({ title: "Could not load exercises", description: userSafeError(error, "Please try another filter.") });
         })
         .finally(() => {
           if (active) setIsLoadingResults(false);
