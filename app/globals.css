@@ -237,3 +237,195 @@ html[lang="ar"] [data-legal-language]:not([lang="ar"]) {
     scroll-behavior: auto !important;
   }
 }
+
+.reduce-motion,
+.reduce-motion * {
+  scroll-behavior: auto !important;
+}
+
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.blue-surface {
+  background: linear-gradient(135deg, var(--surface), var(--surface-elevated));
+}
+
+.luxury-surface {
+  background: linear-gradient(180deg, var(--surface), var(--surface-elevated));
+}
+
+.premium-surface {
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-elevated) 100%);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 10px 30px rgba(26, 26, 26, 0.06);
+}
+
+.premium-page-bg {
+  background: var(--app-bg);
+}
+
+.glass-shell {
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 8px 28px rgba(26, 26, 26, 0.05);
+}
+
+.glass-card {
+  background: var(--surface);
+  border: 1px solid var(--solid-tracking-border);
+  box-shadow: var(--shadow-soft);
+  border-radius: 1.125rem;
+}
+
+.glass-card-strong {
+  background: var(--surface-elevated);
+  border: 1px solid var(--solid-tracking-border);
+  box-shadow: var(--shadow-soft);
+  border-radius: 1.125rem;
+}
+
+.solid-tracking-card {
+  background: var(--solid-tracking-bg-strong);
+  border: 1px solid var(--solid-tracking-border);
+  box-shadow: var(--solid-tracking-shadow);
+  border-radius: 1.25rem;
+}
+
+.solid-row {
+  background: var(--solid-tracking-bg);
+  border: 1px solid var(--solid-tracking-border);
+  border-radius: 1rem;
+}
+
+.glass-chip {
+  background: color-mix(in srgb, var(--surface) 42%, transparent);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: 999px;
+}
+
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+
+@media (min-width: 640px) {
+  .bento-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .bento-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 1rem;
+  }
+}
+
+@supports not ((backdrop-filter: blur(10px)) or (-webkit-backdrop-filter: blur(10px))) {
+  .glass-shell,
+  .glass-card,
+  .glass-card-strong,
+  .glass-chip {
+    background: var(--solid-tracking-bg);
+  }
+}
+
+.reduce-transparency .glass-shell,
+.reduce-transparency .glass-card,
+.reduce-transparency .glass-card-strong,
+.reduce-transparency .glass-chip {
+  background: var(--solid-tracking-bg-strong);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.premium-field {
+  border: 1px solid var(--color-border);
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 1rem);
+}
+
+.hero-slide {
+  animation: heroCrossfade 18s ease-in-out infinite;
+  opacity: 0;
+  transform: scale(1.04);
+}
+
+@keyframes heroCrossfade {
+  0% {
+    opacity: 0;
+    transform: scale(1.04) translateY(0);
+  }
+  8%,
+  30% {
+    opacity: 1;
+  }
+  45%,
+  100% {
+    opacity: 0;
+    transform: scale(1.12) translateY(-1.5%);
+  }
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.mobile-card-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@supports (height: 100dvh) {
+  .min-h-screen {
+    min-height: 100dvh;
+  }
+}
+
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  button,
+  [role="button"] {
+    min-height: 44px;
+  }
+
+  label {
+    line-height: 1.35;
+  }
+}
