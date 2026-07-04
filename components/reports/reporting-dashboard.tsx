@@ -1,7 +1,7 @@
 "use client";
 
 import { useTodayDate } from "@/lib/hooks/use-today-date";
-import { CalendarDays, ChevronLeft, ChevronRight, Download, Trophy } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Trophy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,10 +18,8 @@ import {
   buildMonthRange,
   buildWeekRange,
   datesInRange,
-  downloadCsv,
   formatDelta,
   reportMetrics,
-  reportToCsv,
   startOfWeek,
   type AggregatedReport,
   type ReportMetric,
@@ -85,11 +83,6 @@ export function ReportingDashboard() {
     }
   }
 
-  function exportCsv() {
-    if (!report) return;
-    downloadCsv(`plaivra-${mode}-report-${report.range.start}-to-${report.range.end}.csv`, reportToCsv(report));
-  }
-
   return (
     <div className="space-y-5">
       <Card variant="glass">
@@ -115,9 +108,6 @@ export function ReportingDashboard() {
 
       {report ? (
         <>
-          <div className="solid-tracking-card flex flex-wrap justify-end gap-2 p-3">
-            <Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4" /> Export CSV</Button>
-          </div>
           <MetricGrid metrics={metrics} />
           <ReportDetails report={report} mode={mode} />
         </>
