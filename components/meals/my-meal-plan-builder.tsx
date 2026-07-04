@@ -371,19 +371,18 @@ function MyMealPlanBuilderInner() {
         </DialogContent>
       </Dialog>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3 sm:space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
-            <TabsTrigger value="day">Day</TabsTrigger>
-            <TabsTrigger value="week">Week</TabsTrigger>
-            <TabsTrigger value="shopping">Shopping</TabsTrigger>
-          </TabsList>
-          <Button asChild variant="outline" size="sm" className="shrink-0">
-            <Link href={`/my-meal-plan/food-preferences${selectedDate ? `?date=${encodeURIComponent(selectedDate)}` : ""}`}>
-              Food preferences
-            </Link>
-          </Button>
-        </div>
+<Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3 sm:space-y-4">
+  <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
+    <TabsTrigger value="day">Day</TabsTrigger>
+    <TabsTrigger value="week">Week</TabsTrigger>
+    <TabsTrigger value="shopping">Shopping</TabsTrigger>
+    <Link
+      href={`/my-meal-plan/food-preferences${selectedDate ? `?date=${encodeURIComponent(selectedDate)}` : ""}`}
+      className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl px-3 py-1.5 text-sm font-semibold text-foreground transition-colors hover:bg-white/60 dark:hover:bg-white/10"
+    >
+      Food preferences
+    </Link>
+  </TabsList>
 
         <TabsContent value="day" className="space-y-3 sm:space-y-4">
           <motion.div
