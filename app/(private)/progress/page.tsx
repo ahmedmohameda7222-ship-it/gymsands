@@ -417,7 +417,6 @@ export default function ProgressPage() {
                 {measurementTrends.map((trend) => <TrendCard key={trend.label} trend={trend} />)}
               </CardContent>
             </Card>
-          </div>
         </TabsContent>
 
         {!settings.hideProgressPhotos ? (
