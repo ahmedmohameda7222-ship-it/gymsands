@@ -229,43 +229,6 @@ html[lang="ar"] [data-legal-language]:not([lang="ar"]) {
   display: none;
 }
 
-#main-content div:has(> [role="tablist"] + a[href^="/my-meal-plan/food-preferences"]) {
-  display: inline-flex;
-  max-width: 100%;
-  align-items: center;
-  gap: 0;
-  overflow-x: auto;
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--radius-lg);
-  background: hsl(var(--card));
-  padding: 0.25rem;
-  box-shadow: var(--shadow-soft);
-}
-
-#main-content div:has(> [role="tablist"] + a[href^="/my-meal-plan/food-preferences"]) > [role="tablist"] {
-  width: auto !important;
-  flex: 0 0 auto;
-  border: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  padding: 0;
-}
-
-#main-content div:has(> [role="tablist"] + a[href^="/my-meal-plan/food-preferences"]) > a[href^="/my-meal-plan/food-preferences"] {
-  height: 2.5rem;
-  flex: 0 0 auto;
-  border: 0 !important;
-  border-radius: var(--radius-sm);
-  background: transparent !important;
-  box-shadow: none !important;
-  color: hsl(var(--foreground));
-  font-weight: 600;
-}
-
-#main-content div:has(> [role="tablist"] + a[href^="/my-meal-plan/food-preferences"]) > a[href^="/my-meal-plan/food-preferences"]:hover {
-  background: hsl(var(--muted)) !important;
-}
-
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.001ms !important;
