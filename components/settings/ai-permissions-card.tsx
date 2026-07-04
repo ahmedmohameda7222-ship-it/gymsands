@@ -195,20 +195,35 @@ export function AiPermissionsCard() {
             </button>
           </div>
 
-          <div className="grid gap-3 rounded-[16px] border border-border/70 bg-muted/20 p-4 sm:grid-cols-2">
-            <div className="flex gap-3"><Eye className="mt-0.5 h-5 w-5 shrink-0 text-primary" /><div><p className="font-semibold text-foreground">View only</p><p className="mt-1 text-sm leading-6 text-muted-foreground">ChatGPT can read this area and suggest changes in chat, but cannot save changes.</p></div></div>
-            <div className="flex gap-3"><KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-primary" /><div><p className="font-semibold text-foreground">Change</p><p className="mt-1 text-sm leading-6 text-muted-foreground">ChatGPT can save changes you explicitly approve. Change automatically includes View for that area only.</p></div></div>
-          </div>
+{/* Custom section toggles */}
+{config.accessMode === "custom" ? (
+  <div className="space-y-3">
+    <div className="grid gap-3 rounded-[16px] border border-border/70 bg-muted/20 p-4 sm:grid-cols-2">
+      <div className="flex gap-3">
+        <Eye className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+        <div>
+          <p className="font-semibold text-foreground">View only</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            ChatGPT can read this area and suggest changes in chat, but cannot save changes.
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-3">
+        <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+        <div>
+          <p className="font-semibold text-foreground">Change</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            ChatGPT can save changes you explicitly approve. Change automatically includes View for that area only.
+          </p>
+        </div>
+      </div>
+    </div>
 
-          <div className="grid gap-3 sm:grid-cols-3" aria-label="Selected permission summary">
-            <PermissionSummary title="Can view" values={summary.view} icon={<Eye className="h-4 w-4" />} />
-            <PermissionSummary title="Can change" values={summary.change} icon={<KeyRound className="h-4 w-4" />} />
-            <PermissionSummary title="Not allowed" values={summary.denied} icon={<Ban className="h-4 w-4" />} />
-          </div>
-
-          {/* Custom section toggles */}
-          {config.accessMode === "custom" ? (
-            <div className="space-y-3">
+    <div className="grid gap-3 sm:grid-cols-3" aria-label="Selected permission summary">
+      <PermissionSummary title="Can view" values={summary.view} icon={<Eye className="h-4 w-4" />} />
+      <PermissionSummary title="Can change" values={summary.change} icon={<KeyRound className="h-4 w-4" />} />
+      <PermissionSummary title="Not allowed" values={summary.denied} icon={<Ban className="h-4 w-4" />} />
+    </div>
               <p className="text-sm font-semibold text-foreground">Choose what ChatGPT can do</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {ALL_AI_PERMISSION_SECTIONS.map((section) => {
