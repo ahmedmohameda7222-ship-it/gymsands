@@ -139,7 +139,7 @@ export function SafetyProfileCard() {
   );
 }
 
-export function NutritionPreferenceCard({ compact = false }: { compact?: boolean }) {
+export function NutritionPreferenceCard({ compact = false, onSaved, saveLabel = "Save food preferences" }: { compact?: boolean; onSaved?: () => void; saveLabel?: string }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [form, setForm] = useState<NutritionPreferenceInput>(emptyNutrition);
@@ -177,6 +177,7 @@ export function NutritionPreferenceCard({ compact = false }: { compact?: boolean
       setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       toast({ title: "Food preferences saved", description: "They can be included in ChatGPT meal requests you prepare." });
       if (compact) setIsOpen(false);
+      onSaved?.();
     } catch (error) {
       toast({ title: "Could not save food preferences", description: userSafeError(error) });
     } finally { setIsSaving(false); }
@@ -212,7 +213,7 @@ export function NutritionPreferenceCard({ compact = false }: { compact?: boolean
               </ProfileSection>
               <div className="sticky bottom-20 z-10 flex flex-col gap-2 rounded-[14px] border bg-card/95 p-3 shadow-lg sm:bottom-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className={`text-sm font-medium ${isDirty ? "text-warning" : "text-primary"}`}>{isDirty ? "You have unsaved food preference changes." : savedAt ? `Food preferences saved at ${savedAt}.` : "Food preferences are up to date."}</p>
-                <Button onClick={save} disabled={isSaving || !isDirty}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : "Save food preferences"}</Button>
+                <Button onClick={save} disabled={isSaving || !isDirty}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : saveLabel}</Button>
               </div>
             </>
           )}
