@@ -16,8 +16,7 @@ import { InlineFeedback } from "@/components/motion";
 import {
   createAiActionRequest,
   getNutritionPreferenceProfile,
-  getSafetyProfile,
-  updateAiActionRequestStatus
+  getSafetyProfile
 } from "@/services/database/execution-layer";
 import type { AiActionRequest, AiActionType } from "@/types";
 import type { AiPermissionSection } from "@/types";
@@ -214,17 +213,24 @@ export function AiActionRequestDialog({
     }
   }
 
-  async function changeStatus(status: AiActionRequest["status"]) {
-    if (!request || !user?.id) return;
-    setIsSaving(true);
-    try {
-      const updated = await updateAiActionRequestStatus(user.id, request.id, status);
-      setRequest(updated);
-      toast({
-        title: status === "sent_to_chatgpt" ? "Marked as waiting" : status === "resolved" ? "Request done" : status === "ready_for_chatgpt" ? "Request reopened" : "Request cancelled",
-        description: status === "cancelled" ? "No workout or meal data was changed." : "Your saved request is up to date."
-      });
-    } catch (error) {
+function changeStatus(status: AiActionRequest["status"]) {
+  if (!request) return;
+
+  const now = new Date().toISOString();
+
+  setRequest({
+    ...request,
+    status,
+    updated_at: now,
+    resolved_at: status === "resolved" ? now : request.resolved_at
+  });
+
+  toast({
+    title: status === "sent_to_chatgpt" ? "Marked as waiting" : status === "resolved" ? "Request done" : status === "ready_for_chatgpt" ? "Request reopened" : "Request cancelled",
+    description: status === "cancelled" ? "No workout or meal data was changed." : "Request updated locally."
+  });
+}
+    catch (error) {
       toast({ title: "Could not update request", description: userSafeError(error) });
     } finally {
       setIsSaving(false);
