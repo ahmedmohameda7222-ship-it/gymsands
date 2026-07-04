@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError } from "@/lib/error-formatting";
 import { cn } from "@/lib/utils";
+import { InlineFeedback } from "@/components/motion";
 import {
   createAiActionRequest,
   getNutritionPreferenceProfile,
@@ -335,11 +336,11 @@ export function AiActionRequestDialog({
                 <p className="mt-3 whitespace-pre-line text-sm leading-6 text-foreground">{prompt}</p>
               </div>
               {safetyDecision.message ? <SafetyMessage decision={safetyDecision} /> : null}
-              {copyState !== "idle" ? (
-                <div className={cn("rounded-[14px] border p-3 text-sm", copyState === "copied" ? "border-primary/30 bg-primary/5 text-foreground" : "border-destructive/30 bg-destructive/5 text-destructive")} role="status">
-                  {copyState === "copied" ? "Copied. Your request is on the clipboard and ready to paste into ChatGPT." : "Copy failed. Try again or select the request text manually."}
-                </div>
-              ) : null}
+              <InlineFeedback
+                message={copyState === "copied" ? "Copied. Your request is on the clipboard and ready to paste into ChatGPT." : copyState === "error" ? "Copy failed. Try again or select the request text manually." : ""}
+                variant={copyState === "error" ? "error" : "info"}
+                onClose={() => setCopyState("idle")}
+              />
               <div className="grid gap-2 sm:grid-cols-2">
                 {copyState === "copied" ? (
                   <Button type="button" onClick={refreshAppData}><RefreshCw className="h-4 w-4" /> Refresh</Button>

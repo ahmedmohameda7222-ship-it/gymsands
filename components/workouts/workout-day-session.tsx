@@ -25,6 +25,7 @@ import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
 import { createExerciseAlternative, getDailyCheckins, getExerciseAlternatives, getProgressionTargets } from "@/services/database/execution-layer";
 import { calculateReadiness, getSleepRecoveryHistory, type EnhancedSleepRecoveryLog } from "@/services/wellness/wellness-data";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
+import { InlineFeedback } from "@/components/motion";
 
 const defaultInstructions = "Use controlled form, keep the target muscle engaged, avoid rushing the eccentric part, and stop if the movement feels painful.";
 
@@ -796,6 +797,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
             {exerciseStates.map((item, index) => {
               const done = item.sets.filter((set) => set.completedAt).length;
               const active = index === activeExerciseIndex;
+              const allDone = done === item.sets.length;
               const group = supersetLabel(item.exercise);
               const previous = previousPerformance(history, item.exercise.exercise_name);
               return (
@@ -817,13 +819,13 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
                     setActiveSetIndex(firstOpen >= 0 ? firstOpen : item.sets.length - 1);
                     setTimerSeconds(item.exercise.rest_seconds ?? 75);
                   }}
-                  className={`rounded-md border p-3 text-left transition-colors ${active ? "border-primary bg-primary/10" : "bg-card hover:border-primary/45"}`}
+                  className={`rounded-md border p-3 text-left transition-colors ${active ? "border-primary bg-primary/10" : allDone ? "border-success/30 bg-success/5" : "bg-card hover:border-primary/45"}`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="truncate text-sm font-semibold">{index + 1}. {item.exercise.exercise_name}</p>
+                    <p className="truncate text-sm font-semibold">{index + 1}. {item.exercise.exercise_name}{allDone ? <span className="ml-1 text-success">✓</span> : null}</p>
                     {group ? <Badge>{group}</Badge> : null}
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">{done}/{item.sets.length} sets</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{done}/{item.sets.length} sets{allDone ? " · complete" : ""}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{previous ? `Last: ${previous.lastWeightKg ?? 0} kg x ${previous.lastReps ?? 0}` : "No previous data"}</p>
                 </div>
               );
@@ -951,7 +953,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
             </div>
 
             <div className="lg:sticky lg:bottom-3 z-20 rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
-              {setFeedback ? <p className="mb-3 rounded-[12px] border border-primary/25 bg-primary/5 p-3 text-sm font-medium text-foreground" role="status">{setFeedback}</p> : null}
+              <InlineFeedback message={setFeedback} onClose={() => setSetFeedback("")} />
               <div className="grid gap-2 sm:grid-cols-2">
                 <Button className="min-h-12" onClick={finishCurrentSet} disabled={!activeSet || Boolean(activeSet.completedAt)}><CheckCircle2 className="h-4 w-4" /> Finish current set</Button>
                 <Button className="min-h-12" variant="outline" onClick={restartCurrentSet} disabled={!activeSet?.completedAt}><RotateCcw className="h-4 w-4" /> Reopen set</Button>

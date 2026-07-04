@@ -16,6 +16,7 @@ import {
 import { AI_PERMISSION_SECTION_DETAILS, FULL_ACCESS_WARNING } from "@/lib/mcp/permission-presentation";
 import { userSafeError } from "@/lib/error-formatting";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { InlineFeedback } from "@/components/motion";
 
 const permissionExamples: Record<string, string> = {
   workouts: "Example: Review today’s workout or save an approved set change.",
@@ -275,12 +276,10 @@ export function AiPermissionsCard() {
             </p>
           ) : null}
 
-          {hasSavedSettings ? (
-            <div className="rounded-[14px] border border-primary/30 bg-primary/5 p-3 text-sm" role="status">
-              <p className="font-semibold text-foreground">Permissions saved{savedAt ? ` at ${savedAt}` : ""}</p>
-              <p className="mt-1 text-muted-foreground">These selections stay visible after refresh. Reconnect ChatGPT after changing permissions so the connection uses the latest choices.</p>
-            </div>
-          ) : null}
+          <InlineFeedback
+            message={hasSavedSettings ? `Permissions saved${savedAt ? ` at ${savedAt}` : ""}. These selections stay visible after refresh. Reconnect ChatGPT after changing permissions so the connection uses the latest choices.` : ""}
+            onClose={() => {}}
+          />
 
           {/* Save button */}
           <div className="flex justify-end">

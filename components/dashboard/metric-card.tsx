@@ -1,7 +1,14 @@
 import { LucideIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { AnimatedNumber } from "@/components/motion";
 import { cn } from "@/lib/utils";
+
+function parseNumericValue(value: string): { number: number; suffix: string } {
+  const match = value.match(/^([\d,]+)(.*)$/);
+  if (!match) return { number: 0, suffix: value };
+  return { number: parseInt(match[1].replace(/,/g, ""), 10) || 0, suffix: match[2] };
+}
 
 export function MetricCard({
   icon: Icon,
@@ -9,7 +16,8 @@ export function MetricCard({
   value,
   detail,
   progress,
-  className
+  className,
+  animate = true
 }: {
   icon: LucideIcon;
   label: string;
@@ -17,14 +25,24 @@ export function MetricCard({
   detail: string;
   progress?: number;
   className?: string;
+  animate?: boolean;
 }) {
+  const { number, suffix } = parseNumericValue(value);
+  const shouldAnimate = animate && number > 0;
+
   return (
     <Card variant="glass" className={cn("overflow-hidden", className)}>
       <CardContent className="p-3.5 pt-3.5 sm:p-5 sm:pt-5">
         <div className="flex items-start justify-between gap-2 sm:gap-3">
           <div className="min-w-0">
             <p className="text-[13px] font-bold leading-5 text-muted-foreground">{label}</p>
-            <p className="mt-1 text-[28px] font-extrabold leading-none tracking-[-0.055em] text-foreground sm:mt-2 sm:text-[34px]">{value}</p>
+            <p className="mt-1 text-[28px] font-extrabold leading-none tracking-[-0.055em] text-foreground sm:mt-2 sm:text-[34px]">
+              {shouldAnimate ? (
+                <AnimatedNumber value={number} suffix={suffix} />
+              ) : (
+                value
+              )}
+            </p>
             <p className="mt-1 text-xs font-medium text-muted-foreground sm:text-[13px]">{detail}</p>
           </div>
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/45 text-primary backdrop-blur-md dark:bg-white/10 sm:h-[42px] sm:w-[42px]">

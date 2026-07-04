@@ -12,6 +12,7 @@ import { Disclosure } from "@/components/ui/disclosure";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
+import { InlineFeedback } from "@/components/motion";
 import { userSafeError } from "@/lib/error-formatting";
 import { deleteGroceryItem, getGroceryItems, upsertGroceryItem } from "@/services/database/execution-layer";
 import type { GroceryStoreSection, MealPlanItem, UserGroceryItem } from "@/types";
@@ -300,7 +301,7 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0 sm:p-5 sm:pt-0">
-        {feedback ? <div className="flex items-start gap-2 rounded-[14px] border border-primary/25 bg-primary/5 p-3 text-sm" role="status"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><p>{feedback}</p></div> : null}
+        <InlineFeedback message={feedback} onClose={() => setFeedback("")} />
 
         {showQuickAdd ? <>
         <div className="space-y-2 rounded-[14px] border border-border/70 bg-muted/20 p-3">

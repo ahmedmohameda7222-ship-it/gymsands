@@ -11,6 +11,7 @@ import { ErrorState } from "@/components/ui/state-views";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError } from "@/lib/error-formatting";
+import { InlineFeedback } from "@/components/motion";
 import { getAiActionRequests, updateAiActionRequestStatus } from "@/services/database/execution-layer";
 import type { AiActionRequest, AiActionRequestStatus } from "@/types";
 
@@ -180,7 +181,7 @@ export function RecentAiActionRequests({ limit, compact = false }: { limit?: num
                   {request.status !== "resolved" && request.status !== "cancelled" ? <Button type="button" size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => void changeStatus(request, "cancelled")} disabled={busyId === request.id}><X className="h-4 w-4" /> Cancel</Button> : null}
                 </div>
               ) : null}
-              {copiedId === request.id ? <p className="mt-3 rounded-[12px] border border-primary/25 bg-primary/5 p-3 text-sm" role="status">Copied to your clipboard. Nothing was sent automatically.</p> : null}
+              <InlineFeedback message={copiedId === request.id ? "Copied to your clipboard. Nothing was sent automatically." : ""} onClose={() => setCopiedId(null)} />
             </article>
           );
         })}

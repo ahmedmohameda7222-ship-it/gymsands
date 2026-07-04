@@ -8,6 +8,7 @@ import type { FoodLog } from "@/types";
 import { deleteFoodLog } from "@/services/database/nutrition";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError } from "@/lib/error-formatting";
+import { InlineFeedback } from "@/components/motion";
 
 export function FoodLogList({
   logs = [],
@@ -109,7 +110,7 @@ export function FoodLogList({
               {onScanAction ? <Button variant="outline" onClick={onScanAction}><Barcode className="h-4 w-4" /> Scan barcode</Button> : null}
               {onCopyPrevious ? <Button variant="outline" onClick={onCopyPrevious}><Copy className="h-4 w-4" /> Copy previous day</Button> : null}
             </div>
-            {copyStatus ? <p className="w-full rounded-[12px] border border-primary/25 bg-primary/5 p-3 text-sm text-foreground" role="status">{copyStatus}</p> : null}
+            <InlineFeedback message={copyStatus} onClose={() => {}} />
           </div>
         )}
       </CardContent>

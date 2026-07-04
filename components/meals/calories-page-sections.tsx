@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { formatIsoDate } from "@/lib/date-utils";
+import { AnimatedNumber } from "@/components/motion";
 import { percent, sumFoodLogs } from "@/services/nutrition/calculations";
 import type { SavedTargets } from "@/services/nutrition/targets";
 import type { DailyNutritionSummary, WaterLog } from "@/types";
@@ -35,7 +36,7 @@ export function TrackerCard({ label, value, target, unit, hasTarget }: { label: 
     <Card variant="glass">
       <CardContent className="pt-5">
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
-        <p className="mt-2 text-[28px] font-extrabold leading-none tracking-[-0.055em]">{value}{unit}</p>
+        <p className="mt-2 text-[28px] font-extrabold leading-none tracking-[-0.055em]"><AnimatedNumber value={value} suffix={unit} /></p>
         <p className="mt-1 text-xs font-medium text-muted-foreground">{hasTarget ? `Target ${target}${unit}` : "No target set"}</p>
         <Progress value={hasTarget ? progressValue : 0} className="mt-4" indicatorStyle={isCalories ? { background: calorieProgressColor(progressValue) } : undefined} />
       </CardContent>

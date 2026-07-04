@@ -52,6 +52,7 @@ import { DailyCheckins } from "@/components/wellness/daily-checkins";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { RecentAiActionRequests } from "@/components/ai/recent-ai-action-requests";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
+import { StaggerContainer, StaggerItem, InlineFeedback } from "@/components/motion";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -93,6 +94,8 @@ export default function DashboardPage() {
   const isMobile = useIsMobile();
   const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
   const [activeMealType, setActiveMealType] = useState<string | null>(null);
+  const [waterFeedback, setWaterFeedback] = useState<string | null>(null);
+  const [mealFeedback, setMealFeedback] = useState<string | null>(null);
 
   async function loadDashboard() {
     if (!user?.id) {
@@ -272,6 +275,8 @@ export default function DashboardPage() {
       if (!result.already_done) {
         const allComplete = mealPlanItems.every((meal) => meal.id === item.id || meal.status === "done" || skippedIds.has(meal.id));
         celebrate(allComplete ? "All meals complete" : "Meal logged");
+        setMealFeedback(allComplete ? "All meals complete" : `${item.food_name} added to log`);
+        window.setTimeout(() => setMealFeedback(null), 1500);
       }
     } catch (error) {
       logRecoverableError("dashboard.meal-done", error);
@@ -284,6 +289,8 @@ export default function DashboardPage() {
     try {
       const log = await addWaterLog(user.id, today, amountMl);
       setWaterLogs((current) => [log, ...current]);
+      setWaterFeedback(`+${amountMl} ml logged`);
+      window.setTimeout(() => setWaterFeedback(null), 1500);
     } catch (error) {
       logRecoverableError("dashboard.water", error);
       toast({ title: "Could not add water", description: userSafeError(error, "Water was not logged. Retry without adding duplicate entries.") });
@@ -368,14 +375,15 @@ export default function DashboardPage() {
             </Card>
           ) : null}
 
-          <BentoGrid>
+          <StaggerContainer className="contents">
+            <BentoGrid>
             {!settings.hideCaloriesOnDashboard ? (
-              <MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Flame} label="Calories" value={`${totals.calories} kcal`} detail={hasTargets ? `${remaining.calories} kcal left` : "No target"} progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined} />
+              <StaggerItem><MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Flame} label="Calories" value={`${totals.calories} kcal`} detail={hasTargets ? `${remaining.calories} kcal left` : "No target"} progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined} /></StaggerItem>
             ) : null}
-            <MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={hasTargets ? `${remaining.protein_g}g left` : "Set target"} progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined} />
-            <MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Droplets} label="Water" value={waterTotalMl ? `${waterTotalMl} ml / ${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${targets.water_ml} ml / ${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
+            <StaggerItem><MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={hasTargets ? `${remaining.protein_g}g left` : "Set target"} progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined} /></StaggerItem>
+            <StaggerItem><MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Droplets} label="Water" value={waterTotalMl ? `${waterTotalMl} ml / ${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${targets.water_ml} ml / ${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} /></StaggerItem>
             {!settings.hideBodyWeightOnDashboard ? (
-              <MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} />
+              <StaggerItem><MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} /></StaggerItem>
             ) : null}
           {activePlan ? (
             todayPlanDay ? (
@@ -471,6 +479,8 @@ export default function DashboardPage() {
                   })}
                 </div>
 
+                <InlineFeedback message={mealFeedback ?? ""} />
+
                 {currentMealType ? (
                   <div className="mt-4 space-y-3">
                     {mealGroups
@@ -564,6 +574,7 @@ export default function DashboardPage() {
             </CollapsibleSection>
           ) : null}
           </BentoGrid>
+          </StaggerContainer>
           <DailyCheckins compact />
           <RecentAiActionRequests limit={3} compact />
           {weeklyReport ? (

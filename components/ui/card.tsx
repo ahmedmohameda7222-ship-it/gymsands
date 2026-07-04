@@ -4,9 +4,9 @@ import { cn } from "@/lib/utils";
 type CardVariant = "solid" | "glass" | "glassStrong";
 
 const cardVariants: Record<CardVariant, string> = {
-  solid: "solid-tracking-card",
-  glass: "glass-card",
-  glassStrong: "glass-card-strong"
+  solid: "solid-tracking-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card",
+  glass: "glass-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card",
+  glassStrong: "glass-card-strong transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card"
 };
 
 export function Card({

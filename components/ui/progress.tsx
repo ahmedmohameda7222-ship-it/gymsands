@@ -1,15 +1,24 @@
+"use client";
+
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
+import { AnimatedProgress } from "@/components/motion";
 
 export function Progress({
   value,
   className,
-  indicatorStyle
+  indicatorStyle,
+  animated = true
 }: {
   value: number;
   className?: string;
   indicatorStyle?: CSSProperties;
+  animated?: boolean;
 }) {
+  if (animated) {
+    return <AnimatedProgress value={value} className={className} indicatorClassName={indicatorStyle ? "" : ""} />;
+  }
+
   const safeValue = Math.min(100, Math.max(0, value));
   return (
     <div className={cn("h-2.5 w-full overflow-hidden rounded-full bg-muted", className)}>
