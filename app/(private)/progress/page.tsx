@@ -28,8 +28,6 @@ import { useUserSettings } from "@/lib/settings/user-settings-context";
 
 const GOAL_WEIGHT_STORAGE_KEY = "plaivra_goal_weight_kg";
 const LEGACY_GOAL_WEIGHT_STORAGE_KEY = "fitlife_goal_weight_kg";
-const BODY_FAT_SETTINGS_KEY = "plaivra_body_fat_estimate_settings";
-const LEGACY_BODY_FAT_SETTINGS_KEY = "fitlife_body_fat_estimate_settings";
 const photoTypes: ProgressPhotoType[] = ["front", "side", "back"];
 
 const editableMeasurementFields: Array<[keyof BodyMeasurement, string]> = [
@@ -69,8 +67,6 @@ export default function ProgressPage() {
   const [goalWeight, setGoalWeight] = useState("");
   const [editingEntry, setEditingEntry] = useState<ProgressEntry | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
-  const [estimateSettings, setEstimateSettings] = useState({ heightCm: "", sex: "male" as "male" | "female" });
-
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const { dialog, ask } = useConfirm();
@@ -110,16 +106,7 @@ export default function ProgressPage() {
     } else if (storedGoal) {
       setGoalWeight(storedGoal);
     }
-    // TODO(migration): Move body fat settings to Supabase
-    const storedEstimate = window.localStorage.getItem(BODY_FAT_SETTINGS_KEY) ?? window.localStorage.getItem(LEGACY_BODY_FAT_SETTINGS_KEY);
-    if (storedEstimate) {
-      try {
-        const parsed = JSON.parse(storedEstimate) as { heightCm?: string; sex?: "male" | "female" };
-        setEstimateSettings({ heightCm: parsed.heightCm ?? "", sex: parsed.sex === "female" ? "female" : "male" });
-      } catch {
-        // Ignore invalid browser-local settings.
-      }
-    }
+
   }, [profile?.target_weight_kg]);
 
   useEffect(() => {
@@ -149,7 +136,6 @@ export default function ProgressPage() {
   const targetDateEstimate = estimateTargetDate(weightEntries, numericGoalWeight);
   const weeklyInsights = buildWeeklyInsights({ nutritionWeek, workoutActivity, entries: sortedEntries, today });
   const consistencyScore = weeklyInsights.consistencyScore ?? calculateConsistencyScore({ entries: sortedEntries, completedCount, skippedCount });
-  const bodyFatEstimate = buildBodyFatEstimate({ latestMeasurement, latestWaist, heightCm: Number(estimateSettings.heightCm), sex: estimateSettings.sex });
   const measurementTrends = buildMeasurementTrends(sortedEntries);
   const progressFeedback = buildProgressFeedback({
     entries: sortedEntries,
@@ -180,11 +166,7 @@ export default function ProgressPage() {
     }
   }
 
-  function saveEstimateSettings() {
-    window.localStorage.setItem(BODY_FAT_SETTINGS_KEY, JSON.stringify(estimateSettings));
-    window.localStorage.removeItem(LEGACY_BODY_FAT_SETTINGS_KEY);
-    toast({ title: "Estimate settings saved", description: "Used only for the clearly labeled body-fat estimate." });
-  }
+
 
   function startEdit(entry: ProgressEntry) {
     const measurement = entry.measurements;
@@ -429,20 +411,6 @@ export default function ProgressPage() {
         </TabsContent>
 
         <TabsContent value="measurements" className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-            <Card variant="glassStrong">
-              <CardHeader><CardTitle>Body-fat estimate</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">Body-fat estimate is calculated from saved measurements and should be treated as a rough fitness estimate, not medical data.</p>
-                <div className="grid gap-3 sm:grid-cols-[1fr_160px_auto]">
-                  <div className="space-y-2"><Label>Height cm for estimate</Label><Input type="number" value={estimateSettings.heightCm} onChange={(event) => setEstimateSettings((current) => ({ ...current, heightCm: event.target.value }))} placeholder="Example: 175" /></div>
-                  <div className="space-y-2"><Label>Sex for formula</Label><select value={estimateSettings.sex} onChange={(event) => setEstimateSettings((current) => ({ ...current, sex: event.target.value as "male" | "female" }))} className="h-10 w-full rounded-[14px] border bg-card px-3 text-sm"><option value="male">male</option><option value="female">female</option></select></div>
-                  <Button className="self-end" variant="outline" onClick={saveEstimateSettings}>Save settings</Button>
-                </div>
-                <div className="rounded-md border bg-muted/40 p-3"><p className="font-semibold">{bodyFatEstimate.value}</p><p className="mt-1 text-sm text-muted-foreground">{bodyFatEstimate.detail}</p></div>
-              </CardContent>
-            </Card>
-
             <Card>
               <CardHeader><CardTitle>Measurement trends</CardTitle></CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -691,7 +659,6 @@ function calculateConsistencyScore({ entries, completedCount, skippedCount }: { 
 function buildWeeklyInsights({ nutritionWeek, workoutActivity, entries, today }: { nutritionWeek: DailyNutritionSummary[]; workoutActivity: WorkoutSession[]; entries: ProgressEntry[]; today: string }) { const start = startOfWeek(today); const end = addDays(start, 6); const weekSessions = workoutActivity.filter((session) => { const date = (session.completed_at ?? session.skipped_at ?? session.started_at)?.slice(0, 10); return Boolean(date && date >= start && date <= end); }); const completedWorkouts = weekSessions.filter((session) => session.status === "completed").length; const skippedWorkouts = weekSessions.filter((session) => session.status === "skipped").length; const daysWithLogs = nutritionWeek.filter((day) => day.logs?.length); const waterDays = nutritionWeek.filter((day) => Number(day.water_ml) > 0); const currentWeekProgressEntries = entries.filter((entry) => entry.entry_date >= start && entry.entry_date <= end).length; const totalCalories = daysWithLogs.reduce((sum, day) => sum + Number(day.calories), 0); const totalProtein = daysWithLogs.reduce((sum, day) => sum + Number(day.protein_g), 0); const calories = daysWithLogs.length ? Math.round(totalCalories / daysWithLogs.length) : null; const calendarAverageCalories = Math.round(totalCalories / 7); const protein = daysWithLogs.length ? Math.round(totalProtein / daysWithLogs.length) : null; const calendarAverageProtein = Math.round(totalProtein / 7); const water = waterDays.length ? Math.round(waterDays.reduce((sum, day) => sum + Number(day.water_ml), 0) / waterDays.length) : null; const workoutTotal = completedWorkouts + skippedWorkouts; const workoutCompletionRate = workoutTotal ? Math.round((completedWorkouts / workoutTotal) * 100) : null; const consistencyScore = Math.min(100, (workoutCompletionRate ?? 0) * 0.5 + Math.min(25, daysWithLogs.length * 4) + Math.min(15, waterDays.length * 3) + Math.min(10, currentWeekProgressEntries * 5)); return { completedWorkouts: workoutTotal ? completedWorkouts : null, skippedWorkouts: workoutTotal ? skippedWorkouts : null, weekWorkoutTotal: workoutTotal, weekWorkoutCompletionRate: workoutCompletionRate, averageCalories: calories, calendarAverageCalories, averageProtein: protein, calendarAverageProtein, waterAverage: water, consistencyScore: Math.round(consistencyScore) }; }
 function buildProgressFeedback({ entries, latestWeightChange, weeklyInsights, consistencyScore, measurementTrends }: { entries: ProgressEntry[]; latestWeightChange: number | null; weeklyInsights: WeeklyInsights; consistencyScore: number; measurementTrends: MeasurementTrend[] }): ProgressFeedback[] { const loggedMeasurements = measurementTrends.filter((trend) => trend.latest !== null).length; const workoutMessage = weeklyInsights.completedWorkouts === null ? "No workouts this week" : `${weeklyInsights.completedWorkouts} completed`; const weightMessage = latestWeightChange === null ? "Need two weigh-ins" : `${formatDelta(latestWeightChange)} kg last change`; return [{ label: "Consistency", value: `${consistencyScore}%`, detail: consistencyScore >= 75 ? "Strong week. Keep the same logging rhythm." : "The biggest upgrade is logging workouts, food, water, and one progress check this week." }, { label: "Weight signal", value: weightMessage, detail: entries.length < 2 ? "Add at least two entries before trusting the trend." : "Use this with waist and photos, not by itself." }, { label: "Coverage", value: `${workoutMessage} / ${loggedMeasurements} measurements`, detail: loggedMeasurements ? "Measurements are broad enough for better trend context." : "Add waist, chest, arms, or thigh measurements to make progress less weight-only." }]; }
 function buildMeasurementTrends(entries: ProgressEntry[]): MeasurementTrend[] { const defs: Array<{ key: keyof BodyMeasurement; label: string; unit: string; combine?: (measurement: BodyMeasurement) => number | null }> = [ { key: "waist_cm", label: "Waist", unit: "cm" }, { key: "chest_cm", label: "Chest", unit: "cm" }, { key: "left_arm_cm", label: "Arms avg", unit: "cm", combine: (m) => averageNumbers([m.left_arm_cm, m.right_arm_cm]) }, { key: "left_thigh_cm", label: "Thighs avg", unit: "cm", combine: (m) => averageNumbers([m.left_thigh_cm, m.right_thigh_cm]) }, { key: "hips_cm", label: "Hips", unit: "cm" }, { key: "shoulders_cm", label: "Shoulders", unit: "cm" }, { key: "calves_cm", label: "Calves", unit: "cm" }, { key: "body_fat_percent", label: "Manual body fat", unit: "%" } ]; return defs.map((def) => { const values = entries.map((entry) => entry.measurements).filter((measurement): measurement is BodyMeasurement => Boolean(measurement)).map((measurement) => def.combine ? def.combine(measurement) : measurement[def.key]).filter((value): value is number => isFiniteNumber(value) && value > 0); const first = values[0] ?? null; const latest = values.at(-1) ?? null; return { label: def.label, latest: latest === null ? null : round(latest), delta: latest !== null && first !== null ? round(latest - first) : null, unit: def.unit }; }); }
-function buildBodyFatEstimate({ latestMeasurement, latestWaist, heightCm, sex }: { latestMeasurement: BodyMeasurement | null; latestWaist: number | null; heightCm: number; sex: "male" | "female" }) { if (isFiniteNumber(latestMeasurement?.body_fat_percent)) return { value: `${latestMeasurement.body_fat_percent}% manual`, detail: "Manual body-fat entry from your latest saved measurement. Not a medical measurement." }; if (!isFiniteNumber(latestWaist) || !isFiniteNumber(heightCm) || heightCm <= 0) return { value: "Not enough measurement data", detail: "Needs latest waist measurement and height to calculate a simple Relative Fat Mass estimate." }; const estimate = sex === "female" ? 76 - 20 * (heightCm / latestWaist) : 64 - 20 * (heightCm / latestWaist); if (!Number.isFinite(estimate) || estimate < 3 || estimate > 70) return { value: "Not enough measurement data", detail: "The inputs do not produce a usable estimate. Check waist and height values." }; return { value: `${round(estimate)}% estimated`, detail: `Relative Fat Mass estimate using height ${heightCm} cm, waist ${latestWaist} cm, and sex ${sex}. Not medically accurate.` }; }
 function averageNumbers(values: Array<number | null | undefined>) { const filtered = values.filter(isFiniteNumber); return filtered.length ? filtered.reduce((sum, value) => sum + value, 0) / filtered.length : null; }
 function numberOrNull(value: string) { if (!value.trim()) return null; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : null; }
 function round(value: number) { return Math.round(value * 10) / 10; }
