@@ -230,12 +230,7 @@ function changeStatus(status: AiActionRequest["status"]) {
     description: status === "cancelled" ? "No workout or meal data was changed." : "Request updated locally."
   });
 }
-    catch (error) {
-      toast({ title: "Could not update request", description: userSafeError(error) });
-    } finally {
-      setIsSaving(false);
-    }
-  }
+
 
   const requestFinished = request?.status === "cancelled";
 
