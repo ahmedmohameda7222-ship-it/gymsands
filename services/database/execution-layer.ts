@@ -39,17 +39,22 @@ export async function createAiActionRequest(input: {
   status?: AiActionRequestStatus;
 }) {
   requireUser(input.userId);
-  const { data, error } = await supabase!.from("ai_action_requests").insert({
+
+  const now = new Date().toISOString();
+
+  return {
+    id: `local-${crypto.randomUUID()}`,
     user_id: input.userId,
     action_type: input.actionType,
     source_type: input.sourceType,
     source_id: cleanText(input.sourceId),
     status: input.status ?? "ready_for_chatgpt",
     context_json: input.context,
-    user_note: cleanText(input.userNote)
-  }).select("*").single();
-  if (error) throw error;
-  return data as AiActionRequest;
+    user_note: cleanText(input.userNote),
+    created_at: now,
+    updated_at: now,
+    resolved_at: null
+  } as AiActionRequest;
 }
 
 export async function getAiActionRequests(userId: string, status?: AiActionRequestStatus) {
