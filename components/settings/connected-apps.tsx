@@ -96,9 +96,6 @@ export function ChatGptSetupCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-sm leading-6 text-muted-foreground">
-          ChatGPT can use only the Plaivra areas you allow. You can change permissions or disconnect at any time.
-        </p>
         {!hasMcpServerUrl ? (
           <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
             ChatGPT import is not ready for this deployment. The Plaivra connection URL is missing.
