@@ -35,26 +35,9 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, children, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
-    const childHref = React.isValidElement(children) ? (children.props as { href?: unknown }).href : undefined;
-    const isMealPlanFoodPreferencesLink =
-      typeof childHref === "string" && childHref.startsWith("/my-meal-plan/food-preferences");
-
-    return (
-      <Comp
-        className={cn(
-          buttonVariants({ variant, size }),
-          isMealPlanFoodPreferencesLink &&
-            "-ml-2 h-11 rounded-l-none rounded-r-2xl border-l-0 border-white/50 bg-white/35 px-3 text-sm text-foreground shadow-soft backdrop-blur-md hover:bg-white/45 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10",
-          className
-        )}
-        ref={ref}
-        {...props}
-      >
-        {children}
-      </Comp>
-    );
+    return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
   }
 );
 
