@@ -46,6 +46,7 @@ import { userSafeError } from "@/lib/error-formatting";
 import { getOnboarding } from "@/services/database/profile";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
+import { motion, AnimatePresence } from "framer-motion";
 
 type MacroTotals = { calories: number; protein_g: number; carbs_g: number; fat_g: number };
 type Notice = { type: "success" | "error" | "info"; title: string; description?: string };
@@ -380,6 +381,13 @@ function MyMealPlanBuilderInner() {
         </TabsList>
 
         <TabsContent value="day" className="space-y-3 sm:space-y-4">
+          <motion.div
+            key={selectedDate}
+            initial={{ opacity: 0.85, y: 2 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+            className="contents"
+          >
           <div className="glass-card p-3 sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -514,6 +522,7 @@ function MyMealPlanBuilderInner() {
               </CardContent>
             </Card>
           ) : null}
+          </motion.div>
         </TabsContent>
 
         <TabsContent value="week" className="space-y-3 sm:space-y-4">
@@ -635,12 +644,30 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
         <p className="text-xs text-muted-foreground">{Math.round(totals.calories)} kcal · {Math.round(totals.protein_g)}g protein</p>
       </CardHeader>
       <CardContent className="space-y-2 p-3 pt-0 sm:space-y-3 sm:p-5 sm:pt-0">
-        {!items.length ? <p className="text-sm text-muted-foreground">No food planned yet. Tap + to add.</p> : null}
+        {!items.length ? (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+            className="text-sm text-muted-foreground"
+          >
+            No food planned yet. Tap + to add.
+          </motion.p>
+        ) : null}
+        <AnimatePresence mode="popLayout" initial={false}>
         {items.map((item) => {
           const isEditing = editingId === item.id;
           const validation = validateMealItem(item);
           return (
-            <div key={item.id} className="solid-row p-2.5 sm:p-3">
+            <motion.div
+              key={item.id}
+              layout
+              initial={{ opacity: 0, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
+              className="solid-row p-2.5 sm:p-3"
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold leading-5">{item.food_name}</p>
@@ -670,9 +697,10 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
                 </div>
               )}
               {!isEditing ? <MealAiActions item={item} /> : null}
-            </div>
+            </motion.div>
           );
         })}
+        </AnimatePresence>
       </CardContent>
     </Card>
   );

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { formatIsoDate } from "@/lib/date-utils";
-import { AnimatedNumber } from "@/components/motion";
+import { AnimatedNumber, InlineFeedback } from "@/components/motion";
 import { percent, sumFoodLogs } from "@/services/nutrition/calculations";
 import type { SavedTargets } from "@/services/nutrition/targets";
 import type { DailyNutritionSummary, WaterLog } from "@/types";
@@ -182,11 +182,12 @@ function MacroBar({ label, value, total }: { label: string; value: number; total
   return <div><div className="mb-1 flex justify-between text-sm"><span>{label}</span><span>{Math.round(value)}g</span></div><Progress value={percent(value, total)} /></div>;
 }
 
-export function WaterCard({ waterTotal, waterGoal, customWaterMl, setCustomWaterMl, waterLogs, onAddWater, onRemoveWater }: { waterTotal: number; waterGoal: number; customWaterMl: string; setCustomWaterMl: (value: string) => void; waterLogs: WaterLog[]; onAddWater: (amount: number) => void; onRemoveWater: (log: WaterLog) => void }) {
+export function WaterCard({ waterTotal, waterGoal, customWaterMl, setCustomWaterMl, waterLogs, onAddWater, onRemoveWater, waterFeedback }: { waterTotal: number; waterGoal: number; customWaterMl: string; setCustomWaterMl: (value: string) => void; waterLogs: WaterLog[]; onAddWater: (amount: number) => void; onRemoveWater: (log: WaterLog) => void; waterFeedback?: string }) {
   return (
     <Card variant="glass">
       <CardHeader><CardTitle>Water intake</CardTitle></CardHeader>
       <CardContent className="space-y-3">
+        <InlineFeedback message={waterFeedback ?? ""} />
         <div><p className="text-2xl font-bold">{waterTotal} ml <span className="text-base font-semibold text-muted-foreground">/ {(waterTotal / 1000).toFixed(2)} L</span></p><p className="text-sm text-muted-foreground">Goal {waterGoal} ml / {(waterGoal / 1000).toFixed(2)} L</p><Progress value={percent(waterTotal, waterGoal)} className="mt-3" /></div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[250, 500, 750, 1000].map((amount) => <Button key={amount} type="button" variant="outline" size="sm" onClick={() => onAddWater(amount)}>+{amount === 1000 ? "1 L" : `${amount} ml`}</Button>)}</div>
         <div className="grid gap-2 sm:grid-cols-[1fr_auto]"><Input type="number" min="1" inputMode="numeric" enterKeyHint="done" value={customWaterMl} onChange={(event) => setCustomWaterMl(event.target.value)} /><Button type="button" onClick={() => onAddWater(Number(customWaterMl))}>Add water</Button></div>
@@ -249,10 +250,11 @@ function MacroMiniBar({ label, value, target, progress, color, unit = "g" }: { l
   );
 }
 
-export function WaterMiniSummary({ waterTotal, waterGoal, onAddWater }: { waterTotal: number; waterGoal: number; onAddWater: (amount: number) => void }) {
+export function WaterMiniSummary({ waterTotal, waterGoal, onAddWater, waterFeedback }: { waterTotal: number; waterGoal: number; onAddWater: (amount: number) => void; waterFeedback?: string }) {
   const progress = percent(waterTotal, waterGoal);
   return (
     <div className="glass-card-strong p-3 shadow-soft">
+      <InlineFeedback message={waterFeedback ?? ""} />
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium text-muted-foreground">Water</p>

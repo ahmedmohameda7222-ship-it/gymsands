@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CheckCircle2, Clock, ExternalLink, RefreshCcw, RotateCcw, Save, Sparkles, TimerReset, Trophy } from "lucide-react";
+import { ArrowLeft, Check, CheckCircle2, Clock, ExternalLink, RefreshCcw, RotateCcw, Save, Sparkles, TimerReset, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -365,6 +365,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   const [isSavingAlternative, setIsSavingAlternative] = useState(false);
   const [showReplacement, setShowReplacement] = useState(false);
   const [setFeedback, setSetFeedback] = useState("");
+  const [prFeedback, setPrFeedback] = useState("");
   const workoutTimerKey = useMemo(() => workoutStorageKey(["workout-day-session", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const restTimerKey = useMemo(() => workoutStorageKey(["workout-day-rest-timer", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const [timerEndsAtMs, setTimerEndsAtMs] = useState<number | null>(null);
@@ -851,6 +852,16 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {activeExercise.sets.every((s) => s.completedAt) ? (
+              <div className="rounded-[12px] border border-success/25 bg-success/5 p-3">
+                <p className="flex items-center gap-2 text-sm font-semibold text-success">
+                  <CheckCircle2 className="h-4 w-4" /> All sets completed
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {activeExercise.sets.filter((s) => s.completedAt).length}/{activeExercise.sets.length} sets done. Move to the next exercise or finish the workout.
+                </p>
+              </div>
+            ) : null}
             {isTimerRunning ? (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-primary/25 bg-primary/5 p-4">
                 <div><p className="text-sm font-semibold text-foreground">Rest</p><p className="text-2xl font-bold text-primary">{formatTime(timerLeft)}</p></div>
@@ -915,10 +926,10 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               {activeExercise.sets.map((set, setIndex) => {
                 const previousSet = previousSetForExercise(history, activeExercise.exercise.exercise_name, set.setNumber);
                 return (
-                  <div key={set.setNumber} className={`rounded-md border p-3 ${set.completedAt ? "border-success/40 bg-success/10" : setIndex === activeSetIndex ? "border-primary bg-primary/10" : "bg-card"}`}>
+                  <div key={set.setNumber} className={`rounded-md border p-3 transition-all duration-200 ${set.completedAt ? "border-success/40 bg-success/10 relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:rounded-l-md before:bg-success/60" : setIndex === activeSetIndex ? "border-primary bg-primary/10 ring-1 ring-primary/20 shadow-sm" : "bg-card hover:border-border/80"}`}>
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <p className="font-semibold">Set {set.setNumber}</p>
-                      {set.completedAt ? <Badge variant="success">Done</Badge> : <Badge variant="outline">Open</Badge>}
+                      {set.completedAt ? <Badge variant="success" className="gap-1"><Check className="h-3 w-3" /> Done</Badge> : <Badge variant="outline">Open</Badge>}
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1"><Label>Actual reps</Label><Input className="h-14 text-xl lg:h-12 lg:text-lg" value={set.reps} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { reps: event.target.value })} inputMode="numeric" /></div>
@@ -954,6 +965,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
 
             <div className="lg:sticky lg:bottom-3 z-20 rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
               <InlineFeedback message={setFeedback} onClose={() => setSetFeedback("")} />
+              <InlineFeedback message={prFeedback} onClose={() => setPrFeedback("")} />
               <div className="grid gap-2 sm:grid-cols-2">
                 <Button className="min-h-12" onClick={finishCurrentSet} disabled={!activeSet || Boolean(activeSet.completedAt)}><CheckCircle2 className="h-4 w-4" /> Finish current set</Button>
                 <Button className="min-h-12" variant="outline" onClick={restartCurrentSet} disabled={!activeSet?.completedAt}><RotateCcw className="h-4 w-4" /> Reopen set</Button>

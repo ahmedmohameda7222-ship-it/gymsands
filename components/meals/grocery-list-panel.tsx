@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Download, FileDown, MoreHorizontal, Plus, RefreshCw, Share2, ShoppingCart, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, Download, FileDown, MoreHorizontal, Plus, RefreshCw, Share2, ShoppingCart, Trash2, X } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -336,6 +337,27 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
           <AiActionRequestDialog actions={[{ type: "make_meal_cheaper", label: "Find cheaper options", description: "Ask ChatGPT for lower-cost substitutions for this grocery list." }]} sourceType="grocery_week" sourceId={weekStart} context={{ week_start: weekStart, week_end: weekEnd, grocery_items: items, meal_plan_items: mealItems }} title="Ask ChatGPT for help" buttonVariant="ghost" />
         </div>
 
+        <AnimatePresence>
+          {selectedIds.size > 0 ? (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.18 }}
+              className="flex flex-wrap items-center gap-2 rounded-[12px] border border-primary/25 bg-primary/5 p-2.5"
+            >
+              <span className="text-sm font-semibold">{selectedIds.size} selected</span>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => setSelectedIds(new Set(items.map((item) => item.id)))}>Select all</Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}><X className="h-4 w-4" /> Clear</Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => void patchSelected({ checked: true }, `${selectedItems.length} item${selectedItems.length === 1 ? "" : "s"} marked checked.`)} disabled={isBusy}><Check className="h-4 w-4" /> Mark checked</Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => void patchSelected({ already_have: true }, `${selectedItems.length} item${selectedItems.length === 1 ? "" : "s"} marked as already have.`)} disabled={isBusy}>Already have</Button>
+                <Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => confirmDelete(selectedItems, "Delete selected items?", "Selected items deleted.")} disabled={isBusy}><Trash2 className="h-4 w-4" /> Delete</Button>
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
         {isLoading ? <p className="text-sm text-muted-foreground">Loading grocery list...</p> : null}
         {!isLoading && loadError ? (
           <div className="rounded-[14px] border border-destructive/30 bg-destructive/5 p-4" role="alert">
@@ -348,14 +370,25 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
 
         {grouped.map((group) => (
           <div key={group.section}>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.section}</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.section} · {group.items.filter((item) => item.checked).length}/{group.items.length} checked</p>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {group.items.map((item) => (
-                <div key={item.id} className={cn("solid-row space-y-3 p-3", item.checked && "opacity-75", selectedIds.has(item.id) && "border-2 border-primary")}>
+                <motion.div
+                  layout
+                  key={item.id}
+                  initial={{ opacity: 0, y: 2 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className={cn(
+                    "solid-row space-y-3 p-3 transition-all duration-200",
+                    item.checked && "opacity-75 bg-success/5",
+                    selectedIds.has(item.id) && "border-2 border-primary bg-primary/5"
+                  )}
+                >
                   <div className="flex items-start gap-3">
                     <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelection(item.id)} aria-label={`Select ${item.item_name}`} className="mt-0.5 h-6 w-6 shrink-0 accent-primary" />
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2"><p className={cn("font-semibold", item.checked && "line-through")}>{item.item_name}</p>{item.created_by === "meal_plan" ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">Imported</span> : null}</div>
+                      <div className="flex flex-wrap items-center gap-2"><p className={cn("font-semibold transition-all duration-200", item.checked && "line-through text-muted-foreground")}>{item.item_name}</p>{item.created_by === "meal_plan" ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">Imported</span> : null}</div>
                       <p className="text-xs text-muted-foreground">{item.quantity ?? "Qty not set"} {item.unit ?? ""}{item.notes ? ` · ${item.notes}` : ""}</p>
                     </div>
                     <Button type="button" variant="ghost" size="icon" className="shrink-0 text-destructive" onClick={() => confirmDelete([item], `Delete ${item.item_name}?`, `${item.item_name} deleted.`)} aria-label={`Delete ${item.item_name}`}><Trash2 className="h-4 w-4" /></Button>
@@ -364,7 +397,7 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
                     <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="h-5 w-5 accent-primary" checked={item.checked} onChange={() => void patchItem(item, { checked: !item.checked })} /> Checked off</label>
                     <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="h-5 w-5 accent-primary" checked={item.already_have} onChange={() => void patchItem(item, { already_have: !item.already_have })} /> Already have</label>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           </div>

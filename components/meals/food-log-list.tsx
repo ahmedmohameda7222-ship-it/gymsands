@@ -9,6 +9,7 @@ import { deleteFoodLog } from "@/services/database/nutrition";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError } from "@/lib/error-formatting";
 import { InlineFeedback } from "@/components/motion";
+import { motion } from "framer-motion";
 
 export function FoodLogList({
   logs = [],
@@ -71,8 +72,11 @@ export function FoodLogList({
                   </Badge>
                 </div>
                 {items.map((log) => (
-                  <div
+                  <motion.div
                     key={log.id}
+                    initial={{ opacity: 0, y: 3 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
                     className="solid-row flex items-center justify-between gap-3 p-3 transition-colors hover:border-primary/40 hover:bg-muted/20"
                   >
                     <div className="min-w-0 flex-1">
@@ -93,13 +97,18 @@ export function FoodLogList({
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             );
           })
         ) : (
-          <div className="solid-row flex flex-col items-start gap-4 border-dashed p-5">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+            className="solid-row flex flex-col items-start gap-4 border-dashed p-5"
+          >
             <div>
               <p className="text-sm font-semibold text-foreground">No food logged yet</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">Search for food, create something custom, scan a barcode, or copy yesterday when your routine repeats.</p>
@@ -111,7 +120,7 @@ export function FoodLogList({
               {onCopyPrevious ? <Button variant="outline" onClick={onCopyPrevious}><Copy className="h-4 w-4" /> Copy previous day</Button> : null}
             </div>
             <InlineFeedback message={copyStatus} onClose={() => {}} />
-          </div>
+          </motion.div>
         )}
       </CardContent>
     </Card>

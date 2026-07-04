@@ -25,6 +25,7 @@ import {
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { CardGridSkeleton } from "@/components/ui/state-views";
+import { InlineFeedback } from "@/components/motion";
 import { userSafeError } from "@/lib/error-formatting";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -70,6 +71,7 @@ export default function CaloriesPage() {
   const [showTargetEditor, setShowTargetEditor] = useState(false);
   const [activeTab, setActiveTab] = useState("today");
   const [copyStatus, setCopyStatus] = useState("");
+  const [waterFeedback, setWaterFeedback] = useState("");
   const [wizard, setWizard] = useState({
     age: "",
     heightCm: "",
@@ -217,6 +219,8 @@ export default function CaloriesPage() {
     try {
       const log = await addWaterLog(user.id, selectedDate, amountMl);
       setWaterLogs((current) => [log, ...current]);
+      setWaterFeedback(`+${amountMl} ml added`);
+      window.setTimeout(() => setWaterFeedback(""), 1500);
       await loadWeek();
     } catch (error) {
       toast({ title: "Could not add water", description: userSafeError(error) });
@@ -327,7 +331,7 @@ export default function CaloriesPage() {
         </TabsList>
 
         <TabsContent value="today" className="space-y-4">
-          <Card className="border-primary/25 bg-primary/5">
+          <Card className="border-primary/25 bg-primary/5 transition-all duration-300">
             <CardContent className="p-4 sm:p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -375,7 +379,7 @@ export default function CaloriesPage() {
               copyStatus={copyStatus}
             />
 
-            <WaterMiniSummary waterTotal={waterTotal} waterGoal={displayTargets.water_ml} onAddWater={addWater} />
+            <WaterMiniSummary waterTotal={waterTotal} waterGoal={displayTargets.water_ml} onAddWater={addWater} waterFeedback={waterFeedback} />
 
             <details className="glass-card-strong">
               <summary className="flex cursor-pointer items-center justify-between p-4 text-sm font-semibold">
@@ -427,6 +431,7 @@ export default function CaloriesPage() {
                   waterLogs={waterLogs}
                   onAddWater={addWater}
                   onRemoveWater={removeWater}
+                  waterFeedback={waterFeedback}
                 />
               </div>
               <FoodLogList
