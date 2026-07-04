@@ -28,7 +28,7 @@ export default function AiImportsSettingsPage() {
           </CardContent>
         </Card>
         <AiPermissionsCard />
-          <ChatGptSetupCard />
+        <ChatGptSetupCard />
         <ConnectionStatusCard />
       </div>
 
