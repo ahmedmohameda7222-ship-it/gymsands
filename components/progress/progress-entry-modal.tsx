@@ -15,17 +15,17 @@ import { useTodayDate } from "@/lib/hooks/use-today-date";
 import type { ProgressEntry } from "@/types";
 
 const measurementFields = [
-  ["hips_cm", "Hips cm", "Hips measurement, e.g. 96"],
-  ["chest_cm", "Chest cm", "Chest measurement, e.g. 100"],
-  ["shoulders_cm", "Shoulders cm", "Shoulders measurement, e.g. 112"],
-  ["left_arm_cm", "Left arm cm", "Left arm measurement, e.g. 34"],
-  ["right_arm_cm", "Right arm cm", "Right arm measurement, e.g. 34"],
-  ["left_thigh_cm", "Left thigh cm", "Left thigh measurement, e.g. 58"],
-  ["right_thigh_cm", "Right thigh cm", "Right thigh measurement, e.g. 58"],
-  ["glutes_cm", "Glutes / hips cm", "Glutes measurement, e.g. 100"],
-  ["calves_cm", "Calves cm", "Calves measurement, e.g. 38"],
-  ["neck_cm", "Neck cm", "Neck measurement, e.g. 38"],
-  ["body_fat_percent", "Manual body fat %", "Optional manual estimate, e.g. 22"]
+  ["hips_cm", "Hips cm", "Hips measurement"],
+  ["chest_cm", "Chest cm", "Chest measurement"],
+  ["shoulders_cm", "Shoulders cm", "Shoulders measurement"],
+  ["left_arm_cm", "Left arm cm", "Left arm measurement"],
+  ["right_arm_cm", "Right arm cm", "Right arm measurement"],
+  ["left_thigh_cm", "Left thigh cm", "Left thigh measurement "],
+  ["right_thigh_cm", "Right thigh cm", "Right thigh measurement"],
+  ["glutes_cm", "Glutes / hips cm", "Glutes measurement"],
+  ["calves_cm", "Calves cm", "Calves measurement"],
+  ["neck_cm", "Neck cm", "Neck measurement"],
+  ["body_fat_percent", "Body fat %"]
 ] as const;
 
 function invalidPositiveNumber(value: string) {
