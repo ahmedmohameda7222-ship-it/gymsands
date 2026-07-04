@@ -1,33 +1,27 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
-import { PageHeading } from "@/components/layout/page-heading";
 import { Button } from "@/components/ui/button";
 import { NutritionPreferenceCard } from "@/components/profile/execution-profiles";
 
-export default function MealPlanFoodPreferencesPage() {
+export default function FoodPreferencesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const date = searchParams.get("date");
+
+  const backHref = date ? `/my-meal-plan?date=${encodeURIComponent(date)}` : "/my-meal-plan";
 
   return (
-    <>
-      <PageHeading
-        title="Food Preferences"
-        description="Set the taste, budget, cooking-time, and shopping context used for meal-plan requests."
-      />
-      <div className="mb-4">
-        <Button asChild variant="outline">
-          <Link href="/my-meal-plan">
-            <ChevronLeft className="h-4 w-4" />
-            Back
-          </Link>
-        </Button>
-      </div>
+    <div className="space-y-4">
+      <Button variant="outline" onClick={() => router.push(backHref)} className="gap-1">
+        <ChevronLeft className="h-4 w-4" />
+        Back
+      </Button>
       <NutritionPreferenceCard
         saveLabel="Save food preference"
-        onSaved={() => router.push("/my-meal-plan")}
+        onAfterSave={() => router.push(backHref)}
       />
-    </>
+    </div>
   );
 }

@@ -139,13 +139,12 @@ export function SafetyProfileCard() {
   );
 }
 
-export function NutritionPreferenceCard({ compact = false, onSaved, saveLabel = "Save food preferences" }: { compact?: boolean; onSaved?: () => void; saveLabel?: string }) {
+export function NutritionPreferenceCard({ onAfterSave, saveLabel }: { onAfterSave?: () => void; saveLabel?: string }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [form, setForm] = useState<NutritionPreferenceInput>(emptyNutrition);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isOpen, setIsOpen] = useState(!compact);
   const [savedForm, setSavedForm] = useState<NutritionPreferenceInput>(emptyNutrition);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const isDirty = JSON.stringify(form) !== JSON.stringify(savedForm);
@@ -155,10 +154,10 @@ export function NutritionPreferenceCard({ compact = false, onSaved, saveLabel = 
     getNutritionPreferenceProfile(user.id)
       .then((saved) => { if (saved) { setForm(saved); setSavedForm(saved); } })
       .catch((error) => {
-        if (!compact) toast({ title: "Could not load food preferences", description: userSafeError(error, "Please refresh and try again.") });
+        toast({ title: "Could not load food preferences", description: userSafeError(error, "Please refresh and try again.") });
       })
       .finally(() => setIsLoading(false));
-  }, [compact, toast, user?.id]);
+  }, [toast, user?.id]);
 
   useEffect(() => {
     if (!isDirty) return;
@@ -176,14 +175,11 @@ export function NutritionPreferenceCard({ compact = false, onSaved, saveLabel = 
       setSavedForm(saved);
       setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       toast({ title: "Food preferences saved", description: "They can be included in ChatGPT meal requests you prepare." });
-      if (compact) setIsOpen(false);
-      onSaved?.();
+      onAfterSave?.();
     } catch (error) {
       toast({ title: "Could not save food preferences", description: userSafeError(error) });
     } finally { setIsSaving(false); }
   }
-
-  if (compact) return null;
 
   return (
     <Card>
@@ -213,7 +209,7 @@ export function NutritionPreferenceCard({ compact = false, onSaved, saveLabel = 
             </ProfileSection>
             <div className="sticky bottom-20 z-10 flex flex-col gap-2 rounded-[14px] border bg-card/95 p-3 shadow-lg sm:bottom-3 sm:flex-row sm:items-center sm:justify-between">
               <p className={`text-sm font-medium ${isDirty ? "text-warning" : "text-primary"}`}>{isDirty ? "You have unsaved food preference changes." : savedAt ? `Food preferences saved at ${savedAt}.` : "Food preferences are up to date."}</p>
-              <Button onClick={save} disabled={isSaving || !isDirty}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : saveLabel}</Button>
+              <Button onClick={save} disabled={isSaving || !isDirty}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : (saveLabel ?? "Save food preferences")}</Button>
             </div>
           </>
         )}

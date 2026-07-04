@@ -36,7 +36,6 @@ import {
   weekStart
 } from "@/components/meals/meal-plan-calendar";
 import type { MealPlanItem, MealType, OnboardingAnswers } from "@/types";
-import { NutritionPreferenceCard } from "@/components/profile/execution-profiles";
 import { GroceryListPanel } from "@/components/meals/grocery-list-panel";
 import { MealAiActions } from "@/components/meals/meal-ai-actions";
 import { validateMealItem, validateMealPlanDay } from "@/services/meals/meal-validation";
@@ -280,7 +279,7 @@ function MyMealPlanBuilderInner() {
     try {
       const existing = await getGroceryItems(user.id, selectedWeekStart);
       if (existing.some((groceryItem) => groceryItem.source_meal_plan_item_id === item.id)) {
-        setNotice({ type: "info", title: "Already in grocery list", description: `${item.food_name} is already linked to this week’s list.` });
+        setNotice({ type: "info", title: "Already in grocery list", description: `${item.food_name} is already linked to this week's list.` });
         return;
       }
       await upsertGroceryItem(user.id, {
@@ -329,7 +328,6 @@ function MyMealPlanBuilderInner() {
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      <NutritionPreferenceCard compact />
       <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4">
         <SummaryCard label="Planned" value={plannedTotals.calories} detail={`${Math.round(plannedTotals.protein_g)}g protein`} />
         <SummaryCard label="Done" value={doneTotals.calories} detail={`${Math.round(doneTotals.protein_g)}g protein`} />
@@ -374,11 +372,18 @@ function MyMealPlanBuilderInner() {
       </Dialog>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3 sm:space-y-4">
-        <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
-          <TabsTrigger value="day">Day</TabsTrigger>
-          <TabsTrigger value="week">Week</TabsTrigger>
-          <TabsTrigger value="shopping">Shopping</TabsTrigger>
-        </TabsList>
+        <div className="flex flex-wrap items-center gap-2">
+          <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
+            <TabsTrigger value="day">Day</TabsTrigger>
+            <TabsTrigger value="week">Week</TabsTrigger>
+            <TabsTrigger value="shopping">Shopping</TabsTrigger>
+          </TabsList>
+          <Button asChild variant="outline" size="sm" className="shrink-0">
+            <Link href={`/my-meal-plan/food-preferences${selectedDate ? `?date=${encodeURIComponent(selectedDate)}` : ""}`}>
+              Food preferences
+            </Link>
+          </Button>
+        </div>
 
         <TabsContent value="day" className="space-y-3 sm:space-y-4">
           <motion.div
@@ -426,7 +431,7 @@ function MyMealPlanBuilderInner() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-base font-semibold sm:text-lg">{displayDate(selectedDate)} meals</h2>
-              <p className="text-xs text-muted-foreground sm:text-sm">{dayStats.totalPlanned} planned · {dayStats.totalDone} done</p>
+              <p className="text-xs text-muted-foreground sm:text-sm">{dayStats.totalPlanned} planned &middot; {dayStats.totalDone} done</p>
             </div>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => setActiveTab("shopping")}>
@@ -567,8 +572,8 @@ function WeeklyPlanner({ weekDays, selectedDate, weekItems, onSelectDate }: { we
           return (
             <button key={day} type="button" onClick={() => onSelectDate(day)} className={cn("rounded-[14px] border p-2.5 text-left transition-colors hover:border-primary/45 sm:p-3", day === selectedDate ? "border-primary bg-primary/10" : "border-white/50 bg-white/35 dark:border-white/10 dark:bg-white/5")}>
               <p className="text-sm font-semibold">{displayDate(day)}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">{dayItems.length} meals · {Math.round(done.calories)}/{Math.round(planned.calories + done.calories)} kcal</p>
-              <p className="text-[11px] text-muted-foreground">P {Math.round(planned.protein_g + done.protein_g)}g · C {Math.round(planned.carbs_g + done.carbs_g)}g · F {Math.round(planned.fat_g + done.fat_g)}g</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{dayItems.length} meals &middot; {Math.round(done.calories)}/{Math.round(planned.calories + done.calories)} kcal</p>
+              <p className="text-[11px] text-muted-foreground">P {Math.round(planned.protein_g + done.protein_g)}g &middot; C {Math.round(planned.carbs_g + done.carbs_g)}g &middot; F {Math.round(planned.fat_g + done.fat_g)}g</p>
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {mealTypes.map((type) => {
                   const count = dayItems.filter((item) => item.meal_type === type).length;
@@ -641,7 +646,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
             </Button>
           </div>
         </CardTitle>
-        <p className="text-xs text-muted-foreground">{Math.round(totals.calories)} kcal · {Math.round(totals.protein_g)}g protein</p>
+        <p className="text-xs text-muted-foreground">{Math.round(totals.calories)} kcal &middot; {Math.round(totals.protein_g)}g protein</p>
       </CardHeader>
       <CardContent className="space-y-2 p-3 pt-0 sm:space-y-3 sm:p-5 sm:pt-0">
         {!items.length ? (
@@ -673,7 +678,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
                   <p className="text-sm font-semibold leading-5">{item.food_name}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">{item.quantity}x {item.serving_size}</p>
                   <p className="mt-0.5 text-[11px] text-muted-foreground sm:text-xs">
-                    {Math.round(toNumber(item.calories))} kcal · {Math.round(toNumber(item.protein_g))}g protein · {Math.round(toNumber(item.carbs_g))}g carbs · {Math.round(toNumber(item.fat_g))}g fat
+                    {Math.round(toNumber(item.calories))} kcal &middot; {Math.round(toNumber(item.protein_g))}g protein &middot; {Math.round(toNumber(item.carbs_g))}g carbs &middot; {Math.round(toNumber(item.fat_g))}g fat
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
