@@ -620,6 +620,16 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     try {
       await persistProgress(nextStates);
       setSetFeedback(`Set ${targetSet.setNumber} saved: ${targetSet.reps || "-"} reps at ${targetSet.weightKg || "0"} kg.`);
+      const currentWeight = toNumberOrNull(targetSet.weightKg) ?? 0;
+      const currentReps = toNumberOrNull(targetSet.reps) ?? 0;
+      const exercise = exerciseStates[exerciseIndex];
+      if (exercise && currentWeight > 0 && currentReps > 0) {
+        const prevPerf = previousPerformance(history, exercise.exercise.exercise_name);
+        if (prevPerf && (currentWeight > (prevPerf.lastWeightKg ?? 0) || currentReps > (prevPerf.lastReps ?? 0))) {
+          setPrFeedback(`${exercise.exercise.exercise_name}: new best ${currentWeight} kg x ${currentReps} reps`);
+          window.setTimeout(() => setPrFeedback(""), 2500);
+        }
+      }
     } catch (error) {
       toast({ title: "Could not save set", description: userSafeError(error, "Try finishing the workout again if it does not appear in history.") });
     } finally {

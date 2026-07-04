@@ -119,7 +119,7 @@ export function FoodLogList({
               {onScanAction ? <Button variant="outline" onClick={onScanAction}><Barcode className="h-4 w-4" /> Scan barcode</Button> : null}
               {onCopyPrevious ? <Button variant="outline" onClick={onCopyPrevious}><Copy className="h-4 w-4" /> Copy previous day</Button> : null}
             </div>
-            <InlineFeedback message={copyStatus} onClose={() => {}} />
+            <InlineFeedback message={copyStatus} />
           </motion.div>
         )}
       </CardContent>

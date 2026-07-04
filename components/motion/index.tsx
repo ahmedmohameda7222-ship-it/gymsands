@@ -63,11 +63,13 @@ export function AnimatedProgress({
   value,
   className = "",
   indicatorClassName = "",
+  indicatorStyle,
   durationMs = 650
 }: {
   value: number;
   className?: string;
   indicatorClassName?: string;
+  indicatorStyle?: React.CSSProperties;
   durationMs?: number;
 }) {
   const safeValue = Math.min(100, Math.max(0, value));
@@ -108,7 +110,7 @@ export function AnimatedProgress({
     <div className={`h-2.5 w-full overflow-hidden rounded-full bg-muted ${className}`}>
       <div
         className={`h-full rounded-full bg-primary ${indicatorClassName}`}
-        style={{ width: `${displayWidth}%`, transition: reduceMotion ? "width 0.001ms" : "none" }}
+        style={{ width: `${displayWidth}%`, transition: reduceMotion ? "width 0.001ms" : "none", ...indicatorStyle }}
       />
     </div>
   );

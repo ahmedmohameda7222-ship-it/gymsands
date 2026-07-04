@@ -229,6 +229,15 @@ html[lang="ar"] [data-legal-language]:not([lang="ar"]) {
   display: none;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 .reduce-motion,
 .reduce-motion * {
   scroll-behavior: auto !important;

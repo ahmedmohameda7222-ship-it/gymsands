@@ -3,20 +3,26 @@ import { cn } from "@/lib/utils";
 
 type CardVariant = "solid" | "glass" | "glassStrong";
 
-const cardVariants: Record<CardVariant, string> = {
-  solid: "solid-tracking-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card",
-  glass: "glass-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card",
-  glassStrong: "glass-card-strong transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card"
-};
+function cardBase(variant: CardVariant, interactive?: boolean) {
+  const base = {
+    solid: "solid-tracking-card",
+    glass: "glass-card",
+    glassStrong: "glass-card-strong"
+  }[variant];
+  const hover = interactive ? " transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card" : "";
+  return base + hover;
+}
 
 export function Card({
   variant = "solid",
+  interactive,
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & {
   variant?: CardVariant;
+  interactive?: boolean;
 }) {
-  return <div className={cn(cardVariants[variant], "text-card-foreground", className)} {...props} />;
+  return <div className={cn(cardBase(variant, interactive), "text-card-foreground", className)} {...props} />;
 }
 
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

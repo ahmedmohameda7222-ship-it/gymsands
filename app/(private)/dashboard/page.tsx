@@ -381,7 +381,10 @@ export default function DashboardPage() {
               <StaggerItem><MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Flame} label="Calories" value={`${totals.calories} kcal`} detail={hasTargets ? `${remaining.calories} kcal left` : "No target"} progress={targets?.daily_calories ? percent(totals.calories, targets.daily_calories) : undefined} /></StaggerItem>
             ) : null}
             <StaggerItem><MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={hasTargets ? `${remaining.protein_g}g left` : "Set target"} progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined} /></StaggerItem>
-            <StaggerItem><MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Droplets} label="Water" value={waterTotalMl ? `${waterTotalMl} ml / ${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${targets.water_ml} ml / ${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} /></StaggerItem>
+            <StaggerItem>
+              <MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Droplets} label="Water" value={waterTotalMl ? `${waterTotalMl} ml / ${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${targets.water_ml} ml / ${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
+              <InlineFeedback message={waterFeedback ?? ""} />
+            </StaggerItem>
             {!settings.hideBodyWeightOnDashboard ? (
               <StaggerItem><MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} /></StaggerItem>
             ) : null}

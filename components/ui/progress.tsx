@@ -16,7 +16,7 @@ export function Progress({
   animated?: boolean;
 }) {
   if (animated) {
-    return <AnimatedProgress value={value} className={className} indicatorClassName={indicatorStyle ? "" : ""} />;
+    return <AnimatedProgress value={value} className={className} indicatorStyle={indicatorStyle} />;
   }
 
   const safeValue = Math.min(100, Math.max(0, value));
