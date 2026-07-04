@@ -3,7 +3,6 @@
 import { SettingsPageShell } from "@/components/settings/settings-page-shell";
 import { AiPermissionsCard } from "@/components/settings/ai-permissions-card";
 import { ChatGptSetupCard, ConnectionStatusCard } from "@/components/settings/connected-apps";
-import { RecentAiActionRequests } from "@/components/ai/recent-ai-action-requests";
 import { useTranslation } from "@/lib/i18n/use-translation";
 import { ShieldCheck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,9 +27,8 @@ export default function AiImportsSettingsPage() {
             </ul>
           </CardContent>
         </Card>
-        <ChatGptSetupCard />
-        <RecentAiActionRequests limit={5} />
         <AiPermissionsCard />
+          <ChatGptSetupCard />
         <ConnectionStatusCard />
       </div>
 
