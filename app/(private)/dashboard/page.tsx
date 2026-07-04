@@ -50,7 +50,6 @@ import type { FitnessHabit, FoodLog, MealPlanItem, ProgressEntry, SleepRecoveryL
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { DailyCheckins } from "@/components/wellness/daily-checkins";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
-import { RecentAiActionRequests } from "@/components/ai/recent-ai-action-requests";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 import { StaggerContainer, StaggerItem, InlineFeedback } from "@/components/motion";
 
@@ -579,7 +578,6 @@ export default function DashboardPage() {
           </BentoGrid>
           </StaggerContainer>
           <DailyCheckins compact />
-          <RecentAiActionRequests limit={3} compact />
           {weeklyReport ? (
             <Card variant="glass" className="border-primary/20">
               <CardHeader><CardTitle className="text-base">Weekly ChatGPT review</CardTitle></CardHeader>
