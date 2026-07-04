@@ -292,9 +292,9 @@ export function AiPermissionsCard() {
           ) : null}
 
           <InlineFeedback
-            message={hasSavedSettings ? `Permissions saved${savedAt ? ` at ${savedAt}` : ""}. These selections stay visible after refresh. Reconnect ChatGPT after changing permissions so the connection uses the latest choices.` : ""}
-            onClose={() => {}}
-          />
+              message={savedAt ? `Permissions saved at ${savedAt}. Reconnect ChatGPT after changing permissions so the connection uses the latest choices.` : ""}
+              onClose={() => setSavedAt(null)}
+                  />
 
           {/* Save button */}
           <div className="flex justify-end">
