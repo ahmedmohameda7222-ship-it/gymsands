@@ -183,42 +183,41 @@ export function NutritionPreferenceCard({ compact = false, onSaved, saveLabel = 
     } finally { setIsSaving(false); }
   }
 
+  if (compact) return null;
+
   return (
     <Card>
-      <CardHeader className={compact ? "p-4" : undefined}>
+      <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><CardTitle className="flex items-center gap-2"><Utensils className="h-5 w-5 text-primary" /> Food preferences</CardTitle><p className="mt-1 text-sm text-muted-foreground">Everything is optional. Add only what helps ChatGPT make practical suggestions for your taste, time, budget, and kitchen.</p></div>
-          {compact ? <Button type="button" variant="outline" size="sm" onClick={() => setIsOpen((current) => !current)}>{isOpen ? "Close" : "Edit"}</Button> : null}
         </div>
       </CardHeader>
-      {isOpen ? (
-        <CardContent className={compact ? "space-y-4 p-4 pt-0" : "space-y-4"}>
-          {isLoading ? <p className="text-sm text-muted-foreground">Loading food preferences...</p> : (
-            <>
-              <ProfileSection title="Food preferences" description="Why this matters: it helps ChatGPT avoid bad fits and suggest meals you will actually use.">
-                <TagInput id="preferred-cuisines" label="Preferred cuisines" value={form.preferred_cuisines} onChange={(preferred_cuisines) => setForm((current) => ({ ...current, preferred_cuisines }))} placeholder="Add a cuisine" />
-                <TagInput id="disliked-foods" label="Disliked foods" value={form.disliked_foods} onChange={(disliked_foods) => setForm((current) => ({ ...current, disliked_foods }))} placeholder="Add a food" />
-                <Field label="Allergies" value={form.allergies ?? ""} onChange={(value) => setForm((current) => ({ ...current, allergies: value || null }))} placeholder="List confirmed allergies" />
-                <Field label="How much repetition is okay?" value={form.repeat_tolerance ?? ""} onChange={(value) => setForm((current) => ({ ...current, repeat_tolerance: value || null }))} placeholder="For example: repeat lunch 3 times" />
-              </ProfileSection>
-              <ProfileSection title="Budget, prep time, and kitchen" description="Why this matters: practical limits keep meal and grocery suggestions realistic.">
-                <Field label="Weekly food budget" type="number" value={form.weekly_food_budget === null ? "" : String(form.weekly_food_budget)} onChange={(value) => setForm((current) => ({ ...current, weekly_food_budget: optionalNumber(value) }))} />
-                <Field label="Currency" value={form.budget_currency ?? ""} onChange={(value) => setForm((current) => ({ ...current, budget_currency: value || null }))} placeholder="EUR" />
-                <Field label="Maximum cooking time (minutes)" type="number" value={form.max_cooking_time_minutes === null ? "" : String(form.max_cooking_time_minutes)} onChange={(value) => setForm((current) => ({ ...current, max_cooking_time_minutes: optionalNumber(value) }))} />
-                <Field label="Meals per day" type="number" value={form.meals_per_day === null ? "" : String(form.meals_per_day)} onChange={(value) => setForm((current) => ({ ...current, meals_per_day: optionalNumber(value) }))} />
-                <TagInput id="meal-prep-days" label="Meal prep days" value={form.meal_prep_days} onChange={(meal_prep_days) => setForm((current) => ({ ...current, meal_prep_days }))} placeholder="Add a day" />
-                <TagInput id="kitchen-equipment" label="Kitchen equipment" value={form.kitchen_equipment} onChange={(kitchen_equipment) => setForm((current) => ({ ...current, kitchen_equipment }))} placeholder="Add equipment" />
-                <Field label="Cooking confidence" value={form.cooking_skill ?? ""} onChange={(value) => setForm((current) => ({ ...current, cooking_skill: value || null }))} placeholder="Beginner, comfortable, confident" />
-                <Field label="Shopping routine" value={form.grocery_style_preference ?? ""} onChange={(value) => setForm((current) => ({ ...current, grocery_style_preference: value || null }))} placeholder="For example: one weekly shop" />
-              </ProfileSection>
-              <div className="sticky bottom-20 z-10 flex flex-col gap-2 rounded-[14px] border bg-card/95 p-3 shadow-lg sm:bottom-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className={`text-sm font-medium ${isDirty ? "text-warning" : "text-primary"}`}>{isDirty ? "You have unsaved food preference changes." : savedAt ? `Food preferences saved at ${savedAt}.` : "Food preferences are up to date."}</p>
-                <Button onClick={save} disabled={isSaving || !isDirty}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : saveLabel}</Button>
-              </div>
-            </>
-          )}
-        </CardContent>
-      ) : null}
+      <CardContent className="space-y-4">
+        {isLoading ? <p className="text-sm text-muted-foreground">Loading food preferences...</p> : (
+          <>
+            <ProfileSection title="Food preferences" description="Why this matters: it helps ChatGPT avoid bad fits and suggest meals you will actually use.">
+              <TagInput id="preferred-cuisines" label="Preferred cuisines" value={form.preferred_cuisines} onChange={(preferred_cuisines) => setForm((current) => ({ ...current, preferred_cuisines }))} placeholder="Add a cuisine" />
+              <TagInput id="disliked-foods" label="Disliked foods" value={form.disliked_foods} onChange={(disliked_foods) => setForm((current) => ({ ...current, disliked_foods }))} placeholder="Add a food" />
+              <Field label="Allergies" value={form.allergies ?? ""} onChange={(value) => setForm((current) => ({ ...current, allergies: value || null }))} placeholder="List confirmed allergies" />
+              <Field label="How much repetition is okay?" value={form.repeat_tolerance ?? ""} onChange={(value) => setForm((current) => ({ ...current, repeat_tolerance: value || null }))} placeholder="For example: repeat lunch 3 times" />
+            </ProfileSection>
+            <ProfileSection title="Budget, prep time, and kitchen" description="Why this matters: practical limits keep meal and grocery suggestions realistic.">
+              <Field label="Weekly food budget" type="number" value={form.weekly_food_budget === null ? "" : String(form.weekly_food_budget)} onChange={(value) => setForm((current) => ({ ...current, weekly_food_budget: optionalNumber(value) }))} />
+              <Field label="Currency" value={form.budget_currency ?? ""} onChange={(value) => setForm((current) => ({ ...current, budget_currency: value || null }))} placeholder="EUR" />
+              <Field label="Maximum cooking time (minutes)" type="number" value={form.max_cooking_time_minutes === null ? "" : String(form.max_cooking_time_minutes)} onChange={(value) => setForm((current) => ({ ...current, max_cooking_time_minutes: optionalNumber(value) }))} />
+              <Field label="Meals per day" type="number" value={form.meals_per_day === null ? "" : String(form.meals_per_day)} onChange={(value) => setForm((current) => ({ ...current, meals_per_day: optionalNumber(value) }))} />
+              <TagInput id="meal-prep-days" label="Meal prep days" value={form.meal_prep_days} onChange={(meal_prep_days) => setForm((current) => ({ ...current, meal_prep_days }))} placeholder="Add a day" />
+              <TagInput id="kitchen-equipment" label="Kitchen equipment" value={form.kitchen_equipment} onChange={(kitchen_equipment) => setForm((current) => ({ ...current, kitchen_equipment }))} placeholder="Add equipment" />
+              <Field label="Cooking confidence" value={form.cooking_skill ?? ""} onChange={(value) => setForm((current) => ({ ...current, cooking_skill: value || null }))} placeholder="Beginner, comfortable, confident" />
+              <Field label="Shopping routine" value={form.grocery_style_preference ?? ""} onChange={(value) => setForm((current) => ({ ...current, grocery_style_preference: value || null }))} placeholder="For example: one weekly shop" />
+            </ProfileSection>
+            <div className="sticky bottom-20 z-10 flex flex-col gap-2 rounded-[14px] border bg-card/95 p-3 shadow-lg sm:bottom-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className={`text-sm font-medium ${isDirty ? "text-warning" : "text-primary"}`}>{isDirty ? "You have unsaved food preference changes." : savedAt ? `Food preferences saved at ${savedAt}.` : "Food preferences are up to date."}</p>
+              <Button onClick={save} disabled={isSaving || !isDirty}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : saveLabel}</Button>
+            </div>
+          </>
+        )}
+      </CardContent>
     </Card>
   );
 }
