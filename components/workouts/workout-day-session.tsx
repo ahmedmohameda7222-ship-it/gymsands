@@ -1,7 +1,32 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Check, CheckCircle2, Clock, ExternalLink, RefreshCcw, RotateCcw, Save, Sparkles, TimerReset, Trophy } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  CheckCircle2,
+  Clock,
+  Dumbbell,
+  ExternalLink,
+  FastForward,
+  Flame,
+  Pause,
+  Play,
+  RefreshCcw,
+  RotateCcw,
+  Save,
+  Sparkles,
+  Target,
+  TimerReset,
+  Trophy,
+  TrendingUp,
+  Zap,
+  ChevronRight,
+  Award,
+  BarChart3,
+  MoreHorizontal,
+  ChevronDown
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +50,7 @@ import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
 import { createExerciseAlternative, getDailyCheckins, getExerciseAlternatives, getProgressionTargets } from "@/services/database/execution-layer";
 import { calculateReadiness, getSleepRecoveryHistory, type EnhancedSleepRecoveryLog } from "@/services/wellness/wellness-data";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
-import { InlineFeedback } from "@/components/motion";
+import { InlineFeedback, MotionCard } from "@/components/motion";
 
 const defaultInstructions = "Use controlled form, keep the target muscle engaged, avoid rushing the eccentric part, and stop if the movement feels painful.";
 
@@ -606,17 +631,17 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     const targetSet = exerciseStates[exerciseIndex]?.sets[setIndex];
     if (!targetSet || targetSet.completedAt) return;
     if (isSaving) return;
-    
+
     setIsSaving(true);
     const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: new Date().toISOString() });
     setExerciseStates(nextStates);
-    
+
     const hasNextSet = completedSets + 1 < totalSets;
     if (hasNextSet) {
       startRestTimer(exerciseStates[exerciseIndex]?.exercise.rest_seconds ?? timerSeconds);
       moveToNextSet(nextStates, exerciseIndex, setIndex);
     }
-    
+
     try {
       await persistProgress(nextStates);
       setSetFeedback(`Set ${targetSet.setNumber} saved: ${targetSet.reps || "-"} reps at ${targetSet.weightKg || "0"} kg.`);
@@ -627,7 +652,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         const prevPerf = previousPerformance(history, exercise.exercise.exercise_name);
         if (prevPerf && (currentWeight > (prevPerf.lastWeightKg ?? 0) || currentReps > (prevPerf.lastReps ?? 0))) {
           setPrFeedback(`${exercise.exercise.exercise_name}: new best ${currentWeight} kg x ${currentReps} reps`);
-          window.setTimeout(() => setPrFeedback(""), 2500);
+          window.setTimeout(() => setPrFeedback(""), 3500);
         }
       }
     } catch (error) {
@@ -645,11 +670,11 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     const targetSet = exerciseStates[exerciseIndex]?.sets[setIndex];
     if (!targetSet) return;
     if (isSaving) return;
-    
+
     setIsSaving(true);
     const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: null });
     setExerciseStates(nextStates);
-    
+
     try {
       await persistProgress(nextStates);
     } catch {
@@ -749,10 +774,18 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
     );
   }
 
+  const activeExerciseCompleted = activeExercise?.sets.every((s) => s.completedAt) ?? false;
+  const nextExercise = exerciseStates[activeExerciseIndex + 1];
+  const nextSetLabel = activeExercise && !activeExerciseCompleted
+    ? `Set ${activeSet.setNumber} of ${activeExercise.sets.length}`
+    : nextExercise
+      ? `Next: ${nextExercise.exercise.exercise_name}`
+      : "All done";
+
   return (
     <div className="space-y-4 pb-28 lg:pb-4">
       {confirmDialog}
-      {completedSummary ? <WorkoutSummaryCard summary={completedSummary} /> : null}
+      {completedSummary ? <WorkoutSummaryCard summary={completedSummary} dayName={day.day_name} /> : null}
 
       {lowReadiness && !readinessDismissed ? (
         <Card className="border-warning/30 bg-warning/10">
@@ -768,7 +801,7 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               context={workoutContext}
               actions={[
                 { type: "reduce_workout_volume", label: "Reduce volume", description: "Ask ChatGPT which sets or exercises to reduce today." },
-                { type: "reduce_workout_intensity", label: "Reduce intensity", description: "Ask ChatGPT for a lower-intensity version of today’s planned work." },
+                { type: "reduce_workout_intensity", label: "Reduce intensity", description: "Ask ChatGPT for a lower-intensity version of today's planned work." },
                 { type: "recovery_workout", label: "Recovery version", description: "Ask ChatGPT for a recovery-focused version without automatically changing the plan." }
               ]}
             />
@@ -784,224 +817,453 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
         </Card>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button asChild variant="outline">
-          <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to plan</Link>
-        </Button>
-        <div className="flex flex-wrap gap-2">
-          <Badge>{day.weekday ?? "Workout day"}</Badge>
-          <Badge variant="outline">{completedSets}/{totalSets} sets done</Badge>
-          <Badge variant="outline">{formatTime(elapsedSeconds)}</Badge>
-          {isTimerRunning ? <Badge variant="success">Rest {formatTime(timerLeft)}</Badge> : null}
-          {isStarting ? <Badge variant="outline">Saving session...</Badge> : null}
+      {/* 1. PREMIUM COMPACT WORKOUT HEADER */}
+      <div className="sticky top-0 z-30 -mx-4 border-b border-border/60 bg-card/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/80 lg:static lg:mx-0 lg:border-b-0 lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0 lg:hidden">
+                <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /></Link>
+              </Button>
+              <div className="min-w-0">
+                <h1 className="truncate text-base font-semibold leading-tight">{day.day_name}</h1>
+                <p className="text-xs text-muted-foreground">{day.weekday ?? "Workout day"} · {exerciseStates.length} exercises</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {isTimerRunning ? (
+              <div className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-sm font-semibold text-primary">
+                <TimerReset className="h-3.5 w-3.5" />
+                {formatTime(timerLeft)}
+              </div>
+            ) : null}
+            <div className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-sm">
+              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="font-medium tabular-nums">{formatTime(elapsedSeconds)}</span>
+            </div>
+          </div>
+        </div>
+        <div className="mt-2">
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+            <span>{completedSets}/{totalSets} sets</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{day.day_name}</CardTitle>
-          <p className="text-sm text-muted-foreground">Log each set as you train. Previous performance and PR checks use real saved workout history only.</p>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Progress value={progress} />
-          <div className="grid gap-2 grid-cols-2 lg:grid-cols-4">
-            {exerciseStates.map((item, index) => {
-              const done = item.sets.filter((set) => set.completedAt).length;
-              const active = index === activeExerciseIndex;
-              const allDone = done === item.sets.length;
-              const group = supersetLabel(item.exercise);
-              const previous = previousPerformance(history, item.exercise.exercise_name);
-              return (
-                <div
-                  key={item.exercise.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
-                    setActiveExerciseIndex(index);
-                    const firstOpen = item.sets.findIndex((set) => !set.completedAt);
-                    setActiveSetIndex(firstOpen >= 0 ? firstOpen : item.sets.length - 1);
-                    setTimerSeconds(item.exercise.rest_seconds ?? 75);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return;
-                    event.preventDefault();
-                    setActiveExerciseIndex(index);
-                    const firstOpen = item.sets.findIndex((set) => !set.completedAt);
-                    setActiveSetIndex(firstOpen >= 0 ? firstOpen : item.sets.length - 1);
-                    setTimerSeconds(item.exercise.rest_seconds ?? 75);
-                  }}
-                  className={`rounded-md border p-3 text-left transition-colors ${active ? "border-primary bg-primary/10" : allDone ? "border-success/30 bg-success/5" : "bg-card hover:border-primary/45"}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="truncate text-sm font-semibold">{index + 1}. {item.exercise.exercise_name}{allDone ? <span className="ml-1 text-success">✓</span> : null}</p>
-                    {group ? <Badge>{group}</Badge> : null}
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">{done}/{item.sets.length} sets{allDone ? " · complete" : ""}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{previous ? `Last: ${previous.lastWeightKg ?? 0} kg x ${previous.lastReps ?? 0}` : "No previous data"}</p>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+      {/* 2. BACK LINK (desktop only) */}
+      <div className="hidden lg:flex">
+        <Button asChild variant="outline" size="sm">
+          <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to plan</Link>
+        </Button>
+      </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
+      {/* 7. COMPACT EXERCISE SELECTOR — mobile horizontal stepper, desktop clean grid */}
+      <div className="lg:hidden">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+          {exerciseStates.map((item, index) => {
+            const done = item.sets.filter((set) => set.completedAt).length;
+            const allDone = done === item.sets.length;
+            const active = index === activeExerciseIndex;
+            return (
+              <button
+                key={item.exercise.id}
+                type="button"
+                onClick={() => {
+                  setActiveExerciseIndex(index);
+                  const firstOpen = item.sets.findIndex((set) => !set.completedAt);
+                  setActiveSetIndex(firstOpen >= 0 ? firstOpen : item.sets.length - 1);
+                  setTimerSeconds(item.exercise.rest_seconds ?? 75);
+                }}
+                className={`flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-left transition-colors ${
+                  active
+                    ? "border-primary bg-primary/10"
+                    : allDone
+                      ? "border-success/30 bg-success/5 text-success"
+                      : "border-border bg-card hover:border-primary/40"
+                }`}
+              >
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                  allDone ? "bg-success text-success-foreground" : active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                }`}>
+                  {allDone ? <Check className="h-3 w-3" /> : index + 1}
+                </span>
+                <span className="max-w-[120px] truncate text-xs font-medium">{item.exercise.exercise_name}</span>
+                <span className="text-[10px] text-muted-foreground">{done}/{item.sets.length}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="hidden lg:block">
         <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <CardTitle className="flex flex-wrap items-center gap-2">
-                {activeExercise.exercise.exercise_name}
-                {supersetLabel(activeExercise.exercise) ? <Badge>Superset {supersetLabel(activeExercise.exercise)}</Badge> : null}
-              </CardTitle>
-              <Button type="button" variant="outline" size="sm" onClick={() => setShowReplacement((current) => !current)} aria-expanded={showReplacement}><RefreshCcw className="h-4 w-4" /> Replace exercise</Button>
-            </div>
-            <div className="flex flex-wrap gap-2 pt-2">
-              <Badge variant="outline">Planned {activeExercise.exercise.sets ?? activeExercise.sets.length} sets</Badge>
-              <Badge variant="outline">Reps {activeExercise.exercise.reps ?? "custom"}</Badge>
-              <Badge variant="outline">Rest {activeExercise.exercise.rest_seconds ?? timerSeconds}s</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {activeExercise.sets.every((s) => s.completedAt) ? (
-              <div className="rounded-[12px] border border-success/25 bg-success/5 p-3">
-                <p className="flex items-center gap-2 text-sm font-semibold text-success">
-                  <CheckCircle2 className="h-4 w-4" /> All sets completed
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {activeExercise.sets.filter((s) => s.completedAt).length}/{activeExercise.sets.length} sets done. Move to the next exercise or finish the workout.
-                </p>
-              </div>
-            ) : null}
-            {isTimerRunning ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-primary/25 bg-primary/5 p-4">
-                <div><p className="text-sm font-semibold text-foreground">Rest</p><p className="text-2xl font-bold text-primary">{formatTime(timerLeft)}</p></div>
-                <div className="flex gap-2"><Button type="button" variant="outline" size="sm" onClick={() => startRestTimer(timerLeft + 30)}>+30 sec</Button><Button type="button" variant="ghost" size="sm" onClick={stopRestTimer}>Skip</Button></div>
-              </div>
-            ) : null}
-
-            {showReplacement ? (
-              <div className="rounded-[16px] border-2 border-primary/30 bg-primary/5 p-4">
-                <p className="font-semibold text-foreground">Replace for today</p>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">Use a known alternative now, or prepare a ChatGPT request. Your saved workout plan stays unchanged.</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2"><Label htmlFor="manual-replacement-visible">Replacement exercise</Label><Input id="manual-replacement-visible" value={manualReplacementName} onChange={(event) => setManualReplacementName(event.target.value)} placeholder="For example: Dumbbell bench press" /></div>
-                  <div className="space-y-2"><Label htmlFor="replacement-reason-visible">Reason</Label><select id="replacement-reason-visible" value={replacementReason} onChange={(event) => setReplacementReason(event.target.value as ExerciseAlternativeReason)} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm"><option value="machine_taken">Machine taken</option><option value="no_equipment">No equipment</option><option value="pain_or_discomfort">Pain or discomfort</option><option value="too_hard">Too hard today</option><option value="home_alternative">Home alternative</option><option value="same_muscle">Same muscle, different movement</option><option value="lower_back_friendly">Lower-back friendly</option><option value="knee_friendly">Knee friendly</option><option value="shoulder_friendly">Shoulder friendly</option><option value="other">Other</option></select></div>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" onClick={useManualReplacement} disabled={!manualReplacementName.trim() || isSavingAlternative}><RefreshCcw className="h-4 w-4" /> {isSavingAlternative ? "Saving..." : "Use for today"}</Button>
-                  <AiActionRequestDialog actions={[{ type: "replace_exercise", label: "Ask ChatGPT", description: "Ask ChatGPT to recommend a suitable replacement using the selected reason and current workout." }]} sourceType="plan_exercise" sourceId={activeExercise.exercise.id} context={{ ...workoutContext, replacement_reason: replacementReason, exercise_alternatives: activeAlternatives }} />
-                </div>
-              </div>
-            ) : null}
-
-            <Disclosure title="Workout details" description="Progression, replacement, guide, alternatives, and timer settings">
-              <div className="space-y-4">
-            <div className="rounded-md bg-muted/40 p-3 text-sm leading-6 text-muted-foreground">
-              {currentInstructions}
-              <div className="mt-3 flex flex-wrap gap-2">
-                {currentGuideUrl ? (
-                  <Button asChild variant="outline" size="sm"><a href={currentGuideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open Exercise Guide</a></Button>
-                ) : null}
-                {currentCustomVideoUrl ? (
-                  <Button asChild variant="outline" size="sm"><a href={currentCustomVideoUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open Custom Video</a></Button>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <InfoBox title="Previous performance" lines={activePreviousPerformance ? [
-                `Last used: ${activePreviousPerformance.lastWeightKg ?? 0} kg x ${activePreviousPerformance.lastReps ?? 0}`,
-                `Last best set: ${activePreviousPerformance.lastBestSet ?? "No previous data"}`,
-                `Last performed: ${activePreviousPerformance.lastPerformedAt ? activePreviousPerformance.lastPerformedAt.slice(0, 10) : "No previous data"}`
-              ] : ["No previous data"]} />
-              <InfoBox title="Overload guidance" lines={[buildProgressiveSuggestion(activeExercise)]} />
-              <InfoBox title="Saved ChatGPT next target" lines={activeProgressionTarget ? [
-                `Target: ${activeProgressionTarget.next_target_weight_kg ?? "custom"} kg x ${activeProgressionTarget.next_target_reps ?? "custom reps"}${activeProgressionTarget.next_target_sets ? ` for ${activeProgressionTarget.next_target_sets} sets` : ""}`,
-                activeProgressionTarget.ai_recommendation || activeProgressionTarget.progression_note || "No note saved."
-              ] : ["No saved next-session target yet."]} />
-            </div>
-
-            {activeAlternatives.length ? (
-              <div className="rounded-[14px] border border-primary/20 bg-primary/5 p-3 text-sm">
-                <p className="flex items-center gap-2 font-semibold"><RefreshCcw className="h-4 w-4" /> Saved alternatives</p>
-                {activeAlternatives.slice(0, 3).map((alternative) => <p key={alternative.id} className="mt-1 text-muted-foreground">{alternative.alternative_exercise_name} · {alternative.reason.replaceAll("_", " ")}</p>)}
-              </div>
-            ) : null}
-
-                <Button type="button" variant="ghost" size="sm" onClick={resetWorkoutTimer}><TimerReset className="h-4 w-4" /> Reset workout timer</Button>
-              </div>
-            </Disclosure>
-
-            <div className="space-y-3">
-              {activeExercise.sets.map((set, setIndex) => {
-                const previousSet = previousSetForExercise(history, activeExercise.exercise.exercise_name, set.setNumber);
+          <CardContent className="p-4">
+            <div className="grid gap-2 grid-cols-2 lg:grid-cols-4">
+              {exerciseStates.map((item, index) => {
+                const done = item.sets.filter((set) => set.completedAt).length;
+                const active = index === activeExerciseIndex;
+                const allDone = done === item.sets.length;
+                const group = supersetLabel(item.exercise);
+                const previous = previousPerformance(history, item.exercise.exercise_name);
                 return (
-                  <div key={set.setNumber} className={`rounded-md border p-3 transition-all duration-200 ${set.completedAt ? "border-success/40 bg-success/10 relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:rounded-l-md before:bg-success/60" : setIndex === activeSetIndex ? "border-primary bg-primary/10 ring-1 ring-primary/20 shadow-sm" : "bg-card hover:border-border/80"}`}>
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <p className="font-semibold">Set {set.setNumber}</p>
-                      {set.completedAt ? <Badge variant="success" className="gap-1"><Check className="h-3 w-3" /> Done</Badge> : <Badge variant="outline">Open</Badge>}
+                  <div
+                    key={item.exercise.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      setActiveExerciseIndex(index);
+                      const firstOpen = item.sets.findIndex((set) => !set.completedAt);
+                      setActiveSetIndex(firstOpen >= 0 ? firstOpen : item.sets.length - 1);
+                      setTimerSeconds(item.exercise.rest_seconds ?? 75);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      setActiveExerciseIndex(index);
+                      const firstOpen = item.sets.findIndex((set) => !set.completedAt);
+                      setActiveSetIndex(firstOpen >= 0 ? firstOpen : item.sets.length - 1);
+                      setTimerSeconds(item.exercise.rest_seconds ?? 75);
+                    }}
+                    className={`rounded-md border p-3 text-left transition-colors ${active ? "border-primary bg-primary/10" : allDone ? "border-success/30 bg-success/5" : "bg-card hover:border-primary/45"}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="truncate text-sm font-semibold">{index + 1}. {item.exercise.exercise_name}{allDone ? <span className="ml-1 text-success">✓</span> : null}</p>
+                      {group ? <Badge>{group}</Badge> : null}
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1"><Label>Actual reps</Label><Input className="h-14 text-xl lg:h-12 lg:text-lg" value={set.reps} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { reps: event.target.value })} inputMode="numeric" /></div>
-                      <div className="space-y-1"><Label>Weight kg</Label><Input className="h-14 text-xl lg:h-12 lg:text-lg" value={set.weightKg} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { weightKg: event.target.value })} inputMode="decimal" placeholder="0" /></div>
-                    </div>
-                    <Disclosure title="Set details" description="RPE, RIR, set type, and notes" className="mt-3">
-                      <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="space-y-1"><Label>RPE</Label><Input className="h-14 lg:h-12" value={set.rpe} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" /></div>
-                      <div className="space-y-1"><Label>RIR</Label><Input className="h-14 lg:h-12" value={set.rir} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" /></div>
-                      <div className="space-y-1">
-                        <Label>Set type</Label>
-                        <select value={set.setType} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-14 lg:h-12 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                          <option value="normal">Normal</option>
-                          <option value="warmup">Warm-up</option>
-                          <option value="working">Working</option>
-                          <option value="failure">Failure</option>
-                          <option value="drop">Drop set</option>
-                        </select>
-                      </div>
-                        <div className="space-y-1 sm:col-span-3"><Label>Notes</Label><textarea className="min-h-24 w-full resize-y rounded-[14px] border border-input bg-card px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring" value={set.notes} onChange={(event) => updateSet(activeExerciseIndex, setIndex, { notes: event.target.value })} placeholder="Optional notes about this set" /></div>
-                      </div>
-                    </Disclosure>
-                    {previousSet ? <p className="mt-2 text-xs text-muted-foreground">Previous set: {previousSet.weightKg ?? 0} kg x {previousSet.reps ?? 0}{previousSet.performedAt ? ` on ${previousSet.performedAt.slice(0, 10)}` : ""}</p> : null}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" onClick={() => applyPreviousSet(activeExerciseIndex, setIndex)} disabled={Boolean(set.completedAt) || !previousSet}><Sparkles className="h-4 w-4" /> Use previous</Button>
-                      <Button className="w-full sm:w-auto" onClick={() => finishSet(activeExerciseIndex, setIndex)} disabled={Boolean(set.completedAt)}><CheckCircle2 className="h-4 w-4" /> Finish set</Button>
-                      <Button size="sm" variant="outline" onClick={() => restartSet(activeExerciseIndex, setIndex)} disabled={!set.completedAt}><RotateCcw className="h-4 w-4" /> Reopen</Button>
-                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{done}/{item.sets.length} sets{allDone ? " · complete" : ""}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{previous ? `Last: ${previous.lastWeightKg ?? 0} kg x ${previous.lastReps ?? 0}` : "No previous data"}</p>
                   </div>
                 );
               })}
             </div>
-
-            <div className="lg:sticky lg:bottom-3 z-20 rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
-              <InlineFeedback message={setFeedback} onClose={() => setSetFeedback("")} />
-              <InlineFeedback message={prFeedback} onClose={() => setPrFeedback("")} />
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Button className="min-h-12" onClick={finishCurrentSet} disabled={!activeSet || Boolean(activeSet.completedAt)}><CheckCircle2 className="h-4 w-4" /> Finish current set</Button>
-                <Button className="min-h-12" variant="outline" onClick={restartCurrentSet} disabled={!activeSet?.completedAt}><RotateCcw className="h-4 w-4" /> Reopen set</Button>
-              </div>
-              {isTimerRunning ? <p className="mt-2 text-center text-sm font-semibold text-primary">Rest timer: {formatTime(timerLeft)}</p> : null}
-            </div>
           </CardContent>
         </Card>
+      </div>
 
+      <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
         <div className="space-y-4">
+          {/* Active exercise header */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold leading-tight">{activeExercise.exercise.exercise_name}</h2>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <Badge variant="outline" className="font-normal">{activeExercise.exercise.sets ?? activeExercise.sets.length} sets</Badge>
+                <Badge variant="outline" className="font-normal">{activeExercise.exercise.reps ?? "custom"} reps</Badge>
+                <Badge variant="outline" className="font-normal">{activeExercise.exercise.rest_seconds ?? timerSeconds}s rest</Badge>
+                {supersetLabel(activeExercise.exercise) ? <Badge className="text-[10px]">Superset {supersetLabel(activeExercise.exercise)}</Badge> : null}
+              </div>
+            </div>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setShowReplacement((current) => !current)} aria-expanded={showReplacement} className="shrink-0">
+              <RefreshCcw className="h-4 w-4 mr-1" /> Replace
+            </Button>
+          </div>
+
+          {/* 9. COMPLETED EXERCISE STATE */}
+          {activeExerciseCompleted ? (
+            <MotionCard>
+              <div className="rounded-[16px] border border-success/25 bg-success/5 p-5 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/15">
+                  <CheckCircle2 className="h-6 w-6 text-success" />
+                </div>
+                <p className="mt-3 font-semibold text-success">All sets complete</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {activeExercise.exercise.exercise_name} — {activeExercise.sets.length} sets logged
+                </p>
+                {nextExercise ? (
+                  <Button
+                    className="mt-4"
+                    onClick={() => {
+                      setActiveExerciseIndex(activeExerciseIndex + 1);
+                      setActiveSetIndex(0);
+                      setTimerSeconds(nextExercise.exercise.rest_seconds ?? 75);
+                    }}
+                  >
+                    Next: {nextExercise.exercise.exercise_name} <ChevronRight className="ml-1 h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button className="mt-4" onClick={askFinishWorkout}><Save className="mr-2 h-4 w-4" /> Finish Workout</Button>
+                )}
+              </div>
+            </MotionCard>
+          ) : null}
+
+          {/* 2. ACTIVE SET HERO + 3. COMPACT SET TIMELINE */}
+          {!activeExerciseCompleted ? (
+            <div className="space-y-3">
+              {/* Active set hero */}
+              <MotionCard className="rounded-[16px] border border-primary/20 bg-primary/[0.03] p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-primary">
+                      <Target className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">Set {activeSet.setNumber}</p>
+                      <p className="text-xs text-muted-foreground">{activeSet.setType !== "working" ? activeSet.setType.charAt(0).toUpperCase() + activeSet.setType.slice(1) : "Working set"}</p>
+                    </div>
+                  </div>
+                  {activePreviousPerformance ? (
+                    <div className="text-right">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Previous best</p>
+                      <p className="text-sm font-semibold">{activePreviousPerformance.lastBestSet ?? `${activePreviousPerformance.lastWeightKg ?? 0} x ${activePreviousPerformance.lastReps ?? 0}`}</p>
+                    </div>
+                  ) : (
+                    <div className="text-right">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Previous</p>
+                      <p className="text-sm text-muted-foreground">No data</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Reps</Label>
+                    <Input
+                      className="h-16 text-center text-2xl font-bold lg:h-14 lg:text-xl"
+                      value={activeSet.reps}
+                      onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { reps: event.target.value })}
+                      inputMode="numeric"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Weight (kg)</Label>
+                    <Input
+                      className="h-16 text-center text-2xl font-bold lg:h-14 lg:text-xl"
+                      value={activeSet.weightKg}
+                      onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { weightKg: event.target.value })}
+                      inputMode="decimal"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <Button
+                    className="w-full min-h-[52px] text-base font-semibold"
+                    onClick={finishCurrentSet}
+                    disabled={!activeSet || Boolean(activeSet.completedAt) || isSaving}
+                  >
+                    <CheckCircle2 className="mr-2 h-5 w-5" />
+                    {isSaving ? "Saving..." : `Finish Set ${activeSet.setNumber}`}
+                  </Button>
+                </div>
+              </MotionCard>
+
+              {/* 3. Compact set timeline */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Workout map</p>
+                <div className="space-y-2">
+                  {activeExercise.sets.map((set, setIndex) => {
+                    const isActive = setIndex === activeSetIndex;
+                    const isCompleted = Boolean(set.completedAt);
+                    const previousSet = previousSetForExercise(history, activeExercise.exercise.exercise_name, set.setNumber);
+
+                    if (isActive) return null; // Active set shown in hero above
+
+                    return (
+                      <div
+                        key={set.setNumber}
+                        className={`flex items-center gap-3 rounded-[12px] border p-3 transition-colors ${
+                          isCompleted
+                            ? "border-success/30 bg-success/5"
+                            : "border-border/60 bg-card hover:border-primary/30"
+                        }`}
+                      >
+                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                          isCompleted
+                            ? "bg-success text-success-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}>
+                          {isCompleted ? <Check className="h-4 w-4" /> : set.setNumber}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">
+                            {isCompleted
+                              ? `${set.reps || "-"} reps · ${set.weightKg || "0"} kg`
+                              : `Set ${set.setNumber} · planned ${activeExercise.exercise.reps ?? "custom"}`
+                            }
+                          </p>
+                          {previousSet ? (
+                            <p className="text-xs text-muted-foreground">
+                              Previous: {previousSet.weightKg ?? 0} kg x {previousSet.reps ?? 0}
+                              {previousSet.performedAt ? ` · ${previousSet.performedAt.slice(0, 10)}` : ""}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No previous data</p>
+                          )}
+                        </div>
+                        {isCompleted ? (
+                          <Button size="sm" variant="ghost" onClick={() => restartSet(activeExerciseIndex, setIndex)}>
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="ghost" onClick={() => setActiveSetIndex(setIndex)}>
+                            <Target className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 4. COLLAPSED ADVANCED SET DETAILS */}
+              <Disclosure title="Advanced details" description="RPE, RIR, set type, notes" defaultOpen={false}>
+                <div className="space-y-4 pt-2">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="space-y-1"><Label className="text-xs">RPE</Label><Input className="h-12" value={activeSet.rpe} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" /></div>
+                    <div className="space-y-1"><Label className="text-xs">RIR</Label><Input className="h-12" value={activeSet.rir} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" /></div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Set type</Label>
+                      <select value={activeSet.setType} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-12 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <option value="normal">Normal</option>
+                        <option value="warmup">Warm-up</option>
+                        <option value="working">Working</option>
+                        <option value="failure">Failure</option>
+                        <option value="drop">Drop set</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1 sm:col-span-3"><Label className="text-xs">Notes</Label><textarea className="min-h-20 w-full resize-y rounded-[12px] border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" value={activeSet.notes} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { notes: event.target.value })} placeholder="Optional notes about this set" /></div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={() => applyPreviousSet(activeExerciseIndex, activeSetIndex)} disabled={Boolean(activeSet.completedAt)}>
+                      <Sparkles className="mr-1 h-3.5 w-3.5" /> Use previous
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={restartCurrentSet} disabled={!activeSet?.completedAt}>
+                      <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reopen
+                    </Button>
+                  </div>
+                </div>
+              </Disclosure>
+            </div>
+          ) : null}
+
+          {/* Workout details — instructions, guide, performance, targets */}
+          {!activeExerciseCompleted ? (
+            <Disclosure title="Workout details" description="Progression, guide, alternatives, and timer settings" defaultOpen={false}>
+              <div className="space-y-4 pt-2">
+                <div className="rounded-md bg-muted/40 p-3 text-sm leading-6 text-muted-foreground">
+                  {currentInstructions}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {currentGuideUrl ? (
+                      <Button asChild variant="outline" size="sm"><a href={currentGuideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4 mr-1" /> Open Exercise Guide</a></Button>
+                    ) : null}
+                    {currentCustomVideoUrl ? (
+                      <Button asChild variant="outline" size="sm"><a href={currentCustomVideoUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4 mr-1" /> Open Custom Video</a></Button>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <InfoBox title="Previous performance" lines={activePreviousPerformance ? [
+                    `Last used: ${activePreviousPerformance.lastWeightKg ?? 0} kg x ${activePreviousPerformance.lastReps ?? 0}`,
+                    `Last best set: ${activePreviousPerformance.lastBestSet ?? "No previous data"}`,
+                    `Last performed: ${activePreviousPerformance.lastPerformedAt ? activePreviousPerformance.lastPerformedAt.slice(0, 10) : "No previous data"}`
+                  ] : ["No previous data"]} />
+                  <InfoBox title="Overload guidance" lines={[buildProgressiveSuggestion(activeExercise)]} />
+                  <InfoBox title="Saved ChatGPT next target" lines={activeProgressionTarget ? [
+                    `Target: ${activeProgressionTarget.next_target_weight_kg ?? "custom"} kg x ${activeProgressionTarget.next_target_reps ?? "custom reps"}${activeProgressionTarget.next_target_sets ? ` for ${activeProgressionTarget.next_target_sets} sets` : ""}`,
+                    activeProgressionTarget.ai_recommendation || activeProgressionTarget.progression_note || "No note saved."
+                  ] : ["No saved next-session target yet."]} />
+                </div>
+                {activeAlternatives.length ? (
+                  <div className="rounded-[14px] border border-primary/20 bg-primary/5 p-3 text-sm">
+                    <p className="flex items-center gap-2 font-semibold"><RefreshCcw className="h-4 w-4" /> Saved alternatives</p>
+                    {activeAlternatives.slice(0, 3).map((alternative) => <p key={alternative.id} className="mt-1 text-muted-foreground">{alternative.alternative_exercise_name} · {alternative.reason.replaceAll("_", " ")}</p>)}
+                  </div>
+                ) : null}
+                <Button type="button" variant="ghost" size="sm" onClick={resetWorkoutTimer}><TimerReset className="h-4 w-4 mr-1" /> Reset workout timer</Button>
+              </div>
+            </Disclosure>
+          ) : null}
+
+          {/* 5. REST / NEXT-SET STATE */}
+          {isTimerRunning && !activeExerciseCompleted ? (
+            <MotionCard>
+              <div className="rounded-[16px] border border-primary/20 bg-primary/[0.04] p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Rest timer</p>
+                    <p className="mt-1 text-3xl font-bold tabular-nums text-primary">{formatTime(timerLeft)}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{nextSetLabel}</p>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => startRestTimer(timerLeft + 30)}>
+                      <PlusIcon className="mr-1 h-3.5 w-3.5" /> 30s
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={stopRestTimer}>
+                      <FastForward className="mr-1 h-3.5 w-3.5" /> Skip
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </MotionCard>
+          ) : null}
+
+          {/* Feedback */}
+          <InlineFeedback message={setFeedback} onClose={() => setSetFeedback("")} />
+          <InlineFeedback message={prFeedback} onClose={() => setPrFeedback("")} />
+        </div>
+
+        {/* SIDE PANEL */}
+        <div className="space-y-4">
+          {/* Rest timer card */}
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><TimerReset className="h-5 w-5" /> Rest timer</CardTitle></CardHeader>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <TimerReset className="h-4 w-4" /> Rest timer
+              </CardTitle>
+            </CardHeader>
             <CardContent className="space-y-3">
-              <div className="space-y-2"><Label>Timer seconds</Label><Input type="number" min="0" inputMode="numeric" enterKeyHint="done" value={timerSeconds} onChange={(event) => setTimerSeconds(Math.max(0, Number(event.target.value) || 0))} /></div>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="flex items-center gap-3">
                 <Button variant="outline" size="sm" onClick={() => startRestTimer(30)}>30s</Button>
                 <Button variant="outline" size="sm" onClick={() => startRestTimer(60)}>60s</Button>
                 <Button variant="outline" size="sm" onClick={() => startRestTimer(90)}>90s</Button>
                 <Button variant="outline" size="sm" onClick={() => startRestTimer(180)}>3m</Button>
               </div>
-              <div className="rounded-md bg-foreground p-5 text-center text-background"><Clock className="mx-auto h-6 w-6" /><p className="mt-2 text-4xl font-bold">{formatTime(timerLeft)}</p></div>
-              <div className="grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => startRestTimer(timerSeconds)}>Start timer</Button><Button variant="outline" onClick={stopRestTimer}>Stop</Button></div>
+              <div className="rounded-[14px] bg-foreground p-4 text-center text-background">
+                <Clock className="mx-auto h-5 w-5 opacity-80" />
+                <p className="mt-1 text-3xl font-bold tabular-nums">{formatTime(timerLeft)}</p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => startRestTimer(timerSeconds)}><Play className="mr-1 h-3.5 w-3.5" /> Start</Button>
+                <Button variant="outline" size="sm" className="flex-1" onClick={stopRestTimer}><Pause className="mr-1 h-3.5 w-3.5" /> Stop</Button>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Custom timer (seconds)</Label>
+                <Input type="number" min="0" inputMode="numeric" value={timerSeconds} onChange={(event) => setTimerSeconds(Math.max(0, Number(event.target.value) || 0))} />
+              </div>
             </CardContent>
           </Card>
 
-          <Disclosure title="Workout summary" description="Volume, completed exercises, and possible records">
+          {/* Session notes */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Session notes</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <textarea
+                value={sessionNotes}
+                onChange={(event) => setSessionNotes(event.target.value)}
+                placeholder="How did this workout feel?"
+                className="min-h-20 w-full resize-y rounded-[12px] border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <Button className="w-full hidden lg:inline-flex" onClick={askFinishWorkout} disabled={isSaving || !session}>
+                <Save className="mr-2 h-4 w-4" /> {isSaving ? "Saving..." : isFinished ? "Finish workout" : "Finish and save partial workout"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Workout summary preview */}
+          <Disclosure title="Workout summary" description="Volume, completed exercises, and possible records" defaultOpen={false}>
             <div className="space-y-3 text-sm text-muted-foreground">
               <p>Total volume: {round(buildSessionSets(exerciseStates).reduce((sum, set) => sum + set.weightKg * set.reps, 0))} kg</p>
               <p>Exercises completed: {exerciseStates.filter((item) => item.sets.some((set) => set.completedAt)).length}/{exerciseStates.length}</p>
@@ -1009,34 +1271,69 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
               <ul className="space-y-1">{liveSuggestions.slice(0, 4).map((suggestion) => <li key={suggestion}>• {suggestion}</li>)}</ul>
             </div>
           </Disclosure>
-
-          <Card>
-            <CardHeader><CardTitle>Finish workout</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {isFinished && !completedSummary ? <div className="rounded-[14px] border border-primary/30 bg-primary/5 p-3"><p className="font-semibold text-foreground">All planned sets are complete.</p><p className="mt-1 text-sm text-muted-foreground">Review your note, then save the workout to history.</p></div> : null}
-              {completedSummary ? <div id="workout-finish-status" className="rounded-[14px] border border-primary/30 bg-primary/5 p-3" role="status"><p className="font-semibold text-foreground">Workout saved successfully.</p><p className="mt-1 text-sm text-muted-foreground">Your sets, duration, and notes are now in workout history.</p></div> : null}
-              <textarea value={sessionNotes} onChange={(event) => setSessionNotes(event.target.value)} placeholder="How did this workout feel?" className="min-h-24 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-              <Button className="w-full hidden lg:inline-flex" onClick={askFinishWorkout} disabled={isSaving || !session}><Save className="h-4 w-4" /> {isSaving ? "Saving..." : isFinished ? "Finish workout" : "Finish and save partial workout"}</Button>
-              <p className="text-xs text-muted-foreground">Time spent: {formatTime(elapsedSeconds)}. Completed sets are already saved while the session is open.</p>
-            </CardContent>
-          </Card>
         </div>
       </div>
 
+      {/* Exercise replacement */}
+      {showReplacement ? (
+        <MotionCard>
+          <div className="rounded-[16px] border-2 border-primary/30 bg-primary/5 p-4">
+            <p className="font-semibold text-foreground">Replace for today</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">Use a known alternative now, or prepare a ChatGPT request. Your saved workout plan stays unchanged.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2"><Label htmlFor="manual-replacement-visible">Replacement exercise</Label><Input id="manual-replacement-visible" value={manualReplacementName} onChange={(event) => setManualReplacementName(event.target.value)} placeholder="For example: Dumbbell bench press" /></div>
+              <div className="space-y-2"><Label htmlFor="replacement-reason-visible">Reason</Label><select id="replacement-reason-visible" value={replacementReason} onChange={(event) => setReplacementReason(event.target.value as ExerciseAlternativeReason)} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm"><option value="machine_taken">Machine taken</option><option value="no_equipment">No equipment</option><option value="pain_or_discomfort">Pain or discomfort</option><option value="too_hard">Too hard today</option><option value="home_alternative">Home alternative</option><option value="same_muscle">Same muscle, different movement</option><option value="lower_back_friendly">Lower-back friendly</option><option value="knee_friendly">Knee friendly</option><option value="shoulder_friendly">Shoulder friendly</option><option value="other">Other</option></select></div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button type="button" onClick={useManualReplacement} disabled={!manualReplacementName.trim() || isSavingAlternative}><RefreshCcw className="h-4 w-4" /> {isSavingAlternative ? "Saving..." : "Use for today"}</Button>
+              <AiActionRequestDialog actions={[{ type: "replace_exercise", label: "Ask ChatGPT", description: "Ask ChatGPT to recommend a suitable replacement using the selected reason and current workout." }]} sourceType="plan_exercise" sourceId={activeExercise.exercise.id} context={{ ...workoutContext, replacement_reason: replacementReason, exercise_alternatives: activeAlternatives }} />
+            </div>
+          </div>
+        </MotionCard>
+      ) : null}
+
+      {/* ChatGPT help */}
       <Disclosure title="ChatGPT help" description="Review this workout, make today lighter, or plan the next step">
         <WorkoutAiActionPanel compact sourceType="workout_session" sourceId={session?.id ?? day.id} context={workoutContext} />
       </Disclosure>
 
+      {/* 6. CONTEXT-AWARE MOBILE STICKY BOTTOM */}
       <MobileStickyActions>
         <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1 text-sm">
-            <p className="font-semibold text-foreground">{completedSets}/{totalSets} sets</p>
-            <p className="truncate text-xs text-muted-foreground">{formatTime(elapsedSeconds)} elapsed</p>
-          </div>
-          <Button className="min-h-12 flex-1 text-base" onClick={askFinishWorkout} disabled={isSaving || !session}>
-            <Save className="h-5 w-5" />
-            {isSaving ? "Saving..." : "Finish Workout"}
-          </Button>
+          {isTimerRunning ? (
+            <>
+              <div className="min-w-0 flex-1 text-sm">
+                <p className="font-semibold text-foreground">Resting</p>
+                <p className="truncate text-xs text-muted-foreground">{formatTime(timerLeft)} · {nextSetLabel}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => startRestTimer(timerLeft + 30)}>+30s</Button>
+              <Button className="min-h-12 flex-1 text-base" variant="secondary" onClick={stopRestTimer}>
+                <FastForward className="mr-2 h-5 w-5" /> Skip Rest
+              </Button>
+            </>
+          ) : isFinished && !completedSummary ? (
+            <>
+              <div className="min-w-0 flex-1 text-sm">
+                <p className="font-semibold text-foreground">Workout complete</p>
+                <p className="truncate text-xs text-muted-foreground">{formatTime(elapsedSeconds)} · {completedSets} sets</p>
+              </div>
+              <Button className="min-h-12 flex-1 text-base" onClick={askFinishWorkout} disabled={isSaving || !session}>
+                <Save className="mr-2 h-5 w-5" />
+                {isSaving ? "Saving..." : "Finish Workout"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="min-w-0 flex-1 text-sm">
+                <p className="font-semibold text-foreground">{activeExercise?.exercise.exercise_name ?? "Workout"}</p>
+                <p className="truncate text-xs text-muted-foreground">{completedSets}/{totalSets} sets · {formatTime(elapsedSeconds)}</p>
+              </div>
+              <Button className="min-h-12 flex-1 text-base" onClick={finishCurrentSet} disabled={!activeSet || Boolean(activeSet.completedAt) || isSaving || activeExerciseCompleted}>
+                <CheckCircle2 className="mr-2 h-5 w-5" />
+                {isSaving ? "Saving..." : `Finish Set ${activeSet?.setNumber ?? ""}`}
+              </Button>
+            </>
+          )}
         </div>
       </MobileStickyActions>
       <MobileStickyActionsSpacer />
@@ -1044,27 +1341,103 @@ export function WorkoutDaySession({ day }: { day: WorkoutPlanDaySession }) {
   );
 }
 
-function InfoBox({ title, lines }: { title: string; lines: string[] }) {
-  return <div className="rounded-md border p-3"><p className="font-semibold">{title}</p><div className="mt-2 space-y-1 text-sm text-muted-foreground">{lines.map((line) => <p key={line}>{line}</p>)}</div></div>;
+function PlusIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
 }
 
-function WorkoutSummaryCard({ summary }: { summary: WorkoutSummary }) {
+function InfoBox({ title, lines }: { title: string; lines: string[] }) {
   return (
-    <Card className="border-primary bg-primary/10">
-      <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> Workout summary saved</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-4">
-          <InfoBox title="Duration" lines={[`${summary.durationMinutes} min`]} />
-          <InfoBox title="Volume" lines={[`${summary.totalVolume} kg`]} />
-          <InfoBox title="Sets" lines={[`${summary.completedSets} completed`]} />
-          <InfoBox title="Exercises" lines={[`${summary.completedExercises} completed`, summary.skippedExercises.length ? `${summary.skippedExercises.length} skipped` : "None skipped"]} />
-        </div>
-        <InfoBox title="PRs achieved" lines={summary.prs.length ? summary.prs : ["No new PRs detected from this workout."]} />
-        <InfoBox title="Progressive overload guidance" lines={summary.suggestions} />
-        {summary.skippedExercises.length ? <InfoBox title="Skipped or incomplete exercises" lines={summary.skippedExercises} /> : null}
-        {summary.notes ? <InfoBox title="Session notes" lines={[summary.notes]} /> : null}
-        <Button asChild><Link href="/my-workout/plans">Back to Workout Plans</Link></Button>
-      </CardContent>
-    </Card>
+    <div className="rounded-[12px] border border-border/60 bg-card/50 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</p>
+      <div className="mt-2 space-y-1 text-sm text-muted-foreground">{lines.map((line) => <p key={line}>{line}</p>)}</div>
+    </div>
+  );
+}
+
+function WorkoutSummaryCard({ summary, dayName }: { summary: WorkoutSummary; dayName: string }) {
+  return (
+    <MotionCard>
+      <Card className="border-success/20 bg-success/[0.04]">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Award className="h-5 w-5 text-success" />
+            {dayName} complete
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Stats grid */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-[12px] border border-border/60 bg-card p-3 text-center">
+              <Clock className="mx-auto h-4 w-4 text-muted-foreground" />
+              <p className="mt-2 text-xl font-bold">{summary.durationMinutes}</p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Minutes</p>
+            </div>
+            <div className="rounded-[12px] border border-border/60 bg-card p-3 text-center">
+              <BarChart3 className="mx-auto h-4 w-4 text-muted-foreground" />
+              <p className="mt-2 text-xl font-bold">{summary.totalVolume}</p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Volume kg</p>
+            </div>
+            <div className="rounded-[12px] border border-border/60 bg-card p-3 text-center">
+              <CheckCircle2 className="mx-auto h-4 w-4 text-muted-foreground" />
+              <p className="mt-2 text-xl font-bold">{summary.completedSets}</p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Sets</p>
+            </div>
+            <div className="rounded-[12px] border border-border/60 bg-card p-3 text-center">
+              <Dumbbell className="mx-auto h-4 w-4 text-muted-foreground" />
+              <p className="mt-2 text-xl font-bold">{summary.completedExercises}</p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Exercises</p>
+            </div>
+          </div>
+
+          {/* PRs */}
+          {summary.prs.length > 0 ? (
+            <div className="rounded-[12px] border border-primary/20 bg-primary/[0.04] p-4">
+              <p className="flex items-center gap-2 text-sm font-semibold text-primary">
+                <Trophy className="h-4 w-4" /> {summary.prs.length} new PR{summary.prs.length === 1 ? "" : "s"}
+              </p>
+              <ul className="mt-2 space-y-1">
+                {summary.prs.map((pr) => (
+                  <li key={pr} className="text-sm text-muted-foreground">• {pr}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {/* Suggestions */}
+          <div className="rounded-[12px] border border-border/60 bg-card/50 p-4">
+            <p className="flex items-center gap-2 text-sm font-semibold">
+              <TrendingUp className="h-4 w-4" /> Progressive overload guidance
+            </p>
+            <ul className="mt-2 space-y-1">
+              {summary.suggestions.slice(0, 4).map((suggestion) => (
+                <li key={suggestion} className="text-sm text-muted-foreground">• {suggestion}</li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Skipped exercises */}
+          {summary.skippedExercises.length > 0 ? (
+            <div className="rounded-[12px] border border-warning/20 bg-warning/[0.04] p-4">
+              <p className="text-sm font-semibold text-warning">Skipped exercises</p>
+              <p className="mt-1 text-sm text-muted-foreground">{summary.skippedExercises.join(", ")}</p>
+            </div>
+          ) : null}
+
+          {/* Notes */}
+          {summary.notes ? (
+            <div className="rounded-[12px] border border-border/60 bg-card/50 p-4">
+              <p className="text-sm font-semibold">Session notes</p>
+              <p className="mt-1 text-sm text-muted-foreground">{summary.notes}</p>
+            </div>
+          ) : null}
+
+          <Button asChild className="w-full"><Link href="/my-workout/plans">Back to Workout Plans</Link></Button>
+        </CardContent>
+      </Card>
+    </MotionCard>
   );
 }
