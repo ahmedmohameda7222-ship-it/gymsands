@@ -165,9 +165,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (isWorkoutSessionRoute) {
     return (
-      <div className="premium-page-bg min-h-dvh text-foreground">
+      <div className="premium-page-bg relative min-h-dvh overflow-hidden text-foreground">
         {isOffline ? <div className="fixed inset-x-3 top-3 z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg" role="status"><p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> You appear offline. Changes may not save until the connection returns.</p></div> : null}
-        <main id="main-content" className="min-h-dvh overflow-hidden">
+        <main id="main-content" className="min-h-dvh">
           {children}
         </main>
       </div>
