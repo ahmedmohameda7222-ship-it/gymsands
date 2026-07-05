@@ -727,7 +727,7 @@ function ScheduleStepper({
         >
           -
         </Button>
-        <div className="relative min-h-11 rounded-[14px] border border-border/60 bg-card/95 text-center transition-colors focus-within:border-primary/15 focus-within:bg-primary/5 focus-within:ring-2 focus-within:ring-primary/10">
+        <div className="group relative flex min-h-11 items-center overflow-hidden rounded-[14px] border border-border/60 bg-card/95 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition focus-within:border-primary/20 focus-within:bg-primary/5 focus-within:ring-2 focus-within:ring-primary/10">
           <input
             type="text"
             inputMode="numeric"
@@ -740,9 +740,9 @@ function ScheduleStepper({
             onKeyDown={(event) => {
               if (event.key === "Enter") event.currentTarget.blur();
             }}
-            className="h-11 min-h-11 w-full rounded-[14px] border-0 bg-transparent px-3 pr-16 text-center text-lg font-bold text-foreground outline-none ring-0 focus:border-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            className="h-11 min-h-11 min-w-0 flex-1 appearance-none border-0 !border-transparent bg-transparent px-3 text-center text-lg font-bold text-foreground !outline-none !ring-0 shadow-none [appearance:textfield] focus:!border-transparent focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
-          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-muted-foreground">{unit}</span>
+          <span className="pointer-events-none flex h-full items-center pl-1 pr-3 text-xs font-semibold text-muted-foreground">{unit}</span>
         </div>
         <Button
           type="button"
