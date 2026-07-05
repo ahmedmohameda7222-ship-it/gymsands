@@ -50,7 +50,8 @@ export default function DataPrivacyPage() {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-    toast({ title: "CSV export ready", description: "A private CSV copy of your Plaivra data was downloaded." });    } catch (downloadError) {
+      toast({ title: "CSV export ready", description: "A private CSV copy of your Plaivra data was downloaded." });
+    } catch (downloadError) {
       toast({ title: "Export failed", description: downloadError instanceof Error ? downloadError.message : "Please try again." });
     } finally {
       setIsDownloadingExport(false);
@@ -61,8 +62,6 @@ export default function DataPrivacyPage() {
     await updateSettings({ [key]: value } as Partial<UserAppSettings>);
     setHasSaved(true);
   }
-
-
 
   async function handleResetSettings() {
     await resetSettings();
@@ -127,7 +126,19 @@ export default function DataPrivacyPage() {
           <CardDescription>{t("settings.safeActionsDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-         
+          <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3">
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Download className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block font-semibold text-foreground">Export Plaivra Data</span>
+                <span className="mt-1 block text-sm leading-5 text-muted-foreground">Download a private CSV copy of your Plaivra account, workouts, meals, progress, and settings.</span>
+              </span>
+            </span>
+            <Button variant="outline" disabled={isDownloadingExport} onClick={() => void downloadDataExport()}>{isDownloadingExport ? "Preparing…" : "Export CSV"}</Button>
+          </div>
+
           <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3">
             <span className="flex min-w-0 items-center gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
