@@ -3,13 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   User,
-  Target,
   Bell,
   Bot,
   SlidersHorizontal,
   Shield,
   ShieldAlert,
-  MessageCircle,
+ 
 } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -97,12 +96,7 @@ export default function SettingsPage() {
       description: t("settings.accountDesc"),
       href: "/settings/account",
     },
-    {
-      icon: Target,
-      title: t("settings.goalsTracking"),
-      description: t("settings.goalsTrackingDesc"),
-      href: "/settings/goals-tracking",
-    },
+
     {
       icon: Bell,
       title: t("settings.reminders"),
@@ -127,12 +121,7 @@ export default function SettingsPage() {
       description: "Training safety, food preferences, budget, and cooking routine for requests you prepare.",
       href: "/settings/coaching-profile",
     },
-    {
-      icon: MessageCircle,
-      title: "ChatGPT requests",
-      description: "Return to requests you prepared and update their status.",
-      href: "/settings/chatgpt-requests",
-    },
+   
     {
       icon: Shield,
       title: t("settings.dataPrivacy"),
