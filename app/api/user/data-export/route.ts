@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 function csvCell(value: unknown) {
   if (value === null || value === undefined) return "";
-  const text = typeof value === "string" ? value : JSON.stringify(value);
+  const text = typeof value === "string" ? value : JSON.stringify(value) ?? String(value);
   return `"${text.replace(/"/g, '""')}"`;
 }
 
