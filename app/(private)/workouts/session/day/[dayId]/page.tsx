@@ -47,7 +47,17 @@ export default function WorkoutDaySessionPage() {
       {isLoading ? <CardSkeleton rows={7} /> : null}
       {!isLoading && loadError ? <ErrorState title="Workout day could not load" description={loadError} onRetry={loadDay} fallbackLabel="Back to workout plans" fallbackHref="/my-workout/plans" details={loadErrorDetails} /> : null}
       {!isLoading && !loadError && !day ? <EmptyState title="Workout day not found" description="This workout day was not found. Save your plan again, then start it from the workout calendar." actionLabel="Back to workout plans" actionHref="/my-workout/plans" /> : null}
-      {!isLoading && !loadError && day ? <WorkoutDayFocusSession day={day} /> : null}
+      {!isLoading && !loadError && day ? (
+        <div className="workout-day-session-clean">
+          <style>{`
+            .workout-day-session-clean [class*="radial-gradient"] {
+              background: transparent !important;
+              background-image: none !important;
+            }
+          `}</style>
+          <WorkoutDayFocusSession day={day} />
+        </div>
+      ) : null}
     </>
   );
 }
