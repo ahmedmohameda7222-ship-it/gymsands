@@ -127,51 +127,7 @@ export default function DataPrivacyPage() {
           <CardDescription>{t("settings.safeActionsDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3">
-            <span className="flex min-w-0 items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Download className="h-5 w-5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block font-semibold text-foreground">Export Plaivra Data</span>
-                <span className="mt-1 block text-sm leading-5 text-muted-foreground">Download a private CSV copy of your Plaivra account, workouts, meals, progress, and settings.</span>
-              </span>
-            </span>
-            <Button variant="outline" disabled={isDownloadingExport} onClick={() => void downloadDataExport()}>{isDownloadingExport ? "Preparing…" : "Export CSV"}</Button>
-          </div>
-          <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3">
-            <span className="flex min-w-0 items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Download className="h-5 w-5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block font-semibold text-foreground">{t("settings.exportSettings")}</span>
-                <span className="mt-1 block text-sm leading-5 text-muted-foreground">{t("settings.exportSettingsDesc")}</span>
-              </span>
-            </span>
-          </div>
-          <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3">
-            <span className="flex min-w-0 items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <FileArchive className="h-5 w-5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block font-semibold text-foreground">Request full data export</span>
-                <span className="mt-1 block text-sm leading-5 text-muted-foreground">Submit a tracked request for a complete Plaivra data export.</span>
-              </span>
-            </span>
-          </div>
-          <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border border-destructive/30 bg-card p-3">
-            <span className="flex min-w-0 items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
-                <Trash2 className="h-5 w-5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block font-semibold text-foreground">Request account deletion</span>
-                <span className="mt-1 block text-sm leading-5 text-muted-foreground">Creates a reviewable deletion request and revokes active ChatGPT access; it does not immediately delete your account or fitness data.</span>
-              </span>
-            </span>
-          </div>
+         
           <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3">
             <span className="flex min-w-0 items-center gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
