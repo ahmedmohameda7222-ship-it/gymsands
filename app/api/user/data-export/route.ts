@@ -5,6 +5,35 @@ import { rateLimit } from "@/lib/integrations/rate-limit";
 
 export const runtime = "nodejs";
 
+function csvCell(value: unknown) {
+  if (value === null || value === undefined) return "";
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function flattenToCsvRows(value: unknown, path = "export"): Array<[string, string]> {
+  if (value === null || value === undefined || typeof value !== "object") {
+    return [[path, value === null || value === undefined ? "" : String(value)]];
+  }
+
+  if (Array.isArray(value)) {
+    if (!value.length) return [[path, ""]];
+    return value.flatMap((item, index) => flattenToCsvRows(item, `${path}[${index}]`));
+  }
+
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, child]) =>
+    flattenToCsvRows(child, `${path}.${key}`)
+  );
+}
+
+function buildCsv(payload: unknown) {
+  const rows = flattenToCsvRows(payload);
+  return [
+    ["field", "value"].map(csvCell).join(","),
+    ...rows.map((row) => row.map(csvCell).join(","))
+  ].join("\n");
+}
+
 export async function GET(request: Request) {
   const limited = rateLimit(request, "data-export", 3, 60_000);
   if (limited) return limited;
@@ -14,11 +43,14 @@ export async function GET(request: Request) {
 
   try {
     const payload = await buildCurrentUserDataExport(context.supabase, context.user);
+    const csv = buildCsv(payload);
     const date = new Date().toISOString().slice(0, 10);
-    return NextResponse.json(payload, {
+
+    return new NextResponse(csv, {
       headers: {
         "Cache-Control": "no-store",
-        "Content-Disposition": `attachment; filename="plaivra-data-export-${date}.json"`,
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="plaivra-data-export-${date}.csv"`,
         "X-Content-Type-Options": "nosniff"
       }
     });
