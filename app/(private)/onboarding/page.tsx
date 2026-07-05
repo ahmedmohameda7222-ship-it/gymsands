@@ -599,7 +599,7 @@ function NumericStatInput({
         <Label>{label}</Label>
         <span className="text-xs font-semibold text-muted-foreground">{min}-{max} {unit}</span>
       </div>
-      <div className="mt-3 grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center rounded-[14px] border border-border/70 bg-muted/25 transition-colors focus-within:border-primary/25 focus-within:bg-primary/5 focus-within:ring-2 focus-within:ring-primary/15">
+      <div className="mt-3 flex min-h-12 items-center overflow-hidden rounded-[14px] border border-border/70 bg-muted/25 transition-colors focus-within:border-primary/20 focus-within:bg-primary/5 focus-within:ring-2 focus-within:ring-primary/10">
         <input
           type="text"
           inputMode="numeric"
@@ -613,9 +613,9 @@ function NumericStatInput({
           onKeyDown={(event) => {
             if (event.key === "Enter") event.currentTarget.blur();
           }}
-          className="h-12 min-h-12 min-w-0 rounded-l-[14px] bg-transparent px-3 text-center text-xl font-bold text-foreground outline-none placeholder:text-sm placeholder:font-semibold placeholder:text-muted-foreground"
+          className="h-12 min-h-12 min-w-0 flex-1 appearance-none border-0 !border-transparent bg-transparent px-3 text-center text-xl font-bold text-foreground !outline-none !ring-0 shadow-none placeholder:text-sm placeholder:font-semibold placeholder:text-muted-foreground [appearance:textfield] focus:!border-transparent focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />
-        <span className="px-3 text-sm font-semibold text-muted-foreground">{unit}</span>
+        <span className="pointer-events-none flex h-full items-center pl-1 pr-3 text-sm font-semibold text-muted-foreground">{unit}</span>
       </div>
     </div>
   );
