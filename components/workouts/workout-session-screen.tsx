@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
@@ -9,21 +9,11 @@ import { Button } from "@/components/ui/button";
 export function WorkoutSessionScreen({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [isClosing, setIsClosing] = useState(false);
-  const timerRef = useRef<number | null>(null);
 
   function handleClose() {
     if (isClosing) return;
     setIsClosing(true);
-    timerRef.current = window.setTimeout(() => router.back(), 380);
   }
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
-      }
-    };
-  }, []);
 
   return (
     <motion.div
@@ -32,6 +22,9 @@ export function WorkoutSessionScreen({ children }: { children: React.ReactNode }
       initial={{ y: "100%" }}
       animate={isClosing ? { y: "100%" } : { y: 0 }}
       transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+      onAnimationComplete={() => {
+        if (isClosing) router.back();
+      }}
     >
       <Button
         type="button"

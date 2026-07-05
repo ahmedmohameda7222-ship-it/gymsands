@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   BarChart3,
@@ -151,6 +151,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const previousPathnameRef = useRef<string | undefined>(undefined);
+  const cameFromWorkoutSession = previousPathnameRef.current?.startsWith("/workouts/session") ?? false;
+
+  useEffect(() => {
+    previousPathnameRef.current = pathname;
+  }, [pathname]);
+
   if (pathname === "/onboarding") {
     return (
       <div className="premium-page-bg min-h-dvh text-foreground">
@@ -227,7 +234,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main id="main-content" className="pb-32 lg:ml-72 lg:pb-0">
         <motion.div
           key={pathname}
-          initial={{ opacity: 0, y: 8 }}
+          initial={cameFromWorkoutSession ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
           className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8"
