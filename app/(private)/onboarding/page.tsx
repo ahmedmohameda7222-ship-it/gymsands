@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { WheelPicker } from "@/components/ui/wheel-picker";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { cn } from "@/lib/utils";
 import { getOnboarding, saveOnboarding, updateProfile } from "@/services/database/profile";
 import {
   getDefaultAiPermissionConfig,
@@ -45,12 +45,17 @@ const trainingCycles = [
   "Wellness / Mobility",
   "I don't know"
 ];
-const ageOptions = Array.from({ length: 88 }, (_, index) => index + 13);
-const heightOptions = Array.from({ length: 131 }, (_, index) => index + 120);
-const weightOptions = Array.from({ length: 216 }, (_, index) => index + 35);
+const AGE_MIN = 13;
+const AGE_MAX = 100;
+const HEIGHT_MIN = 120;
+const HEIGHT_MAX = 250;
+const WEIGHT_MIN = 35;
+const WEIGHT_MAX = 250;
 const dayOptions = Array.from({ length: 7 }, (_, index) => index + 1);
-const weekOptions = Array.from({ length: 52 }, (_, index) => index + 1);
-const minuteOptions = Array.from({ length: 120 }, (_, index) => index + 1);
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
 
 function ageToRange(age: number | null): string {
   if (!age) return "Prefer not to say";
@@ -167,6 +172,40 @@ export default function OnboardingPage() {
 
   const progressValue = ((step + 1) / steps.length) * 100;
 
+  function updateTrainingDays(training_days_per_week: number) {
+    setAnswers((current) => ({ ...current, training_days_per_week: clamp(training_days_per_week, 1, 7) }));
+  }
+
+  function updatePlanDuration(desired_duration_weeks: number) {
+    setAnswers((current) => ({ ...current, desired_duration_weeks: clamp(desired_duration_weeks, 1, 52) }));
+  }
+
+  function updateMinimumSession(min: number) {
+    const safeMin = clamp(min, 1, 120);
+    setAnswers((current) => {
+      const nextMax = Math.max(safeMin, current.max_workout_duration_minutes);
+      return {
+        ...current,
+        min_workout_duration_minutes: safeMin,
+        max_workout_duration_minutes: nextMax,
+        workout_duration_minutes: Math.round((safeMin + nextMax) / 2)
+      };
+    });
+  }
+
+  function updateMaximumSession(max: number) {
+    const safeMax = clamp(max, 1, 120);
+    setAnswers((current) => {
+      const nextMin = Math.min(current.min_workout_duration_minutes, safeMax);
+      return {
+        ...current,
+        min_workout_duration_minutes: nextMin,
+        max_workout_duration_minutes: safeMax,
+        workout_duration_minutes: Math.round((nextMin + safeMax) / 2)
+      };
+    });
+  }
+
   return (
     <>
       <PageHeading title="Profile Setup" />
@@ -182,14 +221,20 @@ export default function OnboardingPage() {
           <Progress value={progressValue} />
           <div className="flex gap-2 overflow-x-auto pb-1">
             {steps.map((item, index) => (
-              <button
+              <Button
                 key={item}
                 type="button"
+                variant={index === step ? "default" : "outline"}
                 onClick={() => setStep(index)}
-                className={`min-w-fit rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${index === step ? "border-primary bg-primary text-primary-foreground" : index < step ? "border-primary/30 bg-primary/10 text-primary" : "border-white/50 bg-white/35 text-muted-foreground dark:border-white/10 dark:bg-white/5"}`}
+                className={cn(
+                  "min-h-11 min-w-fit shrink-0 rounded-full px-3 text-xs shadow-none",
+                  index < step && index !== step && "border-primary/35 bg-primary/10 text-primary hover:bg-primary/15",
+                  index > step && "border-white/60 bg-white/35 text-muted-foreground hover:border-primary/35 hover:text-primary dark:border-white/10 dark:bg-white/5"
+                )}
               >
-                {index < step ? "✓ " : ""}{item}
-              </button>
+                {index < step ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
+                {item}
+              </Button>
             ))}
           </div>
         </CardHeader>
@@ -201,9 +246,9 @@ export default function OnboardingPage() {
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Body stats</p>
                 <div className="grid gap-4 md:grid-cols-3">
-                  <WheelPicker label="Age" value={answers.age} values={ageOptions} suffix="years" onChange={(age) => setAnswers((current) => ({ ...current, age }))} />
-                  <WheelPicker label="Height" value={answers.height_cm} values={heightOptions} suffix="cm" onChange={(height_cm) => setAnswers((current) => ({ ...current, height_cm }))} />
-                  <WheelPicker label="Weight" value={answers.weight_kg} values={weightOptions} suffix="kg" onChange={(weight_kg) => setAnswers((current) => ({ ...current, weight_kg }))} />
+                  <NumericStatInput label="Age" value={answers.age} unit="years" min={AGE_MIN} max={AGE_MAX} onChange={(age) => setAnswers((current) => ({ ...current, age }))} />
+                  <NumericStatInput label="Height" value={answers.height_cm} unit="cm" min={HEIGHT_MIN} max={HEIGHT_MAX} onChange={(height_cm) => setAnswers((current) => ({ ...current, height_cm }))} />
+                  <NumericStatInput label="Weight" value={answers.weight_kg} unit="kg" min={WEIGHT_MIN} max={WEIGHT_MAX} onChange={(weight_kg) => setAnswers((current) => ({ ...current, weight_kg }))} />
                 </div>
                 <div className="pt-2">
                   <ChoiceGroup label="Gender / sex" value={answers.gender} values={["Male", "Female", "Prefer not to say"]} onChange={(gender) => setAnswers((current) => ({ ...current, gender }))} />
@@ -217,7 +262,7 @@ export default function OnboardingPage() {
               <StepIntro title="Choose your goals" />
               <MultiChoice label="Goals" values={goalOptions} selected={answers.goals} onChange={(goals) => setAnswers((current) => ({ ...current, goals, goal: goals.join(", ") || "General wellness" }))} />
               <div className="max-w-sm">
-                <WheelPicker label="Goal weight" value={answers.goal_weight_kg} values={weightOptions} suffix="kg" onChange={(goal_weight_kg) => setAnswers((current) => ({ ...current, goal_weight_kg }))} />
+                <NumericStatInput label="Goal weight" value={answers.goal_weight_kg} unit="kg" min={WEIGHT_MIN} max={WEIGHT_MAX} onChange={(goal_weight_kg) => setAnswers((current) => ({ ...current, goal_weight_kg }))} />
               </div>
             </section>
           ) : null}
@@ -249,32 +294,18 @@ export default function OnboardingPage() {
           {step === 3 ? (
             <section className="space-y-4">
               <StepIntro title="Schedule and duration" />
-              <div className="space-y-3">
+              <div className="space-y-3 rounded-[18px] border border-border/80 bg-card p-3 sm:p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Weekly schedule</p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <WheelPicker label="Training availability" value={answers.training_days_per_week} values={dayOptions} suffix="days/week" onChange={(training_days_per_week) => setAnswers((current) => ({ ...current, training_days_per_week }))} />
-                  <WheelPicker label="Plan duration" value={answers.desired_duration_weeks} values={weekOptions} suffix="weeks" onChange={(desired_duration_weeks) => setAnswers((current) => ({ ...current, desired_duration_weeks }))} />
+                <div className="grid gap-3">
+                  <ScheduleDayGrid label="Training availability" value={answers.training_days_per_week} values={dayOptions} unit="days/week" onChange={updateTrainingDays} />
+                  <ScheduleStepper label="Plan duration" value={answers.desired_duration_weeks} unit="weeks" min={1} max={52} step={1} onChange={updatePlanDuration} />
                 </div>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-3 rounded-[18px] border border-border/80 bg-card p-3 sm:p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Session length</p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <WheelPicker label="Minimum session" value={answers.min_workout_duration_minutes} values={minuteOptions} suffix="minutes" onChange={(min) => {
-                    setAnswers((current) => ({
-                      ...current,
-                      min_workout_duration_minutes: min,
-                      max_workout_duration_minutes: Math.max(min, current.max_workout_duration_minutes),
-                      workout_duration_minutes: Math.round((min + Math.max(min, current.max_workout_duration_minutes)) / 2)
-                    }));
-                  }} />
-                  <WheelPicker label="Maximum session" value={answers.max_workout_duration_minutes} values={minuteOptions} suffix="minutes" onChange={(max) => {
-                    setAnswers((current) => ({
-                      ...current,
-                      min_workout_duration_minutes: Math.min(current.min_workout_duration_minutes, max),
-                      max_workout_duration_minutes: max,
-                      workout_duration_minutes: Math.round((Math.min(current.min_workout_duration_minutes, max) + max) / 2)
-                    }));
-                  }} />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <ScheduleStepper label="Minimum session" value={answers.min_workout_duration_minutes} unit="minutes" min={1} max={120} step={5} onChange={updateMinimumSession} />
+                  <ScheduleStepper label="Maximum session" value={answers.max_workout_duration_minutes} unit="minutes" min={1} max={120} step={5} onChange={updateMaximumSession} />
                 </div>
               </div>
             </section>
@@ -331,12 +362,13 @@ export default function OnboardingPage() {
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Choose sections AI can access</p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {ALL_AI_PERMISSION_SECTIONS.map((section) => (
-                        <div key={section} className="solid-row p-4 space-y-3">
-                          <div className="flex items-center justify-between">
+                        <div key={section} className="solid-row space-y-3 p-4">
+                          <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
                             <p className="text-sm font-semibold capitalize">{section.replace("_", " ")}</p>
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
+                            <div className="grid grid-cols-2 gap-1 rounded-[14px] border border-border/80 bg-muted/50 p-1">
+                              <PermissionToggle
+                                active={aiPermissions.sections[section].read}
+                                label="Read"
                                 onClick={() =>
                                   setAiPermissions((current) => ({
                                     ...current,
@@ -349,16 +381,10 @@ export default function OnboardingPage() {
                                     }
                                   }))
                                 }
-                                className={`rounded-lg border px-2 py-1 text-xs font-medium transition ${
-                                  aiPermissions.sections[section].read
-                                    ? "border-primary bg-primary/10 text-primary"
-                                    : "bg-muted text-muted-foreground"
-                                }`}
-                              >
-                                Read
-                              </button>
-                              <button
-                                type="button"
+                              />
+                              <PermissionToggle
+                                active={aiPermissions.sections[section].write}
+                                label="Write"
                                 onClick={() =>
                                   setAiPermissions((current) => {
                                     const nextWrite = !current.sections[section].write;
@@ -374,14 +400,7 @@ export default function OnboardingPage() {
                                     };
                                   })
                                 }
-                                className={`rounded-lg border px-2 py-1 text-xs font-medium transition ${
-                                  aiPermissions.sections[section].write
-                                    ? "border-primary bg-primary/10 text-primary"
-                                    : "bg-muted text-muted-foreground"
-                                }`}
-                              >
-                                Write
-                              </button>
+                              />
                             </div>
                           </div>
                           {aiPermissions.sections[section].write ? (
@@ -449,7 +468,7 @@ export default function OnboardingPage() {
 
 function StepIntro({ title, detail }: { title: string; detail?: string }) {
   return (
-    <div className="glass-card p-4">
+    <div className="rounded-[18px] border border-primary/10 bg-primary/5 p-4">
       <p className="font-semibold text-foreground">{title}</p>
       {detail ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{detail}</p> : null}
     </div>
@@ -464,10 +483,9 @@ function ChoiceGroup({ label, value, values, onChange }: { label: string; value:
         {values.map((item) => {
           const active = item === value;
           return (
-            <button key={item} type="button" onClick={() => onChange(item)} className={`flex min-h-12 items-center justify-between gap-3 rounded-2xl border px-3 text-left text-sm font-medium transition ${active ? "border-primary bg-primary/10 text-primary shadow-soft" : "bg-card text-foreground hover:border-primary/40 hover:bg-muted/45"}`}>
-              <span>{item}</span>
-              {active ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : null}
-            </button>
+            <OnboardingChoiceButton key={item} active={active} onClick={() => onChange(item)}>
+              {item}
+            </OnboardingChoiceButton>
           );
         })}
       </div>
@@ -483,10 +501,9 @@ function MultiChoice({ label, values, selected, onChange }: { label: string; val
         {values.map((item) => {
           const active = selected.includes(item);
           return (
-            <button key={item} type="button" onClick={() => onChange(active ? selected.filter((value) => value !== item) : [...selected, item])} className={`flex min-h-12 items-center justify-between gap-3 rounded-2xl border px-3 text-left text-sm font-medium transition ${active ? "border-primary bg-primary/10 text-primary shadow-soft" : "bg-card text-foreground hover:border-primary/40 hover:bg-muted/45"}`}>
-              <span>{item}</span>
-              {active ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : null}
-            </button>
+            <OnboardingChoiceButton key={item} active={active} onClick={() => onChange(active ? selected.filter((value) => value !== item) : [...selected, item])}>
+              {item}
+            </OnboardingChoiceButton>
           );
         })}
       </div>
@@ -499,6 +516,246 @@ function ContextField({ label, value, onChange, placeholder }: { label: string; 
     <div className="space-y-2">
       <Label>{label}</Label>
       <textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="min-h-28 w-full resize-y rounded-[14px] border border-input bg-card px-3 py-3 text-base outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring" />
+    </div>
+  );
+}
+
+function OnboardingChoiceButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "flex min-h-12 items-center justify-between gap-3 rounded-[18px] border px-3.5 py-3 text-left text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]",
+        active
+          ? "border-primary/45 bg-primary/10 text-primary shadow-soft"
+          : "border-border/80 bg-card text-foreground hover:border-primary/40 hover:bg-muted/45"
+      )}
+    >
+      <span className="min-w-0">{children}</span>
+      {active ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : null}
+    </button>
+  );
+}
+
+function PermissionToggle({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "min-h-11 rounded-[10px] px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]",
+        active ? "bg-card text-primary shadow-soft" : "text-muted-foreground hover:bg-card/70 hover:text-foreground"
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function NumericStatInput({
+  label,
+  value,
+  unit,
+  min,
+  max,
+  onChange
+}: {
+  label: string;
+  value: number | null;
+  unit: string;
+  min: number;
+  max: number;
+  onChange: (value: number | null) => void;
+}) {
+  const [draftValue, setDraftValue] = useState(value === null ? "" : String(value));
+  const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing) setDraftValue(value === null ? "" : String(value));
+  }, [isEditing, value]);
+
+  function commitDraft() {
+    const trimmed = draftValue.trim();
+    const parsed = Number(trimmed);
+
+    if (!trimmed || !Number.isFinite(parsed)) {
+      setDraftValue(value === null ? "" : String(value));
+      setIsEditing(false);
+      return;
+    }
+
+    const nextValue = clamp(Math.round(parsed), min, max);
+    setDraftValue(String(nextValue));
+    setIsEditing(false);
+    onChange(nextValue);
+  }
+
+  return (
+    <div className="rounded-[18px] border border-border/80 bg-card p-3 shadow-soft">
+      <div className="flex items-center justify-between gap-3">
+        <Label>{label}</Label>
+        <span className="text-xs font-semibold text-muted-foreground">{min}-{max} {unit}</span>
+      </div>
+      <div className="mt-3 flex min-h-12 items-center overflow-hidden rounded-[14px] border border-border/70 bg-muted/25 transition-colors focus-within:border-primary/20 focus-within:bg-primary/5 focus-within:ring-2 focus-within:ring-primary/10">
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          aria-label={label}
+          value={draftValue}
+          placeholder="Not set"
+          onFocus={() => setIsEditing(true)}
+          onChange={(event) => setDraftValue(event.target.value)}
+          onBlur={commitDraft}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+          }}
+          className="h-12 min-h-12 min-w-0 flex-1 appearance-none border-0 !border-transparent bg-transparent px-3 text-center text-xl font-bold text-foreground !outline-none !ring-0 shadow-none placeholder:text-sm placeholder:font-semibold placeholder:text-muted-foreground [appearance:textfield] focus:!border-transparent focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+        <span className="pointer-events-none flex h-full items-center pl-1 pr-3 text-sm font-semibold text-muted-foreground">{unit}</span>
+      </div>
+    </div>
+  );
+}
+
+function ScheduleDayGrid({
+  label,
+  value,
+  values,
+  unit,
+  onChange
+}: {
+  label: string;
+  value: number;
+  values: number[];
+  unit: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label>{label}</Label>
+        <span className="text-sm font-semibold text-primary">{value} {unit}</span>
+      </div>
+      <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+        {values.map((item) => {
+          const active = item === value;
+          return (
+            <Button
+              key={item}
+              type="button"
+              variant={active ? "default" : "outline"}
+              aria-pressed={active}
+              aria-label={`${item} ${unit}`}
+              onClick={() => onChange(item)}
+              className={cn("min-h-11 rounded-[14px] px-2 text-sm shadow-none", active ? "" : "bg-card")}
+            >
+              {item}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ScheduleStepper({
+  label,
+  value,
+  unit,
+  min,
+  max,
+  step,
+  onChange
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  const [draftValue, setDraftValue] = useState(String(value));
+  const [isEditing, setIsEditing] = useState(false);
+  const atMin = value <= min;
+  const atMax = value >= max;
+
+  useEffect(() => {
+    if (!isEditing) setDraftValue(String(value));
+  }, [isEditing, value]);
+
+  function commitDraft() {
+    const parsed = Number(draftValue);
+    if (!draftValue.trim() || !Number.isFinite(parsed)) {
+      setDraftValue(String(value));
+      setIsEditing(false);
+      return;
+    }
+
+    const nextValue = clamp(Math.round(parsed), min, max);
+    setDraftValue(String(nextValue));
+    setIsEditing(false);
+    onChange(nextValue);
+  }
+
+  function nudge(nextValue: number) {
+    const clampedValue = clamp(nextValue, min, max);
+    setDraftValue(String(clampedValue));
+    setIsEditing(false);
+    onChange(clampedValue);
+  }
+
+  return (
+    <div className="rounded-[18px] border border-border/80 bg-muted/25 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <Label>{label}</Label>
+        <span className="text-sm font-semibold text-primary">{isEditing && draftValue ? draftValue : value} {unit}</span>
+      </div>
+      <div className="mt-3 grid grid-cols-[44px_1fr_44px] items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          disabled={atMin}
+          aria-label={`Decrease ${label}`}
+          onClick={() => nudge(value - step)}
+          className="h-11 min-h-11 w-11 rounded-[14px] shadow-none"
+        >
+          -
+        </Button>
+        <div className="group relative flex min-h-11 items-center overflow-hidden rounded-[14px] border border-border/60 bg-card/95 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition focus-within:border-primary/20 focus-within:bg-primary/5 focus-within:ring-2 focus-within:ring-primary/10">
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            aria-label={label}
+            value={draftValue}
+            onFocus={() => setIsEditing(true)}
+            onChange={(event) => setDraftValue(event.target.value)}
+            onBlur={commitDraft}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
+            className="h-11 min-h-11 min-w-0 flex-1 appearance-none border-0 !border-transparent bg-transparent px-3 text-center text-lg font-bold text-foreground !outline-none !ring-0 shadow-none [appearance:textfield] focus:!border-transparent focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
+          <span className="pointer-events-none flex h-full items-center pl-1 pr-3 text-xs font-semibold text-muted-foreground">{unit}</span>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          disabled={atMax}
+          aria-label={`Increase ${label}`}
+          onClick={() => nudge(value + step)}
+          className="h-11 min-h-11 w-11 rounded-[14px] shadow-none"
+        >
+          +
+        </Button>
+      </div>
     </div>
   );
 }
