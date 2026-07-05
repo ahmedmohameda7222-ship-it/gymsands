@@ -126,14 +126,14 @@ export function ProgressEntryModal({ onSaved, buttonClassName }: { onSaved?: (en
           </div>
           <div className="space-y-2">
             <Label htmlFor="progress-waist">Waist cm</Label>
-            <Input id="progress-waist" type="number" step="0.1" min="0" inputMode="decimal" enterKeyHint="done" value={waist} onChange={(event) => setWaist(event.target.value)} placeholder="Waist in cm, e.g. 82" aria-invalid={invalidPositiveNumber(waist)} />
+            <Input id="progress-waist" type="number" step="0.1" min="0" inputMode="decimal" enterKeyHint="done" value={waist} onChange={(event) => setWaist(event.target.value)} placeholder="Waist cm" aria-invalid={invalidPositiveNumber(waist)} />
           </div>
-          {measurementFields.map(([id, label, placeholder]) => (
-            <div key={id} className="space-y-2">
-              <Label htmlFor={id}>{label}</Label>
-              <Input id={id} type="number" min="0" step="0.1" inputMode="decimal" enterKeyHint="done" value={measurements[id] ?? ""} onChange={(event) => setMeasurements((current) => ({ ...current, [id]: event.target.value }))} placeholder={placeholder} aria-invalid={invalidPositiveNumber(measurements[id] ?? "")} />
-            </div>
-          ))}
+    {measurementFields.map(([id, label, placeholder]) => (
+    <div key={id} className="space-y-2">
+    <Label htmlFor={id}>{label}</Label>
+    <Input id={id} type="number" min="0" step="0.1" inputMode="decimal" enterKeyHint="done" value={measurements[id] ?? ""} onChange={(event) => setMeasurements((current) => ({ ...current, [id]: event.target.value }))} placeholder={placeholder} aria-invalid={invalidPositiveNumber(measurements[id] ?? "")} />
+    </div>
+    ))}
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="progress-notes">Notes</Label>
             <Input id="progress-notes" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Progress note, e.g. energy felt better this week" />
