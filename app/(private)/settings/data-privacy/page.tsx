@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Download, ExternalLink, FileArchive, RotateCcw, Shield, Trash2 } from "lucide-react";
+import { Download, ExternalLink, RotateCcw, Shield } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SettingsPageShell } from "@/components/settings/settings-page-shell";
@@ -25,36 +25,6 @@ export default function DataPrivacyPage() {
   const { session } = useAuth();
   const [hasSaved, setHasSaved] = useState(false);
   const [isDownloadingExport, setIsDownloadingExport] = useState(false);
-  const [submittingRequest, setSubmittingRequest] = useState<"export" | "deletion" | null>(null);
-
-  async function submitPrivacyRequest(requestType: "export" | "deletion") {
-    if (!session?.access_token) {
-      toast({ title: "Sign in required", description: "Sign in again before submitting a privacy request." });
-      return;
-    }
-    if (requestType === "deletion" && !window.confirm("Submit an account deletion request and revoke active ChatGPT access now? Your Plaivra account and fitness data will not be deleted immediately.")) return;
-
-    setSubmittingRequest(requestType);
-    const response = await fetch("/api/user/privacy-requests", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ request_type: requestType })
-    });
-    const data = await response.json().catch(() => ({}));
-    setSubmittingRequest(null);
-    if (!response.ok) {
-      toast({ title: "Request not submitted", description: data.error ?? "Please try again." });
-      return;
-    }
-    toast({
-      title: data.already_exists ? "Request already pending" : "Request submitted",
-      description: requestType === "export"
-        ? "Your full data export request is now tracked."
-        : data.chatgpt_access_revoked === false
-          ? "Your deletion request is tracked, but ChatGPT revocation could not be confirmed. Revoke it manually under AI & Imports."
-          : "Your deletion request is tracked for review and active ChatGPT access was revoked."
-    });
-  }
 
   async function downloadDataExport() {
     if (!session?.access_token) {
@@ -75,13 +45,12 @@ export default function DataPrivacyPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `plaivra-data-export-${new Date().toISOString().slice(0, 10)}.json`;
+      link.download = `plaivra-data-export-${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      toast({ title: "Data export ready", description: "A private copy of your Plaivra data was downloaded." });
-    } catch (downloadError) {
+    toast({ title: "CSV export ready", description: "A private CSV copy of your Plaivra data was downloaded." });    } catch (downloadError) {
       toast({ title: "Export failed", description: downloadError instanceof Error ? downloadError.message : "Please try again." });
     } finally {
       setIsDownloadingExport(false);
@@ -93,23 +62,7 @@ export default function DataPrivacyPage() {
     setHasSaved(true);
   }
 
-  function exportSettings() {
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      type: "plaivra_user_app_settings",
-      settings
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `plaivra-settings-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    toast({ title: t("settings.exportSettings"), description: t("settings.exportSettingsDesc") });
-  }
+
 
   async function handleResetSettings() {
     await resetSettings();
@@ -180,11 +133,11 @@ export default function DataPrivacyPage() {
                 <Download className="h-5 w-5" />
               </span>
               <span className="min-w-0">
-                <span className="block font-semibold text-foreground">Download current Plaivra data</span>
-                <span className="mt-1 block text-sm leading-5 text-muted-foreground">Downloads a private copy of your Plaivra data without sign-in details, private request text, or anyone else’s data.</span>
+                <span className="block font-semibold text-foreground">Export Plaivra Data</span>
+                <span className="mt-1 block text-sm leading-5 text-muted-foreground">Download a private CSV copy of your Plaivra account, workouts, meals, progress, and settings.</span>
               </span>
             </span>
-            <Button variant="outline" disabled={isDownloadingExport} onClick={() => void downloadDataExport()}>{isDownloadingExport ? "Preparing…" : "Download data"}</Button>
+            <Button variant="outline" disabled={isDownloadingExport} onClick={() => void downloadDataExport()}>{isDownloadingExport ? "Preparing…" : "Export CSV"}</Button>
           </div>
           <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3">
             <span className="flex min-w-0 items-center gap-3">
@@ -196,7 +149,6 @@ export default function DataPrivacyPage() {
                 <span className="mt-1 block text-sm leading-5 text-muted-foreground">{t("settings.exportSettingsDesc")}</span>
               </span>
             </span>
-            <Button variant="outline" onClick={exportSettings}>{t("settings.exportSettings")}</Button>
           </div>
           <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3">
             <span className="flex min-w-0 items-center gap-3">
@@ -208,7 +160,6 @@ export default function DataPrivacyPage() {
                 <span className="mt-1 block text-sm leading-5 text-muted-foreground">Submit a tracked request for a complete Plaivra data export.</span>
               </span>
             </span>
-            <Button variant="outline" disabled={submittingRequest !== null} onClick={() => void submitPrivacyRequest("export")}>Request export</Button>
           </div>
           <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border border-destructive/30 bg-card p-3">
             <span className="flex min-w-0 items-center gap-3">
@@ -220,7 +171,6 @@ export default function DataPrivacyPage() {
                 <span className="mt-1 block text-sm leading-5 text-muted-foreground">Creates a reviewable deletion request and revokes active ChatGPT access; it does not immediately delete your account or fitness data.</span>
               </span>
             </span>
-            <Button variant="destructive" disabled={submittingRequest !== null} onClick={() => void submitPrivacyRequest("deletion")}>Request deletion</Button>
           </div>
           <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border bg-card p-3">
             <span className="flex min-w-0 items-center gap-3">
