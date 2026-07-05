@@ -810,7 +810,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="space-y-4">
           <MotionCard className="overflow-hidden rounded-[28px] border border-primary/15 bg-card/90 shadow-sm">
-            <div className="bg-[radial-gradient(circle_at_top_right,_rgba(132,204,22,0.18),_transparent_40%)] p-5 sm:p-6">
+            <div className="p-5 sm:p-6">
               <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-primary">
                 <Target className="h-4 w-4" /> Focus set
               </div>
