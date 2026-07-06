@@ -22,6 +22,7 @@ Completed audits:
 - `/workouts/session/day/[dayId]` — 58/100 — fixes open
 - `/my-workout/day/[dayId]` — 59/100 — fixes open
 - `/workouts` — 58/100 — fixes open
+- `/workout-history` — 60/100 — fixes open
 - `/calories` — 54/100 — fixes open after AI-first reframing
 - `/my-meal-plan` — 57/100 — fixes open after AI-first reframing
 - `/hydration` — 68/100 — fixes open
@@ -34,7 +35,7 @@ Completed audits:
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
-Product rule: Plaivra is AI-first where appropriate, but not every route is ChatGPT-first. Manual entry is fallback/correction where appropriate. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking. Settings is a trust/control hub. Workout day editor and Exercise Library are manual correction/reference routes.
+Product rule: Plaivra is AI-first where appropriate, but not every route is ChatGPT-first. Manual entry is fallback/correction where appropriate. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking. Settings is a trust/control hub. Workout day editor and Exercise Library are manual correction/reference routes. Workout History is a review route that must show data-source confidence.
 
 ---
 
@@ -60,7 +61,6 @@ For user-data, privacy, permission, or AI apply flows, add `$security-audit` and
 $memory-management $agent-coder $agent-reviewer $agent-tester
 
 Task: Implement audited dashboard UX corrections.
-Read first: docs/ux-progress/README.md and the UX constitution files.
 Primary route: /dashboard
 Required fixes: one next best action, demote competing CTAs, optimistic water and meal Done, clearer imported/active state, calmer meal selector, state-based motion only.
 Do not change unrelated routes, schema, auth, API routes, subscriptions, or global theme.
@@ -145,21 +145,44 @@ Verification: restored draft visible, unsaved changes visible, Back/Cancel prote
 
 ```text
 /caveman lite
-
 $memory-management $agent-reviewer $agent-coder $agent-tester
 
 Mode: high plus advisor
 Advisor: strict senior mobile product engineer + route reliability reviewer + exercise-library UX reviewer
 
 Task: Implement audited Exercise Library UX, result-state, detail-state, and route-action corrections.
+Primary route: /workouts
+Related routes: /workouts/[id], /workouts/session/[id] if it exists, /my-workout/day/[dayId]/add-exercise
+Read first: docs/ux-progress/routes/exercise-library.md
+Required flow: Verified actions -> visible result states -> reliable favorites/custom saves -> 48px mobile controls.
+Required fixes: verify Start route, inline search/filter errors, fallback banner, favorite pending/rollback, custom load failure state, custom exercise validation/pending/failure, custom video URL validation, detail skeleton/ErrorState, custom video inline states, 48px top/filter/card/detail controls, mobile result/status row, sticky mobile filter actions, icon clarity, custom draft discard guard.
+Do not change schema, auth, workout session execution semantics, AI import/apply behavior, local fallback behavior, global theme, or unrelated routes.
+Verification: search states, fallback, favorite rollback, custom draft retention, detail states, Start action validity, 48px controls, add-to-plan still works, mobile 390x844.
+```
+
+---
+
+## Prompt section 7 — Workout History correction
+
+```text
+/caveman lite
+
+$memory-management $agent-reviewer $agent-coder $agent-tester
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + workout history data-state reviewer + mobile readability reviewer
+
+Task: Implement audited Workout History UX, history-state, and detail-readability corrections.
 
 Primary route:
-- /workouts
+- /workout-history
 
-Related routes:
-- /workouts/[id]
-- /workouts/session/[id] or the actual standalone exercise/session route, if it exists
-- /my-workout/day/[dayId]/add-exercise
+Relevant files to inspect first:
+- app/(private)/workout-history/page.tsx
+- components/workouts/workout-history.tsx
+- services/database/workout-sessions.ts
+- app/(private)/workouts/[id]/page.tsx
+- app/(private)/progress/page.tsx
 
 Read first:
 - CHATGPT_CODEX_PROMPT_RULES.md
@@ -169,80 +192,65 @@ Read first:
 - docs/ux-constitution/flow-and-workflow-audit.md
 - docs/ux-constitution/motion-and-interaction.md
 - docs/ux-progress/README.md
-- docs/ux-progress/routes/exercise-library.md
-
-Relevant files to inspect first:
-- app/(private)/workouts/page.tsx
-- components/workouts/workout-browser.tsx
-- app/(private)/workouts/[id]/page.tsx
-- components/workouts/video-player.tsx
-- app/(private)/my-workout/exercises/[exerciseId]/page.tsx
-- services/database/workout-library.ts
-- services/workouts/exercise-library-store.ts
-- components/workouts/workout-day-add-exercise.tsx
-- components/workouts/workout-plan-builder.tsx
+- docs/ux-progress/routes/workout-history.md
 
 Flow decision:
-- Tune flow with search-state, detail-state, and route-action hardening.
+- Tune flow with history-state and detail-readability hardening.
 
 Product rule:
-- Exercise Library is not AI/import-first. It is a reference, discovery, and manual fallback route. It must not become the primary full-plan creation path for Plaivra's AI-first model.
+- Workout History is not AI/import-first and not a logging route. It is a review route. It must distinguish complete, partial, failed, true-empty, and filtered-empty history states.
 
 Required flow:
-- Verified actions -> visible result states -> reliable favorites/custom saves -> 48px mobile controls.
+- Loaded history -> known source confidence -> clear filters -> readable session details -> valid next action.
 
 Required fixes:
-1. Verify `/workouts/session/[id]` route used by Start actions. Implement, redirect, or replace/remove the Start action if the route does not exist.
-2. Add inline search/filter load error with retry and distinguish failed load from true empty.
-3. Add degraded/fallback banner when live filter/workout data falls back to local data.
-4. Add favorite pending state, optimistic update, and rollback on failure on library and detail pages.
-5. Catch favorites/custom load failure and show degraded state.
-6. Add custom exercise save pending, duplicate-submit protection, inline validation, success, and failure state.
-7. Add inline custom video URL validation.
-8. Add detail route skeleton/ErrorState.
-9. Add custom video save/reset inline success/failure state on detail route.
-10. Resize top actions, filter options, result-card actions, and detail disclosures to 48px.
-11. Add mobile result/status row with count, loading, and active filters.
-12. Make mobile filter Apply/Clear actions sticky or easier to reach.
-13. Improve icon-only action clarity with labels or action sheet where useful.
-14. Add discard confirmation for non-empty custom exercise draft.
+1. Add inline ErrorState/retry for failed history load.
+2. Distinguish true empty, filtered-empty, failed, and partial history states.
+3. Surface degraded state when legacy or scheduled history source fails.
+4. Resize All/week/month and mobile Date controls to 48px.
+5. Resize session detail summary to 48px and improve mobile readability.
+6. Verify `/today-workout` empty-state action route; replace if invalid.
+7. Add stat skeleton/loading placeholder.
+8. Add clearer result/status row with count and active filter.
+9. Improve filter dialog reset/apply layout with sticky/reachable actions.
+10. Optional: add View full session details action if a route exists or can be added safely.
+11. Optional: add safe repeat-workout action only after a real repeat flow is designed.
 
 Do not:
 - Do not change workout database schema.
 - Do not change auth behavior.
 - Do not change workout session execution semantics.
 - Do not change AI import/apply behavior.
-- Do not remove intentional local fallback behavior.
-- Do not redesign the library from scratch.
+- Do not make ChatGPT/trend review primary on this route.
+- Do not redesign the route from scratch.
 - Do not touch global theme or unrelated routes.
 
 Implementation guidance:
-- Preserve the current route model: Search/filter -> result cards -> exercise detail -> favorites/custom/video support.
-- Treat service fallbacks as useful, but surface degraded/fallback state when feasible.
-- Keep favorites/custom exercises usable for anonymous/local fallback users.
-- Keep add-to-plan behavior in `/my-workout/day/[dayId]/add-exercise` working.
-- Use sober state feedback; no decorative exercise-card animation.
+- Preserve the current route model: Stats -> filters -> completed workout list -> expandable exercise/set details.
+- Prefer source-level try/catch or metadata so legacy and scheduled history failures can be shown separately.
+- Avoid showing failed data as real empty history.
+- Keep history copy privacy-respecting and analytical.
+- Use sober state feedback; no decorative history animations.
 
 Verification:
 - Run typecheck, lint, and build if feasible.
-- Test /workouts at 390x844.
-- Verify search loading, empty, failed, fallback, and loaded states are distinct.
-- Verify result count and active filter count are visible on mobile.
-- Verify favorite pending/failure/rollback works on library and detail pages.
-- Verify custom exercise creation has inline validation and keeps draft on failure.
-- Verify detail page skeleton/ErrorState.
-- Verify custom video save/reset inline states.
-- Verify `/workouts/session/[id]` Start action works or is replaced/removed.
-- Verify top actions, result card icons, filter controls, and detail accordions meet 48px target.
-- Verify mobile filters dialog has comfortable Apply/Clear behavior.
-- Verify add-to-plan flow through `/my-workout/day/[dayId]/add-exercise` still works.
+- Test /workout-history at 390x844.
+- Verify skeleton/status while loading.
+- Verify failed legacy history load is visible and retryable.
+- Verify failed scheduled history load is visible as partial/degraded.
+- Verify true empty history is distinct from filtered-empty.
+- Verify filtered-empty has a reset action.
+- Verify All/week/month and Date controls are 48px targets.
+- Verify session detail summary is 48px and readable on mobile.
+- Verify long sessions remain readable after expansion.
+- Verify `/today-workout` empty-state action is valid or replaced.
 - Verify no schema/auth/session/AI/global-theme/unrelated-route changes.
 - Review git diff before final report.
 ```
 
 ---
 
-## Prompt section 7 — Calories AI-first correction
+## Prompt section 8 — Calories AI-first correction
 
 ```text
 /caveman lite
@@ -259,7 +267,7 @@ Verification: AI import primary, reviewable estimates, fallback paths, water/rec
 
 ---
 
-## Prompt section 8 — Meal plan AI-first correction
+## Prompt section 9 — Meal plan AI-first correction
 
 ```text
 /caveman lite
@@ -276,7 +284,7 @@ Verification: import/update primary, reviewable plan data, manual fallback, Mark
 
 ---
 
-## Prompt section 9 — Hydration correction
+## Prompt section 10 — Hydration correction
 
 ```text
 /caveman lite
@@ -292,7 +300,7 @@ Verification: loading gate, optimistic rollback, duplicate protection, target st
 
 ---
 
-## Prompt section 10 — Wellness correction
+## Prompt section 11 — Wellness correction
 
 ```text
 /caveman lite
@@ -309,7 +317,7 @@ Verification: compact check-in, loading/degraded states, save failure, 48px cont
 
 ---
 
-## Prompt section 11 — Progress correction
+## Prompt section 12 — Progress correction
 
 ```text
 /caveman lite
@@ -325,7 +333,7 @@ Verification: load/failed/empty states, goal/trend hero, edit/delete/photo state
 
 ---
 
-## Prompt section 12 — Settings hub correction
+## Prompt section 13 — Settings hub correction
 
 ```text
 /caveman lite
@@ -342,7 +350,7 @@ Verification: profile modes, setup states, grouped cards, 48px controls, mobile 
 
 ---
 
-## Prompt section 13 — AI imports correction
+## Prompt section 14 — AI imports correction
 
 ```text
 /caveman lite
@@ -360,7 +368,7 @@ Verification: confidence hero, failed-load safety, full-access confirmation, rev
 
 ---
 
-## Prompt section 14 — Data privacy correction
+## Prompt section 15 — Data privacy correction
 
 ```text
 /caveman lite
@@ -377,7 +385,7 @@ Verification: hide-vs-delete, toggle states, export states, reset confirmation, 
 
 ---
 
-## Prompt section 15 — Preferences correction
+## Prompt section 16 — Preferences correction
 
 ```text
 /caveman lite
