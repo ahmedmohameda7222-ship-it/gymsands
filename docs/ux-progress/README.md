@@ -40,31 +40,20 @@ Each audited route receives a score out of 100.
 | 50-69 | Functional but not subscription-ready. |
 | Below 50 | Failing route experience. Must be redesigned or simplified. |
 
-### Status labels
-
-| Status | Meaning |
-|---|---|
-| Not audited | No route-level audit has been completed yet. |
-| Audited | Issues are documented, but fixes are not completed. |
-| In progress | Fixes are being implemented. |
-| Needs retest | Fixes were made and need verification. |
-| Passed | Meets the constitution and motion standard at release-grade level. |
-| Exception accepted | Does not fully meet the constitution or motion standard, but the exception is documented and approved. |
-
 ---
 
 ## 2. Global progress summary
 
-Current global status: **Dashboard, onboarding, and workout plans audited; remaining routes are not audited yet against the 2026.1 constitution, workflow standard, and motion standard.**
+Current global status: **Dashboard, onboarding, workout plans, and workout session audited; remaining routes are not audited yet against the 2026.1 constitution, workflow standard, and motion standard.**
 
 | Area | Status | Score | Notes |
 |---|---|---:|---|
 | Global app shell / navigation | Not audited | — | Needs mobile nav, safe area, action hierarchy, route transitions, active states, and offline/sync banner review. |
-| Dashboard | Audited | 72 | Strong foundation with skeleton/error/empty states and some motion, but not premium-ready yet. Needs clearer primary action, reduced action density, stronger optimistic feedback, better section-level motion, and tighter mobile action grouping. |
+| Dashboard | Audited | 72 | Strong foundation but not premium-ready. Needs clearer primary action, reduced action density, stronger optimistic feedback, better section-level motion, and tighter mobile action grouping. |
 | Onboarding | Audited | 66 | Functional but not launch-quality. Needs conditional target-weight logic, saved-answer loading state, step motion, reduced action density, stronger validation, and 48px touch target cleanup. |
 | Workout plans | Audited | 63 | Functional but workflow is management-heavy. Needs Today-first flow, better no-plan setup flow, clearer add/import hierarchy, 48px plan menus, and stronger ChatGPT import framing. Full audit: `docs/ux-progress/routes/my-workout-plans.md`. |
+| Workout session | Audited | 58 | Strong concept but core mobile/reliability issues. Needs session-local sticky CTA fix, optimistic rollback, 48px touch targets, unsaved-exit protection, and clearer set/rest failure states. Full audit: `docs/ux-progress/routes/workout-session-day.md`. |
 | Workout day editor | Not audited | — | Needs edit-mode motion, destructive action protection, exercise row actions, and save feedback audit. |
-| Workout session | Not audited | — | Needs focused-session audit: no nav clutter, instant set logging, rest-timer motion, bottom actions, success completion, and error recovery. |
 | Exercise library | Not audited | — | Needs filters, search, result-count feedback, card actions, card/detail reveal, and custom-video action audit. |
 | Workout history | Not audited | — | Needs empty/history/detail actions, list transitions, loading states, and recovery audit. |
 | Calories / food log | Not audited | — | Needs target editor, food logging, water logging, macro progress motion, tabs, optimistic feedback, and error-state audit. |
@@ -98,32 +87,13 @@ Current global status: **Dashboard, onboarding, and workout plans audited; remai
 
 Primary issue: the dashboard has the correct daily data, but too many actions compete. It needs one dominant next best action, optimistic repeated actions, and calmer hierarchy.
 
-Open fixes:
-
-- P1: Add a top-level Next Best Action card.
-- P1: Demote duplicate CTAs.
-- P1: Add optimistic water quick add.
-- P1: Add optimistic meal Done.
-- P1: Make Done dominant and Skip secondary.
-- P1: Replace meal type button cluster with calmer selector.
-- P2: Animate metric progress and collapsible state changes.
-
 ### `/onboarding?edit=true`
 
 **Status:** Audited  
 **Score:** 66 / 100  
 **Flow decision:** Tune flow
 
-Primary issue: the onboarding edit flow is functional, but target-weight relevance, saved-data loading, step motion, tap targets, and AI permission framing are not launch-quality yet.
-
-Open fixes:
-
-- P0: Hide Target weight for non-weight goals when no saved target weight exists.
-- P1: Add edit-mode saved-answer loading gate.
-- P1: Add reduced-motion-safe step transitions.
-- P1: Resize relevant controls to 48px effective tap targets.
-- P1: Improve AI permission trust framing and summary.
-- P1: Make mobile step navigation calmer.
+Primary issue: onboarding edit is functional, but target-weight relevance, saved-data loading, step motion, tap targets, and AI permission framing are not launch-quality yet.
 
 ### `/my-workout/plans`
 
@@ -132,7 +102,7 @@ Open fixes:
 **Flow decision:** Reorder flow  
 **Full audit:** `docs/ux-progress/routes/my-workout-plans.md`
 
-Primary issue: the route has useful pieces, but the workflow is too management-heavy. It should lead with today's training intent, not plan administration.
+Primary issue: the route is too management-heavy. It should lead with today's training intent.
 
 Recommended flow:
 
@@ -140,18 +110,20 @@ Recommended flow:
 Today hero -> weekly calendar -> saved plan library -> add/import plan
 ```
 
-Open fixes:
+### `/workouts/session/day/[dayId]`
 
-- P1: Reorder flow to lead with Today hero when an active plan exists.
-- P1: Replace no-plan empty state with setup choice hero: Import from ChatGPT primary, Create manually secondary.
-- P1: Move Create manually and Import into an Add plan area instead of top-level competing controls.
-- P1: Remove duplicate Start Today patterns.
-- P1: Make plan More actions trigger and menu items 48px effective tap targets.
-- P1: Separate destructive menu actions visually from normal actions.
-- P1: Improve ChatGPT import/access framing and standard button styling.
-- P2: Add calendar selected-day and plan action pending feedback.
-- P2: Avoid silent import context load failure.
-- P2: Add reduced-motion-safe menu/import/status transitions.
+**Status:** Audited  
+**Score:** 58 / 100  
+**Flow decision:** Tune flow with one P0 bug fix  
+**Full audit:** `docs/ux-progress/routes/workout-session-day.md`
+
+Primary issue: the focus-session concept is strong, but the current implementation has core mobile and reliability problems.
+
+Required correction sequence:
+
+```txt
+Fix session-local mobile sticky CTA -> add optimistic rollback -> clean key touch targets -> clarify exit/failure states
+```
 
 ---
 
@@ -176,7 +148,8 @@ Open fixes:
 | 2026-07-06 | `/dashboard` | Completed route audit | Score 72/100; P1 fixes required before route is premium-ready | `2f636e072f82a31d85c824e15de8791c02f02e60` |
 | 2026-07-06 | `/onboarding?edit=true` | Completed route audit | Score 66/100; P0/P1 fixes required before route is premium-ready | `f1857db2eafe923b5ac4759e01e577919c540488` |
 | 2026-07-06 | Flow audit standard | Added flow-first audit standard | Future audits start with workflow before buttons/motion | `34355940625ace2d519368cbf083453cb19aa14b` |
-| 2026-07-06 | `/my-workout/plans` | Completed flow-first route audit | Score 63/100; flow reorder required before route is premium-ready | This commit |
+| 2026-07-06 | `/my-workout/plans` | Completed flow-first route audit | Score 63/100; flow reorder required before route is premium-ready | `50e7ccbcb0f341e58cae2d3c91c3d0726a0cb914` |
+| 2026-07-06 | `/workouts/session/day/[dayId]` | Completed flow-first route audit | Score 58/100; P0/P1 fixes required for core session reliability | This commit |
 
 ---
 
@@ -189,7 +162,7 @@ Suggested order:
 1. `/dashboard` — audited, fixes open
 2. `/onboarding?edit=true` — audited, fixes open
 3. `/my-workout/plans` — audited, fixes open
-4. `/workouts/session/day/[dayId]`
+4. `/workouts/session/day/[dayId]` — audited, fixes open
 5. `/calories`
 6. `/my-meal-plan`
 7. `/hydration`
