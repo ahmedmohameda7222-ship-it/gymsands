@@ -44,7 +44,7 @@ Each audited route receives a score out of 100.
 
 ## 2. Global progress summary
 
-Current global status: **Dashboard, onboarding, workout plans, and workout session audited; remaining routes are not audited yet against the 2026.1 constitution, workflow standard, and motion standard.**
+Current global status: **Dashboard, onboarding, workout plans, workout session, and calories audited; remaining routes are not audited yet against the 2026.1 constitution, workflow standard, and motion standard.**
 
 | Area | Status | Score | Notes |
 |---|---|---:|---|
@@ -53,10 +53,10 @@ Current global status: **Dashboard, onboarding, workout plans, and workout sessi
 | Onboarding | Audited | 66 | Functional but not launch-quality. Needs conditional target-weight logic, saved-answer loading state, step motion, reduced action density, stronger validation, and 48px touch target cleanup. |
 | Workout plans | Audited | 63 | Functional but workflow is management-heavy. Needs Today-first flow, better no-plan setup flow, clearer add/import hierarchy, 48px plan menus, and stronger ChatGPT import framing. Full audit: `docs/ux-progress/routes/my-workout-plans.md`. |
 | Workout session | Audited | 58 | Strong concept but core mobile/reliability issues. Needs session-local sticky CTA fix, optimistic rollback, 48px touch targets, unsaved-exit protection, and clearer set/rest failure states. Full audit: `docs/ux-progress/routes/workout-session-day.md`. |
+| Calories / food log | Audited | 61 | Strong feature set but daily logging flow is too split across tabs/tools. Needs Today command center, surfaced quick logging actions, optimistic water/recent logging, 48px quick controls, and shared ErrorState. Full audit: `docs/ux-progress/routes/calories.md`. |
 | Workout day editor | Not audited | — | Needs edit-mode motion, destructive action protection, exercise row actions, and save feedback audit. |
 | Exercise library | Not audited | — | Needs filters, search, result-count feedback, card actions, card/detail reveal, and custom-video action audit. |
 | Workout history | Not audited | — | Needs empty/history/detail actions, list transitions, loading states, and recovery audit. |
-| Calories / food log | Not audited | — | Needs target editor, food logging, water logging, macro progress motion, tabs, optimistic feedback, and error-state audit. |
 | Food Hub / custom foods and meals | Not audited | — | `/calories/custom-food-meal` redirects here; audit actual builder route, form reveal, validation feedback, and save success state. |
 | Meal plan | Not audited | — | Needs add/edit/mark-done/shopping-list/AI action audit, planned-to-done transitions, totals update, and optimistic feedback. |
 | Weekly overview / reports | Not audited | — | Needs report navigation, filters, chart/data motion, loading, empty-state, and reduced-motion audit. |
@@ -125,6 +125,21 @@ Required correction sequence:
 Fix session-local mobile sticky CTA -> add optimistic rollback -> clean key touch targets -> clarify exit/failure states
 ```
 
+### `/calories`
+
+**Status:** Audited  
+**Score:** 61 / 100  
+**Flow decision:** Reorder flow  
+**Full audit:** `docs/ux-progress/routes/calories.md`
+
+Primary issue: the nutrition feature set is strong, but the route feels like a dense nutrition control panel rather than a fast daily logging flow.
+
+Recommended flow:
+
+```txt
+Today command center -> fast logging actions -> food/water logs -> secondary week/targets/tools
+```
+
 ---
 
 ## 4. Priority definitions
@@ -149,7 +164,8 @@ Fix session-local mobile sticky CTA -> add optimistic rollback -> clean key touc
 | 2026-07-06 | `/onboarding?edit=true` | Completed route audit | Score 66/100; P0/P1 fixes required before route is premium-ready | `f1857db2eafe923b5ac4759e01e577919c540488` |
 | 2026-07-06 | Flow audit standard | Added flow-first audit standard | Future audits start with workflow before buttons/motion | `34355940625ace2d519368cbf083453cb19aa14b` |
 | 2026-07-06 | `/my-workout/plans` | Completed flow-first route audit | Score 63/100; flow reorder required before route is premium-ready | `50e7ccbcb0f341e58cae2d3c91c3d0726a0cb914` |
-| 2026-07-06 | `/workouts/session/day/[dayId]` | Completed flow-first route audit | Score 58/100; P0/P1 fixes required for core session reliability | This commit |
+| 2026-07-06 | `/workouts/session/day/[dayId]` | Completed flow-first route audit | Score 58/100; P0/P1 fixes required for core session reliability | `1f4efc9baf25d23e778eddd20b0d468a7577adf7` |
+| 2026-07-06 | `/calories` | Completed flow-first route audit | Score 61/100; flow reorder required for fast daily nutrition logging | This commit |
 
 ---
 
@@ -163,7 +179,7 @@ Suggested order:
 2. `/onboarding?edit=true` — audited, fixes open
 3. `/my-workout/plans` — audited, fixes open
 4. `/workouts/session/day/[dayId]` — audited, fixes open
-5. `/calories`
+5. `/calories` — audited, fixes open
 6. `/my-meal-plan`
 7. `/hydration`
 8. `/wellness`
