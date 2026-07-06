@@ -39,7 +39,7 @@ This file tracks route-level UX quality against Plaivra's AI-first product model
 
 ## 2. Global progress summary
 
-Current global status: **Dashboard, onboarding, workout plans, workout session, calories, meal plan, hydration, wellness, and progress audited. Calories and meal plan were reframed after the AI-first product clarification. Hydration is a direct quick-logging exception. Wellness is a calm hub/check-in route. Progress is a sensitive direct-tracking route, not an AI/import-first flow.**
+Current global status: **Dashboard, onboarding, workout plans, workout session, calories, meal plan, hydration, wellness, progress, and settings audited. Calories and meal plan were reframed after the AI-first product clarification. Hydration is a direct quick-logging exception. Wellness is a calm hub/check-in route. Progress is a sensitive direct-tracking route. Settings is a trust/control hub, not an AI/import-first route.**
 
 | Area | Status | Score | Notes |
 |---|---|---:|---|
@@ -53,6 +53,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | Hydration | Audited | 68 | Product role is correct as direct quick logging. Needs optimistic quick-add/delete with rollback, initial hero loading gate, target-hit state, 48px cleanup, and useful motion. Full audit: `docs/ux-progress/routes/hydration.md`. |
 | Wellness hub | Audited | 60 | Correct modules exist, but the route is too form-first. Needs status/next-action hero, compact/contextual check-in, visible loading/degraded states, 48px check-in controls, and calm saved-state motion. Full audit: `docs/ux-progress/routes/wellness.md`. |
 | Progress | Audited | 62 | Feature-rich direct tracker, but needs goal/trend-first hierarchy, visible degraded/error states, privacy/photo copy, synced/local goal state, 48px correction controls, and restrained update motion. Full audit: `docs/ux-progress/routes/progress.md`. |
+| Settings hub | Audited | 64 | Solid control hub, but needs setup loading/degraded state, confidence-aware setup status, grouping for trust/data controls, 48px setup/back/account actions, and app confirmation for account request flow. Full audit: `docs/ux-progress/routes/settings.md`. |
 | Workout day editor | Not audited | — | Needs edit-mode motion, safer high-risk actions, exercise row actions, and save feedback audit. |
 | Exercise library | Not audited | — | Needs filters, search, result-count feedback, card actions, card/detail reveal, and custom-video action audit. |
 | Workout history | Not audited | — | Needs empty/history/detail actions, list transitions, loading states, and recovery audit. |
@@ -63,7 +64,6 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | Sleep & recovery | Not audited | — | Needs form/action/feedback audit with quiet low-stimulation motion and clear save states. |
 | Supplements | Not audited | — | Needs dose/taken/reminder actions, checklist feedback, optimistic behavior, and failure recovery audit. |
 | Daily fit tasks | Not audited | — | Needs add/edit/complete/delete actions, task-complete transitions, optimistic behavior, and empty-state audit. |
-| Settings hub | Not audited | — | Needs category hierarchy, row spacing, stable/minimal transitions, and account-action audit. |
 | Account settings | Not audited | — | Needs sign-out/delete-account separation, confirmation states, and serious low-motion behavior audit. |
 | AI imports / permissions | Not audited | — | Critical route. Needs permission clarity, connection status, revoke, ChatGPT flow choreography, pending/success/error states, import/apply safety, and AI trust audit. |
 | Preferences | Not audited | — | Needs settings-row spacing, selects, toggles, save feedback, reduced-motion preference handling, and pending/error audit. |
@@ -85,6 +85,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | `/hydration` | Audited | 68 | Tune flow | `docs/ux-progress/routes/hydration.md` | `Today hero -> quick add -> manual fallback -> recent entries -> weekly context -> streak/reminder`. |
 | `/wellness` | Audited | 60 | Reorder flow | `docs/ux-progress/routes/wellness.md` | `Today status -> next wellness action -> compact check-in -> focused launchers -> recent history`. |
 | `/progress` | Audited | 62 | Tune flow | `docs/ux-progress/routes/progress.md` | `Goal/trend status -> one next logging action -> reliable add/edit/delete/photo states -> private trend review`. |
+| `/settings` | Audited | 64 | Tune flow | `docs/ux-progress/routes/settings.md` | `Profile/setup confidence -> grouped sensitive controls -> comfortable navigation -> visible recovery states`. |
 
 ---
 
@@ -118,6 +119,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | 2026-07-06 | `/hydration` | Completed direct-logging route audit | Score 68/100; product role correct but optimistic logging/recovery and loading polish required | `61741d42ef9f7738451442032f80d4cb34c7f4be` |
 | 2026-07-06 | `/wellness` | Completed wellness hub route audit | Score 60/100; needs status/next-action hierarchy, compact check-in, and visible loading/degraded states | `52e1ef00c01a0a3010ed814604535000ae1009d2` |
 | 2026-07-06 | `/progress` | Completed progress route audit | Score 62/100; needs goal/trend hierarchy, privacy-state clarity, and reliable correction/photo states | `b56faa0364dfa0a62915c4df3166e79e72997a70` |
+| 2026-07-06 | `/settings` | Completed settings hub route audit | Score 64/100; needs setup state confidence, grouped trust/data controls, 48px actions, and safer account request pattern | `1b5d2b0936b1257cba19e44d5dea601d0249fcf3` |
 
 ---
 
@@ -132,9 +134,10 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 7. `/hydration` — audited, fixes open
 8. `/wellness` — audited, fixes open
 9. `/progress` — audited, fixes open
-10. `/settings`
+10. `/settings` — audited, fixes open
 11. `/settings/ai-imports`
 12. `/settings/data-privacy`
+13. `/settings/preferences`
 
 Reason: these routes carry the highest daily-use, trust, AI, motion, and future-subscription impact.
 
