@@ -30,10 +30,11 @@ Completed audits:
 - `/settings` — 64/100 — fixes open
 - `/settings/ai-imports` — 66/100 — fixes open
 - `/settings/data-privacy` — 61/100 — fixes open
+- `/settings/preferences` — 62/100 — fixes open
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
-Product rule: Plaivra is an AI-first tracker where appropriate, but not every route is ChatGPT-first. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking. Settings is a trust/control hub. AI imports is the permission/connection trust layer. Data privacy is the sensitive visibility/export/settings-reset route.
+Product rule: Plaivra is an AI-first tracker where appropriate, but not every route is ChatGPT-first. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking. Settings is a trust/control hub. AI imports is the permission/connection trust layer. Data privacy is the sensitive visibility/export/settings-reset route. Preferences is the app-behavior/accessibility route.
 
 ---
 
@@ -744,37 +745,102 @@ Required fixes:
 12. Add account deletion/account settings link under rights/help if appropriate.
 13. Optional: show last export/download timestamp for current session only.
 
+Do not change data export API semantics, export table selection or CSV payload shape, auth behavior, database schema, account deletion behavior, global theme, unrelated routes, or imply privacy toggles delete database data.
+
+Verification: typecheck, lint, build if feasible, mobile 390x844, hide-vs-delete copy, toggle pending/success/failure, export scope/status/retry, reset confirmation/status, mobile stacking, 48px help actions, no API/schema/auth/export semantics changed, review git diff.
+
+Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+```
+
+---
+
+## Prompt section 13 — Preferences correction
+
+```text
+/caveman lite
+
+$memory-management $agent-reviewer $agent-coder $agent-tester
+
+Task: Implement the audited P1/P2 preferences UX, settings-state, and accessibility corrections for Plaivra.
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + settings-state reliability reviewer + accessibility UX reviewer
+
+Read first:
+- CHATGPT_CODEX_PROMPT_RULES.md
+- Ruflo_usage.md
+- docs/product/ai-first-tracker-model.md
+- docs/ux-constitution/README.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
+- docs/ux-progress/README.md
+- docs/ux-progress/routes/settings-preferences.md
+
+Primary route:
+- /settings/preferences
+
+Relevant files to inspect first:
+- app/(private)/settings/preferences/page.tsx
+- components/settings/settings-toggle-row.tsx
+- components/settings/settings-page-shell.tsx
+- components/ui/select-field.tsx
+- lib/settings/user-settings-context.tsx
+- services/database/user-settings.ts
+- lib/themes.ts
+
+Flow decision:
+- Tune flow with settings-state hardening.
+
+Product rule:
+- Preferences is not AI/import-first. It is the app-behavior and accessibility control route. It must make settings changes predictable, recoverable, and reduced-motion-safe.
+
+Required flow:
+- Loaded preferences -> comfortable controls -> clear pending/save/failure -> reduced-motion-safe UI.
+
+Required fixes:
+1. Surface settings load/save error inline using existing provider `saveError`.
+2. Add pending/saved/failed state for preference updates.
+3. Prevent confusing rapid repeated changes while a setting save is pending.
+4. Resize native select controls to 48px effective height.
+5. Stack select rows on narrow mobile when needed.
+6. Remove or gate decorative theme-card hover translation for reduced-motion safety.
+7. Make reduceAnimations preference visibly respected by this route.
+8. Replace plain loading text with skeleton/degraded state.
+9. Add short descriptions/help copy for Quick Log shortcuts.
+10. Add clearer save/sync copy near recently changed controls.
+11. Resize icon containers and shared back controls to 48px where relevant.
+12. Optional: add section-level summary/status chips for Appearance, Units, Quick Log, Accessibility.
+
 Do not:
-- Do not change data export API semantics.
-- Do not change export table selection or CSV payload shape.
-- Do not change auth behavior.
 - Do not change database schema.
-- Do not change account deletion behavior.
-- Do not touch global theme or unrelated routes.
-- Do not imply privacy toggles delete database data.
+- Do not change auth behavior.
+- Do not change user settings semantics.
+- Do not change theme definitions unless absolutely required for the UI correction.
+- Do not rewrite global theme architecture.
+- Do not touch unrelated routes.
+- Do not add AI/import behavior to preferences.
 
 Implementation guidance:
-- Preserve the existing route model: privacy toggles, legal/contact links, Export CSV, Reset settings.
-- Use the existing settings provider rollback behavior, but expose inline failure/rollback state on the page.
-- Treat export as a private local file download and tell the user what it broadly contains.
-- Treat reset settings as a serious broad settings action, not a casual row button.
-- Use sober, minimal motion. No decorative privacy/export animations.
+- Preserve the existing sections: Theme, Language, Units, Calendar, Dashboard start page, Quick Log shortcuts, Accessibility.
+- Reuse the existing provider rollback behavior, but expose inline failure/rollback state on the page.
+- Avoid broad provider rewrites unless a tiny prop/state addition is necessary.
+- Treat reduceAnimations as a live trust test: the route should avoid non-essential motion when it is enabled.
+- Use simple, sober state feedback; no decorative settings animations.
 
 Verification:
 - Run typecheck, lint, and build if feasible.
-- Test /settings/data-privacy at 390x844.
-- Verify the route explains privacy toggles hide UI surfaces and do not delete saved data.
-- Verify every privacy toggle has a short description.
-- Verify toggle save pending/success/failure states are visible.
-- Verify failed toggle save rolls back and tells the user the previous setting was restored.
-- Verify settings load failure is visible as degraded/unknown state, not confident defaults.
-- Verify export card explains CSV scope and local-file privacy.
-- Verify export pending/success/failure/retry states are visible inline.
-- Verify reset settings requires app confirmation.
-- Verify reset success/failure is visible inline and clarifies no Plaivra logs/plans/account data were deleted.
-- Verify export/reset rows stack cleanly on 390x844 mobile.
-- Verify legal/contact/help actions meet 48px target.
-- Verify no API semantics, data export contents, schema, auth, or unrelated routes were changed.
+- Test /settings/preferences at 390x844.
+- Verify loading skeleton/degraded state.
+- Verify load/save errors are visible inline, not only via toast.
+- Verify failed setting save rolls back and explains that previous value was restored.
+- Verify each select is 48px effective height.
+- Verify select rows stack cleanly on mobile.
+- Verify theme picker cards remain usable and reduced-motion-safe.
+- Verify Reduce animations removes/gates non-essential route motion where feasible.
+- Verify Quick Log toggles have clearer helper copy.
+- Verify rapid repeated changes do not create confusing state.
+- Verify save/sync state is visible and specific enough to trust.
+- Verify no database schema, auth, global settings semantics, theme architecture, or unrelated routes were changed.
 - Review git diff before final report.
 
 Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
