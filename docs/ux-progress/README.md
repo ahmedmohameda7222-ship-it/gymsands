@@ -48,7 +48,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | Workout plans | Audited | 63 | Full audit: `docs/ux-progress/routes/my-workout-plans.md`. |
 | Workout session | Audited | 58 | Full audit: `docs/ux-progress/routes/workout-session-day.md`. |
 | Workout day editor | Audited | 59 | Full audit: `docs/ux-progress/routes/workout-day-editor.md`. |
-| Exercise library | Audited | 64 | Needs search/result state honesty, inline favorite/custom/custom-video recovery, 48px filters/actions, and clearer standalone Start vs add-to-plan flow. Full audit: `docs/ux-progress/routes/exercise-library.md`. |
+| Exercise library | Audited | 58 | Needs verified Start route/action, visible search/filter/detail states, favorite/custom rollback, and 48px mobile controls. Full audit: `docs/ux-progress/routes/exercise-library.md`. |
 | Calories / food log | Audited | 54 | Full audit: `docs/ux-progress/routes/calories.md`. |
 | Meal plan | Audited | 57 | Full audit: `docs/ux-progress/routes/my-meal-plan.md`. |
 | Hydration | Audited | 68 | Full audit: `docs/ux-progress/routes/hydration.md`. |
@@ -81,7 +81,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | `/my-workout/plans` | Audited | 63 | Reorder flow | `docs/ux-progress/routes/my-workout-plans.md` | `Today hero -> weekly calendar -> saved plan library -> add/import plan`. |
 | `/workouts/session/day/[dayId]` | Audited | 58 | Tune flow | `docs/ux-progress/routes/workout-session-day.md` | Fix mobile sticky CTA, optimistic rollback, key tap targets, and failure states. |
 | `/my-workout/day/[dayId]` | Audited | 59 | Tune flow with editor-state and unsaved-change hardening | `docs/ux-progress/routes/workout-day-editor.md` | `Known day -> visible draft state -> safe edits -> protected cancel/back/remove -> reliable save`. |
-| `/workouts` | Audited | 64 | Tune flow with search-state and exercise-action hardening | `docs/ux-progress/routes/exercise-library.md` | `Known result state -> comfortable actions -> clear favorite/custom/video outcomes -> reliable detail page`. |
+| `/workouts` | Audited | 58 | Tune flow with search-state, detail-state, and route-action hardening | `docs/ux-progress/routes/exercise-library.md` | `Verified actions -> visible result states -> reliable favorites/custom saves -> 48px mobile controls`. |
 | `/calories` | Audited | 54 | Needs AI-first reframing | `docs/ux-progress/routes/calories.md` | `ChatGPT meal import/review -> Plaivra overview/tracking -> manual fallback/correction`. |
 | `/my-meal-plan` | Audited | 57 | Needs AI-first reframing | `docs/ux-progress/routes/my-meal-plan.md` | `ChatGPT meal-plan import/review -> planned overview -> shopping / mark done -> manual fallback/correction`. |
 | `/hydration` | Audited | 68 | Tune flow | `docs/ux-progress/routes/hydration.md` | `Today hero -> quick add -> manual fallback -> recent entries -> weekly context -> streak/reminder`. |
@@ -113,6 +113,8 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | 2026-07-06 | `/onboarding?edit=true` | Completed route audit | Score 66/100 | `f1857db2eafe923b5ac4759e01e577919c540488` |
 | 2026-07-06 | `/my-workout/plans` | Completed route audit | Score 63/100 | `50e7ccbcb0f341e58cae2d3c91c3d0726a0cb914` |
 | 2026-07-06 | `/workouts/session/day/[dayId]` | Completed route audit | Score 58/100 | `1f4efc9baf25d23e778eddd20b0d468a7577adf7` |
+| 2026-07-06 | `/my-workout/day/[dayId]` | Completed route audit | Score 59/100 | `bc997484faef6d4576e432c069ae4e14f0e334d1` |
+| 2026-07-06 | `/workouts` | Completed exercise library route audit | Score 58/100 | `cc9b50ecdd7447cf80dfc49caa504895260bc23d` |
 | 2026-07-06 | `/calories` | Completed/reframed route audit | Score 54/100 | `7c8422fb407bea78fd9cc639472dc444a52a08df` |
 | 2026-07-06 | `/my-meal-plan` | Completed route audit | Score 57/100 | `fe33ec561ee07ba7cb26767c7ce7d94b285e4cf0` |
 | 2026-07-06 | `/hydration` | Completed route audit | Score 68/100 | `61741d42ef9f7738451442032f80d4cb34c7f4be` |
@@ -122,8 +124,6 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | 2026-07-06 | `/settings/ai-imports` | Completed route audit | Score 66/100 | `543b6771ec043446127986e7db36f8399abf985e` |
 | 2026-07-06 | `/settings/data-privacy` | Completed route audit | Score 61/100 | `a1fe83d619d0720da5a3e4c3750de12804ce665f` |
 | 2026-07-06 | `/settings/preferences` | Completed route audit | Score 62/100 | `3236e76d673347b59f8f9638c6690b7a7f48cb31` |
-| 2026-07-06 | `/my-workout/day/[dayId]` | Completed workout day editor route audit | Score 59/100 | `bc997484faef6d4576e432c069ae4e14f0e334d1` |
-| 2026-07-06 | `/workouts` | Completed Exercise Library route audit | Score 64/100 | `45e24672bf6dcc6ee1d89a8b778712e6ea0978d1` |
 
 ---
 
@@ -146,6 +146,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 15. `/settings/preferences` — audited, fixes open
 16. Workout history
 17. Global app shell / navigation
+18. Food Hub / custom foods and meals
 
 Reason: these routes carry the highest daily-use, trust, AI, motion, and future-subscription impact.
 
