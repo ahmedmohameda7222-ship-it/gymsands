@@ -39,7 +39,7 @@ This file tracks route-level UX quality against Plaivra's AI-first product model
 
 ## 2. Global progress summary
 
-Current global status: **Dashboard, onboarding, workout plans, workout session, calories, meal plan, hydration, wellness, progress, settings, and AI imports audited. Calories and meal plan were reframed after the AI-first product clarification. Hydration is a direct quick-logging exception. Wellness is a calm hub/check-in route. Progress is a sensitive direct-tracking route. Settings is a trust/control hub. AI imports is the permission/connection trust layer for Plaivra's AI-first model.**
+Current global status: **Dashboard, onboarding, workout plans, workout session, calories, meal plan, hydration, wellness, progress, settings, AI imports, and data privacy audited. Calories and meal plan were reframed after the AI-first product clarification. Hydration is a direct quick-logging exception. Wellness is a calm hub/check-in route. Progress is a sensitive direct-tracking route. Settings is a trust/control hub. AI imports is the permission/connection trust layer. Data privacy is the sensitive visibility/export/settings-reset route.**
 
 | Area | Status | Score | Notes |
 |---|---|---:|---|
@@ -55,6 +55,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | Progress | Audited | 62 | Feature-rich direct tracker, but needs goal/trend-first hierarchy, visible degraded/error states, privacy/photo copy, synced/local goal state, 48px correction controls, and restrained update motion. Full audit: `docs/ux-progress/routes/progress.md`. |
 | Settings hub | Audited | 64 | Solid control hub, but needs setup loading/degraded state, confidence-aware setup status, grouping for trust/data controls, 48px setup/back/account actions, and app confirmation for account request flow. Full audit: `docs/ux-progress/routes/settings.md`. |
 | AI imports / permissions | Audited | 66 | Correct AI trust foundation, but needs permission/connection status hero, explicit load/save/revoke failure states, full-access confirmation, 48px permission controls, and visible activity. Full audit: `docs/ux-progress/routes/settings-ai-imports.md`. |
+| Data privacy | Audited | 61 | Lightweight and functional, but privacy toggles, export, and reset settings need inline state, clearer hide-vs-delete copy, export scope, reset confirmation, and mobile stacking. Full audit: `docs/ux-progress/routes/settings-data-privacy.md`. |
 | Workout day editor | Not audited | — | Needs edit-mode motion, safer high-risk actions, exercise row actions, and save feedback audit. |
 | Exercise library | Not audited | — | Needs filters, search, result-count feedback, card actions, card/detail reveal, and custom-video action audit. |
 | Workout history | Not audited | — | Needs empty/history/detail actions, list transitions, loading states, and recovery audit. |
@@ -67,7 +68,6 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | Daily fit tasks | Not audited | — | Needs add/edit/complete/delete actions, task-complete transitions, optimistic behavior, and empty-state audit. |
 | Account settings | Not audited | — | Needs sign-out/delete-account separation, confirmation states, and serious low-motion behavior audit. |
 | Preferences | Not audited | — | Needs settings-row spacing, selects, toggles, save feedback, reduced-motion preference handling, and pending/error audit. |
-| Data privacy | Not audited | — | Needs export, reset, privacy links, high-risk action hierarchy, serious confirmation states, and progress/error audit. |
 | Public landing/auth | Not audited | — | Needs premium first impression, auth CTA, subtle entrance motion, loading/error auth states, and trust audit. |
 
 ---
@@ -87,6 +87,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | `/progress` | Audited | 62 | Tune flow | `docs/ux-progress/routes/progress.md` | `Goal/trend status -> one next logging action -> reliable add/edit/delete/photo states -> private trend review`. |
 | `/settings` | Audited | 64 | Tune flow | `docs/ux-progress/routes/settings.md` | `Profile/setup confidence -> grouped sensitive controls -> comfortable navigation -> visible recovery states`. |
 | `/settings/ai-imports` | Audited | 66 | Tune flow with trust-state hardening | `docs/ux-progress/routes/settings-ai-imports.md` | `Known connection state -> known permission state -> safe permission changes -> safe setup/revoke -> auditable activity`. |
+| `/settings/data-privacy` | Audited | 61 | Tune flow with privacy-action hardening | `docs/ux-progress/routes/settings-data-privacy.md` | `Clear privacy meaning -> reliable toggle saves -> explicit export status -> confirmed reset settings`. |
 
 ---
 
@@ -122,6 +123,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | 2026-07-06 | `/progress` | Completed progress route audit | Score 62/100; needs goal/trend hierarchy, privacy-state clarity, and reliable correction/photo states | `b56faa0364dfa0a62915c4df3166e79e72997a70` |
 | 2026-07-06 | `/settings` | Completed settings hub route audit | Score 64/100; needs setup state confidence, grouped trust/data controls, 48px actions, and safer account request pattern | `1b5d2b0936b1257cba19e44d5dea601d0249fcf3` |
 | 2026-07-06 | `/settings/ai-imports` | Completed AI imports route audit | Score 66/100; needs permission/connection state hardening, full-access confirmation, and safer revoke flow | `543b6771ec043446127986e7db36f8399abf985e` |
+| 2026-07-06 | `/settings/data-privacy` | Completed data privacy route audit | Score 61/100; needs privacy-action state hardening, export scope/status, and reset confirmation | `a1fe83d619d0720da5a3e4c3750de12804ce665f` |
 
 ---
 
@@ -138,7 +140,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 9. `/progress` — audited, fixes open
 10. `/settings` — audited, fixes open
 11. `/settings/ai-imports` — audited, fixes open
-12. `/settings/data-privacy`
+12. `/settings/data-privacy` — audited, fixes open
 13. `/settings/preferences`
 
 Reason: these routes carry the highest daily-use, trust, AI, motion, and future-subscription impact.
