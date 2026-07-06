@@ -39,7 +39,7 @@ This file tracks route-level UX quality against Plaivra's AI-first product model
 
 ## 2. Global progress summary
 
-Current global status: **Dashboard, onboarding, workout plans, workout session, calories, meal plan, hydration, and wellness audited. Calories and meal plan were reframed after the AI-first product clarification. Hydration is a direct quick-logging exception. Wellness is a calm hub/check-in route, not an AI chat route.**
+Current global status: **Dashboard, onboarding, workout plans, workout session, calories, meal plan, hydration, wellness, and progress audited. Calories and meal plan were reframed after the AI-first product clarification. Hydration is a direct quick-logging exception. Wellness is a calm hub/check-in route. Progress is a sensitive direct-tracking route, not an AI/import-first flow.**
 
 | Area | Status | Score | Notes |
 |---|---|---:|---|
@@ -52,12 +52,12 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | Meal plan | Audited | 57 | Needs ChatGPT meal-plan import/update as primary, review/apply/correct state, manual add as fallback, mark-done/grocery feedback, and 48px cleanup. Full audit: `docs/ux-progress/routes/my-meal-plan.md`. |
 | Hydration | Audited | 68 | Product role is correct as direct quick logging. Needs optimistic quick-add/delete with rollback, initial hero loading gate, target-hit state, 48px cleanup, and useful motion. Full audit: `docs/ux-progress/routes/hydration.md`. |
 | Wellness hub | Audited | 60 | Correct modules exist, but the route is too form-first. Needs status/next-action hero, compact/contextual check-in, visible loading/degraded states, 48px check-in controls, and calm saved-state motion. Full audit: `docs/ux-progress/routes/wellness.md`. |
+| Progress | Audited | 62 | Feature-rich direct tracker, but needs goal/trend-first hierarchy, visible degraded/error states, privacy/photo copy, synced/local goal state, 48px correction controls, and restrained update motion. Full audit: `docs/ux-progress/routes/progress.md`. |
 | Workout day editor | Not audited | — | Needs edit-mode motion, safer high-risk actions, exercise row actions, and save feedback audit. |
 | Exercise library | Not audited | — | Needs filters, search, result-count feedback, card actions, card/detail reveal, and custom-video action audit. |
 | Workout history | Not audited | — | Needs empty/history/detail actions, list transitions, loading states, and recovery audit. |
 | Food Hub / custom foods and meals | Not audited | — | Audit as manual fallback/edit path, not as the main product entry path. |
 | Weekly overview / reports | Not audited | — | Needs report navigation, filters, chart/data motion, loading, empty-state, and reduced-motion audit. |
-| Progress | Not audited | — | Needs overview/trend flow, add entry, photos, goal weight, edit/delete, chart transitions, progress updates, and privacy-state audit. |
 | Personal records | Not audited | — | Needs tracker, insight actions, PR update highlight, achievement feedback, and empty-state audit. |
 | Habits | Not audited | — | Needs repeated toggle/check behavior, streak feedback, optimistic updates, reduced motion, and error recovery audit. |
 | Sleep & recovery | Not audited | — | Needs form/action/feedback audit with quiet low-stimulation motion and clear save states. |
@@ -84,6 +84,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | `/my-meal-plan` | Audited | 57 | Needs AI-first reframing | `docs/ux-progress/routes/my-meal-plan.md` | `ChatGPT meal-plan import/review -> planned overview -> shopping / mark done -> manual fallback/correction`. |
 | `/hydration` | Audited | 68 | Tune flow | `docs/ux-progress/routes/hydration.md` | `Today hero -> quick add -> manual fallback -> recent entries -> weekly context -> streak/reminder`. |
 | `/wellness` | Audited | 60 | Reorder flow | `docs/ux-progress/routes/wellness.md` | `Today status -> next wellness action -> compact check-in -> focused launchers -> recent history`. |
+| `/progress` | Audited | 62 | Tune flow | `docs/ux-progress/routes/progress.md` | `Goal/trend status -> one next logging action -> reliable add/edit/delete/photo states -> private trend review`. |
 
 ---
 
@@ -116,6 +117,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | 2026-07-06 | `/my-meal-plan` | Completed AI-first route audit | Score 57/100; needs ChatGPT meal-plan import/review as primary route flow | `fe33ec561ee07ba7cb26767c7ce7d94b285e4cf0` |
 | 2026-07-06 | `/hydration` | Completed direct-logging route audit | Score 68/100; product role correct but optimistic logging/recovery and loading polish required | `61741d42ef9f7738451442032f80d4cb34c7f4be` |
 | 2026-07-06 | `/wellness` | Completed wellness hub route audit | Score 60/100; needs status/next-action hierarchy, compact check-in, and visible loading/degraded states | `52e1ef00c01a0a3010ed814604535000ae1009d2` |
+| 2026-07-06 | `/progress` | Completed progress route audit | Score 62/100; needs goal/trend hierarchy, privacy-state clarity, and reliable correction/photo states | `b56faa0364dfa0a62915c4df3166e79e72997a70` |
 
 ---
 
@@ -129,7 +131,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 6. `/my-meal-plan` — audited, fixes open after AI-first reframing
 7. `/hydration` — audited, fixes open
 8. `/wellness` — audited, fixes open
-9. `/progress`
+9. `/progress` — audited, fixes open
 10. `/settings`
 11. `/settings/ai-imports`
 12. `/settings/data-privacy`
