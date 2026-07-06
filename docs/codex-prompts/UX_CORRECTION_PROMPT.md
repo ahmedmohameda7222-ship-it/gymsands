@@ -37,6 +37,7 @@ Product rule: Plaivra is AI-first where appropriate, but not every route is Chat
 | `/sleep-recovery` | 57 | `docs/ux-progress/routes/sleep-recovery.md` |
 | `/supplements` | 56 | `docs/ux-progress/routes/supplements.md` |
 | `/daily-fit-tasks` | 61 | `docs/ux-progress/routes/daily-fit-tasks.md` |
+| `/settings/account` | 59 | `docs/ux-progress/routes/account-settings.md` |
 | `/calories` | 54 | `docs/ux-progress/routes/calories.md` |
 | `/my-meal-plan` | 57 | `docs/ux-progress/routes/my-meal-plan.md` |
 | `/hydration` | 68 | `docs/ux-progress/routes/hydration.md` |
@@ -58,68 +59,72 @@ Mode: high plus advisor
 Advisor: strict senior mobile product engineer + premium UX reviewer
 ```
 
-For personal user data, permissions, health data, nutrition data, reports, or AI apply flows, include the project security review skill listed in `Ruflo_usage.md`.
+For personal user data, permissions, health data, nutrition data, reports, account actions, or AI apply flows, include the project security review skill listed in `Ruflo_usage.md`.
 
 ---
 
-## Current focused prompt — Daily Fit Tasks correction
+## Current focused prompt — Account Settings correction
 
 ```text
 /caveman lite
-$memory-management $agent-reviewer $agent-coder $agent-tester
+$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
 
 Mode: high plus advisor
-Advisor: strict senior mobile product engineer + repeated-action reliability reviewer + duplicate-route/component reviewer
+Advisor: strict senior mobile product engineer + account/privacy safety reviewer + sensitive-action confirmation reviewer
 
-Task: Implement audited Daily Fit Tasks UX corrections.
+Task: Implement audited Account Settings UX corrections.
 
 Primary route:
-- /daily-fit-tasks
+- /settings/account
 
 Read first:
-- docs/ux-progress/routes/daily-fit-tasks.md
-- app/(private)/daily-fit-tasks/page.tsx
-- components/lifestyle/daily-fit-tasks-page-client.tsx
-- components/lifestyle/wellness-trackers.tsx
-- services/database/wellness.ts
+- docs/ux-progress/routes/account-settings.md
+- app/(private)/settings/account/page.tsx
+- components/settings/settings-page-shell.tsx
+- components/settings/settings-section-card.tsx
+- components/auth/auth-provider.tsx
+- app/api/user/privacy-requests/route.ts
 
 Product role:
-- Daily Fit Tasks is a lightweight direct checklist.
-- Do not make ChatGPT primary.
-- Do not turn it into a complex planner.
+- Account Settings is a trust/control route.
+- Do not add AI/import behavior.
+- Deletion is a request flow, not immediate account deletion.
 
 Required flow:
-- Skeleton/ErrorState -> optimistic complete/reopen -> safe save/edit/remove -> duplicate prevention -> 48px controls.
+- Account identity -> sign-out state -> deletion status -> app confirmation -> inline success/failure -> 48px controls.
 
 Required fixes:
-1. Replace plain loading text with skeleton/status.
-2. Add optimistic Mark done/Reopen with rollback and per-row pending.
-3. Add inline save failure and saved state while preserving draft.
-4. Add visible edit mode banner plus Cancel/Discard.
-5. Add remove confirmation or undo with failure recovery.
-6. Resize starter chips, Retry, task actions, and inputs to 48px targets.
-7. Prevent duplicate starter task creation for the same day.
-8. Respect reduced-motion for progress and completion feedback.
-9. Consider making tasks/status more prominent than the add form once tasks exist.
-10. Decide whether to deprecate or sync shared DailyFitTasksTracker to avoid route/component divergence.
+1. Show signed-in account identity on the route.
+2. Add sign-out pending, disabled, and failure state.
+3. Replace window.confirm deletion confirmation with app confirmation UI.
+4. Load existing privacy request status from /api/user/privacy-requests.
+5. Show pending/in-progress/completed deletion request state inline.
+6. Wrap deletion POST in try/catch/finally so the button cannot remain stuck.
+7. Add inline deletion request success/failure status, not toast-only.
+8. Resize Back, Sign out, Request deletion, and related controls to 48px targets.
+9. Surface ChatGPT access revocation status/copy when deletion is requested.
+10. Add retry for privacy request status load.
+11. Improve destructive copy with review/timeline/verification language.
 
 Do not:
 - Do not change database schema.
-- Do not change sign-in or account behavior.
+- Do not change auth semantics.
 - Do not change AI import/apply behavior.
 - Do not change global theme.
-- Do not regress other wellness tracker routes.
+- Do not imply immediate account deletion.
+- Do not expose service-role or admin-only behavior to the browser.
 
 Verification:
 - Run typecheck, lint, and build if feasible.
-- Test /daily-fit-tasks at 390x844.
-- Verify failed load has retry and does not look empty.
-- Verify Mark done/Reopen updates immediately and rolls back on failure.
-- Verify row pending prevents repeated taps.
-- Verify failed save keeps draft and shows inline error.
-- Verify edit mode and Cancel/Discard work.
-- Verify remove confirmation/undo and recovery.
-- Verify starter chips cannot create duplicate same-day tasks.
-- Verify 48px starter chips, Retry, inputs, Mark done, Edit, and Remove controls.
+- Test /settings/account at 390x844.
+- Verify signed-in account identity appears.
+- Verify sign-out pending/failure behavior.
+- Verify deletion request uses app confirmation, not window.confirm.
+- Verify existing pending deletion request appears before submit.
+- Verify deletion POST cannot leave the button stuck.
+- Verify deletion status appears inline.
+- Verify ChatGPT revocation copy/status appears when relevant.
+- Verify Back, Sign out, Request deletion, and key row controls are 48px.
+- Verify /settings, /settings/data-privacy, and /settings/ai-imports still work after shared settings control changes.
 - Review git diff before final report.
 ```
