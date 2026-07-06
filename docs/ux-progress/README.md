@@ -39,7 +39,7 @@ This file tracks route-level UX quality against Plaivra's AI-first product model
 
 ## 2. Global progress summary
 
-Current global status: **Dashboard, onboarding, workout plans, workout session, workout day editor, exercise library, workout history, global app shell/navigation, food hub, calories, meal plan, hydration, wellness, progress, settings, AI imports, data privacy, and preferences audited.**
+Current global status: **Dashboard, onboarding, workout plans, workout session, workout day editor, exercise library, workout history, global app shell/navigation, food hub, weekly reports, calories, meal plan, hydration, wellness, progress, settings, AI imports, data privacy, and preferences audited.**
 
 | Area | Status | Score | Notes |
 |---|---|---:|---|
@@ -51,7 +51,8 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | Exercise library | Audited | 58 | Full audit: `docs/ux-progress/routes/exercise-library.md`. |
 | Workout history | Audited | 60 | Full audit: `docs/ux-progress/routes/workout-history.md`. |
 | Global app shell / navigation | Audited | 63 | Full audit: `docs/ux-progress/routes/global-app-shell.md`. |
-| Food Hub / custom foods and meals | Audited | 55 | Needs manual-fallback framing, inline form/load states, protected deletes, per-item pending, and 48px mobile controls. Full audit: `docs/ux-progress/routes/food-hub.md`. |
+| Food Hub / custom foods and meals | Audited | 55 | Full audit: `docs/ux-progress/routes/food-hub.md`. |
+| Weekly overview / reports | Audited | 57 | Needs source-level confidence, skeleton/ErrorState, complete/partial/no-data states, readable period controls, and user-facing data coverage copy. Full audit: `docs/ux-progress/routes/weekly-overview-reports.md`. |
 | Calories / food log | Audited | 54 | Full audit: `docs/ux-progress/routes/calories.md`. |
 | Meal plan | Audited | 57 | Full audit: `docs/ux-progress/routes/my-meal-plan.md`. |
 | Hydration | Audited | 68 | Full audit: `docs/ux-progress/routes/hydration.md`. |
@@ -61,7 +62,6 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | AI imports / permissions | Audited | 66 | Full audit: `docs/ux-progress/routes/settings-ai-imports.md`. |
 | Data privacy | Audited | 61 | Full audit: `docs/ux-progress/routes/settings-data-privacy.md`. |
 | Preferences | Audited | 62 | Full audit: `docs/ux-progress/routes/settings-preferences.md`. |
-| Weekly overview / reports | Not audited | — | Needs report navigation, filters, chart/data motion, loading, empty-state, and reduced-motion audit. |
 | Personal records | Not audited | — | Needs tracker, insight actions, PR update highlight, achievement feedback, and empty-state audit. |
 | Habits | Not audited | — | Needs repeated toggle/check behavior, streak feedback, optimistic updates, reduced motion, and error recovery audit. |
 | Sleep & recovery | Not audited | — | Needs form/action/feedback audit with quiet low-stimulation motion and clear save states. |
@@ -85,6 +85,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | `/workout-history` | Audited | 60 | Tune flow with history-state and detail-readability hardening | `docs/ux-progress/routes/workout-history.md` | `Loaded history -> known source confidence -> clear filters -> readable session details -> valid next action`. |
 | Global app shell / navigation | Audited | 63 | Tune shell with navigation reliability, safe-area, and motion hardening | `docs/ux-progress/routes/global-app-shell.md` | `Valid links -> safe bottom stack -> 48px shell controls -> reduced-motion-safe transitions -> clear offline/active workout states`. |
 | `/calories/food-hub` | Audited | 55 | Tune flow with manual-fallback framing, form-state hardening, and destructive-action protection | `docs/ux-progress/routes/food-hub.md` | `Manual fallback context -> clear data confidence -> safe custom edits -> protected deletes -> 48px mobile controls`. |
+| `/calories/weekly-overview` | Audited | 57 | Tune flow with report-source confidence, empty-state clarity, and readable period controls | `docs/ux-progress/routes/weekly-overview-reports.md` | `Readable period controls -> source confidence -> skeleton/ErrorState -> clear missing-data explanations -> optional safe export`. |
 | `/calories` | Audited | 54 | Needs AI-first reframing | `docs/ux-progress/routes/calories.md` | `ChatGPT meal import/review -> Plaivra overview/tracking -> manual fallback/correction`. |
 | `/my-meal-plan` | Audited | 57 | Needs AI-first reframing | `docs/ux-progress/routes/my-meal-plan.md` | `ChatGPT meal-plan import/review -> planned overview -> shopping / mark done -> manual fallback/correction`. |
 | `/hydration` | Audited | 68 | Tune flow | `docs/ux-progress/routes/hydration.md` | `Today hero -> quick add -> manual fallback -> recent entries -> weekly context -> streak/reminder`. |
@@ -121,6 +122,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | 2026-07-06 | `/workout-history` | Completed workout history route audit | Score 60/100 | `3d9412c1dc76029ab992d960ec474f570619bf70` |
 | 2026-07-06 | Global app shell / navigation | Completed shell audit | Score 63/100 | `d24f6eb24b0978317b5c999feceba6989e455b35` |
 | 2026-07-06 | `/calories/food-hub` | Completed Food Hub route audit | Score 55/100 | `b36cce109ef70550748f3ea7488c12aac9f8014a` |
+| 2026-07-06 | `/calories/weekly-overview` | Completed weekly reports route audit | Score 57/100 | `0752b20c93609a2ab77dd5fc250fc5856695ceed` |
 | 2026-07-06 | `/calories` | Completed/reframed route audit | Score 54/100 | `7c8422fb407bea78fd9cc639472dc444a52a08df` |
 | 2026-07-06 | `/my-meal-plan` | Completed route audit | Score 57/100 | `fe33ec561ee07ba7cb26767c7ce7d94b285e4cf0` |
 | 2026-07-06 | `/hydration` | Completed route audit | Score 68/100 | `61741d42ef9f7738451442032f80d4cb34c7f4be` |
@@ -144,18 +146,19 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 7. `/workout-history` — audited, fixes open
 8. Global app shell / navigation — audited, fixes open
 9. `/calories/food-hub` — audited, fixes open
-10. `/calories` — audited, fixes open after AI-first reframing
-11. `/my-meal-plan` — audited, fixes open after AI-first reframing
-12. `/hydration` — audited, fixes open
-13. `/wellness` — audited, fixes open
-14. `/progress` — audited, fixes open
-15. `/settings` — audited, fixes open
-16. `/settings/ai-imports` — audited, fixes open
-17. `/settings/data-privacy` — audited, fixes open
-18. `/settings/preferences` — audited, fixes open
-19. Weekly overview / reports
+10. `/calories/weekly-overview` — audited, fixes open
+11. `/calories` — audited, fixes open after AI-first reframing
+12. `/my-meal-plan` — audited, fixes open after AI-first reframing
+13. `/hydration` — audited, fixes open
+14. `/wellness` — audited, fixes open
+15. `/progress` — audited, fixes open
+16. `/settings` — audited, fixes open
+17. `/settings/ai-imports` — audited, fixes open
+18. `/settings/data-privacy` — audited, fixes open
+19. `/settings/preferences` — audited, fixes open
 20. Personal records
 21. Habits
+22. Sleep & recovery
 
 Reason: these routes carry the highest daily-use, trust, AI, motion, and future-subscription impact.
 
