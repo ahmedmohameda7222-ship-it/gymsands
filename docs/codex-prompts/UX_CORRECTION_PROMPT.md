@@ -1,11 +1,11 @@
 # Plaivra Codex UX Correction Prompt
 
-**Version:** 2026.1
+**Version:** 2026.1  
 **Status:** Active prompt builder
 
-This file stores the Codex CLI correction prompt assembled from completed Plaivra UX audits.
+This file stores the Codex CLI correction prompts assembled from completed Plaivra UX audits.
 
-Source documents:
+Codex must read these first:
 
 - `CHATGPT_CODEX_PROMPT_RULES.md`
 - `Ruflo_usage.md`
@@ -15,68 +15,69 @@ Source documents:
 - `docs/ux-progress/README.md`
 - `docs/platform-roadmap/README.md`
 
-Current completed audits:
+Completed audits:
 
-- `/dashboard` — audited, score 72/100, fixes open
-- `/onboarding?edit=true` — audited, score 66/100, fixes open
+- `/dashboard` — 72/100 — fixes open
+- `/onboarding?edit=true` — 66/100 — fixes open
+- `/my-workout/plans` — 63/100 — fixes open
 
-Recommended current setup for a one-route UI correction:
-
-- Codex mode: high plus advisor
-- Start with: `/caveman lite`
-- Skills for UI-only route work: `$memory-management $agent-coder $agent-reviewer $agent-tester`
-- Skills for onboarding/auth/AI/user-data-adjacent work: `$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester`
-- Advisor: strict senior mobile product engineer + premium UX reviewer
-- Model: use the strongest reliable reasoning model available in Codex CLI; high reasoning is enough for one-route tasks.
-
-Future multi-route correction bundle setup:
-
-- Codex mode: high plus advisor, or xhigh plus advisor only for a large multi-route batch
-- Start with: `/caveman lite`
-- Skills: `$swarm-orchestration $memory-management $agent-reviewer $agent-tester`
-- Advisor: strict senior mobile product engineer + release-quality UX auditor + regression reviewer
-
-Flow-first rule for all future sections:
-
-- Audit and implement workflow changes before button polish.
-- If the flow is weak, propose and implement the corrected flow first.
-- Only after the flow decision is clear should Codex adjust buttons, spacing, states, and motion.
-- Use `docs/ux-constitution/flow-and-workflow-audit.md` as a required source of truth.
+General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
 ---
 
-## Paste-ready prompt section 1 — Dashboard correction
+## Setup guide
 
-Use this only when you want Codex to implement the dashboard P1 fixes.
+### One-route UI correction
 
 ```text
 /caveman lite
 
 $memory-management $agent-coder $agent-reviewer $agent-tester
 
-Task:
-Implement the audited P1 dashboard UX corrections for Plaivra.
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + premium UX reviewer
+```
 
-Mode:
-high plus advisor
+### One-route work touching profile, auth, AI permissions, or user data
 
-Advisor:
-Act as a strict senior mobile product engineer and premium UX reviewer. Optimize for launch-quality mobile-first behavior, not decoration.
+```text
+/caveman lite
+
+$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
+
+Mode: high plus advisor
+Advisor: strict senior product engineer + user-data safety reviewer
+```
+
+### Future multi-route bundle
+
+```text
+/caveman lite
+
+$swarm-orchestration $memory-management $agent-reviewer $agent-tester
+
+Mode: high plus advisor, or xhigh plus advisor only for a large multi-route batch
+Advisor: strict senior mobile product engineer + release-quality UX auditor + regression reviewer
+```
+
+---
+
+## Prompt section 1 — Dashboard correction
+
+```text
+/caveman lite
+
+$memory-management $agent-coder $agent-reviewer $agent-tester
+
+Task: Implement the audited P1 dashboard UX corrections for Plaivra.
 
 Read first:
-1. CHATGPT_CODEX_PROMPT_RULES.md
-2. Ruflo_usage.md
-3. docs/ux-constitution/README.md
-4. docs/ux-constitution/flow-and-workflow-audit.md
-5. docs/ux-constitution/motion-and-interaction.md
-6. docs/ux-progress/README.md, especially the /dashboard audit
-
-Before editing:
-1. Use memory_search.
-2. Inspect only relevant dashboard files.
-3. Confirm the dashboard flow decision from the audit before changing buttons.
-4. Make a short plan.
-5. Make the smallest clean change.
+- CHATGPT_CODEX_PROMPT_RULES.md
+- Ruflo_usage.md
+- docs/ux-constitution/README.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
+- docs/ux-progress/README.md
 
 Primary route:
 - /dashboard
@@ -89,86 +90,44 @@ Inspect first:
 - components/motion/index.tsx
 - lib/motion.ts
 
-Do not touch unrelated routes, env files, database schema, migrations, auth, API routes, MCP routes, onboarding, settings, subscriptions, or global theme unless required for a small reusable primitive.
-
-Audit result:
-/dashboard score is 72/100. The route is useful but not premium-ready because actions compete, repeated actions are not optimistic enough, and some UI feels dense/static.
-
 Required fixes:
-1. Add a clearer single Next Best Action experience using existing dashboard data only.
-2. Demote duplicated or competing CTAs instead of removing useful functionality.
-3. Add optimistic UI and pending protection for dashboard water quick add.
-4. Add optimistic UI and pending protection for dashboard meal Done.
+1. Add one clear Next Best Action experience.
+2. Demote duplicated or competing CTAs.
+3. Add optimistic UI and pending protection for water quick add.
+4. Add optimistic UI and pending protection for meal Done.
 5. Make Done dominant and Skip secondary in meal rows.
-6. Restyle the meal type selector into a calmer segmented or horizontal selector.
-7. Use existing motion utilities/tokens only where motion clarifies feedback or state change.
-8. Do not redesign the whole dashboard.
-9. Do not implement unrelated P2 polish unless directly needed for a P1 fix.
+6. Restyle meal type selector into a calmer segmented/horizontal selector.
+7. Use motion only for feedback/state clarity.
 
-Acceptance criteria:
-1. One obvious next best action is visible within two seconds.
-2. Dashboard no longer feels like several equal CTAs competing at once.
-3. Water quick add gives immediate visual feedback and blocks duplicate rapid taps.
-4. Meal Done gives immediate visual feedback and blocks duplicate rapid taps.
-5. Failed optimistic water/meal actions roll back cleanly and show existing safe toast behavior.
-6. Done is visually dominant and Skip is secondary.
-7. Meal type selector is calmer and clearer.
-8. Existing loading, empty, error, retry, AI approval, privacy, and auth behavior remain intact.
-9. No unrelated routes are changed.
+Do not touch unrelated routes, env files, schema, migrations, auth, API routes, MCP routes, settings, subscriptions, or global theme.
 
 Verification:
-1. Run npm run typecheck.
-2. Run npm run lint.
-3. Run npm run build if feasible.
-4. Inspect /dashboard around 390x844 mobile width.
-5. Verify optimistic water add success, duplicate protection, and rollback behavior.
-6. Verify optimistic meal Done success, duplicate protection, and rollback behavior.
-7. Run git diff --stat and review the diff.
+- Run typecheck, lint, and build if feasible.
+- Test /dashboard at 390x844.
+- Verify optimistic success, duplicate protection, and rollback for water and meal Done.
+- Review git diff before final report.
 
-Final report:
-1. Changed files
-2. What changed
-3. What was tested
-4. Risks
-5. Anything not verified
-6. Whether memory_store was used
-7. Recommended next step
+Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
 ```
 
 ---
 
-## Paste-ready prompt section 2 — Onboarding edit correction
-
-Use this only when you want Codex to implement the `/onboarding?edit=true` P0/P1 fixes.
+## Prompt section 2 — Onboarding edit correction
 
 ```text
 /caveman lite
 
 $memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
 
-Task:
-Implement the audited P0/P1 onboarding edit UX corrections for Plaivra.
-
-Mode:
-high plus advisor
-
-Advisor:
-Act as a strict senior mobile product engineer, premium onboarding UX reviewer, and user-data safety reviewer. Optimize for reliable profile editing, not visual decoration.
+Task: Implement the audited P0/P1 onboarding edit UX corrections for Plaivra.
 
 Read first:
-1. CHATGPT_CODEX_PROMPT_RULES.md
-2. Ruflo_usage.md
-3. docs/ux-constitution/README.md
-4. docs/ux-constitution/flow-and-workflow-audit.md
-5. docs/ux-constitution/motion-and-interaction.md
-6. docs/ux-progress/README.md, especially the /onboarding?edit=true audit
-
-Before editing:
-1. Use memory_search.
-2. Inspect only relevant onboarding/profile/AI-permission files.
-3. Confirm the onboarding flow decision from the audit before changing buttons.
-4. Make a short plan.
-5. Make the smallest clean change.
+- CHATGPT_CODEX_PROMPT_RULES.md
+- Ruflo_usage.md
+- docs/ux-constitution/README.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
+- docs/ux-progress/README.md
 
 Primary route:
 - /onboarding?edit=true
@@ -182,81 +141,89 @@ Inspect first:
 - components/motion/index.tsx
 - lib/motion.ts
 
-Do not touch unrelated routes, dashboard, workout pages, calorie pages, meal pages, env files, database schema, migrations, payment/subscription files, MCP routes, or global theme unless required for a tiny reusable primitive.
-
-Audit result:
-/onboarding?edit=true score is 66/100. The route is functional but not launch-quality because it shows irrelevant target weight, has saved-data loading risk, uses several 44px controls, has abrupt step changes, and needs stronger AI permission trust framing.
-
 Required fixes:
-1. P0: Fix conditional Target weight visibility.
-   - Show target weight only when selected goals include weight/body-composition goals or a saved target weight exists.
-   - Weight/body-composition goals: Lose fat, Build muscle, Body recomposition, Improve health.
-   - Hide the whole Target weight section for non-weight goals when no saved target weight exists.
-   - Do not leave blank space.
-   - If hiding because goals are non-weight-related, do not force-clear saved target weight unless the existing product logic already requires it.
-
-2. Add an edit-mode saved-answer loading gate.
-   - In edit mode, do not let the user edit default answers before saved onboarding and AI permissions resolve.
-   - Prevent late saved data from overwriting user edits.
-   - Add a clear loading state and safe error/retry behavior.
-
-3. Add subtle step transition motion.
-   - Use existing motion utilities/tokens where possible.
-   - Step changes should feel guided, not static.
-   - Respect reduced-motion behavior.
-   - Do not add decorative animation.
-
-4. Fix touch target baseline.
-   - Step chips, schedule day buttons, stepper plus/minus buttons, stepper input shell, and permission toggles must have at least 48px effective tap area.
-   - Do not make the UI bulky; improve tap area cleanly.
-
-5. Improve AI permission trust framing.
-   - Full AI Access should clearly explain broad read/write access.
-   - Write access should clearly state that it includes read access.
-   - The Review step should summarize AI access clearly before Save.
-   - Do not silently change permission semantics.
-
+1. Show Target weight only for weight/body-composition goals or when a saved target weight exists.
+2. Add edit-mode saved-answer loading gate.
+3. Add subtle reduced-motion-safe step transitions.
+4. Resize relevant controls to 48px effective tap targets.
+5. Improve AI permission trust framing and review summary.
 6. Make mobile step navigation calmer.
-   - The 8-step horizontal chip strip should not feel like the main action area.
-   - Keep all steps reachable, but demote/restyle the strip if needed.
-   - Back/Next/Save remain the main navigation actions.
 
-Do not redesign the whole onboarding flow.
-Do not change database schema or auth behavior.
-
-Acceptance criteria:
-1. Target weight is hidden for non-weight goals when no saved target weight exists.
-2. Target weight is visible for Lose fat, Build muscle, Body recomposition, or Improve health.
-3. Target weight remains visible if a saved target weight exists, with clear context.
-4. Edit mode waits for saved onboarding and AI permission data before editable defaults appear.
-5. Saved data cannot overwrite user edits after loading completes.
-6. All relevant onboarding controls meet 48px effective tap target.
-7. Step transitions are subtle and reduced-motion-safe.
-8. AI Full Access and Write Access are explained clearly before saving.
-9. Back/Next/Save remain sticky, mobile-safe, and clear.
-10. Save still persists onboarding, profile target/body goal, and AI permissions correctly.
-11. No unrelated routes are changed.
+Do not change database schema, auth behavior, or unrelated routes.
 
 Verification:
-1. Run npm run typecheck.
-2. Run npm run lint.
-3. Run npm run build if feasible.
-4. Inspect /onboarding?edit=true around 390x844 mobile width.
-5. Test non-weight goals: Improve endurance, Improve mobility, Reduce stress, Improve strength.
-6. Test weight-related goals: Lose fat, Build muscle, Body recomposition, Improve health.
-7. Test edit mode with saved target weight and non-weight goals.
-8. Verify saved onboarding values load before editing is allowed.
-9. Verify AI permission summary and save behavior.
-10. Run git diff --stat and review the diff.
+- Run typecheck, lint, and build if feasible.
+- Test /onboarding?edit=true at 390x844.
+- Test non-weight goals and weight-related goals.
+- Test saved target weight case.
+- Verify onboarding/profile/AI permissions still save correctly.
+- Review git diff before final report.
 
-Final report:
-1. Changed files
-2. What changed
-3. What was tested
-4. Risks
-5. Anything not verified
-6. Whether memory_store was used
-7. Recommended next step
+Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+```
+
+---
+
+## Prompt section 3 — Workout plans correction
+
+```text
+/caveman lite
+
+$memory-management $agent-coder $agent-reviewer $agent-tester
+
+Task: Implement the audited P1 workout plans UX corrections for Plaivra.
+
+Read first:
+- CHATGPT_CODEX_PROMPT_RULES.md
+- Ruflo_usage.md
+- docs/ux-constitution/README.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
+- docs/ux-progress/README.md
+- docs/ux-progress/routes/my-workout-plans.md
+
+Primary route:
+- /my-workout/plans
+
+Flow decision:
+- Reorder flow.
+
+Required flow:
+- Today hero -> weekly calendar -> saved plan library -> add/import plan.
+
+Inspect first:
+- app/(private)/my-workout/plans/page.tsx
+- components/workouts/my-workout-plans.tsx
+- components/workouts/workout-calendar.tsx
+- components/shared/chatgpt-import-card.tsx
+- components/ui/disclosure.tsx
+- components/ui/button.tsx
+- components/motion/index.tsx
+- lib/motion.ts
+
+Required fixes:
+1. Reorder route so active plan users see a Today hero first.
+2. Replace no-plan empty state with setup choice hero: Import from ChatGPT primary, Create manually secondary.
+3. Move Create manually and Import into an Add plan area, not top-level competing controls.
+4. Remove duplicate Start Today patterns.
+5. Make plan More actions trigger and menu items 48px effective tap targets.
+6. Separate destructive menu actions visually from normal actions.
+7. Improve ChatGPT import/access framing and standard button styling.
+8. Add only useful state/motion feedback; no decorative animation.
+
+Do not change workout session tracking, database schema, auth, payments, or unrelated routes.
+
+Verification:
+- Run typecheck, lint, and build if feasible.
+- Test /my-workout/plans at 390x844.
+- Test no-plan state.
+- Test active plan with today workout.
+- Test active plan with rest day/no today workout.
+- Test More actions, delete confirmation, archive, duplicate, rename, and set default.
+- Test ChatGPT import visibility and access prompt.
+- Review git diff before final report.
+
+Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
 ```
 
 ---
