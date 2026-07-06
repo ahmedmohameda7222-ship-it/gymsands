@@ -34,6 +34,7 @@ Product rule: Plaivra is AI-first where appropriate, but not every route is Chat
 | `/calories/weekly-overview` | 57 | `docs/ux-progress/routes/weekly-overview-reports.md` |
 | `/personal-records` | 56 | `docs/ux-progress/routes/personal-records.md` |
 | `/habits` | 58 | `docs/ux-progress/routes/habits.md` |
+| `/sleep-recovery` | 57 | `docs/ux-progress/routes/sleep-recovery.md` |
 | `/calories` | 54 | `docs/ux-progress/routes/calories.md` |
 | `/my-meal-plan` | 57 | `docs/ux-progress/routes/my-meal-plan.md` |
 | `/hydration` | 68 | `docs/ux-progress/routes/hydration.md` |
@@ -59,47 +60,48 @@ For personal user data, permissions, health data, nutrition data, reports, or AI
 
 ---
 
-## Current focused prompt — Habits correction
+## Current focused prompt — Sleep & Recovery correction
 
 ```text
 /caveman lite
-$memory-management $agent-reviewer $agent-coder $agent-tester
+$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
 
 Mode: high plus advisor
-Advisor: strict senior mobile product engineer + repeated-action reliability reviewer + shared-component regression reviewer
+Advisor: strict senior mobile product engineer + sensitive recovery-data reviewer + shared-component regression reviewer
 
-Task: Implement audited Habits UX corrections.
+Task: Implement audited Sleep & Recovery UX corrections.
 
 Primary route:
-- /habits
+- /sleep-recovery
 
 Read first:
-- docs/ux-progress/routes/habits.md
-- app/(private)/habits/page.tsx
+- docs/ux-progress/routes/sleep-recovery.md
+- app/(private)/sleep-recovery/page.tsx
 - components/lifestyle/wellness-trackers.tsx
-- services/database/wellness.ts
 - services/wellness/wellness-data.ts
+- services/database/wellness.ts
 
 Product role:
-- Habits is direct repeated daily logging.
+- Sleep & Recovery is a calm direct recovery check-in route.
 - Do not make ChatGPT primary.
-- Do not turn habits into a planning route.
+- Do not make medical claims.
 
 Required flow:
-- Load confidence -> optimistic toggles -> safe save/edit/remove -> accessible streaks -> 48px controls.
+- Load confidence -> validated save/edit -> protected remove -> cautious readiness copy -> 48px controls.
 
 Required fixes:
-1. Add loading skeleton/status for today's habits and history.
+1. Add loading skeleton/status for recovery logs.
 2. Add inline retry state; failed load must not look empty.
-3. Add optimistic Mark done/Reopen with rollback and per-row pending.
-4. Add save pending, duplicate protection, inline failure, and saved state.
+3. Add save pending, duplicate protection, inline failure, and quiet saved state.
+4. Preserve draft on failed save.
 5. Add visible edit mode banner plus Cancel/Discard.
-6. Add confirmation or undo for removing a habit, with failure recovery.
-7. Resize starter chips, ActionCard controls, inputs, and menu actions to 48px targets.
-8. Prevent duplicate starter habit creation for the same day.
-9. Add accessible labels/tooltips for streak dots.
-10. Add degraded state when history fails but today's habits load.
-11. Respect reduced-motion for progress bar and toggle feedback.
+6. Preserve edited record date or clearly restrict edit behavior.
+7. Add confirmation or undo for removing a recovery log, with failure recovery.
+8. Add validation for hours slept and rating ranges.
+9. Resize inputs/selects and menu actions to 48px targets.
+10. Add empty recovery log state.
+11. Strengthen non-medical readiness/source copy.
+12. Improve log title when hours are missing.
 
 Do not:
 - Do not change database schema.
@@ -107,18 +109,20 @@ Do not:
 - Do not change AI import/apply behavior.
 - Do not change global theme.
 - Do not regress other trackers in components/lifestyle/wellness-trackers.tsx.
+- Do not add alarmist or medical language.
 
 Verification:
 - Run typecheck, lint, and build if feasible.
-- Test /habits at 390x844.
-- Verify failed today load has retry and does not look empty.
-- Verify failed history load shows degraded streak state.
-- Verify Mark done/Reopen updates immediately and rolls back on failure.
-- Verify starter chips cannot create duplicates by repeated taps.
+- Test /sleep-recovery at 390x844.
+- Verify failed load has retry and does not look empty.
+- Verify save pending/saved/failed states.
 - Verify failed save keeps draft.
+- Verify hours slept and rating validation.
 - Verify edit mode and Cancel/Discard work.
+- Verify editing an older log does not silently change its date.
 - Verify remove confirmation/undo and recovery.
-- Verify 48px starter chips, inputs, Mark done, More, Edit, and Remove controls.
-- Verify Weekly Reports still reads habit completion correctly.
+- Verify 48px inputs/selects/menu actions.
+- Verify readiness copy is non-medical and based on saved data only.
+- Verify Weekly Reports still reads sleep average correctly.
 - Review git diff before final report.
 ```
