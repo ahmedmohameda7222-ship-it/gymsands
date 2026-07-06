@@ -3,7 +3,7 @@
 **Version:** 2026.1  
 **Status:** Active prompt builder
 
-This file stores the Codex CLI correction prompts assembled from completed Plaivra UX audits.
+This file stores Codex CLI correction prompts assembled from completed Plaivra UX audits.
 
 Codex must read these first:
 
@@ -25,10 +25,11 @@ Completed audits:
 - `/calories` — 54/100 — fixes open after AI-first reframing
 - `/my-meal-plan` — 57/100 — fixes open after AI-first reframing
 - `/hydration` — 68/100 — fixes open
+- `/wellness` — 60/100 — fixes open
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
-Product rule: Plaivra is an AI-first tracker, not primarily a manual data-entry app. ChatGPT-assisted import/apply should be the primary data-entry path where appropriate. Manual entry remains fallback/edit/power-user behavior.
+Product rule: Plaivra is an AI-first tracker, not primarily a manual data-entry app. ChatGPT-assisted import/apply should be the primary data-entry path where appropriate. Manual entry remains fallback/edit/power-user behavior. Hydration is a direct quick-logging exception. Wellness is a calm hub/check-in route, not an AI chat route.
 
 ---
 
@@ -45,29 +46,7 @@ Mode: high plus advisor
 Advisor: strict senior mobile product engineer + premium UX reviewer
 ```
 
-### One-route work touching profile, auth, AI permissions, or user data
-
-```text
-/caveman lite
-
-$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
-
-Mode: high plus advisor
-Advisor: strict senior product engineer + user-data safety reviewer
-```
-
-### One-route work touching active workout logging reliability
-
-```text
-/caveman lite
-
-$memory-management $agent-coder $agent-reviewer $agent-tester
-
-Mode: high plus advisor
-Advisor: strict senior mobile product engineer + data-integrity reviewer
-```
-
-### One-route work adding or changing AI import/apply flows
+### One-route work touching profile, auth, AI permissions, user data, or import/apply flows
 
 ```text
 /caveman lite
@@ -76,6 +55,17 @@ $memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
 
 Mode: high plus advisor
 Advisor: strict senior mobile product engineer + AI import/review/apply safety reviewer
+```
+
+### Active workout logging reliability
+
+```text
+/caveman lite
+
+$memory-management $agent-coder $agent-reviewer $agent-tester
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + data-integrity reviewer
 ```
 
 ### Future multi-route bundle
@@ -122,7 +112,7 @@ Required fixes:
 7. Ensure dashboard reflects Plaivra's AI-first model: show imported/active state and review/apply needs where relevant.
 8. Use motion only for feedback/state clarity.
 
-Inspect relevant dashboard files only. Do not touch unrelated routes, env files, schema, migrations, auth, API routes, MCP routes, settings, subscriptions, or global theme.
+Do not touch unrelated routes, env files, schema, migrations, auth, API routes, MCP routes, settings, subscriptions, or global theme.
 
 Verification: typecheck, lint, build if feasible, mobile 390x844, optimistic success/rollback for water and meal Done, review git diff.
 
@@ -203,7 +193,7 @@ Required fixes:
 3. Move Create manually and Import into an Add plan area, not top-level competing controls.
 4. Remove duplicate Start Today patterns.
 5. Make plan More actions trigger and menu items 48px effective tap targets.
-6. Separate destructive menu actions visually from normal actions.
+6. Separate high-risk menu actions visually from normal actions.
 7. Improve ChatGPT import/access framing and standard button styling.
 8. Add only useful state/motion feedback; no decorative animation.
 
@@ -306,17 +296,7 @@ Required fixes:
 
 Do not rewrite nutrition calculations, database schema, auth, payments, unrelated meal-plan routes, or global theme. Do not silently apply AI-estimated food data without a review/apply/correct step unless an existing explicit permission model already allows it and the UI makes that clear.
 
-Verification:
-- Run typecheck, lint, and build if feasible.
-- Test /calories at 390x844.
-- Verify first screen makes ChatGPT meal import/review primary.
-- Verify imported estimates are reviewable/correctable before saving.
-- Verify manual add/search/custom/barcode/recent remain available as fallback.
-- Verify water optimistic success, duplicate protection, and rollback.
-- Verify recent food logging pending behavior and duplicate protection.
-- Verify food/water delete pending/rollback or safe unchanged behavior.
-- Verify weekly, targets, and barcode scanner still work.
-- Review git diff before final report.
+Verification: typecheck, lint, build if feasible, mobile 390x844, AI meal import primary, imported estimates reviewable, manual fallback available, water/recent/delete pending and rollback, weekly/targets/barcode still work, review git diff.
 
 Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
 ```
@@ -366,46 +346,26 @@ Required flow:
 - ChatGPT meal-plan import/review -> Plaivra planned overview -> shopping / mark done -> manual fallback/correction.
 
 Required fixes:
-1. Add a persistent route-level primary CTA: Import/update meal plan with ChatGPT.
-2. Add a review/apply/correct stage for structured ChatGPT meal-plan results before saving, using existing AI/import patterns where available.
+1. Add persistent route-level primary CTA: Import/update meal plan with ChatGPT.
+2. Add review/apply/correct stage for structured ChatGPT meal-plan results before saving, using existing AI/import patterns where available.
 3. Reframe empty day and empty meal-type states so ChatGPT import/update is primary and manual add is fallback.
-4. Reorder the first screen into: meal-plan status/import hero -> pending review/apply area if any -> today planned meals -> week/shopping/manual tools.
+4. Reorder first screen into meal-plan status/import hero -> pending review/apply area if any -> today planned meals -> week/shopping/manual tools.
 5. Change Add source order: ChatGPT import/update first, Quick add and Food Hub secondary.
-6. Fix the Done carbs summary detail so it uses done fat, not planned fat.
-7. Resize date controls, week chips, meal-type chips, meal plus buttons, meal item actions, delete controls, form selects, and grocery menu items to 48px effective tap targets.
-8. Add clearer pending/success/failure states for Mark Done, including whether the meal was logged to Calories and what happens on failure.
+6. Fix Done carbs summary detail so it uses done fat, not planned fat.
+7. Resize date controls, week chips, meal-type chips, meal plus buttons, item actions, delete controls, form selects, and grocery menu items to 48px targets.
+8. Add clearer pending/success/failure states for Mark Done.
 9. Add pending/duplicate protection for Add to grocery.
-10. Add optimistic grocery checked/already-have interactions with rollback on failure.
+10. Add optimistic grocery checked/already-have interactions with rollback.
 11. Replace custom route/grocery load errors with shared ErrorState where practical.
 12. Move Food preferences out of the tab row into a secondary action/menu/helper area.
 13. Reduce repeated per-item ChatGPT visual density after route-level import becomes primary.
-14. Add only useful reduced-motion-safe import/review/apply, mark-done, and checklist feedback. No decorative animation.
+14. Add only useful reduced-motion-safe import/review/apply, mark-done, and checklist feedback.
 
-Do not:
-- Do not redesign the route from scratch.
-- Do not rewrite nutrition calculations.
-- Do not change database schema unless an existing import/apply path truly requires a documented minimal migration and you explicitly report why.
-- Do not change auth, subscriptions, global theme, unrelated calorie routes, unrelated workout routes, or settings.
-- Do not silently apply AI-generated meal-plan changes without review/apply/correct.
-- Do not remove manual entry; demote it to fallback/correction.
+Safety rule: if no structured ChatGPT meal-plan apply path exists, do not fake silent import. Surface the primary request/update flow and add a safe review/apply placeholder or pending state that preserves current data until explicit approval. Report the missing backend/import gap clearly.
 
-Safety rule:
-- If no structured ChatGPT meal-plan apply path exists, do not fake a silent import. Surface the primary ChatGPT request/import/update flow and add a safe review/apply placeholder or pending state that preserves current data until the user explicitly approves. Report the missing backend/import gap clearly.
+Do not redesign from scratch, rewrite nutrition calculations, change auth, subscriptions, global theme, unrelated routes, or silently apply AI-generated data.
 
-Verification:
-- Run typecheck, lint, and build if feasible.
-- Test /my-meal-plan at 390x844.
-- Verify first screen makes ChatGPT meal-plan import/update primary.
-- Verify existing planned meals do not hide the import/update path.
-- Verify imported/generated plans are reviewable/correctable before saving, or that the UI clearly preserves current data if full apply is not implemented.
-- Verify manual Add food, Food Hub, item edit, item delete, and Food preferences still work.
-- Verify Mark Done logs to Calories, blocks duplicate logs, and has clear pending/failure feedback.
-- Verify Add to grocery blocks duplicate rapid taps.
-- Verify grocery checked/already-have optimistic success and rollback.
-- Verify Done carbs detail uses done fat.
-- Verify key tap targets meet 48px effective size.
-- Verify Week and Shopping tabs still work.
-- Review git diff before final report.
+Verification: typecheck, lint, build if feasible, mobile 390x844, import/update primary, plans reviewable/correctable or safe placeholder, manual add/Food Hub/edit/delete/preferences still work, Mark Done logs Calories safely, grocery actions protected, Done carbs fixed, Week/Shopping still work, review git diff.
 
 Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
 ```
@@ -442,9 +402,6 @@ Relevant files to inspect first:
 - services/database/nutrition.ts
 - types/database.ts
 
-Flow decision:
-- Tune flow.
-
 Product rule:
 - Hydration is intentionally not ChatGPT/import-first. Direct quick logging is primary. Do not add AI as the main hydration action.
 
@@ -452,7 +409,7 @@ Required flow:
 - Today hero -> quick add -> manual fallback -> recent entries -> weekly context -> streak/reminder.
 
 Required fixes:
-1. Add an initial loading gate/skeleton so the hero does not show false 0 L while hydration logs/target/week data are loading.
+1. Add an initial loading gate/skeleton so the hero does not show false 0 L while hydration data is loading.
 2. Add optimistic quick-add for water logs with rollback on failure.
 3. Add per-action pending state and duplicate rapid-tap protection for quick add and manual add.
 4. Add optimistic delete for recent water entries with rollback and restored-entry error copy.
@@ -464,36 +421,102 @@ Required fixes:
 10. Add controlled progress/row motion for add/delete and respect reduced motion.
 11. Surface degraded/partial-load state if week/target/logs cannot fully load, where feasible without broad service rewrites.
 
+Do not add ChatGPT/import as the primary hydration path, redesign route from scratch, change schema, rewrite calorie target editing, or touch unrelated routes.
+
+Verification: typecheck, lint, build if feasible, mobile 390x844, loading gate, optimistic add/delete rollback, duplicate protection, 48px controls, target-hit/missing-target states, weekly totals correct, ErrorState retry, no primary ChatGPT action, review git diff.
+
+Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+```
+
+---
+
+## Prompt section 8 — Wellness hub correction
+
+```text
+/caveman lite
+
+$memory-management $agent-coder $agent-reviewer $agent-tester
+
+Task: Implement the audited P1/P2 wellness hub UX and data-state corrections for Plaivra.
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + calm wellness UX reviewer + data-state reliability reviewer
+
+Read first:
+- CHATGPT_CODEX_PROMPT_RULES.md
+- Ruflo_usage.md
+- docs/product/ai-first-tracker-model.md
+- docs/ux-constitution/README.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
+- docs/ux-progress/README.md
+- docs/ux-progress/routes/wellness.md
+
+Primary route:
+- /wellness
+
+Relevant files to inspect first:
+- app/(private)/wellness/page.tsx
+- components/wellness/daily-checkins.tsx
+- services/database/wellness.ts
+- services/wellness/wellness-data.ts
+- services/database/execution-layer.ts
+- types/database.ts
+
+Flow decision:
+- Reorder flow.
+
+Product rule:
+- Wellness is not ChatGPT/import-first. It is a calm daily hub and check-in route. Check-in context may support later ChatGPT requests, but it must not automatically change plans.
+
+Required flow:
+- Today status -> next wellness action -> compact check-in -> focused launchers -> recent history.
+
+Required fixes:
+1. Add a wellness status / next best action hero before the full check-in form.
+2. Reorder route to: status/next action -> compact check-in -> launcher cards -> recent check-ins.
+3. Make DailyCheckins compact/contextual on the hub instead of expanded full form by default.
+4. Show only the most relevant check-in first: morning if unsaved, evening if morning saved/evening unsaved, saved summary if both done.
+5. Add summary loading skeleton/gate so default None/0 values are not shown as real data.
+6. Add inline summary error/degraded state with retry instead of toast-only failure.
+7. Add inline check-in save failure message and clear not-saved state.
+8. Resize rating buttons and compact check-in controls to 48px effective tap targets.
+9. Add next-action emphasis to the relevant launcher or check-in action.
+10. Add calm saved-state transition and optional collapse after successful check-in save.
+11. Collapse or move recent check-in history below launcher cards.
+12. Clarify microcopy that check-in context may support ChatGPT requests but does not automatically change plans.
+13. Add reduced-motion-safe reveal/collapse for check-in sections.
+
 Do not:
-- Do not add ChatGPT/import as the primary hydration path.
+- Do not add ChatGPT as the primary wellness action.
 - Do not redesign the route from scratch.
+- Do not duplicate full habits/sleep/supplements/task functionality inside /wellness.
 - Do not change database schema.
-- Do not rewrite calorie target editing.
-- Do not change unrelated Calories tools, AI permissions, auth, settings, subscriptions, or global theme.
-- Do not change hydration target semantics without explicit approval.
+- Do not touch unrelated wellness subroutes, auth, subscriptions, settings, AI permissions, or global theme.
+- Do not silently save or mutate plans based on check-in values.
 
 Implementation guidance:
-- Preserve the current route structure and service calls where possible.
-- For optimistic add/delete, snapshot previous logs and weekData before local update.
-- On failure, restore previous state and show clear error copy.
-- Keep quick add fast; do not add confirmation to low-risk water logging.
-- Keep delete low-friction, but reliable and reversible through rollback if the server fails.
-- Use motion only for feedback/state clarity: press feedback, progress fill, row enter/exit, and target-hit state.
+- Preserve current modules: DailyCheckins, Hydration, Habits, Sleep & Recovery, Supplements, Daily Fit Tasks, Recent check-in history.
+- Compute next action from saved state and current summary: unsaved morning check-in, unsaved evening review, incomplete hydration/habits/supplements/sleep/tasks.
+- Treat missing data and failed data differently where feasible. Do not show failed loads as confident None states.
+- Keep tone calm and low-stimulation.
+- Use motion only for saved/open/close/status changes, and respect reduced motion.
 
 Verification:
 - Run typecheck, lint, and build if feasible.
-- Test /hydration at 390x844.
-- Verify hydration opens with a loading skeleton/gate instead of false 0 L.
-- Verify quick add updates total, progress, recent entries, and weekly total immediately.
-- Verify failed quick add rolls back total/log/week state and explains water was not saved.
-- Verify manual add has validation, pending state, and duplicate protection.
-- Verify delete removes row immediately and restores it if delete fails.
-- Verify Delete, Refresh, Edit Targets, and empty-state action meet 48px effective tap size.
-- Verify reaching target shows a calm completion state.
-- Verify missing target state clearly points to target setup.
-- Verify weekly totals remain correct after optimistic add/delete.
-- Verify route-level ErrorState retry still works.
-- Verify no primary ChatGPT/import action was added to hydration.
+- Test /wellness at 390x844.
+- Verify first screen shows wellness status and one next best action.
+- Verify full daily check-in form no longer dominates above the hub overview.
+- Verify morning/evening check-in is contextual to saved state.
+- Verify launcher cards remain visible and useful on mobile.
+- Verify summary loading does not display false 0/None values.
+- Verify summary load failure produces visible inline degraded/error state and retry.
+- Verify check-in load/save failure is visible inside the check-in card.
+- Verify successful check-in save gives calm feedback and a clear next step.
+- Verify rating controls and compact action buttons meet 48px effective tap target.
+- Verify recent check-in history is not above the main launcher grid unless explicitly expanded.
+- Verify motion is calm, reduced-motion-safe, and only supports saved/open/close/status changes.
+- Verify the route does not add ChatGPT as a primary wellness action.
 - Review git diff before final report.
 
 Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
