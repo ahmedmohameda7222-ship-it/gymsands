@@ -33,6 +33,7 @@ Product rule: Plaivra is AI-first where appropriate, but not every route is Chat
 | `/calories/food-hub` | 55 | `docs/ux-progress/routes/food-hub.md` |
 | `/calories/weekly-overview` | 57 | `docs/ux-progress/routes/weekly-overview-reports.md` |
 | `/personal-records` | 56 | `docs/ux-progress/routes/personal-records.md` |
+| `/habits` | 58 | `docs/ux-progress/routes/habits.md` |
 | `/calories` | 54 | `docs/ux-progress/routes/calories.md` |
 | `/my-meal-plan` | 57 | `docs/ux-progress/routes/my-meal-plan.md` |
 | `/hydration` | 68 | `docs/ux-progress/routes/hydration.md` |
@@ -58,48 +59,47 @@ For personal user data, permissions, health data, nutrition data, reports, or AI
 
 ---
 
-## Current focused prompt — Personal Records correction
+## Current focused prompt — Habits correction
 
 ```text
 /caveman lite
 $memory-management $agent-reviewer $agent-coder $agent-tester
 
 Mode: high plus advisor
-Advisor: strict senior mobile product engineer + milestone data reviewer + shared-component regression reviewer
+Advisor: strict senior mobile product engineer + repeated-action reliability reviewer + shared-component regression reviewer
 
-Task: Implement audited Personal Records UX corrections.
+Task: Implement audited Habits UX corrections.
 
 Primary route:
-- /personal-records
+- /habits
 
 Read first:
-- docs/ux-progress/routes/personal-records.md
-- app/(private)/personal-records/page.tsx
-- components/lifestyle/personal-records-insights.tsx
+- docs/ux-progress/routes/habits.md
+- app/(private)/habits/page.tsx
 - components/lifestyle/wellness-trackers.tsx
-- services/database/progress.ts
+- services/database/wellness.ts
+- services/wellness/wellness-data.ts
 
 Product role:
-- Personal Records is a milestone tracker and correction surface.
-- Do not make it a workout logging route.
-- Do not make AI review primary.
+- Habits is direct repeated daily logging.
+- Do not make ChatGPT primary.
+- Do not turn habits into a planning route.
 
 Required flow:
-- Load confidence -> consistent records state -> safe save/edit/remove -> 48px controls -> clear PR feedback.
+- Load confidence -> optimistic toggles -> safe save/edit/remove -> accessible streaks -> 48px controls.
 
 Required fixes:
-1. Add loading skeleton/status for insights and tracker.
-2. Add inline retry state for record load failure; failed load must not look empty.
-3. Keep insights and tracker consistent after save/remove, or share one records state.
-4. Add save pending, duplicate protection, inline failure, and saved state for Save/Update Record.
-5. Add visible edit mode banner plus Cancel/Discard action.
-6. Add confirmation or undo for removing a record, with pending/failure recovery.
-7. Resize inputs/selects and edit/remove actions to 48px targets.
-8. Validate that a record has a meaningful value: weight, reps, or notes depending on record type.
-9. Add richer empty state with links to add first record, Today Workout, and Workout History.
-10. Add source label for manual vs auto-detected records where feasible.
-11. Normalize display labels for 1RM / Estimated 1RM and Best set / Best volume.
-12. Add subtle recent/new PR highlight after save/update.
+1. Add loading skeleton/status for today's habits and history.
+2. Add inline retry state; failed load must not look empty.
+3. Add optimistic Mark done/Reopen with rollback and per-row pending.
+4. Add save pending, duplicate protection, inline failure, and saved state.
+5. Add visible edit mode banner plus Cancel/Discard.
+6. Add confirmation or undo for removing a habit, with failure recovery.
+7. Resize starter chips, ActionCard controls, inputs, and menu actions to 48px targets.
+8. Prevent duplicate starter habit creation for the same day.
+9. Add accessible labels/tooltips for streak dots.
+10. Add degraded state when history fails but today's habits load.
+11. Respect reduced-motion for progress bar and toggle feedback.
 
 Do not:
 - Do not change database schema.
@@ -110,13 +110,15 @@ Do not:
 
 Verification:
 - Run typecheck, lint, and build if feasible.
-- Test /personal-records at 390x844.
-- Verify failed load has retry and does not look empty.
-- Verify insights and tracker stay consistent after save/remove.
+- Test /habits at 390x844.
+- Verify failed today load has retry and does not look empty.
+- Verify failed history load shows degraded streak state.
+- Verify Mark done/Reopen updates immediately and rolls back on failure.
+- Verify starter chips cannot create duplicates by repeated taps.
 - Verify failed save keeps draft.
 - Verify edit mode and Cancel/Discard work.
-- Verify record removal confirmation/undo and recovery.
-- Verify 48px inputs/selects/edit/remove actions.
-- Verify Weekly Reports still reads PRs correctly.
+- Verify remove confirmation/undo and recovery.
+- Verify 48px starter chips, inputs, Mark done, More, Edit, and Remove controls.
+- Verify Weekly Reports still reads habit completion correctly.
 - Review git diff before final report.
 ```
