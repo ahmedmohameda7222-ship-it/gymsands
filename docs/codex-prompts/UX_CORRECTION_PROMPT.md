@@ -24,6 +24,7 @@ Completed audits:
 - `/workouts` — 58/100 — fixes open
 - `/workout-history` — 60/100 — fixes open
 - Global app shell / navigation — 63/100 — fixes open
+- `/calories/food-hub` — 55/100 — fixes open
 - `/calories` — 54/100 — fixes open after AI-first reframing
 - `/my-meal-plan` — 57/100 — fixes open after AI-first reframing
 - `/hydration` — 68/100 — fixes open
@@ -36,7 +37,7 @@ Completed audits:
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
-Product rule: Plaivra is AI-first where appropriate, but not every route is ChatGPT-first. Manual entry is fallback/correction where appropriate. The global app shell is infrastructure: valid navigation, safe layout, reduced-motion compliance, offline/active-workout continuity, and 48px shell controls.
+Product rule: Plaivra is AI-first where appropriate, but not every route is ChatGPT-first. Manual entry is fallback/correction where appropriate. Food Hub is an advanced manual fallback/correction route for custom foods and saved meals, not the primary AI-first meal logging path.
 
 ---
 
@@ -174,28 +175,43 @@ Verification: failed source states, filtered-empty reset, 48px controls, long se
 
 ```text
 /caveman lite
-
 $memory-management $agent-reviewer $agent-coder $agent-tester
-
 Mode: high plus advisor
 Advisor: strict senior mobile product engineer + app-shell reliability reviewer + accessibility/motion reviewer
+Task: Implement audited global app shell and navigation corrections.
+Primary scope: Global app shell / navigation
+Read first: docs/ux-progress/routes/global-app-shell.md
+Required flow: Valid links -> safe bottom stack -> 48px shell controls -> reduced-motion-safe transitions -> clear offline/active workout states.
+Required fixes: verify /workouts/session/[id] links, reduce route transitions when reduceAnimations, 48px shell controls, bottom overlay stack, ActiveWorkoutIndicator pending/failure, verify More drawer links/active states, branded ProtectedRoute loading, offline banner placement, Preferences link for empty Quick Log.
+Do not change schema, auth semantics, AI import/apply behavior, route product flows, global theme redesign, or unrelated feature internals.
+Verification: nav at 360x780/390x844/430x932, valid links, reduced motion, overlay collision, 48px controls, branded loading.
+```
 
-Task: Implement audited global app shell and navigation corrections for Plaivra.
+---
 
-Primary scope:
-- Global app shell / navigation
+## Prompt section 9 — Food Hub correction
+
+```text
+/caveman lite
+
+$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + nutrition data-integrity reviewer + AI-first product alignment reviewer
+
+Task: Implement audited Food Hub UX, manual-fallback framing, and custom nutrition safety corrections.
+
+Primary route:
+- /calories/food-hub
 
 Relevant files to inspect first:
-- app/layout.tsx
-- app/(private)/layout.tsx
-- components/layout/app-shell.tsx
-- components/layout/page-heading.tsx
-- components/workouts/active-workout-indicator.tsx
-- components/settings/app-preference-effects.tsx
-- components/auth/protected-route.tsx
-- app/globals.css
-- app/(private)/today-workout/page.tsx
-- any actual standalone workout session route if it exists
+- app/(private)/calories/food-hub/page.tsx
+- components/meals/food-browser.tsx
+- components/meals/custom-nutrition-manager.tsx
+- services/database/nutrition.ts
+- docs/ux-progress/routes/food-hub.md
+- docs/ux-progress/routes/calories.md
+- docs/ux-progress/routes/my-meal-plan.md
 
 Read first:
 - CHATGPT_CODEX_PROMPT_RULES.md
@@ -205,63 +221,71 @@ Read first:
 - docs/ux-constitution/flow-and-workflow-audit.md
 - docs/ux-constitution/motion-and-interaction.md
 - docs/ux-progress/README.md
-- docs/ux-progress/routes/global-app-shell.md
+- docs/ux-progress/routes/food-hub.md
 
 Flow decision:
-- Tune shell with navigation reliability, safe-area, and motion hardening.
+- Tune flow with manual-fallback framing, form-state hardening, and destructive-action protection.
 
 Product rule:
-- The global shell is not AI-first or manual-entry-first. It is navigation and state infrastructure. It must preserve context, avoid overlap, expose active/offline states, and respect reduced-motion preferences across authenticated routes.
+- Food Hub is not the primary AI-first meal entry path. It is an advanced manual fallback/correction route for custom foods, saved meals, and reusable library items. Do not make it compete with ChatGPT/photo/text import as the primary nutrition flow.
 
 Required flow:
-- Valid links -> safe bottom stack -> 48px shell controls -> reduced-motion-safe transitions -> clear offline/active workout states.
+- Manual fallback context -> clear data confidence -> safe custom edits -> protected deletes -> 48px mobile controls.
 
 Required fixes:
-1. Verify `/workouts/session/[id]` links from Quick Log and ActiveWorkoutIndicator. Implement, redirect, or replace/remove if invalid.
-2. Make global route transitions respect `settings.reduceAnimations`.
-3. Normalize shell tap targets to 48px: sidebar links, mobile menu trigger, header logout, active workout actions.
-4. Define bottom overlay stack for mobile bottom nav, Quick Log FAB, ActiveWorkoutIndicator, and route sticky CTAs.
-5. Add ActiveWorkoutIndicator pending/failure states for pause/finish/cancel and avoid silent disappearance on load failure where feasible.
-6. Verify More drawer links and active states for every top-level route.
-7. Add branded ProtectedRoute loading state and optional degraded setup/consent check state.
-8. Improve offline banner copy and safe-area placement.
-9. Add direct Preferences link when Quick Log has no visible items.
-10. Document or codify z-index/safe-area policy for shell overlays.
+1. Reframe Food Hub copy as manual fallback/correction, not primary food logging.
+2. Add inline load/degraded states for kitchens, custom meals, favorites, and food library fallback.
+3. Add per-item pending and duplicate protection for Log food, Add to plan, and Log saved meal.
+4. Add optimistic favorite rollback and error handling.
+5. Add inline validation and save/failure state for custom food form.
+6. Add pending/failure state for custom meal save.
+7. Add confirmation/undo for deleting custom food and saved meal.
+8. Add visible edit mode plus cancel/discard for custom food and custom meal editing.
+9. Resize selects, buttons, and list actions to 48px and stack dense action rows on mobile.
+10. Replace FoodHubFallback plain text with skeleton.
+11. Add dirty-state guard before hiding builder with an unsaved draft.
+12. Structure builder with tabs/sections if needed to reduce density, without rebuilding the entire route.
+13. Add direct link/copy back to AI-first Calories import path.
 
 Do not:
-- Do not change database schema.
-- Do not change auth semantics.
+- Do not change nutrition database schema.
 - Do not change AI import/apply behavior.
-- Do not redesign the whole navigation model.
-- Do not change route product flows.
-- Do not touch unrelated feature internals unless required by route validity.
+- Do not make Food Hub the primary logging route.
+- Do not remove existing FoodBrowser or CustomNutritionManager capability.
+- Do not change auth behavior.
+- Do not change global theme.
+- Do not touch unrelated routes except to verify shared FoodBrowser regression on `/calories`.
 
 Implementation guidance:
-- Preserve desktop sidebar, sticky header, mobile bottom nav, Quick Log FAB, More drawer, and ActiveWorkoutIndicator.
-- Keep onboarding and workout-session special shell treatment.
-- Prefer conditional transition values over broad animation rewrites.
-- Test bottom overlay collisions on 360x780, 390x844, and 430x932.
-- Use sober state feedback; no decorative shell animations.
+- Preserve current capability: food search/browser -> log/add/favorite -> custom food builder -> custom meal builder -> saved meal logging.
+- Shared FoodBrowser changes must be safe for `/calories` too.
+- Keep useful local/fallback food data, but surface fallback/degraded state.
+- Deleting custom food/meal must not be silent; use app confirmation or undo.
+- Save failures must preserve user drafts.
+- Use sober feedback; no decorative food-card animation.
 
 Verification:
 - Run typecheck, lint, and build if feasible.
-- Verify mobile bottom nav at 360x780, 390x844, and 430x932.
-- Verify More drawer links and active states.
-- Verify Quick Log links are valid.
-- Verify ActiveWorkoutIndicator route is valid for plan-day and standalone workouts.
-- Verify ActiveWorkoutIndicator actions have pending/failure states.
-- Verify route transitions and drawers respect reduceAnimations.
-- Verify sidebar/header/mobile/active-workout shell controls meet 48px target.
-- Verify offline banner does not cover header or critical route actions.
-- Verify active workout banner, Quick Log FAB, bottom nav, and route CTAs do not overlap.
-- Verify ProtectedRoute loading state is branded.
-- Verify no schema/auth/AI/global-theme-redesign/unrelated-route changes.
+- Test `/calories/food-hub` at 390x844.
+- Verify route copy frames Food Hub as manual fallback/correction.
+- Verify Food Hub loading uses skeleton.
+- Verify food library fallback/degraded state is visible.
+- Verify kitchen/custom/favorite load failures are visible and retryable where feasible.
+- Verify Log food, Add to plan, and Log saved meal have per-item pending and duplicate protection.
+- Verify favorite failure rolls back or shows clear recovery.
+- Verify custom food form shows inline validation and save failure while preserving draft.
+- Verify custom meal save has pending/failure and preserves draft.
+- Verify Delete custom food and Delete saved meal require confirm/undo.
+- Verify editing food/meal shows edit mode and supports cancel/discard.
+- Verify main selects/buttons/icon actions meet 48px target.
+- Verify shared FoodBrowser changes do not regress `/calories`.
+- Verify no nutrition schema/auth/AI/global-theme/unrelated-route changes.
 - Review git diff before final report.
 ```
 
 ---
 
-## Prompt section 9 — Calories AI-first correction
+## Prompt section 10 — Calories AI-first correction
 
 ```text
 /caveman lite
@@ -277,7 +301,7 @@ Verification: AI import primary, reviewable estimates, fallback paths, water/rec
 
 ---
 
-## Prompt section 10 — Meal plan AI-first correction
+## Prompt section 11 — Meal plan AI-first correction
 
 ```text
 /caveman lite
@@ -293,7 +317,7 @@ Verification: import/update primary, reviewable plan data, manual fallback, Mark
 
 ---
 
-## Prompt section 11 — Hydration correction
+## Prompt section 12 — Hydration correction
 
 ```text
 /caveman lite
@@ -308,7 +332,7 @@ Verification: loading gate, optimistic rollback, duplicate protection, target st
 
 ---
 
-## Prompt section 12 — Wellness correction
+## Prompt section 13 — Wellness correction
 
 ```text
 /caveman lite
@@ -324,7 +348,7 @@ Verification: compact check-in, loading/degraded states, save failure, 48px cont
 
 ---
 
-## Prompt section 13 — Progress correction
+## Prompt section 14 — Progress correction
 
 ```text
 /caveman lite
@@ -339,7 +363,7 @@ Verification: load/failed/empty states, goal/trend hero, edit/delete/photo state
 
 ---
 
-## Prompt section 14 — Settings hub correction
+## Prompt section 15 — Settings hub correction
 
 ```text
 /caveman lite
@@ -355,7 +379,7 @@ Verification: profile modes, setup states, grouped cards, 48px controls, mobile 
 
 ---
 
-## Prompt section 15 — AI imports correction
+## Prompt section 16 — AI imports correction
 
 ```text
 /caveman lite
@@ -372,7 +396,7 @@ Verification: confidence hero, failed-load safety, full-access confirmation, rev
 
 ---
 
-## Prompt section 16 — Data privacy correction
+## Prompt section 17 — Data privacy correction
 
 ```text
 /caveman lite
@@ -388,7 +412,7 @@ Verification: hide-vs-delete, toggle states, export states, reset confirmation, 
 
 ---
 
-## Prompt section 17 — Preferences correction
+## Prompt section 18 — Preferences correction
 
 ```text
 /caveman lite
