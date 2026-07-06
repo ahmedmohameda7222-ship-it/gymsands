@@ -23,6 +23,7 @@ Completed audits:
 - `/my-workout/plans` — 63/100 — fixes open
 - `/workouts/session/day/[dayId]` — 58/100 — fixes open
 - `/calories` — 54/100 — fixes open after AI-first reframing
+- `/my-meal-plan` — 57/100 — fixes open after AI-first reframing
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
@@ -314,6 +315,95 @@ Verification:
 - Verify recent food logging pending behavior and duplicate protection.
 - Verify food/water delete pending/rollback or safe unchanged behavior.
 - Verify weekly, targets, and barcode scanner still work.
+- Review git diff before final report.
+
+Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+```
+
+---
+
+## Prompt section 6 — Meal plan AI-first correction
+
+```text
+/caveman lite
+
+$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
+
+Task: Implement the audited P0/P1 AI-first meal plan corrections for Plaivra.
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + AI import/review/apply safety reviewer + meal planning data-integrity reviewer
+
+Read first:
+- CHATGPT_CODEX_PROMPT_RULES.md
+- Ruflo_usage.md
+- docs/product/ai-first-tracker-model.md
+- docs/ux-constitution/README.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
+- docs/ux-progress/README.md
+- docs/ux-progress/routes/my-meal-plan.md
+
+Primary route:
+- /my-meal-plan
+
+Relevant files to inspect first:
+- app/(private)/my-meal-plan/page.tsx
+- components/meals/my-meal-plan-builder.tsx
+- components/meals/meal-ai-actions.tsx
+- components/meals/grocery-list-panel.tsx
+- components/meals/meal-plan-calendar.tsx
+- components/ai/ai-action-request-dialog.tsx
+- services/database/meal-plan.ts
+- services/database/execution-layer.ts
+- types/database.ts
+
+Flow decision:
+- Needs AI-first reframing.
+
+Required flow:
+- ChatGPT meal-plan import/review -> Plaivra planned overview -> shopping / mark done -> manual fallback/correction.
+
+Required fixes:
+1. Add a persistent route-level primary CTA: Import/update meal plan with ChatGPT.
+2. Add a review/apply/correct stage for structured ChatGPT meal-plan results before saving, using existing AI/import patterns where available.
+3. Reframe empty day and empty meal-type states so ChatGPT import/update is primary and manual add is fallback.
+4. Reorder the first screen into: meal-plan status/import hero -> pending review/apply area if any -> today planned meals -> week/shopping/manual tools.
+5. Change Add source order: ChatGPT import/update first, Quick add and Food Hub secondary.
+6. Fix the Done carbs summary detail so it uses done fat, not planned fat.
+7. Resize date controls, week chips, meal-type chips, meal plus buttons, meal item actions, delete controls, form selects, and grocery menu items to 48px effective tap targets.
+8. Add clearer pending/success/failure states for Mark Done, including whether the meal was logged to Calories and what happens on failure.
+9. Add pending/duplicate protection for Add to grocery.
+10. Add optimistic grocery checked/already-have interactions with rollback on failure.
+11. Replace custom route/grocery load errors with shared ErrorState where practical.
+12. Move Food preferences out of the tab row into a secondary action/menu/helper area.
+13. Reduce repeated per-item ChatGPT visual density after route-level import becomes primary.
+14. Add only useful reduced-motion-safe import/review/apply, mark-done, and checklist feedback. No decorative animation.
+
+Do not:
+- Do not redesign the route from scratch.
+- Do not rewrite nutrition calculations.
+- Do not change database schema unless an existing import/apply path truly requires a documented minimal migration and you explicitly report why.
+- Do not change auth, subscriptions, global theme, unrelated calorie routes, unrelated workout routes, or settings.
+- Do not silently apply AI-generated meal-plan changes without review/apply/correct.
+- Do not remove manual entry; demote it to fallback/correction.
+
+Safety rule:
+- If no structured ChatGPT meal-plan apply path exists, do not fake a silent import. Surface the primary ChatGPT request/import/update flow and add a safe review/apply placeholder or pending state that preserves current data until the user explicitly approves. Report the missing backend/import gap clearly.
+
+Verification:
+- Run typecheck, lint, and build if feasible.
+- Test /my-meal-plan at 390x844.
+- Verify first screen makes ChatGPT meal-plan import/update primary.
+- Verify existing planned meals do not hide the import/update path.
+- Verify imported/generated plans are reviewable/correctable before saving, or that the UI clearly preserves current data if full apply is not implemented.
+- Verify manual Add food, Food Hub, item edit, item delete, and Food preferences still work.
+- Verify Mark Done logs to Calories, blocks duplicate logs, and has clear pending/failure feedback.
+- Verify Add to grocery blocks duplicate rapid taps.
+- Verify grocery checked/already-have optimistic success and rollback.
+- Verify Done carbs detail uses done fat.
+- Verify key tap targets meet 48px effective size.
+- Verify Week and Shopping tabs still work.
 - Review git diff before final report.
 
 Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
