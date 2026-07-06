@@ -45,7 +45,7 @@ Each audited route receives a score out of 100.
 
 ## 2. Global progress summary
 
-Current global status: **Dashboard, onboarding, workout plans, workout session, and calories audited; calories was reframed after the AI-first product clarification. Remaining routes are not audited yet against the 2026.1 AI-first product model, constitution, workflow standard, and motion standard.**
+Current global status: **Dashboard, onboarding, workout plans, workout session, calories, and meal plan audited. Calories and meal plan were reframed after the AI-first product clarification. Remaining routes are not audited yet against the 2026.1 AI-first product model, constitution, workflow standard, and motion standard.**
 
 | Area | Status | Score | Notes |
 |---|---|---:|---|
@@ -59,7 +59,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | Exercise library | Not audited | — | Needs filters, search, result-count feedback, card actions, card/detail reveal, and custom-video action audit. |
 | Workout history | Not audited | — | Needs empty/history/detail actions, list transitions, loading states, and recovery audit. |
 | Food Hub / custom foods and meals | Not audited | — | Audit as manual fallback/edit path, not as the main product entry path. |
-| Meal plan | Not audited | — | Needs ChatGPT meal-plan generation/import as primary path, manual editing as fallback, planned-to-done transitions, shopping list, and review/apply safety. |
+| Meal plan | Audited | 57 | Useful day/week/shopping objects exist, but the route still opens as a manual day planner. Needs ChatGPT meal-plan import/update as primary, review/apply/correct state, manual add as fallback, stronger mark-done/grocery feedback, and 48px tap cleanup. Full audit: `docs/ux-progress/routes/my-meal-plan.md`. |
 | Weekly overview / reports | Not audited | — | Needs report navigation, filters, chart/data motion, loading, empty-state, and reduced-motion audit. |
 | Progress | Not audited | — | Needs overview/trend flow, add entry, photos, goal weight, edit/delete, chart transitions, progress updates, and privacy-state audit. |
 | Personal records | Not audited | — | Needs tracker, insight actions, PR update highlight, achievement feedback, and empty-state audit. |
@@ -141,6 +141,21 @@ Recommended flow:
 ChatGPT meal import/review -> Plaivra overview/tracking -> manual fallback/correction
 ```
 
+### `/my-meal-plan`
+
+**Status:** Audited  
+**Score:** 57 / 100  
+**Flow decision:** Needs AI-first reframing  
+**Full audit:** `docs/ux-progress/routes/my-meal-plan.md`
+
+Primary issue: the route has useful day, week, shopping, mark-done, and per-item ChatGPT help surfaces, but it still opens as a manual day planner. ChatGPT meal-plan import/update must become the primary route-level workflow, with review/apply/correct before saving.
+
+Recommended flow:
+
+```txt
+ChatGPT meal-plan import/review -> planned overview -> shopping / mark done -> manual fallback/correction
+```
+
 ---
 
 ## 4. Priority definitions
@@ -169,6 +184,7 @@ ChatGPT meal import/review -> Plaivra overview/tracking -> manual fallback/corre
 | 2026-07-06 | `/calories` | Completed flow-first route audit | Initial score 61/100 as manual tracker flow | `7c8422fb407bea78fd9cc639472dc444a52a08df` |
 | 2026-07-06 | AI-first product model | Added product source of truth | Plaivra defined as ChatGPT-first tracker, manual entry as fallback | `1c7fb06c3d73958c4191de72e5cf919030a4b958` |
 | 2026-07-06 | `/calories` | Reframed calories audit | Score revised to 54/100; needs AI-first meal import/review flow | This commit |
+| 2026-07-06 | `/my-meal-plan` | Completed AI-first route audit | Score 57/100; needs ChatGPT meal-plan import/review as primary route flow | `fe33ec561ee07ba7cb26767c7ce7d94b285e4cf0` |
 
 ---
 
@@ -183,7 +199,7 @@ Suggested order:
 3. `/my-workout/plans` — audited, fixes open
 4. `/workouts/session/day/[dayId]` — audited, fixes open
 5. `/calories` — audited, fixes open after AI-first reframing
-6. `/my-meal-plan`
+6. `/my-meal-plan` — audited, fixes open after AI-first reframing
 7. `/hydration`
 8. `/wellness`
 9. `/progress`
