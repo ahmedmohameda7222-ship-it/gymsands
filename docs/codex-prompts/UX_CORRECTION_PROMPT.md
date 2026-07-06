@@ -10,6 +10,7 @@ Source documents:
 - `CHATGPT_CODEX_PROMPT_RULES.md`
 - `Ruflo_usage.md`
 - `docs/ux-constitution/README.md`
+- `docs/ux-constitution/flow-and-workflow-audit.md`
 - `docs/ux-constitution/motion-and-interaction.md`
 - `docs/ux-progress/README.md`
 - `docs/platform-roadmap/README.md`
@@ -35,6 +36,13 @@ Future multi-route correction bundle setup:
 - Skills: `$swarm-orchestration $memory-management $agent-reviewer $agent-tester`
 - Advisor: strict senior mobile product engineer + release-quality UX auditor + regression reviewer
 
+Flow-first rule for all future sections:
+
+- Audit and implement workflow changes before button polish.
+- If the flow is weak, propose and implement the corrected flow first.
+- Only after the flow decision is clear should Codex adjust buttons, spacing, states, and motion.
+- Use `docs/ux-constitution/flow-and-workflow-audit.md` as a required source of truth.
+
 ---
 
 ## Paste-ready prompt section 1 — Dashboard correction
@@ -59,14 +67,16 @@ Read first:
 1. CHATGPT_CODEX_PROMPT_RULES.md
 2. Ruflo_usage.md
 3. docs/ux-constitution/README.md
-4. docs/ux-constitution/motion-and-interaction.md
-5. docs/ux-progress/README.md, especially the /dashboard audit
+4. docs/ux-constitution/flow-and-workflow-audit.md
+5. docs/ux-constitution/motion-and-interaction.md
+6. docs/ux-progress/README.md, especially the /dashboard audit
 
 Before editing:
 1. Use memory_search.
 2. Inspect only relevant dashboard files.
-3. Make a short plan.
-4. Make the smallest clean change.
+3. Confirm the dashboard flow decision from the audit before changing buttons.
+4. Make a short plan.
+5. Make the smallest clean change.
 
 Primary route:
 - /dashboard
@@ -149,14 +159,16 @@ Read first:
 1. CHATGPT_CODEX_PROMPT_RULES.md
 2. Ruflo_usage.md
 3. docs/ux-constitution/README.md
-4. docs/ux-constitution/motion-and-interaction.md
-5. docs/ux-progress/README.md, especially the /onboarding?edit=true audit
+4. docs/ux-constitution/flow-and-workflow-audit.md
+5. docs/ux-constitution/motion-and-interaction.md
+6. docs/ux-progress/README.md, especially the /onboarding?edit=true audit
 
 Before editing:
 1. Use memory_search.
 2. Inspect only relevant onboarding/profile/AI-permission files.
-3. Make a short plan.
-4. Make the smallest clean change.
+3. Confirm the onboarding flow decision from the audit before changing buttons.
+4. Make a short plan.
+5. Make the smallest clean change.
 
 Primary route:
 - /onboarding?edit=true
@@ -255,6 +267,10 @@ For every audited route, append:
 
 - route
 - audit score
+- flow verdict
+- current workflow
+- recommended workflow
+- flow decision label
 - recommended mode
 - skills
 - advisor
