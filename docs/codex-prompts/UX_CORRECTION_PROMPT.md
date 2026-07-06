@@ -29,10 +29,11 @@ Completed audits:
 - `/progress` — 62/100 — fixes open
 - `/settings` — 64/100 — fixes open
 - `/settings/ai-imports` — 66/100 — fixes open
+- `/settings/data-privacy` — 61/100 — fixes open
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
-Product rule: Plaivra is an AI-first tracker where appropriate, but not every route is ChatGPT-first. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking. Settings is a trust/control hub. AI imports is the permission/connection trust layer for Plaivra's AI-first model.
+Product rule: Plaivra is an AI-first tracker where appropriate, but not every route is ChatGPT-first. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking. Settings is a trust/control hub. AI imports is the permission/connection trust layer. Data privacy is the sensitive visibility/export/settings-reset route.
 
 ---
 
@@ -676,43 +677,104 @@ Required fixes:
 13. Reduce density of custom permission cards on mobile without removing details.
 14. Keep the detailed setup guide, but optionally add step progress/anchor navigation later.
 
+Do not change OAuth semantics, MCP API behavior, permission scope names, database schema, auth behavior, global theme, unrelated routes, broaden permissions silently, or make ChatGPT changes apply without explicit approval.
+
+Verification: typecheck, lint, build if feasible, mobile 390x844, connection/permission confidence hero, permission failed-load safety, full-access confirmation, 48px toggles, connection unknown/error states, app confirm revoke, visible activity, no API/schema/auth semantics changed, review git diff.
+
+Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+```
+
+---
+
+## Prompt section 12 — Data privacy correction
+
+```text
+/caveman lite
+
+$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
+
+Task: Implement the audited P1/P2 data privacy UX and privacy-action state corrections for Plaivra.
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + privacy UX reviewer + settings data-state reliability reviewer
+
+Read first:
+- CHATGPT_CODEX_PROMPT_RULES.md
+- Ruflo_usage.md
+- docs/product/ai-first-tracker-model.md
+- docs/ux-constitution/README.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
+- docs/ux-progress/README.md
+- docs/ux-progress/routes/settings-data-privacy.md
+
+Primary route:
+- /settings/data-privacy
+
+Relevant files to inspect first:
+- app/(private)/settings/data-privacy/page.tsx
+- components/settings/settings-toggle-row.tsx
+- components/settings/settings-page-shell.tsx
+- lib/settings/user-settings-context.tsx
+- services/database/user-settings.ts
+- app/api/user/data-export/route.ts
+- lib/privacy/data-export.ts
+
+Flow decision:
+- Tune flow with privacy-action hardening.
+
+Product rule:
+- Data privacy is not AI/import-first. It is the sensitive visibility/export/settings-reset route. It must distinguish hiding UI surfaces from deleting saved data, and it must show clear outcomes for export and reset actions.
+
+Required flow:
+- Clear privacy meaning -> reliable toggle saves -> explicit export status -> confirmed reset settings.
+
+Required fixes:
+1. Surface settings load/save error inline using existing `saveError` and a degraded state.
+2. Add pending/saved/failed state for privacy toggles; prevent confusing rapid toggles during save.
+3. Add descriptions to each privacy toggle explaining what it hides.
+4. Add clear hide-vs-delete privacy explanation.
+5. Add inline export success/failure/retry state, not only toast.
+6. Add export scope summary and local-file privacy warning.
+7. Require app confirmation before reset settings.
+8. Add reset pending/success/failure state that clarifies no logs/plans/account data were deleted.
+9. Improve loading skeleton instead of plain text.
+10. Stack export/reset rows on mobile so text and button do not crowd.
+11. Ensure legal/contact/export/reset/back controls are 48px effective targets.
+12. Add account deletion/account settings link under rights/help if appropriate.
+13. Optional: show last export/download timestamp for current session only.
+
 Do not:
-- Do not change OAuth semantics.
-- Do not change MCP API behavior.
-- Do not change permission scope names.
-- Do not change database schema.
+- Do not change data export API semantics.
+- Do not change export table selection or CSV payload shape.
 - Do not change auth behavior.
-- Do not change global theme.
-- Do not touch unrelated routes.
-- Do not silently broaden permissions.
-- Do not make ChatGPT changes apply without explicit approval.
+- Do not change database schema.
+- Do not change account deletion behavior.
+- Do not touch global theme or unrelated routes.
+- Do not imply privacy toggles delete database data.
 
 Implementation guidance:
-- Preserve existing building blocks: trust intro, AiPermissionsCard, ChatGptSetupCard, ConnectionStatusCard, ChatGptSetupFlow, ChatGptActivityCard.
-- Treat permission load failure as an unknown state, not as default permissions.
-- Treat connection fetch failure as an unknown state, not as not connected.
-- Keep saved permissions and active connection state conceptually distinct.
-- Full access is broad; require explicit app confirmation before save.
-- Revoke must stay visually connected to the confirmed connection state until the API confirms success.
-- Use sober, security-like UI. No decorative AI animations.
+- Preserve the existing route model: privacy toggles, legal/contact links, Export CSV, Reset settings.
+- Use the existing settings provider rollback behavior, but expose inline failure/rollback state on the page.
+- Treat export as a private local file download and tell the user what it broadly contains.
+- Treat reset settings as a serious broad settings action, not a casual row button.
+- Use sober, minimal motion. No decorative privacy/export animations.
 
 Verification:
 - Run typecheck, lint, and build if feasible.
-- Test /settings/ai-imports at 390x844.
-- Verify first screen shows connection status and permission confidence.
-- Verify permission loading, loaded, no saved settings, failed load, and save failure are visually distinct.
-- Verify failed permission load cannot be mistaken for confirmed default/no saved permissions.
-- Verify full access save requires app confirmation.
-- Verify custom read/change toggles are 48px effective targets.
-- Verify permission save gives pending, success, and inline failure feedback.
-- Verify connection status has loading, connected, not connected, and unknown/error states.
-- Verify revoke connection uses app confirmation, not browser confirm.
-- Verify revoke pending/failure/success states are visible and honest.
-- Verify refresh/revoke/reconnect/back controls meet 48px effective target.
-- Verify recent ChatGPT activity is visible or clearly reachable.
-- Verify missing MCP URL state remains visible.
-- Verify setup flow still explains OAuth client ID is not a secret.
-- Verify no API semantics, auth behavior, permission scope semantics, or database schema were changed.
+- Test /settings/data-privacy at 390x844.
+- Verify the route explains privacy toggles hide UI surfaces and do not delete saved data.
+- Verify every privacy toggle has a short description.
+- Verify toggle save pending/success/failure states are visible.
+- Verify failed toggle save rolls back and tells the user the previous setting was restored.
+- Verify settings load failure is visible as degraded/unknown state, not confident defaults.
+- Verify export card explains CSV scope and local-file privacy.
+- Verify export pending/success/failure/retry states are visible inline.
+- Verify reset settings requires app confirmation.
+- Verify reset success/failure is visible inline and clarifies no Plaivra logs/plans/account data were deleted.
+- Verify export/reset rows stack cleanly on 390x844 mobile.
+- Verify legal/contact/help actions meet 48px target.
+- Verify no API semantics, data export contents, schema, auth, or unrelated routes were changed.
 - Review git diff before final report.
 
 Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
