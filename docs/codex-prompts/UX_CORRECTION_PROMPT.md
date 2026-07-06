@@ -28,10 +28,11 @@ Completed audits:
 - `/wellness` — 60/100 — fixes open
 - `/progress` — 62/100 — fixes open
 - `/settings` — 64/100 — fixes open
+- `/settings/ai-imports` — 66/100 — fixes open
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
-Product rule: Plaivra is an AI-first tracker where appropriate, but not every route is ChatGPT-first. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking. Settings is a trust/control hub, not an AI/import-first route.
+Product rule: Plaivra is an AI-first tracker where appropriate, but not every route is ChatGPT-first. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking. Settings is a trust/control hub. AI imports is the permission/connection trust layer for Plaivra's AI-first model.
 
 ---
 
@@ -586,7 +587,7 @@ Flow decision:
 - Tune flow.
 
 Product rule:
-- Settings is not AI/import-first. It is a trust/control hub. It should make setup status, AI access, privacy, coaching context, reminders, preferences, and account controls easy to understand and safe to navigate.
+- Settings is not AI/import-first. It is a trust/control hub.
 
 Required flow:
 - Profile/setup confidence -> grouped sensitive controls -> comfortable navigation -> visible recovery states.
@@ -603,36 +604,115 @@ Required fixes:
 9. Add reduced-motion-safe setup expand/collapse and loading transition.
 10. Optional: add compact setup-complete status if all setup items are done.
 
+Do not add AI/import workflow to /settings itself, redesign settings from scratch, change schema/auth/AI permission logic/privacy request API semantics, or implement full fixes for /settings/ai-imports, /settings/data-privacy, or /settings/preferences in this prompt.
+
+Verification: typecheck, lint, build if feasible, mobile 390x844, profile normal/private modes, setup loading/degraded states, grouped cards, 48px controls, app confirmation for account deletion request, no AI/import workflow added to /settings, review git diff.
+
+Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+```
+
+---
+
+## Prompt section 11 — AI imports permission/connection correction
+
+```text
+/caveman lite
+
+$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
+
+Task: Implement the audited P1/P2 AI imports permission, connection, and trust-state corrections for Plaivra.
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + AI permission safety reviewer + connection-state reliability reviewer
+
+Read first:
+- CHATGPT_CODEX_PROMPT_RULES.md
+- Ruflo_usage.md
+- docs/product/ai-first-tracker-model.md
+- docs/ux-constitution/README.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
+- docs/ux-progress/README.md
+- docs/ux-progress/routes/settings-ai-imports.md
+
+Primary route:
+- /settings/ai-imports
+
+Related route:
+- /settings/ai-imports/chatgpt-setup
+
+Relevant files to inspect first:
+- app/(private)/settings/ai-imports/page.tsx
+- app/(private)/settings/ai-imports/chatgpt-setup/page.tsx
+- components/settings/ai-permissions-card.tsx
+- components/settings/connected-apps.tsx
+- components/settings/settings-page-shell.tsx
+- services/database/ai-permissions.ts
+- lib/mcp/permission-presentation.ts
+- types/database.ts
+
+Flow decision:
+- Tune flow with trust-state hardening.
+
+Product rule:
+- AI imports is the permission/connection trust layer for Plaivra's AI-first model. It is not a normal settings page. It must make permission state, connection state, setup state, revoke behavior, and activity auditability explicit.
+
+Required flow:
+- Known connection state -> known permission state -> safe permission changes -> safe setup/revoke -> auditable activity.
+
+Required fixes:
+1. Add top-level AI connection/permission status hero.
+2. Add explicit permission load error state with retry.
+3. Ensure failed permission load is not displayed as confident default/no saved settings.
+4. Add inline permission save failure state.
+5. Require app confirmation before saving full access mode.
+6. Add connection loading/error/unknown state to ConnectionStatusCard.
+7. Replace revoke window.confirm with app confirmation/status pattern.
+8. Add inline revoke failure/success state and keep status honest until reload confirms.
+9. Resize permission toggles, refresh, revoke/reconnect, and shared back controls to 48px effective targets.
+10. Show ChatGptActivityCard on the main AI imports route or add a clear activity link.
+11. Make reconnect-after-permission-change copy more prominent.
+12. Add copy-to-clipboard failure handling in setup flow.
+13. Reduce density of custom permission cards on mobile without removing details.
+14. Keep the detailed setup guide, but optionally add step progress/anchor navigation later.
+
 Do not:
-- Do not add AI/import workflow to /settings itself.
-- Do not redesign settings from scratch.
+- Do not change OAuth semantics.
+- Do not change MCP API behavior.
+- Do not change permission scope names.
 - Do not change database schema.
 - Do not change auth behavior.
-- Do not change AI permission logic.
-- Do not change privacy request API semantics.
-- Do not touch subscriptions, global theme, or unrelated routes.
-- Do not implement full fixes for /settings/ai-imports, /settings/data-privacy, or /settings/preferences in this prompt; those are separate audits.
+- Do not change global theme.
+- Do not touch unrelated routes.
+- Do not silently broaden permissions.
+- Do not make ChatGPT changes apply without explicit approval.
 
 Implementation guidance:
-- Preserve the main model: ProfileSummaryCard, SetupProgressCard, SettingsHubCard list, shared SettingsPageShell.
-- Keep setup next action as the main setup CTA, but show loading/degraded confidence clearly.
-- Treat AI Imports, Data Privacy, and Coaching Context as trust/data controls with clearer grouping.
-- Use app confirmation pattern for account deletion request; do not alter the API route behavior.
-- Use stable, minimal motion only for setup loading and expand/collapse.
+- Preserve existing building blocks: trust intro, AiPermissionsCard, ChatGptSetupCard, ConnectionStatusCard, ChatGptSetupFlow, ChatGptActivityCard.
+- Treat permission load failure as an unknown state, not as default permissions.
+- Treat connection fetch failure as an unknown state, not as not connected.
+- Keep saved permissions and active connection state conceptually distinct.
+- Full access is broad; require explicit app confirmation before save.
+- Revoke must stay visually connected to the confirmed connection state until the API confirms success.
+- Use sober, security-like UI. No decorative AI animations.
 
 Verification:
 - Run typecheck, lint, and build if feasible.
-- Test /settings at 390x844.
-- Verify profile summary works in normal and private profile modes.
-- Verify setup status shows a loading placeholder while setup data loads.
-- Verify setup load failure shows visible degraded state and retry.
-- Verify failed setup reads are not displayed as confident incomplete setup.
-- Verify cards are grouped into trust/data, preferences, and account sections.
-- Verify AI Imports, Data Privacy, and Coaching Context have clearer trust/context copy.
-- Verify setup action buttons, expand control, shared back button, and account actions meet 48px effective target.
-- Verify account deletion request uses app confirmation/status pattern, not browser confirm.
-- Verify hub remains simple on 390x844 mobile.
-- Verify no AI/import workflow was added to /settings itself.
+- Test /settings/ai-imports at 390x844.
+- Verify first screen shows connection status and permission confidence.
+- Verify permission loading, loaded, no saved settings, failed load, and save failure are visually distinct.
+- Verify failed permission load cannot be mistaken for confirmed default/no saved permissions.
+- Verify full access save requires app confirmation.
+- Verify custom read/change toggles are 48px effective targets.
+- Verify permission save gives pending, success, and inline failure feedback.
+- Verify connection status has loading, connected, not connected, and unknown/error states.
+- Verify revoke connection uses app confirmation, not browser confirm.
+- Verify revoke pending/failure/success states are visible and honest.
+- Verify refresh/revoke/reconnect/back controls meet 48px effective target.
+- Verify recent ChatGPT activity is visible or clearly reachable.
+- Verify missing MCP URL state remains visible.
+- Verify setup flow still explains OAuth client ID is not a secret.
+- Verify no API semantics, auth behavior, permission scope semantics, or database schema were changed.
 - Review git diff before final report.
 
 Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
