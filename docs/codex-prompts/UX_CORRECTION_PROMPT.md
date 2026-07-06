@@ -1,9 +1,7 @@
 # Plaivra Codex UX Correction Prompt
 
 **Version:** 2026.1  
-**Status:** Active prompt builder
-
-This file stores Codex CLI correction prompts assembled from completed Plaivra UX audits.
+**Status:** Active compact prompt backlog
 
 Codex must read these first:
 
@@ -23,6 +21,7 @@ Completed audits:
 - `/my-workout/plans` — 63/100 — fixes open
 - `/workouts/session/day/[dayId]` — 58/100 — fixes open
 - `/my-workout/day/[dayId]` — 59/100 — fixes open
+- `/workouts` — 64/100 — fixes open
 - `/calories` — 54/100 — fixes open after AI-first reframing
 - `/my-meal-plan` — 57/100 — fixes open after AI-first reframing
 - `/hydration` — 68/100 — fixes open
@@ -35,13 +34,11 @@ Completed audits:
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
-Product rule: Plaivra is AI-first where appropriate, but not every route is ChatGPT-first. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking. Settings is a trust/control hub. Workout day editor is a manual correction route that must protect local drafts and unsaved edits.
+Product rule: Plaivra is AI-first where appropriate, but not every route is ChatGPT-first. Manual entry is fallback/correction where appropriate. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking. Settings is a trust/control hub. Workout day editor and Exercise Library are manual correction/reference routes.
 
 ---
 
 ## Standard setup
-
-### Standard one-route UI correction
 
 ```text
 /caveman lite
@@ -52,16 +49,7 @@ Mode: high plus advisor
 Advisor: strict senior mobile product engineer + premium UX reviewer
 ```
 
-### User-data, privacy, or AI import/apply correction
-
-```text
-/caveman lite
-
-$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
-
-Mode: high plus advisor
-Advisor: strict senior mobile product engineer + user-data safety reviewer
-```
+For user-data, privacy, or AI import/apply routes, add `$security-audit` and use a user-data safety advisor.
 
 ---
 
@@ -75,10 +63,7 @@ $memory-management $agent-coder $agent-reviewer $agent-tester
 Task: Implement audited dashboard UX corrections for Plaivra.
 
 Read first:
-- CHATGPT_CODEX_PROMPT_RULES.md
-- Ruflo_usage.md
 - docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/README.md
 - docs/ux-constitution/flow-and-workflow-audit.md
 - docs/ux-constitution/motion-and-interaction.md
 - docs/ux-progress/README.md
@@ -89,12 +74,11 @@ Primary route:
 Required fixes:
 1. Add one clear Next Best Action experience.
 2. Demote duplicated or competing CTAs.
-3. Add optimistic UI and pending protection for water quick add.
-4. Add optimistic UI and pending protection for meal Done.
-5. Make Done dominant and Skip secondary in meal rows.
-6. Restyle meal type selector into a calmer segmented/horizontal selector.
-7. Reflect imported/active AI-first state where relevant.
-8. Use motion only for feedback/state clarity.
+3. Add optimistic UI and pending protection for water quick add and meal Done.
+4. Make Done dominant and Skip secondary in meal rows.
+5. Restyle meal type selector into a calmer segmented/horizontal selector.
+6. Reflect imported/active AI-first state where relevant.
+7. Use motion only for feedback/state clarity.
 
 Do not touch unrelated routes, env files, database schema, auth, API routes, settings, subscriptions, or global theme.
 
@@ -114,15 +98,6 @@ Task: Implement audited onboarding edit UX corrections for Plaivra.
 
 Primary route:
 - /onboarding?edit=true
-
-Read first:
-- CHATGPT_CODEX_PROMPT_RULES.md
-- Ruflo_usage.md
-- docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/README.md
-- docs/ux-constitution/flow-and-workflow-audit.md
-- docs/ux-constitution/motion-and-interaction.md
-- docs/ux-progress/README.md
 
 Required fixes:
 1. Show Target weight only for weight/body-composition goals or when a saved target weight exists.
@@ -153,9 +128,6 @@ Primary route:
 
 Read first:
 - docs/ux-progress/routes/my-workout-plans.md
-- docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/flow-and-workflow-audit.md
-- docs/ux-constitution/motion-and-interaction.md
 
 Required flow:
 - Today hero -> weekly calendar -> saved plan library -> add/import plan.
@@ -172,7 +144,7 @@ Required fixes:
 
 Do not change workout session tracking, schema, auth, payments, or unrelated routes.
 
-Verification: typecheck, lint, build if feasible, mobile 390x844, no-plan, active-plan, rest-day, More actions, delete confirmation, import visibility.
+Verification: typecheck, lint, build if feasible, mobile 390x844, no-plan, active-plan, rest-day, More actions, confirmation patterns, import visibility.
 ```
 
 ---
@@ -197,14 +169,13 @@ Read first:
 
 Required fixes:
 1. Restore or replace the in-session mobile sticky CTA so Finish Set / Rest / Finish Workout is reachable on mobile.
-2. Add rollback for failed optimistic finishSet persistence.
-3. Add rollback for failed restartSet persistence.
-4. Add clearer starting/resuming session pending state.
-5. Resize close/back/more/exercise chip/set path/advanced sheet controls to 48px.
-6. Simplify exit behavior and guard unsaved local changes before leaving.
-7. Add clear failure feedback when a set save fails.
-8. Keep ChatGPT as support, not required for every set.
-9. Use motion only for state/rest/finish clarity.
+2. Add rollback for failed optimistic finishSet and restartSet persistence.
+3. Add clearer starting/resuming session pending state.
+4. Resize close/back/more/exercise chip/set path/advanced sheet controls to 48px.
+5. Simplify exit behavior and guard unsaved local changes before leaving.
+6. Add clear failure feedback when a set save fails.
+7. Keep ChatGPT as support, not required for every set.
+8. Use motion only for state/rest/finish clarity.
 
 Do not redesign the session, change workout schema, auth, payments, or unrelated routes.
 
@@ -234,37 +205,14 @@ Related routes:
 - /my-workout/plans/builder
 
 Read first:
-- CHATGPT_CODEX_PROMPT_RULES.md
-- Ruflo_usage.md
-- docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/README.md
-- docs/ux-constitution/flow-and-workflow-audit.md
-- docs/ux-constitution/motion-and-interaction.md
-- docs/ux-progress/README.md
 - docs/ux-progress/routes/workout-day-editor.md
-
-Relevant files to inspect first:
-- app/(private)/my-workout/day/[dayId]/page.tsx
-- components/workouts/workout-day-editor.tsx
-- app/(private)/my-workout/day/[dayId]/add-exercise/page.tsx
-- components/workouts/workout-day-add-exercise.tsx
-- app/(private)/my-workout/plans/[planId]/page.tsx
-- components/workouts/workout-plan-detail.tsx
-- components/workouts/workout-plan-builder.tsx
-- services/database/workout-plans.ts
-
-Flow decision:
-- Tune flow with editor-state and unsaved-change hardening.
-
-Product rule:
-- Workout day editor is not AI/import-first. It is a manual correction editor for a saved workout plan day. It must protect local drafts, unsaved edits, and save failure recovery.
 
 Required flow:
 - Known day -> visible draft state -> safe edits -> protected cancel/back/remove -> reliable save.
 
 Required fixes:
 1. Add editor status bar showing draft restored, unsaved changes, saving, saved, and failed states.
-2. Add unsaved-change guard for Back and Cancel; Cancel must confirm before clearing the local draft.
+2. Add unsaved-change guard for Back and Cancel; Cancel must confirm before clearing local draft.
 3. Add inline save failure state with retry and keep local draft intact.
 4. Add draft-restored banner with discard draft action.
 5. Add confirm/undo for remove exercise.
@@ -277,41 +225,114 @@ Required fixes:
 12. Prefer returning to plan detail after save when route context is known.
 13. Add reduced-motion-safe reorder/remove feedback.
 
+Do not change workout database schema, auth behavior, workout session execution, AI import/apply behavior, global theme, or unrelated routes.
+
+Verification: typecheck, lint, build if feasible, mobile 390x844, restored draft, unsaved changes, protected Back/Cancel, save failure, remove undo, 48px controls.
+```
+
+---
+
+## Prompt section 6 — Exercise Library correction
+
+```text
+/caveman lite
+
+$memory-management $agent-reviewer $agent-coder $agent-tester
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + exercise-library search-state reviewer + mobile interaction reviewer
+
+Task: Implement audited Exercise Library UX, search-state, and exercise-action corrections.
+
+Primary route:
+- /workouts
+
+Related route:
+- /workouts/[id]
+
+Related plan-add route to regression-test:
+- /my-workout/day/[dayId]/add-exercise
+
+Read first:
+- CHATGPT_CODEX_PROMPT_RULES.md
+- Ruflo_usage.md
+- docs/product/ai-first-tracker-model.md
+- docs/ux-constitution/README.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
+- docs/ux-progress/README.md
+- docs/ux-progress/routes/exercise-library.md
+
+Relevant files to inspect first:
+- app/(private)/workouts/page.tsx
+- components/workouts/workout-browser.tsx
+- app/(private)/workouts/[id]/page.tsx
+- components/workouts/video-player.tsx
+- services/database/workout-library.ts
+- services/workouts/exercise-library-store.ts
+- components/workouts/workout-day-add-exercise.tsx
+- components/workouts/workout-plan-builder.tsx
+
+Flow decision:
+- Tune flow with search-state and exercise-action hardening.
+
+Product rule:
+- Exercise Library is not AI/import-first. It is a reference, discovery, and manual fallback route. It must not become the primary plan-building path for Plaivra's AI-first model.
+
+Required flow:
+- Known result state -> comfortable actions -> clear favorite/custom/video outcomes -> reliable detail page.
+
+Required fixes:
+1. Add visible result/search status strip with loading, count, empty, failed, and fallback/degraded states.
+2. Add inline search failure ErrorState/retry while preserving filters.
+3. Add inline filter metadata failure/degraded state.
+4. Add pending/failure/rollback state for favorite toggles on library and detail pages.
+5. Add inline custom exercise validation, pending, success, and failure state; keep draft on failure.
+6. Add inline custom video save/reset success/failure state on detail route.
+7. Replace detail route plain loading/failure with skeleton and ErrorState.
+8. Resize top actions, result card actions, filter group headers/options, and detail summaries to 48px.
+9. Clarify Start as standalone exercise session and distinguish it from add-to-plan flow.
+10. Add sticky Apply/Clear footer to mobile filters dialog.
+11. Add account-vs-device storage microcopy for favorites/custom exercises.
+12. Add custom form close/discard guard if draft has content.
+13. Add reduced-motion-safe result/filter update feedback.
+
 Do not:
-- Do not change workout database schema.
+- Do not change database schema.
 - Do not change auth behavior.
 - Do not change workout session execution.
 - Do not change AI import/apply behavior.
-- Do not redesign the editor from scratch.
+- Do not remove intentional local fallback behavior.
+- Do not redesign the library from scratch.
 - Do not touch global theme or unrelated routes.
 
 Implementation guidance:
-- Preserve the current route model: plan detail -> edit selected day -> local draft editor -> add exercise browser -> save day.
-- Keep local draft persistence; make it visible and recoverable.
-- Clear local draft only after confirmed save or confirmed discard.
-- Treat remove/reorder/edit as draft changes until Save Workout succeeds.
-- Use sober state feedback; no decorative animation.
+- Preserve the current route model: Search/filter -> result cards -> exercise detail -> custom/favorite/video support.
+- Treat service fallbacks as useful, but surface degraded/fallback state when feasible.
+- Keep favorites/custom exercises usable for anonymous/local fallback users.
+- Keep add-to-plan behavior in `/my-workout/day/[dayId]/add-exercise` working.
+- Use sober state feedback; no decorative exercise-card animation.
 
 Verification:
 - Run typecheck, lint, and build if feasible.
-- Test /my-workout/day/[dayId] at 390x844.
-- Verify skeleton and ErrorState for day load.
-- Verify restored local draft is visible and discardable.
-- Verify unsaved changes appear after day/exercise edits.
-- Verify Back/Cancel do not silently lose edits.
-- Verify save failure keeps draft and shows inline retry/failure.
-- Verify remove exercise has confirm/undo behavior.
-- Verify move/edit/remove controls are 48px targets.
-- Verify add-exercise route explains draft-until-save behavior.
-- Verify add-exercise failed loads are not shown as true empty results.
-- Verify custom video URL validation works.
+- Test /workouts at 390x844.
+- Verify search loading, empty, failed, fallback, and loaded states are distinct.
+- Verify result count and active filter count are visible on mobile.
+- Verify favorite pending/failure/rollback works on library and detail pages.
+- Verify custom exercise creation has inline validation and keeps draft on failure.
+- Verify detail page skeleton/ErrorState.
+- Verify custom video save/reset inline states.
+- Verify top actions, result card icons, filter controls, and detail accordions meet 48px target.
+- Verify mobile filters dialog has comfortable Apply/Clear behavior.
+- Verify Start copy clearly means standalone exercise session.
+- Verify add-to-plan flow through `/my-workout/day/[dayId]/add-exercise` still works.
 - Verify no schema/auth/session/AI/global-theme/unrelated-route changes.
 - Review git diff before final report.
 ```
 
 ---
 
-## Prompt section 6 — Calories AI-first correction
+## Prompt section 7 — Calories AI-first correction
 
 ```text
 /caveman lite
@@ -351,7 +372,7 @@ Verification: typecheck, lint, build if feasible, mobile 390x844, AI import prim
 
 ---
 
-## Prompt section 7 — Meal plan AI-first correction
+## Prompt section 8 — Meal plan AI-first correction
 
 ```text
 /caveman lite
@@ -395,7 +416,7 @@ Verification: typecheck, lint, build if feasible, mobile 390x844, import/update 
 
 ---
 
-## Prompt section 8 — Hydration correction
+## Prompt section 9 — Hydration correction
 
 ```text
 /caveman lite
@@ -435,7 +456,7 @@ Verification: typecheck, lint, build if feasible, mobile 390x844, loading gate, 
 
 ---
 
-## Prompt section 9 — Wellness correction
+## Prompt section 10 — Wellness correction
 
 ```text
 /caveman lite
@@ -478,7 +499,7 @@ Verification: typecheck, lint, build if feasible, mobile 390x844, compact check-
 
 ---
 
-## Prompt section 10 — Progress correction
+## Prompt section 11 — Progress correction
 
 ```text
 /caveman lite
@@ -522,7 +543,7 @@ Verification: typecheck, lint, build if feasible, mobile 390x844, load/failed/em
 
 ---
 
-## Prompt section 11 — Settings hub correction
+## Prompt section 12 — Settings hub correction
 
 ```text
 /caveman lite
@@ -561,7 +582,7 @@ Verification: typecheck, lint, build if feasible, mobile 390x844, profile normal
 
 ---
 
-## Prompt section 12 — AI imports correction
+## Prompt section 13 — AI imports correction
 
 ```text
 /caveman lite
@@ -607,7 +628,7 @@ Verification: typecheck, lint, build if feasible, mobile 390x844, confidence her
 
 ---
 
-## Prompt section 13 — Data privacy correction
+## Prompt section 14 — Data privacy correction
 
 ```text
 /caveman lite
@@ -649,7 +670,7 @@ Verification: typecheck, lint, build if feasible, mobile 390x844, hide-vs-delete
 
 ---
 
-## Prompt section 14 — Preferences correction
+## Prompt section 15 — Preferences correction
 
 ```text
 /caveman lite
