@@ -24,6 +24,7 @@ Completed audits:
 - `/workouts/session/day/[dayId]` — 58/100 — fixes open
 - `/calories` — 54/100 — fixes open after AI-first reframing
 - `/my-meal-plan` — 57/100 — fixes open after AI-first reframing
+- `/hydration` — 68/100 — fixes open
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
@@ -404,6 +405,95 @@ Verification:
 - Verify Done carbs detail uses done fat.
 - Verify key tap targets meet 48px effective size.
 - Verify Week and Shopping tabs still work.
+- Review git diff before final report.
+
+Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+```
+
+---
+
+## Prompt section 7 — Hydration direct-logging correction
+
+```text
+/caveman lite
+
+$memory-management $agent-coder $agent-reviewer $agent-tester
+
+Task: Implement the audited P1/P2 hydration UX and direct-logging reliability corrections for Plaivra.
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + daily logging data-integrity reviewer
+
+Read first:
+- CHATGPT_CODEX_PROMPT_RULES.md
+- Ruflo_usage.md
+- docs/product/ai-first-tracker-model.md
+- docs/ux-constitution/README.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
+- docs/ux-progress/README.md
+- docs/ux-progress/routes/hydration.md
+
+Primary route:
+- /hydration
+
+Relevant files to inspect first:
+- app/(private)/hydration/page.tsx
+- services/database/nutrition.ts
+- types/database.ts
+
+Flow decision:
+- Tune flow.
+
+Product rule:
+- Hydration is intentionally not ChatGPT/import-first. Direct quick logging is primary. Do not add AI as the main hydration action.
+
+Required flow:
+- Today hero -> quick add -> manual fallback -> recent entries -> weekly context -> streak/reminder.
+
+Required fixes:
+1. Add an initial loading gate/skeleton so the hero does not show false 0 L while hydration logs/target/week data are loading.
+2. Add optimistic quick-add for water logs with rollback on failure.
+3. Add per-action pending state and duplicate rapid-tap protection for quick add and manual add.
+4. Add optimistic delete for recent water entries with rollback and restored-entry error copy.
+5. Resize delete controls to 48px effective tap targets.
+6. Add clearer failure copy for add/delete so the user knows whether the total changed or was restored.
+7. Add a calm target-hit state or success moment when total reaches the target.
+8. Make missing-target state more actionable with a clear target setup prompt.
+9. Resize Refresh and Edit Targets to comfortable 48px effective targets.
+10. Add controlled progress/row motion for add/delete and respect reduced motion.
+11. Surface degraded/partial-load state if week/target/logs cannot fully load, where feasible without broad service rewrites.
+
+Do not:
+- Do not add ChatGPT/import as the primary hydration path.
+- Do not redesign the route from scratch.
+- Do not change database schema.
+- Do not rewrite calorie target editing.
+- Do not change unrelated Calories tools, AI permissions, auth, settings, subscriptions, or global theme.
+- Do not change hydration target semantics without explicit approval.
+
+Implementation guidance:
+- Preserve the current route structure and service calls where possible.
+- For optimistic add/delete, snapshot previous logs and weekData before local update.
+- On failure, restore previous state and show clear error copy.
+- Keep quick add fast; do not add confirmation to low-risk water logging.
+- Keep delete low-friction, but reliable and reversible through rollback if the server fails.
+- Use motion only for feedback/state clarity: press feedback, progress fill, row enter/exit, and target-hit state.
+
+Verification:
+- Run typecheck, lint, and build if feasible.
+- Test /hydration at 390x844.
+- Verify hydration opens with a loading skeleton/gate instead of false 0 L.
+- Verify quick add updates total, progress, recent entries, and weekly total immediately.
+- Verify failed quick add rolls back total/log/week state and explains water was not saved.
+- Verify manual add has validation, pending state, and duplicate protection.
+- Verify delete removes row immediately and restores it if delete fails.
+- Verify Delete, Refresh, Edit Targets, and empty-state action meet 48px effective tap size.
+- Verify reaching target shows a calm completion state.
+- Verify missing target state clearly points to target setup.
+- Verify weekly totals remain correct after optimistic add/delete.
+- Verify route-level ErrorState retry still works.
+- Verify no primary ChatGPT/import action was added to hydration.
 - Review git diff before final report.
 
 Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
