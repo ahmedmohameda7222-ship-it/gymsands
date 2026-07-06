@@ -39,7 +39,7 @@ This file tracks route-level UX quality against Plaivra's AI-first product model
 
 ## 2. Global progress summary
 
-Current global status: **Dashboard, onboarding, workout plans, workout session, workout day editor, calories, meal plan, hydration, wellness, progress, settings, AI imports, data privacy, and preferences audited.**
+Current global status: **Dashboard, onboarding, workout plans, workout session, workout day editor, exercise library, calories, meal plan, hydration, wellness, progress, settings, AI imports, data privacy, and preferences audited.**
 
 | Area | Status | Score | Notes |
 |---|---|---:|---|
@@ -47,7 +47,8 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | Onboarding | Audited | 66 | Full audit tracked in this file and prompt backlog. |
 | Workout plans | Audited | 63 | Full audit: `docs/ux-progress/routes/my-workout-plans.md`. |
 | Workout session | Audited | 58 | Full audit: `docs/ux-progress/routes/workout-session-day.md`. |
-| Workout day editor | Audited | 59 | Needs visible draft/unsaved/save-failed states, protected back/cancel/remove flows, 48px row controls, and add-exercise state clarity. Full audit: `docs/ux-progress/routes/workout-day-editor.md`. |
+| Workout day editor | Audited | 59 | Full audit: `docs/ux-progress/routes/workout-day-editor.md`. |
+| Exercise library | Audited | 64 | Needs search/result state honesty, inline favorite/custom/custom-video recovery, 48px filters/actions, and clearer standalone Start vs add-to-plan flow. Full audit: `docs/ux-progress/routes/exercise-library.md`. |
 | Calories / food log | Audited | 54 | Full audit: `docs/ux-progress/routes/calories.md`. |
 | Meal plan | Audited | 57 | Full audit: `docs/ux-progress/routes/my-meal-plan.md`. |
 | Hydration | Audited | 68 | Full audit: `docs/ux-progress/routes/hydration.md`. |
@@ -58,7 +59,6 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | Data privacy | Audited | 61 | Full audit: `docs/ux-progress/routes/settings-data-privacy.md`. |
 | Preferences | Audited | 62 | Full audit: `docs/ux-progress/routes/settings-preferences.md`. |
 | Global app shell / navigation | Not audited | — | Needs mobile nav, safe area, route transitions, active states, and offline/sync banner review. |
-| Exercise library | Not audited | — | Needs filters, search, result-count feedback, card actions, card/detail reveal, and custom-video action audit. |
 | Workout history | Not audited | — | Needs empty/history/detail actions, list transitions, loading states, and recovery audit. |
 | Food Hub / custom foods and meals | Not audited | — | Audit as manual fallback/edit path, not as the main product entry path. |
 | Weekly overview / reports | Not audited | — | Needs report navigation, filters, chart/data motion, loading, empty-state, and reduced-motion audit. |
@@ -81,6 +81,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | `/my-workout/plans` | Audited | 63 | Reorder flow | `docs/ux-progress/routes/my-workout-plans.md` | `Today hero -> weekly calendar -> saved plan library -> add/import plan`. |
 | `/workouts/session/day/[dayId]` | Audited | 58 | Tune flow | `docs/ux-progress/routes/workout-session-day.md` | Fix mobile sticky CTA, optimistic rollback, key tap targets, and failure states. |
 | `/my-workout/day/[dayId]` | Audited | 59 | Tune flow with editor-state and unsaved-change hardening | `docs/ux-progress/routes/workout-day-editor.md` | `Known day -> visible draft state -> safe edits -> protected cancel/back/remove -> reliable save`. |
+| `/workouts` | Audited | 64 | Tune flow with search-state and exercise-action hardening | `docs/ux-progress/routes/exercise-library.md` | `Known result state -> comfortable actions -> clear favorite/custom/video outcomes -> reliable detail page`. |
 | `/calories` | Audited | 54 | Needs AI-first reframing | `docs/ux-progress/routes/calories.md` | `ChatGPT meal import/review -> Plaivra overview/tracking -> manual fallback/correction`. |
 | `/my-meal-plan` | Audited | 57 | Needs AI-first reframing | `docs/ux-progress/routes/my-meal-plan.md` | `ChatGPT meal-plan import/review -> planned overview -> shopping / mark done -> manual fallback/correction`. |
 | `/hydration` | Audited | 68 | Tune flow | `docs/ux-progress/routes/hydration.md` | `Today hero -> quick add -> manual fallback -> recent entries -> weekly context -> streak/reminder`. |
@@ -122,6 +123,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | 2026-07-06 | `/settings/data-privacy` | Completed route audit | Score 61/100 | `a1fe83d619d0720da5a3e4c3750de12804ce665f` |
 | 2026-07-06 | `/settings/preferences` | Completed route audit | Score 62/100 | `3236e76d673347b59f8f9638c6690b7a7f48cb31` |
 | 2026-07-06 | `/my-workout/day/[dayId]` | Completed workout day editor route audit | Score 59/100 | `bc997484faef6d4576e432c069ae4e14f0e334d1` |
+| 2026-07-06 | `/workouts` | Completed Exercise Library route audit | Score 64/100 | `45e24672bf6dcc6ee1d89a8b778712e6ea0978d1` |
 
 ---
 
@@ -132,16 +134,16 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 3. `/my-workout/plans` — audited, fixes open
 4. `/workouts/session/day/[dayId]` — audited, fixes open
 5. `/my-workout/day/[dayId]` — audited, fixes open
-6. `/calories` — audited, fixes open after AI-first reframing
-7. `/my-meal-plan` — audited, fixes open after AI-first reframing
-8. `/hydration` — audited, fixes open
-9. `/wellness` — audited, fixes open
-10. `/progress` — audited, fixes open
-11. `/settings` — audited, fixes open
-12. `/settings/ai-imports` — audited, fixes open
-13. `/settings/data-privacy` — audited, fixes open
-14. `/settings/preferences` — audited, fixes open
-15. Exercise library
+6. `/workouts` — audited, fixes open
+7. `/calories` — audited, fixes open after AI-first reframing
+8. `/my-meal-plan` — audited, fixes open after AI-first reframing
+9. `/hydration` — audited, fixes open
+10. `/wellness` — audited, fixes open
+11. `/progress` — audited, fixes open
+12. `/settings` — audited, fixes open
+13. `/settings/ai-imports` — audited, fixes open
+14. `/settings/data-privacy` — audited, fixes open
+15. `/settings/preferences` — audited, fixes open
 16. Workout history
 17. Global app shell / navigation
 
