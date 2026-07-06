@@ -21,6 +21,7 @@ Completed audits:
 - `/onboarding?edit=true` — 66/100 — fixes open
 - `/my-workout/plans` — 63/100 — fixes open
 - `/workouts/session/day/[dayId]` — 58/100 — fixes open
+- `/calories` — 61/100 — fixes open
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
@@ -301,6 +302,77 @@ Verification:
 - Simulate failed Reopen set and confirm rollback.
 - Verify close/back behavior protects unsaved local changes.
 - Verify advanced actions remain in a sheet and do not clutter the main set screen.
+- Review git diff before final report.
+
+Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+```
+
+---
+
+## Prompt section 5 — Calories correction
+
+```text
+/caveman lite
+
+$memory-management $agent-coder $agent-reviewer $agent-tester
+
+Task: Implement the audited P1 calories daily logging UX corrections for Plaivra.
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + daily nutrition logging UX reviewer
+
+Read first:
+- CHATGPT_CODEX_PROMPT_RULES.md
+- Ruflo_usage.md
+- docs/ux-constitution/README.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
+- docs/ux-progress/README.md
+- docs/ux-progress/routes/calories.md
+
+Primary route:
+- /calories
+
+Flow decision:
+- Reorder flow.
+
+Required flow:
+- Today command center -> fast logging actions -> food/water logs -> secondary week/targets/tools.
+
+Inspect first:
+- app/(private)/calories/page.tsx
+- components/meals/calories-page-sections.tsx
+- components/meals/food-log-list.tsx
+- components/meals/recent-food-strip.tsx
+- components/meals/api-food-tools.tsx
+- components/ui/button.tsx
+- components/ui/state-views.tsx
+- components/motion/index.tsx
+- lib/motion.ts
+- services/database/nutrition.ts
+
+Required fixes:
+1. Reorder Today tab into a command center: summary, Add Food primary, quick actions, then log/water.
+2. Surface Scan barcode, Recent/Frequent, Custom food/meal, and Copy yesterday as quick logging actions instead of hiding them in Tools/More.
+3. Resize mobile tab selector, date nav, recent food Log, favorite, delete, and water controls to 48px effective targets.
+4. Add optimistic water add with pending duplicate protection and rollback.
+5. Add pending/feedback for Recent food Log and prevent duplicate rapid taps.
+6. Add pending/rollback or safe unchanged behavior for food/water delete.
+7. Replace custom load error UI with shared ErrorState and retry.
+8. Keep weekly/targets/tools available but secondary to daily logging.
+9. Add only useful reduced-motion-safe transitions; no decorative animation.
+
+Do not rewrite nutrition calculations, schema, auth, payments, unrelated meal-plan routes, or global theme.
+
+Verification:
+- Run typecheck, lint, and build if feasible.
+- Test /calories at 390x844.
+- Verify first screen makes Add Food and remaining nutrition obvious.
+- Verify scan/recent/custom/copy are reachable as quick actions.
+- Verify water optimistic success, duplicate protection, and rollback.
+- Verify recent food logging pending behavior and duplicate protection.
+- Verify food/water delete pending/rollback or safe unchanged behavior.
+- Verify weekly, targets, and barcode scanner still work.
 - Review git diff before final report.
 
 Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
