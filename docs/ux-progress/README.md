@@ -4,13 +4,14 @@
 **Status:** Active tracker  
 **Source of truth:**
 
+- `docs/product/ai-first-tracker-model.md`
 - `docs/ux-constitution/README.md`
 - `docs/ux-constitution/flow-and-workflow-audit.md`
 - `docs/ux-constitution/motion-and-interaction.md`
 
-This file tracks how close Plaivra is to the UI/UX constitution, including workflow quality, button hierarchy, spacing, touch comfort, feedback, motion, loading, empty states, error recovery, AI action safety, and subscription-readiness.
+This file tracks how close Plaivra is to the product model and UI/UX constitution, including AI-first workflow quality, button hierarchy, spacing, touch comfort, feedback, motion, loading, empty states, error recovery, AI action safety, and subscription-readiness.
 
-Do not mark a route as passed because it looks better. A route passes only when it has been audited against the constitution, workflow standard, and motion standard, and the relevant issues were fixed or explicitly accepted as exceptions.
+Do not mark a route as passed because it looks better. A route passes only when it has been audited against the AI-first product model, constitution, workflow standard, and motion standard, and the relevant issues were fixed or explicitly accepted as exceptions.
 
 ---
 
@@ -37,40 +38,40 @@ Each audited route receives a score out of 100.
 | 90-100 | Release-grade. Only minor polish allowed. |
 | 80-89 | Good but not premium enough yet. Needs targeted fixes. |
 | 70-79 | Usable but visibly inconsistent. Needs UI/UX and motion refinement. |
-| 50-69 | Functional but not subscription-ready. |
+| 50-69 | Functional but not subscription-ready or not product-aligned. |
 | Below 50 | Failing route experience. Must be redesigned or simplified. |
 
 ---
 
 ## 2. Global progress summary
 
-Current global status: **Dashboard, onboarding, workout plans, workout session, and calories audited; remaining routes are not audited yet against the 2026.1 constitution, workflow standard, and motion standard.**
+Current global status: **Dashboard, onboarding, workout plans, workout session, and calories audited; calories was reframed after the AI-first product clarification. Remaining routes are not audited yet against the 2026.1 AI-first product model, constitution, workflow standard, and motion standard.**
 
 | Area | Status | Score | Notes |
 |---|---|---:|---|
 | Global app shell / navigation | Not audited | — | Needs mobile nav, safe area, action hierarchy, route transitions, active states, and offline/sync banner review. |
-| Dashboard | Audited | 72 | Strong foundation but not premium-ready. Needs clearer primary action, reduced action density, stronger optimistic feedback, better section-level motion, and tighter mobile action grouping. |
+| Dashboard | Audited | 72 | Strong foundation but not premium-ready. Needs clearer primary action, imported/active state visibility, reduced action density, stronger optimistic feedback, better section-level motion, and tighter mobile action grouping. |
 | Onboarding | Audited | 66 | Functional but not launch-quality. Needs conditional target-weight logic, saved-answer loading state, step motion, reduced action density, stronger validation, and 48px touch target cleanup. |
-| Workout plans | Audited | 63 | Functional but workflow is management-heavy. Needs Today-first flow, better no-plan setup flow, clearer add/import hierarchy, 48px plan menus, and stronger ChatGPT import framing. Full audit: `docs/ux-progress/routes/my-workout-plans.md`. |
+| Workout plans | Audited | 63 | Functional but workflow is management-heavy. Needs Today-first flow, better no-plan setup flow, ChatGPT import as primary plan creation, 48px plan menus, and stronger import framing. Full audit: `docs/ux-progress/routes/my-workout-plans.md`. |
 | Workout session | Audited | 58 | Strong concept but core mobile/reliability issues. Needs session-local sticky CTA fix, optimistic rollback, 48px touch targets, unsaved-exit protection, and clearer set/rest failure states. Full audit: `docs/ux-progress/routes/workout-session-day.md`. |
-| Calories / food log | Audited | 61 | Strong feature set but daily logging flow is too split across tabs/tools. Needs Today command center, surfaced quick logging actions, optimistic water/recent logging, 48px quick controls, and shared ErrorState. Full audit: `docs/ux-progress/routes/calories.md`. |
+| Calories / food log | Audited | 54 | Functional manual tracker, but not aligned enough with Plaivra's AI-first model. Needs ChatGPT/photo/text meal import as primary path, review/apply/correct stage, manual fallback, optimistic water/recent logging, and shared ErrorState. Full audit: `docs/ux-progress/routes/calories.md`. |
 | Workout day editor | Not audited | — | Needs edit-mode motion, destructive action protection, exercise row actions, and save feedback audit. |
 | Exercise library | Not audited | — | Needs filters, search, result-count feedback, card actions, card/detail reveal, and custom-video action audit. |
 | Workout history | Not audited | — | Needs empty/history/detail actions, list transitions, loading states, and recovery audit. |
-| Food Hub / custom foods and meals | Not audited | — | `/calories/custom-food-meal` redirects here; audit actual builder route, form reveal, validation feedback, and save success state. |
-| Meal plan | Not audited | — | Needs add/edit/mark-done/shopping-list/AI action audit, planned-to-done transitions, totals update, and optimistic feedback. |
+| Food Hub / custom foods and meals | Not audited | — | Audit as manual fallback/edit path, not as the main product entry path. |
+| Meal plan | Not audited | — | Needs ChatGPT meal-plan generation/import as primary path, manual editing as fallback, planned-to-done transitions, shopping list, and review/apply safety. |
 | Weekly overview / reports | Not audited | — | Needs report navigation, filters, chart/data motion, loading, empty-state, and reduced-motion audit. |
-| Progress | Not audited | — | Needs add entry, photos, goal weight, edit/delete, chart transitions, progress updates, and privacy-state audit. |
+| Progress | Not audited | — | Needs overview/trend flow, add entry, photos, goal weight, edit/delete, chart transitions, progress updates, and privacy-state audit. |
 | Personal records | Not audited | — | Needs tracker, insight actions, PR update highlight, achievement feedback, and empty-state audit. |
 | Wellness hub | Not audited | — | Needs launcher-card hierarchy, daily check-in feedback, calm completion motion, and empty-state audit. |
-| Hydration | Not audited | — | Needs quick-add, manual-add, delete, progress fill, target-reached moment, optimistic feedback, and error recovery audit. |
+| Hydration | Not audited | — | Direct quick logging is primary here. Needs quick-add, manual-add, delete, progress fill, target-reached moment, optimistic feedback, and error recovery audit. |
 | Habits | Not audited | — | Needs repeated toggle/check behavior, streak feedback, optimistic updates, reduced motion, and error recovery audit. |
 | Sleep & recovery | Not audited | — | Needs form/action/feedback audit with quiet low-stimulation motion and clear save states. |
 | Supplements | Not audited | — | Needs dose/taken/reminder actions, checklist feedback, optimistic behavior, and failure recovery audit. |
 | Daily fit tasks | Not audited | — | Needs add/edit/complete/delete actions, task-complete transitions, optimistic behavior, and empty-state audit. |
 | Settings hub | Not audited | — | Needs category hierarchy, row spacing, stable/minimal transitions, and account-action audit. |
 | Account settings | Not audited | — | Needs sign-out/delete-account/destructive separation, confirmation states, and serious low-motion behavior audit. |
-| AI imports / permissions | Not audited | — | Needs permission clarity, connection status, revoke, ChatGPT flow choreography, pending/success/error states, and AI safety audit. |
+| AI imports / permissions | Not audited | — | Critical route. Needs permission clarity, connection status, revoke, ChatGPT flow choreography, pending/success/error states, import/apply safety, and AI trust audit. |
 | Preferences | Not audited | — | Needs settings-row spacing, selects, toggles, save feedback, reduced-motion preference handling, and pending/error audit. |
 | Data privacy | Not audited | — | Needs export, reset, privacy links, dangerous-action hierarchy, serious confirmation states, and progress/error audit. |
 | Public landing/auth | Not audited | — | Needs premium first impression, auth CTA, subtle entrance motion, loading/error auth states, and trust audit. |
@@ -85,7 +86,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 **Score:** 72 / 100  
 **Flow decision:** Tune flow
 
-Primary issue: the dashboard has the correct daily data, but too many actions compete. It needs one dominant next best action, optimistic repeated actions, and calmer hierarchy.
+Primary issue: the dashboard has the correct daily data, but too many actions compete. It needs one dominant next best action, imported/active state clarity, optimistic repeated actions, and calmer hierarchy.
 
 ### `/onboarding?edit=true`
 
@@ -102,7 +103,7 @@ Primary issue: onboarding edit is functional, but target-weight relevance, saved
 **Flow decision:** Reorder flow  
 **Full audit:** `docs/ux-progress/routes/my-workout-plans.md`
 
-Primary issue: the route is too management-heavy. It should lead with today's training intent.
+Primary issue: the route is too management-heavy. It should lead with today's training intent and keep ChatGPT import as the primary plan creation path.
 
 Recommended flow:
 
@@ -128,16 +129,16 @@ Fix session-local mobile sticky CTA -> add optimistic rollback -> clean key touc
 ### `/calories`
 
 **Status:** Audited  
-**Score:** 61 / 100  
-**Flow decision:** Reorder flow  
+**Score:** 54 / 100  
+**Flow decision:** Needs AI-first reframing  
 **Full audit:** `docs/ux-progress/routes/calories.md`
 
-Primary issue: the nutrition feature set is strong, but the route feels like a dense nutrition control panel rather than a fast daily logging flow.
+Primary issue: the route works as a manual calorie tracker, but Plaivra's product model requires ChatGPT/photo/text meal import to be primary, with Plaivra as the review/apply/tracking layer.
 
 Recommended flow:
 
 ```txt
-Today command center -> fast logging actions -> food/water logs -> secondary week/targets/tools
+ChatGPT meal import/review -> Plaivra overview/tracking -> manual fallback/correction
 ```
 
 ---
@@ -147,7 +148,7 @@ Today command center -> fast logging actions -> food/water logs -> secondary wee
 | Priority | Meaning |
 |---|---|
 | P0 | Blocks trust, safety, data integrity, accessibility, or core usability. Must fix before release. |
-| P1 | Strongly damages premium feel, repeated daily use, perceived speed, workflow quality, or motion/interaction quality. Should fix before release. |
+| P1 | Strongly damages premium feel, repeated daily use, perceived speed, workflow quality, product alignment, or motion/interaction quality. Should fix before release. |
 | P2 | Polish, consistency, or minor motion issue. Fix after P0/P1. |
 | P3 | Optional enhancement. Do not distract from core audit fixes. |
 
@@ -165,7 +166,9 @@ Today command center -> fast logging actions -> food/water logs -> secondary wee
 | 2026-07-06 | Flow audit standard | Added flow-first audit standard | Future audits start with workflow before buttons/motion | `34355940625ace2d519368cbf083453cb19aa14b` |
 | 2026-07-06 | `/my-workout/plans` | Completed flow-first route audit | Score 63/100; flow reorder required before route is premium-ready | `50e7ccbcb0f341e58cae2d3c91c3d0726a0cb914` |
 | 2026-07-06 | `/workouts/session/day/[dayId]` | Completed flow-first route audit | Score 58/100; P0/P1 fixes required for core session reliability | `1f4efc9baf25d23e778eddd20b0d468a7577adf7` |
-| 2026-07-06 | `/calories` | Completed flow-first route audit | Score 61/100; flow reorder required for fast daily nutrition logging | This commit |
+| 2026-07-06 | `/calories` | Completed flow-first route audit | Initial score 61/100 as manual tracker flow | `7c8422fb407bea78fd9cc639472dc444a52a08df` |
+| 2026-07-06 | AI-first product model | Added product source of truth | Plaivra defined as ChatGPT-first tracker, manual entry as fallback | `1c7fb06c3d73958c4191de72e5cf919030a4b958` |
+| 2026-07-06 | `/calories` | Reframed calories audit | Score revised to 54/100; needs AI-first meal import/review flow | This commit |
 
 ---
 
@@ -179,7 +182,7 @@ Suggested order:
 2. `/onboarding?edit=true` — audited, fixes open
 3. `/my-workout/plans` — audited, fixes open
 4. `/workouts/session/day/[dayId]` — audited, fixes open
-5. `/calories` — audited, fixes open
+5. `/calories` — audited, fixes open after AI-first reframing
 6. `/my-meal-plan`
 7. `/hydration`
 8. `/wellness`
@@ -195,5 +198,5 @@ Reason: these routes carry the highest daily-use, trust, AI, motion, and future-
 ## 7. Agent instruction for future audits
 
 ```txt
-Use docs/ux-constitution/README.md, docs/ux-constitution/flow-and-workflow-audit.md, and docs/ux-constitution/motion-and-interaction.md as the source of truth, and update docs/ux-progress/README.md with route-level audit results. Audit workflow first. Do not start with button polish. If the flow is weak, propose the corrected flow before changing UI. Then audit buttons, spacing, states, motion, mobile tap comfort, reduced-motion behavior, AI safety, privacy/destructive-action control, and subscription-readiness. Mark every finding with priority P0/P1/P2/P3 and a concrete recommended fix.
+Use docs/product/ai-first-tracker-model.md, docs/ux-constitution/README.md, docs/ux-constitution/flow-and-workflow-audit.md, and docs/ux-constitution/motion-and-interaction.md as the source of truth, and update docs/ux-progress/README.md with route-level audit results. Audit workflow first. Plaivra is AI-first, not manual-entry-first. If a data-entry route treats manual input as primary when ChatGPT/import should be primary, mark it as a product-flow issue before button polish. Then audit buttons, spacing, states, motion, mobile tap comfort, reduced-motion behavior, AI safety, privacy/destructive-action control, and subscription-readiness. Mark every finding with priority P0/P1/P2/P3 and a concrete recommended fix.
 ```
