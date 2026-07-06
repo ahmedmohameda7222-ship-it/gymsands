@@ -1,7 +1,7 @@
 # Plaivra UX Progress Tracker
 
 **Version:** 2026.1  
-**Status:** Active tracker
+**Status:** Current route audit queue complete
 
 Source documents:
 
@@ -26,7 +26,7 @@ Source documents:
 
 ## Current status
 
-Dashboard, onboarding, workout plans, workout session, workout day editor, exercise library, workout history, global app shell/navigation, food hub, weekly reports, personal records, habits, sleep & recovery, supplements, daily fit tasks, account settings, calories, meal plan, hydration, wellness, progress, settings, AI imports, data privacy, and preferences have been audited.
+Dashboard, onboarding, workout plans, workout session, workout day editor, exercise library, workout history, global app shell/navigation, food hub, weekly reports, personal records, habits, sleep & recovery, supplements, daily fit tasks, account settings, public landing/auth, calories, meal plan, hydration, wellness, progress, settings, AI imports, data privacy, and preferences have been audited.
 
 | Area | Status | Score | Full audit |
 |---|---|---:|---|
@@ -46,6 +46,7 @@ Dashboard, onboarding, workout plans, workout session, workout day editor, exerc
 | Supplements | Audited | 56 | `docs/ux-progress/routes/supplements.md` |
 | Daily fit tasks | Audited | 61 | `docs/ux-progress/routes/daily-fit-tasks.md` |
 | Account settings | Audited | 59 | `docs/ux-progress/routes/account-settings.md` |
+| Public landing/auth | Audited | 55 | `docs/ux-progress/routes/public-landing-auth.md` |
 | Calories / food log | Audited | 54 | `docs/ux-progress/routes/calories.md` |
 | Meal plan | Audited | 57 | `docs/ux-progress/routes/my-meal-plan.md` |
 | Hydration | Audited | 68 | `docs/ux-progress/routes/hydration.md` |
@@ -55,35 +56,25 @@ Dashboard, onboarding, workout plans, workout session, workout day editor, exerc
 | AI imports / permissions | Audited | 66 | `docs/ux-progress/routes/settings-ai-imports.md` |
 | Data privacy | Audited | 61 | `docs/ux-progress/routes/settings-data-privacy.md` |
 | Preferences | Audited | 62 | `docs/ux-progress/routes/settings-preferences.md` |
-| Public landing/auth | Not audited | — | — |
 
 ---
 
-## Recommended audit order
+## Recommended correction order
 
-1. `/dashboard` — audited, fixes open
-2. `/onboarding?edit=true` — audited, fixes open
-3. `/my-workout/plans` — audited, fixes open
-4. `/workouts/session/day/[dayId]` — audited, fixes open
-5. `/my-workout/day/[dayId]` — audited, fixes open
-6. `/workouts` — audited, fixes open
-7. `/workout-history` — audited, fixes open
-8. Global app shell / navigation — audited, fixes open
-9. `/calories/food-hub` — audited, fixes open
-10. `/calories/weekly-overview` — audited, fixes open
-11. `/personal-records` — audited, fixes open
-12. `/habits` — audited, fixes open
-13. `/sleep-recovery` — audited, fixes open
-14. `/supplements` — audited, fixes open
-15. `/daily-fit-tasks` — audited, fixes open
-16. `/settings/account` — audited, fixes open
-17. `/calories` — audited, fixes open
-18. `/my-meal-plan` — audited, fixes open
-19. `/hydration` — audited, fixes open
-20. `/wellness` — audited, fixes open
-21. `/progress` — audited, fixes open
-22. `/settings` — audited, fixes open
-23. `/settings/ai-imports` — audited, fixes open
-24. `/settings/data-privacy` — audited, fixes open
-25. `/settings/preferences` — audited, fixes open
-26. Public landing/auth
+1. `/calories` — AI-first reframing, primary nutrition positioning
+2. `/my-meal-plan` — AI-first meal-plan import/review flow
+3. Public landing/auth — AI-first positioning and auth trust states
+4. `/dashboard` — next-best action and repeated-action reliability
+5. `/onboarding?edit=true` — edit-mode reliability and AI permission framing
+6. `/my-workout/plans` — Today-first plan management
+7. `/workouts/session/day/[dayId]` — session CTA and persistence rollback
+8. Global app shell / navigation — route validity, bottom stack, reduced motion
+9. `/settings/ai-imports` — permission and connection trust state
+10. `/settings/data-privacy` and `/settings/account` — privacy/account sensitive-action status
+11. Remaining direct trackers by daily-use frequency: hydration, habits, sleep, supplements, daily fit tasks, progress, PRs, history, reports, food hub, exercise library
+
+---
+
+## Audit note
+
+The original route audit queue is complete. New audits should be opened only when new routes/features are added or when correction work materially changes the user flow.
