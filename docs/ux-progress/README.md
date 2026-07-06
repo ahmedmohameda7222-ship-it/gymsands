@@ -26,7 +26,7 @@ Source documents:
 
 ## Current status
 
-Dashboard, onboarding, workout plans, workout session, workout day editor, exercise library, workout history, global app shell/navigation, food hub, weekly reports, personal records, habits, sleep & recovery, supplements, daily fit tasks, calories, meal plan, hydration, wellness, progress, settings, AI imports, data privacy, and preferences have been audited.
+Dashboard, onboarding, workout plans, workout session, workout day editor, exercise library, workout history, global app shell/navigation, food hub, weekly reports, personal records, habits, sleep & recovery, supplements, daily fit tasks, account settings, calories, meal plan, hydration, wellness, progress, settings, AI imports, data privacy, and preferences have been audited.
 
 | Area | Status | Score | Full audit |
 |---|---|---:|---|
@@ -45,6 +45,7 @@ Dashboard, onboarding, workout plans, workout session, workout day editor, exerc
 | Sleep & recovery | Audited | 57 | `docs/ux-progress/routes/sleep-recovery.md` |
 | Supplements | Audited | 56 | `docs/ux-progress/routes/supplements.md` |
 | Daily fit tasks | Audited | 61 | `docs/ux-progress/routes/daily-fit-tasks.md` |
+| Account settings | Audited | 59 | `docs/ux-progress/routes/account-settings.md` |
 | Calories / food log | Audited | 54 | `docs/ux-progress/routes/calories.md` |
 | Meal plan | Audited | 57 | `docs/ux-progress/routes/my-meal-plan.md` |
 | Hydration | Audited | 68 | `docs/ux-progress/routes/hydration.md` |
@@ -54,7 +55,6 @@ Dashboard, onboarding, workout plans, workout session, workout day editor, exerc
 | AI imports / permissions | Audited | 66 | `docs/ux-progress/routes/settings-ai-imports.md` |
 | Data privacy | Audited | 61 | `docs/ux-progress/routes/settings-data-privacy.md` |
 | Preferences | Audited | 62 | `docs/ux-progress/routes/settings-preferences.md` |
-| Account settings | Not audited | — | — |
 | Public landing/auth | Not audited | — | — |
 
 ---
@@ -76,14 +76,14 @@ Dashboard, onboarding, workout plans, workout session, workout day editor, exerc
 13. `/sleep-recovery` — audited, fixes open
 14. `/supplements` — audited, fixes open
 15. `/daily-fit-tasks` — audited, fixes open
-16. `/calories` — audited, fixes open
-17. `/my-meal-plan` — audited, fixes open
-18. `/hydration` — audited, fixes open
-19. `/wellness` — audited, fixes open
-20. `/progress` — audited, fixes open
-21. `/settings` — audited, fixes open
-22. `/settings/ai-imports` — audited, fixes open
-23. `/settings/data-privacy` — audited, fixes open
-24. `/settings/preferences` — audited, fixes open
-25. Account settings
+16. `/settings/account` — audited, fixes open
+17. `/calories` — audited, fixes open
+18. `/my-meal-plan` — audited, fixes open
+19. `/hydration` — audited, fixes open
+20. `/wellness` — audited, fixes open
+21. `/progress` — audited, fixes open
+22. `/settings` — audited, fixes open
+23. `/settings/ai-imports` — audited, fixes open
+24. `/settings/data-privacy` — audited, fixes open
+25. `/settings/preferences` — audited, fixes open
 26. Public landing/auth
