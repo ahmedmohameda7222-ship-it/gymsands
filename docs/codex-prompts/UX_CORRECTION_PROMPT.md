@@ -38,6 +38,7 @@ Product rule: Plaivra is AI-first where appropriate, but not every route is Chat
 | `/supplements` | 56 | `docs/ux-progress/routes/supplements.md` |
 | `/daily-fit-tasks` | 61 | `docs/ux-progress/routes/daily-fit-tasks.md` |
 | `/settings/account` | 59 | `docs/ux-progress/routes/account-settings.md` |
+| Public landing/auth | 55 | `docs/ux-progress/routes/public-landing-auth.md` |
 | `/calories` | 54 | `docs/ux-progress/routes/calories.md` |
 | `/my-meal-plan` | 57 | `docs/ux-progress/routes/my-meal-plan.md` |
 | `/hydration` | 68 | `docs/ux-progress/routes/hydration.md` |
@@ -59,72 +60,89 @@ Mode: high plus advisor
 Advisor: strict senior mobile product engineer + premium UX reviewer
 ```
 
-For personal user data, permissions, health data, nutrition data, reports, account actions, or AI apply flows, include the project security review skill listed in `Ruflo_usage.md`.
+For personal user data, permissions, health data, nutrition data, reports, account actions, consent flows, or AI apply flows, include the project security review skill listed in `Ruflo_usage.md`.
 
 ---
 
-## Current focused prompt — Account Settings correction
+## Current focused prompt — Public Landing/Auth correction
 
 ```text
 /caveman lite
 $memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
 
 Mode: high plus advisor
-Advisor: strict senior mobile product engineer + account/privacy safety reviewer + sensitive-action confirmation reviewer
+Advisor: strict senior mobile product engineer + AI-first product positioning reviewer + auth/consent safety reviewer + reduced-motion reviewer
 
-Task: Implement audited Account Settings UX corrections.
+Task: Implement audited Public Landing/Auth UX corrections.
 
-Primary route:
-- /settings/account
+Primary surfaces:
+- /
+- /login
+- /register
+- /auth/oauth-complete
+- /auth/consent-completion
+- /forgot-password
+- /reset-password
 
 Read first:
-- docs/ux-progress/routes/account-settings.md
-- app/(private)/settings/account/page.tsx
-- components/settings/settings-page-shell.tsx
-- components/settings/settings-section-card.tsx
-- components/auth/auth-provider.tsx
-- app/api/user/privacy-requests/route.ts
+- docs/ux-progress/routes/public-landing-auth.md
+- app/page.tsx
+- components/layout/public-nav.tsx
+- components/layout/public-footer.tsx
+- components/auth/auth-page.tsx
+- components/auth/auth-form.tsx
+- components/auth/oauth-complete-client.tsx
+- components/auth/consent-completion-client.tsx
+- app/forgot-password/page.tsx
+- app/reset-password/page.tsx
 
 Product role:
-- Account Settings is a trust/control route.
-- Do not add AI/import behavior.
-- Deletion is a request flow, not immediate account deletion.
+- Landing must explain Plaivra's AI-first tracker/control-layer model.
+- Auth must preserve existing email/password, Google OAuth, consent, and password recovery semantics.
 
-Required flow:
-- Account identity -> sign-out state -> deletion status -> app confirmation -> inline success/failure -> 48px controls.
+Required landing flow:
+- AI-first hero -> 5-second workflow visual -> product UI cards -> trust/control strip -> clear auth CTA.
+
+Required auth flow:
+- Auth form -> inline validation/errors -> OAuth pending/recovery -> consent completion -> recovery/reset success/failure.
 
 Required fixes:
-1. Show signed-in account identity on the route.
-2. Add sign-out pending, disabled, and failure state.
-3. Replace window.confirm deletion confirmation with app confirmation UI.
-4. Load existing privacy request status from /api/user/privacy-requests.
-5. Show pending/in-progress/completed deletion request state inline.
-6. Wrap deletion POST in try/catch/finally so the button cannot remain stuck.
-7. Add inline deletion request success/failure status, not toast-only.
-8. Resize Back, Sign out, Request deletion, and related controls to 48px targets.
-9. Surface ChatGPT access revocation status/copy when deletion is requested.
-10. Add retry for privacy request status load.
-11. Improve destructive copy with review/timeline/verification language.
+1. Reframe landing hero around AI-first workflow: ChatGPT/context -> approval -> Plaivra tracking/visualization.
+2. Replace stock fitness photo carousel with product UI cards/workflow visuals.
+3. Reframe feature grid from module list to approved-import workflows.
+4. Add trust/control strip: approval before tracking, no silent AI changes, privacy/health links.
+5. Keep login/privacy/legal reachable on mobile public nav.
+6. Add OAuth pending state to Google sign-in and prevent repeated taps.
+7. Add inline auth form error/success states in addition to toast.
+8. Replace Suspense fallback={null} on auth callback/consent routes with branded loading states.
+9. Resize OAuth retry, consent rows/checks, and mobile nav/auth controls to 48px targets.
+10. Add inline consent save failure state.
+11. Add inline forgot-password reset-link-sent state.
+12. Add reset-password inline error and password visibility/requirements parity with register.
+13. Ensure English and Arabic public copy stay aligned.
+14. Gate or disable public hero animation under reduced-motion settings.
 
 Do not:
 - Do not change database schema.
 - Do not change auth semantics.
+- Do not change consent semantics.
 - Do not change AI import/apply behavior.
-- Do not change global theme.
-- Do not imply immediate account deletion.
-- Do not expose service-role or admin-only behavior to the browser.
+- Do not change private app route behavior.
+- Do not make Plaivra look like a manual calorie tracker, generic gym app, or food database.
+- Do not add stock bodybuilding imagery.
 
 Verification:
 - Run typecheck, lint, and build if feasible.
-- Test /settings/account at 390x844.
-- Verify signed-in account identity appears.
-- Verify sign-out pending/failure behavior.
-- Verify deletion request uses app confirmation, not window.confirm.
-- Verify existing pending deletion request appears before submit.
-- Verify deletion POST cannot leave the button stuck.
-- Verify deletion status appears inline.
-- Verify ChatGPT revocation copy/status appears when relevant.
-- Verify Back, Sign out, Request deletion, and key row controls are 48px.
-- Verify /settings, /settings/data-privacy, and /settings/ai-imports still work after shared settings control changes.
+- Test /, /login, /register, /auth/oauth-complete, /auth/consent-completion, /forgot-password, and /reset-password at 390x844.
+- Verify landing explains the workflow in five seconds.
+- Verify product UI cards/workflow visuals replace stock photos.
+- Verify mobile nav keeps sign in and trust/legal access reachable.
+- Verify OAuth has pending state and repeated-click prevention.
+- Verify auth errors appear inline.
+- Verify OAuth and consent fallbacks are branded, not blank.
+- Verify consent rows/checks meet 48px effective target.
+- Verify forgot/reset password have inline success/error states.
+- Verify reduced-motion disables/gates hero animation.
+- Verify Arabic and English public/auth copy remain coherent.
 - Review git diff before final report.
 ```
