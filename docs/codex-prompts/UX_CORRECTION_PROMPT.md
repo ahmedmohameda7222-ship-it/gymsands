@@ -20,6 +20,7 @@ Completed audits:
 - `/dashboard` — 72/100 — fixes open
 - `/onboarding?edit=true` — 66/100 — fixes open
 - `/my-workout/plans` — 63/100 — fixes open
+- `/workouts/session/day/[dayId]` — 58/100 — fixes open
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
@@ -47,6 +48,17 @@ $memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
 
 Mode: high plus advisor
 Advisor: strict senior product engineer + user-data safety reviewer
+```
+
+### One-route work touching active workout logging reliability
+
+```text
+/caveman lite
+
+$memory-management $agent-coder $agent-reviewer $agent-tester
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + data-integrity reviewer
 ```
 
 ### Future multi-route bundle
@@ -221,6 +233,74 @@ Verification:
 - Test active plan with rest day/no today workout.
 - Test More actions, delete confirmation, archive, duplicate, rename, and set default.
 - Test ChatGPT import visibility and access prompt.
+- Review git diff before final report.
+
+Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+```
+
+---
+
+## Prompt section 4 — Workout session correction
+
+```text
+/caveman lite
+
+$memory-management $agent-coder $agent-reviewer $agent-tester
+
+Task: Implement the audited P0/P1 workout session UX and reliability corrections for Plaivra.
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + workout logging data-integrity reviewer
+
+Read first:
+- CHATGPT_CODEX_PROMPT_RULES.md
+- Ruflo_usage.md
+- docs/ux-constitution/README.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
+- docs/ux-progress/README.md
+- docs/ux-progress/routes/workout-session-day.md
+
+Primary route:
+- /workouts/session/day/[dayId]
+
+Flow decision:
+- Tune flow with one P0 bug fix.
+
+Inspect first:
+- app/(private)/workouts/session/day/[dayId]/page.tsx
+- components/workouts/workout-session-screen.tsx
+- components/workouts/workout-day-focus-session.tsx
+- components/layout/mobile-sticky-actions.tsx
+- components/ui/button.tsx
+- components/motion/index.tsx
+- lib/motion.ts
+- lib/workout-persistence.ts
+- lib/active-workout.ts
+- services/database/workout-sessions.ts
+
+Required fixes:
+1. Restore or replace the in-session mobile sticky CTA so Finish Set / Rest / Finish Workout is reachable on mobile.
+2. Add rollback for failed optimistic finishSet persistence, including completed state, active set/exercise, and rest timer where needed.
+3. Add rollback for failed restartSet persistence.
+4. Add clearer starting/resuming session pending state while logs/history hydrate.
+5. Resize close/back/more/exercise chip/set path/advanced sheet controls to 48px effective tap targets.
+6. Simplify exit behavior and guard unsaved local changes before leaving.
+7. Add clear failure feedback when a set save fails.
+8. Add only useful state/rest/finish motion; no decorative animation.
+
+Do not redesign the whole workout session, change workout schema, change unrelated workout plan pages, auth, payments, or unrelated routes.
+
+Verification:
+- Run typecheck, lint, and build if feasible.
+- Test /workouts/session/day/[dayId] at 390x844.
+- Verify Finish Set is reachable without scrolling on mobile.
+- Verify rest-mode bottom action shows timer, +30s, and Skip/Stop clearly.
+- Verify all-sets-complete state shows Finish Workout as dominant action.
+- Simulate failed set save and confirm rollback + retry path.
+- Simulate failed Reopen set and confirm rollback.
+- Verify close/back behavior protects unsaved local changes.
+- Verify advanced actions remain in a sheet and do not clutter the main set screen.
 - Review git diff before final report.
 
 Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
