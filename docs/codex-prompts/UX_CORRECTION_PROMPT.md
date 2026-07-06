@@ -25,6 +25,7 @@ Completed audits:
 - `/workout-history` — 60/100 — fixes open
 - Global app shell / navigation — 63/100 — fixes open
 - `/calories/food-hub` — 55/100 — fixes open
+- `/calories/weekly-overview` — 57/100 — fixes open
 - `/calories` — 54/100 — fixes open after AI-first reframing
 - `/my-meal-plan` — 57/100 — fixes open after AI-first reframing
 - `/hydration` — 68/100 — fixes open
@@ -37,7 +38,7 @@ Completed audits:
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
-Product rule: Plaivra is AI-first where appropriate, but not every route is ChatGPT-first. Manual entry is fallback/correction where appropriate. Food Hub is an advanced manual fallback/correction route for custom foods and saved meals, not the primary AI-first meal logging path.
+Product rule: Plaivra is AI-first where appropriate, but not every route is ChatGPT-first. Weekly Overview / Reports is a read-only analytical review route. It must show source confidence before adding visual polish or AI interpretation.
 
 ---
 
@@ -193,25 +194,45 @@ Verification: nav at 360x780/390x844/430x932, valid links, reduced motion, overl
 
 ```text
 /caveman lite
+$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + nutrition data-integrity reviewer + AI-first product alignment reviewer
+Task: Implement audited Food Hub UX, manual-fallback framing, and custom nutrition safety corrections.
+Primary route: /calories/food-hub
+Read first: docs/ux-progress/routes/food-hub.md
+Required flow: Manual fallback context -> clear data confidence -> safe custom edits -> protected deletes -> 48px mobile controls.
+Required fixes: manual fallback copy, inline load/degraded states, per-item pending, favorite rollback, custom food validation/save state, custom meal pending/failure, confirm/undo deletes, edit mode + cancel/discard, 48px controls, skeleton fallback, dirty guard, structured builder, link/copy back to Calories import path.
+Do not change nutrition schema, AI import/apply behavior, auth, global theme, or unrelated routes except shared FoodBrowser regression checks.
+Verification: fallback framing, load states, pending actions, delete confirmations, draft preservation, 48px controls, /calories regression, mobile 390x844.
+```
+
+---
+
+## Prompt section 10 — Weekly Overview / Reports correction
+
+```text
+/caveman lite
 
 $memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
 
 Mode: high plus advisor
-Advisor: strict senior mobile product engineer + nutrition data-integrity reviewer + AI-first product alignment reviewer
+Advisor: strict senior mobile product engineer + reporting data-confidence reviewer + health-data privacy reviewer
 
-Task: Implement audited Food Hub UX, manual-fallback framing, and custom nutrition safety corrections.
+Task: Implement audited Weekly Overview / Fitness Reports UX and report-confidence corrections.
 
 Primary route:
-- /calories/food-hub
+- /calories/weekly-overview
 
 Relevant files to inspect first:
-- app/(private)/calories/food-hub/page.tsx
-- components/meals/food-browser.tsx
-- components/meals/custom-nutrition-manager.tsx
+- app/(private)/calories/weekly-overview/page.tsx
+- components/meals/weekly-overview.tsx
+- components/reports/reporting-dashboard.tsx
+- services/reports/reporting.ts
 - services/database/nutrition.ts
-- docs/ux-progress/routes/food-hub.md
-- docs/ux-progress/routes/calories.md
-- docs/ux-progress/routes/my-meal-plan.md
+- services/database/progress.ts
+- services/database/workout-sessions.ts
+- services/wellness/wellness-data.ts
+- docs/ux-progress/routes/weekly-overview-reports.md
 
 Read first:
 - CHATGPT_CODEX_PROMPT_RULES.md
@@ -221,71 +242,66 @@ Read first:
 - docs/ux-constitution/flow-and-workflow-audit.md
 - docs/ux-constitution/motion-and-interaction.md
 - docs/ux-progress/README.md
-- docs/ux-progress/routes/food-hub.md
+- docs/ux-progress/routes/weekly-overview-reports.md
 
 Flow decision:
-- Tune flow with manual-fallback framing, form-state hardening, and destructive-action protection.
+- Tune flow with report-source confidence, empty-state clarity, and readable period controls.
 
 Product rule:
-- Food Hub is not the primary AI-first meal entry path. It is an advanced manual fallback/correction route for custom foods, saved meals, and reusable library items. Do not make it compete with ChatGPT/photo/text import as the primary nutrition flow.
+- Weekly Overview / Reports is a read-only analytical review route. Do not make ChatGPT interpretation primary. Add AI review only later as an explicit read-only action, not a silent analysis or data mutation.
 
 Required flow:
-- Manual fallback context -> clear data confidence -> safe custom edits -> protected deletes -> 48px mobile controls.
+- Readable period controls -> source confidence -> skeleton/ErrorState -> clear missing-data explanations -> optional safe export.
 
 Required fixes:
-1. Reframe Food Hub copy as manual fallback/correction, not primary food logging.
-2. Add inline load/degraded states for kitchens, custom meals, favorites, and food library fallback.
-3. Add per-item pending and duplicate protection for Log food, Add to plan, and Log saved meal.
-4. Add optimistic favorite rollback and error handling.
-5. Add inline validation and save/failure state for custom food form.
-6. Add pending/failure state for custom meal save.
-7. Add confirmation/undo for deleting custom food and saved meal.
-8. Add visible edit mode plus cancel/discard for custom food and custom meal editing.
-9. Resize selects, buttons, and list actions to 48px and stack dense action rows on mobile.
-10. Replace FoodHubFallback plain text with skeleton.
-11. Add dirty-state guard before hiding builder with an unsaved draft.
-12. Structure builder with tabs/sections if needed to reduce density, without rebuilding the entire route.
-13. Add direct link/copy back to AI-first Calories import path.
+1. Replace plain loading text with report skeleton.
+2. Replace plain failure text/toast-only behavior with inline ErrorState and retry.
+3. Add source-level confidence/coverage for nutrition, workouts, progress, habits, sleep, and PRs.
+4. Distinguish complete, partial, failed, no-data, and insufficient-data states.
+5. Replace “Empty states / period checks” with user-facing “Data coverage this period.”
+6. Rework period controls into a 48px segmented Weekly/Monthly control plus readable pager/current/date control.
+7. Add empty report guidance with links to Calories, Today Workout, Progress, Wellness/Sleep, and Habits where relevant.
+8. Expose CSV export using existing helpers with local-file privacy copy, or leave export disabled and document why.
+9. Keep previous report visible while next period loads, with clear loading overlay/status if feasible.
+10. Do not add charts until source confidence states are correct.
 
 Do not:
-- Do not change nutrition database schema.
-- Do not change AI import/apply behavior.
-- Do not make Food Hub the primary logging route.
-- Do not remove existing FoodBrowser or CustomNutritionManager capability.
+- Do not change database schema.
 - Do not change auth behavior.
-- Do not change global theme.
-- Do not touch unrelated routes except to verify shared FoodBrowser regression on `/calories`.
+- Do not change AI import/apply behavior.
+- Do not make AI report interpretation primary.
+- Do not add silent data mutation.
+- Do not redesign global navigation or unrelated route flows.
+- Do not overstate health conclusions from incomplete data.
 
 Implementation guidance:
-- Preserve current capability: food search/browser -> log/add/favorite -> custom food builder -> custom meal builder -> saved meal logging.
-- Shared FoodBrowser changes must be safe for `/calories` too.
-- Keep useful local/fallback food data, but surface fallback/degraded state.
-- Deleting custom food/meal must not be silent; use app confirmation or undo.
-- Save failures must preserve user drafts.
-- Use sober feedback; no decorative food-card animation.
+- Preserve the current aggregation model: week/month period -> aggregate user data -> metric cards -> detail sections.
+- Prefer source-level result wrappers so one failed source does not collapse the whole report.
+- If service functions still return [] on error, expose “unknown/partial” where feasible from the dashboard layer.
+- Keep report copy cautious and clear: averages are based only on logged days.
+- CSV export contains sensitive health data; add local-file privacy copy and success/failure state if exposed.
+- Use sober feedback; no decorative report animation.
 
 Verification:
 - Run typecheck, lint, and build if feasible.
-- Test `/calories/food-hub` at 390x844.
-- Verify route copy frames Food Hub as manual fallback/correction.
-- Verify Food Hub loading uses skeleton.
-- Verify food library fallback/degraded state is visible.
-- Verify kitchen/custom/favorite load failures are visible and retryable where feasible.
-- Verify Log food, Add to plan, and Log saved meal have per-item pending and duplicate protection.
-- Verify favorite failure rolls back or shows clear recovery.
-- Verify custom food form shows inline validation and save failure while preserving draft.
-- Verify custom meal save has pending/failure and preserves draft.
-- Verify Delete custom food and Delete saved meal require confirm/undo.
-- Verify editing food/meal shows edit mode and supports cancel/discard.
-- Verify main selects/buttons/icon actions meet 48px target.
-- Verify shared FoodBrowser changes do not regress `/calories`.
-- Verify no nutrition schema/auth/AI/global-theme/unrelated-route changes.
+- Test `/calories/weekly-overview` at 390x844.
+- Verify loading uses skeleton cards.
+- Verify whole-report failure shows ErrorState with retry.
+- Verify partial source failure shows degraded/partial report banner.
+- Verify nutrition/workout/progress/habit/sleep/PR source coverage is visible.
+- Verify no-data and insufficient-data are distinct from failed data.
+- Verify “Empty states / period checks” copy is replaced.
+- Verify Weekly/Monthly and period navigation controls are 48px and readable on mobile.
+- Verify empty report guidance links to relevant logging routes.
+- Verify CSV export, if added, includes privacy/local-file copy and success/failure state.
+- Verify no source failure silently becomes a confident zero-data metric.
+- Verify no schema/auth/AI/global-theme/unrelated-route changes.
 - Review git diff before final report.
 ```
 
 ---
 
-## Prompt section 10 — Calories AI-first correction
+## Prompt section 11 — Calories AI-first correction
 
 ```text
 /caveman lite
@@ -301,7 +317,7 @@ Verification: AI import primary, reviewable estimates, fallback paths, water/rec
 
 ---
 
-## Prompt section 11 — Meal plan AI-first correction
+## Prompt section 12 — Meal plan AI-first correction
 
 ```text
 /caveman lite
@@ -317,7 +333,7 @@ Verification: import/update primary, reviewable plan data, manual fallback, Mark
 
 ---
 
-## Prompt section 12 — Hydration correction
+## Prompt section 13 — Hydration correction
 
 ```text
 /caveman lite
@@ -332,7 +348,7 @@ Verification: loading gate, optimistic rollback, duplicate protection, target st
 
 ---
 
-## Prompt section 13 — Wellness correction
+## Prompt section 14 — Wellness correction
 
 ```text
 /caveman lite
@@ -348,7 +364,7 @@ Verification: compact check-in, loading/degraded states, save failure, 48px cont
 
 ---
 
-## Prompt section 14 — Progress correction
+## Prompt section 15 — Progress correction
 
 ```text
 /caveman lite
@@ -363,7 +379,7 @@ Verification: load/failed/empty states, goal/trend hero, edit/delete/photo state
 
 ---
 
-## Prompt section 15 — Settings hub correction
+## Prompt section 16 — Settings hub correction
 
 ```text
 /caveman lite
@@ -379,7 +395,7 @@ Verification: profile modes, setup states, grouped cards, 48px controls, mobile 
 
 ---
 
-## Prompt section 16 — AI imports correction
+## Prompt section 17 — AI imports correction
 
 ```text
 /caveman lite
@@ -396,7 +412,7 @@ Verification: confidence hero, failed-load safety, full-access confirmation, rev
 
 ---
 
-## Prompt section 17 — Data privacy correction
+## Prompt section 18 — Data privacy correction
 
 ```text
 /caveman lite
@@ -412,7 +428,7 @@ Verification: hide-vs-delete, toggle states, export states, reset confirmation, 
 
 ---
 
-## Prompt section 18 — Preferences correction
+## Prompt section 19 — Preferences correction
 
 ```text
 /caveman lite
