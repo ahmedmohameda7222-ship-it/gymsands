@@ -22,6 +22,7 @@ Completed audits:
 - `/onboarding?edit=true` — 66/100 — fixes open
 - `/my-workout/plans` — 63/100 — fixes open
 - `/workouts/session/day/[dayId]` — 58/100 — fixes open
+- `/my-workout/day/[dayId]` — 59/100 — fixes open
 - `/calories` — 54/100 — fixes open after AI-first reframing
 - `/my-meal-plan` — 57/100 — fixes open after AI-first reframing
 - `/hydration` — 68/100 — fixes open
@@ -34,11 +35,11 @@ Completed audits:
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
-Product rule: Plaivra is an AI-first tracker where appropriate, but not every route is ChatGPT-first. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking. Settings is a trust/control hub. AI imports is the permission/connection trust layer. Data privacy is the sensitive visibility/export/settings-reset route. Preferences is the app-behavior/accessibility route.
+Product rule: Plaivra is AI-first where appropriate, but not every route is ChatGPT-first. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking. Settings is a trust/control hub. Workout day editor is a manual correction route that must protect local drafts and unsaved edits.
 
 ---
 
-## Setup guide
+## Standard setup
 
 ### Standard one-route UI correction
 
@@ -71,7 +72,7 @@ Advisor: strict senior mobile product engineer + user-data safety reviewer
 
 $memory-management $agent-coder $agent-reviewer $agent-tester
 
-Task: Implement the audited P1 dashboard UX corrections for Plaivra.
+Task: Implement audited dashboard UX corrections for Plaivra.
 
 Read first:
 - CHATGPT_CODEX_PROMPT_RULES.md
@@ -92,14 +93,12 @@ Required fixes:
 4. Add optimistic UI and pending protection for meal Done.
 5. Make Done dominant and Skip secondary in meal rows.
 6. Restyle meal type selector into a calmer segmented/horizontal selector.
-7. Ensure dashboard reflects Plaivra's AI-first model where relevant: imported/active state and review/apply needs.
+7. Reflect imported/active AI-first state where relevant.
 8. Use motion only for feedback/state clarity.
 
-Do not touch unrelated routes, env files, schema, migrations, auth, API routes, settings, subscriptions, or global theme.
+Do not touch unrelated routes, env files, database schema, auth, API routes, settings, subscriptions, or global theme.
 
 Verification: typecheck, lint, build if feasible, mobile 390x844, optimistic success/rollback for water and meal Done, review git diff.
-
-Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
 ```
 
 ---
@@ -111,7 +110,10 @@ Final report: changed files, changes, tests, risks, unverified items, memory_sto
 
 $memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
 
-Task: Implement the audited P0/P1 onboarding edit UX corrections for Plaivra.
+Task: Implement audited onboarding edit UX corrections for Plaivra.
+
+Primary route:
+- /onboarding?edit=true
 
 Read first:
 - CHATGPT_CODEX_PROMPT_RULES.md
@@ -122,9 +124,6 @@ Read first:
 - docs/ux-constitution/motion-and-interaction.md
 - docs/ux-progress/README.md
 
-Primary route:
-- /onboarding?edit=true
-
 Required fixes:
 1. Show Target weight only for weight/body-composition goals or when a saved target weight exists.
 2. Add edit-mode saved-answer loading gate.
@@ -133,11 +132,9 @@ Required fixes:
 5. Improve AI permission trust framing and review summary.
 6. Make mobile step navigation calmer.
 
-Inspect onboarding/profile/AI-permission files only. Do not change database schema, auth behavior, or unrelated routes.
+Do not change schema, auth behavior, or unrelated routes.
 
 Verification: typecheck, lint, build if feasible, mobile 390x844, non-weight goals, weight goals, saved target weight case, AI permissions save.
-
-Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
 ```
 
 ---
@@ -149,42 +146,33 @@ Final report: changed files, changes, tests, risks, unverified items, memory_sto
 
 $memory-management $agent-coder $agent-reviewer $agent-tester
 
-Task: Implement the audited P1 workout plans UX corrections for Plaivra.
-
-Read first:
-- CHATGPT_CODEX_PROMPT_RULES.md
-- Ruflo_usage.md
-- docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/README.md
-- docs/ux-constitution/flow-and-workflow-audit.md
-- docs/ux-constitution/motion-and-interaction.md
-- docs/ux-progress/README.md
-- docs/ux-progress/routes/my-workout-plans.md
+Task: Implement audited workout plans UX corrections.
 
 Primary route:
 - /my-workout/plans
 
-Flow decision:
-- Reorder flow.
+Read first:
+- docs/ux-progress/routes/my-workout-plans.md
+- docs/product/ai-first-tracker-model.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
 
 Required flow:
 - Today hero -> weekly calendar -> saved plan library -> add/import plan.
 
 Required fixes:
-1. Reorder route so active plan users see a Today hero first.
-2. Replace no-plan empty state with setup choice hero: Import from ChatGPT primary, Create manually secondary.
+1. Reorder route so active plan users see Today first.
+2. Replace no-plan empty state with Import from ChatGPT primary and Create manually secondary.
 3. Move Create manually and Import into an Add plan area.
 4. Remove duplicate Start Today patterns.
-5. Make plan More actions trigger and menu items 48px effective tap targets.
-6. Separate high-risk menu actions visually from normal actions.
-7. Improve ChatGPT import/access framing and standard button styling.
-8. Add only useful state/motion feedback; no decorative animation.
+5. Make plan More actions trigger/menu 48px targets.
+6. Separate high-risk menu actions visually.
+7. Improve ChatGPT import/access framing.
+8. Keep motion state-based only.
 
-Do not change workout session tracking, database schema, auth, payments, or unrelated routes.
+Do not change workout session tracking, schema, auth, payments, or unrelated routes.
 
-Verification: typecheck, lint, build if feasible, mobile 390x844, no-plan state, active plan today workout/rest day, More actions, delete confirmation, import visibility.
-
-Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+Verification: typecheck, lint, build if feasible, mobile 390x844, no-plan, active-plan, rest-day, More actions, delete confirmation, import visibility.
 ```
 
 ---
@@ -196,55 +184,54 @@ Final report: changed files, changes, tests, risks, unverified items, memory_sto
 
 $memory-management $agent-coder $agent-reviewer $agent-tester
 
-Task: Implement the audited P0/P1 workout session UX and reliability corrections for Plaivra.
-
 Mode: high plus advisor
 Advisor: strict senior mobile product engineer + workout logging data-integrity reviewer
 
-Read first:
-- CHATGPT_CODEX_PROMPT_RULES.md
-- Ruflo_usage.md
-- docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/README.md
-- docs/ux-constitution/flow-and-workflow-audit.md
-- docs/ux-constitution/motion-and-interaction.md
-- docs/ux-progress/README.md
-- docs/ux-progress/routes/workout-session-day.md
+Task: Implement audited workout session UX and reliability corrections.
 
 Primary route:
 - /workouts/session/day/[dayId]
+
+Read first:
+- docs/ux-progress/routes/workout-session-day.md
 
 Required fixes:
 1. Restore or replace the in-session mobile sticky CTA so Finish Set / Rest / Finish Workout is reachable on mobile.
 2. Add rollback for failed optimistic finishSet persistence.
 3. Add rollback for failed restartSet persistence.
-4. Add clearer starting/resuming session pending state while logs/history hydrate.
-5. Resize close/back/more/exercise chip/set path/advanced sheet controls to 48px effective tap targets.
+4. Add clearer starting/resuming session pending state.
+5. Resize close/back/more/exercise chip/set path/advanced sheet controls to 48px.
 6. Simplify exit behavior and guard unsaved local changes before leaving.
 7. Add clear failure feedback when a set save fails.
-8. Keep ChatGPT as support for replacement/coaching, not as required for every set.
-9. Add only useful state/rest/finish motion; no decorative animation.
+8. Keep ChatGPT as support, not required for every set.
+9. Use motion only for state/rest/finish clarity.
 
-Do not redesign the whole workout session, change workout schema, auth, payments, or unrelated routes.
+Do not redesign the session, change workout schema, auth, payments, or unrelated routes.
 
-Verification: typecheck, lint, build if feasible, mobile 390x844, Finish Set reachable, rest bottom action, all-sets-complete finish action, failed set save rollback, failed reopen rollback, exit guard.
-
-Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+Verification: typecheck, lint, build if feasible, mobile 390x844, Finish Set reachable, rest bottom action, final finish action, failed save rollback, exit guard.
 ```
 
 ---
 
-## Prompt section 5 — Calories AI-first correction
+## Prompt section 5 — Workout day editor correction
 
 ```text
 /caveman lite
 
-$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
-
-Task: Implement the audited P0/P1 AI-first calories tracking corrections for Plaivra.
+$memory-management $agent-reviewer $agent-coder $agent-tester
 
 Mode: high plus advisor
-Advisor: strict senior mobile product engineer + AI import/review/apply safety reviewer + daily nutrition UX reviewer
+Advisor: strict senior mobile product engineer + workout editor data-integrity reviewer + mobile interaction reviewer
+
+Task: Implement audited workout day editor UX and draft-safety corrections.
+
+Primary route:
+- /my-workout/day/[dayId]
+
+Related routes:
+- /my-workout/day/[dayId]/add-exercise
+- /my-workout/plans/[planId]
+- /my-workout/plans/builder
 
 Read first:
 - CHATGPT_CODEX_PROMPT_RULES.md
@@ -254,388 +241,337 @@ Read first:
 - docs/ux-constitution/flow-and-workflow-audit.md
 - docs/ux-constitution/motion-and-interaction.md
 - docs/ux-progress/README.md
-- docs/ux-progress/routes/calories.md
+- docs/ux-progress/routes/workout-day-editor.md
+
+Relevant files to inspect first:
+- app/(private)/my-workout/day/[dayId]/page.tsx
+- components/workouts/workout-day-editor.tsx
+- app/(private)/my-workout/day/[dayId]/add-exercise/page.tsx
+- components/workouts/workout-day-add-exercise.tsx
+- app/(private)/my-workout/plans/[planId]/page.tsx
+- components/workouts/workout-plan-detail.tsx
+- components/workouts/workout-plan-builder.tsx
+- services/database/workout-plans.ts
+
+Flow decision:
+- Tune flow with editor-state and unsaved-change hardening.
+
+Product rule:
+- Workout day editor is not AI/import-first. It is a manual correction editor for a saved workout plan day. It must protect local drafts, unsaved edits, and save failure recovery.
+
+Required flow:
+- Known day -> visible draft state -> safe edits -> protected cancel/back/remove -> reliable save.
+
+Required fixes:
+1. Add editor status bar showing draft restored, unsaved changes, saving, saved, and failed states.
+2. Add unsaved-change guard for Back and Cancel; Cancel must confirm before clearing the local draft.
+3. Add inline save failure state with retry and keep local draft intact.
+4. Add draft-restored banner with discard draft action.
+5. Add confirm/undo for remove exercise.
+6. Resize move/edit/remove exercise controls to 48px effective targets.
+7. Replace plain day load failure with ErrorState and retry/back.
+8. Add clear add-exercise route guidance: changes are draft until saved.
+9. Distinguish add-exercise failed search/filter load from true empty result.
+10. Add 48px stacking for details/guide/custom-video controls.
+11. Validate custom video URL format inline.
+12. Prefer returning to plan detail after save when route context is known.
+13. Add reduced-motion-safe reorder/remove feedback.
+
+Do not:
+- Do not change workout database schema.
+- Do not change auth behavior.
+- Do not change workout session execution.
+- Do not change AI import/apply behavior.
+- Do not redesign the editor from scratch.
+- Do not touch global theme or unrelated routes.
+
+Implementation guidance:
+- Preserve the current route model: plan detail -> edit selected day -> local draft editor -> add exercise browser -> save day.
+- Keep local draft persistence; make it visible and recoverable.
+- Clear local draft only after confirmed save or confirmed discard.
+- Treat remove/reorder/edit as draft changes until Save Workout succeeds.
+- Use sober state feedback; no decorative animation.
+
+Verification:
+- Run typecheck, lint, and build if feasible.
+- Test /my-workout/day/[dayId] at 390x844.
+- Verify skeleton and ErrorState for day load.
+- Verify restored local draft is visible and discardable.
+- Verify unsaved changes appear after day/exercise edits.
+- Verify Back/Cancel do not silently lose edits.
+- Verify save failure keeps draft and shows inline retry/failure.
+- Verify remove exercise has confirm/undo behavior.
+- Verify move/edit/remove controls are 48px targets.
+- Verify add-exercise route explains draft-until-save behavior.
+- Verify add-exercise failed loads are not shown as true empty results.
+- Verify custom video URL validation works.
+- Verify no schema/auth/session/AI/global-theme/unrelated-route changes.
+- Review git diff before final report.
+```
+
+---
+
+## Prompt section 6 — Calories AI-first correction
+
+```text
+/caveman lite
+
+$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + AI import/review/apply safety reviewer + daily nutrition UX reviewer
+
+Task: Implement audited AI-first calories tracking corrections.
 
 Primary route:
 - /calories
 
-Flow decision:
-- Needs AI-first reframing.
+Read first:
+- docs/ux-progress/routes/calories.md
 
 Required flow:
 - ChatGPT meal import/review -> Plaivra overview/tracking -> manual fallback/correction.
 
 Required fixes:
-1. Add or surface primary ChatGPT meal import path on /calories Today view.
-2. Add review/apply/correct stage for imported ChatGPT meal estimates before saving.
+1. Add or surface primary ChatGPT meal import on Today view.
+2. Add review/apply/correct stage before saving imported estimates.
 3. Reorder Today view into AI-first overview.
-4. Keep manual add/search/custom/barcode/recent as fallback/quick correction.
-5. Resize mobile tab selector, date nav, recent food Log, favorite, delete, and water controls to 48px targets.
-6. Add optimistic water add with pending duplicate protection and rollback.
-7. Add pending/feedback for Recent food Log and prevent duplicate rapid taps.
+4. Keep manual add/search/custom/barcode/recent as fallback.
+5. Resize mobile tab selector, date nav, recent food Log, favorite, delete, and water controls to 48px.
+6. Add optimistic water add with duplicate protection and rollback.
+7. Add pending/feedback for Recent food Log.
 8. Add pending/rollback or safe unchanged behavior for food/water delete.
-9. Replace custom load error UI with shared ErrorState and retry.
-10. Add only useful import/review/apply motion; no decorative animation.
+9. Use shared ErrorState and retry.
+10. Use motion only for import/review/apply state.
 
-Do not rewrite nutrition calculations, database schema, auth, payments, unrelated meal-plan routes, or global theme. Do not silently apply AI-estimated food data without review/apply/correct.
+Do not rewrite nutrition calculations, schema, auth, payments, unrelated meal-plan routes, or silently apply AI-estimated data.
 
-Verification: typecheck, lint, build if feasible, mobile 390x844, AI meal import primary, imported estimates reviewable, manual fallback available, water/recent/delete pending and rollback, weekly/targets/barcode still work, review git diff.
-
-Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+Verification: typecheck, lint, build if feasible, mobile 390x844, AI import primary, reviewable estimates, fallback paths, water/recent/delete states.
 ```
 
 ---
 
-## Prompt section 6 — Meal plan AI-first correction
+## Prompt section 7 — Meal plan AI-first correction
 
 ```text
 /caveman lite
 
 $memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
 
-Task: Implement the audited P0/P1 AI-first meal plan corrections for Plaivra.
-
 Mode: high plus advisor
 Advisor: strict senior mobile product engineer + AI import/review/apply safety reviewer + meal planning data-integrity reviewer
 
-Read first:
-- CHATGPT_CODEX_PROMPT_RULES.md
-- Ruflo_usage.md
-- docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/README.md
-- docs/ux-constitution/flow-and-workflow-audit.md
-- docs/ux-constitution/motion-and-interaction.md
-- docs/ux-progress/README.md
-- docs/ux-progress/routes/my-meal-plan.md
+Task: Implement audited AI-first meal plan corrections.
 
 Primary route:
 - /my-meal-plan
 
-Relevant files to inspect first:
-- app/(private)/my-meal-plan/page.tsx
-- components/meals/my-meal-plan-builder.tsx
-- components/meals/meal-ai-actions.tsx
-- components/meals/grocery-list-panel.tsx
-- components/meals/meal-plan-calendar.tsx
-- components/ai/ai-action-request-dialog.tsx
-- services/database/meal-plan.ts
-- services/database/execution-layer.ts
-- types/database.ts
-
-Flow decision:
-- Needs AI-first reframing.
+Read first:
+- docs/ux-progress/routes/my-meal-plan.md
 
 Required flow:
 - ChatGPT meal-plan import/review -> Plaivra planned overview -> shopping / mark done -> manual fallback/correction.
 
 Required fixes:
 1. Add persistent route-level primary CTA: Import/update meal plan with ChatGPT.
-2. Add review/apply/correct stage for structured ChatGPT meal-plan results before saving.
-3. Reframe empty day and empty meal-type states so ChatGPT import/update is primary and manual add is fallback.
-4. Reorder first screen into meal-plan status/import hero -> pending review/apply area -> today planned meals -> week/shopping/manual tools.
-5. Change Add source order: ChatGPT import/update first, Quick add and Food Hub secondary.
-6. Fix Done carbs summary detail so it uses done fat, not planned fat.
-7. Resize key date, meal, item, form, and grocery controls to 48px targets.
-8. Add clearer pending/success/failure states for Mark Done.
-9. Add pending/duplicate protection for Add to grocery.
-10. Add optimistic grocery checked/already-have interactions with rollback.
-11. Replace custom route/grocery load errors with shared ErrorState where practical.
-12. Move Food preferences out of the tab row.
-13. Reduce repeated per-item ChatGPT visual density after route-level import becomes primary.
-14. Add useful reduced-motion-safe import/review/apply, mark-done, and checklist feedback.
+2. Add review/apply/correct stage for structured ChatGPT meal-plan results.
+3. Reframe empty states so ChatGPT import/update is primary and manual add is fallback.
+4. Reorder first screen into meal-plan status/import hero -> review/apply -> today planned meals -> week/shopping/manual tools.
+5. Put ChatGPT import/update first in Add source.
+6. Fix Done carbs summary detail to use done fat.
+7. Resize key date, meal, item, form, and grocery controls to 48px.
+8. Add pending/success/failure states for Mark Done.
+9. Add duplicate protection for Add to grocery.
+10. Add optimistic grocery checked/already-have rollback.
+11. Use shared ErrorState where practical.
+12. Move Food preferences out of tab row.
+13. Reduce per-item ChatGPT density after route-level import exists.
+14. Add reduced-motion-safe feedback.
 
-Safety rule: if no structured ChatGPT meal-plan apply path exists, do not fake silent import. Surface the primary request/update flow and add a safe review/apply placeholder or pending state that preserves current data until explicit approval.
+Do not silently apply AI-generated data or change schema/auth/subscriptions/global theme/unrelated routes.
 
-Do not redesign from scratch, rewrite nutrition calculations, change auth, subscriptions, global theme, unrelated routes, or silently apply AI-generated data.
-
-Verification: typecheck, lint, build if feasible, mobile 390x844, import/update primary, plans reviewable/correctable or safe placeholder, manual add/Food Hub/edit/delete/preferences still work, Mark Done logs Calories safely, grocery actions protected, Done carbs fixed, Week/Shopping still work, review git diff.
-
-Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+Verification: typecheck, lint, build if feasible, mobile 390x844, import/update primary, reviewable plan data, manual fallback, Mark Done, grocery states, Done carbs fixed.
 ```
 
 ---
 
-## Prompt section 7 — Hydration direct-logging correction
+## Prompt section 8 — Hydration correction
 
 ```text
 /caveman lite
 
 $memory-management $agent-coder $agent-reviewer $agent-tester
-
-Task: Implement the audited P1/P2 hydration UX and direct-logging reliability corrections for Plaivra.
 
 Mode: high plus advisor
 Advisor: strict senior mobile product engineer + daily logging data-integrity reviewer
 
-Read first:
-- CHATGPT_CODEX_PROMPT_RULES.md
-- Ruflo_usage.md
-- docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/README.md
-- docs/ux-constitution/flow-and-workflow-audit.md
-- docs/ux-constitution/motion-and-interaction.md
-- docs/ux-progress/README.md
-- docs/ux-progress/routes/hydration.md
+Task: Implement audited hydration direct-logging corrections.
 
 Primary route:
 - /hydration
 
-Relevant files to inspect first:
-- app/(private)/hydration/page.tsx
-- services/database/nutrition.ts
-- types/database.ts
+Read first:
+- docs/ux-progress/routes/hydration.md
 
 Product rule:
-- Hydration is intentionally not ChatGPT/import-first. Direct quick logging is primary. Do not add AI as the main hydration action.
-
-Required flow:
-- Today hero -> quick add -> manual fallback -> recent entries -> weekly context -> streak/reminder.
+- Hydration is direct quick logging. Do not add AI as the main hydration action.
 
 Required fixes:
-1. Add initial loading gate/skeleton so the hero does not show false 0 L while hydration data is loading.
-2. Add optimistic quick-add for water logs with rollback on failure.
-3. Add per-action pending state and duplicate rapid-tap protection for quick add and manual add.
-4. Add optimistic delete for recent water entries with rollback and restored-entry error copy.
-5. Resize delete controls to 48px effective tap targets.
-6. Add clearer failure copy for add/delete.
-7. Add a calm target-hit state or success moment when total reaches target.
-8. Make missing-target state more actionable.
-9. Resize Refresh and Edit Targets to comfortable 48px effective targets.
-10. Add controlled progress/row motion for add/delete and respect reduced motion.
-11. Surface degraded/partial-load state if week/target/logs cannot fully load where feasible.
+1. Add initial loading gate/skeleton so hero does not show false 0 L.
+2. Add optimistic quick-add with rollback.
+3. Add per-action pending and rapid-tap protection.
+4. Add optimistic delete with rollback/restored-entry copy.
+5. Resize delete, Refresh, and Edit Targets to 48px.
+6. Add clearer failure copy.
+7. Add calm target-hit state.
+8. Make missing-target state actionable.
+9. Surface degraded/partial-load state where feasible.
+10. Add reduced-motion-safe progress/row feedback.
 
-Do not add ChatGPT/import as the primary hydration path, redesign route from scratch, change schema, rewrite calorie target editing, or touch unrelated routes.
+Do not add primary ChatGPT/import, redesign the route, change schema, or touch unrelated routes.
 
-Verification: typecheck, lint, build if feasible, mobile 390x844, loading gate, optimistic add/delete rollback, duplicate protection, 48px controls, target-hit/missing-target states, weekly totals correct, ErrorState retry, no primary ChatGPT action, review git diff.
-
-Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+Verification: typecheck, lint, build if feasible, mobile 390x844, loading gate, optimistic add/delete rollback, duplicate protection, target states.
 ```
 
 ---
 
-## Prompt section 8 — Wellness hub correction
+## Prompt section 9 — Wellness correction
 
 ```text
 /caveman lite
 
 $memory-management $agent-coder $agent-reviewer $agent-tester
 
-Task: Implement the audited P1/P2 wellness hub UX and data-state corrections for Plaivra.
-
 Mode: high plus advisor
 Advisor: strict senior mobile product engineer + calm wellness UX reviewer + data-state reliability reviewer
 
-Read first:
-- CHATGPT_CODEX_PROMPT_RULES.md
-- Ruflo_usage.md
-- docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/README.md
-- docs/ux-constitution/flow-and-workflow-audit.md
-- docs/ux-constitution/motion-and-interaction.md
-- docs/ux-progress/README.md
-- docs/ux-progress/routes/wellness.md
+Task: Implement audited wellness hub corrections.
 
 Primary route:
 - /wellness
 
-Relevant files to inspect first:
-- app/(private)/wellness/page.tsx
-- components/wellness/daily-checkins.tsx
-- services/database/wellness.ts
-- services/wellness/wellness-data.ts
-- services/database/execution-layer.ts
-- types/database.ts
-
-Flow decision:
-- Reorder flow.
+Read first:
+- docs/ux-progress/routes/wellness.md
 
 Product rule:
-- Wellness is not ChatGPT/import-first. It is a calm daily hub and check-in route. Check-in context may support later ChatGPT requests, but it must not automatically change plans.
+- Wellness is a calm hub/check-in route. Do not make ChatGPT primary or automatically change plans.
 
 Required flow:
 - Today status -> next wellness action -> compact check-in -> focused launchers -> recent history.
 
 Required fixes:
-1. Add wellness status / next best action hero before full check-in form.
+1. Add wellness status / next action hero.
 2. Reorder route to status/next action -> compact check-in -> launcher cards -> recent check-ins.
-3. Make DailyCheckins compact/contextual on the hub instead of expanded full form by default.
-4. Show only the most relevant check-in first.
-5. Add summary loading skeleton/gate.
-6. Add inline summary error/degraded state with retry.
-7. Add inline check-in save failure and clear not-saved state.
-8. Resize rating buttons and compact check-in controls to 48px.
-9. Add next-action emphasis.
-10. Add calm saved-state transition and optional collapse.
-11. Collapse or move recent check-in history below launcher cards.
-12. Clarify microcopy that check-in context may support ChatGPT requests but does not automatically change plans.
-13. Add reduced-motion-safe reveal/collapse.
+3. Make DailyCheckins compact/contextual by default.
+4. Show most relevant check-in first.
+5. Add summary loading/degraded states.
+6. Add inline check-in save failure and not-saved state.
+7. Resize rating/check-in controls to 48px.
+8. Add next-action emphasis.
+9. Add calm saved-state transition/collapse.
+10. Clarify check-in context does not automatically change plans.
 
-Do not add ChatGPT as the primary wellness action, redesign route from scratch, duplicate full subroute functionality, change schema, or touch unrelated routes/settings/auth.
+Do not add ChatGPT as primary, redesign route, duplicate subroute functionality, change schema, or touch unrelated routes.
 
-Verification: typecheck, lint, build if feasible, mobile 390x844, status/next action visible, compact contextual check-in, launchers visible, loading/degraded states, save failure state, 48px controls, calm motion, no primary ChatGPT action, review git diff.
-
-Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+Verification: typecheck, lint, build if feasible, mobile 390x844, compact check-in, loading/degraded states, save failure, 48px controls.
 ```
 
 ---
 
-## Prompt section 9 — Progress tracker correction
+## Prompt section 10 — Progress correction
 
 ```text
 /caveman lite
 
 $memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
-
-Task: Implement the audited P1/P2 progress tracker UX, privacy, and data-state corrections for Plaivra.
 
 Mode: high plus advisor
 Advisor: strict senior mobile product engineer + privacy-sensitive progress data reviewer + data-state reliability reviewer
 
-Read first:
-- CHATGPT_CODEX_PROMPT_RULES.md
-- Ruflo_usage.md
-- docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/README.md
-- docs/ux-constitution/flow-and-workflow-audit.md
-- docs/ux-constitution/motion-and-interaction.md
-- docs/ux-progress/README.md
-- docs/ux-progress/routes/progress.md
+Task: Implement audited progress tracker corrections.
 
 Primary route:
 - /progress
 
-Relevant files to inspect first:
-- app/(private)/progress/page.tsx
-- components/progress/progress-entry-modal.tsx
-- components/progress/progress-charts.tsx
-- services/database/progress.ts
-- services/progress/progress-measurements.ts
-- services/progress/progress-photos.ts
-- services/database/profile.ts
-- types/database.ts
-
-Flow decision:
-- Tune flow.
+Read first:
+- docs/ux-progress/routes/progress.md
 
 Product rule:
-- Progress is not ChatGPT/import-first. It is sensitive direct tracking. ChatGPT trend interpretation may be added later only as an explicit user-requested review path, not as the primary logging flow.
-
-Required flow:
-- Goal/trend status -> one next logging action -> reliable add/edit/delete/photo states -> private trend review.
+- Progress is direct sensitive tracking. Do not add AI as primary logging flow.
 
 Required fixes:
-1. Add route-level ErrorState/degraded state with retry for failed progress load.
-2. Distinguish empty progress from failed progress load.
-3. Show photo-specific degraded state if photos fail to load instead of silently showing no photos.
-4. Make overview hero goal/trend/next-action focused, not only current-weight focused.
-5. Remove duplicate primary Add progress entry placements.
-6. Add goal weight pending state and explicit synced/local fallback status.
-7. Resize edit/delete/photo/goal/select/link controls to 48px effective targets.
-8. Add row-level pending/failure states for edit/delete entry actions.
-9. Add safer mobile history row interaction instead of action buttons competing inside native summary.
-10. Add privacy copy for progress photos and hidden-photo setting.
-11. Add clear pending/failure state for photo delete.
-12. Add selected-file and inline upload error feedback for photo upload.
-13. Convert raw text “See all / View” controls into comfortable secondary buttons/links.
-14. Add restrained reduced-motion-safe update feedback for add/edit/delete/goal save.
+1. Add route-level ErrorState/degraded state with retry.
+2. Distinguish empty progress from failed load.
+3. Show photo-specific degraded state if photos fail.
+4. Make overview hero goal/trend/next-action focused.
+5. Remove duplicate primary Add progress placements.
+6. Add goal weight pending and synced/local fallback status.
+7. Resize edit/delete/photo/goal/select/link controls to 48px.
+8. Add row-level pending/failure states.
+9. Use safer mobile history row interaction.
+10. Add privacy copy for photos/hidden setting.
+11. Add photo delete pending/failure.
+12. Add selected-file and inline upload error feedback.
+13. Convert raw text controls into comfortable buttons/links.
+14. Add restrained reduced-motion-safe update feedback.
 
-Do not add ChatGPT/AI as the primary progress logging flow, redesign the route from scratch, change schema, change storage bucket policy, touch auth/subscriptions/global theme/unrelated settings, or make medical/body-composition claims.
+Do not change schema, storage policy, auth, subscriptions, global theme, unrelated settings, or make medical claims.
 
-Verification: typecheck, lint, build if feasible, mobile 390x844, distinct loading/failed/empty/real states, goal/trend hero, one primary add action, synced/local goal state, edit/delete/photo states, 48px controls, no primary AI logging flow, review git diff.
-
-Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+Verification: typecheck, lint, build if feasible, mobile 390x844, load/failed/empty states, goal/trend hero, edit/delete/photo states, no primary AI logging.
 ```
 
 ---
 
-## Prompt section 10 — Settings hub correction
+## Prompt section 11 — Settings hub correction
 
 ```text
 /caveman lite
 
 $memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
 
-Task: Implement the audited P1/P2 settings hub UX, trust, and data-state corrections for Plaivra.
-
 Mode: high plus advisor
 Advisor: strict senior mobile product engineer + settings trust/safety reviewer + data-state reliability reviewer
 
-Read first:
-- CHATGPT_CODEX_PROMPT_RULES.md
-- Ruflo_usage.md
-- docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/README.md
-- docs/ux-constitution/flow-and-workflow-audit.md
-- docs/ux-constitution/motion-and-interaction.md
-- docs/ux-progress/README.md
-- docs/ux-progress/routes/settings.md
+Task: Implement audited settings hub corrections.
 
 Primary route:
 - /settings
 
-Relevant files to inspect first:
-- app/(private)/settings/page.tsx
-- components/settings/profile-summary-card.tsx
-- components/settings/setup-progress-card.tsx
-- components/settings/settings-hub-card.tsx
-- components/settings/settings-page-shell.tsx
-- components/settings/settings-section-card.tsx
-- app/(private)/settings/account/page.tsx
-- services/database/profile.ts
-- services/database/nutrition.ts
-- services/database/workout-plans.ts
-
-Flow decision:
-- Tune flow.
-
-Product rule:
-- Settings is not AI/import-first. It is a trust/control hub.
+Read first:
+- docs/ux-progress/routes/settings.md
 
 Required flow:
 - Profile/setup confidence -> grouped sensitive controls -> comfortable navigation -> visible recovery states.
 
 Required fixes:
-1. Add setup status loading skeleton/placeholder instead of hiding setup progress while loading.
-2. Add inline degraded/error state with retry if setup status data fails to load.
-3. Track partial setup data confidence so failed reads are not shown as reliable incomplete setup.
-4. Group settings cards into Trust & data, Preferences, and Account sections.
-5. Resize setup next action, setup expand control, setup item actions, shared back button, and sign-out button to 48px effective targets.
-6. Replace account deletion browser confirm with shared app confirmation/status pattern.
+1. Add setup status loading skeleton/placeholder.
+2. Add inline degraded/error state with retry if setup status fails.
+3. Track partial setup confidence.
+4. Group cards into Trust & data, Preferences, and Account.
+5. Resize setup/back/account actions to 48px.
+6. Replace account request browser confirm with app confirmation/status pattern.
 7. Add status badges/details for AI imports, data privacy, and coaching context where reliable.
-8. Add microcopy clarifying AI imports, privacy, and coaching context roles.
-9. Add reduced-motion-safe setup expand/collapse and loading transition.
-10. Optional: add compact setup-complete status if all setup items are done.
+8. Add microcopy clarifying AI/privacy/coaching roles.
+9. Add reduced-motion-safe setup expand/collapse.
 
-Do not add AI/import workflow to /settings itself, redesign settings from scratch, change schema/auth/AI permission logic/privacy request API semantics, or implement full fixes for /settings/ai-imports, /settings/data-privacy, or /settings/preferences in this prompt.
+Do not add AI/import workflow to /settings itself, change schema/auth/AI permission/privacy API semantics, or fix subroutes in this prompt.
 
-Verification: typecheck, lint, build if feasible, mobile 390x844, profile normal/private modes, setup loading/degraded states, grouped cards, 48px controls, app confirmation for account deletion request, no AI/import workflow added to /settings, review git diff.
-
-Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+Verification: typecheck, lint, build if feasible, mobile 390x844, profile normal/private, setup states, grouped cards, 48px controls.
 ```
 
 ---
 
-## Prompt section 11 — AI imports permission/connection correction
+## Prompt section 12 — AI imports correction
 
 ```text
 /caveman lite
 
 $memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
 
-Task: Implement the audited P1/P2 AI imports permission, connection, and trust-state corrections for Plaivra.
-
 Mode: high plus advisor
 Advisor: strict senior mobile product engineer + AI permission safety reviewer + connection-state reliability reviewer
 
-Read first:
-- CHATGPT_CODEX_PROMPT_RULES.md
-- Ruflo_usage.md
-- docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/README.md
-- docs/ux-constitution/flow-and-workflow-audit.md
-- docs/ux-constitution/motion-and-interaction.md
-- docs/ux-progress/README.md
-- docs/ux-progress/routes/settings-ai-imports.md
+Task: Implement audited AI imports permission/connection corrections.
 
 Primary route:
 - /settings/ai-imports
@@ -643,207 +579,113 @@ Primary route:
 Related route:
 - /settings/ai-imports/chatgpt-setup
 
-Relevant files to inspect first:
-- app/(private)/settings/ai-imports/page.tsx
-- app/(private)/settings/ai-imports/chatgpt-setup/page.tsx
-- components/settings/ai-permissions-card.tsx
-- components/settings/connected-apps.tsx
-- components/settings/settings-page-shell.tsx
-- services/database/ai-permissions.ts
-- lib/mcp/permission-presentation.ts
-- types/database.ts
-
-Flow decision:
-- Tune flow with trust-state hardening.
-
-Product rule:
-- AI imports is the permission/connection trust layer for Plaivra's AI-first model. It is not a normal settings page. It must make permission state, connection state, setup state, revoke behavior, and activity auditability explicit.
+Read first:
+- docs/ux-progress/routes/settings-ai-imports.md
 
 Required flow:
 - Known connection state -> known permission state -> safe permission changes -> safe setup/revoke -> auditable activity.
 
 Required fixes:
-1. Add top-level AI connection/permission status hero.
-2. Add explicit permission load error state with retry.
-3. Ensure failed permission load is not displayed as confident default/no saved settings.
-4. Add inline permission save failure state.
-5. Require app confirmation before saving full access mode.
-6. Add connection loading/error/unknown state to ConnectionStatusCard.
-7. Replace revoke window.confirm with app confirmation/status pattern.
-8. Add inline revoke failure/success state and keep status honest until reload confirms.
-9. Resize permission toggles, refresh, revoke/reconnect, and shared back controls to 48px effective targets.
-10. Show ChatGptActivityCard on the main AI imports route or add a clear activity link.
-11. Make reconnect-after-permission-change copy more prominent.
-12. Add copy-to-clipboard failure handling in setup flow.
-13. Reduce density of custom permission cards on mobile without removing details.
-14. Keep the detailed setup guide, but optionally add step progress/anchor navigation later.
+1. Add AI connection/permission status hero.
+2. Add permission load error with retry.
+3. Treat failed permission load as unknown, not default.
+4. Add inline permission save failure.
+5. Confirm before saving full access.
+6. Add connection loading/error/unknown state.
+7. Replace revoke browser confirm with app confirmation/status pattern.
+8. Add revoke failure/success state.
+9. Resize permission/revoke/reconnect/back controls to 48px.
+10. Show recent ChatGPT activity or clear link.
+11. Make reconnect-after-permission-change copy prominent.
+12. Add copy-to-clipboard failure handling.
+13. Reduce custom permission density on mobile.
 
-Do not change OAuth semantics, MCP API behavior, permission scope names, database schema, auth behavior, global theme, unrelated routes, broaden permissions silently, or make ChatGPT changes apply without explicit approval.
+Do not change OAuth semantics, MCP API behavior, permission scope names, schema, auth, global theme, unrelated routes, broaden permissions silently, or allow ChatGPT changes without approval.
 
-Verification: typecheck, lint, build if feasible, mobile 390x844, connection/permission confidence hero, permission failed-load safety, full-access confirmation, 48px toggles, connection unknown/error states, app confirm revoke, visible activity, no API/schema/auth semantics changed, review git diff.
-
-Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+Verification: typecheck, lint, build if feasible, mobile 390x844, confidence hero, failed-load safety, full-access confirmation, revoke app confirm, visible activity.
 ```
 
 ---
 
-## Prompt section 12 — Data privacy correction
+## Prompt section 13 — Data privacy correction
 
 ```text
 /caveman lite
 
 $memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
 
-Task: Implement the audited P1/P2 data privacy UX and privacy-action state corrections for Plaivra.
-
 Mode: high plus advisor
 Advisor: strict senior mobile product engineer + privacy UX reviewer + settings data-state reliability reviewer
 
-Read first:
-- CHATGPT_CODEX_PROMPT_RULES.md
-- Ruflo_usage.md
-- docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/README.md
-- docs/ux-constitution/flow-and-workflow-audit.md
-- docs/ux-constitution/motion-and-interaction.md
-- docs/ux-progress/README.md
-- docs/ux-progress/routes/settings-data-privacy.md
+Task: Implement audited data privacy corrections.
 
 Primary route:
 - /settings/data-privacy
 
-Relevant files to inspect first:
-- app/(private)/settings/data-privacy/page.tsx
-- components/settings/settings-toggle-row.tsx
-- components/settings/settings-page-shell.tsx
-- lib/settings/user-settings-context.tsx
-- services/database/user-settings.ts
-- app/api/user/data-export/route.ts
-- lib/privacy/data-export.ts
-
-Flow decision:
-- Tune flow with privacy-action hardening.
-
-Product rule:
-- Data privacy is not AI/import-first. It is the sensitive visibility/export/settings-reset route. It must distinguish hiding UI surfaces from deleting saved data, and it must show clear outcomes for export and reset actions.
+Read first:
+- docs/ux-progress/routes/settings-data-privacy.md
 
 Required flow:
 - Clear privacy meaning -> reliable toggle saves -> explicit export status -> confirmed reset settings.
 
 Required fixes:
-1. Surface settings load/save error inline using existing `saveError` and a degraded state.
-2. Add pending/saved/failed state for privacy toggles; prevent confusing rapid toggles during save.
-3. Add descriptions to each privacy toggle explaining what it hides.
-4. Add clear hide-vs-delete privacy explanation.
-5. Add inline export success/failure/retry state, not only toast.
-6. Add export scope summary and local-file privacy warning.
+1. Surface settings load/save error inline using existing saveError.
+2. Add pending/saved/failed state for privacy toggles.
+3. Add descriptions to privacy toggles.
+4. Add hide-vs-delete explanation.
+5. Add inline export success/failure/retry state.
+6. Add export scope summary and local-file warning.
 7. Require app confirmation before reset settings.
-8. Add reset pending/success/failure state that clarifies no logs/plans/account data were deleted.
-9. Improve loading skeleton instead of plain text.
-10. Stack export/reset rows on mobile so text and button do not crowd.
-11. Ensure legal/contact/export/reset/back controls are 48px effective targets.
-12. Add account deletion/account settings link under rights/help if appropriate.
-13. Optional: show last export/download timestamp for current session only.
+8. Add reset status clarifying no logs/plans/account data changed.
+9. Replace plain loading text with skeleton/degraded state.
+10. Stack export/reset rows on mobile.
+11. Ensure legal/contact/export/reset/back controls are 48px.
+12. Add account settings link under rights/help if appropriate.
 
-Do not change data export API semantics, export table selection or CSV payload shape, auth behavior, database schema, account deletion behavior, global theme, unrelated routes, or imply privacy toggles delete database data.
+Do not change export API semantics, export table selection/CSV shape, auth, schema, account behavior, global theme, unrelated routes, or imply toggles remove database data.
 
-Verification: typecheck, lint, build if feasible, mobile 390x844, hide-vs-delete copy, toggle pending/success/failure, export scope/status/retry, reset confirmation/status, mobile stacking, 48px help actions, no API/schema/auth/export semantics changed, review git diff.
-
-Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+Verification: typecheck, lint, build if feasible, mobile 390x844, hide-vs-delete copy, toggle states, export states, reset confirmation, mobile stacking.
 ```
 
 ---
 
-## Prompt section 13 — Preferences correction
+## Prompt section 14 — Preferences correction
 
 ```text
 /caveman lite
 
 $memory-management $agent-reviewer $agent-coder $agent-tester
 
-Task: Implement the audited P1/P2 preferences UX, settings-state, and accessibility corrections for Plaivra.
-
 Mode: high plus advisor
 Advisor: strict senior mobile product engineer + settings-state reliability reviewer + accessibility UX reviewer
 
-Read first:
-- CHATGPT_CODEX_PROMPT_RULES.md
-- Ruflo_usage.md
-- docs/product/ai-first-tracker-model.md
-- docs/ux-constitution/README.md
-- docs/ux-constitution/flow-and-workflow-audit.md
-- docs/ux-constitution/motion-and-interaction.md
-- docs/ux-progress/README.md
-- docs/ux-progress/routes/settings-preferences.md
+Task: Implement audited preferences UX, settings-state, and accessibility corrections.
 
 Primary route:
 - /settings/preferences
 
-Relevant files to inspect first:
-- app/(private)/settings/preferences/page.tsx
-- components/settings/settings-toggle-row.tsx
-- components/settings/settings-page-shell.tsx
-- components/ui/select-field.tsx
-- lib/settings/user-settings-context.tsx
-- services/database/user-settings.ts
-- lib/themes.ts
-
-Flow decision:
-- Tune flow with settings-state hardening.
-
-Product rule:
-- Preferences is not AI/import-first. It is the app-behavior and accessibility control route. It must make settings changes predictable, recoverable, and reduced-motion-safe.
+Read first:
+- docs/ux-progress/routes/settings-preferences.md
 
 Required flow:
 - Loaded preferences -> comfortable controls -> clear pending/save/failure -> reduced-motion-safe UI.
 
 Required fixes:
-1. Surface settings load/save error inline using existing provider `saveError`.
+1. Surface settings load/save error inline using provider saveError.
 2. Add pending/saved/failed state for preference updates.
-3. Prevent confusing rapid repeated changes while a setting save is pending.
-4. Resize native select controls to 48px effective height.
-5. Stack select rows on narrow mobile when needed.
-6. Remove or gate decorative theme-card hover translation for reduced-motion safety.
-7. Make reduceAnimations preference visibly respected by this route.
+3. Prevent confusing rapid repeated changes while saving.
+4. Resize native selects to 48px height.
+5. Stack select rows on narrow mobile.
+6. Remove or gate decorative theme-card hover translation.
+7. Make reduceAnimations visibly respected by this route.
 8. Replace plain loading text with skeleton/degraded state.
-9. Add short descriptions/help copy for Quick Log shortcuts.
-10. Add clearer save/sync copy near recently changed controls.
-11. Resize icon containers and shared back controls to 48px where relevant.
-12. Optional: add section-level summary/status chips for Appearance, Units, Quick Log, Accessibility.
+9. Add helper copy for Quick Log shortcuts.
+10. Add clearer save/sync copy near changed controls.
+11. Resize icon/back controls to 48px where relevant.
 
-Do not:
-- Do not change database schema.
-- Do not change auth behavior.
-- Do not change user settings semantics.
-- Do not change theme definitions unless absolutely required for the UI correction.
-- Do not rewrite global theme architecture.
-- Do not touch unrelated routes.
-- Do not add AI/import behavior to preferences.
+Do not change schema, auth, settings semantics, theme definitions unless required for UI correction, global theme architecture, unrelated routes, or add AI/import behavior.
 
-Implementation guidance:
-- Preserve the existing sections: Theme, Language, Units, Calendar, Dashboard start page, Quick Log shortcuts, Accessibility.
-- Reuse the existing provider rollback behavior, but expose inline failure/rollback state on the page.
-- Avoid broad provider rewrites unless a tiny prop/state addition is necessary.
-- Treat reduceAnimations as a live trust test: the route should avoid non-essential motion when it is enabled.
-- Use simple, sober state feedback; no decorative settings animations.
-
-Verification:
-- Run typecheck, lint, and build if feasible.
-- Test /settings/preferences at 390x844.
-- Verify loading skeleton/degraded state.
-- Verify load/save errors are visible inline, not only via toast.
-- Verify failed setting save rolls back and explains that previous value was restored.
-- Verify each select is 48px effective height.
-- Verify select rows stack cleanly on mobile.
-- Verify theme picker cards remain usable and reduced-motion-safe.
-- Verify Reduce animations removes/gates non-essential route motion where feasible.
-- Verify Quick Log toggles have clearer helper copy.
-- Verify rapid repeated changes do not create confusing state.
-- Verify save/sync state is visible and specific enough to trust.
-- Verify no database schema, auth, global settings semantics, theme architecture, or unrelated routes were changed.
-- Review git diff before final report.
-
-Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+Verification: typecheck, lint, build if feasible, mobile 390x844, inline errors, rollback copy, 48px selects, stacked rows, reduced-motion-safe theme picker.
 ```
 
 ---
