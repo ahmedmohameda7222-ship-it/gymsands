@@ -27,10 +27,11 @@ Completed audits:
 - `/hydration` — 68/100 — fixes open
 - `/wellness` — 60/100 — fixes open
 - `/progress` — 62/100 — fixes open
+- `/settings` — 64/100 — fixes open
 
 General rule: implement workflow corrections before button polish. If a flow is weak, correct the flow first, then refine buttons, states, and motion.
 
-Product rule: Plaivra is an AI-first tracker where appropriate, but not every route is ChatGPT-first. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking with optional later AI interpretation only by explicit request.
+Product rule: Plaivra is an AI-first tracker where appropriate, but not every route is ChatGPT-first. Hydration is direct quick logging. Wellness is a calm hub/check-in route. Progress is sensitive direct tracking. Settings is a trust/control hub, not an AI/import-first route.
 
 ---
 
@@ -56,17 +57,6 @@ $memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
 
 Mode: high plus advisor
 Advisor: strict senior mobile product engineer + user-data safety reviewer
-```
-
-### Future multi-route bundle
-
-```text
-/caveman lite
-
-$swarm-orchestration $memory-management $agent-reviewer $agent-tester
-
-Mode: high plus advisor, or xhigh plus advisor only for a large multi-route batch
-Advisor: strict senior mobile product engineer + release-quality UX auditor + regression reviewer
 ```
 
 ---
@@ -546,41 +536,103 @@ Required fixes:
 13. Convert raw text “See all / View” controls into comfortable secondary buttons/links.
 14. Add restrained reduced-motion-safe update feedback for add/edit/delete/goal save.
 
+Do not add ChatGPT/AI as the primary progress logging flow, redesign the route from scratch, change schema, change storage bucket policy, touch auth/subscriptions/global theme/unrelated settings, or make medical/body-composition claims.
+
+Verification: typecheck, lint, build if feasible, mobile 390x844, distinct loading/failed/empty/real states, goal/trend hero, one primary add action, synced/local goal state, edit/delete/photo states, 48px controls, no primary AI logging flow, review git diff.
+
+Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
+```
+
+---
+
+## Prompt section 10 — Settings hub correction
+
+```text
+/caveman lite
+
+$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
+
+Task: Implement the audited P1/P2 settings hub UX, trust, and data-state corrections for Plaivra.
+
+Mode: high plus advisor
+Advisor: strict senior mobile product engineer + settings trust/safety reviewer + data-state reliability reviewer
+
+Read first:
+- CHATGPT_CODEX_PROMPT_RULES.md
+- Ruflo_usage.md
+- docs/product/ai-first-tracker-model.md
+- docs/ux-constitution/README.md
+- docs/ux-constitution/flow-and-workflow-audit.md
+- docs/ux-constitution/motion-and-interaction.md
+- docs/ux-progress/README.md
+- docs/ux-progress/routes/settings.md
+
+Primary route:
+- /settings
+
+Relevant files to inspect first:
+- app/(private)/settings/page.tsx
+- components/settings/profile-summary-card.tsx
+- components/settings/setup-progress-card.tsx
+- components/settings/settings-hub-card.tsx
+- components/settings/settings-page-shell.tsx
+- components/settings/settings-section-card.tsx
+- app/(private)/settings/account/page.tsx
+- services/database/profile.ts
+- services/database/nutrition.ts
+- services/database/workout-plans.ts
+
+Flow decision:
+- Tune flow.
+
+Product rule:
+- Settings is not AI/import-first. It is a trust/control hub. It should make setup status, AI access, privacy, coaching context, reminders, preferences, and account controls easy to understand and safe to navigate.
+
+Required flow:
+- Profile/setup confidence -> grouped sensitive controls -> comfortable navigation -> visible recovery states.
+
+Required fixes:
+1. Add setup status loading skeleton/placeholder instead of hiding setup progress while loading.
+2. Add inline degraded/error state with retry if setup status data fails to load.
+3. Track partial setup data confidence so failed reads are not shown as reliable incomplete setup.
+4. Group settings cards into Trust & data, Preferences, and Account sections.
+5. Resize setup next action, setup expand control, setup item actions, shared back button, and sign-out button to 48px effective targets.
+6. Replace account deletion browser confirm with shared app confirmation/status pattern.
+7. Add status badges/details for AI imports, data privacy, and coaching context where reliable.
+8. Add microcopy clarifying AI imports, privacy, and coaching context roles.
+9. Add reduced-motion-safe setup expand/collapse and loading transition.
+10. Optional: add compact setup-complete status if all setup items are done.
+
 Do not:
-- Do not add ChatGPT/AI as the primary progress logging flow.
-- Do not redesign the route from scratch.
+- Do not add AI/import workflow to /settings itself.
+- Do not redesign settings from scratch.
 - Do not change database schema.
-- Do not change storage bucket policy.
-- Do not touch auth, subscriptions, global theme, unrelated progress/PR pages, or unrelated settings.
-- Do not make medical/body-composition claims from weight or measurements.
+- Do not change auth behavior.
+- Do not change AI permission logic.
+- Do not change privacy request API semantics.
+- Do not touch subscriptions, global theme, or unrelated routes.
+- Do not implement full fixes for /settings/ai-imports, /settings/data-privacy, or /settings/preferences in this prompt; those are separate audits.
 
 Implementation guidance:
-- Preserve the major tabs: Overview, Measurements, Photos, History.
-- Preserve ProgressEntryModal and its typed-value preservation on failure.
-- For route data, do not show failed loads as confident empty states.
-- For photo privacy, make “private” and “hidden by setting” visible in the UI.
-- For goal weight, show whether it is synced to profile or saved locally as fallback.
-- For deletes, keep confirmation and add row/photo pending plus visible failure state.
-- Use motion only for data update clarity: saved highlight, row pending/exit, sync-state transition. Respect reduced motion.
+- Preserve the main model: ProfileSummaryCard, SetupProgressCard, SettingsHubCard list, shared SettingsPageShell.
+- Keep setup next action as the main setup CTA, but show loading/degraded confidence clearly.
+- Treat AI Imports, Data Privacy, and Coaching Context as trust/data controls with clearer grouping.
+- Use app confirmation pattern for account deletion request; do not alter the API route behavior.
+- Use stable, minimal motion only for setup loading and expand/collapse.
 
 Verification:
 - Run typecheck, lint, and build if feasible.
-- Test /progress at 390x844.
-- Verify loading, failed load, empty state, and real data are visually distinct.
-- Verify failed progress entries load does not display as confident no entries.
-- Verify failed photo load does not display as confident no photos.
-- Verify overview hero explains goal/trend status and next useful logging action.
-- Verify only one primary Add progress entry action is visible per state.
-- Verify goal weight save shows pending and then synced/local fallback state.
-- Verify add progress entry still preserves typed values on failure.
-- Verify edit entry save shows pending, success, and failure inline.
-- Verify delete entry has confirmation, pending state, and clear failure recovery.
-- Verify history rows are comfortable on mobile and actions do not conflict with expand/collapse.
-- Verify photo upload explains privacy, validates selected file, and shows inline failure.
-- Verify photo delete has confirmation, pending, and clear failure state.
-- Verify hidden-photo setting is explained when photos are hidden.
-- Verify key controls meet 48px effective target.
-- Verify no ChatGPT/AI action was added as primary progress logging flow.
+- Test /settings at 390x844.
+- Verify profile summary works in normal and private profile modes.
+- Verify setup status shows a loading placeholder while setup data loads.
+- Verify setup load failure shows visible degraded state and retry.
+- Verify failed setup reads are not displayed as confident incomplete setup.
+- Verify cards are grouped into trust/data, preferences, and account sections.
+- Verify AI Imports, Data Privacy, and Coaching Context have clearer trust/context copy.
+- Verify setup action buttons, expand control, shared back button, and account actions meet 48px effective target.
+- Verify account deletion request uses app confirmation/status pattern, not browser confirm.
+- Verify hub remains simple on 390x844 mobile.
+- Verify no AI/import workflow was added to /settings itself.
 - Review git diff before final report.
 
 Final report: changed files, changes, tests, risks, unverified items, memory_store usage, next step.
