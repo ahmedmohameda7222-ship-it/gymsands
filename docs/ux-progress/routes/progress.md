@@ -224,7 +224,7 @@ Current structural issues:
 
 | Current object | Issue | Recommended change | Priority |
 |---|---|---|---|
-| PageHeading add action + hero add action + empty add action | Duplicate primary action paths. | Keep one visible primary add action per state. | P1 |
+| PageHeading add action + hero add action + empty add action | Duplicate primary action paths. | Keep one state-appropriate primary add path. | P1 |
 | Current weight hero | Useful but too narrow. | Make it goal/trend/next-action hero. | P1 |
 | Goal weight input | Useful but 44px controls and unclear local fallback/sync state. | 48px controls and explicit synced/local state. | P1 |
 | Tabs | Correct major IA. | Keep, but ensure tab triggers meet mobile touch comfort. | P2 |
@@ -306,14 +306,12 @@ No flashy transformations, body-change animations, or celebratory weight-loss ef
 | Route purpose and action hierarchy | 9 | 15 | Correct tracker purpose and tabs, but first screen is too weight-centric and duplicate add actions compete. |
 | Button size, placement, and hierarchy | 8 | 15 | Main add button is strong; many edit/delete/photo/goal controls are 40-44px and raw text links are small. |
 | Spacing consistency and visual rhythm | 7 | 10 | Generally coherent, but overview is dense and history/photo controls are cramped. |
-| Feedback, optimistic UI, loading, and errors | 6 | 15 | Skeleton and modal error are good; route errors and photo/load/edit/delete feedback are weak. |
+| Feedback, optimistic UI, loading, and errors | 7 | 15 | Skeleton and modal error are good; route errors and photo/load/edit/delete feedback are weak. |
 | Motion and interaction quality | 5 | 15 | Mostly static; missing meaningful update/delete/sync-state transitions. |
 | Mobile-first behavior and tap comfort | 7 | 10 | Tabs and cards are workable, but dense controls and details rows reduce comfort. |
 | AI safety, privacy, and high-risk action control | 9 | 10 | No unsafe AI writes; photo privacy service has safeguards. Needs clearer visible privacy states. |
-| Premium/subscription readiness | 11 | 10 | Feature set is rich, but the experience does not feel premium until hierarchy and trust states improve. |
+| Premium/subscription readiness | 10 | 10 | Feature set is rich, but the experience does not feel premium until hierarchy and trust states improve. |
 | **Total** | **62** | **100** | Functional and feature-rich, but not yet a premium, trust-heavy progress tracker. |
-
-Note: Premium/subscription score was capped in the total calculation. The route has strong feature value, but state quality prevents a higher overall score.
 
 ---
 
