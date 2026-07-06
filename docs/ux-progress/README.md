@@ -45,7 +45,7 @@ Each audited route receives a score out of 100.
 
 ## 2. Global progress summary
 
-Current global status: **Dashboard, onboarding, workout plans, workout session, calories, and meal plan audited. Calories and meal plan were reframed after the AI-first product clarification. Remaining routes are not audited yet against the 2026.1 AI-first product model, constitution, workflow standard, and motion standard.**
+Current global status: **Dashboard, onboarding, workout plans, workout session, calories, meal plan, and hydration audited. Calories and meal plan were reframed after the AI-first product clarification. Hydration is correctly treated as a direct quick-logging exception, not an AI-first import route. Remaining routes are not audited yet against the 2026.1 AI-first product model, constitution, workflow standard, and motion standard.**
 
 | Area | Status | Score | Notes |
 |---|---|---:|---|
@@ -64,7 +64,7 @@ Current global status: **Dashboard, onboarding, workout plans, workout session, 
 | Progress | Not audited | — | Needs overview/trend flow, add entry, photos, goal weight, edit/delete, chart transitions, progress updates, and privacy-state audit. |
 | Personal records | Not audited | — | Needs tracker, insight actions, PR update highlight, achievement feedback, and empty-state audit. |
 | Wellness hub | Not audited | — | Needs launcher-card hierarchy, daily check-in feedback, calm completion motion, and empty-state audit. |
-| Hydration | Not audited | — | Direct quick logging is primary here. Needs quick-add, manual-add, delete, progress fill, target-reached moment, optimistic feedback, and error recovery audit. |
+| Hydration | Audited | 68 | Product role is correct as direct quick logging, not AI-first import. Needs optimistic quick-add/delete with rollback, initial hero loading gate, target-hit state, 48px cleanup, and useful progress/checklist motion. Full audit: `docs/ux-progress/routes/hydration.md`. |
 | Habits | Not audited | — | Needs repeated toggle/check behavior, streak feedback, optimistic updates, reduced motion, and error recovery audit. |
 | Sleep & recovery | Not audited | — | Needs form/action/feedback audit with quiet low-stimulation motion and clear save states. |
 | Supplements | Not audited | — | Needs dose/taken/reminder actions, checklist feedback, optimistic behavior, and failure recovery audit. |
@@ -156,6 +156,21 @@ Recommended flow:
 ChatGPT meal-plan import/review -> planned overview -> shopping / mark done -> manual fallback/correction
 ```
 
+### `/hydration`
+
+**Status:** Audited  
+**Score:** 68 / 100  
+**Flow decision:** Tune flow  
+**Full audit:** `docs/ux-progress/routes/hydration.md`
+
+Primary issue: the route has the correct direct quick-logging model, but it is not premium-fast yet. Quick add/delete need optimistic updates with rollback, the hero needs a loading gate, target-hit needs a clear end state, and secondary controls need 48px cleanup.
+
+Recommended flow:
+
+```txt
+Today hero -> quick add -> manual fallback -> recent entries -> weekly context -> streak/reminder
+```
+
 ---
 
 ## 4. Priority definitions
@@ -185,6 +200,7 @@ ChatGPT meal-plan import/review -> planned overview -> shopping / mark done -> m
 | 2026-07-06 | AI-first product model | Added product source of truth | Plaivra defined as ChatGPT-first tracker, manual entry as fallback | `1c7fb06c3d73958c4191de72e5cf919030a4b958` |
 | 2026-07-06 | `/calories` | Reframed calories audit | Score revised to 54/100; needs AI-first meal import/review flow | This commit |
 | 2026-07-06 | `/my-meal-plan` | Completed AI-first route audit | Score 57/100; needs ChatGPT meal-plan import/review as primary route flow | `fe33ec561ee07ba7cb26767c7ce7d94b285e4cf0` |
+| 2026-07-06 | `/hydration` | Completed direct-logging route audit | Score 68/100; product role correct but optimistic logging/recovery and loading polish required | `61741d42ef9f7738451442032f80d4cb34c7f4be` |
 
 ---
 
@@ -200,7 +216,7 @@ Suggested order:
 4. `/workouts/session/day/[dayId]` — audited, fixes open
 5. `/calories` — audited, fixes open after AI-first reframing
 6. `/my-meal-plan` — audited, fixes open after AI-first reframing
-7. `/hydration`
+7. `/hydration` — audited, fixes open
 8. `/wellness`
 9. `/progress`
 10. `/settings`
