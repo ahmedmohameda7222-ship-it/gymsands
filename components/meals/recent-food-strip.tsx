@@ -13,6 +13,7 @@ import {
   setFavoriteFoodAsync,
 } from "@/services/meals/food-logging-speed";
 import { useToast } from "@/components/ui/toaster";
+import { InlineFeedback } from "@/components/motion";
 import { userSafeError } from "@/lib/error-formatting";
 import type { FoodLog, MealType } from "@/types";
 
@@ -30,6 +31,9 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
   const [isLoading, setIsLoading] = useState(true);
   const [mealType, setMealType] = useState<MealType>(defaultMealType);
   const [activePanel, setActivePanel] = useState<"recent" | "frequent" | null>(null);
+  const [pendingLogKey, setPendingLogKey] = useState<string | null>(null);
+  const [pendingFavoriteKey, setPendingFavoriteKey] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
 
   useEffect(() => {
     setMealType(defaultMealType);
@@ -45,8 +49,9 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
       ]);
       setRecentLogs(recent);
       setFavoriteKeys(favorites);
-    } catch {
-      // silent fail
+      setFeedback(null);
+    } catch (error) {
+      setFeedback({ type: "error", message: userSafeError(error, "Recent foods could not load. Manual add is still available.") });
     } finally {
       setIsLoading(false);
     }
@@ -62,27 +67,54 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
 
   const hasAny = uniqueRecents.length > 0 || frequent.length > 0;
   if (isLoading) return null;
+  if (!hasAny && feedback?.type === "error") {
+    return (
+      <Card variant="glass" className="border-dashed">
+        <CardContent className="space-y-2 p-4">
+          <p className="text-sm font-semibold text-foreground">Quick repeats unavailable</p>
+          <InlineFeedback message={feedback.message} variant="error" onClose={() => setFeedback(null)} />
+          <p className="text-xs leading-5 text-muted-foreground">Use ChatGPT review or manual add while Plaivra reloads recent foods.</p>
+        </CardContent>
+      </Card>
+    );
+  }
   if (!hasAny) return null;
 
   async function logAgain(log: FoodLog) {
     if (!user?.id) return;
+    const key = favoriteKeyForLog(log);
+    if (pendingLogKey) return;
+    setPendingLogKey(key);
+    setFeedback({ type: "info", message: `Logging ${log.food_name} to ${displayMealType(mealType)}...` });
     try {
       const added = await logFoodFromPreviousLog(user.id, log, logDate, mealType);
       toast({ title: "Logged again", description: `${log.food_name} added to ${displayMealType(mealType)}.` });
       onFoodLogged?.(added);
       setRecentLogs((current) => [added, ...current]);
+      setFeedback({ type: "info", message: `${log.food_name} was logged. Manual add remains available for corrections.` });
     } catch (error) {
+      setFeedback({ type: "error", message: `Could not log ${log.food_name}. No duplicate was created. ${userSafeError(error)}` });
       toast({ title: "Could not log", description: userSafeError(error) });
+    } finally {
+      setPendingLogKey(null);
     }
   }
 
   async function toggleFavorite(key: string, label: string) {
     if (!user?.id) return;
+    if (pendingFavoriteKey) return;
+    const previous = favoriteKeys;
+    const shouldFavorite = !favoriteKeys.includes(key);
+    setPendingFavoriteKey(key);
+    setFavoriteKeys((current) => shouldFavorite ? Array.from(new Set([...current, key])) : current.filter((item) => item !== key));
     try {
-      const next = await setFavoriteFoodAsync(user.id, key, !favoriteKeys.includes(key), label);
+      const next = await setFavoriteFoodAsync(user.id, key, shouldFavorite, label);
       setFavoriteKeys(next);
-    } catch {
-      // silent
+    } catch (error) {
+      setFavoriteKeys(previous);
+      setFeedback({ type: "error", message: userSafeError(error, "Favorite update failed. We restored the previous state.") });
+    } finally {
+      setPendingFavoriteKey(null);
     }
   }
 
@@ -101,12 +133,13 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        <p className="text-xs leading-5 text-muted-foreground">Recent and frequent foods are fast fallbacks for repeats after the ChatGPT review path.</p>
+        <InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} onClose={() => setFeedback(null)} />
         <div className="flex gap-2">
           <Button
             variant={activePanel === "recent" ? "default" : "outline"}
-            size="sm"
             onClick={() => togglePanel("recent")}
-            className="flex-1"
+            className="min-h-12 flex-1"
             disabled={uniqueRecents.length === 0}
           >
             <Clock className="mr-1 h-3.5 w-3.5" />
@@ -114,9 +147,8 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
           </Button>
           <Button
             variant={activePanel === "frequent" ? "default" : "outline"}
-            size="sm"
             onClick={() => togglePanel("frequent")}
-            className="flex-1"
+            className="min-h-12 flex-1"
             disabled={frequent.length === 0}
           >
             <Utensils className="mr-1 h-3.5 w-3.5" />
@@ -131,6 +163,8 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
                 key={`recent-${favoriteKeyForLog(log)}`}
                 log={log}
                 isFavorite={favoriteKeys.includes(favoriteKeyForLog(log))}
+                isLogging={pendingLogKey === favoriteKeyForLog(log)}
+                isFavoritePending={pendingFavoriteKey === favoriteKeyForLog(log)}
                 onLog={() => logAgain(log)}
                 onFavorite={() => toggleFavorite(favoriteKeyForLog(log), log.food_name)}
               />
@@ -145,6 +179,8 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
                 key={`freq-${favoriteKeyForLog(log)}`}
                 log={log}
                 isFavorite={favoriteKeys.includes(favoriteKeyForLog(log))}
+                isLogging={pendingLogKey === favoriteKeyForLog(log)}
+                isFavoritePending={pendingFavoriteKey === favoriteKeyForLog(log)}
                 onLog={() => logAgain(log)}
                 onFavorite={() => toggleFavorite(favoriteKeyForLog(log), log.food_name)}
               />
@@ -159,11 +195,15 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
 function FoodChip({
   log,
   isFavorite,
+  isLogging,
+  isFavoritePending,
   onLog,
   onFavorite,
 }: {
   log: FoodLog;
   isFavorite?: boolean;
+  isLogging?: boolean;
+  isFavoritePending?: boolean;
   onLog: () => void;
   onFavorite: () => void;
 }) {
@@ -174,7 +214,8 @@ function FoodChip({
         <button
           type="button"
           onClick={onFavorite}
-          className="shrink-0 text-muted-foreground transition hover:text-primary"
+          disabled={isFavoritePending}
+          className="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-muted-foreground transition hover:bg-muted/60 hover:text-primary disabled:opacity-50"
           aria-label={isFavorite ? "Unfavorite" : "Favorite"}
         >
           <Heart className={`h-3.5 w-3.5 ${isFavorite ? "fill-primary text-primary" : ""}`} />
@@ -183,9 +224,9 @@ function FoodChip({
       <p className="text-[11px] text-muted-foreground">
         {Math.round(log.calories)} kcal · {Math.round(log.protein_g)}g P
       </p>
-      <Button size="sm" className="h-8 w-full text-xs" onClick={onLog}>
+      <Button className="min-h-12 w-full text-xs" onClick={onLog} disabled={isLogging}>
         <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-        Log
+        {isLogging ? "Logging..." : "Log"}
       </Button>
     </div>
   );

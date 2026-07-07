@@ -38,6 +38,7 @@ import {
 import type { MealPlanItem, MealType, OnboardingAnswers } from "@/types";
 import { GroceryListPanel } from "@/components/meals/grocery-list-panel";
 import { MealAiActions } from "@/components/meals/meal-ai-actions";
+import { MealPlanImportReview } from "@/components/meals/meal-plan-import-review";
 import { validateMealItem, validateMealPlanDay } from "@/services/meals/meal-validation";
 import { getGroceryItems, upsertGroceryItem } from "@/services/database/execution-layer";
 import { getCalorieTargets } from "@/services/database/nutrition";
@@ -326,13 +327,28 @@ function MyMealPlanBuilderInner() {
     requested_start_date: selectedDate
   };
 
+  function handleReviewedPlanApplied(newItems: MealPlanItem[]) {
+    upsertLocalItems(newItems.map(normalizeMealPlanItem));
+    setNotice({
+      type: "success",
+      title: "Reviewed meal plan applied",
+      description: `${newItems.length} reviewed meal${newItems.length === 1 ? "" : "s"} added. Manual edits are available for corrections.`
+    });
+  }
+
   return (
     <div className="space-y-3 sm:space-y-4">
+      <MealPlanImportReview
+        defaultDate={selectedDate}
+        requestContext={mealPlanRequestContext}
+        onApplied={handleReviewedPlanApplied}
+      />
+
       <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4">
         <SummaryCard label="Planned" value={plannedTotals.calories} detail={`${Math.round(plannedTotals.protein_g)}g protein`} />
         <SummaryCard label="Done" value={doneTotals.calories} detail={`${Math.round(doneTotals.protein_g)}g protein`} />
         <SummaryCard label="Planned carbs" value={plannedTotals.carbs_g} suffix="g" detail={`${Math.round(plannedTotals.fat_g)}g fat`} />
-        <SummaryCard label="Done carbs" value={doneTotals.carbs_g} suffix="g" detail={`${Math.round(plannedTotals.fat_g)}g fat`} />
+        <SummaryCard label="Done carbs" value={doneTotals.carbs_g} suffix="g" detail={`${Math.round(doneTotals.fat_g)}g fat`} />
       </div>
 
       {dayValidation ? <div className={`rounded-[14px] border p-3 text-sm ${dayValidation.tone === "destructive" ? "border-destructive/30 bg-destructive/10" : "border-warning/30 bg-warning/10"}`}><p className="font-semibold">{dayValidation.label}</p><p className="text-muted-foreground">{dayValidation.detail}</p></div> : null}
@@ -353,20 +369,21 @@ function MyMealPlanBuilderInner() {
       <Dialog open={addSourceDialogOpen} onOpenChange={setAddSourceDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Add a meal</DialogTitle>
-            <DialogDescription>Choose how you want to add food to this plan.</DialogDescription>
+            <DialogTitle>Add or import a meal</DialogTitle>
+            <DialogDescription>Use ChatGPT import first for plan updates, or choose manual fallback for corrections.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
-            <Button type="button" onClick={openQuickAdd}>Quick add</Button>
-            <Button asChild variant="outline" onClick={() => setAddSourceDialogOpen(false)}><Link href="/calories/food-hub">Add from Food Hub</Link></Button>
             <AiActionRequestDialog
-              actions={[{ type: "build_meal_plan", label: "Import from ChatGPT", description: "Discuss, approve, and import a personalized meal plan." }]}
+              actions={[{ type: "build_meal_plan", label: "Import/update with ChatGPT", description: "Discuss, approve, and import a personalized meal plan." }]}
               sourceType="meal_plan_empty"
               context={mealPlanRequestContext}
               permissionSection="meal_plans"
               title="Import a meal plan with ChatGPT"
-              className="grid"
+              buttonVariant="default"
+              className="grid min-h-12 [&_button]:min-h-12"
             />
+            <Button type="button" variant="outline" className="min-h-12" onClick={openQuickAdd}>Quick manual correction</Button>
+            <Button asChild variant="outline" className="min-h-12" onClick={() => setAddSourceDialogOpen(false)}><Link href="/calories/food-hub">Add from Food Hub</Link></Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -378,7 +395,7 @@ function MyMealPlanBuilderInner() {
     <TabsTrigger value="shopping">Shopping</TabsTrigger>
     <Link
       href={`/my-meal-plan/food-preferences${selectedDate ? `?date=${encodeURIComponent(selectedDate)}` : ""}`}
-      className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl px-3 py-1.5 text-sm font-semibold text-foreground transition-colors hover:bg-white/60 dark:hover:bg-white/10"
+      className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl px-3 py-1.5 text-sm font-semibold text-foreground transition-colors hover:bg-white/60 dark:hover:bg-white/10"
     >
       Food preferences
     </Link>
@@ -399,9 +416,9 @@ function MyMealPlanBuilderInner() {
                 <p className="text-xs text-muted-foreground sm:text-sm">{dayStats.totalDone}/{dayStats.totalPlanned + dayStats.totalDone} meals marked done</p>
               </div>
               <div className="flex shrink-0 gap-1.5">
-                <Button variant="outline" size="sm" type="button" onClick={() => changeDate(addDays(selectedDate, -1))}><ChevronLeft className="h-4 w-4" /></Button>
-                <Button variant="outline" size="sm" type="button" onClick={() => changeDate(today)}>Today</Button>
-                <Button variant="outline" size="sm" type="button" onClick={() => changeDate(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
+                <Button variant="outline" type="button" className="min-h-12 min-w-12 px-3" onClick={() => changeDate(addDays(selectedDate, -1))}><ChevronLeft className="h-4 w-4" /></Button>
+                <Button variant="outline" type="button" className="min-h-12" onClick={() => changeDate(today)}>Today</Button>
+                <Button variant="outline" type="button" className="min-h-12 min-w-12 px-3" onClick={() => changeDate(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
               </div>
             </div>
             <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1 mobile-card-scroll">
@@ -415,7 +432,7 @@ function MyMealPlanBuilderInner() {
                     type="button"
                     onClick={() => changeDate(day)}
                     className={cn(
-                      "min-w-[72px] rounded-[14px] border px-2 py-1.5 text-left text-xs transition-colors sm:min-w-[92px] sm:px-3 sm:py-2 sm:text-sm",
+                      "min-h-12 min-w-[72px] rounded-[14px] border px-2 py-2 text-left text-xs transition-colors sm:min-w-[92px] sm:px-3 sm:py-2 sm:text-sm",
                       isSelected ? "border-primary bg-primary text-primary-foreground" : isToday ? "border-primary/40 bg-primary/5" : "border-white/50 bg-white/35 hover:border-primary/40 dark:border-white/10 dark:bg-white/5"
                     )}
                   >
@@ -433,12 +450,12 @@ function MyMealPlanBuilderInner() {
               <p className="text-xs text-muted-foreground sm:text-sm">{dayStats.totalPlanned} planned &middot; {dayStats.totalDone} done</p>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => setActiveTab("shopping")}>
+              <Button className="min-h-12" variant="outline" onClick={() => setActiveTab("shopping")}>
                 <ShoppingCart className="h-4 w-4" />
                 <span className="hidden sm:inline">Shopping</span>
                 <span className="sm:hidden">{shoppingCheckedCount}/{shoppingShortcutCount}</span>
               </Button>
-              <Button size="sm" onClick={() => openAddMeal(activeMealType)}>
+              <Button className="min-h-12" onClick={() => openAddMeal(activeMealType)}>
                 <PlusCircle className="h-4 w-4" />
                 Add food
               </Button>
@@ -459,7 +476,7 @@ function MyMealPlanBuilderInner() {
                       type="button"
                       onClick={() => setActiveMealType(type)}
                       className={cn(
-                        "flex min-w-[80px] shrink-0 items-center justify-center gap-1.5 rounded-[14px] border px-2 py-2 text-xs font-semibold transition-colors",
+                        "flex min-h-12 min-w-[80px] shrink-0 items-center justify-center gap-1.5 rounded-[14px] border px-2 py-2 text-xs font-semibold transition-colors",
                         isActive ? "border-primary bg-primary text-primary-foreground" : "border-white/50 bg-white/35 hover:border-primary/40 dark:border-white/10 dark:bg-white/5"
                       )}
                     >
@@ -509,23 +526,6 @@ function MyMealPlanBuilderInner() {
             </div>
           )}
 
-          {!isLoading && items.length === 0 ? (
-            <Card id="meal-plan-import" className="mt-5 border-dashed border-primary/30 bg-primary/5">
-              <CardContent className="grid gap-4 p-5 sm:grid-cols-[1fr_auto] sm:items-center">
-                <div>
-                  <p className="font-semibold text-foreground">Import with ChatGPT</p>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">Prepare a professional request using your goals, schedule, food preferences, allergies, and coaching context. You review and approve the final plan before import.</p>
-                </div>
-                <AiActionRequestDialog
-                  actions={[{ type: "build_meal_plan", label: "Import with ChatGPT", description: "Discuss, approve, and import a personalized meal plan." }]}
-                  sourceType="meal_plan_empty"
-                  context={mealPlanRequestContext}
-                  permissionSection="meal_plans"
-                  title="Import a meal plan with ChatGPT"
-                />
-              </CardContent>
-            </Card>
-          ) : null}
           </motion.div>
         </TabsContent>
 
@@ -569,7 +569,7 @@ function WeeklyPlanner({ weekDays, selectedDate, weekItems, onSelectDate }: { we
           const planned = dayItems.filter((item) => item.status === "planned").reduce(addItemToTotals, emptyTotals());
           const done = dayItems.filter((item) => item.status === "done").reduce(addItemToTotals, emptyTotals());
           return (
-            <button key={day} type="button" onClick={() => onSelectDate(day)} className={cn("rounded-[14px] border p-2.5 text-left transition-colors hover:border-primary/45 sm:p-3", day === selectedDate ? "border-primary bg-primary/10" : "border-white/50 bg-white/35 dark:border-white/10 dark:bg-white/5")}>
+            <button key={day} type="button" onClick={() => onSelectDate(day)} className={cn("min-h-12 rounded-[14px] border p-2.5 text-left transition-colors hover:border-primary/45 sm:p-3", day === selectedDate ? "border-primary bg-primary/10" : "border-white/50 bg-white/35 dark:border-white/10 dark:bg-white/5")}>
               <p className="text-sm font-semibold">{displayDate(day)}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">{dayItems.length} meals &middot; {Math.round(done.calories)}/{Math.round(planned.calories + done.calories)} kcal</p>
               <p className="text-[11px] text-muted-foreground">P {Math.round(planned.protein_g + done.protein_g)}g &middot; C {Math.round(planned.carbs_g + done.carbs_g)}g &middot; F {Math.round(planned.fat_g + done.fat_g)}g</p>
@@ -597,18 +597,18 @@ function MealForm({ title, draft, setDraft, onSave, onCancel, saving }: { title:
     <div className="space-y-3">
       {title ? <h3 className="text-base font-semibold">{title}</h3> : null}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Input value={draft.foodName} onChange={(e) => setDraft((d) => ({ ...d, foodName: e.target.value }))} placeholder="Food name" />
-        <select value={draft.mealType} onChange={(e) => setDraft((d) => ({ ...d, mealType: normalizeMealPlanType(e.target.value) }))} className="h-10 rounded-[14px] border bg-card px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring">{mealTypes.map((type) => <option key={type} value={type}>{displayMealType(type)}</option>)}</select>
-        <Input type="number" min="0.1" step="0.1" inputMode="decimal" enterKeyHint="done" value={draft.quantity} onChange={(e) => setDraft((d) => ({ ...d, quantity: e.target.value }))} placeholder="Quantity" />
-        <Input value={draft.servingInfo} onChange={(e) => setDraft((d) => ({ ...d, servingInfo: e.target.value }))} placeholder="Serving info" />
-        <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.calories} onChange={(e) => setDraft((d) => ({ ...d, calories: e.target.value }))} placeholder="Calories" />
-        <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.protein} onChange={(e) => setDraft((d) => ({ ...d, protein: e.target.value }))} placeholder="Protein g" />
-        <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.carbs} onChange={(e) => setDraft((d) => ({ ...d, carbs: e.target.value }))} placeholder="Carbs g" />
-        <Input type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.fat} onChange={(e) => setDraft((d) => ({ ...d, fat: e.target.value }))} placeholder="Fat g" />
-        <Input className="xl:col-span-2" value={draft.notes} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Notes" />
+        <Input className="h-12" value={draft.foodName} onChange={(e) => setDraft((d) => ({ ...d, foodName: e.target.value }))} placeholder="Food name" />
+        <select value={draft.mealType} onChange={(e) => setDraft((d) => ({ ...d, mealType: normalizeMealPlanType(e.target.value) }))} className="h-12 rounded-[14px] border bg-card px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring">{mealTypes.map((type) => <option key={type} value={type}>{displayMealType(type)}</option>)}</select>
+        <Input className="h-12" type="number" min="0.1" step="0.1" inputMode="decimal" enterKeyHint="done" value={draft.quantity} onChange={(e) => setDraft((d) => ({ ...d, quantity: e.target.value }))} placeholder="Quantity" />
+        <Input className="h-12" value={draft.servingInfo} onChange={(e) => setDraft((d) => ({ ...d, servingInfo: e.target.value }))} placeholder="Serving info" />
+        <Input className="h-12" type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.calories} onChange={(e) => setDraft((d) => ({ ...d, calories: e.target.value }))} placeholder="Calories" />
+        <Input className="h-12" type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.protein} onChange={(e) => setDraft((d) => ({ ...d, protein: e.target.value }))} placeholder="Protein g" />
+        <Input className="h-12" type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.carbs} onChange={(e) => setDraft((d) => ({ ...d, carbs: e.target.value }))} placeholder="Carbs g" />
+        <Input className="h-12" type="number" min="0" inputMode="decimal" enterKeyHint="done" value={draft.fat} onChange={(e) => setDraft((d) => ({ ...d, fat: e.target.value }))} placeholder="Fat g" />
+        <Input className="h-12 xl:col-span-2" value={draft.notes} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Notes" />
         <div className="flex gap-2 xl:col-span-2">
-          <Button type="button" onClick={onSave} disabled={saving} className="flex-1 sm:flex-none"><Save className="h-4 w-4" /> Save</Button>
-          <Button type="button" variant="outline" onClick={onCancel}><X className="h-4 w-4" /> Cancel</Button>
+          <Button type="button" onClick={onSave} disabled={saving} className="min-h-12 flex-1 sm:flex-none"><Save className="h-4 w-4" /> {saving ? "Saving..." : "Save"}</Button>
+          <Button type="button" variant="outline" className="min-h-12" onClick={onCancel}><X className="h-4 w-4" /> Cancel</Button>
         </div>
       </div>
     </div>
@@ -640,7 +640,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
           <span className="flex items-center gap-2"><Utensils className="h-4 w-4" /> {displayMealType(type)}</span>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-[10px]">{plannedCount + doneCount}</Badge>
-            <Button type="button" size="icon" variant="ghost" className="h-11 w-11" onClick={onAdd} aria-label={`Add ${displayMealType(type)} item`}>
+            <Button type="button" size="icon" variant="ghost" className="h-12 w-12" onClick={onAdd} aria-label={`Add ${displayMealType(type)} item`}>
               <PlusCircle className="h-4 w-4" />
             </Button>
           </div>
@@ -655,7 +655,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
             transition={{ duration: 0.2 }}
             className="text-sm text-muted-foreground"
           >
-            No food planned yet. Tap + to add.
+            No food planned yet. Import or update your plan above, or tap + for a manual correction.
           </motion.p>
         ) : null}
         <AnimatePresence mode="popLayout" initial={false}>
@@ -690,14 +690,14 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
                   <MealForm title="Edit planned food" draft={editDraft} setDraft={setEditDraft} onSave={() => onSaveEdit(item)} onCancel={onCancelEdit} saving={updatingId === item.id} />
                 </div>
               ) : (
-                <div className="mt-3 grid grid-cols-[1fr_1fr_1fr_auto] gap-1.5">
-                  <Button type="button" size="sm" onClick={() => onDone(item)} disabled={item.status === "done" || updatingId === item.id}>
+                <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-[1fr_1fr_1fr_auto]">
+                  <Button type="button" className="min-h-12" onClick={() => onDone(item)} disabled={item.status === "done" || updatingId === item.id}>
                     <CheckCircle2 className="h-4 w-4" />
-                    Done
+                    {updatingId === item.id ? "Saving..." : "Done"}
                   </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => onStartEdit(item)} disabled={updatingId === item.id}><Edit3 className="h-4 w-4" /> Edit</Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => onAddToGrocery(item)} disabled={updatingId === item.id}><ShoppingCart className="h-4 w-4" /> <span className="hidden sm:inline">Grocery</span><span className="sm:hidden">Add</span></Button>
-                  <Button type="button" size="icon" variant="ghost" className="h-10 min-h-10 w-10 text-destructive hover:text-destructive" onClick={() => onDelete(item)} disabled={updatingId === item.id} aria-label={`Delete ${item.food_name}`}><Trash2 className="h-4 w-4" /></Button>
+                  <Button type="button" className="min-h-12" variant="outline" onClick={() => onStartEdit(item)} disabled={updatingId === item.id}><Edit3 className="h-4 w-4" /> Edit</Button>
+                  <Button type="button" className="min-h-12" variant="outline" onClick={() => onAddToGrocery(item)} disabled={updatingId === item.id}><ShoppingCart className="h-4 w-4" /> <span className="hidden sm:inline">Grocery</span><span className="sm:hidden">Add</span></Button>
+                  <Button type="button" size="icon" variant="ghost" className="h-12 min-h-12 w-12 text-destructive hover:text-destructive" onClick={() => onDelete(item)} disabled={updatingId === item.id} aria-label={`Delete ${item.food_name}`}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               )}
               {!isEditing ? <MealAiActions item={item} /> : null}
@@ -712,7 +712,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
 
 function NoticeBox({ notice, onClose, onRetry }: { notice: Notice; onClose: () => void; onRetry?: () => void }) {
   const styles = notice.type === "success" ? "border-success/30 bg-success/10 text-foreground" : notice.type === "error" ? "border-destructive/30 bg-destructive/10 text-foreground" : "border-primary/40 bg-primary/5 text-foreground";
-  return <div className={`rounded-md border p-3 text-sm sm:p-4 ${styles}`} role={notice.type === "error" ? "alert" : "status"}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{notice.title}</p>{notice.description ? <p className="mt-1 break-words opacity-90">{notice.description}</p> : null}{onRetry ? <Button className="mt-3" size="sm" onClick={onRetry}><RefreshCw className="h-4 w-4" /> Try again</Button> : null}</div><button type="button" onClick={onClose} className="min-h-11 px-2 text-xs font-semibold underline">close</button></div></div>;
+  return <div className={`rounded-md border p-3 text-sm sm:p-4 ${styles}`} role={notice.type === "error" ? "alert" : "status"}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{notice.title}</p>{notice.description ? <p className="mt-1 break-words opacity-90">{notice.description}</p> : null}{onRetry ? <Button className="mt-3 min-h-12" onClick={onRetry}><RefreshCw className="h-4 w-4" /> Try again</Button> : null}</div><button type="button" onClick={onClose} className="min-h-12 px-3 text-xs font-semibold underline">close</button></div></div>;
 }
 
 function emptyTotals(): MacroTotals { return { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }; }

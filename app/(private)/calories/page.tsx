@@ -9,6 +9,7 @@ import { PageHeading } from "@/components/layout/page-heading";
 import { FoodLogList } from "@/components/meals/food-log-list";
 import { ApiFoodTools } from "@/components/meals/api-food-tools";
 import { RecentFoodStrip } from "@/components/meals/recent-food-strip";
+import { ChatGptMealImportReview } from "@/components/meals/chatgpt-meal-import-review";
 import {
   NutritionCoachCard,
   SavedTarget,
@@ -24,8 +25,7 @@ import {
 } from "@/components/meals/calories-page-sections";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
-import { CardGridSkeleton } from "@/components/ui/state-views";
-import { InlineFeedback } from "@/components/motion";
+import { CardGridSkeleton, ErrorState } from "@/components/ui/state-views";
 import { userSafeError } from "@/lib/error-formatting";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -72,6 +72,9 @@ export default function CaloriesPage() {
   const [activeTab, setActiveTab] = useState("today");
   const [copyStatus, setCopyStatus] = useState("");
   const [waterFeedback, setWaterFeedback] = useState("");
+  const [waterFeedbackVariant, setWaterFeedbackVariant] = useState<"info" | "error">("info");
+  const [waterPendingKey, setWaterPendingKey] = useState<string | null>(null);
+  const [waterDeletingIds, setWaterDeletingIds] = useState<Set<string>>(new Set());
   const [wizard, setWizard] = useState({
     age: "",
     heightCm: "",
@@ -216,25 +219,70 @@ export default function CaloriesPage() {
 
   async function addWater(amountMl: number) {
     if (!user?.id) return toast({ title: "Sign in required", description: "Please sign in before logging water." });
+    if (!Number.isFinite(amountMl) || amountMl <= 0) {
+      setWaterFeedbackVariant("error");
+      setWaterFeedback("Enter a water amount greater than zero.");
+      return;
+    }
+    if (waterPendingKey) return;
+
+    const pendingKey = `add-${Math.round(amountMl)}`;
+    const previousLogs = waterLogs;
+    const now = new Date().toISOString();
+    const optimisticLog: WaterLog = {
+      id: `optimistic-water-${Date.now()}`,
+      user_id: user.id,
+      log_date: selectedDate,
+      amount_ml: Math.round(amountMl),
+      created_at: now,
+      updated_at: now
+    };
+
+    setWaterPendingKey(pendingKey);
+    setWaterFeedbackVariant("info");
+    setWaterFeedback(`+${Math.round(amountMl)} ml pending...`);
+    setWaterLogs((current) => [optimisticLog, ...current]);
     try {
       const log = await addWaterLog(user.id, selectedDate, amountMl);
-      setWaterLogs((current) => [log, ...current]);
-      setWaterFeedback(`+${amountMl} ml added`);
+      setWaterLogs((current) => current.map((item) => item.id === optimisticLog.id ? log : item));
+      setWaterFeedback(`+${Math.round(amountMl)} ml added`);
       window.setTimeout(() => setWaterFeedback(""), 1500);
       await loadWeek();
     } catch (error) {
+      setWaterLogs(previousLogs);
+      setWaterFeedbackVariant("error");
+      setWaterFeedback("Water was not saved. We restored your previous total.");
       toast({ title: "Could not add water", description: userSafeError(error) });
+    } finally {
+      setWaterPendingKey(null);
     }
   }
 
   async function removeWater(log: WaterLog) {
     if (!user?.id) return toast({ title: "Sign in required", description: "Please sign in before deleting water logs." });
+    if (waterDeletingIds.has(log.id)) return;
+
+    const previousLogs = waterLogs;
+    setWaterDeletingIds((current) => new Set(current).add(log.id));
+    setWaterLogs((current) => current.filter((item) => item.id !== log.id));
+    setWaterFeedbackVariant("info");
+    setWaterFeedback("Removing water entry...");
     try {
       await deleteWaterLog(user.id, log.id);
-      setWaterLogs((current) => current.filter((item) => item.id !== log.id));
+      setWaterFeedback("Water entry removed.");
+      window.setTimeout(() => setWaterFeedback(""), 1500);
       await loadWeek();
     } catch (error) {
+      setWaterLogs(previousLogs);
+      setWaterFeedbackVariant("error");
+      setWaterFeedback("Entry was not removed. We restored it.");
       toast({ title: "Could not delete water log", description: userSafeError(error) });
+    } finally {
+      setWaterDeletingIds((current) => {
+        const next = new Set(current);
+        next.delete(log.id);
+        return next;
+      });
     }
   }
 
@@ -273,34 +321,35 @@ export default function CaloriesPage() {
 
   if (loadError) {
     return (
-      <div className="rounded-lg border border-destructive bg-destructive/10 p-6 text-center text-destructive m-4">
-        <p className="font-semibold">Failed to load calories</p>
-        <p className="text-sm mt-1">{loadError}</p>
-        <Button variant="outline" className="mt-4" onClick={() => router.refresh()}>Retry</Button>
-      </div>
+      <ErrorState
+        className="m-4"
+        title="Failed to load calories"
+        description={loadError}
+        onRetry={() => router.refresh()}
+      />
     );
   }
 
   return (
     <>
       <PageHeading
-        title="Calorie Tracker"
-        description={`Track daily food, macros, and water intake for ${formatDay(selectedDate)}.`}
+        title="Nutrition Tracker"
+        description={`Review ChatGPT meal estimates, track food and water, and keep manual controls available for corrections on ${formatDay(selectedDate)}.`}
         action={
           <div className="hidden sm:flex flex-wrap gap-2">
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" className="min-h-12">
               <Link href="/calories/weekly-overview">
                 <BarChart3 className="h-4 w-4" />
                 Weekly Summary
               </Link>
             </Button>
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" className="min-h-12">
               <Link href="/calories/custom-food-meal">
                 <ChefHat className="h-4 w-4" />
                 Food Builder
               </Link>
             </Button>
-            <Button variant="outline" onClick={copyYesterday}>
+            <Button variant="outline" className="min-h-12" onClick={copyYesterday}>
               <Copy className="h-4 w-4" />
               Copy previous day
             </Button>
@@ -313,7 +362,7 @@ export default function CaloriesPage() {
           <select
             value={activeTab}
             onChange={(e) => setActiveTab(e.target.value)}
-            className="glass-card-strong h-11 w-full rounded-[14px] px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="glass-card-strong h-12 w-full rounded-[14px] px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Select tab"
           >
             <option value="today">Today — Food log & summary</option>
@@ -339,7 +388,7 @@ export default function CaloriesPage() {
                   <p className="mt-1 text-lg font-bold text-foreground">{activeTarget?.label ?? "Target not set"}</p>
                   <p className="mt-1 text-sm text-muted-foreground">{activeTarget?.reason ?? "Add a base or day-type target to see today’s goal."}</p>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("targets")}>Review targets</Button>
+                <Button type="button" variant="outline" className="min-h-12" onClick={() => setActiveTab("targets")}>Review targets</Button>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">
                 <SavedTarget label="Calories" value={displayTargets.daily_calories ? `${displayTargets.daily_calories} kcal` : "-"} />
@@ -355,12 +404,14 @@ export default function CaloriesPage() {
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-muted-foreground">{formatDay(selectedDate)}</p>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => moveWeek(-1)}>← Prev</Button>
-                <Button variant="outline" size="sm" onClick={() => moveWeek(1)}>Next →</Button>
+                <Button variant="outline" className="min-h-12" onClick={() => moveWeek(-1)}>Prev</Button>
+                <Button variant="outline" className="min-h-12" onClick={() => moveWeek(1)}>Next</Button>
               </div>
             </div>
 
             <CompactNutritionSummary totals={totals} targets={displayTargets} waterTotal={waterTotal} />
+
+            <ChatGptMealImportReview selectedDate={selectedDate} onSaved={handleLogAdded} />
 
             <RecentFoodStrip logDate={selectedDate} onFoodLogged={handleLogAdded} />
 
@@ -379,7 +430,14 @@ export default function CaloriesPage() {
               copyStatus={copyStatus}
             />
 
-            <WaterMiniSummary waterTotal={waterTotal} waterGoal={displayTargets.water_ml} onAddWater={addWater} waterFeedback={waterFeedback} />
+            <WaterMiniSummary
+              waterTotal={waterTotal}
+              waterGoal={displayTargets.water_ml}
+              onAddWater={addWater}
+              waterFeedback={waterFeedback}
+              waterFeedbackVariant={waterFeedbackVariant}
+              pendingWaterKey={waterPendingKey}
+            />
 
             <details className="glass-card-strong">
               <summary className="flex cursor-pointer items-center justify-between p-4 text-sm font-semibold">
@@ -419,6 +477,8 @@ export default function CaloriesPage() {
               <TrackerCard label="Water" value={waterTotal} target={displayTargets.water_ml} unit=" ml" hasTarget={displayTargets.water_ml > 0} />
             </div>
 
+            <ChatGptMealImportReview selectedDate={selectedDate} onSaved={handleLogAdded} />
+
             <RecentFoodStrip logDate={selectedDate} onFoodLogged={handleLogAdded} />
 
             <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
@@ -432,6 +492,9 @@ export default function CaloriesPage() {
                   onAddWater={addWater}
                   onRemoveWater={removeWater}
                   waterFeedback={waterFeedback}
+                  waterFeedbackVariant={waterFeedbackVariant}
+                  pendingWaterKey={waterPendingKey}
+                  deletingWaterIds={waterDeletingIds}
                 />
               </div>
               <FoodLogList

@@ -1,6 +1,7 @@
 "use client";
 
 import { Barcode, ChefHat, Copy, Search, Trash2, Utensils } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,16 +32,29 @@ export function FoodLogList({
   copyStatus?: string;
 }) {
   const { toast } = useToast();
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
+  const [deleteFeedback, setDeleteFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
 
-  async function remove(id: string) {
+  async function remove(log: FoodLog) {
+    if (pendingDeleteIds.has(log.id)) return;
+    setPendingDeleteIds((current) => new Set(current).add(log.id));
+    setDeleteFeedback({ type: "info", message: `Deleting ${log.food_name || "food"}...` });
     try {
-      await deleteFoodLog(id);
-      onDeleted?.(id);
+      await deleteFoodLog(log.id);
+      onDeleted?.(log.id);
+      setDeleteFeedback({ type: "info", message: `${log.food_name || "Food"} was deleted.` });
       toast({ title: "Food log deleted", description: "Today has been updated." });
     } catch (error) {
+      setDeleteFeedback({ type: "error", message: `Could not delete ${log.food_name || "food"}. Your log is unchanged. ${userSafeError(error)}` });
       toast({
         title: "Could not delete food",
         description: userSafeError(error),
+      });
+    } finally {
+      setPendingDeleteIds((current) => {
+        const next = new Set(current);
+        next.delete(log.id);
+        return next;
       });
     }
   }
@@ -58,6 +72,7 @@ export function FoodLogList({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <InlineFeedback message={deleteFeedback?.message} variant={deleteFeedback?.type === "error" ? "error" : "info"} onClose={() => setDeleteFeedback(null)} />
         {hasLogs ? (
           mealOrder.map((meal) => {
             const items = grouped[meal];
@@ -91,8 +106,9 @@ export function FoodLogList({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-9 w-9 shrink-0"
-                      onClick={() => remove(log.id)}
+                      className="h-12 w-12 shrink-0 text-destructive hover:text-destructive"
+                      onClick={() => remove(log)}
+                      disabled={pendingDeleteIds.has(log.id)}
                       aria-label={`Delete ${log.food_name || "food"}`}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -111,13 +127,13 @@ export function FoodLogList({
           >
             <div>
               <p className="text-sm font-semibold text-foreground">No food logged yet</p>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">Search for food, create something custom, scan a barcode, or copy yesterday when your routine repeats.</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">Manual add is available when you want to correct or enter something yourself. Search, custom food, barcode, and copy-yesterday stay available as fallback controls.</p>
             </div>
             <div className="grid w-full gap-2 sm:grid-cols-2">
-              {onAddAction ? <Button onClick={onAddAction}><Search className="h-4 w-4" /> Search and add food</Button> : null}
-              {onCustomFoodAction ? <Button variant="outline" onClick={onCustomFoodAction}><ChefHat className="h-4 w-4" /> Custom food or meal</Button> : null}
-              {onScanAction ? <Button variant="outline" onClick={onScanAction}><Barcode className="h-4 w-4" /> Scan barcode</Button> : null}
-              {onCopyPrevious ? <Button variant="outline" onClick={onCopyPrevious}><Copy className="h-4 w-4" /> Copy previous day</Button> : null}
+              {onAddAction ? <Button className="min-h-12" onClick={onAddAction}><Search className="h-4 w-4" /> Search and add food</Button> : null}
+              {onCustomFoodAction ? <Button className="min-h-12" variant="outline" onClick={onCustomFoodAction}><ChefHat className="h-4 w-4" /> Custom food or meal</Button> : null}
+              {onScanAction ? <Button className="min-h-12" variant="outline" onClick={onScanAction}><Barcode className="h-4 w-4" /> Scan barcode</Button> : null}
+              {onCopyPrevious ? <Button className="min-h-12" variant="outline" onClick={onCopyPrevious}><Copy className="h-4 w-4" /> Copy previous day</Button> : null}
             </div>
             <InlineFeedback message={copyStatus} />
           </motion.div>

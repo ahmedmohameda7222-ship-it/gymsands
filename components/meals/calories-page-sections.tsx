@@ -49,7 +49,7 @@ export function SelectField({ label, value, values, onChange }: { label: string;
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <select id={id} value={value} onChange={(event) => onChange(event.target.value)} className="flex h-11 w-full rounded-[14px] border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <select id={id} value={value} onChange={(event) => onChange(event.target.value)} className="flex h-12 w-full rounded-[14px] border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {values.map((item) => <option key={item} value={item}>{item.replace("_", " ")}</option>)}
       </select>
     </div>
@@ -65,12 +65,12 @@ export function WeeklyTracker({ selectedDate, weekData, onSelectDate, onMoveWeek
     <Card variant="glassStrong" className="mt-4">
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
         <CardTitle>Weekly tracker</CardTitle>
-        <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => onMoveWeek(-7)}><ChevronLeft className="h-4 w-4" /> Previous</Button><Button variant="outline" size="sm" onClick={() => onMoveWeek(7)}>Next <ChevronRight className="h-4 w-4" /></Button></div>
+        <div className="flex gap-2"><Button variant="outline" className="min-h-12" onClick={() => onMoveWeek(-7)}><ChevronLeft className="h-4 w-4" /> Previous</Button><Button variant="outline" className="min-h-12" onClick={() => onMoveWeek(7)}>Next <ChevronRight className="h-4 w-4" /></Button></div>
       </CardHeader>
       <CardContent>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
           {weekData.map((day) => (
-            <button key={day.date} type="button" onClick={() => onSelectDate(day.date)} className={`rounded-2xl border p-3 text-left transition-colors hover:border-primary/45 hover:bg-white/45 ${day.date === selectedDate ? "border-primary bg-primary/10" : "border-white/50 bg-white/35 dark:border-white/10 dark:bg-white/5"}`}>
+            <button key={day.date} type="button" onClick={() => onSelectDate(day.date)} className={`min-h-12 rounded-2xl border p-3 text-left transition-colors hover:border-primary/45 hover:bg-white/45 ${day.date === selectedDate ? "border-primary bg-primary/10" : "border-white/50 bg-white/35 dark:border-white/10 dark:bg-white/5"}`}>
               <p className="font-semibold">{formatDay(day.date)}</p>
               <p className="mt-2 text-sm text-muted-foreground">{day.has_targets ? `${day.calories} / ${day.planned_calories} kcal` : `${day.calories} kcal logged`}</p>
               <p className="mt-1 text-xs text-muted-foreground">P {day.protein_g}g | C {day.carbs_g}g | F {day.fat_g}g</p>
@@ -182,16 +182,73 @@ function MacroBar({ label, value, total }: { label: string; value: number; total
   return <div><div className="mb-1 flex justify-between text-sm"><span>{label}</span><span>{Math.round(value)}g</span></div><Progress value={percent(value, total)} /></div>;
 }
 
-export function WaterCard({ waterTotal, waterGoal, customWaterMl, setCustomWaterMl, waterLogs, onAddWater, onRemoveWater, waterFeedback }: { waterTotal: number; waterGoal: number; customWaterMl: string; setCustomWaterMl: (value: string) => void; waterLogs: WaterLog[]; onAddWater: (amount: number) => void; onRemoveWater: (log: WaterLog) => void; waterFeedback?: string }) {
+export function WaterCard({
+  waterTotal,
+  waterGoal,
+  customWaterMl,
+  setCustomWaterMl,
+  waterLogs,
+  onAddWater,
+  onRemoveWater,
+  waterFeedback,
+  waterFeedbackVariant = "info",
+  pendingWaterKey,
+  deletingWaterIds
+}: {
+  waterTotal: number;
+  waterGoal: number;
+  customWaterMl: string;
+  setCustomWaterMl: (value: string) => void;
+  waterLogs: WaterLog[];
+  onAddWater: (amount: number) => void;
+  onRemoveWater: (log: WaterLog) => void;
+  waterFeedback?: string;
+  waterFeedbackVariant?: "info" | "error";
+  pendingWaterKey?: string | null;
+  deletingWaterIds?: Set<string>;
+}) {
+  const customAmount = Number(customWaterMl);
+  const customPending = pendingWaterKey === `add-${Math.round(customAmount)}`;
+  const targetHit = waterGoal > 0 && waterTotal >= waterGoal;
   return (
     <Card variant="glass">
       <CardHeader><CardTitle>Water intake</CardTitle></CardHeader>
       <CardContent className="space-y-3">
-        <InlineFeedback message={waterFeedback ?? ""} />
-        <div><p className="text-2xl font-bold">{waterTotal} ml <span className="text-base font-semibold text-muted-foreground">/ {(waterTotal / 1000).toFixed(2)} L</span></p><p className="text-sm text-muted-foreground">Goal {waterGoal} ml / {(waterGoal / 1000).toFixed(2)} L</p><Progress value={percent(waterTotal, waterGoal)} className="mt-3" /></div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[250, 500, 750, 1000].map((amount) => <Button key={amount} type="button" variant="outline" size="sm" onClick={() => onAddWater(amount)}>+{amount === 1000 ? "1 L" : `${amount} ml`}</Button>)}</div>
-        <div className="grid gap-2 sm:grid-cols-[1fr_auto]"><Input type="number" min="1" inputMode="numeric" enterKeyHint="done" value={customWaterMl} onChange={(event) => setCustomWaterMl(event.target.value)} /><Button type="button" onClick={() => onAddWater(Number(customWaterMl))}>Add water</Button></div>
-        <div className="space-y-2">{waterLogs.map((log) => <div key={log.id} className="solid-row flex items-center justify-between p-2 text-sm"><span>{log.amount_ml} ml</span><Button type="button" variant="ghost" size="icon" onClick={() => onRemoveWater(log)} aria-label="Delete water log"><Trash2 className="h-4 w-4" /></Button></div>)}</div>
+        <InlineFeedback message={waterFeedback ?? ""} variant={waterFeedbackVariant} />
+        <div>
+          <p className="text-2xl font-bold">{waterTotal} ml <span className="text-base font-semibold text-muted-foreground">/ {(waterTotal / 1000).toFixed(2)} L</span></p>
+          <p className="text-sm text-muted-foreground">Goal {waterGoal} ml / {(waterGoal / 1000).toFixed(2)} L</p>
+          <p className="mt-1 text-xs text-muted-foreground">Water is logged directly because it does not need AI.</p>
+          {targetHit ? <p className="mt-1 text-xs font-semibold text-success">Water target reached for today.</p> : null}
+          <Progress value={percent(waterTotal, waterGoal)} className="mt-3" />
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[250, 500, 750, 1000].map((amount) => {
+            const isPending = pendingWaterKey === `add-${amount}`;
+            return (
+              <Button key={amount} type="button" variant="outline" className="min-h-12" onClick={() => onAddWater(amount)} disabled={Boolean(pendingWaterKey)}>
+                {isPending ? "Adding..." : `+${amount === 1000 ? "1 L" : `${amount} ml`}`}
+              </Button>
+            );
+          })}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <Input className="h-12" type="number" min="1" inputMode="numeric" enterKeyHint="done" value={customWaterMl} onChange={(event) => setCustomWaterMl(event.target.value)} />
+          <Button type="button" className="min-h-12" onClick={() => onAddWater(Number(customWaterMl))} disabled={Boolean(pendingWaterKey)}>{customPending ? "Adding..." : "Add water"}</Button>
+        </div>
+        <div className="space-y-2">
+          {waterLogs.map((log) => {
+            const deleting = deletingWaterIds?.has(log.id) ?? false;
+            return (
+              <div key={log.id} className="solid-row flex items-center justify-between p-2 text-sm">
+                <span>{log.amount_ml} ml</span>
+                <Button type="button" variant="ghost" size="icon" className="h-12 w-12" onClick={() => onRemoveWater(log)} disabled={deleting || log.id.startsWith("optimistic-water-")} aria-label="Delete water log">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );
@@ -250,20 +307,35 @@ function MacroMiniBar({ label, value, target, progress, color, unit = "g" }: { l
   );
 }
 
-export function WaterMiniSummary({ waterTotal, waterGoal, onAddWater, waterFeedback }: { waterTotal: number; waterGoal: number; onAddWater: (amount: number) => void; waterFeedback?: string }) {
+export function WaterMiniSummary({
+  waterTotal,
+  waterGoal,
+  onAddWater,
+  waterFeedback,
+  waterFeedbackVariant = "info",
+  pendingWaterKey
+}: {
+  waterTotal: number;
+  waterGoal: number;
+  onAddWater: (amount: number) => void;
+  waterFeedback?: string;
+  waterFeedbackVariant?: "info" | "error";
+  pendingWaterKey?: string | null;
+}) {
   const progress = percent(waterTotal, waterGoal);
   return (
     <div className="glass-card-strong p-3 shadow-soft">
-      <InlineFeedback message={waterFeedback ?? ""} />
+      <InlineFeedback message={waterFeedback ?? ""} variant={waterFeedbackVariant} />
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium text-muted-foreground">Water</p>
           <p className="text-sm font-semibold">{waterTotal} ml / {(waterTotal / 1000).toFixed(2)} L <span className="block text-xs font-normal text-muted-foreground">Goal {waterGoal} ml / {(waterGoal / 1000).toFixed(2)} L</span></p>
+          <p className="mt-1 text-xs text-muted-foreground">Water is logged directly because it does not need AI.</p>
         </div>
         <div className="flex shrink-0 gap-1">
           {[250, 500].map((amount) => (
-            <Button key={amount} variant="outline" size="sm" className="px-2 text-xs" onClick={() => onAddWater(amount)}>
-              +{amount} ml
+            <Button key={amount} variant="outline" className="min-h-12 px-3 text-xs" onClick={() => onAddWater(amount)} disabled={Boolean(pendingWaterKey)}>
+              {pendingWaterKey === `add-${amount}` ? "Adding" : `+${amount} ml`}
             </Button>
           ))}
         </div>

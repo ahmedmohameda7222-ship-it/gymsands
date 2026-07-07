@@ -6,7 +6,7 @@ export default function MyMealPlanPage() {
     <>
       <PageHeading
         title="My Meal Plan"
-        description="Plan breakfast, lunch, snacks, and dinner. Planned food counts only after you mark it done."
+        description="Import a meal plan from ChatGPT, review it, then save it to Plaivra. Manual edits stay available for corrections."
       />
       <MyMealPlanBuilder />
     </>
