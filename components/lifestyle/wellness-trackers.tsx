@@ -721,42 +721,105 @@ export function SupplementsTracker() {
 export function SleepRecoveryTracker() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { dialog, ask } = useConfirm();
   const today = useTodayDate();
+  const userId = user?.id ?? "";
   const [items, setItems] = useState<EnhancedSleepRecoveryLog[]>([]);
-  const [draft, setDraft] = useState({ id: "", hours_slept: "", sleep_quality: "", bedtime: "", wake_time: "", recovery_level: "", fatigue_level: "", soreness_level: "", stress_level: "", notes: "" });
+  const [draft, setDraft] = useState(emptyRecoveryDraft(today));
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState("");
+  const [savedMessage, setSavedMessage] = useState("");
+  const [deletingId, setDeletingId] = useState("");
+  const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
+
+  const loadRecovery = useCallback(async () => {
+    if (!userId) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      setItems(await getSleepRecoveryHistory(userId, 30, { throwOnError: true }));
+    } catch (error) {
+      setItems([]);
+      setLoadError(messageFromError(error, "Recovery logs could not load."));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId]);
 
   useEffect(() => {
-    async function load() {
-      if (!user?.id) return;
-      setItems(await getSleepRecoveryHistory(user.id, 30));
-    }
-    load().catch((error) => toast({ title: "Could not load recovery logs", description: error instanceof Error ? error.message : "Please try again." }));
-  }, [toast, user?.id]);
+    void loadRecovery();
+  }, [loadRecovery]);
 
   async function saveLog() {
-    if (!user?.id) return;
-    const saved = await upsertEnhancedSleepRecoveryLog({
-      id: draft.id || undefined,
-      user_id: user.id,
-      log_date: today,
-      hours_slept: draft.hours_slept ? Number(draft.hours_slept) : null,
-      sleep_quality: draft.sleep_quality,
-      bedtime: draft.bedtime,
-      wake_time: draft.wake_time,
-      recovery_level: draft.recovery_level,
-      fatigue_level: draft.fatigue_level,
-      soreness_level: draft.soreness_level,
-      stress_level: draft.stress_level,
-      notes: draft.notes
-    });
-    setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
-    setDraft({ id: "", hours_slept: "", sleep_quality: "", bedtime: "", wake_time: "", recovery_level: "", fatigue_level: "", soreness_level: "", stress_level: "", notes: "" });
+    if (!userId || saveStatus === "saving") return;
+    const validation = validateRecoveryDraft(draft);
+    if (validation) {
+      setSaveStatus("failed");
+      setSaveError(validation);
+      return;
+    }
+    try {
+      setSaveStatus("saving");
+      setSaveError("");
+      setSavedMessage("");
+      const existingForDate = !draft.id ? items.find((item) => item.log_date === draft.log_date) : null;
+      const saved = await upsertEnhancedSleepRecoveryLog({
+        id: draft.id || existingForDate?.id || undefined,
+        user_id: userId,
+        log_date: draft.log_date || today,
+        hours_slept: draft.hours_slept ? Number(draft.hours_slept) : null,
+        sleep_quality: draft.sleep_quality,
+        bedtime: draft.bedtime,
+        wake_time: draft.wake_time,
+        recovery_level: draft.recovery_level,
+        fatigue_level: draft.fatigue_level,
+        soreness_level: draft.soreness_level,
+        stress_level: draft.stress_level,
+        notes: draft.notes
+      });
+      setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort((a, b) => b.log_date.localeCompare(a.log_date)));
+      setDraft(emptyRecoveryDraft(today));
+      setSaveStatus("saved");
+      setSavedMessage("Recovery log saved.");
+    } catch (error) {
+      const message = messageFromError(error, "Please try again.");
+      setSaveStatus("failed");
+      setSaveError(`Save failed. Your recovery draft is still here. ${message}`);
+      toast({ title: "Could not save recovery log", description: message });
+    }
   }
 
   async function removeLog(item: SleepRecoveryLog) {
-    if (!user?.id) return;
-    await deleteSleepRecoveryLog(user.id, item.id);
-    setItems((current) => current.filter((log) => log.id !== item.id));
+    if (!userId) return;
+    ask({
+      title: "Delete this recovery log?",
+      description: `Delete the recovery log from ${item.log_date}? This affects recovery history and reports.`,
+      variant: "destructive",
+      confirmLabel: "Delete log",
+      onConfirm: async () => {
+        const previousItems = items;
+        try {
+          setDeletingId(item.id);
+          setRowError(null);
+          setItems((current) => current.filter((log) => log.id !== item.id));
+          await deleteSleepRecoveryLog(userId, item.id);
+          if (draft.id === item.id) setDraft(emptyRecoveryDraft(today));
+          toast({ title: "Recovery log deleted", description: "Saved recovery history was updated." });
+        } catch (error) {
+          const message = messageFromError(error, "Please try again.");
+          setItems(previousItems);
+          setRowError({ id: item.id, message: `Recovery log was not deleted. ${message}` });
+          toast({ title: "Could not delete recovery log", description: message });
+        } finally {
+          setDeletingId("");
+        }
+      }
+    });
   }
 
   const readiness = calculateReadiness(items);
@@ -766,13 +829,31 @@ export function SleepRecoveryTracker() {
 
   const latest = items[0];
 
+  if (isLoading) {
+    return (
+      <TrackerShell title="Sleep & Recovery" description="Log sleep duration, quality, soreness, fatigue, stress, and recovery notes.">
+        <CardSkeleton rows={4} />
+      </TrackerShell>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <TrackerShell title="Sleep & Recovery" description="Log sleep duration, quality, soreness, fatigue, stress, and recovery notes.">
+        <ErrorState title="Recovery logs could not load" description={`${loadError} Your saved recovery data was not changed.`} onRetry={loadRecovery} />
+      </TrackerShell>
+    );
+  }
+
   return (
     <TrackerShell title="Sleep & Recovery" description="Log sleep duration, quality, soreness, fatigue, stress, and recovery notes.">
+      {dialog}
       {/* Status at top */}
       <div className="grid gap-3 sm:grid-cols-2">
         <Metric title="Average sleep" value={averageSleep === null ? "Not enough data" : `${averageSleep}h`} detail="Recent real sleep logs only" />
         <Metric title="Readiness" value={readiness.value === null ? "Not enough data" : `${readiness.value}%`} detail={readiness.detail} />
       </div>
+      <p className="text-sm text-muted-foreground">Readiness is a simple non-medical estimate from saved sleep and recovery ratings. It is not diagnosis or treatment advice.</p>
 
       {latest ? (
         <div className="solid-row p-3">
@@ -792,10 +873,28 @@ export function SleepRecoveryTracker() {
           </div>
           {latest.notes && <p className="mt-2 text-sm text-muted-foreground">{latest.notes}</p>}
         </div>
+      ) : (
+        <div className="rounded-md border border-border/70 bg-card p-4 text-sm text-muted-foreground">
+          No recovery logs yet. Save one check-in to start average sleep and readiness context.
+        </div>
+      )}
+
+      {draft.id ? (
+        <div className="rounded-md border border-primary/40 bg-primary/5 p-4">
+          <p className="text-sm font-semibold text-foreground">Editing recovery log from {draft.log_date}</p>
+          <p className="mt-1 text-sm text-muted-foreground">The original log date is preserved unless you change the date field.</p>
+          <Button type="button" variant="outline" className="mt-3 h-12" onClick={() => { setDraft(emptyRecoveryDraft(today)); setSaveError(""); setSaveStatus("idle"); }}>
+            Cancel edit
+          </Button>
+        </div>
       ) : null}
+
+      {saveError ? <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{saveError}</p> : null}
+      {savedMessage && saveStatus === "saved" ? <p className="rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success">{savedMessage}</p> : null}
 
       {/* Form */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Field label="Log date" type="date" value={draft.log_date} onChange={(log_date) => setDraft((current) => ({ ...current, log_date }))} />
         <Field label="Hours slept" type="number" inputMode="decimal" enterKeyHint="done" value={draft.hours_slept} onChange={(hours_slept) => setDraft((current) => ({ ...current, hours_slept }))} />
         <Field label="Sleep quality" value={draft.sleep_quality} onChange={(sleep_quality) => setDraft((current) => ({ ...current, sleep_quality }))} placeholder="good, fair, poor, or 1-5" />
         <Field label="Bedtime" type="time" value={draft.bedtime} onChange={(bedtime) => setDraft((current) => ({ ...current, bedtime }))} />
@@ -806,16 +905,17 @@ export function SleepRecoveryTracker() {
         <SelectField label="Stress 1-5" value={draft.stress_level} values={ratingOptions} onChange={(stress_level) => setDraft((current) => ({ ...current, stress_level }))} />
         <Field label="Notes" value={draft.notes} onChange={(notes) => setDraft((current) => ({ ...current, notes }))} />
       </div>
-      <Button className="h-12" onClick={saveLog}>
+      <p className="text-sm text-muted-foreground">Recovery: 1 = poor, 5 = strong. Fatigue, soreness, and stress: 1 = low, 5 = high.</p>
+      <Button className="h-12" onClick={saveLog} disabled={saveStatus === "saving"}>
         <Save className="h-4 w-4" />
-        Save Recovery Log
+        {saveStatus === "saving" ? "Saving recovery log" : "Save Recovery Log"}
       </Button>
 
       <ItemGrid>
         {items.map((item) => (
           <ActionCard
             key={item.id}
-            title={`${item.log_date} | ${item.hours_slept ?? "No"} hours`}
+            title={`${item.log_date} | ${typeof item.hours_slept === "number" ? `${item.hours_slept}h sleep` : "Sleep not logged"}`}
             detail={[
               item.bedtime ? `Bed ${item.bedtime}` : null,
               item.wake_time ? `Wake ${item.wake_time}` : null,
@@ -826,8 +926,11 @@ export function SleepRecoveryTracker() {
               item.stress_level ? `Stress ${item.stress_level}` : null,
               item.notes
             ].filter(Boolean).join(" | ") || "Recovery log"}
+            pending={deletingId === item.id}
+            error={rowError?.id === item.id ? rowError.message : ""}
             onEdit={() => setDraft({
               id: item.id,
+              log_date: item.log_date,
               hours_slept: item.hours_slept === null ? "" : String(item.hours_slept),
               sleep_quality: item.sleep_quality ?? "",
               bedtime: item.bedtime ?? "",
@@ -1071,6 +1174,26 @@ function SelectField({ label, value, values, onChange }: { label: string; value:
       </select>
     </div>
   );
+}
+
+function emptyRecoveryDraft(today: string) {
+  return { id: "", log_date: today, hours_slept: "", sleep_quality: "", bedtime: "", wake_time: "", recovery_level: "", fatigue_level: "", soreness_level: "", stress_level: "", notes: "" };
+}
+
+function validateRecoveryDraft(draft: ReturnType<typeof emptyRecoveryDraft>) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.log_date)) return "Choose a valid recovery log date.";
+  if (draft.hours_slept.trim()) {
+    const hours = Number(draft.hours_slept);
+    if (!Number.isFinite(hours) || hours < 0 || hours > 24) return "Hours slept must be between 0 and 24.";
+  }
+  const ratingFields = [
+    ["Recovery", draft.recovery_level],
+    ["Fatigue", draft.fatigue_level],
+    ["Soreness", draft.soreness_level],
+    ["Stress", draft.stress_level]
+  ];
+  const invalid = ratingFields.find(([, value]) => value && (!Number.isFinite(Number(value)) || Number(value) < 1 || Number(value) > 5));
+  return invalid ? `${invalid[0]} must be rated from 1 to 5.` : "";
 }
 
 function messageFromError(error: unknown, fallback: string) {

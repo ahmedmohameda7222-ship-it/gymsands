@@ -101,7 +101,7 @@ export async function getSupplementHistory(userId: string, days = 30) {
   return (data ?? []) as SupplementLog[];
 }
 
-export async function getSleepRecoveryHistory(userId: string, limit = 30) {
+export async function getSleepRecoveryHistory(userId: string, limit = 30, options?: { throwOnError?: boolean }) {
   if (!canUseUserData(userId)) return [] as EnhancedSleepRecoveryLog[];
   const { data, error } = await supabase!
     .from("sleep_recovery_logs")
@@ -111,6 +111,7 @@ export async function getSleepRecoveryHistory(userId: string, limit = 30) {
     .limit(limit);
   if (error) {
     console.warn("Plaivra could not load sleep and recovery history.", error.message);
+    if (options?.throwOnError) throw new Error(`Could not load sleep and recovery history. ${error.message}`);
     return [];
   }
   return (data ?? []) as EnhancedSleepRecoveryLog[];
