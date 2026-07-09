@@ -25,6 +25,11 @@ export type AiPermissionConfig = {
   >;
 };
 
+export type AiPermissionSettingsStatus =
+  | { state: "loaded"; message?: string }
+  | { state: "none"; message?: string }
+  | { state: "failed"; message: string };
+
 function scopesToConfig(scopes: string[]): AiPermissionConfig {
   const isFull = scopes.includes("plaivra.full_access");
 
@@ -103,8 +108,16 @@ export function getDefaultAiPermissionConfig(): AiPermissionConfig {
   return scopesToConfig([]);
 }
 
-export async function getAiPermissionSettings(userId: string): Promise<AiPermissionConfig | null> {
-  if (!canUseUserData(userId)) return null;
+export async function getAiPermissionSettingsWithStatus(
+  userId: string
+): Promise<{ config: AiPermissionConfig | null; status: AiPermissionSettingsStatus }> {
+  if (!canUseUserData(userId)) {
+    return {
+      config: null,
+      status: { state: "failed", message: "Sign in again to load your AI permission settings." }
+    };
+  }
+
   const { data, error } = await supabase!
     .from("user_ai_permission_settings")
     .select("*")
@@ -113,12 +126,29 @@ export async function getAiPermissionSettings(userId: string): Promise<AiPermiss
 
   if (error) {
     console.warn("Could not load AI permission settings:", error.message);
-    return null;
+    return {
+      config: null,
+      status: { state: "failed", message: "Plaivra could not confirm your saved AI permissions. Retry before making changes." }
+    };
   }
 
-  if (!data) return null;
+  if (!data) {
+    return {
+      config: null,
+      status: { state: "none", message: "No saved AI permission choices yet." }
+    };
+  }
+
   const settings = data as UserAiPermissionSettings;
-  return scopesToConfig(settings.scopes);
+  return {
+    config: scopesToConfig(settings.scopes),
+    status: { state: "loaded" }
+  };
+}
+
+export async function getAiPermissionSettings(userId: string): Promise<AiPermissionConfig | null> {
+  const result = await getAiPermissionSettingsWithStatus(userId);
+  return result.status.state === "failed" ? null : result.config;
 }
 
 export async function saveAiPermissionSettings(

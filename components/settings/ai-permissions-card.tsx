@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
-import { Ban, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Shield } from "lucide-react";
+import { AlertCircle, Ban, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, RefreshCcw, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import {
-  getAiPermissionSettings,
+  getAiPermissionSettingsWithStatus,
   saveAiPermissionSettings,
   getDefaultAiPermissionConfig,
   type AiPermissionConfig,
@@ -38,16 +38,28 @@ export function AiPermissionsCard() {
   const [config, setConfig] = useState<AiPermissionConfig>(() => getDefaultAiPermissionConfig());
   const [hasSavedSettings, setHasSavedSettings] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [saveError, setSaveError] = useState("");
 
   const loadData = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setIsLoading(false);
+      setLoadError("Sign in again to load your AI permission settings.");
+      return;
+    }
     setIsLoading(true);
+    setLoadError("");
+    setSaveError("");
     try {
-      const settings = await getAiPermissionSettings(user.id);
-      setConfig(settings ?? getDefaultAiPermissionConfig());
-      setHasSavedSettings(Boolean(settings));
+      const result = await getAiPermissionSettingsWithStatus(user.id);
+      setConfig(result.config ?? getDefaultAiPermissionConfig());
+      setHasSavedSettings(result.status.state === "loaded");
+      if (result.status.state === "failed") setLoadError(result.status.message);
     } catch (error) {
       console.warn("Could not load AI permissions:", error);
+      setConfig(getDefaultAiPermissionConfig());
+      setHasSavedSettings(false);
+      setLoadError("Plaivra could not confirm your saved AI permissions. Retry before making changes.");
     } finally {
       setIsLoading(false);
     }
@@ -58,21 +70,42 @@ export function AiPermissionsCard() {
   }, [loadData]);
 
   async function handleSave() {
-    if (!user?.id) return;
+    if (!user?.id || loadError) return;
     setIsSaving(true);
+    setSaveError("");
+    setSavedAt(null);
     try {
       await saveAiPermissionSettings(user.id, config);
       toast({ title: "AI Permissions saved", description: "Your AI access settings have been updated." });
       setHasSavedSettings(true);
       setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
     } catch (error) {
-      toast({ title: "Could not save", description: userSafeError(error) });
+      const message = userSafeError(error);
+      setSaveError(message);
+      toast({ title: "Could not save", description: message });
     } finally {
       setIsSaving(false);
     }
   }
 
+  function selectFullAccess() {
+    if (config.accessMode === "full" || loadError || isSaving) return;
+    confirmAsk({
+      title: "Grant ChatGPT access to all Plaivra areas?",
+      description:
+        "This lets ChatGPT view and change every supported Plaivra area, but Plaivra still only saves changes after you approve them. You can revoke or narrow access later.",
+      confirmLabel: "Grant full access",
+      onConfirm: () => setConfig((current) => ({ ...current, accessMode: "full" }))
+    });
+  }
+
+  function selectCustomAccess() {
+    if (loadError || isSaving) return;
+    setConfig((current) => ({ ...current, accessMode: "custom" }));
+  }
+
   function toggleRead(section: (typeof ALL_AI_PERMISSION_SECTIONS)[number]) {
+    if (loadError || isSaving) return;
     const enabled = config.sections[section].read;
     const apply = () => setConfig((current) => ({
       ...current,
@@ -92,6 +125,7 @@ export function AiPermissionsCard() {
   }
 
   function toggleWrite(section: (typeof ALL_AI_PERMISSION_SECTIONS)[number]) {
+    if (loadError || isSaving) return;
     const enabled = config.sections[section].write;
     const apply = () => setConfig((current) => ({
       ...current,
@@ -121,6 +155,7 @@ export function AiPermissionsCard() {
       denied: labels.filter(({ section }) => !config.sections[section].read && !config.sections[section].write).map((item) => item.label)
     };
   }, [config]);
+  const controlsDisabled = Boolean(loadError) || isSaving;
 
   if (isLoading) {
     return (
@@ -144,12 +179,40 @@ export function AiPermissionsCard() {
           <CardDescription>Choose what ChatGPT can see or change after you connect Plaivra. Nothing is shared until you save a choice.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
+          <div className="rounded-xl border border-border/70 bg-muted/30 p-3 text-sm leading-6 text-muted-foreground">
+            <p className="font-semibold text-foreground">
+              {loadError
+                ? "Permission state could not be confirmed"
+                : hasSavedSettings
+                  ? "Saved permission choices loaded"
+                  : "No saved permission choices yet"}
+            </p>
+            <p className="mt-1">
+              {loadError
+                ? "Plaivra is not assuming these defaults are your saved choices. Retry before saving any permission changes."
+                : hasSavedSettings
+                  ? "These choices control what ChatGPT may view or change after you connect it."
+                  : "Choose and save permissions before relying on a ChatGPT connection."}
+            </p>
+            {loadError ? (
+              <Button type="button" variant="outline" onClick={() => void loadData()} disabled={isLoading} className="mt-3 min-h-12 w-full sm:w-auto">
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />} Retry permission load
+              </Button>
+            ) : null}
+          </div>
+          {loadError ? (
+            <div className="flex gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{loadError}</p>
+            </div>
+          ) : null}
           {/* Mode selection */}
           <div className="grid gap-3">
             <button
               type="button"
-              onClick={() => setConfig((current) => ({ ...current, accessMode: "full" }))}
-              className={`flex items-start gap-3 rounded-2xl border p-4 text-left transition ${
+              onClick={selectFullAccess}
+              disabled={controlsDisabled}
+              className={`flex min-h-12 items-start gap-3 rounded-2xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
                 config?.accessMode === "full"
                   ? "border-primary bg-primary/10 text-primary shadow-soft"
                   : "bg-card text-foreground hover:border-primary/40 hover:bg-muted/45"
@@ -172,8 +235,9 @@ export function AiPermissionsCard() {
 
             <button
               type="button"
-              onClick={() => setConfig((current) => ({ ...current, accessMode: "custom" }))}
-              className={`flex items-start gap-3 rounded-2xl border p-4 text-left transition ${
+              onClick={selectCustomAccess}
+              disabled={controlsDisabled}
+              className={`flex min-h-12 items-start gap-3 rounded-2xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
                 config?.accessMode === "custom"
                   ? "border-primary bg-primary/10 text-primary shadow-soft"
                   : "bg-card text-foreground hover:border-primary/40 hover:bg-muted/45"
@@ -241,7 +305,8 @@ export function AiPermissionsCard() {
                             type="button"
                             onClick={() => toggleRead(section)}
                             aria-pressed={perms.read}
-                            className={`inline-flex min-h-11 items-center gap-1 rounded-xl border-2 px-3 py-2 text-xs font-semibold transition ${
+                            disabled={controlsDisabled}
+                            className={`inline-flex min-h-12 items-center gap-1 rounded-xl border-2 px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
                               perms.read
                                 ? "border-primary bg-primary/10 text-primary"
                                 : "border-border bg-muted text-foreground"
@@ -254,7 +319,8 @@ export function AiPermissionsCard() {
                             type="button"
                             onClick={() => toggleWrite(section)}
                             aria-pressed={perms.write}
-                            className={`inline-flex min-h-11 items-center gap-1 rounded-xl border-2 px-3 py-2 text-xs font-semibold transition ${
+                            disabled={controlsDisabled}
+                            className={`inline-flex min-h-12 items-center gap-1 rounded-xl border-2 px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
                               perms.write
                                 ? "border-primary bg-primary/10 text-primary"
                                 : "border-border bg-muted text-foreground"
@@ -292,15 +358,20 @@ export function AiPermissionsCard() {
           ) : null}
 
           <InlineFeedback
-              message={savedAt ? `Permissions saved at ${savedAt}. Reconnect ChatGPT after changing permissions so the connection uses the latest choices.` : ""}
-              onClose={() => setSavedAt(null)}
-                  />
+            message={saveError}
+            variant="error"
+            onClose={() => setSaveError("")}
+          />
+          <InlineFeedback
+            message={savedAt ? `Permissions saved at ${savedAt}. Reconnect ChatGPT after changing permissions so the connection uses the latest choices.` : ""}
+            onClose={() => setSavedAt(null)}
+          />
 
           {/* Save button */}
           <div className="flex justify-end">
-            <Button onClick={() => void handleSave()} disabled={isSaving} className="min-h-12">
+            <Button onClick={() => void handleSave()} disabled={isSaving || Boolean(loadError)} className="min-h-12 w-full sm:w-auto">
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              {isSaving ? "Saving..." : "Save permissions"}
+              {isSaving ? "Saving..." : loadError ? "Retry before saving" : "Save permissions"}
             </Button>
           </div>
         </CardContent>

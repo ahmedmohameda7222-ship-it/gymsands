@@ -22,9 +22,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toaster";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { InlineFeedback } from "@/components/motion";
 import { env } from "@/lib/env";
 import type { PublicMcpActivity } from "@/lib/mcp/activity";
 import { connectionCreationErrorMessage } from "@/lib/mcp/connection-errors";
+import { getAiPermissionSettingsWithStatus } from "@/services/database/ai-permissions";
 
 const chatGptUrl = "https://chatgpt.com";
 const appDescription =
@@ -57,6 +60,136 @@ function getConnectionStatus(connections: ChatGptConnection[]) {
 
 function formatConnectionDate(value: string | null) {
   return value ? new Date(value).toLocaleString() : "Never";
+}
+
+function statusBadgeVariant(state: "success" | "warning" | "error" | "neutral") {
+  if (state === "success") return "success";
+  if (state === "warning") return "warning";
+  if (state === "error") return "destructive";
+  return "outline";
+}
+
+export function AiImportStatusHero() {
+  const { session, user } = useAuth();
+  const accessToken = session?.access_token;
+  const userId = user?.id;
+  const [isLoading, setIsLoading] = useState(true);
+  const [connection, setConnection] = useState<{ label: string; state: "success" | "warning" | "error" | "neutral" }>({
+    label: "Checking connection",
+    state: "neutral"
+  });
+  const [permission, setPermission] = useState<{ label: string; state: "success" | "warning" | "error" | "neutral" }>({
+    label: "Checking permissions",
+    state: "neutral"
+  });
+  const [error, setError] = useState("");
+
+  const loadStatus = useCallback(async () => {
+    setIsLoading(true);
+    setError("");
+
+    let nextError = "";
+    try {
+      if (!accessToken) {
+        setConnection({ label: "Sign in required", state: "error" });
+      } else {
+        const response = await fetch("/api/mcp/connections", {
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          cache: "no-store"
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error ?? "ChatGPT connection status could not be loaded.");
+        const currentConnection = getConnectionStatus(Array.isArray(data.connections) ? data.connections : []);
+        const connected = Boolean(currentConnection?.is_active && !currentConnection.revoked_at);
+        setConnection({
+          label: connected ? "Connected" : "Not connected",
+          state: connected ? "success" : "warning"
+        });
+      }
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : "ChatGPT connection status could not be loaded.";
+      nextError = message;
+      setConnection({ label: "Connection unknown", state: "error" });
+    }
+
+    try {
+      if (!userId) {
+        setPermission({ label: "Sign in required", state: "error" });
+      } else {
+        const result = await getAiPermissionSettingsWithStatus(userId);
+        if (result.status.state === "failed") {
+          setPermission({ label: "Permissions unknown", state: "error" });
+          nextError = nextError || result.status.message;
+        } else if (result.status.state === "none") {
+          setPermission({ label: "No saved permissions", state: "warning" });
+        } else {
+          setPermission({
+            label: result.config?.accessMode === "full" ? "Full access saved" : "Custom permissions saved",
+            state: "success"
+          });
+        }
+      }
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : "AI permission status could not be loaded.";
+      nextError = nextError || message;
+      setPermission({ label: "Permissions unknown", state: "error" });
+    } finally {
+      setError(nextError);
+      setIsLoading(false);
+    }
+  }, [accessToken, userId]);
+
+  useEffect(() => {
+    void loadStatus();
+  }, [loadStatus]);
+
+  return (
+    <Card className="border-primary/25 bg-primary/5">
+      <CardContent className="space-y-4 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="flex items-center gap-2 font-semibold text-foreground">
+              <Shield className="h-5 w-5 text-primary" /> ChatGPT import status
+            </p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+              ChatGPT can only access the categories you save here. Plaivra never changes plans, logs, progress, wellness, or settings silently.
+            </p>
+          </div>
+          <Button type="button" variant="outline" onClick={() => void loadStatus()} disabled={isLoading} className="min-h-12 w-full sm:w-auto">
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />} Refresh
+          </Button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-[12px] border bg-card p-3">
+            <p className="text-sm font-semibold text-foreground">Connection</p>
+            <Badge className="mt-2" variant={statusBadgeVariant(connection.state)}>
+              {connection.label}
+            </Badge>
+          </div>
+          <div className="rounded-[12px] border bg-card p-3">
+            <p className="text-sm font-semibold text-foreground">Permissions</p>
+            <Badge className="mt-2" variant={statusBadgeVariant(permission.state)}>
+              {permission.label}
+            </Badge>
+          </div>
+        </div>
+
+        {error ? (
+          <div className="flex gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>{error}</p>
+          </div>
+        ) : null}
+
+        <ul className="grid gap-2 text-sm text-foreground sm:grid-cols-3">
+          <li className="rounded-[12px] border bg-card p-3"><span className="font-semibold">Approval first</span><span className="mt-1 block text-muted-foreground">AI-generated changes still require user approval.</span></li>
+          <li className="rounded-[12px] border bg-card p-3"><span className="font-semibold">Scope control</span><span className="mt-1 block text-muted-foreground">Limit ChatGPT by Plaivra area and action.</span></li>
+          <li className="rounded-[12px] border bg-card p-3"><span className="font-semibold">Revoke anytime</span><span className="mt-1 block text-muted-foreground">Disconnect below to stop existing ChatGPT access.</span></li>
+        </ul>
+      </CardContent>
+    </Card>
+  );
 }
 
 function SetupStep({ title, body, children }: SetupStepProps) {
@@ -101,7 +234,7 @@ export function ChatGptSetupCard() {
             ChatGPT import is not ready for this deployment. The Plaivra connection URL is missing.
           </p>
         ) : null}
-        <Button asChild className="w-full sm:w-auto">
+        <Button asChild className="min-h-12 w-full sm:w-auto">
           <Link href="/settings/ai-imports/chatgpt-setup">
             <ExternalLink className="h-4 w-4" /> Set up ChatGPT import
           </Link>
@@ -114,8 +247,12 @@ export function ChatGptSetupCard() {
 export function ConnectionStatusCard() {
   const { session } = useAuth();
   const { toast } = useToast();
+  const { dialog: confirmDialog, ask: confirmAsk } = useConfirm();
   const [connections, setConnections] = useState<ChatGptConnection[]>([]);
   const [isBusy, setIsBusy] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [feedback, setFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
 
   const authHeaders = useCallback(
     () => ({ Authorization: `Bearer ${session?.access_token ?? ""}`, "Content-Type": "application/json" }),
@@ -123,94 +260,133 @@ export function ConnectionStatusCard() {
   );
 
   const loadConnections = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError("");
     if (!session?.access_token) {
       setConnections([]);
+      setLoadError("Sign in again to check your ChatGPT connection.");
+      setIsLoading(false);
       return;
     }
 
-    const response = await fetch("/api/mcp/connections", { headers: authHeaders() });
-    const data = await response.json().catch(() => ({}));
-    if (response.ok) setConnections(data.connections ?? []);
+    try {
+      const response = await fetch("/api/mcp/connections", { headers: authHeaders(), cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error ?? "ChatGPT connection status could not be loaded.");
+      setConnections(data.connections ?? []);
+    } catch (error) {
+      setConnections([]);
+      setLoadError(error instanceof Error ? error.message : "ChatGPT connection status could not be loaded.");
+    } finally {
+      setIsLoading(false);
+    }
   }, [authHeaders, session?.access_token]);
 
   useEffect(() => {
     void loadConnections();
   }, [loadConnections]);
 
+  function requestRevokeConnectionToken() {
+    confirmAsk({
+      title: "Revoke ChatGPT access?",
+      description:
+        "Existing ChatGPT access tokens will stop working. Your Plaivra account, plans, logs, and progress data will not be deleted.",
+      confirmLabel: "Revoke access",
+      variant: "destructive",
+      onConfirm: () => void revokeConnectionToken()
+    });
+  }
+
   async function revokeConnectionToken() {
     if (!session?.access_token) {
-      toast({ title: "Sign in required", description: "Sign in to Plaivra before revoking a ChatGPT connection." });
+      setFeedback({ type: "error", message: "Sign in to Plaivra before revoking a ChatGPT connection." });
       return;
     }
-
-    const confirmed = window.confirm(
-      "Revoke ChatGPT access now? Existing ChatGPT access tokens will stop working. Your Plaivra account and fitness data will not be deleted."
-    );
-    if (!confirmed) return;
 
     setIsBusy("chatgpt-revoke");
-    const response = await fetch("/api/mcp/connections", { method: "DELETE", headers: authHeaders() });
-    const data = await response.json().catch(() => ({}));
-    setIsBusy(null);
+    setFeedback(null);
+    try {
+      const response = await fetch("/api/mcp/connections", { method: "DELETE", headers: authHeaders() });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error ?? "Please try again.");
 
-    if (!response.ok) {
-      toast({ title: "Could not revoke connection", description: data.error ?? "Please try again." });
-      return;
+      await loadConnections();
+      const message = "Existing access tokens no longer work. Reconnect from ChatGPT when you are ready.";
+      setFeedback({ type: "info", message });
+      toast({ title: "ChatGPT access revoked", description: message });
+    } catch (error) {
+      setFeedback({ type: "error", message: error instanceof Error ? error.message : "Could not revoke connection. Please try again." });
+    } finally {
+      setIsBusy(null);
     }
-
-    await loadConnections();
-    toast({ title: "ChatGPT access revoked", description: "Existing access tokens no longer work. Reconnect from ChatGPT when you are ready." });
   }
 
   const currentConnection = getConnectionStatus(connections);
   const isConnected = Boolean(currentConnection?.is_active && !currentConnection.revoked_at);
 
   return (
-    <Card className="border-border/70">
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Link2 className="h-5 w-5 text-primary" /> Connection status
-            </CardTitle>
-            <CardDescription>Recent ChatGPT connections for this Plaivra account.</CardDescription>
+    <>
+      {confirmDialog}
+      <Card className="border-border/70">
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Link2 className="h-5 w-5 text-primary" /> Connection status
+              </CardTitle>
+              <CardDescription>Recent ChatGPT connections for this Plaivra account.</CardDescription>
+            </div>
+            <Button type="button" variant="outline" onClick={() => void loadConnections()} disabled={isLoading} className="min-h-12 w-full sm:w-auto">
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />} Refresh
+            </Button>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => void loadConnections()} className="w-full sm:w-auto">
-            <RefreshCcw className="h-4 w-4" /> Refresh
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="rounded-md border border-border/70 bg-muted/30 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-semibold text-foreground">{isConnected ? "Connected" : "Not connected"}</p>
-            <Badge variant={isConnected ? "success" : "outline"}>{isConnected ? "Connected" : "Not connected"}</Badge>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <InlineFeedback
+            message={feedback?.message}
+            variant={feedback?.type === "error" ? "error" : "info"}
+            onClose={() => setFeedback(null)}
+          />
+          {loadError ? (
+            <div className="flex gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{loadError}</p>
+            </div>
+          ) : null}
+          <div className="rounded-md border border-border/70 bg-muted/30 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-semibold text-foreground">{isLoading ? "Checking connection..." : loadError ? "Connection unknown" : isConnected ? "Connected" : "Not connected"}</p>
+              <Badge variant={loadError ? "destructive" : isConnected ? "success" : "outline"}>
+                {isLoading ? "Loading" : loadError ? "Unknown" : isConnected ? "Connected" : "Not connected"}
+              </Badge>
+            </div>
+            <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+              <p>Created: {formatConnectionDate(currentConnection?.created_at ?? null)}</p>
+              <p>Last used: {formatConnectionDate(currentConnection?.last_used_at ?? null)}</p>
+            </div>
           </div>
-          <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-            <p>Created: {formatConnectionDate(currentConnection?.created_at ?? null)}</p>
-            <p>Last used: {formatConnectionDate(currentConnection?.last_used_at ?? null)}</p>
-          </div>
-        </div>
 
-        <Button
-          type="button"
-          variant="destructive"
-          onClick={revokeConnectionToken}
-          disabled={!isConnected || isBusy === "chatgpt-revoke"}
-          className="w-full sm:w-auto"
-        >
-          <Trash2 className="h-4 w-4" /> Revoke connection
-        </Button>
-        <p className="text-xs leading-5 text-muted-foreground">
-          Revoking stops ChatGPT access immediately. It does not delete your Plaivra account, plans, logs, or progress data.
-        </p>
-        {!isConnected ? (
-          <Button asChild variant="outline" className="w-full sm:w-auto">
-            <Link href="/settings/ai-imports/chatgpt-setup">Reconnect ChatGPT</Link>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={requestRevokeConnectionToken}
+            disabled={!isConnected || isBusy === "chatgpt-revoke" || isLoading}
+            className="min-h-12 w-full sm:w-auto"
+          >
+            {isBusy === "chatgpt-revoke" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            {isBusy === "chatgpt-revoke" ? "Revoking..." : "Revoke connection"}
           </Button>
-        ) : null}
-      </CardContent>
-    </Card>
+          <p className="text-xs leading-5 text-muted-foreground">
+            Revoking stops ChatGPT access immediately. It does not delete your Plaivra account, plans, logs, or progress data.
+          </p>
+          {!isConnected ? (
+            <Button asChild variant="outline" className="min-h-12 w-full sm:w-auto">
+              <Link href="/settings/ai-imports/chatgpt-setup">Reconnect ChatGPT</Link>
+            </Button>
+          ) : null}
+        </CardContent>
+      </Card>
+    </>
   );
 }
 
@@ -221,6 +397,9 @@ export function ChatGptSetupFlow() {
   const [copied, setCopied] = useState<CopyKind | null>(null);
   const [connectionClientId, setConnectionClientId] = useState("");
   const [connections, setConnections] = useState<ChatGptConnection[]>([]);
+  const [isLoadingConnections, setIsLoadingConnections] = useState(true);
+  const [connectionLoadError, setConnectionLoadError] = useState("");
+  const [setupFeedback, setSetupFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
   const mcpServerUrl = env.plaivraMcpServerUrl.trim();
   const hasMcpServerUrl = Boolean(mcpServerUrl);
 
@@ -230,13 +409,28 @@ export function ChatGptSetupFlow() {
   );
 
   const loadConnections = useCallback(async () => {
-    if (!session?.access_token) return;
-    const response = await fetch("/api/mcp/connections", { headers: authHeaders() });
-    const data = await response.json().catch(() => ({}));
-    if (response.ok) {
+    setIsLoadingConnections(true);
+    setConnectionLoadError("");
+    if (!session?.access_token) {
+      setConnections([]);
+      setConnectionClientId("");
+      setIsLoadingConnections(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/mcp/connections", { headers: authHeaders(), cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error ?? "ChatGPT connection status could not be loaded.");
       const nextConnections = data.connections ?? [];
       setConnections(nextConnections);
       setConnectionClientId(getConnectionStatus(nextConnections)?.id ?? "");
+    } catch (error) {
+      setConnections([]);
+      setConnectionClientId("");
+      setConnectionLoadError(error instanceof Error ? error.message : "ChatGPT connection status could not be loaded.");
+    } finally {
+      setIsLoadingConnections(false);
     }
   }, [authHeaders, session?.access_token]);
 
@@ -272,26 +466,36 @@ export function ChatGptSetupFlow() {
 
   async function generateConnectionToken() {
     if (!session?.access_token) {
-      toast({ title: "Sign in required", description: "Sign in to Plaivra before creating a ChatGPT OAuth client." });
+      setSetupFeedback({ type: "error", message: "Sign in to Plaivra before creating a ChatGPT OAuth client." });
       return;
     }
 
     setIsBusy("chatgpt-token");
-    const response = await fetch("/api/mcp/connections", {
-      method: "POST",
-      headers: authHeaders()
-    });
-    const data = await response.json().catch(() => ({}));
-    setIsBusy(null);
+    setSetupFeedback(null);
+    try {
+      const response = await fetch("/api/mcp/connections", {
+        method: "POST",
+        headers: authHeaders()
+      });
+      const data = await response.json().catch(() => ({}));
 
-    if (!response.ok) {
-      toast(connectionCreationErrorMessage(data));
-      return;
+      if (!response.ok) {
+        const message = connectionCreationErrorMessage(data).description ?? "Could not create the ChatGPT OAuth client.";
+        setSetupFeedback({ type: "error", message });
+        toast(connectionCreationErrorMessage(data));
+        return;
+      }
+
+      setConnectionClientId(data.client_id ?? "");
+      await loadConnections();
+      const message = "Copy the client ID into ChatGPT OAuth settings and leave the client secret empty.";
+      setSetupFeedback({ type: "info", message });
+      toast({ title: "OAuth client created", description: message });
+    } catch (error) {
+      setSetupFeedback({ type: "error", message: error instanceof Error ? error.message : "Could not create the ChatGPT OAuth client." });
+    } finally {
+      setIsBusy(null);
     }
-
-    setConnectionClientId(data.client_id ?? "");
-    await loadConnections();
-    toast({ title: "OAuth client created", description: "Copy the client ID into ChatGPT OAuth settings and leave the client secret empty." });
   }
 
   function openChatGpt() {
@@ -308,6 +512,17 @@ export function ChatGptSetupFlow() {
           If ChatGPT uses slightly different wording, choose the option for adding a private app or connector. Access remains limited by your saved permissions.
         </p>
       </div>
+      <InlineFeedback
+        message={setupFeedback?.message}
+        variant={setupFeedback?.type === "error" ? "error" : "info"}
+        onClose={() => setSetupFeedback(null)}
+      />
+      {connectionLoadError ? (
+        <div className="flex gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>{connectionLoadError}</p>
+        </div>
+      ) : null}
 
       <SetupStep
         title="Step 1 — Create your Plaivra OAuth client"
@@ -315,7 +530,7 @@ export function ChatGptSetupFlow() {
       >
         <div className="grid gap-2 sm:grid-cols-2">
           <Button type="button" onClick={generateConnectionToken} disabled={isBusy === "chatgpt-token"} className="w-full">
-            <KeyRound className="h-4 w-4" /> Create OAuth client
+            {isBusy === "chatgpt-token" ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />} {isBusy === "chatgpt-token" ? "Creating..." : "Create OAuth client"}
           </Button>
           <Button type="button" variant="outline" onClick={() => copyText(connectionClientId, "clientId")} disabled={!connectionClientId} className="w-full">
             <Copy className="h-4 w-4" /> {copied === "clientId" ? "Copied" : "Copy OAuth client ID"}
@@ -515,12 +730,23 @@ export function ChatGptSetupFlow() {
             Connection status
           </CardTitle>
           <CardDescription>
-            {currentConnection?.is_active && !currentConnection.revoked_at ? "Connected" : "Not connected"}
+            {isLoadingConnections
+              ? "Checking current connection"
+              : connectionLoadError
+                ? "Connection status could not be loaded"
+                : currentConnection?.is_active && !currentConnection.revoked_at
+                  ? "Connected"
+                  : "Not connected"}
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-          <p>Created: {formatConnectionDate(currentConnection?.created_at ?? null)}</p>
-          <p>Last used: {formatConnectionDate(currentConnection?.last_used_at ?? null)}</p>
+        <CardContent className="space-y-3">
+          <Badge variant={connectionLoadError ? "destructive" : currentConnection?.is_active && !currentConnection.revoked_at ? "success" : "outline"}>
+            {isLoadingConnections ? "Loading" : connectionLoadError ? "Unknown" : currentConnection?.is_active && !currentConnection.revoked_at ? "Connected" : "Not connected"}
+          </Badge>
+          <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+            <p>Created: {formatConnectionDate(currentConnection?.created_at ?? null)}</p>
+            <p>Last used: {formatConnectionDate(currentConnection?.last_used_at ?? null)}</p>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -569,7 +795,7 @@ export function ChatGptActivityCard() {
             <CardTitle className="flex items-center gap-2 text-base"><Activity className="h-5 w-5 text-primary" /> Recent ChatGPT activity</CardTitle>
             <CardDescription>A simple history of what ChatGPT was allowed or unable to do in Plaivra.</CardDescription>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => void loadActivity()} disabled={isLoading}>
+          <Button type="button" variant="outline" onClick={() => void loadActivity()} disabled={isLoading} className="min-h-12 w-full sm:w-auto">
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />} Refresh
           </Button>
         </div>
