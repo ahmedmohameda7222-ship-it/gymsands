@@ -39,7 +39,7 @@ export function SettingsSectionCard({
               className="solid-row group flex min-h-[56px] items-center justify-between gap-3 p-3 transition-colors hover:border-primary/40 hover:bg-muted/45"
             >
               <span className="flex min-w-0 items-start gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <Icon className="h-5 w-5" />
                 </span>
                 <span className="min-w-0">
@@ -51,7 +51,7 @@ export function SettingsSectionCard({
                   </span>
                 </span>
               </span>
-              <span className="shrink-0 rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground group-hover:border-primary/40 group-hover:text-primary">
+              <span className="inline-flex min-h-12 shrink-0 items-center rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground group-hover:border-primary/40 group-hover:text-primary">
                 {row.action}
               </span>
             </Link>
