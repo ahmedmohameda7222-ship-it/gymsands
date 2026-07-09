@@ -148,6 +148,17 @@ type RawScheduledSession = {
   user_exercise_logs?: UserExerciseLog[] | null;
 };
 
+export type WorkoutHistorySourceStatus = {
+  source: "legacy" | "scheduled";
+  state: "loaded" | "failed" | "unavailable";
+  message?: string;
+};
+
+export type WorkoutHistorySourceResult<T> = {
+  data: T;
+  status: WorkoutHistorySourceStatus;
+};
+
 function normalizeScheduledSession(session: RawScheduledSession): UserWorkoutSession {
   return {
     id: session.id,
@@ -599,6 +610,48 @@ export async function getWorkoutHistoryDetailed(userId: string, limit = 100) {
     .filter((session) => session.status === "completed");
 }
 
+export async function getWorkoutHistoryDetailedWithStatus(userId: string, limit = 100): Promise<WorkoutHistorySourceResult<WorkoutSessionSummary[]>> {
+  if (!canUseUserData(userId)) {
+    return {
+      data: [],
+      status: {
+        source: "legacy",
+        state: "failed",
+        message: "Completed workout sessions could not load because the user session is invalid."
+      }
+    };
+  }
+
+  const { data, error } = await supabase!
+    .from("workout_sessions")
+    .select("*, exercise_logs(*)")
+    .eq("user_id", userId)
+    .eq("status", "completed")
+    .order("started_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.warn("Plaivra could not load workout history details.", error.message);
+    return {
+      data: [],
+      status: {
+        source: "legacy",
+        state: "failed",
+        message: "Completed workout sessions could not load."
+      }
+    };
+  }
+
+  return {
+    data: ((data ?? []) as WorkoutSessionSummary[])
+      .map((session) => ({
+        ...normalizeWorkoutSession(session),
+        exercise_logs: sortExerciseLogsByWorkoutOrder(session.exercise_logs ?? [])
+      }))
+      .filter((session) => session.status === "completed"),
+    status: { source: "legacy", state: "loaded" }
+  };
+}
+
 export async function getWorkoutActivity(userId: string, limit = 180) {
   if (!canUseUserData(userId)) return [];
   let { data, error } = await supabase!
@@ -650,6 +703,48 @@ export async function getScheduledWorkoutHistory(userId: string, limit = 100) {
   }
 
   return ((data ?? []) as unknown as RawScheduledSession[]).map(normalizeScheduledSession);
+}
+
+export async function getScheduledWorkoutHistoryWithStatus(userId: string, limit = 100): Promise<WorkoutHistorySourceResult<UserWorkoutSession[]>> {
+  if (!canUseUserData(userId)) {
+    return {
+      data: [],
+      status: {
+        source: "scheduled",
+        state: "failed",
+        message: "Imported-plan workout history could not load because the user session is invalid."
+      }
+    };
+  }
+
+  const { data, error } = await supabase!
+    .from("user_workout_sessions")
+    .select(
+      "id,user_id,user_workout_plan_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes,user_exercise_logs(id,user_workout_session_id,plan_exercise_id,exercise_order,exercise_name,planned_sets,planned_reps,weight_kg,reps,notes,completed,completed_at,created_at,updated_at)"
+    )
+    .eq("user_id", userId)
+    .eq("status", "completed")
+    .order("completed_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    if (!isMissingTemplateSchemaError(error)) console.warn("Plaivra could not load workout history.", error.message);
+    return {
+      data: [],
+      status: {
+        source: "scheduled",
+        state: isMissingTemplateSchemaError(error) ? "unavailable" : "failed",
+        message: isMissingTemplateSchemaError(error)
+          ? "Imported-plan history is unavailable here, so this view shows completed workout sessions only."
+          : "Imported-plan workout history could not load."
+      }
+    };
+  }
+
+  return {
+    data: ((data ?? []) as unknown as RawScheduledSession[]).map(normalizeScheduledSession),
+    status: { source: "scheduled", state: "loaded" }
+  };
 }
 
 export async function getScheduledWorkoutActivity(userId: string, limit = 180) {

@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronDown, Dumbbell, Filter, History, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, Dumbbell, Filter, History, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CardSkeleton, EmptyState } from "@/components/ui/state-views";
+import { CardSkeleton, EmptyState, ErrorState, SkeletonLine } from "@/components/ui/state-views";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError } from "@/lib/error-formatting";
-import { getScheduledWorkoutHistory, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
+import { getScheduledWorkoutHistoryWithStatus, getWorkoutHistoryDetailedWithStatus } from "@/services/database/workout-sessions";
 import { cn } from "@/lib/utils";
 import type { ExerciseLog, UserWorkoutSession, WorkoutSessionSummary } from "@/types";
 
@@ -143,37 +143,52 @@ function computeStats(items: HistoryItem[]) {
 
 export function WorkoutHistory() {
   const { user } = useAuth();
+  const userId = user?.id;
   const { toast } = useToast();
   const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
   const [scheduledHistory, setScheduledHistory] = useState<UserWorkoutSession[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [sourceWarnings, setSourceWarnings] = useState<string[]>([]);
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [weekFilter, setWeekFilter] = useState(toIsoWeekInput(new Date()));
   const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7));
   const [showFilterDialog, setShowFilterDialog] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
+  const loadHistory = useCallback(async () => {
+    if (!userId) return;
     setIsLoading(true);
-    Promise.all([getWorkoutHistoryDetailed(user.id), getScheduledWorkoutHistory(user.id)])
-      .then(([legacyItems, scheduledItems]) => {
-        if (!active) return;
-        setHistory(legacyItems);
-        setScheduledHistory(scheduledItems);
-      })
-      .catch((error) => {
-        if (!active) return;
-        setHistory([]);
-        toast({ title: "Could not load workout history", description: userSafeError(error, "Please refresh and try again.") });
-      })
-      .finally(() => {
-        if (active) setIsLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [toast, user]);
+    setLoadError("");
+    setSourceWarnings([]);
+    try {
+      const [legacyResult, scheduledResult] = await Promise.all([
+        getWorkoutHistoryDetailedWithStatus(userId),
+        getScheduledWorkoutHistoryWithStatus(userId)
+      ]);
+      setHistory(legacyResult.data);
+      setScheduledHistory(scheduledResult.data);
+      const warnings = [legacyResult.status, scheduledResult.status]
+        .filter((status) => status.state !== "loaded" && status.message)
+        .map((status) => status.message as string);
+      setSourceWarnings(Array.from(new Set(warnings)));
+      const bothFailed = [legacyResult.status, scheduledResult.status].every((status) => status.state === "failed");
+      if (bothFailed) {
+        setLoadError("Workout history could not load. Retry before treating this as an empty history.");
+      }
+    } catch (error) {
+      const message = userSafeError(error, "Workout history could not load. Please retry.");
+      setHistory([]);
+      setScheduledHistory([]);
+      setLoadError(message);
+      toast({ title: "Could not load workout history", description: message });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast, userId]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
 
   const filteredHistory = useMemo(() => {
     const items = [...history.map(normalizeLegacyHistory), ...scheduledHistory.map(normalizeScheduledHistory)].sort(
@@ -189,10 +204,21 @@ export function WorkoutHistory() {
 
   const totalHistoryCount = history.length + scheduledHistory.length;
   const stats = useMemo(() => computeStats([...history.map(normalizeLegacyHistory), ...scheduledHistory.map(normalizeScheduledHistory)]), [history, scheduledHistory]);
+  const isFiltered = filterMode !== "all";
+  const activeFilterLabel = filterMode === "week" ? `Week ${weekFilter}` : filterMode === "month" ? monthFilter : "All completed";
+
+  function resetDateFilter() {
+    setFilterMode("all");
+  }
 
   return (
     <div className="space-y-5">
-      {stats && !isLoading ? (
+      {isLoading ? (
+        <div className="grid grid-cols-2 gap-3">
+          <StatSkeleton />
+          <StatSkeleton />
+        </div>
+      ) : stats ? (
         <div className="grid grid-cols-2 gap-3">
           <div className="glass-card p-3 shadow-soft">
             <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">This week</p>
@@ -204,6 +230,29 @@ export function WorkoutHistory() {
           </div>
         </div>
       ) : null}
+
+      {loadError ? (
+        <ErrorState
+          title="Workout history could not load"
+          description={loadError}
+          onRetry={loadHistory}
+        />
+      ) : null}
+
+      {sourceWarnings.length ? (
+        <StatusNotice
+          tone="warning"
+          title="Workout history could not fully load"
+          description={`${sourceWarnings.join(" ")} Showing what Plaivra could recover.`}
+        />
+      ) : null}
+
+      <StatusNotice
+        tone={loadError ? "warning" : "default"}
+        title={loadError ? "History load failed" : isLoading ? "Loading completed workouts" : `${filteredHistory.length} completed workouts shown`}
+        description={`Showing completed workouts only. Skipped workouts are tracked in activity, but this history view focuses on completed sessions. Active filter: ${activeFilterLabel}.`}
+        badges={[isFiltered ? "Filtered" : "All", loadError ? "Failed" : sourceWarnings.length ? "Partial" : "Loaded"]}
+      />
 
       <Card>
         <CardHeader className="space-y-4">
@@ -222,37 +271,49 @@ export function WorkoutHistory() {
                   key={mode}
                   type="button"
                   variant={filterMode === mode ? "default" : "outline"}
-                  size="sm"
                   onClick={() => setFilterMode(mode)}
-                  className="capitalize"
+                  className="min-h-12 capitalize"
                 >
                   {mode}
                 </Button>
               ))}
-              <Button variant="outline" size="sm" className="lg:hidden" onClick={() => setShowFilterDialog(true)}>
+              <Button variant="outline" className="min-h-12 lg:hidden" onClick={() => setShowFilterDialog(true)}>
                 <Filter className="h-4 w-4" /> Date
               </Button>
             </div>
             <div className="hidden lg:block">
-              <Input type="week" value={weekFilter} onChange={(event) => { setWeekFilter(event.target.value); setFilterMode("week"); }} aria-label="Filter workout history by week" />
+              <Input className="h-12" type="week" value={weekFilter} onChange={(event) => { setWeekFilter(event.target.value); setFilterMode("week"); }} aria-label="Filter workout history by week" />
             </div>
             <div className="hidden lg:block">
-              <Input type="month" value={monthFilter} onChange={(event) => { setMonthFilter(event.target.value); setFilterMode("month"); }} aria-label="Filter workout history by month" />
+              <Input className="h-12" type="month" value={monthFilter} onChange={(event) => { setMonthFilter(event.target.value); setFilterMode("month"); }} aria-label="Filter workout history by month" />
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <CalendarDays className="h-4 w-4" />
               {filteredHistory.length} of {totalHistoryCount} workouts
+              {isFiltered ? (
+                <Button type="button" variant="ghost" className="min-h-12" onClick={resetDateFilter}>
+                  <RotateCcw className="h-4 w-4" /> Reset date filter
+                </Button>
+              ) : null}
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
           {isLoading ? <CardSkeleton rows={3} /> : null}
-          {!isLoading && !filteredHistory.length ? (
+          {!isLoading && !loadError && !totalHistoryCount ? (
             <EmptyState
-              title="No completed workouts"
+              title="No completed workouts yet"
               description="Start a workout session and log your sets to see your history here."
               actionLabel="Start a workout"
               actionHref="/today-workout"
+            />
+          ) : null}
+          {!isLoading && !loadError && totalHistoryCount > 0 && !filteredHistory.length ? (
+            <EmptyState
+              title="No workouts match this filter"
+              description="Your completed workout history loaded, but nothing matches the selected date filter."
+              actionLabel="Reset date filter"
+              onAction={resetDateFilter}
             />
           ) : null}
 
@@ -276,33 +337,38 @@ export function WorkoutHistory() {
                 </div>
 
                 <details className="mt-3 group">
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-xl bg-muted/40 px-3 text-sm transition hover:bg-muted/60">
-                    <span className="flex items-center gap-2 text-muted-foreground">
-                      <Dumbbell className="h-4 w-4" />
-                      {session.exercises.length} exercises · {totalSets} sets · {session.durationMinutes} min
+                  <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-2 rounded-xl bg-muted/40 px-3 text-sm transition hover:bg-muted/60">
+                    <span className="flex min-w-0 flex-col gap-1 py-2 text-muted-foreground sm:flex-row sm:items-center sm:gap-2">
+                      <span className="flex items-center gap-2">
+                        <Dumbbell className="h-4 w-4" />
+                        Session details
+                      </span>
+                      <span>
+                        {session.exercises.length} exercises - {totalSets} sets - {session.durationMinutes} min
+                      </span>
                     </span>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground transition group-open:rotate-180" />
+                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition group-open:rotate-180" />
                   </summary>
                   {session.exercises.length ? (
-                    <div className="mt-2 grid gap-2">
+                    <div className="mt-2 grid gap-3">
                       {session.exercises.map((exercise) => {
                         return (
                           <div
                             key={`${session.id}-${exercise.id}`}
-                            className={cn("solid-row grid gap-3 p-3 text-sm", "lg:grid-cols-[1.1fr_1.5fr_0.8fr]")}
+                            className={cn("solid-row grid gap-3 p-3 text-sm", "lg:grid-cols-[1fr_1.3fr_0.9fr]")}
                           >
                             <div>
                               <p className="font-medium text-foreground">{exercise.name}</p>
-                              <p className="text-xs text-muted-foreground">{exercise.category}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">{exercise.category}</p>
                             </div>
-                            <div className="space-y-1">
+                            <div className="grid gap-1">
                               {exercise.setDetails.map((line, lineIndex) => (
-                                <p key={`${exercise.id}-set-${lineIndex}`} className="text-foreground">{line}</p>
+                                <p key={`${exercise.id}-set-${lineIndex}`} className="rounded-md bg-muted/40 px-3 py-2 text-foreground">{line}</p>
                               ))}
                             </div>
-                            <div>
-                              <p>{exercise.sets}</p>
-                              {exercise.notes ? <p className="mt-1 text-muted-foreground">{exercise.notes}</p> : null}
+                            <div className="text-sm leading-6">
+                              <p className="font-medium text-foreground">{exercise.sets}</p>
+                              {exercise.notes ? <p className="mt-1 text-muted-foreground">Notes: {exercise.notes}</p> : <p className="mt-1 text-muted-foreground">No set notes.</p>}
                             </div>
                           </div>
                         );
@@ -311,7 +377,7 @@ export function WorkoutHistory() {
                   ) : (
                     <p className="solid-row mt-2 p-3 text-sm text-muted-foreground">No set details were logged for this workout.</p>
                   )}
-                  {session.notes ? <p className="mt-2 text-sm text-muted-foreground">Notes: {session.notes}</p> : null}
+                  {session.notes ? <p className="mt-2 text-sm leading-6 text-muted-foreground">Session notes: {session.notes}</p> : null}
                 </details>
               </div>
             );
@@ -320,7 +386,7 @@ export function WorkoutHistory() {
       </Card>
 
       <Dialog open={showFilterDialog} onOpenChange={setShowFilterDialog}>
-        <DialogContent className="max-h-[85dvh] overflow-y-auto">
+        <DialogContent className="max-h-[85dvh] overflow-y-auto pb-0">
           <DialogHeader>
             <DialogTitle>Filter by date</DialogTitle>
             <DialogDescription>Choose a week or month to narrow your history.</DialogDescription>
@@ -328,19 +394,65 @@ export function WorkoutHistory() {
           <div className="space-y-4">
             <div>
               <Label className="mb-2 block text-sm font-medium">Week</Label>
-              <Input type="week" value={weekFilter} onChange={(event) => { setWeekFilter(event.target.value); setFilterMode("week"); }} aria-label="Filter workout history by week" />
+              <Input className="h-12" type="week" value={weekFilter} onChange={(event) => { setWeekFilter(event.target.value); setFilterMode("week"); }} aria-label="Filter workout history by week" />
             </div>
             <div>
               <Label className="mb-2 block text-sm font-medium">Month</Label>
-              <Input type="month" value={monthFilter} onChange={(event) => { setMonthFilter(event.target.value); setFilterMode("month"); }} aria-label="Filter workout history by month" />
+              <Input className="h-12" type="month" value={monthFilter} onChange={(event) => { setMonthFilter(event.target.value); setFilterMode("month"); }} aria-label="Filter workout history by month" />
             </div>
-            <div className="flex gap-2">
-              <Button onClick={() => setShowFilterDialog(false)} className="flex-1">Apply</Button>
-              <Button variant="outline" onClick={() => { setFilterMode("all"); setShowFilterDialog(false); }}>Reset</Button>
+            <div className="sticky bottom-0 -mx-4 flex gap-2 border-t bg-card/95 p-4 backdrop-blur sm:-mx-6 sm:px-6">
+              <Button onClick={() => setShowFilterDialog(false)} className="min-h-12 flex-1">Apply</Button>
+              <Button variant="outline" className="min-h-12" onClick={() => { resetDateFilter(); setShowFilterDialog(false); }}>
+                <RotateCcw className="h-4 w-4" /> Reset
+              </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function StatSkeleton() {
+  return (
+    <div className="glass-card p-3 shadow-soft" aria-busy="true">
+      <SkeletonLine className="h-3 w-20" />
+      <SkeletonLine className="mt-3 h-6 w-28" />
+    </div>
+  );
+}
+
+function StatusNotice({
+  tone,
+  title,
+  description,
+  badges = []
+}: {
+  tone: "default" | "warning";
+  title: string;
+  description: string;
+  badges?: string[];
+}) {
+  const Icon = tone === "warning" ? AlertTriangle : CheckCircle2;
+  const className = tone === "warning" ? "border-warning/30 bg-warning/10" : "border-primary/20 bg-primary/5";
+  const iconClassName = tone === "warning" ? "text-warning" : "text-primary";
+
+  return (
+    <Card className={className}>
+      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <Icon className={cn("mt-0.5 h-5 w-5 shrink-0", iconClassName)} />
+          <div>
+            <p className="font-semibold text-foreground">{title}</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
+          </div>
+        </div>
+        {badges.length ? (
+          <div className="flex flex-wrap gap-2">
+            {badges.map((badge) => <Badge key={badge} variant={tone === "warning" ? "warning" : "outline"}>{badge}</Badge>)}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
