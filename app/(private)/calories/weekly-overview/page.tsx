@@ -4,7 +4,7 @@ import { WeeklyOverviewPage } from "@/components/meals/weekly-overview";
 export default function CaloriesWeeklyOverviewPage() {
   return (
     <>
-      <PageHeading title="Fitness Reports" description="Weekly and monthly reports for workouts, nutrition, water, weight, measurements, habits, sleep, and PRs." />
+      <PageHeading title="Fitness Reports" description="Read-only weekly and monthly reports with source coverage for workouts, nutrition, water, progress, habits, sleep, and PRs." />
       <WeeklyOverviewPage />
     </>
   );

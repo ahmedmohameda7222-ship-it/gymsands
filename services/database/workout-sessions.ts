@@ -668,7 +668,7 @@ export async function getWorkoutHistoryDetailedWithStatus(userId: string, limit 
   };
 }
 
-export async function getWorkoutActivity(userId: string, limit = 180) {
+export async function getWorkoutActivity(userId: string, limit = 180, options?: { throwOnError?: boolean }) {
   if (!canUseUserData(userId)) return [];
   let { data, error } = await supabase!
     .from("workout_sessions")
@@ -691,6 +691,7 @@ export async function getWorkoutActivity(userId: string, limit = 180) {
 
   if (error) {
     console.warn("Plaivra could not load workout activity.", error.message);
+    if (options?.throwOnError) throw new Error(`Could not load workout activity. ${error.message}`);
     return getScheduledWorkoutActivity(userId, limit);
   }
 

@@ -528,7 +528,7 @@ function weekDates(weekStart: string) {
   });
 }
 
-export async function getNutritionWeek(userId: string, weekStart: string) {
+export async function getNutritionWeek(userId: string, weekStart: string, options?: { throwOnError?: boolean }) {
   const dates = weekDates(weekStart);
   const [targets, logsResult, waterResult] = await Promise.all([
     getCalorieTargets(userId),
@@ -551,8 +551,14 @@ export async function getNutritionWeek(userId: string, weekStart: string) {
       : Promise.resolve({ data: [], error: null })
   ]);
 
-  if (logsResult.error) console.warn("Plaivra could not load weekly calorie logs.", logsResult.error.message);
-  if (waterResult.error) console.warn("Plaivra could not load weekly water logs.", waterResult.error.message);
+  if (logsResult.error) {
+    console.warn("Plaivra could not load weekly calorie logs.", logsResult.error.message);
+    if (options?.throwOnError) throw new Error(`Could not load weekly food logs. ${logsResult.error.message}`);
+  }
+  if (waterResult.error) {
+    console.warn("Plaivra could not load weekly water logs.", waterResult.error.message);
+    if (options?.throwOnError) throw new Error(`Could not load weekly water logs. ${waterResult.error.message}`);
+  }
 
   const logs = ((logsResult.data ?? []) as FoodLog[]).reduce<Record<string, FoodLog[]>>((byDate, log) => {
     byDate[log.log_date] = [...(byDate[log.log_date] ?? []), log];
