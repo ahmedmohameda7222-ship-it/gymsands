@@ -20,7 +20,7 @@ export function SettingsPageShell({ title, description, backHref = "/settings", 
   return (
     <>
       <div className="mb-4 flex items-center gap-2">
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="outline" size="sm" className="min-h-12">
           <Link href={backHref}>
             <ArrowLeft className="h-4 w-4" />
             {backLabel ?? t("common.back")}

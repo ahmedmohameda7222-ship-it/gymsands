@@ -91,10 +91,12 @@ describe("Phase 6 authenticated privacy foundations", () => {
     expect(source).not.toContain('select("input');
   });
 
-  it("requires explicit confirmation in the deletion-request UI", () => {
+  it("requires app confirmation and no-delete copy for privacy settings reset", () => {
     const source = readFileSync("app/(private)/settings/data-privacy/page.tsx", "utf8");
-    expect(source).toContain("window.confirm");
-    expect(source).toContain("revoke active ChatGPT access now");
-    expect(source).toContain("will not be deleted immediately");
+    expect(source).toContain("useConfirm");
+    expect(source).not.toContain("window.confirm");
+    expect(source).toContain("Reset display and privacy settings?");
+    expect(source).toContain("It does not delete logs, plans, meals, photos, progress, ChatGPT connections, or your account.");
+    expect(source).toContain("Export failed. No file was downloaded.");
   });
 });
