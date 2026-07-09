@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { Bell, CalendarDays, Droplets, RefreshCcw, Target, Trash2, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, Bell, CalendarDays, CheckCircle2, Droplets, Loader2, RefreshCcw, Target, Trash2, TrendingUp } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { CardGridSkeleton, EmptyState, ErrorState } from "@/components/ui/state-views";
 import { useToast } from "@/components/ui/toaster";
+import { InlineFeedback } from "@/components/motion";
 import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { addDays, startOfWeek } from "@/lib/date-utils";
@@ -29,9 +30,13 @@ export default function HydrationPage() {
   const [weekData, setWeekData] = useState<DailyNutritionSummary[]>([]);
   const [manualAmountMl, setManualAmountMl] = useState("350");
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [pendingAddKey, setPendingAddKey] = useState<string | null>(null);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
+  const [manualError, setManualError] = useState("");
+  const [feedback, setFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
+  const optimisticIdCounter = useRef(0);
   const date = useTodayDate();
   const totalMl = useMemo(() => logs.reduce((sum, log) => sum + Number(log.amount_ml), 0), [logs]);
   const target = targetMl ?? 0;
@@ -76,45 +81,76 @@ export default function HydrationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  async function quickAdd(amountMl: number) {
-    if (!user?.id || isSaving) return;
-    setIsSaving(true);
+  function updateTodayInWeek(current: DailyNutritionSummary[], deltaMl: number) {
+    return current.map((day) => (day.date === date ? { ...day, water_ml: Math.max(0, day.water_ml + deltaMl) } : day));
+  }
+
+  async function quickAdd(amountMl: number, actionKey = `quick-${amountMl}`) {
+    if (!user?.id || pendingAddKey) return;
+    const roundedAmount = Math.round(amountMl);
+    const previousLogs = logs;
+    const previousWeek = weekData;
+    optimisticIdCounter.current += 1;
+    const optimisticLog: WaterLog = {
+      id: `optimistic-water-${optimisticIdCounter.current}-${roundedAmount}`,
+      user_id: user.id,
+      log_date: date,
+      amount_ml: roundedAmount,
+      created_at: new Date().toISOString()
+    };
+
+    setPendingAddKey(actionKey);
+    setFeedback(null);
+    setLogs((current) => [optimisticLog, ...current]);
+    setWeekData((current) => updateTodayInWeek(current, roundedAmount));
     try {
-      const log = await addWaterLog(user.id, date, amountMl);
-      setLogs((current) => [log, ...current]);
-      setWeekData((current) => current.map((day) => (day.date === date ? { ...day, water_ml: day.water_ml + amountMl } : day)));
-      toast({ title: "Water logged", description: `${amountMl} ml added to today.` });
+      const log = await addWaterLog(user.id, date, roundedAmount);
+      setLogs((current) => current.map((item) => (item.id === optimisticLog.id ? log : item)));
+      setFeedback({ type: "info", message: `${roundedAmount} ml saved. Water logs update the dashboard and Calories hydration total.` });
     } catch (error) {
       logRecoverableError("hydration.add", error);
-      toast({ title: "Could not add water", description: userSafeError(error, "Water was not logged. Please try again.") });
+      const message = userSafeError(error, "Water was not saved. We restored your previous total.");
+      setLogs(previousLogs);
+      setWeekData(previousWeek);
+      setFeedback({ type: "error", message });
+      toast({ title: "Could not add water", description: message });
     } finally {
-      setIsSaving(false);
+      setPendingAddKey(null);
     }
   }
 
   async function removeLog(log: WaterLog) {
-    if (!user?.id || isSaving) return;
-    setIsSaving(true);
+    if (!user?.id || pendingDeleteIds.includes(log.id) || log.id.startsWith("optimistic-water-")) return;
+    const previousLogs = logs;
+    const previousWeek = weekData;
+    setPendingDeleteIds((current) => [...current, log.id]);
+    setFeedback(null);
+    setLogs((current) => current.filter((item) => item.id !== log.id));
+    setWeekData((current) => updateTodayInWeek(current, -Number(log.amount_ml)));
     try {
       await deleteWaterLog(user.id, log.id);
-      setLogs((current) => current.filter((item) => item.id !== log.id));
-      setWeekData((current) => current.map((day) => (day.date === date ? { ...day, water_ml: Math.max(0, day.water_ml - Number(log.amount_ml)) } : day)));
-      toast({ title: "Water entry removed", description: "Today total was updated." });
+      setFeedback({ type: "info", message: "Water entry removed. Today total was updated." });
     } catch (error) {
       logRecoverableError("hydration.delete", error);
-      toast({ title: "Could not remove entry", description: userSafeError(error, "Please try again.") });
+      const message = userSafeError(error, "Entry was not removed. We restored it.");
+      setLogs(previousLogs);
+      setWeekData(previousWeek);
+      setFeedback({ type: "error", message });
+      toast({ title: "Could not remove entry", description: message });
     } finally {
-      setIsSaving(false);
+      setPendingDeleteIds((current) => current.filter((id) => id !== log.id));
     }
   }
 
   function addManualAmount() {
     const amount = Number(manualAmountMl);
     if (!Number.isFinite(amount) || amount <= 0) {
+      setManualError("Enter water in milliliters, for example 350.");
       toast({ title: "Check amount", description: "Enter water in milliliters, for example 350." });
       return;
     }
-    void quickAdd(Math.round(amount));
+    setManualError("");
+    void quickAdd(Math.round(amount), "manual");
   }
 
   return (
@@ -123,7 +159,7 @@ export default function HydrationPage() {
         title="Hydration"
         description="Track today's water from the same account-backed logs used by the dashboard and calorie tracker."
         action={
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline" className="min-h-12">
             <Link href="/calories">Edit Targets</Link>
           </Button>
         }
@@ -140,7 +176,13 @@ export default function HydrationPage() {
         />
       ) : null}
 
-      {!loadError ? (
+      {!loadError && isLoading ? (
+        <div className="space-y-4">
+          <CardGridSkeleton count={3} rows={3} />
+        </div>
+      ) : null}
+
+      {!loadError && !isLoading ? (
         <div className="space-y-4">
           {/* Today progress — mobile hero */}
           <Card variant="glassStrong">
@@ -165,6 +207,24 @@ export default function HydrationPage() {
               ) : null}
 
               {/* Quick add buttons — large touch targets */}
+              {target && totalMl >= target ? (
+                <div className="mt-4 flex gap-2 rounded-2xl border border-primary/25 bg-primary/5 p-3 text-sm text-foreground">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <p>Target reached. You can keep logging extra water, but today's goal is complete.</p>
+                </div>
+              ) : null}
+              {!target ? (
+                <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-warning/30 bg-warning/5 p-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                  <span className="flex gap-2">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                    <span>No target set. Add a water target to unlock meaningful progress and streaks.</span>
+                  </span>
+                  <Button asChild variant="outline" className="min-h-12 w-full sm:w-auto">
+                    <Link href="/calories">Edit targets</Link>
+                  </Button>
+                </div>
+              ) : null}
+
               <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[250, 500, 750, 1000].map((amount) => (
                   <Button
@@ -173,13 +233,14 @@ export default function HydrationPage() {
                     className="min-h-14 gap-2 text-sm sm:text-base"
                     variant="outline"
                     onClick={() => quickAdd(amount)}
-                    disabled={isSaving || isLoading}
+                    disabled={Boolean(pendingAddKey)}
                   >
-                    <Droplets className="h-4 w-4 text-primary" />
-                    +{amount === 1000 ? "1 L" : `${amount} ml`}
+                    {pendingAddKey === `quick-${amount}` ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <Droplets className="h-4 w-4 text-primary" />}
+                    {pendingAddKey === `quick-${amount}` ? "Saving..." : `+${amount === 1000 ? "1 L" : `${amount} ml`}`}
                   </Button>
                 ))}
               </div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">Water logs update the dashboard and Calories hydration total.</p>
 
               {/* Manual input — compact */}
               <div className="mt-3 flex items-center gap-2">
@@ -193,10 +254,17 @@ export default function HydrationPage() {
                   placeholder="350"
                   className="h-12"
                 />
-                <Button type="button" className="h-12 shrink-0 px-5" onClick={addManualAmount} disabled={isSaving || isLoading}>
-                  Add
+                <Button type="button" className="h-12 shrink-0 px-5" onClick={addManualAmount} disabled={Boolean(pendingAddKey)}>
+                  {pendingAddKey === "manual" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {pendingAddKey === "manual" ? "Saving..." : "Add"}
                 </Button>
               </div>
+              {manualError ? <p className="mt-2 text-sm text-destructive">{manualError}</p> : null}
+              <InlineFeedback
+                message={feedback?.message}
+                variant={feedback?.type === "error" ? "error" : "info"}
+                onClose={() => setFeedback(null)}
+              />
             </CardContent>
           </Card>
 
@@ -206,13 +274,12 @@ export default function HydrationPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-normal">Recent entries</CardTitle>
             </CardHeader>
             <CardContent className="p-4 sm:p-5">
-              {isLoading ? <CardGridSkeleton count={1} rows={3} /> : null}
-              {!isLoading && !logs.length ? (
+              {!logs.length ? (
                 <EmptyState
                   title="No water logged today"
                   description="Use quick add when you finish a glass or bottle. No placeholder hydration data is shown."
                   actionLabel="Add 500 ml"
-                  onAction={() => quickAdd(500)}
+                  onAction={() => quickAdd(500, "empty-500")}
                 />
               ) : null}
               <div className="space-y-2">
@@ -231,12 +298,12 @@ export default function HydrationPage() {
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-10 w-10 shrink-0"
+                      className="h-12 w-12 shrink-0"
                       aria-label="Remove water entry"
                       onClick={() => removeLog(log)}
-                      disabled={isSaving}
+                      disabled={pendingDeleteIds.includes(log.id) || log.id.startsWith("optimistic-water-")}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      {pendingDeleteIds.includes(log.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                     </Button>
                   </div>
                 ))}
@@ -340,9 +407,9 @@ export default function HydrationPage() {
             />
           </div>
 
-          <Button type="button" variant="ghost" size="sm" onClick={loadHydration} disabled={isLoading} className="w-full sm:w-auto">
-            <RefreshCcw className="h-4 w-4" />
-            Refresh
+          <Button type="button" variant="ghost" onClick={loadHydration} disabled={isLoading} className="min-h-12 w-full sm:w-auto">
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+            {isLoading ? "Refreshing..." : "Refresh"}
           </Button>
         </div>
       ) : null}
