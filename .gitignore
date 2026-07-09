@@ -19,7 +19,10 @@ netlify/.cache
 # Claude Flow runtime data
 .claude-flow/data/
 .claude-flow/logs/
-
+# Generated/local agent outputs
+.claude-flow/
+.swarm/
+graphify-out/
 # Environment variables
 .env
 .env.local
