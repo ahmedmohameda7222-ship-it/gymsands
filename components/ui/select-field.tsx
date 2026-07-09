@@ -7,7 +7,7 @@ export type SelectOption = { value: string; label: string } | string;
 type NativeSelectProps = Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "value" | "onChange">;
 
 const defaultSelectClass =
-  "h-10 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "h-12 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70";
 
 export function Select({
   value,
