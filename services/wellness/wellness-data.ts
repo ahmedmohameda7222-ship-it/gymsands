@@ -66,7 +66,7 @@ function isIsoDate(value: string | null | undefined) {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
 }
 
-export async function getFitnessHabitHistory(userId: string, days = 30) {
+export async function getFitnessHabitHistory(userId: string, days = 30, options?: { throwOnError?: boolean }) {
   const safeDays = Math.max(1, Math.min(90, Math.floor(days)));
   if (!canUseUserData(userId)) return [] as FitnessHabit[];
   const { data, error } = await supabase!
@@ -79,6 +79,7 @@ export async function getFitnessHabitHistory(userId: string, days = 30) {
     .limit(safeDays * 20);
   if (error) {
     console.warn("Plaivra could not load habit history.", error.message);
+    if (options?.throwOnError) throw new Error(`Could not load habit history. ${error.message}`);
     return [];
   }
   return (data ?? []) as FitnessHabit[];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bell, CheckCircle2, MoreHorizontal, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/components/auth/auth-provider";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { CardSkeleton, ErrorState } from "@/components/ui/state-views";
 import { useToast } from "@/components/ui/toaster";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { getNutritionWeek } from "@/services/database/nutrition";
@@ -53,6 +55,7 @@ const starterTasks = ["Drink water", "Take supplements", "Walk or move", "Stretc
 const starterHabits = ["Water", "Sleep", "Steps", "Protein goal", "Workout done", "Calories logged"];
 const recordTypes = ["1RM", "Max weight", "Max reps", "Best set"];
 const ratingOptions = ["1", "2", "3", "4", "5"];
+type SaveStatus = "idle" | "saving" | "saved" | "failed";
 
 export function WellnessDashboard() {
   const { user } = useAuth();
@@ -314,41 +317,151 @@ export function DailyFitTasksTracker() {
 export function HabitsTracker() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { dialog, ask } = useConfirm();
   const today = useTodayDate();
+  const userId = user?.id ?? "";
   const [items, setItems] = useState<FitnessHabit[]>([]);
   const [history, setHistory] = useState<FitnessHabit[]>([]);
   const [draft, setDraft] = useState({ id: "", name: "", notes: "" });
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [historyError, setHistoryError] = useState("");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState("");
+  const [savedMessage, setSavedMessage] = useState("");
+  const [pendingToggleId, setPendingToggleId] = useState("");
+  const [pendingStarterName, setPendingStarterName] = useState("");
+  const [deletingId, setDeletingId] = useState("");
+  const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
+
+  const loadHabits = useCallback(async () => {
+    if (!userId) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    setLoadError("");
+    setHistoryError("");
+
+    const [todayResult, historyResult] = await Promise.allSettled([
+      getFitnessHabits(userId, today, { throwOnError: true }),
+      getFitnessHabitHistory(userId, 30, { throwOnError: true })
+    ]);
+
+    if (todayResult.status === "fulfilled") {
+      setItems(todayResult.value);
+    } else {
+      setItems([]);
+      setLoadError(messageFromError(todayResult.reason, "Today's habits could not load."));
+      setIsLoading(false);
+      return;
+    }
+
+    if (historyResult.status === "fulfilled") {
+      setHistory(historyResult.value);
+    } else {
+      setHistory(todayResult.value);
+      setHistoryError(messageFromError(historyResult.reason, "Habit history could not load."));
+    }
+
+    setIsLoading(false);
+  }, [today, userId]);
 
   useEffect(() => {
-    async function load() {
-      if (!user?.id) return;
-      const [todayItems, historical] = await Promise.all([getFitnessHabits(user.id, today), getFitnessHabitHistory(user.id, 30)]);
-      setItems(todayItems);
-      setHistory(historical);
-    }
-    load().catch((error) => toast({ title: "Could not load habits", description: error instanceof Error ? error.message : "Please try again." }));
-  }, [toast, user?.id, today]);
+    void loadHabits();
+  }, [loadHabits]);
 
   async function saveHabit(name = draft.name, notes = draft.notes) {
-    if (!user?.id) return;
-    const payload: FitnessHabitInput = { id: draft.id || undefined, user_id: user.id, habit_date: today, name, notes, completed: items.find((item) => item.id === draft.id)?.completed ?? false };
-    const saved = await upsertFitnessHabit(payload);
-    setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort((a, b) => a.created_at.localeCompare(b.created_at)));
-    setHistory((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
-    setDraft({ id: "", name: "", notes: "" });
+    if (!userId || saveStatus === "saving") return;
+    const trimmedName = name.trim();
+    const trimmedNotes = notes.trim();
+    if (!trimmedName) {
+      setSaveStatus("failed");
+      setSaveError("Habit name is required.");
+      return;
+    }
+    const duplicate = items.find((item) => item.name.trim().toLowerCase() === trimmedName.toLowerCase() && item.id !== draft.id);
+    if (duplicate) {
+      setSaveStatus("failed");
+      setSaveError(`${trimmedName} already exists for today. Use the existing row instead.`);
+      return;
+    }
+
+    try {
+      setSaveStatus("saving");
+      setSaveError("");
+      setSavedMessage("");
+      if (!draft.id) setPendingStarterName(trimmedName);
+      const payload: FitnessHabitInput = { id: draft.id || undefined, user_id: userId, habit_date: today, name: trimmedName, notes: trimmedNotes, completed: items.find((item) => item.id === draft.id)?.completed ?? false };
+      const saved = await upsertFitnessHabit(payload);
+      setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort((a, b) => a.created_at.localeCompare(b.created_at)));
+      setHistory((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      setDraft({ id: "", name: "", notes: "" });
+      setSaveStatus("saved");
+      setSavedMessage(draft.id ? "Habit updated." : "Habit saved.");
+    } catch (error) {
+      const message = messageFromError(error, "Please try again.");
+      setSaveStatus("failed");
+      setSaveError(`Habit was not saved. ${message}`);
+      toast({ title: "Could not save habit", description: message });
+    } finally {
+      setPendingStarterName("");
+    }
   }
 
   async function toggleHabit(item: FitnessHabit) {
-    const saved = await upsertFitnessHabit({ ...item, completed: !item.completed });
-    setItems((current) => current.map((habit) => habit.id === saved.id ? saved : habit));
-    setHistory((current) => [saved, ...current.filter((habit) => habit.id !== saved.id)]);
+    if (pendingToggleId || deletingId) return;
+    const previousItems = items;
+    const previousHistory = history;
+    const optimistic = { ...item, completed: !item.completed, updated_at: new Date().toISOString() };
+    setPendingToggleId(item.id);
+    setRowError(null);
+    setItems((current) => current.map((habit) => habit.id === item.id ? optimistic : habit));
+    setHistory((current) => [optimistic, ...current.filter((habit) => habit.id !== item.id)]);
+    try {
+      const saved = await upsertFitnessHabit({ ...item, completed: !item.completed });
+      setItems((current) => current.map((habit) => habit.id === saved.id ? saved : habit));
+      setHistory((current) => [saved, ...current.filter((habit) => habit.id !== saved.id)]);
+    } catch (error) {
+      const message = messageFromError(error, "Restored previous status.");
+      setItems(previousItems);
+      setHistory(previousHistory);
+      setRowError({ id: item.id, message: `Could not update habit. Restored previous status. ${message}` });
+      toast({ title: "Could not update habit", description: message });
+    } finally {
+      setPendingToggleId("");
+    }
   }
 
   async function removeHabit(item: FitnessHabit) {
-    if (!user?.id) return;
-    await deleteFitnessHabit(user.id, item.id);
-    setItems((current) => current.filter((habit) => habit.id !== item.id));
-    setHistory((current) => current.filter((habit) => habit.id !== item.id));
+    if (!userId) return;
+    ask({
+      title: "Delete this habit for today?",
+      description: `${item.name} will be removed from today's habit list and habit history used for reports.`,
+      variant: "destructive",
+      confirmLabel: "Delete habit",
+      onConfirm: async () => {
+        const previousItems = items;
+        const previousHistory = history;
+        try {
+          setDeletingId(item.id);
+          setRowError(null);
+          setItems((current) => current.filter((habit) => habit.id !== item.id));
+          setHistory((current) => current.filter((habit) => habit.id !== item.id));
+          await deleteFitnessHabit(userId, item.id);
+          if (draft.id === item.id) setDraft({ id: "", name: "", notes: "" });
+          toast({ title: "Habit deleted", description: "Saved habit history was updated." });
+        } catch (error) {
+          const message = messageFromError(error, "Please try again.");
+          setItems(previousItems);
+          setHistory(previousHistory);
+          setRowError({ id: item.id, message: `Habit was not deleted. ${message}` });
+          toast({ title: "Could not delete habit", description: message });
+        } finally {
+          setDeletingId("");
+        }
+      }
+    });
   }
 
   const habitStreaks = useMemo(() => {
@@ -367,15 +480,58 @@ export function HabitsTracker() {
 
   const doneCount = items.filter((i) => i.completed).length;
   const progress = items.length ? Math.round((doneCount / items.length) * 100) : 0;
+  const nextOpenHabit = items.find((item) => !item.completed);
+
+  if (isLoading) {
+    return (
+      <TrackerShell title="Habits" description="Track daily behaviors that support training, nutrition, hydration, and recovery.">
+        <CardSkeleton rows={4} />
+      </TrackerShell>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <TrackerShell title="Habits" description="Track daily behaviors that support training, nutrition, hydration, and recovery.">
+        <ErrorState title="Habits could not load" description={`${loadError} Your saved habits were not changed.`} onRetry={loadHabits} />
+      </TrackerShell>
+    );
+  }
 
   return (
     <TrackerShell title="Habits" description="Track daily behaviors that support training, nutrition, hydration, and recovery.">
+      {dialog}
+      <div className="rounded-md border border-border/70 bg-card p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Today</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {items.length ? `${doneCount}/${items.length} habits complete` : "No habits set today. Start with one small habit."}
+            </p>
+          </div>
+          {nextOpenHabit ? <Badge variant="outline">Next: {nextOpenHabit.name}</Badge> : items.length ? <Badge variant="success">All done</Badge> : null}
+        </div>
+      </div>
+
+      {draft.id ? (
+        <div className="rounded-md border border-primary/40 bg-primary/5 p-4">
+          <p className="text-sm font-semibold text-foreground">Editing habit: {draft.name}</p>
+          <p className="mt-1 text-sm text-muted-foreground">Changes are saved only when you press Save. Completion status is preserved.</p>
+          <Button type="button" variant="outline" className="mt-3 h-12" onClick={() => { setDraft({ id: "", name: "", notes: "" }); setSaveError(""); setSaveStatus("idle"); }}>
+            Cancel edit
+          </Button>
+        </div>
+      ) : null}
+
+      {saveError ? <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{saveError}</p> : null}
+      {savedMessage && saveStatus === "saved" ? <p className="rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success">{savedMessage}</p> : null}
+
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
         <Field label="Habit" value={draft.name} onChange={(name) => setDraft((current) => ({ ...current, name }))} />
         <Field label="Notes" value={draft.notes} onChange={(notes) => setDraft((current) => ({ ...current, notes }))} />
-        <Button className="self-end h-12" onClick={() => saveHabit()} disabled={!draft.name.trim()}>
+        <Button className="self-end h-12" onClick={() => saveHabit()} disabled={!draft.name.trim() || saveStatus === "saving"}>
           <Save className="h-4 w-4" />
-          Save
+          {saveStatus === "saving" ? "Saving" : draft.id ? "Save changes" : "Save"}
         </Button>
       </div>
 
@@ -386,7 +542,7 @@ export function HabitsTracker() {
             <span>{progress}%</span>
           </div>
           <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+            <div className="h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none" style={{ width: `${progress}%` }} />
           </div>
         </div>
       )}
@@ -396,9 +552,9 @@ export function HabitsTracker() {
           <p className="text-sm text-muted-foreground">No habits set today. Create one small habit to start.</p>
           <div className="flex flex-wrap gap-2">
             {starterHabits.map((habit) => (
-              <Button key={habit} variant="outline" size="sm" onClick={() => saveHabit(habit, "")}>
+              <Button key={habit} variant="outline" className="h-12" onClick={() => saveHabit(habit, "")} disabled={saveStatus === "saving" || pendingStarterName === habit || items.some((item) => item.name.trim().toLowerCase() === habit.toLowerCase())}>
                 <Plus className="h-4 w-4" />
-                {habit}
+                {pendingStarterName === habit ? "Saving" : habit}
               </Button>
             ))}
           </div>
@@ -412,14 +568,18 @@ export function HabitsTracker() {
             title={item.name}
             detail={item.notes || "Today"}
             done={item.completed}
+            pending={pendingToggleId === item.id || deletingId === item.id}
+            error={rowError?.id === item.id ? rowError.message : ""}
             onToggle={() => toggleHabit(item)}
-            onEdit={() => setDraft({ id: item.id, name: item.name, notes: item.notes ?? "" })}
+            onEdit={() => { setDraft({ id: item.id, name: item.name, notes: item.notes ?? "" }); setSaveError(""); setSaveStatus("idle"); }}
             onDelete={() => removeHabit(item)}
           />
         ))}
       </ItemGrid>
 
       <div className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {historyError ? <ErrorState title="Habit history could not load" description={`${historyError} Today's habits are still shown.`} onRetry={loadHabits} className="sm:col-span-2 xl:col-span-3" /> : null}
+        <p className="text-sm text-muted-foreground sm:col-span-2 xl:col-span-3">Streaks are based on saved habit history.</p>
         {habitStreaks.map((habit) => (
           <HabitStreakCard key={habit.name} name={habit.name} records={habit.records} />
         ))}
@@ -443,7 +603,9 @@ function HabitStreakCard({ name, records }: { name: string; records: Array<{ dat
         {stats.history.slice(-14).map((day, index) => (
           <span
             key={`${name}-${day.date}-${index}`}
-            title={day.date}
+            role="img"
+            aria-label={`${name} ${day.completed ? "completed" : "not completed"} on ${day.date}`}
+            title={`${day.date}: ${day.completed ? "completed" : "not completed"}`}
             className={`h-2.5 w-2.5 rounded-sm ${day.completed ? "bg-primary" : "bg-muted"}`}
           />
         ))}
@@ -828,7 +990,25 @@ function ItemGrid({ children }: { children: React.ReactNode }) {
   return <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{children}</div>;
 }
 
-function ActionCard({ title, detail, done, onToggle, onEdit, onDelete }: { title: string; detail: string; done?: boolean; onToggle?: () => void; onEdit: () => void; onDelete: () => void }) {
+function ActionCard({
+  title,
+  detail,
+  done,
+  pending = false,
+  error = "",
+  onToggle,
+  onEdit,
+  onDelete
+}: {
+  title: string;
+  detail: string;
+  done?: boolean;
+  pending?: boolean;
+  error?: string;
+  onToggle?: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   return (
     <div className="solid-row p-3">
       <div className="flex items-start justify-between gap-3">
@@ -840,23 +1020,24 @@ function ActionCard({ title, detail, done, onToggle, onEdit, onDelete }: { title
           <Badge variant={done ? "success" : "outline"} className="shrink-0 text-xs">{done ? "Done" : "Open"}</Badge>
         ) : null}
       </div>
+      {error ? <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-2 text-sm text-destructive">{error}</p> : null}
       <div className="mt-3 flex items-center gap-2">
         {onToggle ? (
-          <Button size="sm" className="h-11 flex-1" variant={done ? "secondary" : "default"} onClick={onToggle}>
+          <Button className="h-12 flex-1" variant={done ? "secondary" : "default"} onClick={onToggle} disabled={pending}>
             <CheckCircle2 className="h-4 w-4" />
-            {done ? "Reopen" : "Mark done"}
+            {pending ? "Saving" : done ? "Reopen" : "Mark done"}
           </Button>
         ) : null}
         <details className="relative ml-auto">
-          <summary className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-xl border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${title}`}>
+          <summary className="flex h-12 w-12 cursor-pointer list-none items-center justify-center rounded-xl border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary motion-reduce:transition-none" aria-label={`More actions for ${title}`}>
             <MoreHorizontal className="h-4 w-4" />
           </summary>
           <div className="solid-tracking-card absolute right-0 z-20 mt-2 grid w-36 gap-1 p-2">
-            <Button size="sm" variant="ghost" className="justify-start h-10" onClick={onEdit}>
+            <Button variant="ghost" className="h-12 justify-start" onClick={onEdit} disabled={pending}>
               <Pencil className="h-4 w-4" />
               Edit
             </Button>
-            <Button size="sm" variant="ghost" className="justify-start h-10 text-destructive hover:text-destructive" onClick={onDelete}>
+            <Button variant="ghost" className="h-12 justify-start text-destructive hover:text-destructive" onClick={onDelete} disabled={pending}>
               <Trash2 className="h-4 w-4" />
               Delete
             </Button>
@@ -871,7 +1052,7 @@ function Field({ label, value, onChange, type = "text", placeholder, inputMode, 
   return (
     <div className="space-y-2">
       <Label className="text-sm">{label}</Label>
-      <Input type={type} inputMode={inputMode} enterKeyHint={enterKeyHint} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder ?? label} className="h-11" />
+      <Input type={type} inputMode={inputMode} enterKeyHint={enterKeyHint} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder ?? label} className="h-12" />
     </div>
   );
 }
@@ -883,13 +1064,17 @@ function SelectField({ label, value, values, onChange }: { label: string; value:
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="flex h-11 w-full rounded-[14px] border bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex h-12 w-full rounded-[14px] border bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <option value="">Choose</option>
         {values.map((item) => <option key={item} value={item}>{item}</option>)}
       </select>
     </div>
   );
+}
+
+function messageFromError(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
 }
 
 function startOfWeek(value: string) {

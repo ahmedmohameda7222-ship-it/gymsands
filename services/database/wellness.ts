@@ -49,7 +49,7 @@ export async function deleteDailyFitTask(userId: string, id: string) {
   return true;
 }
 
-export async function getFitnessHabits(userId: string, date = todayIso()) {
+export async function getFitnessHabits(userId: string, date = todayIso(), options?: { throwOnError?: boolean }) {
   if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("fitness_habits")
@@ -59,6 +59,7 @@ export async function getFitnessHabits(userId: string, date = todayIso()) {
     .order("created_at", { ascending: true });
   if (error) {
     console.warn("Plaivra could not load fitness habits.", error.message);
+    if (options?.throwOnError) throw new Error(`Could not load fitness habits. ${error.message}`);
     return [];
   }
   return (data ?? []) as FitnessHabit[];
