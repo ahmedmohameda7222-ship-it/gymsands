@@ -66,7 +66,7 @@ export default function WorkoutDaySessionPage() {
   }
 
   return (
-    <WorkoutSessionScreen>
+    <WorkoutSessionScreen confirmExit>
       <WorkoutDayFocusSession day={day} />
     </WorkoutSessionScreen>
   );

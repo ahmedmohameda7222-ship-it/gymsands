@@ -378,6 +378,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const [manualReplacementName, setManualReplacementName] = useState("");
   const [isSavingAlternative, setIsSavingAlternative] = useState(false);
   const [setFeedback, setSetFeedback] = useState("");
+  const [setFeedbackVariant, setSetFeedbackVariant] = useState<"info" | "error">("info");
   const [prFeedback, setPrFeedback] = useState("");
   const workoutTimerKey = useMemo(() => workoutStorageKey(["workout-day-session", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const restTimerKey = useMemo(() => workoutStorageKey(["workout-day-rest-timer", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
@@ -587,9 +588,6 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     setTimerEndsAtMs(deadline);
     setIsTimerRunning(true);
     storeTimestamp(restTimerKey, deadline);
-    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission().catch(() => undefined);
-    }
   }
 
   function stopRestTimer() {
@@ -599,10 +597,23 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     clearStoredValue(restTimerKey);
   }
 
+  function restoreRestTimer(snapshot: { timerSeconds: number; timerLeft: number; timerEndsAtMs: number | null; isTimerRunning: boolean }) {
+    setTimerSeconds(snapshot.timerSeconds);
+    setTimerLeft(snapshot.timerLeft);
+    setTimerEndsAtMs(snapshot.timerEndsAtMs);
+    setIsTimerRunning(snapshot.isTimerRunning);
+    if (snapshot.timerEndsAtMs) storeTimestamp(restTimerKey, snapshot.timerEndsAtMs);
+    else clearStoredValue(restTimerKey);
+  }
+
   async function finishSet(exerciseIndex: number, setIndex: number) {
     const targetSet = exerciseStates[exerciseIndex]?.sets[setIndex];
     if (!targetSet || targetSet.completedAt || isSaving) return;
 
+    const previousStates = exerciseStates;
+    const previousActiveExerciseIndex = activeExerciseIndex;
+    const previousActiveSetIndex = activeSetIndex;
+    const previousTimer = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
     setIsSaving(true);
     const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: new Date().toISOString() });
     setExerciseStates(nextStates);
@@ -614,6 +625,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
     try {
       await persistProgress(nextStates);
+      setSetFeedbackVariant("info");
       setSetFeedback(`Set ${targetSet.setNumber} saved: ${targetSet.reps || "-"} reps at ${targetSet.weightKg || "0"} kg.`);
       const currentWeight = toNumberOrNull(targetSet.weightKg) ?? 0;
       const currentReps = toNumberOrNull(targetSet.reps) ?? 0;
@@ -626,7 +638,13 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         }
       }
     } catch (error) {
-      toast({ title: "Could not save set", description: userSafeError(error, "Try finishing the workout again if it does not appear in history.") });
+      setExerciseStates(previousStates);
+      setActiveExerciseIndex(previousActiveExerciseIndex);
+      setActiveSetIndex(previousActiveSetIndex);
+      restoreRestTimer(previousTimer);
+      setSetFeedbackVariant("error");
+      setSetFeedback("This set was not saved. We restored it so you can try again.");
+      toast({ title: "Could not save set", description: userSafeError(error, "This set was not saved. Your log was restored so you can try again.") });
     } finally {
       setIsSaving(false);
     }
@@ -634,13 +652,19 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
   async function restartSet(exerciseIndex: number, setIndex: number) {
     if (isSaving) return;
+    const previousStates = exerciseStates;
     setIsSaving(true);
     const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: null });
     setExerciseStates(nextStates);
     try {
       await persistProgress(nextStates);
-    } catch {
-      toast({ title: "Could not update this set", description: "Try again in a moment." });
+      setSetFeedbackVariant("info");
+      setSetFeedback("Set reopened. Finish it again when you are ready.");
+    } catch (error) {
+      setExerciseStates(previousStates);
+      setSetFeedbackVariant("error");
+      setSetFeedback("This set was not reopened. Your saved set stayed complete.");
+      toast({ title: "Could not reopen this set", description: userSafeError(error, "Your saved set stayed complete. Try again in a moment.") });
     } finally {
       setIsSaving(false);
     }
@@ -722,7 +746,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       <Card>
         <CardContent className="space-y-3 pt-5">
           <p className="text-sm text-muted-foreground">This workout day has no exercises yet.</p>
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" className="min-h-12">
             <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to plan</Link>
           </Button>
         </CardContent>
@@ -736,15 +760,21 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     <div className="space-y-4 pb-28 lg:pb-4">
       {completedSummary ? <WorkoutSummaryCard summary={completedSummary} dayName={day.day_name} /> : null}
 
-      <div className="sticky top-0 z-30 -mx-4 border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:static lg:mx-0 lg:rounded-[28px] lg:border lg:bg-card/70 lg:px-5 lg:py-4">
+      {isStarting ? (
+        <div className="rounded-[18px] border border-primary/20 bg-primary/5 p-3 text-sm text-primary" role="status">
+          <span className="inline-flex items-center gap-2">
+            <RefreshCcw className="h-4 w-4 motion-safe:animate-spin" />
+            Loading your session and previous logs...
+          </span>
+        </div>
+      ) : null}
+
+      <div className="sticky top-0 z-30 -mx-4 border-b border-border/60 bg-background/95 px-4 py-3 pr-16 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:static lg:mx-0 lg:rounded-[28px] lg:border lg:bg-card/70 lg:px-5 lg:py-4 lg:pr-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <Button asChild variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-[14px] lg:hidden">
-              <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /></Link>
-            </Button>
             <div className="min-w-0">
               <h1 className="truncate text-base font-semibold leading-tight">{day.day_name}</h1>
-              <p className="text-xs text-muted-foreground">{day.weekday ?? "Workout day"} · {exerciseStates.length} exercises</p>
+              <p className="text-xs text-muted-foreground">{day.weekday ?? "Workout day"} - {exerciseStates.length} exercises</p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -764,14 +794,8 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
           <span>{progress}%</span>
         </div>
         <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }} />
+          <div className="h-full rounded-full bg-primary motion-safe:transition-all motion-safe:duration-500" style={{ width: `${progress}%` }} />
         </div>
-      </div>
-
-      <div className="hidden lg:flex">
-        <Button asChild variant="outline" size="sm">
-          <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to plan</Link>
-        </Button>
       </div>
 
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:px-0">
@@ -789,7 +813,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                 setActiveSetIndex(firstOpen >= 0 ? firstOpen : item.sets.length - 1);
                 setTimerSeconds(item.exercise.rest_seconds ?? 75);
               }}
-              className={`flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-left transition-colors ${
+              className={`flex min-h-12 shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-left transition-colors ${
                 active
                   ? "border-primary/50 bg-primary/10 text-foreground"
                   : allDone
@@ -824,7 +848,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                     {supersetLabel(activeExercise.exercise) ? <Badge className="rounded-full text-[10px]">Superset {supersetLabel(activeExercise.exercise)}</Badge> : null}
                   </div>
                 </div>
-                <Button type="button" variant="outline" size="icon" className="h-10 w-10 shrink-0 rounded-[16px]" onClick={() => setActionsOpen(true)}>
+                <Button type="button" variant="outline" size="icon" className="h-12 w-12 shrink-0 rounded-[16px]" onClick={() => setActionsOpen(true)}>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </div>
@@ -876,14 +900,14 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
               <Button className="mt-4 min-h-[56px] w-full rounded-[18px] text-base font-semibold" onClick={() => finishSet(activeExerciseIndex, activeSetIndex)} disabled={Boolean(activeSet.completedAt) || isSaving || isStarting}>
                 <CheckCircle2 className="mr-2 h-5 w-5" />
-                {isSaving ? "Saving..." : `Finish Set ${activeSet.setNumber}`}
+                {isStarting ? "Loading..." : isSaving ? "Saving..." : `Finish Set ${activeSet.setNumber}`}
               </Button>
 
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <Button type="button" variant="outline" className="rounded-[16px]" onClick={() => setActionsOpen(true)}>
+                <Button type="button" variant="outline" className="min-h-12 rounded-[16px]" onClick={() => setActionsOpen(true)}>
                   <MoreHorizontal className="mr-2 h-4 w-4" /> More
                 </Button>
-                <Button type="button" variant="outline" className="rounded-[16px]" onClick={() => setFinishOpen(true)}>
+                <Button type="button" variant="outline" className="min-h-12 rounded-[16px]" onClick={() => setFinishOpen(true)}>
                   <Save className="mr-2 h-4 w-4" /> Finish
                 </Button>
               </div>
@@ -894,13 +918,13 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                 <CheckCircle2 className="h-6 w-6 text-success" />
               </div>
               <p className="mt-3 font-semibold text-success">All sets complete</p>
-              <p className="mt-1 text-sm text-muted-foreground">{activeExercise.exercise.exercise_name} — {activeExercise.sets.length} sets logged</p>
+              <p className="mt-1 text-sm text-muted-foreground">{activeExercise.exercise.exercise_name} - {activeExercise.sets.length} sets logged</p>
               {nextExercise ? (
-                <Button className="mt-4 rounded-[18px]" onClick={() => { setActiveExerciseIndex(activeExerciseIndex + 1); setActiveSetIndex(0); setTimerSeconds(nextExercise.exercise.rest_seconds ?? 75); }}>
+                <Button className="mt-4 min-h-12 rounded-[18px]" onClick={() => { setActiveExerciseIndex(activeExerciseIndex + 1); setActiveSetIndex(0); setTimerSeconds(nextExercise.exercise.rest_seconds ?? 75); }}>
                   Next: {nextExercise.exercise.exercise_name}
                 </Button>
               ) : (
-                <Button className="mt-4 rounded-[18px]" onClick={() => setFinishOpen(true)}><Save className="mr-2 h-4 w-4" /> Finish Workout</Button>
+                <Button className="mt-4 min-h-12 rounded-[18px]" onClick={() => setFinishOpen(true)}><Save className="mr-2 h-4 w-4" /> Finish Workout</Button>
               )}
             </MotionCard>
           )}
@@ -923,7 +947,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                       key={set.setNumber}
                       type="button"
                       onClick={() => setActiveSetIndex(setIndex)}
-                      className={`flex h-11 items-center justify-center rounded-[14px] border text-sm font-bold transition-colors ${isCompleted ? "border-success/30 bg-success/10 text-success" : isActive ? "border-primary/50 bg-primary/10 text-primary" : "border-border bg-muted/40 text-muted-foreground"}`}
+                      className={`flex h-12 items-center justify-center rounded-[14px] border text-sm font-bold transition-colors ${isCompleted ? "border-success/30 bg-success/10 text-success" : isActive ? "border-primary/50 bg-primary/10 text-primary" : "border-border bg-muted/40 text-muted-foreground"}`}
                       aria-label={`Set ${set.setNumber}`}
                     >
                       {isCompleted ? <Check className="h-4 w-4" /> : set.setNumber}
@@ -941,12 +965,12 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                   <p className="text-xs text-muted-foreground">Next exercise</p>
                   <p className="text-sm font-semibold">{nextExercise.exercise.exercise_name}</p>
                 </div>
-                <Badge variant="outline" className="rounded-full">{nextExercise.exercise.sets ?? nextExercise.sets.length} × {nextExercise.exercise.reps ?? "custom"}</Badge>
+                <Badge variant="outline" className="rounded-full">{nextExercise.exercise.sets ?? nextExercise.sets.length} x {nextExercise.exercise.reps ?? "custom"}</Badge>
               </CardContent>
             </Card>
           ) : null}
 
-          <InlineFeedback message={setFeedback} onClose={() => setSetFeedback("")} />
+          <InlineFeedback message={setFeedback} variant={setFeedbackVariant} onClose={() => setSetFeedback("")} />
           <InlineFeedback message={prFeedback} onClose={() => setPrFeedback("")} />
         </div>
 
@@ -958,11 +982,11 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                 <p className="text-xl font-bold tabular-nums text-primary">{formatTime(timerLeft)}</p>
               </div>
               <div className="grid grid-cols-4 gap-2">
-                {[30, 60, 90, 180].map((seconds) => <Button key={seconds} variant="outline" size="sm" onClick={() => startRestTimer(seconds)}>{seconds === 180 ? "3m" : `${seconds}s`}</Button>)}
+                {[30, 60, 90, 180].map((seconds) => <Button key={seconds} variant="outline" className="min-h-12" onClick={() => startRestTimer(seconds)}>{seconds === 180 ? "3m" : `${seconds}s`}</Button>)}
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1" onClick={() => startRestTimer(timerSeconds)}>Start</Button>
-                <Button variant="outline" size="sm" className="flex-1" onClick={stopRestTimer}>Stop</Button>
+                <Button variant="outline" className="min-h-12 flex-1" onClick={() => startRestTimer(timerSeconds)}>Start</Button>
+                <Button variant="outline" className="min-h-12 flex-1" onClick={stopRestTimer}>Stop</Button>
               </div>
             </CardContent>
           </Card>
@@ -975,7 +999,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                 <InfoStat label="Exercises" value={`${exerciseStates.filter((item) => item.sets.some((set) => set.completedAt)).length}/${exerciseStates.length}`} />
                 <InfoStat label="PRs" value={String(previewPrs.length)} />
               </div>
-              <Button className="w-full rounded-[18px]" onClick={() => setFinishOpen(true)} disabled={!session || isSaving}>
+              <Button className="min-h-12 w-full rounded-[18px]" onClick={() => setFinishOpen(true)} disabled={!session || isSaving}>
                 <Save className="mr-2 h-4 w-4" /> {isFinished ? "Finish Workout" : "Finish partial workout"}
               </Button>
             </CardContent>
@@ -992,25 +1016,25 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                 <p className="text-lg font-semibold">Workout actions</p>
                 <p className="text-sm text-muted-foreground">Extra tools stay here so the set screen stays focused.</p>
               </div>
-              <Button variant="ghost" size="icon" className="rounded-[14px]" onClick={() => setActionsOpen(false)}><X className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" className="h-12 w-12 rounded-[14px]" onClick={() => setActionsOpen(false)}><X className="h-4 w-4" /></Button>
             </div>
 
             <div className="space-y-3">
               <ActionBlock icon={<ExternalLink className="h-4 w-4" />} title="Exercise guide / video" description={currentInstructions}>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {currentGuideUrl ? <Button asChild variant="outline" size="sm"><a href={currentGuideUrl} target="_blank" rel="noreferrer">Open guide</a></Button> : null}
-                  {currentCustomVideoUrl ? <Button asChild variant="outline" size="sm"><a href={currentCustomVideoUrl} target="_blank" rel="noreferrer">Open video</a></Button> : null}
+                  {currentGuideUrl ? <Button asChild variant="outline" className="min-h-12"><a href={currentGuideUrl} target="_blank" rel="noreferrer">Open guide</a></Button> : null}
+                  {currentCustomVideoUrl ? <Button asChild variant="outline" className="min-h-12"><a href={currentCustomVideoUrl} target="_blank" rel="noreferrer">Open video</a></Button> : null}
                   {!currentGuideUrl && !currentCustomVideoUrl ? <p className="text-xs text-muted-foreground">No guide or custom video saved.</p> : null}
                 </div>
               </ActionBlock>
 
               <ActionBlock icon={<Sparkles className="h-4 w-4" />} title="Advanced set details" description="RPE, RIR, set type, notes, and previous set copy.">
                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                  <div className="space-y-1"><Label className="text-xs">RPE</Label><Input value={activeSet.rpe} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" /></div>
-                  <div className="space-y-1"><Label className="text-xs">RIR</Label><Input value={activeSet.rir} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" /></div>
+                  <div className="space-y-1"><Label className="text-xs">RPE</Label><Input className="h-12" value={activeSet.rpe} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" /></div>
+                  <div className="space-y-1"><Label className="text-xs">RIR</Label><Input className="h-12" value={activeSet.rir} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" /></div>
                   <div className="space-y-1">
                     <Label className="text-xs">Type</Label>
-                    <select value={activeSet.setType} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <select value={activeSet.setType} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-12 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       <option value="normal">Normal</option>
                       <option value="warmup">Warm-up</option>
                       <option value="working">Working</option>
@@ -1021,15 +1045,15 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                   <div className="space-y-1 sm:col-span-3"><Label className="text-xs">Notes</Label><textarea className="min-h-20 w-full resize-y rounded-[14px] border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" value={activeSet.notes} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { notes: event.target.value })} placeholder="Optional notes about this set" /></div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" onClick={() => applyPreviousSet(activeExerciseIndex, activeSetIndex)} disabled={Boolean(activeSet.completedAt)}>Use previous</Button>
-                  <Button size="sm" variant="outline" onClick={() => restartSet(activeExerciseIndex, activeSetIndex)} disabled={!activeSet.completedAt}>Reopen set</Button>
+                  <Button className="min-h-12" variant="outline" onClick={() => applyPreviousSet(activeExerciseIndex, activeSetIndex)} disabled={Boolean(activeSet.completedAt)}>Use previous</Button>
+                  <Button className="min-h-12" variant="outline" onClick={() => restartSet(activeExerciseIndex, activeSetIndex)} disabled={!activeSet.completedAt || isSaving}>{isSaving ? "Saving..." : "Reopen set"}</Button>
                 </div>
               </ActionBlock>
 
               <ActionBlock icon={<RefreshCcw className="h-4 w-4" />} title="Replace for today" description="Use an alternative now. The saved plan is not changed.">
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <Input value={manualReplacementName} onChange={(event) => setManualReplacementName(event.target.value)} placeholder="For example: Dumbbell bench press" />
-                  <select value={replacementReason} onChange={(event) => setReplacementReason(event.target.value as ExerciseAlternativeReason)} className="h-10 rounded-md border border-input bg-card px-3 text-sm">
+                  <Input className="h-12" value={manualReplacementName} onChange={(event) => setManualReplacementName(event.target.value)} placeholder="For example: Dumbbell bench press" />
+                  <select value={replacementReason} onChange={(event) => setReplacementReason(event.target.value as ExerciseAlternativeReason)} className="h-12 rounded-md border border-input bg-card px-3 text-sm">
                     <option value="machine_taken">Machine taken</option>
                     <option value="no_equipment">No equipment</option>
                     <option value="pain_or_discomfort">Pain or discomfort</option>
@@ -1044,18 +1068,18 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                 </div>
                 {activeAlternatives.length ? <div className="mt-3 rounded-[14px] bg-muted/40 p-3 text-xs text-muted-foreground">Saved: {activeAlternatives.slice(0, 3).map((alternative) => alternative.alternative_exercise_name).join(", ")}</div> : null}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" size="sm" onClick={useManualReplacement} disabled={!manualReplacementName.trim() || isSavingAlternative}>{isSavingAlternative ? "Saving..." : "Use for today"}</Button>
+                  <Button type="button" className="min-h-12" onClick={useManualReplacement} disabled={!manualReplacementName.trim() || isSavingAlternative}>{isSavingAlternative ? "Saving..." : "Use for today"}</Button>
                   <AiActionRequestDialog actions={[{ type: "replace_exercise", label: "Ask ChatGPT", description: "Ask ChatGPT to recommend a suitable replacement using the selected reason and current workout." }]} sourceType="plan_exercise" sourceId={activeExercise.exercise.id} context={{ ...workoutContext, replacement_reason: replacementReason, exercise_alternatives: activeAlternatives }} />
                 </div>
               </ActionBlock>
 
               <ActionBlock icon={<TimerReset className="h-4 w-4" />} title="Timer controls" description="Adjust rest or reset the workout timer.">
                 <div className="mt-3 grid grid-cols-4 gap-2">
-                  {[30, 60, 90, 180].map((seconds) => <Button key={seconds} type="button" variant="outline" size="sm" onClick={() => startRestTimer(seconds)}>{seconds === 180 ? "3m" : `${seconds}s`}</Button>)}
+                  {[30, 60, 90, 180].map((seconds) => <Button key={seconds} type="button" variant="outline" className="min-h-12" onClick={() => startRestTimer(seconds)}>{seconds === 180 ? "3m" : `${seconds}s`}</Button>)}
                 </div>
                 <div className="mt-3 flex gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={stopRestTimer}>Stop rest</Button>
-                  <Button type="button" variant="outline" size="sm" onClick={resetWorkoutTimer}>Reset workout timer</Button>
+                  <Button type="button" variant="outline" className="min-h-12" onClick={stopRestTimer}>Stop rest</Button>
+                  <Button type="button" variant="outline" className="min-h-12" onClick={resetWorkoutTimer}>Reset workout timer</Button>
                 </div>
               </ActionBlock>
 
@@ -1078,7 +1102,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                 <p className="text-lg font-semibold">Finish workout?</p>
                 <p className="text-sm text-muted-foreground">Review only the important summary before saving.</p>
               </div>
-              <Button variant="ghost" size="icon" className="rounded-[14px]" onClick={() => setFinishOpen(false)}><X className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" className="h-12 w-12 rounded-[14px]" onClick={() => setFinishOpen(false)}><X className="h-4 w-4" /></Button>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <InfoStat label="Minutes" value={String(durationMinutes)} />
@@ -1094,20 +1118,20 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
             <Button className="mt-4 min-h-12 w-full rounded-[18px]" onClick={completeSession} disabled={isSaving || !session}>
               <Save className="mr-2 h-4 w-4" /> {isSaving ? "Saving..." : isFinished ? "Save workout" : "Save partial workout"}
             </Button>
-            <Button className="mt-2 w-full rounded-[18px]" variant="outline" onClick={() => setFinishOpen(false)}>Keep training</Button>
+            <Button className="mt-2 min-h-12 w-full rounded-[18px]" variant="outline" onClick={() => setFinishOpen(false)}>Keep training</Button>
           </div>
         </div>
       ) : null}
 
-      <MobileStickyActions>
+      <MobileStickyActions allowOnSession className="bottom-[env(safe-area-inset-bottom)] z-[60]">
         <div className="flex items-center gap-3">
           {isTimerRunning ? (
             <>
               <div className="min-w-0 flex-1 text-sm">
-                <p className="font-semibold text-foreground">Resting · {formatTime(timerLeft)}</p>
+                <p className="font-semibold text-foreground">Resting - {formatTime(timerLeft)}</p>
                 <p className="truncate text-xs text-muted-foreground">{nextSetLabel}</p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => startRestTimer(timerLeft + 30)}>+30s</Button>
+              <Button variant="outline" className="min-h-12 px-4" onClick={() => startRestTimer(timerLeft + 30)}>+30s</Button>
               <Button className="min-h-12 flex-1 text-base" variant="secondary" onClick={stopRestTimer}>
                 <FastForward className="mr-2 h-5 w-5" /> Skip
               </Button>
@@ -1116,7 +1140,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
             <>
               <div className="min-w-0 flex-1 text-sm">
                 <p className="font-semibold text-foreground">Workout complete</p>
-                <p className="truncate text-xs text-muted-foreground">{formatTime(elapsedSeconds)} · {completedSets} sets</p>
+                <p className="truncate text-xs text-muted-foreground">{formatTime(elapsedSeconds)} - {completedSets} sets</p>
               </div>
               <Button className="min-h-12 flex-1 text-base" onClick={() => setFinishOpen(true)} disabled={isSaving || !session}>
                 <Save className="mr-2 h-5 w-5" /> Finish
@@ -1126,17 +1150,17 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
             <>
               <div className="min-w-0 flex-1 text-sm">
                 <p className="truncate font-semibold text-foreground">{activeExercise.exercise.exercise_name}</p>
-                <p className="truncate text-xs text-muted-foreground">{completedSets}/{totalSets} sets · {formatTime(elapsedSeconds)}</p>
+                <p className="truncate text-xs text-muted-foreground">{completedSets}/{totalSets} sets - {formatTime(elapsedSeconds)}</p>
               </div>
               <Button className="min-h-12 flex-1 text-base" onClick={() => finishSet(activeExerciseIndex, activeSetIndex)} disabled={Boolean(activeSet.completedAt) || isSaving || activeExerciseCompleted || isStarting}>
                 <CheckCircle2 className="mr-2 h-5 w-5" />
-                {isSaving ? "Saving..." : `Finish Set ${activeSet.setNumber}`}
+                {isStarting ? "Loading..." : isSaving ? "Saving..." : `Finish Set ${activeSet.setNumber}`}
               </Button>
             </>
           )}
         </div>
       </MobileStickyActions>
-      <MobileStickyActionsSpacer />
+      <MobileStickyActionsSpacer allowOnSession className="h-28" />
     </div>
   );
 }
@@ -1154,7 +1178,7 @@ function ActionBlock({ icon, title, description, children }: { icon: React.React
   return (
     <div className="rounded-[20px] border border-border/70 bg-background/30 p-4">
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px] bg-primary/10 text-primary">{icon}</div>
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-primary/10 text-primary">{icon}</div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">{title}</p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
@@ -1171,7 +1195,7 @@ function WorkoutSummaryCard({ summary, dayName }: { summary: WorkoutSummary; day
       <Card className="rounded-[28px] border-success/20 bg-success/[0.04]">
         <CardContent className="space-y-5 p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-success/15">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success/15">
               <Dumbbell className="h-5 w-5 text-success" />
             </div>
             <div>
@@ -1188,10 +1212,10 @@ function WorkoutSummaryCard({ summary, dayName }: { summary: WorkoutSummary; day
           {summary.prs.length ? (
             <div className="rounded-[16px] border border-primary/20 bg-primary/[0.04] p-4">
               <p className="flex items-center gap-2 text-sm font-semibold text-primary"><Trophy className="h-4 w-4" /> {summary.prs.length} new PR{summary.prs.length === 1 ? "" : "s"}</p>
-              <ul className="mt-2 space-y-1">{summary.prs.slice(0, 4).map((pr) => <li key={pr} className="text-sm text-muted-foreground">• {pr}</li>)}</ul>
+              <ul className="mt-2 space-y-1">{summary.prs.slice(0, 4).map((pr) => <li key={pr} className="text-sm text-muted-foreground">- {pr}</li>)}</ul>
             </div>
           ) : null}
-          <Button asChild className="w-full rounded-[18px]"><Link href="/my-workout/plans">Back to Workout Plans</Link></Button>
+          <Button asChild className="min-h-12 w-full rounded-[18px]"><Link href="/my-workout/plans">Back to Workout Plans</Link></Button>
         </CardContent>
       </Card>
     </MotionCard>

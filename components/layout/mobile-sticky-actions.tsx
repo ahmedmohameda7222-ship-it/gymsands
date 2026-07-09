@@ -4,13 +4,17 @@ import * as React from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-function useDisableStickyActions() {
+function useDisableStickyActions(allowOnSession = false) {
   const pathname = usePathname();
-  return pathname.startsWith("/workouts/session");
+  return !allowOnSession && pathname.startsWith("/workouts/session");
 }
 
-export function MobileStickyActions({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  const disabled = useDisableStickyActions();
+type MobileStickyActionsProps = React.HTMLAttributes<HTMLDivElement> & {
+  allowOnSession?: boolean;
+};
+
+export function MobileStickyActions({ className, children, allowOnSession = false, ...props }: MobileStickyActionsProps) {
+  const disabled = useDisableStickyActions(allowOnSession);
 
   if (disabled) return null;
 
@@ -27,8 +31,8 @@ export function MobileStickyActions({ className, children, ...props }: React.HTM
   );
 }
 
-export function MobileStickyActionsSpacer({ className }: { className?: string }) {
-  const disabled = useDisableStickyActions();
+export function MobileStickyActionsSpacer({ className, allowOnSession = false }: { className?: string; allowOnSession?: boolean }) {
+  const disabled = useDisableStickyActions(allowOnSession);
 
   if (disabled) return null;
 
