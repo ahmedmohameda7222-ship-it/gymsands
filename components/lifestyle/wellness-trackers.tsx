@@ -617,59 +617,204 @@ function HabitStreakCard({ name, records }: { name: string; records: Array<{ dat
 export function SupplementsTracker() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { dialog, ask } = useConfirm();
   const today = useTodayDate();
+  const userId = user?.id ?? "";
   const [items, setItems] = useState<SupplementLog[]>([]);
   const [history, setHistory] = useState<SupplementLog[]>([]);
   const [draft, setDraft] = useState({ id: "", name: "", dose: "", time: "", reminder: "" });
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [historyError, setHistoryError] = useState("");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState("");
+  const [savedMessage, setSavedMessage] = useState("");
+  const [pendingToggleId, setPendingToggleId] = useState("");
+  const [deletingId, setDeletingId] = useState("");
+  const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
+
+  const loadSupplements = useCallback(async () => {
+    if (!userId) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    setLoadError("");
+    setHistoryError("");
+    const [todayResult, historyResult] = await Promise.allSettled([
+      getSupplementLogs(userId, today, { throwOnError: true }),
+      getSupplementHistory(userId, 30, { throwOnError: true })
+    ]);
+    if (todayResult.status === "fulfilled") {
+      setItems(todayResult.value);
+    } else {
+      setItems([]);
+      setLoadError(messageFromError(todayResult.reason, "Today's supplements could not load."));
+      setIsLoading(false);
+      return;
+    }
+    if (historyResult.status === "fulfilled") {
+      setHistory(historyResult.value);
+    } else {
+      setHistory(todayResult.value);
+      setHistoryError(messageFromError(historyResult.reason, "Supplement adherence history could not load."));
+    }
+    setIsLoading(false);
+  }, [today, userId]);
 
   useEffect(() => {
-    async function load() {
-      if (!user?.id) return;
-      const [todayItems, historical] = await Promise.all([getSupplementLogs(user.id, today), getSupplementHistory(user.id, 30)]);
-      setItems(todayItems);
-      setHistory(historical);
-    }
-    load().catch((error) => toast({ title: "Could not load supplements", description: error instanceof Error ? error.message : "Please try again." }));
-  }, [toast, user?.id, today]);
+    void loadSupplements();
+  }, [loadSupplements]);
 
   async function saveSupplement() {
-    if (!user?.id) return;
-    const payload: SupplementLogInput = { id: draft.id || undefined, user_id: user.id, supplement_date: today, name: draft.name, dose: draft.dose, time: draft.time, reminder: draft.reminder, taken_today: items.find((item) => item.id === draft.id)?.taken_today ?? false };
-    const saved = await upsertSupplementLog(payload);
-    setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort((a, b) => (a.time ?? "").localeCompare(b.time ?? "")));
-    setHistory((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
-    setDraft({ id: "", name: "", dose: "", time: "", reminder: "" });
+    if (!userId || saveStatus === "saving") return;
+    const name = draft.name.trim();
+    if (!name) {
+      setSaveStatus("failed");
+      setSaveError("Supplement name is required.");
+      return;
+    }
+    const duplicate = items.find((item) => item.name.trim().toLowerCase() === name.toLowerCase() && item.id !== draft.id);
+    if (duplicate) {
+      setSaveStatus("failed");
+      setSaveError(`${name} already exists for today. Edit the existing row instead.`);
+      return;
+    }
+    try {
+      setSaveStatus("saving");
+      setSaveError("");
+      setSavedMessage("");
+      const payload: SupplementLogInput = { id: draft.id || undefined, user_id: userId, supplement_date: today, name, dose: draft.dose, time: draft.time, reminder: draft.reminder, taken_today: items.find((item) => item.id === draft.id)?.taken_today ?? false };
+      const saved = await upsertSupplementLog(payload);
+      setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort((a, b) => (a.time ?? "").localeCompare(b.time ?? "")));
+      setHistory((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      setDraft({ id: "", name: "", dose: "", time: "", reminder: "" });
+      setSaveStatus("saved");
+      setSavedMessage(draft.id ? "Supplement updated." : "Supplement saved.");
+    } catch (error) {
+      const message = messageFromError(error, "Please try again.");
+      setSaveStatus("failed");
+      setSaveError(`Supplement was not saved. ${message}`);
+      toast({ title: "Could not save supplement", description: message });
+    }
   }
 
   async function toggleSupplement(item: SupplementLog) {
-    const saved = await upsertSupplementLog({ ...item, taken_today: !item.taken_today });
-    setItems((current) => current.map((supplement) => supplement.id === saved.id ? saved : supplement));
-    setHistory((current) => [saved, ...current.filter((supplement) => supplement.id !== saved.id)]);
+    if (pendingToggleId || deletingId) return;
+    const previousItems = items;
+    const previousHistory = history;
+    const optimistic = { ...item, taken_today: !item.taken_today, updated_at: new Date().toISOString() };
+    setPendingToggleId(item.id);
+    setRowError(null);
+    setItems((current) => current.map((supplement) => supplement.id === item.id ? optimistic : supplement));
+    setHistory((current) => [optimistic, ...current.filter((supplement) => supplement.id !== item.id)]);
+    try {
+      const saved = await upsertSupplementLog({ ...item, taken_today: !item.taken_today });
+      setItems((current) => current.map((supplement) => supplement.id === saved.id ? saved : supplement));
+      setHistory((current) => [saved, ...current.filter((supplement) => supplement.id !== saved.id)]);
+    } catch (error) {
+      const message = messageFromError(error, "Restored previous state.");
+      setItems(previousItems);
+      setHistory(previousHistory);
+      setRowError({ id: item.id, message: `Could not update taken status. Restored previous state. ${message}` });
+      toast({ title: "Could not update supplement", description: message });
+    } finally {
+      setPendingToggleId("");
+    }
   }
 
   async function removeSupplement(item: SupplementLog) {
-    if (!user?.id) return;
-    await deleteSupplementLog(user.id, item.id);
-    setItems((current) => current.filter((supplement) => supplement.id !== item.id));
-    setHistory((current) => current.filter((supplement) => supplement.id !== item.id));
+    if (!userId) return;
+    ask({
+      title: "Delete this supplement from today?",
+      description: `${item.name} will be removed from today's supplement checklist and adherence history.`,
+      variant: "destructive",
+      confirmLabel: "Delete supplement",
+      onConfirm: async () => {
+        const previousItems = items;
+        const previousHistory = history;
+        try {
+          setDeletingId(item.id);
+          setRowError(null);
+          setItems((current) => current.filter((supplement) => supplement.id !== item.id));
+          setHistory((current) => current.filter((supplement) => supplement.id !== item.id));
+          await deleteSupplementLog(userId, item.id);
+          if (draft.id === item.id) setDraft({ id: "", name: "", dose: "", time: "", reminder: "" });
+          toast({ title: "Supplement deleted", description: "Saved supplement history was updated." });
+        } catch (error) {
+          const message = messageFromError(error, "Please try again.");
+          setItems(previousItems);
+          setHistory(previousHistory);
+          setRowError({ id: item.id, message: `Supplement was not deleted. ${message}` });
+          toast({ title: "Could not delete supplement", description: message });
+        } finally {
+          setDeletingId("");
+        }
+      }
+    });
   }
 
   const adherence = calculateSupplementAdherence(history);
   const takenCount = items.filter((i) => i.taken_today).length;
   const progress = items.length ? Math.round((takenCount / items.length) * 100) : 0;
+  const nextOpenSupplement = items.find((item) => !item.taken_today);
+
+  if (isLoading) {
+    return (
+      <TrackerShell title="Supplements" description="Plan supplement dose, time, reminder, and taken status for today.">
+        <CardSkeleton rows={4} />
+      </TrackerShell>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <TrackerShell title="Supplements" description="Plan supplement dose, time, reminder, and taken status for today.">
+        <ErrorState title="Supplements could not load" description={`${loadError} Your saved supplement data was not changed.`} onRetry={loadSupplements} />
+      </TrackerShell>
+    );
+  }
 
   return (
     <TrackerShell title="Supplements" description="Plan supplement dose, time, reminder, and taken status for today.">
+      {dialog}
+      <div className="rounded-md border border-border/70 bg-card p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Today</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {items.length ? `${takenCount}/${items.length} supplements taken` : "No supplements planned today."}
+            </p>
+          </div>
+          {nextOpenSupplement ? <Badge variant="outline">Next: {nextOpenSupplement.name}</Badge> : items.length ? <Badge variant="success">All taken</Badge> : null}
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">Supplement tracking is for logging only, not medical advice. Plaivra does not recommend doses.</p>
+      </div>
+
+      {draft.id ? (
+        <div className="rounded-md border border-primary/40 bg-primary/5 p-4">
+          <p className="text-sm font-semibold text-foreground">Editing supplement: {draft.name}</p>
+          <p className="mt-1 text-sm text-muted-foreground">Save keeps the current taken state unless you change it from the checklist row.</p>
+          <Button type="button" variant="outline" className="mt-3 h-12" onClick={() => { setDraft({ id: "", name: "", dose: "", time: "", reminder: "" }); setSaveError(""); setSaveStatus("idle"); }}>
+            Cancel edit
+          </Button>
+        </div>
+      ) : null}
+
+      {saveError ? <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{saveError}</p> : null}
+      {savedMessage && saveStatus === "saved" ? <p className="rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success">{savedMessage}</p> : null}
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_auto]">
         <Field label="Supplement name" value={draft.name} onChange={(name) => setDraft((current) => ({ ...current, name }))} />
         <Field label="Dose" value={draft.dose} onChange={(dose) => setDraft((current) => ({ ...current, dose }))} />
         <Field label="Time" type="time" value={draft.time} onChange={(time) => setDraft((current) => ({ ...current, time }))} />
         <Field label="Reminder note" value={draft.reminder} onChange={(reminder) => setDraft((current) => ({ ...current, reminder }))} />
-        <Button className="self-end h-12" onClick={saveSupplement} disabled={!draft.name.trim()}>
+        <Button className="self-end h-12" onClick={saveSupplement} disabled={!draft.name.trim() || saveStatus === "saving"}>
           <Save className="h-4 w-4" />
-          Save
+          {saveStatus === "saving" ? "Saving" : draft.id ? "Save changes" : "Save"}
         </Button>
       </div>
+      <p className="text-sm text-muted-foreground">Reminder note and time are saved as text for your review here. They are not push notifications.</p>
 
       {items.length > 0 && (
         <div className="mt-1">
@@ -678,13 +823,13 @@ export function SupplementsTracker() {
             <span>{progress}%</span>
           </div>
           <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+            <div className="h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none" style={{ width: `${progress}%` }} />
           </div>
         </div>
       )}
 
       {!items.length ? (
-        <p className="text-sm text-muted-foreground">No supplements today. Add your first supplement above.</p>
+        <p className="rounded-md border border-border/70 bg-card p-4 text-sm text-muted-foreground">No supplements today. Add a supplement only if it is already part of your own plan.</p>
       ) : null}
 
       <ItemGrid>
@@ -694,14 +839,17 @@ export function SupplementsTracker() {
             title={item.name}
             detail={[item.dose, item.time, item.reminder].filter(Boolean).join(" | ") || "Today"}
             done={item.taken_today}
+            pending={pendingToggleId === item.id || deletingId === item.id}
+            error={rowError?.id === item.id ? rowError.message : ""}
             onToggle={() => toggleSupplement(item)}
-            onEdit={() => setDraft({ id: item.id, name: item.name, dose: item.dose ?? "", time: item.time ?? "", reminder: item.reminder ?? "" })}
+            onEdit={() => { setDraft({ id: item.id, name: item.name, dose: item.dose ?? "", time: item.time ?? "", reminder: item.reminder ?? "" }); setSaveError(""); setSaveStatus("idle"); }}
             onDelete={() => removeSupplement(item)}
           />
         ))}
       </ItemGrid>
 
       <div className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {historyError ? <ErrorState title="Supplement adherence could not load" description={`${historyError} Today's supplements are still shown.`} onRetry={loadSupplements} className="sm:col-span-2 xl:col-span-3" /> : null}
         {adherence.map((item) => (
           <div key={item.name} className="solid-row p-3">
             <p className="text-sm font-semibold">{item.name}</p>

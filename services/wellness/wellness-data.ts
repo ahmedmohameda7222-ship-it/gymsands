@@ -85,7 +85,7 @@ export async function getFitnessHabitHistory(userId: string, days = 30, options?
   return (data ?? []) as FitnessHabit[];
 }
 
-export async function getSupplementHistory(userId: string, days = 30) {
+export async function getSupplementHistory(userId: string, days = 30, options?: { throwOnError?: boolean }) {
   if (!canUseUserData(userId)) return [] as SupplementLog[];
   const { data, error } = await supabase!
     .from("supplement_logs")
@@ -96,6 +96,7 @@ export async function getSupplementHistory(userId: string, days = 30) {
     .order("created_at", { ascending: true });
   if (error) {
     console.warn("Plaivra could not load supplement history.", error.message);
+    if (options?.throwOnError) throw new Error(`Could not load supplement history. ${error.message}`);
     return [];
   }
   return (data ?? []) as SupplementLog[];

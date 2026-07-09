@@ -111,7 +111,7 @@ export async function deleteSleepRecoveryLog(userId: string, id: string) {
   return true;
 }
 
-export async function getSupplementLogs(userId: string, date = todayIso()) {
+export async function getSupplementLogs(userId: string, date = todayIso(), options?: { throwOnError?: boolean }) {
   if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("supplement_logs")
@@ -121,6 +121,7 @@ export async function getSupplementLogs(userId: string, date = todayIso()) {
     .order("created_at", { ascending: true });
   if (error) {
     console.warn("Plaivra could not load supplements.", error.message);
+    if (options?.throwOnError) throw new Error(`Could not load supplements. ${error.message}`);
     return [];
   }
   return (data ?? []) as SupplementLog[];
