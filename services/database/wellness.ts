@@ -18,7 +18,7 @@ export type FitnessHabitInput = Omit<FitnessHabit, "id" | "created_at" | "update
 export type SleepRecoveryInput = Omit<SleepRecoveryLog, "id" | "created_at" | "updated_at"> & { id?: string };
 export type SupplementLogInput = Omit<SupplementLog, "id" | "created_at" | "updated_at"> & { id?: string };
 
-export async function getDailyFitTasks(userId: string, date = todayIso()) {
+export async function getDailyFitTasks(userId: string, date = todayIso(), options?: { throwOnError?: boolean }) {
   if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("daily_fit_tasks")
@@ -28,6 +28,7 @@ export async function getDailyFitTasks(userId: string, date = todayIso()) {
     .order("created_at", { ascending: true });
   if (error) {
     console.warn("Plaivra could not load daily fit tasks.", error.message);
+    if (options?.throwOnError) throw new Error(`Could not load daily fit tasks. ${error.message}`);
     return [];
   }
   return (data ?? []) as DailyFitTask[];
