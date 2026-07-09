@@ -15,7 +15,7 @@ function mockStamped<T extends { user_id: string }>(payload: T) {
 
 export type PersonalRecordInput = Omit<PersonalRecord, "id" | "created_at" | "updated_at"> & { id?: string };
 
-export async function getPersonalRecords(userId: string, limit = 100) {
+export async function getPersonalRecords(userId: string, limit = 100, options?: { throwOnError?: boolean }) {
   if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("personal_records")
@@ -26,6 +26,7 @@ export async function getPersonalRecords(userId: string, limit = 100) {
     .limit(limit);
   if (error) {
     console.warn("Plaivra could not load personal records.", error.message);
+    if (options?.throwOnError) throw new Error(`Could not load personal records. ${error.message}`);
     return [];
   }
   return (data ?? []) as PersonalRecord[];

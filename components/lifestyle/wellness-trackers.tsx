@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Bell, CheckCircle2, MoreHorizontal, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,7 +54,7 @@ import type { DailyFitTask, FitnessHabit, PersonalRecord, SleepRecoveryLog, Supp
 
 const starterTasks = ["Drink water", "Take supplements", "Walk or move", "Stretch 10 min", "Hit protein goal"];
 const starterHabits = ["Water", "Sleep", "Steps", "Protein goal", "Workout done", "Calories logged"];
-const recordTypes = ["1RM", "Max weight", "Max reps", "Best set"];
+const recordTypes = ["Max weight", "Max reps", "Estimated 1RM", "Best set", "Best volume"];
 const ratingOptions = ["1", "2", "3", "4", "5"];
 type SaveStatus = "idle" | "saving" | "saved" | "failed";
 
@@ -1100,39 +1101,105 @@ export function SleepRecoveryTracker() {
 export function PersonalRecordsTracker() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { dialog, ask } = useConfirm();
   const today = useTodayDate();
+  const userId = user?.id ?? "";
   const [items, setItems] = useState<PersonalRecord[]>([]);
   const [draft, setDraft] = useState({ id: "", exercise_name: "", record_type: "Max weight", weight_kg: "", reps: "", record_date: today, notes: "" });
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState("");
+  const [savedMessage, setSavedMessage] = useState("");
+  const [deletingId, setDeletingId] = useState("");
+  const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
+  const [recentRecordId, setRecentRecordId] = useState("");
+
+  const loadRecords = useCallback(async () => {
+    if (!userId) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      setItems(await getPersonalRecords(userId, 100, { throwOnError: true }));
+    } catch (error) {
+      setItems([]);
+      setLoadError(messageFromError(error, "Personal records could not load."));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId]);
 
   useEffect(() => {
-    async function load() {
-      if (!user?.id) return;
-      setItems(await getPersonalRecords(user.id));
-    }
-    load().catch((error) => toast({ title: "Could not load records", description: error instanceof Error ? error.message : "Please try again." }));
-  }, [toast, user?.id]);
+    void loadRecords();
+  }, [loadRecords]);
 
   async function saveRecord() {
-    if (!user?.id) return;
+    if (!userId || saveStatus === "saving") return;
+    const validation = validatePersonalRecordDraft(draft);
+    if (validation) {
+      setSaveStatus("failed");
+      setSaveError(validation);
+      return;
+    }
     const payload: PersonalRecordInput = {
       id: draft.id || undefined,
-      user_id: user.id,
-      exercise_name: draft.exercise_name,
-      record_type: draft.record_type,
+      user_id: userId,
+      exercise_name: draft.exercise_name.trim(),
+      record_type: normalizedRecordType(draft.record_type),
       weight_kg: draft.weight_kg ? Number(draft.weight_kg) : null,
       reps: draft.reps ? Number(draft.reps) : null,
       record_date: draft.record_date || today,
-      notes: draft.notes
+      notes: draft.notes.trim() || null
     };
-    const saved = await upsertPersonalRecord(payload);
-    setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort((a, b) => a.exercise_name.localeCompare(b.exercise_name) || b.record_date.localeCompare(a.record_date)));
-    setDraft({ id: "", exercise_name: "", record_type: "Max weight", weight_kg: "", reps: "", record_date: today, notes: "" });
+    try {
+      setSaveStatus("saving");
+      setSaveError("");
+      setSavedMessage("");
+      const saved = await upsertPersonalRecord(payload);
+      setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort((a, b) => a.exercise_name.localeCompare(b.exercise_name) || b.record_date.localeCompare(a.record_date)));
+      setDraft({ id: "", exercise_name: "", record_type: "Max weight", weight_kg: "", reps: "", record_date: today, notes: "" });
+      setRecentRecordId(saved.id);
+      setSaveStatus("saved");
+      setSavedMessage(draft.id ? "Record updated." : "Record saved.");
+      window.dispatchEvent(new Event("plaivra:personal-records-changed"));
+    } catch (error) {
+      const message = messageFromError(error, "Please try again.");
+      setSaveStatus("failed");
+      setSaveError(`Save failed. Your record draft is still here. ${message}`);
+      toast({ title: "Could not save record", description: message });
+    }
   }
 
   async function removeRecord(item: PersonalRecord) {
-    if (!user?.id) return;
-    await deletePersonalRecord(user.id, item.id);
-    setItems((current) => current.filter((record) => record.id !== item.id));
+    if (!userId) return;
+    ask({
+      title: "Delete this personal record?",
+      description: `${item.exercise_name} ${displayRecordType(item.record_type)} from ${item.record_date} will be removed from PR history and reports.`,
+      variant: "destructive",
+      confirmLabel: "Delete record",
+      onConfirm: async () => {
+        const previousItems = items;
+        try {
+          setDeletingId(item.id);
+          setRowError(null);
+          setItems((current) => current.filter((record) => record.id !== item.id));
+          await deletePersonalRecord(userId, item.id);
+          if (draft.id === item.id) setDraft({ id: "", exercise_name: "", record_type: "Max weight", weight_kg: "", reps: "", record_date: today, notes: "" });
+          window.dispatchEvent(new Event("plaivra:personal-records-changed"));
+          toast({ title: "Record deleted", description: "Personal record history was updated." });
+        } catch (error) {
+          const message = messageFromError(error, "Please try again.");
+          setItems(previousItems);
+          setRowError({ id: item.id, message: `Record was not deleted. ${message}` });
+          toast({ title: "Could not delete record", description: message });
+        } finally {
+          setDeletingId("");
+        }
+      }
+    });
   }
 
   const groupedRecords = useMemo(() => {
@@ -1151,8 +1218,37 @@ export function PersonalRecordsTracker() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [items]);
 
+  if (isLoading) {
+    return (
+      <TrackerShell title="Personal Records" description="Track best lifts, reps, and custom exercise milestones.">
+        <CardSkeleton rows={4} />
+      </TrackerShell>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <TrackerShell title="Personal Records" description="Track best lifts, reps, and custom exercise milestones.">
+        <ErrorState title="Personal records could not load" description={`${loadError} Saved records were not changed.`} onRetry={loadRecords} className="[&_button]:h-12" />
+      </TrackerShell>
+    );
+  }
+
   return (
     <TrackerShell title="Personal Records" description="Track best lifts, reps, and custom exercise milestones.">
+      {dialog}
+      <p className="text-sm text-muted-foreground">Personal records can be added manually or detected from completed workouts. This page is for milestone review and correction, not workout logging.</p>
+      {draft.id ? (
+        <div className="rounded-md border border-primary/40 bg-primary/5 p-4">
+          <p className="text-sm font-semibold text-foreground">Editing record: {draft.exercise_name} - {displayRecordType(draft.record_type)} on {draft.record_date}</p>
+          <p className="mt-1 text-sm text-muted-foreground">Save changes when ready, or cancel to keep the current record unchanged.</p>
+          <Button type="button" variant="outline" className="mt-3 h-12" onClick={() => { setDraft({ id: "", exercise_name: "", record_type: "Max weight", weight_kg: "", reps: "", record_date: today, notes: "" }); setSaveError(""); setSaveStatus("idle"); }}>
+            Cancel edit
+          </Button>
+        </div>
+      ) : null}
+      {saveError ? <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{saveError}</p> : null}
+      {savedMessage && saveStatus === "saved" ? <p className="rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success">{savedMessage}</p> : null}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
         <Field label="Exercise" value={draft.exercise_name} onChange={(exercise_name) => setDraft((current) => ({ ...current, exercise_name }))} />
         <SelectField label="Type" value={draft.record_type} values={recordTypes} onChange={(record_type) => setDraft((current) => ({ ...current, record_type }))} />
@@ -1161,9 +1257,9 @@ export function PersonalRecordsTracker() {
         <Field label="Date" type="date" value={draft.record_date} onChange={(record_date) => setDraft((current) => ({ ...current, record_date }))} />
         <Field label="Notes" value={draft.notes} onChange={(notes) => setDraft((current) => ({ ...current, notes }))} />
       </div>
-      <Button className="h-12 w-full sm:w-auto" onClick={saveRecord} disabled={!draft.exercise_name.trim()}>
+      <Button className="h-12 w-full sm:w-auto" onClick={saveRecord} disabled={!draft.exercise_name.trim() || saveStatus === "saving"}>
         <Save className="h-4 w-4" />
-        {draft.id ? "Update Record" : "Save Record"}
+        {saveStatus === "saving" ? "Saving record" : draft.id ? "Update Record" : "Save Record"}
       </Button>
 
       <div className="space-y-4">
@@ -1172,10 +1268,10 @@ export function PersonalRecordsTracker() {
             <p className="text-sm font-semibold text-foreground">{group.name}</p>
             <div className="mt-2 space-y-2">
               {group.records.map((item) => (
-                <div key={item.id} className="solid-row flex items-center justify-between p-3">
+                <div key={item.id} className={`solid-row flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between ${recentRecordId === item.id ? "border-primary/50 bg-primary/5" : ""} ${deletingId === item.id ? "opacity-60" : ""}`}>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold">{item.record_type}</span>
+                      <span className="text-sm font-semibold">{displayRecordType(item.record_type)}</span>
                       <span className="text-xs text-muted-foreground">{item.record_date}</span>
                     </div>
                     <p className="text-sm text-muted-foreground">
@@ -1183,20 +1279,22 @@ export function PersonalRecordsTracker() {
                       {item.reps ? ` · ${item.reps} reps` : null}
                       {item.notes ? ` · ${item.notes}` : null}
                     </p>
+                    <p className="mt-1 text-xs text-muted-foreground">{recordSourceLabel(item)}</p>
+                    {rowError?.id === item.id ? <p className="mt-2 text-sm text-destructive">{rowError.message}</p> : null}
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <Button size="icon" variant="ghost" className="h-10 w-10" onClick={() => setDraft({
+                    <Button size="icon" variant="ghost" className="h-12 w-12" onClick={() => { setDraft({
                       id: item.id,
                       exercise_name: item.exercise_name,
-                      record_type: item.record_type,
+                      record_type: normalizedRecordType(item.record_type),
                       weight_kg: item.weight_kg === null ? "" : String(item.weight_kg),
                       reps: item.reps === null ? "" : String(item.reps),
                       record_date: item.record_date,
                       notes: item.notes ?? ""
-                    })} aria-label={`Edit ${item.exercise_name} record`}>
+                    }); setSaveError(""); setSaveStatus("idle"); }} disabled={deletingId === item.id} aria-label={`Edit ${item.exercise_name} record`}>
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-10 w-10 text-destructive" onClick={() => removeRecord(item)} aria-label={`Delete ${item.exercise_name} record`}>
+                    <Button size="icon" variant="ghost" className="h-12 w-12 text-destructive" onClick={() => removeRecord(item)} disabled={deletingId === item.id} aria-label={`Delete ${item.exercise_name} record`}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -1206,11 +1304,46 @@ export function PersonalRecordsTracker() {
           </div>
         ))}
         {!groupedRecords.length && (
-          <p className="text-sm text-muted-foreground">No personal records yet. Add your first record above.</p>
+          <div className="rounded-md border border-border/70 bg-card p-4 text-sm text-muted-foreground">
+            <p>No personal records yet. Complete workouts or add your first record manually.</p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Button asChild variant="outline" className="h-12"><Link href="/today-workout">Today Workout</Link></Button>
+              <Button asChild variant="outline" className="h-12"><Link href="/workout-history">Workout History</Link></Button>
+            </div>
+          </div>
         )}
       </div>
     </TrackerShell>
   );
+}
+
+function normalizedRecordType(type: string) {
+  if (type === "1RM") return "Estimated 1RM";
+  if (type === "Best set") return "Best set";
+  return type;
+}
+
+function displayRecordType(type: string) {
+  if (type === "1RM") return "Estimated 1RM";
+  return type;
+}
+
+function recordSourceLabel(record: PersonalRecord) {
+  return record.notes?.toLowerCase().includes("auto-detected") ? "Auto-detected from workout session." : "Manual record.";
+}
+
+function validatePersonalRecordDraft(draft: { exercise_name: string; record_type: string; weight_kg: string; reps: string; record_date: string; notes: string }) {
+  if (!draft.exercise_name.trim()) return "Exercise name is required.";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.record_date)) return "Choose a valid record date.";
+  const weight = draft.weight_kg.trim() ? Number(draft.weight_kg) : null;
+  const reps = draft.reps.trim() ? Number(draft.reps) : null;
+  if (weight !== null && (!Number.isFinite(weight) || weight <= 0)) return "Weight must be a positive number.";
+  if (reps !== null && (!Number.isFinite(reps) || reps <= 0)) return "Reps must be a positive number.";
+  const type = normalizedRecordType(draft.record_type);
+  if ((type === "Max weight" || type === "Estimated 1RM") && weight === null) return `${type} needs a weight value.`;
+  if (type === "Max reps" && reps === null) return "Max reps needs a reps value.";
+  if (weight === null && reps === null && !draft.notes.trim()) return "Add weight, reps, or notes so this record has a meaningful value.";
+  return "";
 }
 
 function Metric({ title, value, detail }: { title: string; value: string; detail: string }) {

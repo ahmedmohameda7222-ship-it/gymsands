@@ -1,25 +1,46 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
-import { useToast } from "@/components/ui/toaster";
+import { CardSkeleton, ErrorState } from "@/components/ui/state-views";
 import { getPersonalRecords } from "@/services/database/progress";
 import type { PersonalRecord } from "@/types";
 
 export function PersonalRecordsInsights() {
   const { user } = useAuth();
-  const { toast } = useToast();
+  const userId = user?.id ?? "";
   const [records, setRecords] = useState<PersonalRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const loadRecords = useCallback(async () => {
+    if (!userId) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      setRecords(await getPersonalRecords(userId, 100, { throwOnError: true }));
+    } catch (error) {
+      setRecords([]);
+      setLoadError(error instanceof Error ? error.message : "Personal record insights could not load.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    getPersonalRecords(user.id)
-      .then(setRecords)
-      .catch((error) => toast({ title: "Could not load record insights", description: error instanceof Error ? error.message : "Please try again." }));
-  }, [toast, user?.id]);
+    void loadRecords();
+    window.addEventListener("plaivra:personal-records-changed", loadRecords);
+    return () => window.removeEventListener("plaivra:personal-records-changed", loadRecords);
+  }, [loadRecords]);
 
   const insights = useMemo(() => buildRecordInsights(records), [records]);
   const groupedByExercise = useMemo(() => buildExerciseGroups(records), [records]);
+
+  if (isLoading) return <CardSkeleton rows={4} />;
+  if (loadError) return <ErrorState title="Record insights could not load" description={`${loadError} Saved records were not changed.`} onRetry={loadRecords} className="[&_button]:h-12" />;
 
   return (
     <div className="space-y-4">
@@ -47,6 +68,13 @@ export function PersonalRecordsInsights() {
           <p className="mt-3 text-sm text-muted-foreground">
             Best lift: <span className="font-medium text-foreground">{insights.bestWeight.exercise_name}</span> on {insights.bestWeight.record_date}
           </p>
+        )}
+        {!records.length ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Personal records can be added manually or detected from completed workouts. Add your first record below, start a workout, or review workout history.
+          </p>
+        ) : (
+          <p className="mt-3 text-sm text-muted-foreground">Estimated 1RM is calculated from saved workout sets when available.</p>
         )}
       </div>
 
