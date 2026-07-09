@@ -55,7 +55,7 @@ function RatingField({ label, value, onChange, options = ratingOptions }: { labe
       <Label>{label}</Label>
       <div className="grid grid-cols-3 overflow-hidden rounded-[14px] border bg-card" role="radiogroup" aria-label={label}>
         {options.map((option) => (
-          <button key={option.value} type="button" role="radio" aria-checked={value === option.value} onClick={() => onChange(option.value)} className={`min-h-11 border-r px-2 text-xs font-semibold last:border-r-0 sm:text-sm ${value === option.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50"}`}>{option.label}</button>
+          <button key={option.value} type="button" role="radio" aria-checked={value === option.value} onClick={() => onChange(option.value)} className={`min-h-12 border-r px-2 text-xs font-semibold last:border-r-0 sm:text-sm ${value === option.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50"}`}>{option.label}</button>
         ))}
       </div>
     </div>
@@ -71,7 +71,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   return <label className="solid-row flex min-h-12 cursor-pointer items-center gap-3 p-3 text-sm font-medium"><input type="checkbox" className="h-5 w-5 accent-primary" checked={checked} onChange={(event) => onChange(event.target.checked)} />{label}</label>;
 }
 
-export function DailyCheckins({ compact = false }: { compact?: boolean }) {
+export function DailyCheckins({ compact = false, defaultOpen }: { compact?: boolean; defaultOpen?: boolean }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const today = useTodayDate();
@@ -79,10 +79,11 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
   const [evening, setEvening] = useState(eveningDefaults);
   const [morningSaved, setMorningSaved] = useState(false);
   const [eveningSaved, setEveningSaved] = useState(false);
-  const [isOpen, setIsOpen] = useState(!compact);
+  const [isOpen, setIsOpen] = useState(defaultOpen ?? !compact);
   const [savingType, setSavingType] = useState<"morning" | "evening" | null>(null);
   const [recentCheckins, setRecentCheckins] = useState<UserDailyCheckin[]>([]);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [inlineError, setInlineError] = useState("");
 
   useEffect(() => {
     if (!user?.id) return;
@@ -101,13 +102,16 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
         }
       })
       .catch((error) => {
-        if (!compact) toast({ title: "Could not load check-ins", description: userSafeError(error, "Please refresh and try again.") });
+        const message = userSafeError(error, "Please refresh and try again.");
+        setInlineError(`Could not load check-ins. ${message}`);
+        if (!compact) toast({ title: "Could not load check-ins", description: message });
       });
   }, [compact, toast, today, user?.id]);
 
   async function saveMorning() {
     if (!user?.id) return;
     setSavingType("morning");
+    setInlineError("");
     try {
       const saved = await upsertDailyCheckin(user.id, {
         checkin_date: today,
@@ -126,7 +130,9 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
       setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       toast({ title: "Morning check-in saved", description: "Today’s readiness context is available for your ChatGPT requests." });
     } catch (error) {
-      toast({ title: "Could not save morning check-in", description: userSafeError(error) });
+      const message = userSafeError(error, "Morning check-in was not saved.");
+      setInlineError(message);
+      toast({ title: "Could not save morning check-in", description: message });
     } finally {
       setSavingType(null);
     }
@@ -135,6 +141,7 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
   async function saveEvening() {
     if (!user?.id) return;
     setSavingType("evening");
+    setInlineError("");
     try {
       const saved = await upsertDailyCheckin(user.id, {
         checkin_date: today,
@@ -148,7 +155,9 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
       setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       toast({ title: "Evening review saved", description: "Today’s accountability record is complete." });
     } catch (error) {
-      toast({ title: "Could not save evening review", description: userSafeError(error) });
+      const message = userSafeError(error, "Evening review was not saved.");
+      setInlineError(message);
+      toast({ title: "Could not save evening review", description: message });
     } finally {
       setSavingType(null);
     }
@@ -160,17 +169,18 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <CardTitle className="text-base">{compact ? "Quick check-in" : "Daily check-ins"}</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">{compact ? "Energy, soreness, and readiness for today." : `A morning plan and evening review for ${today}.`}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{compact ? "Your check-in helps Plaivra adjust coaching context. It does not change your plan automatically." : `A morning plan and evening review for ${today}.`}</p>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={morningSaved ? "success" : "outline"}>{compact ? "Today" : "Morning"} {morningSaved ? "done" : "open"}</Badge>
             {!compact ? <Badge variant={eveningSaved ? "success" : "outline"}>Evening {eveningSaved ? "done" : "open"}</Badge> : null}
-            {compact ? <Button type="button" variant="outline" size="sm" onClick={() => setIsOpen((current) => !current)}>{isOpen ? "Close" : "Check in"}</Button> : null}
+            {compact ? <Button type="button" variant="outline" className="min-h-12" onClick={() => setIsOpen((current) => !current)}>{isOpen ? "Close" : "Check in"}</Button> : null}
           </div>
         </div>
       </CardHeader>
       {isOpen ? (
         <CardContent className={compact ? "p-4 pt-0" : "grid gap-4 lg:grid-cols-2"}>
+          {inlineError ? <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{inlineError}</p> : null}
           <div className="solid-tracking-card space-y-3 p-4">
             <p className="flex items-center gap-2 font-semibold"><Sun className="h-4 w-4 text-warning" /> {compact ? "How are you feeling?" : "Morning check-in"}</p>
             <div className={`grid gap-3 ${compact ? "lg:grid-cols-3" : "sm:grid-cols-2"}`}>
@@ -183,7 +193,7 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
               {!compact ? <TextField multiline label="Main goal" value={morning.today_main_goal} onChange={(value) => setMorning((current) => ({ ...current, today_main_goal: value }))} /> : null}
               {!compact ? <TextField multiline label="Likely blocker" value={morning.today_blocker} onChange={(value) => setMorning((current) => ({ ...current, today_blocker: value }))} /> : null}
             </div>
-            <Button onClick={saveMorning} disabled={savingType !== null}><Save className="h-4 w-4" /> {savingType === "morning" ? "Saving..." : compact ? "Save check-in" : "Save morning check-in"}</Button>
+            <Button className="min-h-12" onClick={saveMorning} disabled={savingType !== null}><Save className="h-4 w-4" /> {savingType === "morning" ? "Saving..." : compact ? "Save check-in" : "Save morning check-in"}</Button>
             {morningSaved ? <p className="text-sm font-medium text-primary" role="status">Morning check-in saved{savedAt ? ` at ${savedAt}` : ""}.</p> : null}
           </div>
 
@@ -203,7 +213,7 @@ export function DailyCheckins({ compact = false }: { compact?: boolean }) {
               <TextField multiline label="Main blocker" value={evening.main_blocker} onChange={(value) => setEvening((current) => ({ ...current, main_blocker: value }))} />
               <TextField multiline label="Tomorrow note" value={evening.tomorrow_note} onChange={(value) => setEvening((current) => ({ ...current, tomorrow_note: value }))} />
             </div>
-            <Button onClick={saveEvening} disabled={savingType !== null}><CheckCircle2 className="h-4 w-4" /> {savingType === "evening" ? "Saving..." : "Save evening review"}</Button>
+            <Button className="min-h-12" onClick={saveEvening} disabled={savingType !== null}><CheckCircle2 className="h-4 w-4" /> {savingType === "evening" ? "Saving..." : "Save evening review"}</Button>
             {eveningSaved ? <p className="text-sm font-medium text-primary" role="status">Evening review saved{savedAt ? ` at ${savedAt}` : ""}.</p> : null}
           </div> : null}
         </CardContent>
