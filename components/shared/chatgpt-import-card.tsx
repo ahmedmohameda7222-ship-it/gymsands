@@ -79,15 +79,19 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
   const [permission, setPermission] = useState<AiPermissionConfig | null>(null);
   const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
   const [isSavingPermission, setIsSavingPermission] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     if (!userId) {
+      setLoadFailed(false);
       setIsLoading(false);
       return;
     }
     const currentUserId = userId;
     async function load() {
+      setIsLoading(true);
       try {
+        setLoadFailed(false);
         const [onb, allPlans] = await Promise.all([
           getOnboarding(currentUserId),
           getAllUserWorkoutPlans(currentUserId)
@@ -95,7 +99,7 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
         setOnboarding(onb);
         setPlans(allPlans);
       } catch {
-        // silently fail; card degrades gracefully
+        setLoadFailed(true);
       } finally {
         setIsLoading(false);
       }
@@ -108,7 +112,7 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
     getAiPermissionSettings(userId).then(setPermission).catch(() => setPermission(null));
   }, [userId]);
 
-  const hasImportedPlan = plans.some(isChatGptPlan);
+  const hasImportedPlan = mode === "workout" && plans.some(isChatGptPlan);
   const setupComplete = Boolean(onboarding);
 
   const prompt = useMemo(() => {
@@ -146,16 +150,13 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
       await saveAiPermissionSettings(userId, next);
       setPermission(next);
       setPermissionDialogOpen(false);
-      toast({ title: "ChatGPT access updated", description: "Workout access is now available." });
+      toast({ title: "ChatGPT access updated", description: `${mode === "workout" ? "Workout" : "Meal plan"} access is now available.` });
     } catch (error) {
       toast({ title: "Could not update ChatGPT access", description: error instanceof Error ? error.message : "Please try again.", variant: "error" });
     } finally {
       setIsSavingPermission(false);
     }
   }
-
-  // Hide completely if user already has any imported plan
-  if (!isLoading && hasImportedPlan) return null;
 
   const noun = mode === "workout" ? "workout plan" : "meal plan";
   const sectionPermission = mode === "workout" ? permission?.sections.workouts : permission?.sections.meal_plans;
@@ -165,16 +166,21 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
     <Card variant="glassStrong" className={className}>
       <CardContent className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
         <div className="flex gap-3">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-soft">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-soft">
             <Bot className="h-5 w-5" />
           </div>
           <div>
             <p className="text-lg font-semibold">Import your {noun} from ChatGPT</p>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
               {setupComplete
-                ? "Your profile is set up. Generate a personalized prompt and open ChatGPT to create your plan."
-                : "Complete your profile setup so Plaivra can build a personalized prompt for ChatGPT."}
+                ? hasImportedPlan
+                  ? `You already have an imported ${noun}. You can still use ChatGPT to add or update another ${noun} after review.`
+                  : `Your profile is set up. Generate a personalized prompt and open ChatGPT to create your ${noun}.`
+                : loadFailed
+                  ? "Plaivra could not load all setup context. You can still open setup or try again before importing."
+                  : "Complete your profile setup so Plaivra can build a personalized prompt for ChatGPT."}
             </p>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">ChatGPT can prepare the {noun}; Plaivra stores only reviewed imports you approve.</p>
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row md:flex-col">
@@ -187,20 +193,22 @@ export function ChatGptImportCard({ mode, className }: { mode: "workout" | "meal
             </Button>
           ) : !hasChatGptAccess ? (
             <>
-              <button type="button" onClick={() => setPermissionDialogOpen(true)} className="rounded-xl border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10">
+              <Button type="button" variant="outline" className="min-h-12" onClick={() => setPermissionDialogOpen(true)}>
                 Give ChatGPT access for {mode === "workout" ? "workouts" : "meal plans"}
-              </button>
+              </Button>
               <Dialog open={permissionDialogOpen} onOpenChange={setPermissionDialogOpen}>
                 <DialogContent className="sm:max-w-md">
                   <DialogHeader>
                     <DialogTitle>Do you want to give ChatGPT access to {mode === "workout" ? "workouts" : "meal plans"}?</DialogTitle>
-                    <DialogDescription>Choose the access level you are comfortable with. You can remove it later from AI Permissions.</DialogDescription>
+                    <DialogDescription>
+                      Read access lets ChatGPT use your Plaivra context for planning. Write access can prepare imports, but Plaivra still requires your review before saving.
+                    </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-2">
-                    <Button type="button" variant="outline" onClick={() => void grantWorkoutAccess("read")} disabled={isSavingPermission}>Read access</Button>
-                    <Button type="button" variant="outline" onClick={() => void grantWorkoutAccess("write")} disabled={isSavingPermission}>Write access</Button>
-                    <Button type="button" onClick={() => void grantWorkoutAccess("both")} disabled={isSavingPermission}>Both read and write</Button>
-                    <Button type="button" variant="ghost" onClick={() => setPermissionDialogOpen(false)} disabled={isSavingPermission}>Do not give access</Button>
+                    <Button type="button" className="min-h-12" variant="outline" onClick={() => void grantWorkoutAccess("read")} disabled={isSavingPermission}>{isSavingPermission ? "Saving..." : "Read access"}</Button>
+                    <Button type="button" className="min-h-12" variant="outline" onClick={() => void grantWorkoutAccess("write")} disabled={isSavingPermission}>{isSavingPermission ? "Saving..." : "Write access"}</Button>
+                    <Button type="button" className="min-h-12" onClick={() => void grantWorkoutAccess("both")} disabled={isSavingPermission}>{isSavingPermission ? "Saving..." : "Both read and write"}</Button>
+                    <Button type="button" className="min-h-12" variant="ghost" onClick={() => setPermissionDialogOpen(false)} disabled={isSavingPermission}>Do not give access</Button>
                   </div>
                 </DialogContent>
               </Dialog>

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CardGridSkeleton, EmptyState, ErrorState } from "@/components/ui/state-views";
+import { CardGridSkeleton, ErrorState } from "@/components/ui/state-views";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError, logRecoverableError, technicalErrorDetails } from "@/lib/error-formatting";
@@ -17,6 +17,7 @@ import { archiveWorkoutPlan, deleteWorkoutPlan, duplicateWorkoutPlan, getActiveW
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { WorkoutCalendar } from "@/components/workouts/workout-calendar";
 import { Input } from "@/components/ui/input";
+import { ChatGptImportCard } from "@/components/shared/chatgpt-import-card";
 import type { UserWorkoutPlan, WorkoutSession } from "@/types";
 
 type PlanMeta = Omit<UserWorkoutPlan, "source"> & {
@@ -115,6 +116,7 @@ export function MyWorkoutPlans() {
   const activeCalendarDays = useMemo(() => (activePlan ? calendarDaysFromPlan(activePlan) : []), [activePlan]);
   const availablePlans = plans.filter((plan) => !plan.archived_at);
   const archivedPlans = plans.filter((plan) => plan.archived_at);
+  const firstAvailablePlan = availablePlans[0] ?? null;
 
   const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
   const todayIndex = activeCalendarDays.findIndex((day) => day.weekday === today && day.exercises.length > 0);
@@ -166,7 +168,7 @@ export function MyWorkoutPlans() {
   }
 
   async function saveMetadata(plan: UserWorkoutPlan) {
-    if (!user?.id) return;
+    if (!user?.id || busyPlanId) return;
     if (!editName.trim()) {
       toast({ title: "Plan name required", description: "Enter a plan name before saving." });
       return;
@@ -202,15 +204,6 @@ export function MyWorkoutPlans() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={loadPlans} disabled={isLoading}>
-            <RefreshCcw className="h-4 w-4" /> Refresh
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => router.push("/my-workout/plans/builder")}>
-            <Plus className="h-4 w-4" /> Create manually
-          </Button>
-      </div>
-
       {isLoading ? <CardGridSkeleton count={3} rows={4} /> : null}
 
       {!isLoading && loadError ? (
@@ -219,6 +212,13 @@ export function MyWorkoutPlans() {
 
       {!isLoading && !loadError && activePlan ? (
         <div className="space-y-4">
+          <TodayTrainingHero
+            activePlan={activePlan}
+            todayLabel={today}
+            todayDay={todayDay}
+            onStartToday={startToday}
+          />
+
           <WorkoutCalendar
             days={activeCalendarDays}
             activity={activity}
@@ -226,90 +226,117 @@ export function MyWorkoutPlans() {
             onSelectDay={openCalendarDay}
             onStartToday={startToday}
           />
-
-          {/* Today's Workout Card - prominent on mobile */}
-          {todayDay ? (
-            <Card className="overflow-hidden border-primary/20 shadow-luxe lg:hidden">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <Badge>Today</Badge>
-                  <Badge variant="outline">{todayDay.weekday}</Badge>
-                </div>
-                <h3 className="mt-3 text-xl font-semibold tracking-tight">{todayDay.dayName}</h3>
-                <div className="mt-3 space-y-2">
-                  {todayDay.exercises.map((exercise, index) => (
-                    <div key={exercise.id} className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium">{index + 1}. {exercise.name}</p>
-                      <Badge variant="outline" className="shrink-0">{exercise.sets ?? 3} x {exercise.reps ?? "?"}</Badge>
-                    </div>
-                  ))}
-                </div>
-                <Button className="mt-4 h-12 w-full text-base" onClick={startToday}>
-                  <Play className="h-5 w-5" /> Start Today&apos;s Workout
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
         </div>
       ) : null}
 
       {!isLoading && !loadError && !plans.length ? (
-        <EmptyState title="No workout plans yet" description="Create one manually or import a plan you already reviewed in ChatGPT." actionLabel="Set up ChatGPT import" actionHref="/settings/ai-imports" secondaryLabel="Create manually" secondaryHref="/my-workout/plans/builder" />
+        <PlanSetupHero onCreateManual={() => router.push("/my-workout/plans/builder")} />
       ) : null}
 
-      {!isLoading && !loadError ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {availablePlans.map((plan) => {
-            const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
-            const isDefault = plan.is_default ?? plan.is_active;
-            const sourceLabel = sourceBadge(plan);
-            const meta = plan as PlanMeta;
-            return (
-              <Card key={plan.id} variant="glass" className="overflow-hidden">
-                <CardContent className="space-y-4 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="mb-2 flex flex-wrap gap-2">
-                        {isDefault ? <Badge>Default</Badge> : <Badge variant="outline">{sourceLabel}</Badge>}
+      {!isLoading && !loadError && plans.length > 0 && !activePlan ? (
+        <ChooseActivePlanHero
+          firstPlan={firstAvailablePlan}
+          busyPlanId={busyPlanId}
+          onSetActive={setDefaultPlan}
+          onCreateManual={() => router.push("/my-workout/plans/builder")}
+        />
+      ) : null}
+
+      {!isLoading && !loadError && availablePlans.length > 0 ? (
+        <div className="space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Saved plan library</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Default plan controls today&apos;s schedule. Archived plans keep history available.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" className="min-h-12" onClick={loadPlans} disabled={isLoading}>
+                <RefreshCcw className="h-4 w-4" /> Refresh
+              </Button>
+              <Button variant="outline" className="min-h-12" onClick={() => router.push("/my-workout/plans/builder")}>
+                <Plus className="h-4 w-4" /> Create manually
+              </Button>
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {availablePlans.map((plan) => {
+              const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
+              const isDefault = plan.is_default ?? plan.is_active;
+              const sourceLabel = sourceBadge(plan);
+              const meta = plan as PlanMeta;
+              const isPlanBusy = busyPlanId === plan.id;
+
+              return (
+                <Card key={plan.id} variant="glass" className="overflow-hidden">
+                  <CardContent className="space-y-4 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="mb-2 flex flex-wrap gap-2">
+                          {isDefault ? <Badge>Default</Badge> : <Badge variant="outline">{sourceLabel}</Badge>}
+                        </div>
+                        <h3 className="line-clamp-2 text-base font-semibold leading-6 text-foreground">{plan.name}</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">{plan.days.length} day plan - {exerciseCount} exercises{meta.session_duration_minutes ? ` - ${meta.session_duration_minutes} min` : ""}</p>
                       </div>
-                      <h3 className="line-clamp-2 text-base font-semibold leading-6 text-foreground">{plan.name}</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">{plan.days.length} day plan · {exerciseCount} exercises{meta.session_duration_minutes ? ` · ${meta.session_duration_minutes} min` : ""}</p>
+                      <PlanActions
+                        plan={plan}
+                        isDefault={isDefault}
+                        busyPlanId={busyPlanId}
+                        onDefault={setDefaultPlan}
+                        onDuplicate={duplicatePlan}
+                        onArchive={archivePlan}
+                        onDelete={(p) => ask({ title: "Delete plan?", description: `This will permanently remove ${p.name} and all its days and exercises. Workout history will be kept.`, variant: "destructive", confirmLabel: "Delete", onConfirm: () => deletePlan(p) })}
+                        onEdit={(nextPlan) => { setEditingPlanId(nextPlan.id); setEditName(nextPlan.name); }}
+                      />
                     </div>
-                    <PlanActions
-                      plan={plan}
-                      isDefault={isDefault}
-                      busyPlanId={busyPlanId}
-                      onDefault={setDefaultPlan}
-                      onDuplicate={duplicatePlan}
-                      onArchive={archivePlan}
-                      onDelete={(p) => ask({ title: "Delete plan?", description: `This will permanently remove ${p.name} and all its days and exercises. Workout history will be kept.`, variant: "destructive", confirmLabel: "Delete", onConfirm: () => deletePlan(p) })}
-                      onEdit={(nextPlan) => { setEditingPlanId(nextPlan.id); setEditName(nextPlan.name); }}
-                    />
-                  </div>
 
-                  {editingPlanId === plan.id ? (
-                    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                      <Input value={editName} onChange={(event) => setEditName(event.target.value)} aria-label="Plan name" />
-                      <Button onClick={() => saveMetadata(plan)} disabled={busyPlanId === plan.id}>
-                        <Save className="h-4 w-4" /> Save
+                    {editingPlanId === plan.id ? (
+                      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                        <Input className="h-12" value={editName} onChange={(event) => setEditName(event.target.value)} aria-label="Plan name" />
+                        <Button className="min-h-12" onClick={() => saveMetadata(plan)} disabled={Boolean(busyPlanId)}>
+                          <Save className="h-4 w-4" /> {isPlanBusy ? "Saving..." : "Save"}
+                        </Button>
+                      </div>
+                    ) : null}
+
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <PlanFact label="Days" value={String(plan.days.length)} icon={CalendarDays} />
+                      <PlanFact label="Exercises" value={String(exerciseCount)} icon={Dumbbell} />
+                      <PlanFact label="Duration" value={planDurationLabel(plan)} icon={CalendarDays} />
+                    </div>
+
+                    {!isDefault ? (
+                      <Button type="button" variant="outline" className="min-h-12 w-full" onClick={() => setDefaultPlan(plan)} disabled={Boolean(busyPlanId)}>
+                        <Star className="h-4 w-4" />
+                        {isPlanBusy ? "Updating..." : "Set as active"}
                       </Button>
-                    </div>
-                  ) : null}
+                    ) : null}
 
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    <PlanFact label="Days" value={String(plan.days.length)} icon={CalendarDays} />
-                    <PlanFact label="Exercises" value={String(exerciseCount)} icon={Dumbbell} />
-                    <PlanFact label="Duration" value={planDurationLabel(plan)} icon={CalendarDays} />
-                  </div>
-
-                  <Button asChild className="w-full">
-                    <Link href={`/my-workout/plans/${plan.id}`}>Open Plan</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          })}
+                    <Button asChild className="min-h-12 w-full">
+                      <Link href={`/my-workout/plans/${plan.id}`}>Open Plan</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
         </div>
+      ) : null}
+
+      {!isLoading && !loadError && plans.length ? (
+        <Card variant="glassStrong" className="border-primary/20">
+          <CardHeader>
+            <CardTitle>Add or import a plan</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm leading-6 text-muted-foreground">
+              ChatGPT import is the recommended creation path for most users. You can review, edit, schedule, and start workouts in Plaivra after import.
+            </p>
+            <ChatGptImportCard mode="workout" />
+            <Button variant="outline" className="min-h-12" onClick={() => router.push("/my-workout/plans/builder")}>
+              <Plus className="h-4 w-4" /> Create manually instead
+            </Button>
+          </CardContent>
+        </Card>
       ) : null}
 
       {!isLoading && !loadError && archivedPlans.length ? (
@@ -322,7 +349,7 @@ export function MyWorkoutPlans() {
                   <p className="font-semibold">{plan.name}</p>
                   <p className="text-muted-foreground">{plan.archived_at ? new Date(plan.archived_at).toLocaleDateString() : "Archived"}</p>
                 </div>
-                <Button asChild variant="outline" size="sm"><Link href={`/my-workout/plans/${plan.id}`}>View</Link></Button>
+                <Button asChild variant="outline" className="min-h-12"><Link href={`/my-workout/plans/${plan.id}`}>View</Link></Button>
               </div>
             ))}
           </CardContent>
@@ -340,6 +367,123 @@ function sourceBadge(plan: UserWorkoutPlan) {
   return "Saved";
 }
 
+function TodayTrainingHero({
+  activePlan,
+  todayLabel,
+  todayDay,
+  onStartToday
+}: {
+  activePlan: UserWorkoutPlan;
+  todayLabel: string;
+  todayDay: ReturnType<typeof calendarDaysFromPlan>[number] | null;
+  onStartToday: () => void;
+}) {
+  return (
+    <Card className="border-primary/25 bg-primary/5">
+      <CardContent className="space-y-4 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Today&apos;s training</p>
+            <h2 className="mt-1 text-xl font-semibold text-foreground">
+              {todayDay ? todayDay.dayName : "Rest day"}
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              {todayDay
+                ? `${activePlan.name} is active for ${todayLabel}. Start here, then use the calendar for the rest of the week.`
+                : `${activePlan.name} is active, and no workout is assigned to ${todayLabel}. That is a normal rest-day state.`}
+            </p>
+          </div>
+          {todayDay ? (
+            <Button className="min-h-12 sm:min-w-[190px]" onClick={onStartToday}>
+              <Play className="h-5 w-5" />
+              Start workout
+            </Button>
+          ) : (
+            <Button asChild variant="outline" className="min-h-12 sm:min-w-[190px]">
+              <Link href={`/my-workout/plans/${activePlan.id}`}>Review active plan</Link>
+            </Button>
+          )}
+        </div>
+        {todayDay ? (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {todayDay.exercises.slice(0, 6).map((exercise, index) => (
+              <div key={exercise.id} className="solid-row p-3">
+                <p className="text-sm font-semibold">{index + 1}. {exercise.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{exercise.sets ?? 3} x {exercise.reps ?? "?"}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlanSetupHero({ onCreateManual }: { onCreateManual: () => void }) {
+  return (
+    <Card className="border-primary/25 bg-primary/5">
+      <CardContent className="space-y-4 p-4 sm:p-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Create your first plan</p>
+          <h2 className="mt-1 text-xl font-semibold text-foreground">Import a ChatGPT plan, then edit and track it in Plaivra</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            ChatGPT is the recommended path for plan creation. Plaivra stores the approved plan, lets you edit days/exercises, and starts focused workout sessions from it.
+          </p>
+        </div>
+        <ChatGptImportCard mode="workout" />
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button variant="outline" className="min-h-12" onClick={onCreateManual}>
+            <Plus className="h-4 w-4" />
+            Create manually instead
+          </Button>
+          <Button asChild variant="ghost" className="min-h-12">
+            <Link href="/settings/ai-imports">Review ChatGPT access</Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChooseActivePlanHero({
+  firstPlan,
+  busyPlanId,
+  onSetActive,
+  onCreateManual
+}: {
+  firstPlan: UserWorkoutPlan | null;
+  busyPlanId: string | null;
+  onSetActive: (plan: UserWorkoutPlan) => void;
+  onCreateManual: () => void;
+}) {
+  const isBusy = Boolean(firstPlan && busyPlanId === firstPlan.id);
+
+  return (
+    <Card className="border-primary/25 bg-primary/5">
+      <CardContent className="space-y-4 p-4 sm:p-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Training plan needed</p>
+          <h2 className="mt-1 text-xl font-semibold text-foreground">Choose the plan that controls today&apos;s workout</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            A default plan controls the Today hero and weekly calendar. Pick a saved plan below, or import/build a new one if your training has changed.
+          </p>
+        </div>
+        {firstPlan ? (
+          <Button type="button" className="min-h-12" onClick={() => onSetActive(firstPlan)} disabled={Boolean(busyPlanId)}>
+            <Star className="h-4 w-4" />
+            {isBusy ? "Setting active..." : `Set ${firstPlan.name} active`}
+          </Button>
+        ) : (
+          <Button type="button" className="min-h-12" onClick={onCreateManual}>
+            <Plus className="h-4 w-4" />
+            Create a current plan
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function planDurationLabel(plan: UserWorkoutPlan) {
   const meta = plan as PlanMeta;
   const weeks = meta.program_duration_weeks ?? meta.duration_weeks;
@@ -352,27 +496,32 @@ function PlanFact({ label, value, icon: Icon }: { label: string; value: string; 
 }
 
 function PlanActions({ plan, isDefault, busyPlanId, onDefault, onDuplicate, onArchive, onDelete, onEdit }: { plan: UserWorkoutPlan; isDefault: boolean; busyPlanId: string | null; onDefault: (plan: UserWorkoutPlan) => void; onDuplicate: (plan: UserWorkoutPlan) => void; onArchive: (plan: UserWorkoutPlan) => void; onDelete: (plan: UserWorkoutPlan) => void; onEdit: (plan: UserWorkoutPlan) => void }) {
+  const isPlanBusy = busyPlanId === plan.id;
+  const isAnyPlanBusy = Boolean(busyPlanId);
+
   return (
     <details className="relative shrink-0">
-      <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-xl border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${plan.name}`}>
+      <summary className="flex h-12 w-12 cursor-pointer list-none items-center justify-center rounded-xl border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${plan.name}`}>
         <MoreHorizontal className="h-4 w-4" />
       </summary>
       <div className="solid-tracking-card absolute right-0 z-20 mt-2 grid w-64 gap-1 p-2">
-        <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={() => onDefault(plan)} disabled={isDefault || busyPlanId === plan.id}>
-          <Star className="h-4 w-4" /> {isDefault ? "Default plan" : "Set as default"}
+        <Button type="button" variant="ghost" className="min-h-12 justify-start" onClick={() => onDefault(plan)} disabled={isDefault || isAnyPlanBusy}>
+          <Star className="h-4 w-4" /> {isDefault ? "Default plan" : isPlanBusy ? "Setting default..." : "Set as default"}
         </Button>
-        <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={() => onEdit(plan)} disabled={busyPlanId === plan.id}>
+        <Button type="button" variant="ghost" className="min-h-12 justify-start" onClick={() => onEdit(plan)} disabled={isAnyPlanBusy}>
           <Edit3 className="h-4 w-4" /> Rename
         </Button>
-        <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={() => onDuplicate(plan)} disabled={busyPlanId === plan.id}>
-          <Copy className="h-4 w-4" /> Duplicate
+        <Button type="button" variant="ghost" className="min-h-12 justify-start" onClick={() => onDuplicate(plan)} disabled={isAnyPlanBusy}>
+          <Copy className="h-4 w-4" /> {isPlanBusy ? "Duplicating..." : "Duplicate"}
         </Button>
-        <Button type="button" variant="ghost" size="sm" className="justify-start text-destructive hover:text-destructive" onClick={() => onArchive(plan)} disabled={busyPlanId === plan.id}>
-          <Archive className="h-4 w-4" /> Archive
-        </Button>
-        <Button type="button" variant="ghost" size="sm" className="justify-start text-destructive hover:text-destructive" onClick={() => onDelete(plan)} disabled={busyPlanId === plan.id}>
-          <Trash2 className="h-4 w-4" /> Delete
-        </Button>
+        <div className="mt-1 border-t border-border/70 pt-1">
+          <Button type="button" variant="ghost" className="min-h-12 w-full justify-start text-destructive hover:text-destructive" onClick={() => onArchive(plan)} disabled={isAnyPlanBusy}>
+            <Archive className="h-4 w-4" /> {isPlanBusy ? "Archiving..." : "Archive"}
+          </Button>
+          <Button type="button" variant="ghost" className="min-h-12 w-full justify-start text-destructive hover:text-destructive" onClick={() => onDelete(plan)} disabled={isAnyPlanBusy}>
+            <Trash2 className="h-4 w-4" /> {isPlanBusy ? "Deleting..." : "Delete"}
+          </Button>
+        </div>
       </div>
     </details>
   );
