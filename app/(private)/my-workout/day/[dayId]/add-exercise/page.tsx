@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { WorkoutDayAddExercise } from "@/components/workouts/workout-day-add-exercise";
 import { useToast } from "@/components/ui/toaster";
+import { CardSkeleton, ErrorState } from "@/components/ui/state-views";
 import { getUserWorkoutPlanDay } from "@/services/database/workout-plans";
 import type { WorkoutPlanDaySession } from "@/types";
 import { userSafeError } from "@/lib/error-formatting";
@@ -14,8 +15,11 @@ export default function AddExerciseToWorkoutDayPage() {
   const { toast } = useToast();
   const [day, setDay] = useState<WorkoutPlanDaySession | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  function loadDay() {
+    setIsLoading(true);
+    setLoadError("");
     getUserWorkoutPlanDay(params.dayId)
       .then((nextDay) => {
         setDay(nextDay);
@@ -25,10 +29,30 @@ export default function AddExerciseToWorkoutDayPage() {
         const message = userSafeError(error, "Could not load this workout day. Please refresh and try again.");
         setLoadError(message);
         toast({ title: "Could not load workout day", description: message });
+      })
+      .finally(() => {
+        setIsLoading(false);
       });
+  }
+
+  useEffect(() => {
+    loadDay();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.dayId, toast]);
 
-  if (!day) return <p className="text-sm text-muted-foreground">{loadError || "Loading exercise browser..."}</p>;
+  if (isLoading) return <CardSkeleton rows={5} />;
+
+  if (!day) {
+    return (
+      <ErrorState
+        title="Exercise browser could not load"
+        description={loadError || "This workout day was not found. Save your plan again and try opening it from Workout Plans."}
+        onRetry={loadDay}
+        fallbackLabel="Back to workout plans"
+        fallbackHref="/my-workout/plans"
+      />
+    );
+  }
 
   return (
     <>

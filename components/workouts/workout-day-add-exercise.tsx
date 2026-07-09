@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CardGridSkeleton, ErrorState } from "@/components/ui/state-views";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError } from "@/lib/error-formatting";
@@ -101,6 +102,10 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
   const [results, setResults] = useState<Workout[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isLoadingResults, setIsLoadingResults] = useState(false);
+  const [isLoadingFilters, setIsLoadingFilters] = useState(true);
+  const [filterError, setFilterError] = useState("");
+  const [resultsError, setResultsError] = useState("");
+  const [reloadResultsNonce, setReloadResultsNonce] = useState(0);
 
   useEffect(() => {
     const storedDraft = readStoredJson<EditorDraft>(draftKey);
@@ -120,13 +125,25 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
     storeJson(filterKey, filters);
   }, [filterKey, filters, isHydrated]);
 
+  async function loadFilterOptions() {
+    setIsLoadingFilters(true);
+    setFilterError("");
+    try {
+      const options = await getWorkoutFilterOptions();
+      setFilterOptions(options);
+    } catch (error) {
+      const message = userSafeError(error, "Exercise filters could not load. You can still search by name or retry.");
+      setFilterOptions(emptyOptions);
+      setFilterError(message);
+      toast({ title: "Could not load exercise filters", description: message });
+    } finally {
+      setIsLoadingFilters(false);
+    }
+  }
+
   useEffect(() => {
-    getWorkoutFilterOptions()
-      .then(setFilterOptions)
-      .catch((error) => {
-        setFilterOptions(emptyOptions);
-        toast({ title: "Could not load exercise filters", description: userSafeError(error, "Please refresh and try again.") });
-      });
+    loadFilterOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast]);
 
   const requestFilters: WorkoutFilters = useMemo(
@@ -148,14 +165,17 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
     let active = true;
     const timer = window.setTimeout(() => {
       setIsLoadingResults(true);
+      setResultsError("");
       getWorkouts(filters.query.trim(), requestFilters, 0)
         .then((items) => {
           if (active) setResults(items.slice(0, 60).map(withTrainingDefaults));
         })
         .catch((error) => {
           if (!active) return;
+          const message = userSafeError(error, "Exercise results could not load. Try another filter or retry.");
           setResults([]);
-          toast({ title: "Could not load exercises", description: userSafeError(error, "Please try another filter.") });
+          setResultsError(message);
+          toast({ title: "Could not load exercises", description: message });
         })
         .finally(() => {
           if (active) setIsLoadingResults(false);
@@ -166,7 +186,7 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [filters.query, isHydrated, requestFilters, toast]);
+  }, [filters.query, isHydrated, reloadResultsNonce, requestFilters, toast]);
 
   const addedKeys = useMemo(() => new Set(draft.exercises.map(exerciseKey)), [draft.exercises]);
   const activeFilterCount = Object.entries(filters).filter(([key, value]) => key !== "query" && value !== allValue).length + (filters.query ? 1 : 0);
@@ -194,7 +214,7 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button asChild variant="outline">
+        <Button asChild variant="outline" className="min-h-12">
           <Link href={`/my-workout/day/${day.id}`}>
             <ArrowLeft className="h-4 w-4" />
             Back to workout day
@@ -205,6 +225,14 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
           {activeFilterCount ? <Badge variant="outline">{activeFilterCount} filters</Badge> : null}
         </div>
       </div>
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="p-4">
+          <p className="text-sm leading-6 text-muted-foreground">
+            Added exercises are kept in this day&apos;s local draft. Return to the editor and use Save Workout to apply them to the saved plan.
+          </p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -218,14 +246,22 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
                 value={filters.query}
                 onChange={(event) => patchFilters({ query: event.target.value })}
                 placeholder="Search by exercise name"
-                className="pl-10"
+                className="h-12 pl-10"
               />
             </div>
-            <Button type="button" variant="outline" onClick={resetFilters} disabled={!activeFilterCount}>
+            <Button type="button" variant="outline" className="min-h-12" onClick={resetFilters} disabled={!activeFilterCount}>
               <RotateCcw className="h-4 w-4" />
               Clear filters
             </Button>
           </div>
+          {filterError ? (
+            <ErrorState
+              title="Filter options could not load"
+              description={filterError}
+              onRetry={loadFilterOptions}
+            />
+          ) : null}
+          {isLoadingFilters ? <p className="text-sm text-muted-foreground">Loading filter options...</p> : null}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <FilterSelect label="Muscle category" value={filters.muscleCategory} values={filterOptions.muscleCategories} onChange={(muscleCategory) => patchFilters({ muscleCategory })} />
             <FilterSelect label="Primary muscle" value={filters.primaryMuscle} values={filterOptions.primaryMuscles} onChange={(primaryMuscle) => patchFilters({ primaryMuscle })} />
@@ -239,8 +275,21 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
         </CardContent>
       </Card>
 
-      {isLoadingResults ? <p className="text-sm text-muted-foreground">Loading exercises...</p> : null}
-      {!isLoadingResults && !results.length ? <p className="text-sm text-muted-foreground">No exercises match these filters.</p> : null}
+      {resultsError ? (
+        <ErrorState
+          title="Exercise results could not load"
+          description={resultsError}
+          onRetry={() => setReloadResultsNonce((current) => current + 1)}
+        />
+      ) : null}
+      {isLoadingResults ? <CardGridSkeleton count={3} rows={4} /> : null}
+      {!isLoadingResults && !resultsError && !results.length ? (
+        <Card className="border-dashed">
+          <CardContent className="p-4 text-sm leading-6 text-muted-foreground">
+            No exercises match these filters. Clear filters or search for a different movement.
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {results.map((workout) => {
@@ -269,20 +318,20 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
                     type="button"
                     onClick={() => addExercise(workout)}
                     disabled={isAdded}
-                    className={isAdded ? "bg-success text-success-foreground hover:bg-success disabled:opacity-100" : undefined}
+                    className={isAdded ? "min-h-12 bg-success text-success-foreground hover:bg-success disabled:opacity-100" : "min-h-12"}
                   >
                     {isAdded ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                     {isAdded ? "Added" : "Add"}
                   </Button>
                   {guideUrl ? (
-                    <Button asChild variant="outline">
+                    <Button asChild variant="outline" className="min-h-12">
                       <a href={guideUrl} target="_blank" rel="noreferrer">
                         <ExternalLink className="h-4 w-4" />
                         Open Guide
                       </a>
                     </Button>
                   ) : (
-                    <Button type="button" variant="outline" disabled>
+                    <Button type="button" variant="outline" className="min-h-12" disabled>
                       No guide
                     </Button>
                   )}
@@ -309,7 +358,7 @@ function FilterSelect({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label={label}>
+      <SelectTrigger aria-label={label} className="h-12">
         <SelectValue placeholder={label} />
       </SelectTrigger>
       <SelectContent>
