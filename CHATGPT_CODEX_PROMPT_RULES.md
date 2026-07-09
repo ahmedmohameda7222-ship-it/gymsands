@@ -4,6 +4,25 @@ Use this file in future ChatGPT conversations.
 
 ## Main Rule
 
+## Plaivra Taste Skill Rule
+
+When a Codex task involves public landing/auth visual polish, marketing/product UI cards, mobile mockup references, or anti-generic layout review, include the relevant Taste Skill.
+
+Use Taste Skill only as a secondary visual-quality layer.
+
+Plaivra source-of-truth files override Taste Skill:
+
+- `docs/product/ai-first-tracker-model.md`
+- `docs/ux-constitution/README.md`
+- `docs/ux-constitution/flow-and-workflow-audit.md`
+- `docs/ux-constitution/motion-and-interaction.md`
+- `docs/ux-progress/README.md`
+
+Required instruction to include in those Codex prompts:
+
+```text
+Plaivra UX Constitution overrides Taste Skill. Use Taste only for landing/auth visual polish, product UI cards, mobile mockup references, and anti-generic layout review.
+
 ChatGPT should choose the exact Codex mode and Ruflo skills for each task before writing the Codex prompt.
 
 Do not rely on Codex to guess the skill list by itself.
