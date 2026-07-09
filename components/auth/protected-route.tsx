@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SkeletonLine } from "@/components/ui/state-views";
 import { useAuth } from "@/components/auth/auth-provider";
 import { getOnboarding } from "@/services/database/profile";
 import { hasRequiredConsents } from "@/services/database/consents";
@@ -77,7 +78,7 @@ export function ProtectedRoute({
   }, [adminOnly, isLoading, pathname, router, user?.id]);
 
   if (isLoading || isCheckingConsents || isCheckingSetup) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading Plaivra...</div>;
+    return <PlaivraLoadingState />;
   }
 
   if (!user) return null;
@@ -90,7 +91,7 @@ export function ProtectedRoute({
             <ShieldCheck className="mx-auto mb-3 h-10 w-10 text-primary" />
             <h1 className="text-xl font-semibold">Admin access only</h1>
             <p className="mt-2 text-sm text-muted-foreground">Your Plaivra account can use the member dashboard.</p>
-            <Button asChild className="mt-5">
+            <Button asChild className="mt-5 min-h-12">
               <Link href="/dashboard">Go to dashboard</Link>
             </Button>
           </CardContent>
@@ -100,4 +101,24 @@ export function ProtectedRoute({
   }
 
   return <>{children}</>;
+}
+
+function PlaivraLoadingState() {
+  return (
+    <main className="premium-page-bg flex min-h-screen items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardContent className="space-y-4 pt-6 text-center">
+          <ShieldCheck className="mx-auto h-10 w-10 text-primary" />
+          <div>
+            <p className="text-lg font-semibold text-foreground">Loading Plaivra</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">Checking your session, consent, and setup before opening the app.</p>
+          </div>
+          <div className="space-y-2" aria-hidden="true">
+            <SkeletonLine className="mx-auto h-3 w-3/4" />
+            <SkeletonLine className="mx-auto h-3 w-1/2" />
+          </div>
+        </CardContent>
+      </Card>
+    </main>
+  );
 }

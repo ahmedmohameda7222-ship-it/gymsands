@@ -525,6 +525,22 @@ export async function getOpenWorkoutSession(userId: string, workoutId?: string |
   return data ? normalizeWorkoutSession(data as WorkoutSession) : null;
 }
 
+export async function getOpenWorkoutSessionWithStatus(userId: string, workoutId?: string | null): Promise<{ session: WorkoutSession | null; error?: string }> {
+  if (!canUseUserData(userId)) return { session: null, error: "Active workout could not load because the user session is invalid." };
+  let query = supabase!
+    .from("workout_sessions")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "started");
+  if (workoutId && isUuid(workoutId)) query = query.eq("workout_id", workoutId);
+  const { data, error } = await query.order("started_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) {
+    console.warn("Plaivra could not load the active workout session.", error.message);
+    return { session: null, error: "Active workout could not load. Your current route was left unchanged." };
+  }
+  return { session: data ? normalizeWorkoutSession(data as WorkoutSession) : null };
+}
+
 export async function getOrStartWorkoutSession(userId: string, workout: Workout) {
   const open = await getOpenWorkoutSession(userId, workout.id);
   return open ?? startWorkoutSession(userId, workout);

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   BarChart3,
@@ -151,13 +151,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const previousPathnameRef = useRef<string | undefined>(undefined);
-  const cameFromWorkoutSession = previousPathnameRef.current?.startsWith("/workouts/session") ?? false;
-
-  useEffect(() => {
-    previousPathnameRef.current = pathname;
-  }, [pathname]);
-
   if (pathname === "/onboarding") {
     return (
       <div className="premium-page-bg min-h-dvh text-foreground">
@@ -173,7 +166,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (isWorkoutSessionRoute) {
     return (
       <div className="premium-page-bg relative min-h-dvh overflow-hidden text-foreground">
-        {isOffline ? <div className="fixed inset-x-3 top-3 z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg" role="status"><p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> You appear offline. Changes may not save until the connection returns.</p></div> : null}
+        {isOffline ? <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg" role="status"><p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> You are offline. New changes may not sync until connection returns.</p></div> : null}
         <main id="main-content" className="min-h-dvh">
           {children}
         </main>
@@ -183,7 +176,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="premium-page-bg min-h-screen text-foreground">
-      {isOffline ? <div className="fixed inset-x-3 top-[4.5rem] z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg lg:left-72" role="status"><p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> You appear offline. Changes may not save until the connection returns.</p></div> : null}
+      {isOffline ? <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.75rem)] z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg lg:left-72" role="status"><p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> You are offline. New changes may not sync until connection returns.</p></div> : null}
       <aside className="glass-shell fixed inset-y-0 left-0 z-40 hidden w-72 border-y-0 border-l-0 lg:flex lg:flex-col">
         <div className="flex h-20 items-center px-6">
           <Brand href="/dashboard" />
@@ -208,7 +201,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="glass-card-strong p-3 shadow-none">
             <p className="truncate text-sm font-semibold text-foreground">{hideProfileDetails ? t("nav.member") : profile?.full_name || t("nav.member")}</p>
             {!hideProfileDetails ? <p className="truncate text-xs text-muted-foreground">{profile?.email}</p> : null}
-            <Button variant="ghost" className="mt-3 w-full justify-start" onClick={signOut}>
+            <Button variant="ghost" className="mt-3 min-h-12 w-full justify-start" onClick={signOut}>
               <LogOut className="h-4 w-4" />
               {t("nav.logout")}
             </Button>
@@ -225,18 +218,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Plaivra</p>
             <h1 className="text-base font-semibold text-foreground">{t("nav.tagline")}</h1>
           </div>
-          <Button variant="outline" size="sm" onClick={signOut} className="hidden lg:inline-flex">
+          <Button variant="outline" onClick={signOut} className="hidden min-h-12 lg:inline-flex">
             <LogOut className="h-4 w-4" />
             {t("nav.logout")}
           </Button>
         </div>
       </header>
-      <main id="main-content" className="pb-32 lg:ml-72 lg:pb-0">
+      <main id="main-content" className="pb-[calc(env(safe-area-inset-bottom)+11rem)] lg:ml-72 lg:pb-0">
         <motion.div
           key={pathname}
-          initial={cameFromWorkoutSession ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
+          initial={settings.reduceAnimations ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, ease: "easeOut" }}
+          transition={settings.reduceAnimations ? { duration: 0 } : { duration: 0.22, ease: "easeOut" }}
           className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8"
         >
           {children}
@@ -251,6 +244,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 function MobilePrimaryNav({ pathname, isAdmin, signOut }: { pathname: string; isAdmin: boolean; signOut: () => Promise<void> }) {
   return (
     <div className="fixed inset-x-0 bottom-0 z-[80] isolate lg:hidden">
+      {/* Mobile overlay policy: active workout z70, bottom nav z80, Quick Log FAB z90, dialogs z100+. */}
       <QuickLogSheet />
       <nav className="glass-shell grid grid-cols-4 !rounded-none border-x-0 border-b-0 !bg-card px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-1" aria-label="Primary mobile navigation">
         {mobilePrimaryItems.map((item) => (
@@ -313,7 +307,16 @@ function QuickLogSheet() {
               </DialogClose>
             );
           })}
-          {visibleItems.length === 0 ? <p className="p-3 text-center text-sm text-muted-foreground">Choose Quick Log items in Settings → Preferences.</p> : null}
+          {visibleItems.length === 0 ? (
+            <div className="space-y-3 p-3 text-center">
+              <p className="text-sm text-muted-foreground">No Quick Log shortcuts enabled.</p>
+              <DialogClose asChild>
+                <Button asChild variant="outline" className="min-h-12">
+                  <Link href="/settings/preferences">Open Preferences</Link>
+                </Button>
+              </DialogClose>
+            </div>
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>
@@ -335,6 +338,7 @@ function MobileMenu({
 }) {
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
+  const { settings } = useUserSettings();
 
   function handleNavigate() {
     setOpen(false);
@@ -356,12 +360,18 @@ function MobileMenu({
             <span>{t("nav.more")}</span>
           </button>
         ) : (
-          <Button variant="outline" size="icon" aria-label={t("nav.more")}>
+          <Button variant="outline" size="icon" className="h-12 w-12" aria-label={t("nav.more")}>
             <Menu className="h-5 w-5" />
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent variant="glass" className="inset-y-0 left-0 right-auto top-0 h-dvh max-h-dvh w-[86vw] max-w-sm translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 border-r p-0 data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:slide-in-from-left data-[state=open]:duration-300 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:slide-out-to-left data-[state=closed]:duration-300 sm:left-0 sm:top-0 sm:max-w-sm sm:translate-x-0 sm:translate-y-0 sm:rounded-none">
+      <DialogContent
+        variant="glass"
+        className={cn(
+          "inset-y-0 left-0 right-auto top-0 h-dvh max-h-dvh w-[86vw] max-w-sm translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 border-r p-0 sm:left-0 sm:top-0 sm:max-w-sm sm:translate-x-0 sm:translate-y-0 sm:rounded-none",
+          !settings.reduceAnimations && "data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:slide-in-from-left data-[state=open]:duration-300 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:slide-out-to-left data-[state=closed]:duration-300"
+        )}
+      >
         <DialogHeader className="border-b border-white/40 px-5 py-4 text-left dark:border-white/10">
           <DialogTitle>{t("nav.more")}</DialogTitle>
         </DialogHeader>
@@ -391,7 +401,7 @@ function MobileMenu({
             ) : null}
             <Button
               variant="ghost"
-              className="w-full justify-start"
+              className="min-h-12 w-full justify-start"
               onClick={() => {
                 handleNavigate();
                 void signOut();
@@ -416,7 +426,7 @@ function SidebarLink({ item, active, mobile = false, onClick }: { item: NavItem;
       onClick={onClick}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-2xl px-3 py-2 text-sm font-semibold transition focus-visible:ring-2 focus-visible:ring-ring",
+        "flex min-h-12 items-center gap-3 rounded-2xl px-3 py-2 text-sm font-semibold transition focus-visible:ring-2 focus-visible:ring-ring",
         active ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:bg-white/35 hover:text-primary dark:hover:bg-white/10",
         mobile && "min-h-12 py-3"
       )}
