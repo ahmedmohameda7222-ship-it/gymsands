@@ -199,7 +199,7 @@ export async function deletePersonalRecord(userId: string, id: string) {
   return true;
 }
 
-export async function getProgressEntries(userId: string) {
+export async function getProgressEntries(userId: string, options?: { throwOnError?: boolean }) {
   if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("progress_entries")
@@ -208,6 +208,7 @@ export async function getProgressEntries(userId: string) {
     .order("entry_date", { ascending: true });
   if (error) {
     console.warn("Plaivra could not load progress entries.", error.message);
+    if (options?.throwOnError) throw new Error(`Could not load progress entries. ${error.message}`);
     return [];
   }
 
@@ -222,6 +223,7 @@ export async function getProgressEntries(userId: string) {
 
   if (measurementError) {
     console.warn("Plaivra could not load body measurements.", measurementError.message);
+    if (options?.throwOnError) throw new Error(`Could not load body measurements. ${measurementError.message}`);
     return entries;
   }
 

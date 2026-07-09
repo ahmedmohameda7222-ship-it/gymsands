@@ -82,7 +82,7 @@ export async function getProgressPhotos(userId: string) {
 
   if (error) {
     console.warn("Plaivra could not load progress photos.", error.message);
-    return [] as ProgressPhoto[];
+    throw new Error(`Could not load progress photos. ${error.message}`);
   }
 
   const photos = (data ?? []) as Record<string, unknown>[];
