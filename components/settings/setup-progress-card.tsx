@@ -33,7 +33,7 @@ export function SetupProgressCard({
   return (
     <Card className="overflow-hidden border-primary/20 bg-primary/5">
       <CardContent className="p-4">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground">
               {nextItem ? `${t("setup.next")}: ${nextItem.label}` : t("setup.inProgress")}
@@ -46,20 +46,20 @@ export function SetupProgressCard({
             </div>
           </div>
           {nextItem ? (
-            <Button asChild size="sm" className="shrink-0">
+            <Button asChild className="min-h-12 w-full shrink-0 sm:w-auto">
               <Link href={nextItem.href}>{nextItem.action}</Link>
             </Button>
           ) : null}
         </div>
 
         <details className="group mt-3">
-          <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground">
-            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+          <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 text-sm font-medium text-muted-foreground">
+            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
             {t("setup.showAll")}
           </summary>
           <div className="mt-3 space-y-2 border-t border-primary/10 pt-3">
             {checklist.map((item) => (
-              <div key={item.label} className="flex items-center justify-between gap-2 text-sm">
+              <div key={item.label} className="flex min-h-12 items-center justify-between gap-2 text-sm">
                 <div className="flex min-w-0 items-center gap-2">
                   <CheckCircle2
                     className={cn(
@@ -77,7 +77,7 @@ export function SetupProgressCard({
                   </span>
                 </div>
                 {!item.done ? (
-                  <Button asChild size="sm" variant="ghost" className="shrink-0">
+                  <Button asChild variant="ghost" className="min-h-12 shrink-0">
                     <Link href={item.href}>
                       {item.action}
                       <ChevronRight className="h-3.5 w-3.5" />

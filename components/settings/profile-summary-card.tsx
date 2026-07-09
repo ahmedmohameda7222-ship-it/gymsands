@@ -87,7 +87,7 @@ export function ProfileSummaryCard({ onboarding }: ProfileSummaryCardProps) {
             asChild
             variant="ghost"
             size="icon"
-            className="hidden h-10 w-10 shrink-0 sm:inline-flex"
+            className="hidden h-12 w-12 shrink-0 sm:inline-flex"
             aria-label="Edit profile"
           >
             <Link href="/profile">
@@ -97,13 +97,13 @@ export function ProfileSummaryCard({ onboarding }: ProfileSummaryCardProps) {
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <Button asChild variant="outline" className="w-full">
+          <Button asChild variant="outline" className="min-h-12 w-full">
             <Link href="/profile">
               <UserRound className="h-4 w-4" />
               {t("common.edit")} {t("settings.profile").toLowerCase()}
             </Link>
           </Button>
-          <Button asChild variant="outline" className="w-full">
+          <Button asChild variant="outline" className="min-h-12 w-full">
             <Link href="/onboarding?edit=true">
               <ExternalLink className="h-4 w-4" />
               {t("settings.fitnessProfile")}
