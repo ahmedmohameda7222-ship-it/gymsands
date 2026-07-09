@@ -33,6 +33,16 @@ export type WorkoutFilterOptions = {
   secondaryMuscles: string[];
 };
 
+export type WorkoutLibraryStatus = {
+  source: "live" | "fallback" | "partial";
+  message?: string;
+};
+
+export type WorkoutLibraryResult<T> = {
+  data: T;
+  status: WorkoutLibraryStatus;
+};
+
 type ActiveExerciseRow = {
   id: string;
   name: string;
@@ -226,6 +236,18 @@ function localWorkouts(query = "", filters: WorkoutFilters = {}) {
   return source.filter((workout) => matchesWorkoutFilters(workout, normalized, filters));
 }
 
+function liveStatus(): WorkoutLibraryStatus {
+  return { source: "live" };
+}
+
+function fallbackStatus(message = "Showing fallback exercise data because the full library could not load."): WorkoutLibraryStatus {
+  return { source: "fallback", message };
+}
+
+function partialStatus(message = "Showing live exercise data with a partial source unavailable."): WorkoutLibraryStatus {
+  return { source: "partial", message };
+}
+
 export async function getWorkoutCategories() {
   const fallback = localWorkoutCategories();
   if (!supabase) throw new Error("Database not connected");
@@ -303,6 +325,55 @@ export async function getWorkoutFilterOptions() {
   };
 }
 
+export async function getWorkoutFilterOptionsWithStatus(): Promise<WorkoutLibraryResult<WorkoutFilterOptions>> {
+  const fallback = getLocalWorkoutFilterOptions();
+  if (!supabase) {
+    return {
+      data: fallback,
+      status: fallbackStatus("Showing fallback exercise filters because the full library could not load.")
+    };
+  }
+
+  const [workoutResult, videoResult, exerciseResult] = await Promise.all([
+    supabase!.from("workouts").select("*").eq("is_global", true).limit(5000),
+    supabase!.from("exercise_videos").select("*").eq("is_global", true).limit(5000),
+    supabase!.from("exercises").select("id,name,source,source_url,primary_muscle,secondary_muscles,equipment,difficulty,mechanics,movement_pattern,force_type,instructions,video_url,is_global").eq("is_global", true).eq("is_approved", true).limit(5000)
+  ]);
+
+  if (workoutResult.error || videoResult.error) {
+    console.warn(
+      "Plaivra could not load workout filter metadata, using local fallback.",
+      workoutResult.error?.message || videoResult.error?.message
+    );
+    return {
+      data: fallback,
+      status: fallbackStatus("Showing fallback exercise filters because the full library could not load.")
+    };
+  }
+
+  const workouts = ((workoutResult.data ?? []) as Workout[]).map(hydrateWorkoutMetadata);
+  const videos = ((videoResult.data ?? []) as ExerciseVideo[]).map(mapVideoToWorkout);
+  const activeExercises = exerciseResult.error ? [] : ((exerciseResult.data ?? []) as ActiveExerciseRow[]).map(mapActiveExerciseToWorkout);
+  const all = [...workouts, ...videos, ...activeExercises];
+  const status = exerciseResult.error
+    ? partialStatus("Showing live exercise filters without some approved exercise data.")
+    : liveStatus();
+
+  return {
+    data: {
+      muscleCategories: uniqueSorted([...fallback.muscleCategories, ...all.map((item) => item.muscle_category ?? item.target_muscle)]),
+      primaryMuscles: uniqueSorted([...fallback.primaryMuscles, ...all.map((item) => item.target_muscle ?? item.muscle_category)]),
+      equipmentRequired: uniqueSorted([...fallback.equipmentRequired, ...all.map((item) => item.equipment_required ?? item.equipment)]),
+      mechanics: uniqueSorted([...fallback.mechanics, ...all.map((item) => item.mechanics ?? item.category)]),
+      exerciseTypes: uniqueSorted([...fallback.exerciseTypes, ...all.map((item) => item.category ?? item.mechanics)]),
+      forceTypes: uniqueSorted([...fallback.forceTypes, ...all.map((item) => item.force_type)]),
+      experienceLevels: uniqueSorted([...fallback.experienceLevels, ...all.map((item) => item.experience_level ?? item.difficulty)]),
+      secondaryMuscles: uniqueSorted([...fallback.secondaryMuscles, ...all.flatMap((item) => item.secondary_muscles ?? [])])
+    },
+    status
+  };
+}
+
 export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page = 0) {
   const selectedCategory = filters.category || filters.equipment || filters.muscleCategories?.[0] || filters.categories?.[0] || filters.equipmentRequired?.[0];
   const localMatches = localWorkouts(query, filters);
@@ -342,6 +413,58 @@ export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page
     ? []
     : ((exerciseResult.data ?? []) as ActiveExerciseRow[]).map(mapActiveExerciseToWorkout).filter((workout) => matchesWorkoutFilters(workout, query, filters));
   return dedupeWorkouts([...activeExercises, ...localMatches, ...directWorkouts, ...videoWorkouts]).slice(from, to + 1);
+}
+
+export async function getWorkoutsWithStatus(query = "", filters: WorkoutFilters = {}, page = 0): Promise<WorkoutLibraryResult<Workout[]>> {
+  const selectedCategory = filters.category || filters.equipment || filters.muscleCategories?.[0] || filters.categories?.[0] || filters.equipmentRequired?.[0];
+  const localMatches = localWorkouts(query, filters);
+  const from = page * workoutPageSize;
+  const to = from + workoutPageSize - 1;
+
+  if (!supabase) {
+    return {
+      data: localMatches.slice(from, to + 1),
+      status: fallbackStatus()
+    };
+  }
+
+  let workoutRequest = supabase!.from("workouts").select("*").eq("is_global", true).order("name").limit(5000);
+  if (query) workoutRequest = workoutRequest.or(`name.ilike.%${query}%,target_muscle.ilike.%${query}%,equipment.ilike.%${query}%`);
+
+  let videoRequest = supabase!.from("exercise_videos").select("*").eq("is_global", true).order("exercise_name").limit(5000);
+  if (selectedCategory) videoRequest = videoRequest.eq("category", selectedCategory);
+  if (query) videoRequest = videoRequest.ilike("exercise_name", `%${query}%`);
+
+  let exerciseRequest = supabase!
+    .from("exercises")
+    .select("id,name,source,source_url,primary_muscle,secondary_muscles,equipment,difficulty,mechanics,movement_pattern,force_type,instructions,video_url,is_global")
+    .eq("is_global", true)
+    .eq("is_approved", true)
+    .order("name")
+    .limit(5000);
+  if (query) exerciseRequest = exerciseRequest.or(`name.ilike.%${query}%,primary_muscle.ilike.%${query}%,mechanics.ilike.%${query}%,movement_pattern.ilike.%${query}%`);
+
+  const [workoutResult, videoResult, exerciseResult] = await Promise.all([workoutRequest, videoRequest, exerciseRequest]);
+  if (workoutResult.error || videoResult.error) {
+    console.warn(
+      "Plaivra could not load Supabase workouts, using local fallback.",
+      workoutResult.error?.message || videoResult.error?.message
+    );
+    return {
+      data: localMatches.slice(from, to + 1),
+      status: fallbackStatus()
+    };
+  }
+
+  const directWorkouts = ((workoutResult.data ?? []) as Workout[]).map(hydrateWorkoutMetadata).filter((workout) => matchesWorkoutFilters(workout, query, filters));
+  const videoWorkouts = ((videoResult.data ?? []) as ExerciseVideo[]).map(mapVideoToWorkout).filter((workout) => matchesWorkoutFilters(workout, query, filters));
+  const activeExercises = exerciseResult.error
+    ? []
+    : ((exerciseResult.data ?? []) as ActiveExerciseRow[]).map(mapActiveExerciseToWorkout).filter((workout) => matchesWorkoutFilters(workout, query, filters));
+  return {
+    data: dedupeWorkouts([...activeExercises, ...localMatches, ...directWorkouts, ...videoWorkouts]).slice(from, to + 1),
+    status: exerciseResult.error ? partialStatus("Showing exercise results without some approved exercise data.") : liveStatus()
+  };
 }
 
 export async function getWorkout(id: string) {

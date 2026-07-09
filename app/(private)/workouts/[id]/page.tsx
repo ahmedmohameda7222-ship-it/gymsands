@@ -1,23 +1,25 @@
 "use client";
 
-import { ExternalLink, Heart, Play, RotateCcw, Save, TrendingUp, ChevronDown } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, Heart, Play, RotateCcw, Save, TrendingUp, ChevronDown } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CardSkeleton, ErrorState } from "@/components/ui/state-views";
 import { PageHeading } from "@/components/layout/page-heading";
 import { ExerciseVideoPlayer } from "@/components/workouts/video-player";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import Link from "next/link";
-import { getExerciseVideos, getUserExerciseVideo, getWorkout, getWorkouts, resetUserExerciseVideo, upsertUserExerciseVideo } from "@/services/database/workout-library";
+import { getExerciseVideos, getUserExerciseVideo, getWorkout, getWorkoutsWithStatus, resetUserExerciseVideo, upsertUserExerciseVideo } from "@/services/database/workout-library";
 import { getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
-import { getCustomExercise, getCustomExercises, getFavoriteExerciseIds, setFavoriteExercise } from "@/services/workouts/exercise-library-store";
+import { getCustomExercisesWithStatus, getFavoriteExerciseIdsWithStatus, setFavoriteExercise } from "@/services/workouts/exercise-library-store";
 import { findExerciseVideo } from "@/services/workouts/video-matching";
 import { userSafeError } from "@/lib/error-formatting";
+import { cn } from "@/lib/utils";
 import type { ExerciseLog, ExerciseVideo, Workout, WorkoutSessionSummary } from "@/types";
 
 function normalizeExerciseName(value: string) {
@@ -77,9 +79,15 @@ function sameText(a: string | null | undefined, b: string | null | undefined) {
   return Boolean(left && right && left === right);
 }
 
+function hasInvalidUrl(value: string | null | undefined) {
+  const clean = value?.trim();
+  return Boolean(clean && !/^https?:\/\/[^\s]+$/i.test(clean));
+}
+
 export default function WorkoutDetailsPage() {
   const params = useParams<{ id: string }>();
   const { user } = useAuth();
+  const userId = user?.id;
   const { toast } = useToast();
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [video, setVideo] = useState<ExerciseVideo | null>(null);
@@ -87,52 +95,104 @@ export default function WorkoutDetailsPage() {
   const [customVideoDraft, setCustomVideoDraft] = useState("");
   const [isSavingVideo, setIsSavingVideo] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [loadWarning, setLoadWarning] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
   const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
   const [alternatives, setAlternatives] = useState<Workout[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [isFavoritePending, setIsFavoritePending] = useState(false);
+  const [favoriteError, setFavoriteError] = useState("");
+  const [videoStatus, setVideoStatus] = useState<"idle" | "saving" | "saved" | "failed" | "reset">("idle");
+  const [videoMessage, setVideoMessage] = useState("");
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError("");
+    setLoadWarning("");
+    try {
+      const warnings: string[] = [];
+      const customResult = await getCustomExercisesWithStatus(userId);
+      if (customResult.status.source === "degraded" && customResult.status.message) warnings.push(customResult.status.message);
+      const customExercise = customResult.data.find((exercise) => exercise.id === params.id) ?? null;
+      const nextWorkout = customExercise ?? await getWorkout(params.id);
+      const [videosResult, customVideoResult, historyResult, alternativesResult, favoritesResult] = await Promise.allSettled([
+        getExerciseVideos(nextWorkout.name),
+        userId && !customExercise ? getUserExerciseVideo(userId, nextWorkout.id) : Promise.resolve(null),
+        userId ? getWorkoutHistoryDetailed(userId, 150) : Promise.resolve([]),
+        getWorkoutsWithStatus("", {
+          primaryMuscles: nextWorkout.target_muscle ? [nextWorkout.target_muscle] : [],
+          equipmentRequired: nextWorkout.equipment_required || nextWorkout.equipment ? [nextWorkout.equipment_required || nextWorkout.equipment] : []
+        }, 0),
+        getFavoriteExerciseIdsWithStatus(userId)
+      ]);
+      const videos = videosResult.status === "fulfilled" ? videosResult.value : [];
+      if (videosResult.status === "rejected") warnings.push("Exercise video data could not load. Saved instructions remain visible.");
+      const customVideo = customVideoResult.status === "fulfilled" ? customVideoResult.value : null;
+      if (customVideoResult.status === "rejected") warnings.push("Your custom video override could not load.");
+      const workoutHistory = historyResult.status === "fulfilled" ? historyResult.value : [];
+      if (historyResult.status === "rejected") warnings.push("Workout history could not load for this exercise.");
+      const libraryAlternatives = alternativesResult.status === "fulfilled" ? alternativesResult.value.data : [];
+      if (alternativesResult.status === "fulfilled" && alternativesResult.value.status.message) warnings.push(alternativesResult.value.status.message);
+      if (alternativesResult.status === "rejected") warnings.push("Alternative exercises could not load.");
+      if (favoritesResult.status === "fulfilled") {
+        setFavoriteIds(favoritesResult.value.data);
+        if (favoritesResult.value.status.source === "degraded" && favoritesResult.value.status.message) warnings.push(favoritesResult.value.status.message);
+      } else {
+        warnings.push("Favorite state could not load.");
+        setFavoriteIds([]);
+      }
+      const localCustomAlternatives = customResult.data.filter((item) => item.id !== nextWorkout.id);
+      const combinedAlternatives = [...localCustomAlternatives, ...libraryAlternatives]
+        .filter((item) => item.id !== nextWorkout.id)
+        .filter((item) => sameText(item.target_muscle, nextWorkout.target_muscle) || sameText(item.equipment, nextWorkout.equipment) || sameText(item.mechanics, nextWorkout.mechanics))
+        .filter((item, index, all) => all.findIndex((match) => match.id === item.id) === index)
+        .slice(0, 6);
+      setWorkout(nextWorkout);
+      setVideo(findExerciseVideo(nextWorkout, videos));
+      setCustomVideoUrl(customExercise?.custom_video_url ?? customVideo?.custom_video_url ?? "");
+      setCustomVideoDraft(customExercise?.custom_video_url ?? customVideo?.custom_video_url ?? "");
+      setHistory(workoutHistory);
+      setAlternatives(combinedAlternatives);
+      setLoadWarning(Array.from(new Set(warnings)).join(" "));
+    } catch (error) {
+      const message = userSafeError(error, "Could not load workout details. Please refresh and try again.");
+      setLoadError(message);
+      toast({ title: "Could not load workout", description: message });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [params.id, toast, userId]);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const customExercise = await getCustomExercise(user?.id, params.id);
-        const nextWorkout = customExercise ?? await getWorkout(params.id);
-        const [videos, customVideo, workoutHistory, libraryAlternatives] = await Promise.all([
-          getExerciseVideos(nextWorkout.name),
-          user?.id && !customExercise ? getUserExerciseVideo(user.id, nextWorkout.id) : Promise.resolve(null),
-          user?.id ? getWorkoutHistoryDetailed(user.id, 150) : Promise.resolve([]),
-          getWorkouts("", {
-            primaryMuscles: nextWorkout.target_muscle ? [nextWorkout.target_muscle] : [],
-            equipmentRequired: nextWorkout.equipment_required || nextWorkout.equipment ? [nextWorkout.equipment_required || nextWorkout.equipment] : []
-          }, 0)
-        ]);
-        const customExercises = await getCustomExercises(user?.id);
-        const localCustomAlternatives = customExercises.filter((item) => item.id !== nextWorkout.id);
-        const combinedAlternatives = [...localCustomAlternatives, ...libraryAlternatives]
-          .filter((item) => item.id !== nextWorkout.id)
-          .filter((item) => sameText(item.target_muscle, nextWorkout.target_muscle) || sameText(item.equipment, nextWorkout.equipment) || sameText(item.mechanics, nextWorkout.mechanics))
-          .filter((item, index, all) => all.findIndex((match) => match.id === item.id) === index)
-          .slice(0, 6);
-        setWorkout(nextWorkout);
-        setVideo(findExerciseVideo(nextWorkout, videos));
-        setCustomVideoUrl(customExercise?.custom_video_url ?? customVideo?.custom_video_url ?? "");
-        setCustomVideoDraft(customExercise?.custom_video_url ?? customVideo?.custom_video_url ?? "");
-        setHistory(workoutHistory);
-        setAlternatives(combinedAlternatives);
-        const favoriteIds = await getFavoriteExerciseIds(user?.id);
-        setFavoriteIds(favoriteIds);
-        setLoadError("");
-      } catch (error) {
-        const message = userSafeError(error, "Could not load workout details. Please refresh and try again.");
-        setLoadError(message);
-        toast({ title: "Could not load workout", description: message });
-      }
-    }
-    load();
-  }, [params.id, toast, user?.id]);
+    void load();
+  }, [load]);
 
   const exerciseHistory = useMemo(() => workout ? buildExerciseHistory(exerciseLogsFor(history, workout.name)) : null, [history, workout]);
 
-  if (!workout) return <p className="text-sm text-muted-foreground">{loadError || "Loading workout..."}</p>;
+  if (isLoading) return <CardSkeleton rows={7} />;
+
+  if (loadError) {
+    return (
+      <ErrorState
+        title="Exercise details could not load"
+        description={loadError}
+        onRetry={load}
+        fallbackLabel="Back to Exercise Library"
+        fallbackHref="/workouts"
+      />
+    );
+  }
+
+  if (!workout) {
+    return (
+      <ErrorState
+        title="Exercise not found"
+        description="This exercise could not be found in the library."
+        fallbackLabel="Back to Exercise Library"
+        fallbackHref="/workouts"
+      />
+    );
+  }
 
   const guideUrl = workout.exercise_url || (workout.notes?.startsWith("http") ? workout.notes : video?.exercise_url);
   const videoUrl = customVideoUrl || null;
@@ -144,33 +204,59 @@ export default function WorkoutDetailsPage() {
   const secondaryMuscles = workout.secondary_muscles ?? video?.secondary_muscles ?? [];
   const favorite = favoriteIds.includes(workout.id);
   const mistakes = workout.notes && !workout.notes.startsWith("http") && /mistake|avoid|form/i.test(workout.notes) ? workout.notes : "No specific mistakes saved for this exercise yet.";
+  const customVideoInvalid = hasInvalidUrl(customVideoDraft);
 
   async function saveCustomVideo() {
     if (!workout) return;
-    if (!user?.id) return toast({ title: "Login required", description: "Sign in again before saving a custom video link." });
+    if (!userId) {
+      const message = "Sign in again before saving a custom video link.";
+      setVideoStatus("failed");
+      setVideoMessage(message);
+      toast({ title: "Login required", description: message });
+      return;
+    }
+    if (customVideoInvalid) {
+      setVideoStatus("failed");
+      setVideoMessage("Custom video URL must start with http:// or https://.");
+      return;
+    }
     try {
       setIsSavingVideo(true);
-      const saved = await upsertUserExerciseVideo(user.id, workout.id, customVideoDraft);
+      setVideoStatus("saving");
+      setVideoMessage("");
+      const saved = await upsertUserExerciseVideo(userId, workout.id, customVideoDraft);
       setCustomVideoUrl(saved.custom_video_url);
       setCustomVideoDraft(saved.custom_video_url);
+      setVideoStatus("saved");
+      setVideoMessage("Custom video saved for this exercise only.");
       toast({ title: "Custom video saved", description: "This exercise now has your manually added custom video." });
     } catch (error) {
-      toast({ title: "Could not save video link", description: userSafeError(error, "Please check the link and try again.") });
+      const message = userSafeError(error, "Please check the link and try again.");
+      setVideoStatus("failed");
+      setVideoMessage(message);
+      toast({ title: "Could not save video link", description: message });
     } finally {
       setIsSavingVideo(false);
     }
   }
 
   async function resetCustomVideo() {
-    if (!workout || !user?.id) return;
+    if (!workout || !userId) return;
     try {
       setIsSavingVideo(true);
-      await resetUserExerciseVideo(user.id, workout.id);
+      setVideoStatus("saving");
+      setVideoMessage("");
+      await resetUserExerciseVideo(userId, workout.id);
       setCustomVideoUrl("");
       setCustomVideoDraft("");
+      setVideoStatus("reset");
+      setVideoMessage("Custom video cleared. The exercise guide remains unchanged.");
       toast({ title: "Custom video cleared", description: "The exercise guide remains separate from your custom video link." });
     } catch (error) {
-      toast({ title: "Could not reset video link", description: userSafeError(error) });
+      const message = userSafeError(error, "Could not reset video link. Your current custom video remains unchanged.");
+      setVideoStatus("failed");
+      setVideoMessage(message);
+      toast({ title: "Could not reset video link", description: message });
     } finally {
       setIsSavingVideo(false);
     }
@@ -178,10 +264,27 @@ export default function WorkoutDetailsPage() {
 
   async function toggleFavorite() {
     const currentWorkout = workout;
-    if (!currentWorkout) return;
-    const next = await setFavoriteExercise(user?.id, currentWorkout.id, !favorite);
-    setFavoriteIds(next);
-    toast({ title: !favorite ? "Exercise favorited" : "Exercise unfavorited", description: currentWorkout.name });
+    if (!currentWorkout || isFavoritePending) return;
+    const previousIds = favoriteIds;
+    const nextFavorite = !favorite;
+    const optimistic = nextFavorite
+      ? Array.from(new Set([...favoriteIds, currentWorkout.id]))
+      : favoriteIds.filter((id) => id !== currentWorkout.id);
+    setIsFavoritePending(true);
+    setFavoriteError("");
+    setFavoriteIds(optimistic);
+    try {
+      const next = await setFavoriteExercise(userId, currentWorkout.id, nextFavorite);
+      setFavoriteIds(next);
+      toast({ title: nextFavorite ? "Exercise favorited" : "Exercise unfavorited", description: currentWorkout.name });
+    } catch (error) {
+      const message = userSafeError(error, "Favorite change failed. Your previous favorite state was restored.");
+      setFavoriteIds(previousIds);
+      setFavoriteError(message);
+      toast({ title: "Favorite was not saved", description: message });
+    } finally {
+      setIsFavoritePending(false);
+    }
   }
 
   return (
@@ -189,8 +292,20 @@ export default function WorkoutDetailsPage() {
       <PageHeading
         title={workout.name}
         description={`${workout.target_muscle} | ${workout.equipment} | ${workout.difficulty}`}
-        action={<div className="flex flex-wrap gap-2"><Button variant={favorite ? "default" : "outline"} onClick={toggleFavorite}><Heart className="h-4 w-4" /> {favorite ? "Favorited" : "Favorite"}</Button><Button asChild><Link href={`/workouts/session/${workout.id}`}><Play className="h-4 w-4" /> Start Workout</Link></Button></div>}
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button className="min-h-12" variant={favorite ? "default" : "outline"} onClick={toggleFavorite} disabled={isFavoritePending} aria-busy={isFavoritePending}>
+              <Heart className={cn("h-4 w-4", favorite && "fill-current")} />
+              {isFavoritePending ? "Saving..." : favorite ? "Favorited" : "Favorite"}
+            </Button>
+            <Button asChild className="min-h-12">
+              <Link href={`/workouts/session/${workout.id}`}><Play className="h-4 w-4" /> Start session</Link>
+            </Button>
+          </div>
+        }
       />
+      {loadWarning ? <InlineStatus tone="warning" title="Some exercise data is degraded" description={loadWarning} /> : null}
+      {favoriteError ? <InlineStatus tone="error" title="Favorite was not saved" description={favoriteError} /> : null}
       <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="space-y-4">
           <Card>
@@ -219,17 +334,30 @@ export default function WorkoutDetailsPage() {
               <TextPanel title="Mistakes to avoid" text={mistakes} />
 
               <div className="grid gap-2 sm:grid-cols-2">
-                {guideUrl ? <Button asChild variant="outline"><a href={guideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open Exercise Guide</a></Button> : <Button type="button" variant="outline" disabled>No guide added</Button>}
-                {customVideoUrl ? <Button asChild variant="outline"><a href={customVideoUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open Custom Video</a></Button> : <Button type="button" variant="outline" disabled>No custom video</Button>}
+                {guideUrl ? <Button asChild variant="outline" className="min-h-12"><a href={guideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open Exercise Guide</a></Button> : <Button type="button" variant="outline" className="min-h-12" disabled>No guide added</Button>}
+                {customVideoUrl ? <Button asChild variant="outline" className="min-h-12"><a href={customVideoUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open Custom Video</a></Button> : <Button type="button" variant="outline" className="min-h-12" disabled>No custom video</Button>}
               </div>
 
               <div className="rounded-md border p-3">
-                <Label htmlFor="custom-video-url">Open Custom Video URL</Label>
+                <Label htmlFor="custom-video-url">Custom video URL</Label>
                 <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-                  <Input id="custom-video-url" value={customVideoDraft} onChange={(event) => setCustomVideoDraft(event.target.value)} placeholder="https://youtube.com/watch?v=..." />
-                  <Button type="button" onClick={saveCustomVideo} disabled={isSavingVideo || !customVideoDraft.trim()}><Save className="h-4 w-4" /> Save</Button>
-                  <Button type="button" variant="outline" onClick={resetCustomVideo} disabled={isSavingVideo || !customVideoUrl}><RotateCcw className="h-4 w-4" /> Reset</Button>
+                  <Input
+                    id="custom-video-url"
+                    value={customVideoDraft}
+                    onChange={(event) => {
+                      setCustomVideoDraft(event.target.value);
+                      setVideoStatus("idle");
+                      setVideoMessage("");
+                    }}
+                    placeholder="https://youtube.com/watch?v=..."
+                    className="h-12"
+                    aria-invalid={customVideoInvalid}
+                  />
+                  <Button type="button" className="min-h-12" onClick={saveCustomVideo} disabled={isSavingVideo || !customVideoDraft.trim() || customVideoInvalid}><Save className="h-4 w-4" /> {isSavingVideo && videoStatus === "saving" ? "Saving..." : "Save"}</Button>
+                  <Button type="button" variant="outline" className="min-h-12" onClick={resetCustomVideo} disabled={isSavingVideo || !customVideoUrl}><RotateCcw className="h-4 w-4" /> Reset</Button>
                 </div>
+                {customVideoInvalid ? <p className="mt-2 text-sm leading-6 text-destructive">Custom video URL must start with http:// or https://.</p> : null}
+                {videoMessage ? <InlineStatus className="mt-3" tone={videoStatus === "failed" ? "error" : "success"} title={videoStatus === "failed" ? "Custom video was not saved" : videoStatus === "reset" ? "Custom video cleared" : "Custom video saved"} description={videoMessage} /> : null}
               </div>
             </CardContent>
           </Card>
@@ -256,7 +384,7 @@ export default function WorkoutDetailsPage() {
             <CardHeader><CardTitle>Alternative exercises</CardTitle></CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2">
               {!alternatives.length ? <p className="text-sm text-muted-foreground">No alternatives found from matching muscle or equipment.</p> : null}
-              {alternatives.map((item) => <Link key={item.id} href={`/workouts/${item.id}`} className="rounded-md border p-3 transition hover:border-primary"><p className="font-semibold">{item.name}</p><p className="text-sm text-muted-foreground">{item.target_muscle} | {item.equipment}</p></Link>)}
+              {alternatives.map((item) => <Link key={item.id} href={`/workouts/${item.id}`} className="min-h-12 rounded-md border p-3 transition hover:border-primary"><p className="font-semibold">{item.name}</p><p className="text-sm text-muted-foreground">{item.target_muscle} | {item.equipment}</p></Link>)}
             </CardContent>
           </Card>
         </div>
@@ -269,7 +397,7 @@ export default function WorkoutDetailsPage() {
 function TextPanel({ title, text }: { title: string; text: string | null | undefined }) {
   return (
     <details className="group rounded-md bg-muted/40">
-      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 p-3 text-sm font-semibold text-foreground">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-2 p-3 text-sm font-semibold text-foreground">
         {title}
         <ChevronDown className="h-4 w-4 text-muted-foreground transition group-open:rotate-180" />
       </summary>
@@ -280,4 +408,40 @@ function TextPanel({ title, text }: { title: string; text: string | null | undef
 
 function Detail({ label, value }: { label: string | null | undefined; value: string | null | undefined }) {
   return <div className="rounded-md bg-muted/40 p-3"><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{label}</p><p className="mt-1 text-sm font-medium text-foreground">{value || "N/A"}</p></div>;
+}
+
+function InlineStatus({
+  tone,
+  title,
+  description,
+  className
+}: {
+  tone: "success" | "warning" | "error";
+  title: string;
+  description: string;
+  className?: string;
+}) {
+  const Icon = tone === "success" ? CheckCircle2 : AlertTriangle;
+  const toneClass = tone === "error"
+    ? "border-destructive/30 bg-destructive/5"
+    : tone === "warning"
+      ? "border-warning/30 bg-warning/10"
+      : "border-success/30 bg-success/5";
+  const iconClass = tone === "error"
+    ? "text-destructive"
+    : tone === "warning"
+      ? "text-warning"
+      : "text-success";
+
+  return (
+    <Card className={cn(toneClass, className)}>
+      <CardContent className="flex items-start gap-3 p-4">
+        <Icon className={cn("mt-0.5 h-5 w-5 shrink-0", iconClass)} />
+        <div>
+          <p className="font-semibold text-foreground">{title}</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }

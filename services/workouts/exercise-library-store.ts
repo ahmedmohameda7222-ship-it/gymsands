@@ -20,6 +20,16 @@ type StoredCustomExercise = Workout & {
   updated_at: string;
 };
 
+export type ExerciseLibraryStoreStatus = {
+  source: "account" | "local" | "degraded";
+  message?: string;
+};
+
+export type ExerciseLibraryStoreResult<T> = {
+  data: T;
+  status: ExerciseLibraryStoreStatus;
+};
+
 const favoritesPrefix = "plaivra-exercise-favorites";
 const customPrefix = "plaivra-custom-exercises";
 
@@ -53,6 +63,18 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
+function localStatus(message?: string): ExerciseLibraryStoreStatus {
+  return { source: "local", message };
+}
+
+function accountStatus(): ExerciseLibraryStoreStatus {
+  return { source: "account" };
+}
+
+function degradedStatus(message: string): ExerciseLibraryStoreStatus {
+  return { source: "degraded", message };
+}
+
 // Ensure one-time migration runs
 let hasMigratedFavorites = false;
 let hasMigratedCustom = false;
@@ -75,6 +97,41 @@ export async function getFavoriteExerciseIds(userId: string | null | undefined):
   return data?.map((d: Record<string, unknown>) => d.exercise_id as string) || [];
 }
 
+export async function getFavoriteExerciseIdsWithStatus(userId: string | null | undefined): Promise<ExerciseLibraryStoreResult<string[]>> {
+  const key = storageKey(favoritesPrefix, userId);
+  const local = readJson<string[]>(key, []);
+  if (!canSyncUserData(userId)) {
+    return {
+      data: local,
+      status: localStatus("Favorites are saved on this device until you sign in with account sync.")
+    };
+  }
+
+  try {
+    if (!hasMigratedFavorites && canUseBrowserStorage()) {
+      hasMigratedFavorites = true;
+      if (local.length > 0) {
+        const results = await Promise.all(local.map(id =>
+          supabase!.from("user_exercise_favorites").upsert({ user_id: userId, exercise_id: id }, { onConflict: "user_id, exercise_id" })
+        ));
+        const migrationError = results.find((result) => result.error)?.error;
+        if (migrationError) throw new Error(migrationError.message);
+        window.localStorage.removeItem(key);
+      }
+    }
+
+    const { data, error } = await supabase!.from("user_exercise_favorites").select("exercise_id").eq("user_id", userId);
+    if (error) throw new Error(error.message);
+    return { data: data?.map((d: Record<string, unknown>) => d.exercise_id as string) || [], status: accountStatus() };
+  } catch (error) {
+    console.warn("Plaivra could not load exercise favorites from account storage.", error);
+    return {
+      data: local,
+      status: degradedStatus("Favorites could not sync from your account. Local favorites are shown when available.")
+    };
+  }
+}
+
 export async function isFavoriteExercise(userId: string | null | undefined, exerciseId: string): Promise<boolean> {
   const ids = await getFavoriteExerciseIds(userId);
   return ids.includes(exerciseId);
@@ -93,9 +150,11 @@ export async function setFavoriteExercise(userId: string | null | undefined, exe
 
   const supabaseCl = supabase;
   if (favorite) {
-    await supabaseCl!.from("user_exercise_favorites").upsert({ user_id: userId, exercise_id: exerciseId }, { onConflict: "user_id, exercise_id" });
+    const { error } = await supabaseCl!.from("user_exercise_favorites").upsert({ user_id: userId, exercise_id: exerciseId }, { onConflict: "user_id, exercise_id" });
+    if (error) throw new Error(error.message);
   } else {
-    await supabaseCl!.from("user_exercise_favorites").delete().match({ user_id: userId, exercise_id: exerciseId });
+    const { error } = await supabaseCl!.from("user_exercise_favorites").delete().match({ user_id: userId, exercise_id: exerciseId });
+    if (error) throw new Error(error.message);
   }
   return getFavoriteExerciseIds(userId);
 }
@@ -143,6 +202,67 @@ export async function getCustomExercises(userId: string | null | undefined): Pro
 
   const { data } = await supabase!.from("user_custom_exercises").select("*").eq("user_id", userId).order("created_at", { ascending: false });
   return (data || []) as Workout[];
+}
+
+export async function getCustomExercisesWithStatus(userId: string | null | undefined): Promise<ExerciseLibraryStoreResult<Workout[]>> {
+  const key = storageKey(customPrefix, userId);
+  const local = readJson<StoredCustomExercise[]>(key, []);
+  if (!canSyncUserData(userId)) {
+    return {
+      data: local,
+      status: localStatus("Custom exercises are private to you and stored on this device until account sync is available.")
+    };
+  }
+
+  try {
+    if (!hasMigratedCustom && canUseBrowserStorage()) {
+      hasMigratedCustom = true;
+      if (local.length > 0) {
+        for (const ex of local) {
+          const id = ex.id.startsWith("custom-") ? ex.id.replace("custom-", "") : ex.id;
+          const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : undefined;
+          const { error } = await supabase!.from("user_custom_exercises").insert({
+            id: validUuid,
+            user_id: userId,
+            name: ex.name,
+            category: ex.category,
+            target_muscle: ex.target_muscle,
+            equipment: ex.equipment,
+            difficulty: ex.difficulty,
+            sets: ex.sets,
+            reps: ex.reps,
+            rest_seconds: ex.rest_seconds,
+            instructions: ex.instructions,
+            notes: ex.notes,
+            muscle_category: ex.muscle_category,
+            equipment_required: ex.equipment_required,
+            mechanics: ex.mechanics,
+            force_type: ex.force_type,
+            experience_level: ex.experience_level,
+            secondary_muscles: ex.secondary_muscles,
+            exercise_url: ex.exercise_url,
+            video_url: ex.video_url,
+            custom_video_url: ex.custom_video_url,
+            is_global: ex.is_global,
+            created_at: ex.created_at,
+            updated_at: ex.updated_at
+          }).select().single();
+          if (error) throw new Error(error.message);
+        }
+        window.localStorage.removeItem(key);
+      }
+    }
+
+    const { data, error } = await supabase!.from("user_custom_exercises").select("*").eq("user_id", userId).order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return { data: (data || []) as Workout[], status: accountStatus() };
+  } catch (error) {
+    console.warn("Plaivra could not load custom exercises from account storage.", error);
+    return {
+      data: local,
+      status: degradedStatus("Custom exercises could not sync from your account. Local custom exercises are shown when available.")
+    };
+  }
 }
 
 export async function getCustomExercise(userId: string | null | undefined, exerciseId: string): Promise<Workout | null> {

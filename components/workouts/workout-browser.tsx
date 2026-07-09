@@ -1,17 +1,18 @@
 "use client";
 
-import { ChevronDown, ExternalLink, Heart, MoreHorizontal, Play, Plus, RotateCcw, Search, SlidersHorizontal, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ExternalLink, Heart, MoreHorizontal, Play, Plus, RotateCcw, Search, SlidersHorizontal, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CardGridSkeleton, EmptyState } from "@/components/ui/state-views";
+import { CardGridSkeleton, EmptyState, ErrorState } from "@/components/ui/state-views";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import Link from "next/link";
-import { getWorkoutFilterOptions, getWorkouts, type WorkoutFilterOptions, type WorkoutFilters } from "@/services/database/workout-library";
-import { getCustomExercises, getFavoriteExerciseIds, saveCustomExercise, setFavoriteExercise, type CustomExerciseInput } from "@/services/workouts/exercise-library-store";
+import { getWorkoutFilterOptionsWithStatus, getWorkoutsWithStatus, type WorkoutFilterOptions, type WorkoutFilters, type WorkoutLibraryStatus } from "@/services/database/workout-library";
+import { getCustomExercisesWithStatus, getFavoriteExerciseIdsWithStatus, saveCustomExercise, setFavoriteExercise, type CustomExerciseInput } from "@/services/workouts/exercise-library-store";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
@@ -66,6 +67,11 @@ const filterParamKeys: Record<FilterKey, string> = {
 
 function isLink(value: string | null | undefined) {
   return Boolean(value && /^https?:\/\//i.test(value));
+}
+
+function hasInvalidUrl(value: string | null | undefined) {
+  const clean = value?.trim();
+  return Boolean(clean && !/^https?:\/\/[^\s]+$/i.test(clean));
 }
 
 function splitParam(value: string | null) {
@@ -157,6 +163,8 @@ const emptyCustomExercise: CustomExerciseInput = {
 export function WorkoutBrowser() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
+  const { dialog, ask } = useConfirm();
+  const userId = user?.id;
   const [query, setQuery] = useState("");
   const [filterOptions, setFilterOptions] = useState<WorkoutFilterOptions>(emptyOptions);
   const [filters, setFilters] = useState<Record<FilterKey, string[]>>(emptyFilters);
@@ -173,6 +181,21 @@ export function WorkoutBrowser() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [openFilters, setOpenFilters] = useState<FilterKey[]>([]);
   const [showFiltersDialog, setShowFiltersDialog] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<WorkoutLibraryStatus | null>(null);
+  const [filterError, setFilterError] = useState("");
+  const [resultStatus, setResultStatus] = useState<WorkoutLibraryStatus | null>(null);
+  const [resultError, setResultError] = useState("");
+  const [reloadResultsNonce, setReloadResultsNonce] = useState(0);
+  const [personalLibraryMessages, setPersonalLibraryMessages] = useState<string[]>([]);
+  const [isLoadingPersonalLibrary, setIsLoadingPersonalLibrary] = useState(true);
+  const [pendingFavoriteIds, setPendingFavoriteIds] = useState<string[]>([]);
+  const [favoriteErrors, setFavoriteErrors] = useState<Record<string, string>>({});
+  const [isSavingCustom, setIsSavingCustom] = useState(false);
+  const [customFormError, setCustomFormError] = useState("");
+  const [customSaveStatus, setCustomSaveStatus] = useState<"idle" | "saved" | "failed">("idle");
+  const customDraftDirty = Object.values(customDraft).some((value) => value.trim());
+  const customVideoInvalid = hasInvalidUrl(customDraft.videoUrl);
+  const pendingFavoriteSet = useMemo(() => new Set(pendingFavoriteIds), [pendingFavoriteIds]);
 
   useEffect(() => {
     const persisted = readPersistedFilterState();
@@ -184,24 +207,43 @@ export function WorkoutBrowser() {
     setIsHydrated(true);
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    Promise.all([getFavoriteExerciseIds(user?.id), getCustomExercises(user?.id)]).then(([favorites, custom]) => {
-      if (!active) return;
-      setFavoriteIds(favorites);
-      setCustomExercises(custom);
-    });
-    return () => { active = false; };
-  }, [user?.id]);
+  const loadPersonalLibrary = useCallback(async () => {
+    setIsLoadingPersonalLibrary(true);
+    try {
+      const [favorites, custom] = await Promise.all([
+        getFavoriteExerciseIdsWithStatus(userId),
+        getCustomExercisesWithStatus(userId)
+      ]);
+      setFavoriteIds(favorites.data);
+      setCustomExercises(custom.data);
+      setPersonalLibraryMessages([favorites.status.message, custom.status.message].filter(Boolean) as string[]);
+    } finally {
+      setIsLoadingPersonalLibrary(false);
+    }
+  }, [userId]);
 
   useEffect(() => {
-    getWorkoutFilterOptions()
-      .then(setFilterOptions)
-      .catch((error) => {
-        setFilterOptions(emptyOptions);
-        toast({ title: "Could not load workout filters", description: userSafeError(error, "Please refresh and try again.") });
-      });
+    void loadPersonalLibrary();
+  }, [loadPersonalLibrary]);
+
+  const loadFilterOptions = useCallback(async () => {
+    setFilterError("");
+    try {
+      const result = await getWorkoutFilterOptionsWithStatus();
+      setFilterOptions(result.data);
+      setFilterStatus(result.status);
+    } catch (error) {
+      const message = userSafeError(error, "Exercise filters could not load. Your search text is still available.");
+      setFilterOptions(emptyOptions);
+      setFilterStatus(null);
+      setFilterError(message);
+      toast({ title: "Could not load workout filters", description: message });
+    }
   }, [toast]);
+
+  useEffect(() => {
+    void loadFilterOptions();
+  }, [loadFilterOptions]);
 
   const activeFilterCount = useMemo(() => Object.values(filters).reduce((sum, values) => sum + values.length, 0), [filters]);
   const requestFilters: WorkoutFilters = filters;
@@ -219,22 +261,27 @@ export function WorkoutBrowser() {
       setPage(0);
       setHasMore(false);
       setIsLoading(false);
+      setResultError("");
+      setResultStatus(null);
       return;
     }
     let active = true;
     const timer = window.setTimeout(() => {
       setIsLoading(true);
       setPage(0);
-      getWorkouts(query.trim(), requestFilters, 0)
-        .then((items) => {
+      setResultError("");
+      getWorkoutsWithStatus(query.trim(), requestFilters, 0)
+        .then((result) => {
           if (!active) return;
-          setWorkouts(items);
-          setHasMore(items.length >= pageSize);
+          setWorkouts(result.data);
+          setResultStatus(result.status);
+          setHasMore(result.data.length >= pageSize);
         })
         .catch((error) => {
           if (!active) return;
-          setWorkouts([]);
-          toast({ title: "Could not load workouts", description: userSafeError(error, "Try another search or filter.") });
+          const message = userSafeError(error, "Search failed. Your filters were kept.");
+          setResultError(message);
+          toast({ title: "Could not load workouts", description: message });
         })
         .finally(() => {
           if (active) setIsLoading(false);
@@ -245,7 +292,7 @@ export function WorkoutBrowser() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [filters, hasActiveLibraryRequest, isHydrated, query, requestFilters, toast]);
+  }, [filters, hasActiveLibraryRequest, isHydrated, query, reloadResultsNonce, requestFilters, toast]);
 
   const visibleCustomExercises = hasActiveLibraryRequest ? customExercises.filter((workout) => matchesCustomExercise(workout, query.trim(), filters)) : [];
   const allVisibleWorkouts = [...visibleCustomExercises, ...workouts].filter((workout, index, all) => all.findIndex((item) => item.id === workout.id) === index);
@@ -257,13 +304,17 @@ export function WorkoutBrowser() {
     if (!hasActiveLibraryRequest) return;
     const nextPage = page + 1;
     setIsLoading(true);
+    setResultError("");
     try {
-      const items = await getWorkouts(query.trim(), requestFilters, nextPage);
-      setWorkouts((current) => [...current, ...items]);
+      const result = await getWorkoutsWithStatus(query.trim(), requestFilters, nextPage);
+      setWorkouts((current) => [...current, ...result.data]);
+      setResultStatus(result.status);
       setPage(nextPage);
-      setHasMore(items.length >= pageSize);
+      setHasMore(result.data.length >= pageSize);
     } catch (error) {
-      toast({ title: "Could not load more workouts", description: userSafeError(error) });
+      const message = userSafeError(error, "More exercises could not load. Your current results were kept.");
+      setResultError(message);
+      toast({ title: "Could not load more workouts", description: message });
     } finally {
       setIsLoading(false);
     }
@@ -295,23 +346,110 @@ export function WorkoutBrowser() {
   }
 
   async function toggleFavorite(workout: Workout) {
+    if (pendingFavoriteSet.has(workout.id)) return;
     const nextFavorite = !favoriteIds.includes(workout.id);
-    const nextIds = await setFavoriteExercise(user?.id, workout.id, nextFavorite);
-    setFavoriteIds(nextIds);
-    toast({ title: nextFavorite ? "Exercise favorited" : "Exercise unfavorited", description: `${workout.name} is ${nextFavorite ? "saved to" : "removed from"} your favorites.` });
+    const previousIds = favoriteIds;
+    const optimisticIds = nextFavorite
+      ? Array.from(new Set([...favoriteIds, workout.id]))
+      : favoriteIds.filter((id) => id !== workout.id);
+    setPendingFavoriteIds((current) => Array.from(new Set([...current, workout.id])));
+    setFavoriteIds(optimisticIds);
+    setFavoriteErrors((current) => ({ ...current, [workout.id]: "" }));
+    try {
+      const nextIds = await setFavoriteExercise(userId, workout.id, nextFavorite);
+      setFavoriteIds(nextIds);
+      toast({ title: nextFavorite ? "Exercise favorited" : "Exercise unfavorited", description: `${workout.name} is ${nextFavorite ? "saved to" : "removed from"} your favorites.` });
+    } catch (error) {
+      const message = userSafeError(error, "Favorite change failed. Your previous favorite state was restored.");
+      setFavoriteIds(previousIds);
+      setFavoriteErrors((current) => ({ ...current, [workout.id]: message }));
+      toast({ title: "Favorite was not saved", description: message });
+    } finally {
+      setPendingFavoriteIds((current) => current.filter((id) => id !== workout.id));
+    }
   }
 
   async function createCustomExercise() {
+    if (isSavingCustom) return;
+    if (!customDraft.name.trim()) {
+      setCustomFormError("Exercise name is required.");
+      setCustomSaveStatus("failed");
+      return;
+    }
+    if (customVideoInvalid) {
+      setCustomFormError("Custom video URL must start with http:// or https://.");
+      setCustomSaveStatus("failed");
+      return;
+    }
     try {
-      const saved = await saveCustomExercise(user?.id, customDraft);
+      setIsSavingCustom(true);
+      setCustomFormError("");
+      setCustomSaveStatus("idle");
+      const saved = await saveCustomExercise(userId, customDraft);
       setCustomExercises((current) => [saved, ...current]);
       setCustomDraft(emptyCustomExercise);
       setShowCustomForm(false);
+      setCustomSaveStatus("saved");
       toast({ title: "Custom exercise created", description: `${saved.name} is now available in your exercise library.` });
     } catch (error) {
-      toast({ title: "Could not create exercise", description: userSafeError(error, "Please check the fields and try again.") });
+      const message = userSafeError(error, "Create custom exercise failed. Your typed fields are still here.");
+      setCustomFormError(message);
+      setCustomSaveStatus("failed");
+      toast({ title: "Could not create exercise", description: message });
+    } finally {
+      setIsSavingCustom(false);
     }
   }
+
+  function closeCustomForm() {
+    if (!customDraftDirty) {
+      setShowCustomForm(false);
+      setCustomFormError("");
+      setCustomSaveStatus("idle");
+      return;
+    }
+    ask({
+      title: "Discard custom exercise draft?",
+      description: "The custom exercise has not been saved. Discard the typed fields and close the form?",
+      confirmLabel: "Discard draft",
+      cancelLabel: "Keep editing",
+      variant: "destructive",
+      onConfirm: () => {
+        setCustomDraft(emptyCustomExercise);
+        setCustomFormError("");
+        setCustomSaveStatus("idle");
+        setShowCustomForm(false);
+      }
+    });
+  }
+
+  function toggleCustomForm() {
+    if (showCustomForm) closeCustomForm();
+    else {
+      setShowCustomForm(true);
+      setCustomFormError("");
+      setCustomSaveStatus("idle");
+    }
+  }
+
+  const resultMessages = Array.from(new Set([
+    filterStatus?.message,
+    resultStatus?.message,
+    ...personalLibraryMessages
+  ].filter(Boolean) as string[]));
+  const hasDegradedLibraryState = Boolean(resultMessages.length || filterError || resultError);
+  const resultStatusTitle = resultError
+    ? "Search failed"
+    : isLoading
+      ? "Updating exercise results"
+      : hasActiveLibraryRequest
+        ? `${filteredWorkouts.length} exercises shown`
+        : "Ready to browse";
+  const resultStatusDescription = resultError
+    ? "Search failed. Your filters were kept and any previous results remain visible."
+    : hasActiveLibraryRequest
+      ? "Start opens a standalone exercise session. To add exercises to a plan, use the workout day editor."
+      : "Search by exercise, muscle, or equipment, or use Show all workouts to browse the full library.";
 
   const filterPanelContent = (
     <div className="space-y-4">
@@ -320,10 +458,17 @@ export function WorkoutBrowser() {
           <p className="text-sm font-semibold text-foreground">Show all workouts</p>
           <p className="text-sm text-muted-foreground">Keep this off to show exercises only after a search or filter.</p>
         </div>
-        <Button type="button" variant={showAllWorkouts ? "default" : "outline"} onClick={() => setShowAllWorkouts((current) => !current)} size="sm">
+        <Button type="button" variant={showAllWorkouts ? "default" : "outline"} className="min-h-12" onClick={() => setShowAllWorkouts((current) => !current)}>
           {showAllWorkouts ? "All on" : "Show all"}
         </Button>
       </div>
+      {filterError ? (
+        <ErrorState
+          title="Filter options could not load"
+          description={filterError}
+          onRetry={loadFilterOptions}
+        />
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <FilterGroup title="Muscle Category" values={filterOptions.muscleCategories} selected={filters.muscleCategories} open={openFilters.includes("muscleCategories")} onOpenChange={() => toggleFilterGroup("muscleCategories")} onToggle={(value) => toggleFilter("muscleCategories", value)} />
         <FilterGroup title="Primary Muscle" values={filterOptions.primaryMuscles} selected={filters.primaryMuscles} open={openFilters.includes("primaryMuscles")} onOpenChange={() => toggleFilterGroup("primaryMuscles")} onToggle={(value) => toggleFilter("primaryMuscles", value)} />
@@ -336,7 +481,7 @@ export function WorkoutBrowser() {
       </div>
       <div className="flex flex-wrap gap-2">
         {activeFilterCount > 0 ? (
-          <Button variant="outline" size="sm" onClick={resetFilters}>
+          <Button variant="outline" className="min-h-12" onClick={resetFilters}>
             <RotateCcw className="h-4 w-4" /> Clear all
           </Button>
         ) : null}
@@ -357,38 +502,62 @@ export function WorkoutBrowser() {
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant={favoritesOnly ? "default" : "outline"} onClick={() => setFavoritesOnly((current) => !current)} className="h-11">
+          <Button variant={favoritesOnly ? "default" : "outline"} onClick={() => setFavoritesOnly((current) => !current)} className="min-h-12">
             <Heart className={cn("h-4 w-4", favoritesOnly && "fill-current")} /> Favorites
           </Button>
-          <Button variant="outline" onClick={() => setShowCustomForm((current) => !current)} className="h-11">
-            <Plus className="h-4 w-4" /> Custom
+          <Button variant="outline" onClick={toggleCustomForm} className="min-h-12">
+            <Plus className="h-4 w-4" /> {showCustomForm ? "Close custom" : "Custom"}
           </Button>
-          <Button variant="outline" onClick={() => setShowFiltersDialog(true)} className="h-11 lg:hidden">
+          <Button variant="outline" onClick={() => setShowFiltersDialog(true)} className="min-h-12 lg:hidden">
             <SlidersHorizontal className="h-4 w-4" /> Filters {activeFilterCount ? `(${activeFilterCount})` : ""}
           </Button>
-          <Button variant="outline" onClick={resetFilters} disabled={!query && activeFilterCount === 0 && !favoritesOnly} className="h-11">
+          <Button variant="outline" onClick={resetFilters} disabled={!query && activeFilterCount === 0 && !favoritesOnly} className="min-h-12">
             <RotateCcw className="h-4 w-4" /> Reset
           </Button>
         </div>
       </div>
 
+      {customSaveStatus === "saved" ? (
+        <StatusBanner
+          tone="success"
+          title="Custom exercise saved"
+          description="Custom exercises are private to you and available in this exercise library."
+        />
+      ) : null}
+
       {showCustomForm ? (
         <Card>
-          <CardHeader><CardTitle>Create custom exercise</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Create custom exercise</CardTitle>
+            <p className="text-sm leading-6 text-muted-foreground">Custom exercises are private to you. They support manual corrections and plan building without changing the public exercise library.</p>
+          </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
-            <Field label="Name" value={customDraft.name} onChange={(value) => setCustomDraft((current) => ({ ...current, name: value }))} placeholder="Example: Cable lateral raise" />
+            {customFormError ? (
+              <div className="md:col-span-2">
+                <StatusBanner tone="error" title="Custom exercise was not saved" description={customFormError} />
+              </div>
+            ) : null}
+            <Field label="Name" value={customDraft.name} onChange={(value) => setCustomDraft((current) => ({ ...current, name: value }))} placeholder="Example: Cable lateral raise" required />
             <Field label="Target muscle" value={customDraft.targetMuscle} onChange={(value) => setCustomDraft((current) => ({ ...current, targetMuscle: value }))} placeholder="Shoulders" />
             <Field label="Secondary muscles" value={customDraft.secondaryMuscles} onChange={(value) => setCustomDraft((current) => ({ ...current, secondaryMuscles: value }))} placeholder="Traps, core" />
             <Field label="Equipment" value={customDraft.equipment} onChange={(value) => setCustomDraft((current) => ({ ...current, equipment: value }))} placeholder="Cable machine" />
             <Field label="Difficulty" value={customDraft.difficulty} onChange={(value) => setCustomDraft((current) => ({ ...current, difficulty: value }))} placeholder="Intermediate" />
-            <Field label="Video URL" value={customDraft.videoUrl} onChange={(value) => setCustomDraft((current) => ({ ...current, videoUrl: value }))} placeholder="https://..." />
+            <Field
+              label="Video URL"
+              value={customDraft.videoUrl}
+              onChange={(value) => setCustomDraft((current) => ({ ...current, videoUrl: value }))}
+              placeholder="https://..."
+              error={customVideoInvalid ? "Custom video URL must start with http:// or https://." : undefined}
+            />
             <div className="space-y-1 md:col-span-2">
               <Label>Instructions</Label>
               <textarea value={customDraft.instructions} onChange={(event) => setCustomDraft((current) => ({ ...current, instructions: event.target.value }))} className="min-h-24 w-full rounded-[14px] border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder="Setup, execution, tempo, and safety notes." />
             </div>
-            <div className="flex gap-2 md:col-span-2">
-              <Button onClick={createCustomExercise}>Save custom exercise</Button>
-              <Button variant="outline" onClick={() => setShowCustomForm(false)}>Cancel</Button>
+            <div className="flex flex-col gap-2 md:col-span-2 sm:flex-row">
+              <Button className="min-h-12" onClick={createCustomExercise} disabled={isSavingCustom || customVideoInvalid}>
+                {isSavingCustom ? "Saving..." : "Save custom exercise"}
+              </Button>
+              <Button className="min-h-12" variant="outline" onClick={closeCustomForm} disabled={isSavingCustom}>Cancel</Button>
             </div>
           </CardContent>
         </Card>
@@ -409,18 +578,44 @@ export function WorkoutBrowser() {
       </div>
 
       <Dialog open={showFiltersDialog} onOpenChange={setShowFiltersDialog}>
-        <DialogContent variant="glass" className="max-h-[85dvh] overflow-y-auto">
+        <DialogContent variant="glass" className="max-h-[85dvh] overflow-y-auto pb-0">
           <DialogHeader>
             <DialogTitle>Filters</DialogTitle>
             <DialogDescription>{filteredWorkouts.length} exercises match your selection</DialogDescription>
           </DialogHeader>
           {filterPanelContent}
-          <div className="flex gap-2 pt-2">
-            <Button onClick={() => setShowFiltersDialog(false)} className="flex-1">Apply</Button>
-            <Button variant="outline" onClick={() => { resetFilters(); setShowFiltersDialog(false); }}>Clear all</Button>
+          <div className="sticky bottom-0 -mx-4 mt-4 flex gap-2 border-t bg-card/95 p-4 backdrop-blur sm:-mx-6 sm:px-6">
+            <Button onClick={() => setShowFiltersDialog(false)} className="min-h-12 flex-1">Apply</Button>
+            <Button variant="outline" className="min-h-12" onClick={() => { resetFilters(); setShowFiltersDialog(false); }}>Clear all</Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      <StatusBanner
+        tone={resultError ? "error" : hasDegradedLibraryState ? "warning" : "default"}
+        title={resultStatusTitle}
+        description={resultStatusDescription}
+        badges={[
+          resultStatus?.source === "fallback" ? "Fallback data" : null,
+          resultStatus?.source === "partial" || filterStatus?.source === "partial" ? "Partial source" : null,
+          activeFilterCount ? `${activeFilterCount} filters` : null,
+          favoritesOnly ? "Favorites only" : null,
+          showAllWorkouts ? "Showing all" : null,
+          isLoadingPersonalLibrary ? "Loading saved items" : null
+        ].filter(Boolean) as string[]}
+      />
+
+      {resultMessages.map((message) => (
+        <StatusBanner key={message} tone="warning" title="Library source notice" description={message} />
+      ))}
+
+      {resultError ? (
+        <ErrorState
+          title="Exercise search failed"
+          description={resultError}
+          onRetry={() => setReloadResultsNonce((current) => current + 1)}
+        />
+      ) : null}
 
       {profile?.role === "admin" ? (
         <Card variant="glassStrong">
@@ -449,7 +644,7 @@ export function WorkoutBrowser() {
             />
           </div>
         ) : null}
-        {!isLoading && hasActiveLibraryRequest && !filteredWorkouts.length ? (
+        {!isLoading && hasActiveLibraryRequest && !resultError && !filteredWorkouts.length ? (
           <div className="md:col-span-2 xl:col-span-3">
             <EmptyState title="No exercises found" description="Try adjusting your search or filters." actionLabel="Clear filters" onAction={resetFilters} />
           </div>
@@ -457,6 +652,8 @@ export function WorkoutBrowser() {
         {filteredWorkouts.map((workout) => {
           const guideUrl = workout.exercise_url || (isLink(workout.notes) ? workout.notes : null);
           const favorite = favoriteIds.includes(workout.id);
+          const favoritePending = pendingFavoriteSet.has(workout.id);
+          const favoriteError = favoriteErrors[workout.id];
           const quality = exerciseQuality(workout, duplicateExerciseNames.has(normalizeText(workout.name)));
           return (
             <Card key={workout.id} variant="glass" className="shadow-luxe">
@@ -480,34 +677,106 @@ export function WorkoutBrowser() {
                   {workout.reps ? <Badge variant="outline">{workout.reps}</Badge> : null}
                 </div>
                 {workout.secondary_muscles?.length ? <p className="mt-2 text-xs text-muted-foreground">Secondary: {workout.secondary_muscles.join(", ")}</p> : null}
-                <div className="mt-4 flex items-center gap-2">
-                  <Button asChild className="h-11 flex-1">
-                    <Link href={`/workouts/session/${workout.id}`}><Play className="h-4 w-4" /> Start</Link>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <Button asChild className="min-h-12">
+                    <Link href={`/workouts/session/${workout.id}`}><Play className="h-4 w-4" /> Start session</Link>
                   </Button>
-                  <Button asChild variant="outline" className="h-11 w-11 p-0">
-                    <Link href={`/workouts/${workout.id}`} aria-label={`Details for ${workout.name}`}><MoreHorizontal className="h-4 w-4" /></Link>
+                  <Button asChild variant="outline" className="min-h-12">
+                    <Link href={`/workouts/${workout.id}`} aria-label={`Details for ${workout.name}`}><MoreHorizontal className="h-4 w-4" /> Details</Link>
                   </Button>
-                  <Button variant="outline" className="h-11 w-11 p-0" onClick={() => toggleFavorite(workout)} aria-label={favorite ? "Unfavorite" : "Favorite"}>
+                  <Button variant="outline" className="min-h-12" onClick={() => toggleFavorite(workout)} disabled={favoritePending} aria-label={favorite ? "Unfavorite" : "Favorite"} aria-busy={favoritePending}>
                     <Heart className={cn("h-4 w-4", favorite && "fill-current text-primary")} />
+                    {favoritePending ? "Saving..." : favorite ? "Saved" : "Save"}
                   </Button>
                   {guideUrl ? (
-                    <Button asChild variant="outline" className="h-11 w-11 p-0">
-                      <a href={guideUrl} target="_blank" rel="noreferrer" aria-label={`Guide for ${workout.name}`}><ExternalLink className="h-4 w-4" /></a>
+                    <Button asChild variant="outline" className="min-h-12">
+                      <a href={guideUrl} target="_blank" rel="noreferrer" aria-label={`Guide for ${workout.name}`}><ExternalLink className="h-4 w-4" /> Guide</a>
                     </Button>
-                  ) : null}
+                  ) : (
+                    <Button type="button" variant="outline" className="min-h-12" disabled>No guide</Button>
+                  )}
                 </div>
+                {favoriteError ? <p className="mt-3 text-sm leading-6 text-destructive">{favoriteError}</p> : null}
               </CardContent>
             </Card>
           );
         })}
       </div>
-      {hasMore && !favoritesOnly ? <div className="flex justify-center"><Button variant="outline" onClick={loadMore} disabled={isLoading}>{isLoading ? "Loading..." : "Load more"}</Button></div> : null}
+      {hasMore && !favoritesOnly ? <div className="flex justify-center"><Button className="min-h-12" variant="outline" onClick={loadMore} disabled={isLoading}>{isLoading ? "Loading..." : "Load more"}</Button></div> : null}
+      {dialog}
     </div>
   );
 }
 
-function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) {
-  return <div className="space-y-1"><Label>{label}</Label><Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} /></div>;
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  error,
+  required
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  error?: string;
+  required?: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label>{label}{required ? <span className="text-destructive"> *</span> : null}</Label>
+      <Input className="h-12" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-invalid={Boolean(error)} />
+      {error ? <p className="text-sm leading-6 text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
+function StatusBanner({
+  tone = "default",
+  title,
+  description,
+  badges = []
+}: {
+  tone?: "default" | "success" | "warning" | "error";
+  title: string;
+  description: string;
+  badges?: string[];
+}) {
+  const Icon = tone === "success" ? CheckCircle2 : tone === "default" ? CheckCircle2 : AlertTriangle;
+  const className = tone === "error"
+    ? "border-destructive/30 bg-destructive/5"
+    : tone === "warning"
+      ? "border-warning/30 bg-warning/10"
+      : tone === "success"
+        ? "border-success/30 bg-success/5"
+        : "border-primary/20 bg-primary/5";
+  const iconClassName = tone === "error"
+    ? "text-destructive"
+    : tone === "warning"
+      ? "text-warning"
+      : tone === "success"
+        ? "text-success"
+        : "text-primary";
+
+  return (
+    <Card className={className}>
+      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <Icon className={cn("mt-0.5 h-5 w-5 shrink-0", iconClassName)} />
+          <div>
+            <p className="font-semibold text-foreground">{title}</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
+          </div>
+        </div>
+        {badges.length ? (
+          <div className="flex flex-wrap gap-2">
+            {badges.map((badge) => <Badge key={badge} variant={tone === "error" ? "destructive" : "outline"}>{badge}</Badge>)}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
 }
 
 function QualityMetric({ label, value, detail }: { label: string; value: number; detail: string }) {
@@ -557,14 +826,14 @@ function summarizeExerciseQuality(workouts: Workout[], duplicates: Set<string>) 
 function FilterGroup({ title, values, selected, open, onOpenChange, onToggle }: { title: string; values: string[]; selected: string[]; open: boolean; onOpenChange: () => void; onToggle: (value: string) => void; }) {
   return (
     <div className="solid-row p-3">
-      <button type="button" onClick={onOpenChange} aria-expanded={open} className="flex min-h-10 w-full items-center justify-between gap-2 rounded-md px-1 text-left">
+      <button type="button" onClick={onOpenChange} aria-expanded={open} className="flex min-h-12 w-full items-center justify-between gap-2 rounded-md px-1 text-left">
         <span className="min-w-0 text-sm font-semibold text-foreground">{title}</span>
         <span className="flex items-center gap-2">{selected.length ? <Badge variant="outline">{selected.length}</Badge> : null}<ChevronDown className={cn("h-4 w-4 text-muted-foreground transition", open && "rotate-180")} /></span>
       </button>
       {open ? (
         <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto pr-1">
           {values.map((value) => (
-            <label key={value} className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 text-sm transition hover:bg-card">
+            <label key={value} className="flex min-h-12 cursor-pointer items-center gap-2 rounded-xl px-2 text-sm transition hover:bg-card">
               <input type="checkbox" checked={selected.includes(value)} onChange={() => onToggle(value)} className="h-4 w-4 rounded border-border text-primary" />
               <span className="min-w-0 truncate">{value}</span>
             </label>
