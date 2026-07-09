@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
+import { InlineFeedback } from "@/components/motion";
 import { getPublicCopy } from "@/lib/i18n/public-copy";
 import { useTranslation } from "@/lib/i18n/use-translation";
 import { supabase } from "@/lib/supabase/client";
@@ -17,6 +18,7 @@ import { supabase } from "@/lib/supabase/client";
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
   const { toast } = useToast();
   const { language } = useTranslation();
   const copy = getPublicCopy(language);
@@ -25,20 +27,24 @@ export default function ForgotPasswordPage() {
     event.preventDefault();
     if (!email.trim()) return;
     if (!supabase) {
+      setFeedback({ type: "error", message: "Password reset is unavailable right now. Please try again later." });
       toast({ title: "Password reset unavailable", description: "Please try again later.", variant: "error" });
       return;
     }
     setIsSending(true);
+    setFeedback(null);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: `${window.location.origin}/reset-password`
       });
       if (error) throw error;
+      setFeedback({ type: "info", message: language === "ar" ? "تم إرسال رابط الاستعادة. تحقق من بريدك الإلكتروني." : "Reset link sent. Check your email." });
       toast({
         title: language === "ar" ? "تم إرسال رابط الاستعادة" : "Reset link sent",
         description: language === "ar" ? "افتح بريدك الإلكتروني للمتابعة." : "Open your email to continue."
       });
     } catch (error) {
+      setFeedback({ type: "error", message: error instanceof Error ? error.message : "Please try again." });
       toast({ title: language === "ar" ? "تعذر إرسال الرابط" : "Could not send reset link", description: error instanceof Error ? error.message : "Please try again.", variant: "error" });
     } finally {
       setIsSending(false);
@@ -60,14 +66,15 @@ export default function ForgotPasswordPage() {
             <form className="space-y-4" onSubmit={sendReset}>
               <div className="space-y-2">
                 <Label htmlFor="forgot-email">{copy.email}</Label>
-                <Input id="forgot-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+                <Input id="forgot-email" className="h-12" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
               </div>
-              <Button type="submit" className="w-full" disabled={isSending || !email.trim()}>
+              <InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} onClose={() => setFeedback(null)} />
+              <Button type="submit" className="min-h-12 w-full" disabled={isSending || !email.trim()}>
                 {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 {copy.sendResetLink}
               </Button>
             </form>
-            <p className="mt-5 text-center text-sm"><Link href="/login" className="font-semibold text-primary">{copy.backToLogin}</Link></p>
+            <p className="mt-5 text-center text-sm"><Link href="/login" className="inline-flex min-h-12 items-center font-semibold text-primary">{copy.backToLogin}</Link></p>
           </CardContent>
         </Card>
       </div>

@@ -9,12 +9,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
+import { InlineFeedback } from "@/components/motion";
 import { supabase, setRememberSession } from "@/lib/supabase/client";
 import { defaultStartPageToPath, getUserAppSettings } from "@/services/database/user-settings";
 import { PENDING_CONSENTS_STORAGE_KEY, REQUIRED_CONSENTS } from "@/lib/legal/versions";
 import { safeInternalRedirectPath } from "@/lib/auth/redirect";
 import { useTranslation } from "@/lib/i18n/use-translation";
 import { getPublicCopy } from "@/lib/i18n/public-copy";
+import type { ReactNode } from "react";
 
 type RequiredConsentKey = "terms" | "privacy" | "fitnessData" | "disclaimer" | "age16";
 
@@ -62,6 +64,8 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [authFeedback, setAuthFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
   const [requiredConsents, setRequiredConsents] = useState(initialRequiredConsents);
   const passwordRequirements = {
     minLength: password.length >= 8,
@@ -77,13 +81,19 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   );
 
   async function handleGoogleSignIn() {
+    if (isGoogleLoading || isLoading) return;
     if (mode === "register" && Object.values(requiredConsents).some((granted) => !granted)) {
-      return toast({
+      const message = "Accept the Terms, acknowledge the Privacy Policy and health notice, give explicit fitness-data consent, and confirm that you are at least 16.";
+      setAuthFeedback({ type: "error", message });
+      toast({
         title: "Consent required",
-        description: "Accept the Terms, acknowledge the Privacy Policy and health notice, give explicit fitness-data consent, and confirm that you are at least 16."
+        description: message
       });
+      return;
     }
 
+    setIsGoogleLoading(true);
+    setAuthFeedback({ type: "info", message: "Signing in with Google..." });
     setRememberSession(remember);
 
     if (mode === "register") {
@@ -112,27 +122,39 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
 
     if (error) {
       console.warn("Plaivra Google sign-in failed:", error.message);
+      setAuthFeedback({ type: "error", message: "We could not finish Google sign-in. Try again or use email." });
+      setIsGoogleLoading(false);
       toast({ title: "Google sign-in failed", description: "Please try again or use email and password." });
     }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!email.trim()) return toast({ title: "Email is required", description: "Use the email for your Plaivra account." });
+    setAuthFeedback(null);
+    if (!email.trim()) {
+      setAuthFeedback({ type: "error", message: "Use the email for your Plaivra account." });
+      return toast({ title: "Email is required", description: "Use the email for your Plaivra account." });
+    }
     if (mode === "login" && password.length < 1) {
+      setAuthFeedback({ type: "error", message: "Enter your Plaivra account password." });
       return toast({ title: "Password is required", description: "Enter your Plaivra account password." });
     }
     if (mode === "register" && !passwordIsValid) {
+      setAuthFeedback({ type: "error", message: "Use at least 8 characters with uppercase, lowercase, and a special character." });
       return toast({ title: "Password requirements are not complete", description: "Use at least 8 characters with uppercase, lowercase, and a special character." });
     }
     if (mode === "register" && password !== confirmPassword) {
+      setAuthFeedback({ type: "error", message: "Make sure both password fields match." });
       return toast({ title: "Passwords do not match", description: "Make sure both password fields match." });
     }
     if (mode === "register" && Object.values(requiredConsents).some((granted) => !granted)) {
-      return toast({
+      const message = "Accept the Terms, acknowledge the Privacy Policy and health notice, give explicit fitness-data consent, and confirm that you are at least 16.";
+      setAuthFeedback({ type: "error", message });
+      toast({
         title: "Consent required",
-        description: "Accept the Terms, acknowledge the Privacy Policy and health notice, give explicit fitness-data consent, and confirm that you are at least 16."
+        description: message
       });
+      return;
     }
 
     setIsLoading(true);
@@ -184,6 +206,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             window.localStorage.removeItem(PENDING_CONSENTS_STORAGE_KEY);
           } catch (consentError) {
             console.warn("Consent persistence will be retried after sign-in:", consentError);
+            setAuthFeedback({ type: "info", message: "Your account was created. Plaivra will retry saving your required consent record after sign-in." });
           }
         }
         if (!consentSaved) {
@@ -199,6 +222,10 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         router.refresh();
       }
     } catch (error) {
+      setAuthFeedback({
+        type: "error",
+        message: error instanceof Error ? error.message : "Please try again."
+      });
       toast({
         title: mode === "login" ? "Login failed" : "Registration failed",
         description: error instanceof Error ? error.message : "Please try again."
@@ -222,17 +249,17 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             <Button
               type="button"
               variant="outline"
-              className="w-full"
-              disabled={isLoading}
+              className="min-h-12 w-full"
+              disabled={isLoading || isGoogleLoading}
               onClick={handleGoogleSignIn}
             >
-              <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+              {isGoogleLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
                 <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
                 <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                 <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                 <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-              </svg>
-              {copy.continueWithGoogle}
+              </svg>}
+              {isGoogleLoading ? "Signing in with Google..." : copy.continueWithGoogle}
             </Button>
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
@@ -244,12 +271,14 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             </div>
           </div>
         ) : null}
+        <InlineFeedback message={authFeedback?.message} variant={authFeedback?.type === "error" ? "error" : "info"} onClose={() => setAuthFeedback(null)} />
         <form className="space-y-4" onSubmit={handleSubmit}>
           {mode === "register" ? (
             <div className="space-y-2">
               <Label htmlFor="full-name">{copy.name}</Label>
               <Input
                 id="full-name"
+                className="h-12"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
                 autoComplete="name"
@@ -261,6 +290,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             <Input
               id="email"
               type="email"
+              className="h-12"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder={mode === "register" ? "you@example.com" : undefined}
@@ -277,13 +307,13 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
                 required
-                className="pr-12"
+                className="h-12 pr-12"
               />
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="absolute right-0 top-0 h-11"
+                className="absolute right-0 top-0 h-12 w-12"
                 onClick={() => setShowPassword((value) => !value)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
@@ -310,13 +340,13 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   autoComplete="new-password"
                   required
-                  className="pr-12"
+                  className="h-12 pr-12"
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="absolute right-0 top-0 h-11"
+                  className="absolute right-0 top-0 h-12 w-12"
                   onClick={() => setShowConfirmPassword((value) => !value)}
                   aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
                 >
@@ -325,12 +355,12 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
               </div>
             </div>
           ) : null}
-          <label className="solid-row flex min-h-11 items-center gap-3 px-3 text-sm">
+          <label className="solid-row flex min-h-12 items-center gap-3 px-3 text-sm">
             <input
               type="checkbox"
               checked={remember}
               onChange={(event) => setRemember(event.target.checked)}
-            className="h-4 w-4 rounded border-border accent-primary"
+            className="h-5 w-5 rounded border-border accent-primary"
             />
             {copy.rememberMe}
           </label>
@@ -366,22 +396,22 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
               <Button
                 type="button"
                 variant="outline"
-                className="w-full"
-                disabled={isLoading}
+                className="min-h-12 w-full"
+                disabled={isLoading || isGoogleLoading}
                 onClick={handleGoogleSignIn}
               >
-                <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+                {isGoogleLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
                   <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
                   <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                   <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                   <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                </svg>
-                {copy.continueWithGoogle}
+                </svg>}
+                {isGoogleLoading ? "Signing in with Google..." : copy.continueWithGoogle}
               </Button>
             </div>
             </>
           ) : null}
-          <Button type="submit" className="w-full" disabled={isLoading || !registerIsValid}>
+          <Button type="submit" className="min-h-12 w-full" disabled={isLoading || isGoogleLoading || !registerIsValid}>
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {mode === "login" ? copy.login : copy.createAccount}
           </Button>
@@ -415,16 +445,16 @@ function ConsentCheckbox({
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <label className="flex items-start gap-3 text-sm leading-5 text-muted-foreground">
+    <label className="flex min-h-12 items-start gap-3 rounded-xl px-1 py-2 text-sm leading-5 text-muted-foreground">
       <input
         type="checkbox"
         required
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
+        className="mt-0.5 h-5 w-5 shrink-0 rounded border-border accent-primary"
       />
       <span>{children}</span>
     </label>

@@ -139,13 +139,13 @@ export function OAuthCompleteClient() {
           <p className="mt-2 text-sm text-muted-foreground">{errorMessage}</p>
           <button
             onClick={handleRetry}
-            className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           >
             Try again
           </button>
           <a
             href="/login"
-            className="mt-3 inline-block text-sm font-semibold text-primary underline"
+            className="mt-3 inline-flex min-h-12 w-full items-center justify-center text-sm font-semibold text-primary underline"
           >
             Back to login
           </a>

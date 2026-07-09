@@ -15,6 +15,8 @@ import {
   CollapsibleSection,
   CompactSetupChecklist,
   WellnessSummary,
+  SmartActionCard,
+  buildNextBestActions,
   buildWeeklyFocus,
   countCompletedTrainingStreak,
   getDashboardShortcuts
@@ -94,7 +96,10 @@ export default function DashboardPage() {
   const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
   const [activeMealType, setActiveMealType] = useState<string | null>(null);
   const [waterFeedback, setWaterFeedback] = useState<string | null>(null);
+  const [waterFeedbackVariant, setWaterFeedbackVariant] = useState<"info" | "error">("info");
+  const [waterPendingAmount, setWaterPendingAmount] = useState<number | null>(null);
   const [mealFeedback, setMealFeedback] = useState<string | null>(null);
+  const [pendingMealIds, setPendingMealIds] = useState<Set<string>>(new Set());
 
   async function loadDashboard() {
     if (!user?.id) {
@@ -266,6 +271,9 @@ export default function DashboardPage() {
 
   async function quickMarkMealDone(item: MealPlanItem) {
     if (!user?.id) return;
+    if (pendingMealIds.has(item.id) || item.status === "done") return;
+    setPendingMealIds((current) => new Set(current).add(item.id));
+    setMealFeedback(`Saving ${item.food_name}...`);
     try {
       const result = await markMealPlanItemDone(item);
       setMealPlanItems((current) => current.map((meal) => (meal.id === result.item.id ? result.item : meal)));
@@ -279,20 +287,48 @@ export default function DashboardPage() {
       }
     } catch (error) {
       logRecoverableError("dashboard.meal-done", error);
+      setMealFeedback(`Could not mark ${item.food_name} done. No duplicate food log was created.`);
       toast({ title: "Could not mark meal done", description: userSafeError(error, "The meal was not logged. Retry when the connection is stable.") });
+    } finally {
+      setPendingMealIds((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
     }
   }
 
   async function quickAddWater(amountMl: number) {
     if (!user?.id) return;
+    if (!Number.isFinite(amountMl) || amountMl <= 0 || waterPendingAmount !== null) return;
+    const roundedAmount = Math.round(amountMl);
+    const previousLogs = waterLogs;
+    const now = new Date().toISOString();
+    const optimisticLog: WaterLog = {
+      id: `dashboard-water-${Date.now()}`,
+      user_id: user.id,
+      log_date: today,
+      amount_ml: roundedAmount,
+      created_at: now,
+      updated_at: now
+    };
+    setWaterPendingAmount(roundedAmount);
+    setWaterFeedbackVariant("info");
+    setWaterFeedback(`+${roundedAmount} ml pending...`);
+    setWaterLogs((current) => [optimisticLog, ...current]);
     try {
-      const log = await addWaterLog(user.id, today, amountMl);
-      setWaterLogs((current) => [log, ...current]);
-      setWaterFeedback(`+${amountMl} ml logged`);
+      const log = await addWaterLog(user.id, today, roundedAmount);
+      setWaterLogs((current) => current.map((entry) => entry.id === optimisticLog.id ? log : entry));
+      setWaterFeedback(`+${roundedAmount} ml logged`);
       window.setTimeout(() => setWaterFeedback(null), 1500);
     } catch (error) {
       logRecoverableError("dashboard.water", error);
+      setWaterLogs(previousLogs);
+      setWaterFeedbackVariant("error");
+      setWaterFeedback("Water was not logged. We restored the previous total.");
       toast({ title: "Could not add water", description: userSafeError(error, "Water was not logged. Retry without adding duplicate entries.") });
+    } finally {
+      setWaterPendingAmount(null);
     }
   }
 
@@ -316,6 +352,24 @@ export default function DashboardPage() {
       return next;
     });
   }
+
+  const nextBestActions = buildNextBestActions({
+    logs,
+    targets,
+    totals,
+    remaining,
+    waterTotalMl,
+    mealPlanItems,
+    habits,
+    todayPlanDayId,
+    activePlanId: activePlan?.id ?? null,
+    openSessionId,
+    completedToday,
+    latestProgressDate: latestProgress?.entry_date ?? null,
+    sleepLoggedToday: Boolean(todaySleepLog),
+    supplements,
+    today
+  });
 
   return (
     <>
@@ -361,6 +415,28 @@ export default function DashboardPage() {
             />
           ) : null}
 
+          <Card className="border-primary/25 bg-primary/5">
+            <CardContent className="space-y-4 p-4 sm:p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Today status</p>
+                  <h2 className="mt-1 text-xl font-semibold text-foreground">{nextBestActions[0]?.title ?? "Review today's plan"}</h2>
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                    {nextBestActions[0]?.reason ?? "Plaivra uses saved food, workouts, progress, and wellness data to show the next useful control path."}
+                  </p>
+                </div>
+                <div className="rounded-[14px] border border-border/70 bg-card px-3 py-2 text-sm font-semibold text-muted-foreground">
+                  {closedTodayCount}/4 key loops closed
+                </div>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-3">
+                {nextBestActions.map((action) => (
+                  <SmartActionCard key={`${action.label}-${action.title}`} item={action} onAddWater={quickAddWater} />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
           {activeNutritionTarget?.hasTarget ? (
             <Card className="border-primary/25 bg-primary/5">
               <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
@@ -369,7 +445,7 @@ export default function DashboardPage() {
                   <p className="mt-1 text-sm text-muted-foreground">{activeNutritionTarget.reason}</p>
                   <p className="mt-2 font-semibold text-foreground">{targets?.daily_calories ?? 0} kcal · P {targets?.protein_g ?? 0}g · C {targets?.carbs_g ?? 0}g · F {targets?.fat_g ?? 0}g · Water {targets?.water_ml ?? 0} ml / {((targets?.water_ml ?? 0) / 1000).toFixed(2)} L</p>
                 </div>
-                <Button asChild variant="outline" size="sm"><Link href="/calories">Review active target</Link></Button>
+                <Button asChild variant="outline" className="min-h-12"><Link href="/calories">Review active target</Link></Button>
               </CardContent>
             </Card>
           ) : null}
@@ -382,7 +458,7 @@ export default function DashboardPage() {
             <StaggerItem><MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Soup} label="Protein" value={`${totals.protein_g}g`} detail={hasTargets ? `${remaining.protein_g}g left` : "Set target"} progress={targets?.protein_g ? percent(totals.protein_g, targets.protein_g) : undefined} /></StaggerItem>
             <StaggerItem>
               <MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Droplets} label="Water" value={waterTotalMl ? `${waterTotalMl} ml / ${waterLiters} L` : "No water"} detail={targets?.water_ml ? `${targets.water_ml} ml / ${waterTargetLiters} L target` : "Set target"} progress={targets?.water_ml ? percent(waterTotalMl, targets.water_ml) : undefined} />
-              <InlineFeedback message={waterFeedback ?? ""} />
+              <InlineFeedback message={waterFeedback ?? ""} variant={waterFeedbackVariant} />
             </StaggerItem>
             {!settings.hideBodyWeightOnDashboard ? (
               <StaggerItem><MetricCard className="order-4 col-span-1 sm:col-span-3 xl:col-span-3" icon={Scale} label="Weight" value={latestProgress?.body_weight_kg ? `${latestProgress.body_weight_kg} kg` : "No entry"} detail={latestProgress ? `Last ${latestProgress.entry_date}` : "Add progress"} /></StaggerItem>
@@ -414,11 +490,11 @@ export default function DashboardPage() {
                         <CheckCircle2 className="h-3.5 w-3.5" /> Done
                       </span>
                     ) : openSessionId ? (
-                      <Button asChild size="sm">
+                      <Button asChild className="min-h-12">
                         <Link href={`/workouts/session/day/${todayPlanDay.id}`}>Resume</Link>
                       </Button>
                     ) : (
-                      <Button asChild size="sm">
+                      <Button asChild className="min-h-12">
                         <Link href={`/workouts/session/day/${todayPlanDay.id}`}>Start</Link>
                       </Button>
                     )}
@@ -448,7 +524,7 @@ export default function DashboardPage() {
                     <p className="text-sm text-muted-foreground">Import a plan to see today&apos;s workout here.</p>
                   </div>
                 </div>
-                <Button asChild variant="outline" size="sm" className="mt-3">
+                <Button asChild variant="outline" className="mt-3 min-h-12">
                   <Link href="/my-workout/plans">Import plan</Link>
                 </Button>
               </CardContent>
@@ -471,7 +547,7 @@ export default function DashboardPage() {
                         key={group.type}
                         type="button"
                         variant={currentMealType === group.type ? "default" : allDone ? "ghost" : "outline"}
-                        size="sm"
+                        className="min-h-12"
                         onClick={() => setActiveMealType(group.type)}
                       >
                         {group.type}
@@ -497,12 +573,12 @@ export default function DashboardPage() {
                             </p>
                           </div>
                           <div className="flex shrink-0 gap-2">
-                            <Button type="button" variant="ghost" size="sm" onClick={() => skipFood(item.id)}>
+                            <Button type="button" variant="ghost" className="min-h-12" onClick={() => skipFood(item.id)} disabled={pendingMealIds.has(item.id)}>
                               Skip
                             </Button>
-                            <Button type="button" size="sm" onClick={() => quickMarkMealDone(item)}>
+                            <Button type="button" className="min-h-12" onClick={() => quickMarkMealDone(item)} disabled={pendingMealIds.has(item.id)}>
                               <CheckCircle2 className="h-3.5 w-3.5" />
-                              Done
+                              {pendingMealIds.has(item.id) ? "Saving..." : "Done"}
                             </Button>
                           </div>
                         </div>
@@ -519,7 +595,7 @@ export default function DashboardPage() {
                 )}
 
                 {currentMealType && mealGroups.find((g) => g.type === currentMealType)?.items.some((item) => item.status !== "done" && !skippedIds.has(item.id)) ? (
-                  <Button type="button" variant="ghost" size="sm" className="mt-3 w-full" onClick={() => skipMeal(currentMealType)}>
+                  <Button type="button" variant="ghost" className="mt-3 min-h-12 w-full" onClick={() => skipMeal(currentMealType)}>
                     Skip all {currentMealType.toLowerCase()}
                   </Button>
                 ) : null}
@@ -544,7 +620,7 @@ export default function DashboardPage() {
                   ))}
                 </div>
               ) : <p className="text-sm text-muted-foreground">Build your list from the Shopping tab in Meal Plan.</p>}
-              <Button asChild variant="outline" size="sm"><Link href="/my-meal-plan">Open shopping list</Link></Button>
+              <Button asChild variant="outline" className="min-h-12"><Link href="/my-meal-plan">Open shopping list</Link></Button>
             </div>
           </CollapsibleSection>
 
@@ -554,7 +630,7 @@ export default function DashboardPage() {
               {visibleShortcuts.map((shortcut) => {
                 const Icon = shortcut.icon;
                 return (
-                  <Button key={shortcut.href} asChild variant="outline" size="sm">
+                  <Button key={shortcut.href} asChild variant="outline" className="min-h-12">
                     <Link href={shortcut.href}>
                       <Icon className="h-3.5 w-3.5" />
                       {shortcut.label}

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { CardGridSkeleton } from "@/components/ui/state-views";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
@@ -52,6 +53,7 @@ const HEIGHT_MAX = 250;
 const WEIGHT_MIN = 35;
 const WEIGHT_MAX = 250;
 const dayOptions = Array.from({ length: 7 }, (_, index) => index + 1);
+const weightRelatedGoals = new Set(["Lose fat", "Build muscle", "Body recomposition", "Improve health"]);
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -101,12 +103,18 @@ export default function OnboardingPage() {
   const searchParams = useSearchParams();
   const [step, setStep] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingSavedSetup, setIsLoadingSavedSetup] = useState(true);
+  const [hadSavedTargetWeight, setHadSavedTargetWeight] = useState(false);
   const [answers, setAnswers] = useState(defaultAnswers);
   const [aiPermissions, setAiPermissions] = useState<AiPermissionConfig>(getDefaultAiPermissionConfig);
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setIsLoadingSavedSetup(false);
+      return;
+    }
     const isEdit = searchParams.get("edit") === "true";
 
+    setIsLoadingSavedSetup(true);
     Promise.all([getOnboarding(user.id), getAiPermissionSettings(user.id)])
       .then(([saved, permissions]) => {
         if (permissions) setAiPermissions(permissions);
@@ -116,10 +124,12 @@ export default function OnboardingPage() {
           return;
         }
         const goals = saved.goals?.length ? saved.goals : saved.goal ? saved.goal.split(",").map((goal) => goal.trim()).filter(Boolean) : defaultAnswers.goals;
+        const existingTargetWeight = saved.goal_weight_kg ?? profile?.target_weight_kg ?? null;
+        setHadSavedTargetWeight(existingTargetWeight !== null);
         setAnswers((current) => ({
           ...current,
           ...saved,
-          goal_weight_kg: saved.goal_weight_kg ?? profile?.target_weight_kg ?? null,
+          goal_weight_kg: existingTargetWeight,
           goals: goals.length ? goals : defaultAnswers.goals,
           training_cycle: saved.training_cycle || current.training_cycle,
           available_equipment: saved.available_equipment?.length ? saved.available_equipment : current.available_equipment,
@@ -136,7 +146,8 @@ export default function OnboardingPage() {
       .catch((error) => {
         console.warn("Plaivra could not load saved onboarding answers.", error);
         toast({ title: "Could not load saved setup", description: "You can still review and save this setup again." });
-      });
+      })
+      .finally(() => setIsLoadingSavedSetup(false));
   }, [profile?.target_weight_kg, toast, user?.id, router, searchParams]);
 
   async function finish() {
@@ -171,6 +182,19 @@ export default function OnboardingPage() {
   }
 
   const progressValue = ((step + 1) / steps.length) * 100;
+  const hasWeightRelatedGoal = answers.goals.some((goal) => weightRelatedGoals.has(goal));
+  const shouldShowTargetWeight = hasWeightRelatedGoal || hadSavedTargetWeight;
+
+  function updateGoals(goals: string[]) {
+    const nextGoals = goals.length ? goals : ["General wellness"];
+    const nextHasWeightGoal = nextGoals.some((goal) => weightRelatedGoals.has(goal));
+    setAnswers((current) => ({
+      ...current,
+      goals: nextGoals,
+      goal: nextGoals.join(", "),
+      goal_weight_kg: nextHasWeightGoal || hadSavedTargetWeight ? current.goal_weight_kg : null
+    }));
+  }
 
   function updateTrainingDays(training_days_per_week: number) {
     setAnswers((current) => ({ ...current, training_days_per_week: clamp(training_days_per_week, 1, 7) }));
@@ -210,7 +234,9 @@ export default function OnboardingPage() {
     <>
       <PageHeading title="Profile Setup" />
 
-      <Card variant="glassStrong" className="mx-auto max-w-4xl overflow-hidden border-primary/15">
+      {isLoadingSavedSetup ? <CardGridSkeleton count={2} rows={3} className="mx-auto max-w-4xl" /> : null}
+
+      {!isLoadingSavedSetup ? <Card variant="glassStrong" className="mx-auto max-w-4xl overflow-hidden border-primary/15">
         <CardHeader className="space-y-4 border-b border-white/50 dark:border-white/10">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -227,7 +253,7 @@ export default function OnboardingPage() {
                 variant={index === step ? "default" : "outline"}
                 onClick={() => setStep(index)}
                 className={cn(
-                  "min-h-11 min-w-fit shrink-0 rounded-full px-3 text-xs shadow-none",
+                  "min-h-12 min-w-fit shrink-0 rounded-full px-3 text-xs shadow-none",
                   index < step && index !== step && "border-primary/35 bg-primary/10 text-primary hover:bg-primary/15",
                   index > step && "border-white/60 bg-white/35 text-muted-foreground hover:border-primary/35 hover:text-primary dark:border-white/10 dark:bg-white/5"
                 )}
@@ -260,10 +286,33 @@ export default function OnboardingPage() {
           {step === 1 ? (
             <section className="space-y-4">
               <StepIntro title="Choose your goals" />
-              <MultiChoice label="Goals" values={goalOptions} selected={answers.goals} onChange={(goals) => setAnswers((current) => ({ ...current, goals, goal: goals.join(", ") || "General wellness" }))} />
-              <div className="max-w-sm">
-                <NumericStatInput label="Goal weight" value={answers.goal_weight_kg} unit="kg" min={WEIGHT_MIN} max={WEIGHT_MAX} onChange={(goal_weight_kg) => setAnswers((current) => ({ ...current, goal_weight_kg }))} />
-              </div>
+              <MultiChoice label="Goals" values={goalOptions} selected={answers.goals} onChange={updateGoals} />
+              {shouldShowTargetWeight ? (
+                hasWeightRelatedGoal ? (
+                  <div className="max-w-sm">
+                    <NumericStatInput label="Target weight" value={answers.goal_weight_kg} unit="kg" min={WEIGHT_MIN} max={WEIGHT_MAX} onChange={(goal_weight_kg) => setAnswers((current) => ({ ...current, goal_weight_kg }))} />
+                  </div>
+                ) : (
+                  <div className="max-w-xl rounded-[18px] border border-border/80 bg-card p-4">
+                    <p className="font-semibold text-foreground">Existing target weight kept</p>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">Your selected goals no longer require a target weight, but Plaivra will not delete the saved value unless you clear it.</p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <span className="text-sm font-semibold">{answers.goal_weight_kg ? `${answers.goal_weight_kg} kg` : "No target weight value"}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-12"
+                        onClick={() => {
+                          setHadSavedTargetWeight(false);
+                          setAnswers((current) => ({ ...current, goal_weight_kg: null }));
+                        }}
+                      >
+                        Clear target weight
+                      </Button>
+                    </div>
+                  </div>
+                )
+              ) : null}
             </section>
           ) : null}
 
@@ -354,7 +403,7 @@ export default function OnboardingPage() {
                   <div className="glass-card p-4 sm:p-5">
                     <p className="font-semibold text-foreground">Full AI Access</p>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      AI can read and manage your workouts, nutrition, meal plans, food logs, hydration, wellness, progress, and profile data.
+                      AI can read and manage your workouts, nutrition, meal plans, food logs, hydration, wellness, progress, and profile data only through explicit Plaivra flows. Plaivra will not silently change saved data, and access can be revoked later.
                     </p>
                   </div>
                 ) : (
@@ -413,7 +462,7 @@ export default function OnboardingPage() {
                 )}
 
                 <div className="glass-card p-3 text-sm text-muted-foreground">
-                  You can change or revoke AI access anytime from Settings.
+                  AI can help prepare imports, corrections, and context-aware requests. Plaivra requires review/approval before AI-generated user data is saved, and you can change or revoke AI access anytime from Settings.
                 </div>
               </div>
             </section>
@@ -459,7 +508,7 @@ export default function OnboardingPage() {
             )}
           </div>
         </CardContent>
-      </Card>
+      </Card> : null}
 
       <div className="h-[calc(env(safe-area-inset-bottom)+1rem)]" aria-hidden="true" />
     </>
@@ -546,7 +595,7 @@ function PermissionToggle({ active, label, onClick }: { active: boolean; label: 
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "min-h-11 rounded-[10px] px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]",
+        "min-h-12 rounded-[10px] px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]",
         active ? "bg-card text-primary shadow-soft" : "text-muted-foreground hover:bg-card/70 hover:text-foreground"
       )}
     >
@@ -651,7 +700,7 @@ function ScheduleDayGrid({
               aria-pressed={active}
               aria-label={`${item} ${unit}`}
               onClick={() => onChange(item)}
-              className={cn("min-h-11 rounded-[14px] px-2 text-sm shadow-none", active ? "" : "bg-card")}
+              className={cn("min-h-12 rounded-[14px] px-2 text-sm shadow-none", active ? "" : "bg-card")}
             >
               {item}
             </Button>
@@ -715,7 +764,7 @@ function ScheduleStepper({
         <Label>{label}</Label>
         <span className="text-sm font-semibold text-primary">{isEditing && draftValue ? draftValue : value} {unit}</span>
       </div>
-      <div className="mt-3 grid grid-cols-[44px_1fr_44px] items-center gap-2">
+      <div className="mt-3 grid grid-cols-[48px_1fr_48px] items-center gap-2">
         <Button
           type="button"
           variant="outline"
@@ -723,11 +772,11 @@ function ScheduleStepper({
           disabled={atMin}
           aria-label={`Decrease ${label}`}
           onClick={() => nudge(value - step)}
-          className="h-11 min-h-11 w-11 rounded-[14px] shadow-none"
+          className="h-12 min-h-12 w-12 rounded-[14px] shadow-none"
         >
           -
         </Button>
-        <div className="group relative flex min-h-11 items-center overflow-hidden rounded-[14px] border border-border/60 bg-card/95 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition focus-within:border-primary/20 focus-within:bg-primary/5 focus-within:ring-2 focus-within:ring-primary/10">
+        <div className="group relative flex min-h-12 items-center overflow-hidden rounded-[14px] border border-border/60 bg-card/95 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition focus-within:border-primary/20 focus-within:bg-primary/5 focus-within:ring-2 focus-within:ring-primary/10">
           <input
             type="text"
             inputMode="numeric"
@@ -740,7 +789,7 @@ function ScheduleStepper({
             onKeyDown={(event) => {
               if (event.key === "Enter") event.currentTarget.blur();
             }}
-            className="h-11 min-h-11 min-w-0 flex-1 appearance-none border-0 !border-transparent bg-transparent px-3 text-center text-lg font-bold text-foreground !outline-none !ring-0 shadow-none [appearance:textfield] focus:!border-transparent focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            className="h-12 min-h-12 min-w-0 flex-1 appearance-none border-0 !border-transparent bg-transparent px-3 text-center text-lg font-bold text-foreground !outline-none !ring-0 shadow-none [appearance:textfield] focus:!border-transparent focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
           <span className="pointer-events-none flex h-full items-center pl-1 pr-3 text-xs font-semibold text-muted-foreground">{unit}</span>
         </div>
@@ -751,7 +800,7 @@ function ScheduleStepper({
           disabled={atMax}
           aria-label={`Increase ${label}`}
           onClick={() => nudge(value + step)}
-          className="h-11 min-h-11 w-11 rounded-[14px] shadow-none"
+          className="h-12 min-h-12 w-12 rounded-[14px] shadow-none"
         >
           +
         </Button>

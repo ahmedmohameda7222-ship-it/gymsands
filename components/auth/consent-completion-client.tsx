@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InlineFeedback } from "@/components/motion";
 import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
 import { PENDING_CONSENTS_STORAGE_KEY, REQUIRED_CONSENTS } from "@/lib/legal/versions";
@@ -50,6 +51,7 @@ export function ConsentCompletionClient() {
   const [requiredConsents, setRequiredConsents] = useState(initialRequiredConsents);
   const [isSaving, setIsSaving] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
+  const [saveError, setSaveError] = useState("");
 
   const allChecked = Object.values(requiredConsents).every(Boolean);
   const next = safeInternalRedirectPath(searchParams.get("next") ?? undefined);
@@ -83,6 +85,7 @@ export function ConsentCompletionClient() {
 
   async function handleSubmit() {
     if (!allChecked) {
+      setSaveError("Please accept all required agreements to continue.");
       toast({
         title: language === "ar" ? "الموافقات المطلوبة" : "Consent required",
         description:
@@ -94,6 +97,7 @@ export function ConsentCompletionClient() {
     }
 
     if (!session?.access_token) {
+      setSaveError("Please sign in again.");
       toast({
         title: language === "ar" ? "انتهت الجلسة" : "Session expired",
         description:
@@ -105,6 +109,7 @@ export function ConsentCompletionClient() {
     }
 
     setIsSaving(true);
+    setSaveError("");
     try {
       await saveRequiredConsents(session.access_token);
       window.localStorage.removeItem(PENDING_CONSENTS_STORAGE_KEY);
@@ -117,6 +122,7 @@ export function ConsentCompletionClient() {
       });
       router.replace(next);
     } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       toast({
         title: language === "ar" ? "فشل الحفظ" : "Save failed",
         description:
@@ -206,7 +212,9 @@ export function ConsentCompletionClient() {
             </ConsentCheckbox>
           </fieldset>
 
-          <Button className="w-full" disabled={isSaving || !allChecked} onClick={handleSubmit}>
+          <InlineFeedback message={saveError} variant="error" onClose={() => setSaveError("")} />
+
+          <Button className="min-h-12 w-full" disabled={isSaving || !allChecked} onClick={handleSubmit}>
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {language === "ar" ? "متابعة" : "Continue"}
           </Button>
@@ -226,12 +234,12 @@ function ConsentCheckbox({
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex items-start gap-3 text-sm leading-5 text-muted-foreground">
+    <label className="flex min-h-12 items-start gap-3 rounded-xl px-1 py-2 text-sm leading-5 text-muted-foreground">
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
+        className="mt-0.5 h-5 w-5 shrink-0 rounded border-border accent-primary"
       />
       <span>{children}</span>
     </label>

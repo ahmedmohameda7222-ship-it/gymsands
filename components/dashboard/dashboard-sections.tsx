@@ -148,7 +148,7 @@ export function SmartActionCard({ item, onAddWater }: { item: NextBestAction; on
   return (
     <div className="flex h-full flex-col justify-between rounded-md border border-border/70 bg-card p-4">
       <div><p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{item.label}</p><p className="mt-1 font-semibold">{item.title}</p><p className="mt-2 text-sm text-muted-foreground">{item.reason}</p></div>
-      {item.waterAmountMl ? <Button type="button" className="mt-4 w-full" onClick={() => onAddWater(item.waterAmountMl!)}><Droplets className="h-4 w-4" />{item.cta}</Button> : item.href ? <Button asChild className="mt-4 w-full"><Link href={item.href}>{item.cta}<ArrowRight className="h-4 w-4" /></Link></Button> : null}
+      {item.waterAmountMl ? <Button type="button" className="mt-4 min-h-12 w-full" onClick={() => onAddWater(item.waterAmountMl!)}><Droplets className="h-4 w-4" />{item.cta}</Button> : item.href ? <Button asChild className="mt-4 min-h-12 w-full"><Link href={item.href}>{item.cta}<ArrowRight className="h-4 w-4" /></Link></Button> : null}
     </div>
   );
 }
