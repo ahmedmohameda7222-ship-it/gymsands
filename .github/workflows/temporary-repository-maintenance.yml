@@ -1,0 +1,32 @@
+name: Temporary Repository Maintenance
+
+on:
+  push:
+    branches:
+      - repo-constitution-cleanup
+
+permissions:
+  contents: write
+
+jobs:
+  maintain:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: repo-constitution-cleanup
+          fetch-depth: 0
+      - name: Apply one-time cleanup
+        run: |
+          python scripts/maintenance/wire_fitness_constraints.py
+          rm scripts/maintenance/wire_fitness_constraints.py
+          rm .github/workflows/temporary-repository-maintenance.yml
+      - name: Commit cleanup
+        run: |
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat: finish repository and fitness constraints cleanup"
+          git push origin HEAD:repo-constitution-cleanup
