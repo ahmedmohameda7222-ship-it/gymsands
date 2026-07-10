@@ -26,18 +26,21 @@ comment on column public.user_fitness_constraints.nutrition_restrictions is
 
 alter table public.user_fitness_constraints enable row level security;
 
+drop policy if exists user_fitness_constraints_select_own on public.user_fitness_constraints;
 create policy user_fitness_constraints_select_own
   on public.user_fitness_constraints
   for select
   to authenticated
   using ((select auth.uid()) = user_id);
 
+drop policy if exists user_fitness_constraints_insert_own on public.user_fitness_constraints;
 create policy user_fitness_constraints_insert_own
   on public.user_fitness_constraints
   for insert
   to authenticated
   with check ((select auth.uid()) = user_id);
 
+drop policy if exists user_fitness_constraints_update_own on public.user_fitness_constraints;
 create policy user_fitness_constraints_update_own
   on public.user_fitness_constraints
   for update
@@ -45,12 +48,14 @@ create policy user_fitness_constraints_update_own
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);
 
+drop policy if exists user_fitness_constraints_delete_own on public.user_fitness_constraints;
 create policy user_fitness_constraints_delete_own
   on public.user_fitness_constraints
   for delete
   to authenticated
   using ((select auth.uid()) = user_id);
 
+drop trigger if exists set_user_fitness_constraints_updated_at on public.user_fitness_constraints;
 create trigger set_user_fitness_constraints_updated_at
   before update on public.user_fitness_constraints
   for each row execute function public.set_updated_at();
@@ -59,30 +64,37 @@ revoke all on table public.user_fitness_constraints from anon, authenticated;
 grant select, insert, update, delete on table public.user_fitness_constraints to authenticated;
 grant all on table public.user_fitness_constraints to service_role;
 
--- Preserve the limited functional fields already entered by existing users.
-insert into public.user_fitness_constraints (
-  id,
-  user_id,
-  injury_or_limitation_labels,
-  areas_to_protect,
-  movement_restrictions,
-  nutrition_restrictions,
-  created_at,
-  updated_at
-)
-select
-  id,
-  user_id,
-  coalesce(injuries, '{}'::text[]),
-  coalesce(pain_areas, '{}'::text[]),
-  movement_restrictions,
-  nutrition_restrictions,
-  created_at,
-  updated_at
-from public.user_safety_profiles
-on conflict (user_id) do update set
-  injury_or_limitation_labels = excluded.injury_or_limitation_labels,
-  areas_to_protect = excluded.areas_to_protect,
-  movement_restrictions = excluded.movement_restrictions,
-  nutrition_restrictions = excluded.nutrition_restrictions,
-  updated_at = greatest(public.user_fitness_constraints.updated_at, excluded.updated_at);
+-- Preserve only the limited functional fields already entered by existing users.
+-- Dynamic SQL keeps fresh installations valid when the legacy table does not exist.
+do $migration$
+begin
+  if to_regclass('public.user_safety_profiles') is not null then
+    execute $copy$
+      insert into public.user_fitness_constraints (
+        user_id,
+        injury_or_limitation_labels,
+        areas_to_protect,
+        movement_restrictions,
+        nutrition_restrictions,
+        created_at,
+        updated_at
+      )
+      select
+        user_id,
+        coalesce(injuries, '{}'::text[]),
+        coalesce(pain_areas, '{}'::text[]),
+        movement_restrictions,
+        nutrition_restrictions,
+        created_at,
+        updated_at
+      from public.user_safety_profiles
+      on conflict (user_id) do update set
+        injury_or_limitation_labels = excluded.injury_or_limitation_labels,
+        areas_to_protect = excluded.areas_to_protect,
+        movement_restrictions = excluded.movement_restrictions,
+        nutrition_restrictions = excluded.nutrition_restrictions,
+        updated_at = greatest(public.user_fitness_constraints.updated_at, excluded.updated_at)
+    $copy$;
+  end if;
+end
+$migration$;
