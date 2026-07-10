@@ -1,0 +1,164 @@
+from pathlib import Path
+
+
+def replace_once(text: str, old: str, new: str, label: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"{label}: expected exactly one match, found {count}")
+    return text.replace(old, new, 1)
+
+
+service_path = Path("services/database/execution-layer.ts")
+service = service_path.read_text()
+service = replace_once(service, "cleanStringArray(data.injuries)", "cleanStringArray(data.injury_or_limitation_labels)", "map limitation labels")
+service = replace_once(service, "cleanStringArray(data.pain_areas)", "cleanStringArray(data.areas_to_protect)", "map protected areas")
+if service.count('.from("user_safety_profiles")') != 2:
+    raise SystemExit("service: expected exactly two legacy table references")
+service = service.replace('.from("user_safety_profiles")', '.from("user_fitness_constraints")')
+service = replace_once(
+    service,
+    '.select("injuries,pain_areas,movement_restrictions,nutrition_restrictions")',
+    '.select("injury_or_limitation_labels,areas_to_protect,movement_restrictions,nutrition_restrictions")',
+    "read canonical fields",
+)
+service = replace_once(
+    service,
+    "injuries: cleanStringArray(input.injury_or_limitation_labels)",
+    "injury_or_limitation_labels: cleanStringArray(input.injury_or_limitation_labels)",
+    "write limitation labels",
+)
+service = replace_once(
+    service,
+    "pain_areas: cleanStringArray(input.areas_to_protect)",
+    "areas_to_protect: cleanStringArray(input.areas_to_protect)",
+    "write protected areas",
+)
+service = replace_once(
+    service,
+    '.select("injuries,pain_areas,movement_restrictions,nutrition_restrictions")',
+    '.select("injury_or_limitation_labels,areas_to_protect,movement_restrictions,nutrition_restrictions")',
+    "return canonical fields",
+)
+service_path.write_text(service)
+
+executor_path = Path("lib/mcp/tool-executor.ts")
+executor = executor_path.read_text()
+old_profile = '''        const [profile, onboarding, target] = await Promise.all([
+          ctx.supabase.from("profiles").select("*").eq("id", ctx.userId).maybeSingle(),
+          ctx.supabase.from("onboarding_answers").select("*").eq("user_id", ctx.userId).maybeSingle(),
+          ctx.supabase.from("calorie_targets").select("*").eq("user_id", ctx.userId).maybeSingle()
+        ]);
+        for (const result of [profile, onboarding, target]) if (result.error) throw new Error(result.error.message);
+        return ok({ ok: true, profile: profile.data, onboarding: onboarding.data, calorie_targets: target.data });'''
+new_profile = '''        const [profile, onboarding, target, fitnessConstraints] = await Promise.all([
+          ctx.supabase.from("profiles").select("*").eq("id", ctx.userId).maybeSingle(),
+          ctx.supabase.from("onboarding_answers").select("*").eq("user_id", ctx.userId).maybeSingle(),
+          ctx.supabase.from("calorie_targets").select("*").eq("user_id", ctx.userId).maybeSingle(),
+          ctx.supabase.from("user_fitness_constraints").select("*").eq("user_id", ctx.userId).maybeSingle()
+        ]);
+        for (const result of [profile, onboarding, target, fitnessConstraints]) if (result.error) throw new Error(result.error.message);
+        return ok({
+          ok: true,
+          profile: profile.data,
+          onboarding: onboarding.data,
+          calorie_targets: target.data,
+          fitness_constraints: fitnessConstraints.data
+        });'''
+executor = replace_once(executor, old_profile, new_profile, "include fitness constraints in profile context")
+executor_path.write_text(executor)
+
+safe_path = Path("lib/mcp/tool-executor-safe.ts")
+safe = safe_path.read_text()
+function_anchor = 'async function updateNutritionPreferences(ctx: McpContext, input: JsonObject) {'
+fitness_function = '''async function updateFitnessConstraints(ctx: McpContext, input: JsonObject) {
+  const payload: Record<string, unknown> = { user_id: ctx.userId };
+  if (Object.prototype.hasOwnProperty.call(input, "injury_or_limitation_labels")) payload.injury_or_limitation_labels = stringArray(input, "injury_or_limitation_labels");
+  if (Object.prototype.hasOwnProperty.call(input, "areas_to_protect")) payload.areas_to_protect = stringArray(input, "areas_to_protect");
+  if (Object.prototype.hasOwnProperty.call(input, "movement_restrictions")) payload.movement_restrictions = input.movement_restrictions == null ? null : getOptionalString(input, "movement_restrictions") ?? null;
+  if (Object.prototype.hasOwnProperty.call(input, "nutrition_restrictions")) payload.nutrition_restrictions = input.nutrition_restrictions == null ? null : getOptionalString(input, "nutrition_restrictions") ?? null;
+  if (Object.keys(payload).length === 1) return fail("missing_required_input", "Provide at least one fitness constraint field to update.");
+  const { data, error } = await ctx.supabase.from("user_fitness_constraints").upsert(payload, { onConflict: "user_id" }).select("*").single();
+  if (error) throw new Error(error.message);
+  return ok({ ok: true, fitness_constraints: data });
+}
+
+'''
+safe = replace_once(safe, function_anchor, fitness_function + function_anchor, "add fitness constraints updater")
+dispatch_anchor = '  if (toolName === "get_nutrition_preference_profile") return getSingleUserRow(ctx, "user_nutrition_preference_profiles", "nutrition_preference_profile");'
+dispatch = '  if (toolName === "get_fitness_constraints") return getSingleUserRow(ctx, "user_fitness_constraints", "fitness_constraints");\n  if (toolName === "update_fitness_constraints") return updateFitnessConstraints(ctx, input);\n'
+safe = replace_once(safe, dispatch_anchor, dispatch + dispatch_anchor, "add fitness constraints dispatch")
+safe_path.write_text(safe)
+
+tools_path = Path("lib/mcp/tools.ts")
+tools = tools_path.read_text()
+tools = replace_once(
+    tools,
+    'description: "Validate the connection and return the linked Plaivra account identity. The legacy internal tool name is retained temporarily for compatibility."',
+    'description: "Validate the connection and return the linked Plaivra account identity."',
+    "remove obsolete compatibility wording",
+)
+profile_tool = '  { name: "get_user_profile", title: "Get Plaivra profile", description: "Return the authorized core fitness profile and targets. Use only when a narrower domain tool cannot satisfy the request.", inputSchema: emptyInputSchema, risk: "read" },'
+constraint_tools = '\n  { name: "get_fitness_constraints", title: "Get fitness constraints", description: "Return user-authored movement and food-planning constraints. Treat them as practical preferences, not diagnoses.", inputSchema: emptyInputSchema, risk: "read" },\n  { name: "update_fitness_constraints", title: "Update fitness constraints", description: "Create or update user-authored practical constraints. Do not infer diagnoses or add medical claims.", inputSchema: objectSchema({ injury_or_limitation_labels: { type: "array", items: { type: "string" } }, areas_to_protect: { type: "array", items: { type: "string" } }, movement_restrictions: { type: ["string", "null"] }, nutrition_restrictions: { type: ["string", "null"] } }), risk: "medium" },'
+tools = replace_once(tools, profile_tool, profile_tool + constraint_tools, "add fitness constraint tools")
+tools_path.write_text(tools)
+
+server_path = Path("lib/mcp/server.ts")
+server = server_path.read_text()
+server = replace_once(
+    server,
+    '  "get_plaivra_status",\n  "get_user_profile"',
+    '  "get_plaivra_status",\n  "get_user_profile",\n  "get_fitness_constraints"',
+    "map fitness read scope",
+)
+server = replace_once(
+    server,
+    '  "update_user_profile",\n  "update_training_goal",',
+    '  "update_user_profile",\n  "update_fitness_constraints",\n  "update_training_goal",',
+    "map fitness write scope",
+)
+server_path.write_text(server)
+
+test_path = Path("lib/mcp/server.test.ts")
+test = test_path.read_text()
+test = replace_once(
+    test,
+    '    expect(names.has("get_nutrition_preference_profile")).toBe(true);',
+    '    expect(names.has("get_nutrition_preference_profile")).toBe(true);\n    expect(names.has("get_fitness_constraints")).toBe(true);\n    expect(names.has("update_fitness_constraints")).toBe(true);',
+    "assert fitness tools are public",
+)
+test = replace_once(
+    test,
+    '    expect(requiredScopesForTool(tool("get_user_profile"))).toEqual([MCP_SCOPES.profileRead]);\n    expect(requiredScopesForTool(tool("update_user_profile"))).toEqual([MCP_SCOPES.profileWrite]);',
+    '    expect(requiredScopesForTool(tool("get_user_profile"))).toEqual([MCP_SCOPES.profileRead]);\n    expect(requiredScopesForTool(tool("get_fitness_constraints"))).toEqual([MCP_SCOPES.profileRead]);\n    expect(requiredScopesForTool(tool("update_user_profile"))).toEqual([MCP_SCOPES.profileWrite]);\n    expect(requiredScopesForTool(tool("update_fitness_constraints"))).toEqual([MCP_SCOPES.profileWrite]);',
+    "assert fitness tool scopes",
+)
+test_path.write_text(test)
+
+quality_path = Path(".github/workflows/quality.yml")
+quality = quality_path.read_text()
+quality = replace_once(
+    quality,
+    "SafetyRiskLevel'",
+    "SafetyRiskLevel|user_safety_profiles'",
+    "ban legacy safety table from runtime",
+)
+quality_path.write_text(quality)
+
+archive = Path("supabase/migrations_archive")
+if archive.exists():
+    for file_path in sorted(archive.rglob("*"), reverse=True):
+        if file_path.is_file() or file_path.is_symlink():
+            file_path.unlink()
+        elif file_path.is_dir():
+            file_path.rmdir()
+    if archive.exists():
+        archive.rmdir()
+
+runtime_paths = [
+    Path("services/database/execution-layer.ts"),
+    Path("lib/mcp/tool-executor.ts"),
+    Path("lib/mcp/tool-executor-safe.ts"),
+]
+for path in runtime_paths:
+    if "user_safety_profiles" in path.read_text():
+        raise SystemExit(f"legacy safety table remains in {path}")
