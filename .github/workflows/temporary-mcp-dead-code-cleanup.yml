@@ -1,9 +1,10 @@
 name: Temporary MCP Dead Code Cleanup
 
 on:
-  push:
+  pull_request:
     branches:
-      - repo-constitution-cleanup
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -41,88 +42,28 @@ jobs:
 
           original_path = Path("lib/mcp/tool-executor.ts")
           original = original_path.read_text()
-          original = replace_once(
-              original,
-              'import { configuredProviders } from "@/lib/integrations/env";\n',
-              '',
-              'remove provider import'
-          )
-          original = sub_once(
-              original,
-              r'\nfunction assertAdmin\(ctx: McpContext\) \{.*?\n\}\n',
-              '\n',
-              'remove admin assertion'
-          )
-          original = replace_once(
-              original,
-              '      case "get_fitlife_status":',
-              '      case "get_plaivra_status":',
-              'rename connection status tool'
-          )
+          original = replace_once(original, 'import { configuredProviders } from "@/lib/integrations/env";\n', '', 'remove provider import')
+          original = sub_once(original, r'\nfunction assertAdmin\(ctx: McpContext\) \{.*?\n\}\n', '\n', 'remove admin assertion')
+          original = replace_once(original, '      case "get_fitlife_status":', '      case "get_plaivra_status":', 'rename connection status tool')
           original = replace_once(
               original,
               '      case "create_custom_workout_plan":\n      case "save_chatgpt_workout_plan":\n      case "generate_workout_plan":\n',
               '      case "create_custom_workout_plan":\n',
               'remove workout aliases'
           )
-          original = sub_once(
-              original,
-              r'\n      case "get_active_workout_plan": \{.*?\n      \}\n',
-              '\n',
-              'remove retired active-plan case'
-          )
-          original = sub_once(
-              original,
-              r'\n      case "add_cardio_to_plan": \{.*?\n      \}\n',
-              '\n',
-              'remove retired add-cardio case'
-          )
-          original = sub_once(
-              original,
-              r'\n      case "search_exercises":\n        return .*?;\n',
-              '\n',
-              'remove retired exercise search'
-          )
-          original = sub_once(
-              original,
-              r'\n      case "replace_exercise": \{.*?\n      \}\n',
-              '\n',
-              'remove retired replace-exercise case'
-          )
-          original = sub_once(
-              original,
-              r'\n      case "admin_api_status":[\s\S]*?\n      default:',
-              '\n      default:',
-              'remove admin executor cases'
-          )
-          original = replace_once(
-              original,
-              '    if (message === "not_admin") return fail("not_admin", "Admin access is required.");\n',
-              '',
-              'remove retired admin error mapping'
-          )
+          original = sub_once(original, r'\n      case "get_active_workout_plan": \{.*?\n      \}\n', '\n', 'remove retired active-plan case')
+          original = sub_once(original, r'\n      case "add_cardio_to_plan": \{.*?\n      \}\n', '\n', 'remove retired add-cardio case')
+          original = sub_once(original, r'\n      case "search_exercises":\n        return .*?;\n', '\n', 'remove retired exercise search')
+          original = sub_once(original, r'\n      case "replace_exercise": \{.*?\n      \}\n', '\n', 'remove retired replace-exercise case')
+          original = sub_once(original, r'\n      case "admin_api_status":[\s\S]*?\n      default:', '\n      default:', 'remove admin executor cases')
+          original = replace_once(original, '    if (message === "not_admin") return fail("not_admin", "Admin access is required.");\n', '', 'remove retired admin error mapping')
           original_path.write_text(original)
 
           safe_path = Path("lib/mcp/tool-executor-safe.ts")
           safe = safe_path.read_text()
-          safe = sub_once(
-              safe,
-              r'\nconst aiActionTypes = new Set\(\[.*?\]\);\nconst aiActionStatuses = new Set\(\[.*?\]\);',
-              '',
-              'remove AI request constants'
-          )
-          for function_name in [
-              'getAiActionRequests',
-              'createAiActionRequest',
-              'updateAiActionStatus',
-              'updateSafetyProfile',
-          ]:
-              safe = sub_once(
-                  safe,
-                  rf'\nasync function {function_name}\(.*?\n\}}\n',
-                  '\n',
-                  f'remove {function_name}'
-              )
+          safe = sub_once(safe, r'\nconst aiActionTypes = new Set\(\[.*?\]\);\nconst aiActionStatuses = new Set\(\[.*?\]\);', '', 'remove AI request constants')
+          for function_name in ['getAiActionRequests', 'createAiActionRequest', 'updateAiActionStatus', 'updateSafetyProfile']:
+              safe = sub_once(safe, rf'\nasync function {function_name}\(.*?\n\}}\n', '\n', f'remove {function_name}')
           for line in [
               '  if (toolName === "get_ai_action_requests") return getAiActionRequests(ctx, input);\n',
               '  if (toolName === "create_ai_action_request") return createAiActionRequest(ctx, input);\n',
@@ -137,12 +78,7 @@ jobs:
               '  if (toolName === "update_meal_plan_item") return updateMealPlanItem(ctx, input);',
               'remove meal-plan alias'
           )
-          safe = sub_once(
-              safe,
-              r'\n  if \(toolName === "get_active_workout_plan"\) \{.*?\n  \}\n',
-              '\n',
-              'remove safe active-plan dispatch'
-          )
+          safe = sub_once(safe, r'\n  if \(toolName === "get_active_workout_plan"\) \{.*?\n  \}\n', '\n', 'remove safe active-plan dispatch')
           safe_path.write_text(safe)
 
           for path_string in ["lib/mcp/tools.ts", "lib/mcp/server.ts"]:
