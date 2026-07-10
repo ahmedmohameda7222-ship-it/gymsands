@@ -20,12 +20,12 @@ jobs:
           ref: repo-constitution-cleanup
           fetch-depth: 0
 
-      - name: Prove obsolete types have no external references
+      - name: Prove obsolete types have no application references
         shell: bash
         run: |
           set -euo pipefail
-          if git grep -n -E '\b(AiActionRequestStatus|AiActionRequest|SafetyRiskLevel|UserSafetyProfile)\b' -- ':!types/database.ts'; then
-            echo "Obsolete types still have external references." >&2
+          if git grep -n -E '\b(AiActionRequestStatus|AiActionRequest|SafetyRiskLevel|UserSafetyProfile)\b' -- app components lib services types ':!types/database.ts'; then
+            echo "Obsolete types still have application references." >&2
             exit 1
           fi
 
