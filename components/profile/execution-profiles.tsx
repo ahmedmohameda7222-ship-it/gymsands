@@ -240,8 +240,6 @@ export function FitnessConstraintsCard() {
   );
 }
 
-/** Temporary export alias for routes not yet renamed during this cleanup branch. */
-export const SafetyProfileCard = FitnessConstraintsCard;
 
 export function NutritionPreferenceCard({ onAfterSave, saveLabel }: { onAfterSave?: () => void; saveLabel?: string }) {
   const { user } = useAuth();
