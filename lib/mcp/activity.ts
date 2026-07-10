@@ -14,7 +14,7 @@ export type PublicMcpActivity = {
   timestamp: string;
   action: string;
   status: "allowed" | "denied" | "failed";
-  category: "read" | "write" | "destructive" | "admin";
+  category: "read" | "write" | "destructive";
   summary: string;
   connectionLabel: "ChatGPT";
 };
@@ -26,7 +26,6 @@ function record(value: unknown): Record<string, unknown> {
 function categoryForTool(toolName: string): PublicMcpActivity["category"] {
   if (toolName === "connection_authorization") return "read";
   const risk = mcpTools.find((tool) => tool.name === toolName)?.risk;
-  if (risk === "admin") return "admin";
   if (risk === "high") return "destructive";
   if (risk === "read") return "read";
   return "write";
