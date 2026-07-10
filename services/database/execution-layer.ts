@@ -46,8 +46,8 @@ const emptyFitnessConstraints: FitnessConstraintInput = {
 function mapFitnessConstraints(data: Record<string, unknown> | null): FitnessConstraintInput | null {
   if (!data) return null;
   return {
-    injury_or_limitation_labels: cleanStringArray(data.injuries),
-    areas_to_protect: cleanStringArray(data.pain_areas),
+    injury_or_limitation_labels: cleanStringArray(data.injury_or_limitation_labels),
+    areas_to_protect: cleanStringArray(data.areas_to_protect),
     movement_restrictions: cleanText(typeof data.movement_restrictions === "string" ? data.movement_restrictions : null),
     nutrition_restrictions: cleanText(typeof data.nutrition_restrictions === "string" ? data.nutrition_restrictions : null)
   };
@@ -56,8 +56,8 @@ function mapFitnessConstraints(data: Record<string, unknown> | null): FitnessCon
 export async function getFitnessConstraints(userId: string): Promise<FitnessConstraintInput | null> {
   requireUser(userId);
   const { data, error } = await supabase!
-    .from("user_safety_profiles")
-    .select("injuries,pain_areas,movement_restrictions,nutrition_restrictions")
+    .from("user_fitness_constraints")
+    .select("injury_or_limitation_labels,areas_to_protect,movement_restrictions,nutrition_restrictions")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
@@ -68,15 +68,15 @@ export async function upsertFitnessConstraints(userId: string, input: FitnessCon
   requireUser(userId);
   const payload = {
     user_id: userId,
-    injuries: cleanStringArray(input.injury_or_limitation_labels),
-    pain_areas: cleanStringArray(input.areas_to_protect),
+    injury_or_limitation_labels: cleanStringArray(input.injury_or_limitation_labels),
+    areas_to_protect: cleanStringArray(input.areas_to_protect),
     movement_restrictions: cleanText(input.movement_restrictions),
     nutrition_restrictions: cleanText(input.nutrition_restrictions)
   };
   const { data, error } = await supabase!
-    .from("user_safety_profiles")
+    .from("user_fitness_constraints")
     .upsert(payload, { onConflict: "user_id" })
-    .select("injuries,pain_areas,movement_restrictions,nutrition_restrictions")
+    .select("injury_or_limitation_labels,areas_to_protect,movement_restrictions,nutrition_restrictions")
     .single();
   if (error) throw error;
   return mapFitnessConstraints(data as Record<string, unknown>) ?? emptyFitnessConstraints;
