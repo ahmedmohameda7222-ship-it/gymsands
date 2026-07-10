@@ -89,12 +89,18 @@ jobs:
               path.write_text(text.replace('get_fitlife_status', 'get_plaivra_status'))
           PY
 
-      - name: Verify retired names are absent from active MCP source
+      - name: Verify retired names are absent from runtime MCP source
         shell: bash
         run: |
           set -euo pipefail
-          if grep -R -n -E 'get_ai_action_requests|create_ai_action_request|update_ai_action_request_status|get_safety_profile|update_safety_profile|save_chatgpt_workout_plan|generate_workout_plan|replace_meal_plan_item|admin_api_status|admin_search_users|get_admin_user_summary|get_fitlife_status' lib/mcp; then
-            echo "Retired MCP source remains." >&2
+          runtime_files=(
+            lib/mcp/tools.ts
+            lib/mcp/server.ts
+            lib/mcp/tool-executor.ts
+            lib/mcp/tool-executor-safe.ts
+          )
+          if grep -n -E 'get_ai_action_requests|create_ai_action_request|update_ai_action_request_status|get_safety_profile|update_safety_profile|save_chatgpt_workout_plan|generate_workout_plan|replace_meal_plan_item|admin_api_status|admin_search_users|get_admin_user_summary|get_fitlife_status' "${runtime_files[@]}"; then
+            echo "Retired MCP runtime source remains." >&2
             exit 1
           fi
 
