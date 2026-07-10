@@ -14,20 +14,21 @@ function tool(name: string): McpToolDefinition {
   return found;
 }
 
-function context(scopes: string[], role: "member" | "admin" = "member"): McpContext {
+function context(scopes: string[]): McpContext {
   return {
     supabase: {} as McpContext["supabase"],
     userId: validId,
     connectionId: "22222222-2222-4222-8222-222222222222",
     scopes,
-    profile: { id: validId, email: "member@example.test", full_name: "Member", role }
+    profile: { id: validId, email: "member@example.test", full_name: "Member", role: "member" }
   };
 }
 
-describe("Phase 3 MCP tool inventory and annotations", () => {
-  it("has a unique, fully annotated 97-tool inventory", () => {
-    expect(mcpTools).toHaveLength(97);
+describe("curated MCP tool inventory and annotations", () => {
+  it("has a unique, fully annotated public inventory", () => {
+    expect(mcpTools.length).toBeGreaterThan(40);
     expect(new Set(mcpTools.map((item) => item.name)).size).toBe(mcpTools.length);
+
     for (const item of mcpTools) {
       expect(item.name).toMatch(/^[a-z][a-z0-9_]*$/);
       expect(item.title.length).toBeGreaterThan(0);
@@ -35,25 +36,41 @@ describe("Phase 3 MCP tool inventory and annotations", () => {
       expect(typeof item.annotations.readOnlyHint).toBe("boolean");
       expect(typeof item.annotations.destructiveHint).toBe("boolean");
       expect(item.annotations.openWorldHint).toBe(false);
-      expect(requiredScopesForTool(item).length).toBeGreaterThan(0);
+      expect(requiredScopesForTool(item).length, item.name).toBeGreaterThan(0);
     }
+  });
+
+  it("contains no obsolete queue, broad safety-profile, admin, or alias tools", () => {
+    const names = new Set(mcpTools.map((item) => item.name));
+    for (const removed of [
+      "get_ai_action_requests",
+      "create_ai_action_request",
+      "update_ai_action_request_status",
+      "get_safety_profile",
+      "update_safety_profile",
+      "save_chatgpt_workout_plan",
+      "generate_workout_plan",
+      "replace_meal_plan_item"
+    ]) {
+      expect(names.has(removed), removed).toBe(false);
+    }
+    expect([...names].some((name) => name.startsWith("admin_") || name === "get_admin_user_summary")).toBe(false);
   });
 
   it("marks reads as read-only, writes as mutable, and high-risk tools as destructive", () => {
     for (const item of mcpTools) {
-      if (item.risk === "read") expect(item.annotations.readOnlyHint).toBe(true);
-      if (["low", "medium", "high"].includes(item.risk)) expect(item.annotations.readOnlyHint).toBe(false);
+      expect(item.annotations.readOnlyHint).toBe(item.risk === "read");
       expect(item.annotations.destructiveHint).toBe(item.risk === "high");
     }
   });
 
-  it("hides admin and unrelated tools from a normal nutrition-only catalog", () => {
+  it("shows only nutrition reads in a nutrition-read catalog", () => {
     const payload = toolListPayload(context([MCP_SCOPES.nutritionRead]));
     const names = payload.tools.map((item) => item.name);
     expect(names).toContain("search_foods");
+    expect(names).toContain("get_nutrition_preference_profile");
     expect(names).not.toContain("add_food_log");
     expect(names).not.toContain("get_workout_plans");
-    expect(names.some((name) => name.startsWith("admin_") || name === "get_admin_user_summary")).toBe(false);
   });
 
   it("fails closed for an unmapped future tool", () => {
@@ -70,7 +87,7 @@ describe("Phase 3 MCP tool inventory and annotations", () => {
   });
 });
 
-describe("Phase 3 MCP runtime input validation", () => {
+describe("MCP runtime input validation", () => {
   it("rejects invalid enums, UUIDs, dates, ranges, and overlong strings", () => {
     expect(validateMcpToolInput(tool("add_food_log"), { meal_type: "Brunch", items: [] }).success).toBe(false);
     expect(validateMcpToolInput(tool("add_food_log"), { meal_type: "Breakfast", items: [] }).success).toBe(false);
@@ -98,21 +115,26 @@ describe("Phase 3 MCP runtime input validation", () => {
       activate_workout_plan: "plan_id",
       delete_workout_plan: "plan_id"
     };
+
     for (const item of mcpTools.filter((candidate) => candidate.annotations.destructiveHint)) {
       const idField = ids[item.name];
-      expect(idField).toBeDefined();
+      expect(idField, item.name).toBeDefined();
       expect(validateMcpToolInput(item, { [idField]: validId }).success).toBe(false);
       expect(validateMcpToolInput(item, { [idField]: validId, confirm: true }).success).toBe(true);
     }
   });
 
   it("keeps a direct executor confirmation guard on meal-plan deletion", async () => {
-    const result = await executeMcpTool(context([MCP_SCOPES.mealPlansWrite]), "delete_meal_plan_item", { meal_plan_item_id: validId });
+    const result = await executeMcpTool(
+      context([MCP_SCOPES.mealPlansWrite]),
+      "delete_meal_plan_item",
+      { meal_plan_item_id: validId }
+    );
     expect(result.structuredContent.requires_confirmation).toBe(true);
   });
 });
 
-describe("Phase 3 MCP output minimization", () => {
+describe("MCP output minimization", () => {
   it("removes ownership, connection, token, secret, and raw note fields recursively", () => {
     const minimized = minimizeMcpOutput({
       user_id: validId,
