@@ -543,55 +543,14 @@ async function getSafeTodayWorkout(ctx: McpContext, date: string) {
   return { active_plan: activePlan, workout, workout_day: workoutDay, exercises };
 }
 
-const aiActionTypes = new Set([
-  "replace_exercise", "adjust_next_workout", "rebalance_week", "review_workout_session",
-  "adjust_for_low_readiness", "explain_progression", "reduce_workout_volume",
-  "reduce_workout_intensity", "recovery_workout", "reduce_next_session", "regenerate_meal",
-  "make_meal_cheaper", "make_meal_faster", "make_meal_higher_protein",
-  "replace_meal_ingredient", "make_meal_dairy_free", "make_meal_gluten_free",
-  "make_meal_cuisine", "build_grocery_list", "review_week"
-]);
-const aiActionStatuses = new Set(["draft", "ready_for_chatgpt", "sent_to_chatgpt", "resolved", "cancelled"]);
 const alternativeReasons = new Set(["machine_taken", "no_equipment", "pain_or_discomfort", "too_hard", "home_alternative", "same_muscle", "lower_back_friendly", "knee_friendly", "shoulder_friendly", "other"]);
 
 function stringArray(input: JsonObject, key: string) {
   return getArray(input, key).map(String).map((item) => item.trim()).filter(Boolean);
 }
 
-async function getAiActionRequests(ctx: McpContext, input: JsonObject) {
-  let query = ctx.supabase.from("ai_action_requests").select("*").eq("user_id", ctx.userId).order("created_at", { ascending: false }).limit(100);
-  const status = getOptionalString(input, "status");
-  if (status) query = query.eq("status", status);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return ok({ ok: true, requests: data ?? [] });
-}
 
-async function createAiActionRequest(ctx: McpContext, input: JsonObject) {
-  const actionType = getString(input, "action_type");
-  if (!aiActionTypes.has(actionType)) return fail("invalid_action_type", "action_type is not supported.");
-  const contextJson = input.context_json;
-  if (!contextJson || typeof contextJson !== "object" || Array.isArray(contextJson)) return fail("invalid_context", "context_json must be an object.");
-  const { data, error } = await ctx.supabase.from("ai_action_requests").insert({
-    user_id: ctx.userId,
-    action_type: actionType,
-    source_type: getString(input, "source_type"),
-    source_id: getOptionalString(input, "source_id") ?? null,
-    status: "ready_for_chatgpt",
-    context_json: contextJson,
-    user_note: getOptionalString(input, "user_note") ?? null
-  }).select("*").single();
-  if (error) throw new Error(error.message);
-  return ok({ ok: true, request: data, message: "Request stored. No plan data was changed." });
-}
 
-async function updateAiActionStatus(ctx: McpContext, input: JsonObject) {
-  const status = getString(input, "status");
-  if (!aiActionStatuses.has(status)) return fail("invalid_status", "Unsupported AI action request status.");
-  const { data, error } = await ctx.supabase.from("ai_action_requests").update({ status, resolved_at: status === "resolved" ? new Date().toISOString() : null }).eq("id", getString(input, "request_id")).eq("user_id", ctx.userId).select("*").single();
-  if (error) throw new Error(error.message);
-  return ok({ ok: true, request: data });
-}
 
 async function getSingleUserRow(ctx: McpContext, table: string, key: string) {
   const { data, error } = await ctx.supabase.from(table).select("*").eq("user_id", ctx.userId).maybeSingle();
@@ -599,28 +558,6 @@ async function getSingleUserRow(ctx: McpContext, table: string, key: string) {
   return ok({ ok: true, [key]: data ?? null });
 }
 
-async function updateSafetyProfile(ctx: McpContext, input: JsonObject) {
-  const riskLevel = getOptionalString(input, "risk_level") ?? "green";
-  if (!["green", "yellow", "red"].includes(riskLevel)) return fail("invalid_risk_level", "risk_level must be green, yellow, or red.");
-  const payload = {
-    user_id: ctx.userId,
-    injuries: stringArray(input, "injuries"),
-    pain_areas: stringArray(input, "pain_areas"),
-    medical_conditions: getOptionalString(input, "medical_conditions") ?? null,
-    doctor_restrictions: getOptionalString(input, "doctor_restrictions") ?? null,
-    medications_or_supplement_notes: getOptionalString(input, "medications_or_supplement_notes") ?? null,
-    pregnancy_or_postpartum: getOptionalString(input, "pregnancy_or_postpartum") ?? null,
-    eating_disorder_risk_acknowledged: getBoolean(input, "eating_disorder_risk_acknowledged"),
-    under_18_flag: getBoolean(input, "under_18_flag"),
-    movement_restrictions: getOptionalString(input, "movement_restrictions") ?? null,
-    nutrition_restrictions: getOptionalString(input, "nutrition_restrictions") ?? null,
-    risk_level: riskLevel,
-    emergency_warning_acknowledged: getBoolean(input, "emergency_warning_acknowledged")
-  };
-  const { data, error } = await ctx.supabase.from("user_safety_profiles").upsert(payload, { onConflict: "user_id" }).select("*").single();
-  if (error) throw new Error(error.message);
-  return ok({ ok: true, safety_profile: data, medical_advice: false });
-}
 
 async function updateNutritionPreferences(ctx: McpContext, input: JsonObject) {
   const payload = {
@@ -805,11 +742,6 @@ async function upsertNutritionTargetProfile(ctx: McpContext, input: JsonObject) 
 
 export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput: unknown): Promise<McpToolResult> {
   const input = asObject(rawInput);
-  if (toolName === "get_ai_action_requests") return getAiActionRequests(ctx, input);
-  if (toolName === "create_ai_action_request") return createAiActionRequest(ctx, input);
-  if (toolName === "update_ai_action_request_status") return updateAiActionStatus(ctx, input);
-  if (toolName === "get_safety_profile") return getSingleUserRow(ctx, "user_safety_profiles", "safety_profile");
-  if (toolName === "update_safety_profile") return updateSafetyProfile(ctx, input);
   if (toolName === "get_nutrition_preference_profile") return getSingleUserRow(ctx, "user_nutrition_preference_profiles", "nutrition_preference_profile");
   if (toolName === "update_nutrition_preference_profile") return updateNutritionPreferences(ctx, input);
   if (toolName === "get_progression_targets") return getProgressionTargets(ctx, input);
@@ -828,7 +760,7 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
   if (toolName === "get_meal_plan_for_date") return getMealPlanForDate(ctx, input.date ?? input.plan_date ?? input.planned_date ?? "today");
   if (toolName === "get_meal_plan_for_week") return getMealPlanForWeek(ctx, input);
   if (toolName === "generate_shopping_list") return generateShoppingList(ctx, input);
-  if (toolName === "update_meal_plan_item" || toolName === "replace_meal_plan_item") return updateMealPlanItem(ctx, input);
+  if (toolName === "update_meal_plan_item") return updateMealPlanItem(ctx, input);
   if (toolName === "delete_meal_plan_item") return deleteMealPlanItem(ctx, input);
   if (toolName === "mark_meal_plan_item_done") return markMealPlanItemDone(ctx, input);
   if (toolName === "create_custom_meal") return createCustomMeal(ctx, input);
@@ -844,11 +776,6 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
   if (toolName === "get_today_supplements") return getTodaySupplements(ctx, input);
   if (toolName === "add_supplement_log") return addSupplementLog(ctx, input);
   if (toolName === "mark_supplement_taken") return markSupplementTaken(ctx, input);
-  if (toolName === "get_active_workout_plan") {
-    const activePlan = await getSafeActivePlan(ctx);
-    if (!activePlan?.id) return ok({ ok: true, plan: null, days: [], exercises: [] });
-    return ok({ ok: true, ...(await getFullPlan(ctx, String(activePlan.id))) });
-  }
   if (toolName === "get_today_workout") {
     const today = cleanDate("today");
     return ok({ ok: true, date: today, ...(await getSafeTodayWorkout(ctx, today)) });

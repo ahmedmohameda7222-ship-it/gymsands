@@ -528,7 +528,6 @@ export type AiPermissionSection =
   | "profile"
   | "settings";
 
-export type AiActionRequestStatus = "draft" | "ready_for_chatgpt" | "sent_to_chatgpt" | "resolved" | "cancelled";
 
 export type AiActionType =
   | "build_meal_plan"
@@ -553,40 +552,8 @@ export type AiActionType =
   | "build_grocery_list"
   | "review_week";
 
-export type AiActionRequest = {
-  id: string;
-  user_id: string;
-  action_type: AiActionType;
-  source_type: string;
-  source_id: string | null;
-  status: AiActionRequestStatus;
-  context_json: Record<string, unknown>;
-  user_note: string | null;
-  created_at: string;
-  updated_at: string;
-  resolved_at: string | null;
-};
 
-export type SafetyRiskLevel = "green" | "yellow" | "red";
 
-export type UserSafetyProfile = {
-  id: string;
-  user_id: string;
-  injuries: string[];
-  pain_areas: string[];
-  medical_conditions: string | null;
-  doctor_restrictions: string | null;
-  medications_or_supplement_notes: string | null;
-  pregnancy_or_postpartum: string | null;
-  eating_disorder_risk_acknowledged: boolean;
-  under_18_flag: boolean;
-  movement_restrictions: string | null;
-  nutrition_restrictions: string | null;
-  risk_level: SafetyRiskLevel;
-  emergency_warning_acknowledged: boolean;
-  created_at: string;
-  updated_at: string;
-};
 
 export type UserNutritionPreferenceProfile = {
   id: string;

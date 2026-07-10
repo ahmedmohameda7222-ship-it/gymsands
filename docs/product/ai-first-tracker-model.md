@@ -1,217 +1,163 @@
-# Plaivra AI-First Tracker Model
+# Plaivra AI-First Context and Tracking Model
 
-**Version:** 2026.1  
+**Version:** 2026.2  
 **Status:** Required product source of truth  
-**Purpose:** Define Plaivra's core product model so future UX audits and implementation prompts do not treat Plaivra like a normal manual tracker.
+**Authority:** Subordinate to `PLAIVRA_PRODUCT_CONSTITUTION.md`
 
----
+## 1. Core decision
 
-## 1. Core product decision
+Plaivra is not primarily a manual data-entry application.
 
-Plaivra is **not primarily a manual data-entry app**.
+Plaivra is a persistent personal fitness context, structured execution, tracking, history, correction, and visualization system designed to work with ChatGPT.
 
-Plaivra is an **AI-first tracker and overview system**.
-
-The intended product model is:
-
-```txt
-User talks to ChatGPT
--> ChatGPT understands the request / photo / meal / workout / plan
--> ChatGPT prepares structured data
--> Plaivra imports or applies the structured data
--> Plaivra becomes the clean overview, tracker, history, and control layer
+```text
+User starts from Plaivra or ChatGPT
+→ user asks ChatGPT for advice or an action
+→ ChatGPT reads only authorized task-relevant Plaivra context
+→ ChatGPT reasons about the request
+→ for executable requests, ChatGPT calls Plaivra tools
+→ Plaivra stores confirmed structured data
+→ Plaivra visualizes and tracks it
 ```
 
-Manual entry must exist, but it should not be the main product promise.
+There is no normal manual copy-back and no second Plaivra review/import queue after a successful tool call.
 
-Manual entry is:
+## 2. Product differentiation
 
-```txt
-- fallback
-- correction path
-- quick edit path
-- power-user path
-- offline/emergency path
+```text
+ChatGPT handles reasoning, interpretation, and intelligent execution.
+Plaivra handles persistent context, permissions, structure, ownership, history, tracking, visualization, and correction.
 ```
 
-The main experience should feel like:
+The user should not repeat the same age, body profile, goals, training context, food preferences, budget, cooking constraints, equipment, schedule, and functional fitness constraints in every conversation.
 
-```txt
-Talk to ChatGPT -> review/apply in Plaivra -> track progress in Plaivra
+## 3. Data-entry and execution hierarchy
+
+Use this hierarchy where relevant:
+
+```text
+1. ChatGPT direct execution through authorized tools
+2. Fast execution from existing Plaivra plans/data
+3. Simple direct logging or correction
+4. Advanced manual editing when genuinely useful
 ```
 
----
+Manual controls remain first-class for real-world execution, including workout sets, completion, hydration, habits, tasks, supplements, edits, corrections, and privacy controls.
 
-## 2. Product positioning
+Complex manual plan construction must not dominate the normal product when ChatGPT can create the structure directly.
 
-Plaivra should not compete only as another calorie tracker, workout tracker, or wellness tracker.
+## 4. Persistent context rule
 
-Plaivra's differentiation:
+The complete profile is not returned by default.
 
-```txt
-ChatGPT handles messy input.
-Plaivra handles structure, tracking, memory, and progress overview.
-```
+Use task-specific projections:
 
-Examples:
+- training planning;
+- nutrition planning;
+- workout adjustment;
+- meal preparation;
+- daily execution;
+- progress summary.
 
-| User input to ChatGPT | Plaivra result |
-|---|---|
-| Photo of a meal | Estimated calories/macros added to food log after review/import |
-| “I ate chicken, rice, and salad” | Structured food log with calories/macros estimate |
-| “Make me a 3-day PPL plan” | Workout plan imported into Plaivra |
-| “Machine is taken, replace this exercise” | Temporary replacement saved for today or suggested for approval |
-| “Adjust my calories for training days” | Day-type targets imported/reviewed in Plaivra |
-| “Build a 1-week meal plan” | Meal plan imported into Plaivra |
-| “Review my week” | Summary/insights generated from Plaivra data through explicit permission |
+The user controls access by category and read/write scope.
 
----
+## 5. Advisory versus executable actions
 
-## 3. Data entry hierarchy
+### Advisory
 
-Every data-entry route must follow this hierarchy unless there is a documented exception.
+Read-only examples:
 
-```txt
-1. ChatGPT-assisted import/apply
-2. Fast repeat/reuse from previous Plaivra data
-3. Simple manual add/edit
-4. Advanced manual builder
-```
+- explain my progress;
+- review my current plan;
+- summarize my adherence;
+- tell me what to prioritize today.
 
-This means:
+### Executable
 
-- ChatGPT import should be visible and trusted, not hidden as an advanced tool.
-- Repeat/reuse should be fast for daily actions.
-- Manual entry should be available but not dominate the first screen.
-- Advanced builders should not crowd daily-use flows.
+Write examples:
 
----
+- create a workout or meal plan;
+- log a meal;
+- replace an exercise;
+- save a grocery list;
+- change a target;
+- record progress.
 
-## 4. Plaivra's role after import
+ChatGPT must not claim an action was saved before the Plaivra tool confirms success.
 
-Plaivra should be the place where the user can:
+## 6. UX implications
 
-```txt
-- review imported data
-- approve or reject changes
-- edit structured data
-- track daily progress
-- see history and trends
-- understand what is active today
-- control AI permissions
-- export/delete data
-```
+### Daily screens
 
-Plaivra must not silently accept risky AI changes.
+Start with:
 
-AI-assisted changes should be:
+- what is active now;
+- the next useful action;
+- current progress/status;
+- fast execution controls;
+- a contextual ChatGPT action only when it adds real value.
 
-```txt
-- explicit
-- reviewable
-- reversible where practical
-- scoped by permission
-- clearly attributed to ChatGPT/import
-```
+Do not lead with large setup forms or an AI request queue.
 
----
+### Empty states
 
-## 5. UX implications
+Use the next best product action. Depending on context this may be:
 
-### 5.1 Daily screens
+- create with ChatGPT;
+- connect Plaivra;
+- start a plan;
+- log directly;
+- configure missing profile context.
 
-Daily screens should start with:
+Do not use generic `No data` states.
 
-```txt
-What is active now?
-What did ChatGPT/import add?
-What should I review or do next?
-What can I log quickly if I do not want to use ChatGPT?
-```
+### Correction
 
-They should not start with a large manual form unless the route is specifically a builder/editor.
+Every ChatGPT-created record must be editable, replaceable, and deletable through normal Plaivra controls.
 
-### 5.2 Empty states
+### Trust
 
-Empty states should not only say “add manually.”
+Show:
 
-They should usually offer:
+- what permission is required;
+- what context category will be read;
+- whether the action will write data;
+- pending, success, and failure state;
+- destructive confirmation before the tool call where required.
 
-```txt
-Primary: Ask/Import from ChatGPT
-Secondary: Create manually
-Tertiary: Browse templates/recent examples if relevant
-```
-
-### 5.3 Correction/edit flows
-
-Because AI estimates may be imperfect, Plaivra must make correction easy.
-
-Important correction paths:
-
-```txt
-- edit food quantity/macros
-- change meal type/date
-- remove incorrect item
-- review imported workout plan before activation
-- replace exercise for today only
-- adjust day-type calories
-```
-
-### 5.4 Trust framing
-
-Any ChatGPT import should explain:
-
-```txt
-- what data ChatGPT will produce
-- what Plaivra will import
-- whether the user must approve before saving
-- whether existing data will be overwritten
-- what can be edited afterward
-```
-
----
-
-## 6. Audit rule
-
-Future audits must not judge Plaivra as if manual input is the primary product.
-
-For every route, ask:
-
-```txt
-1. Is this a tracker/overview route or a manual-entry route?
-2. Where is the ChatGPT-assisted import path?
-3. Is manual entry available as fallback without dominating?
-4. Is review/apply clear and safe?
-5. Can the user correct AI-imported data easily?
-6. Does Plaivra give a useful overview after import?
-```
-
-If a route makes manual entry the main experience when AI import should be primary, mark it as a workflow issue.
-
----
+Do not add a second approval screen after a confirmed non-destructive write.
 
 ## 7. Route implications
 
-| Route | AI-first implication |
+| Area | Product implication |
 |---|---|
-| Dashboard | Show imported/active state and next review/action, not many manual CTAs. |
-| Onboarding | ChatGPT can help generate initial profile/preferences, but user must review. |
-| Workout plans | Import from ChatGPT should be the primary plan creation path. Manual create is secondary. |
-| Workout session | Execution/logging is direct; ChatGPT helps with replacement/coaching, not every set. |
-| Calories | ChatGPT/photo/text meal import should be primary. Manual food entry is fallback/edit path. |
-| Meal plan | ChatGPT meal-plan generation/import should be primary. Manual editing remains available. |
-| Hydration | Direct quick logging is primary; ChatGPT is not needed for every water log. |
-| Progress | Tracker/overview role; ChatGPT can summarize trends with explicit permission. |
-| Settings / AI imports | Must clearly control what ChatGPT can read/write/import. |
-| Data privacy | Must clearly show what Plaivra stores after AI imports. |
+| Today/dashboard | Show current plan, progress, and next action. |
+| Onboarding/profile | Save reusable user-controlled context once. |
+| Workout plans | ChatGPT creation is primary; direct execution and editing remain in Plaivra. |
+| Workout session | Fast direct logging; ChatGPT supports requested adaptation. |
+| Nutrition log | Fast logging and correction; ChatGPT handles messy input and reasoning. |
+| Meal plan | ChatGPT creates structured plans directly; Plaivra visualizes and tracks them. |
+| Hydration/tasks/habits/supplements | Direct quick execution is primary. |
+| Progress | Visualize history; ChatGPT may explain authorized trends. |
+| Settings | Control account, permissions, consent, connection, export, and deletion. |
 
----
+## 8. Audit questions
 
-## 8. Codex instruction
+For each route ask:
 
-When asking Codex or another agent to implement Plaivra flows, include:
+1. What is the dominant user job?
+2. Is repeated profile context reused rather than requested again?
+3. Is ChatGPT used where reasoning adds value?
+4. Are direct execution controls fast where ChatGPT is unnecessary?
+5. Is authorized context minimal and clear?
+6. Is the result stored as normal user-owned structured data?
+7. Can the user correct it?
+8. Are loading, success, failure, offline, and revoked states covered?
 
-```txt
-Plaivra is an AI-first tracker, not primarily a manual data-entry app. ChatGPT-assisted import/apply should be the primary data-entry path where appropriate. Manual entry must remain available as fallback/edit/power-user path, but it should not dominate daily flows. Review/apply, correction, permission, and overview states are central to the product.
+## 9. Agent instruction
+
+Use this instruction in implementation tasks:
+
+```text
+Plaivra is a persistent, user-controlled fitness context and execution platform for ChatGPT. ChatGPT is the reasoning layer and directly creates or updates structured Plaivra data through authorized tools. Plaivra is the storage, visualization, tracking, history, correction, permission, privacy, and execution layer. Do not build a copy/import queue or a second in-app approval workflow. Preserve fast direct controls for daily real-world execution and correction.
 ```

@@ -1,38 +1,31 @@
-# .agents Directory
+# Plaivra Agent Configuration
 
-This directory contains agent configuration and skills for OpenAI Codex CLI.
+This directory intentionally contains a small local Codex/Ruflo skill surface.
 
-## Structure
+Product and engineering authority is defined in:
 
-```
-.agents/
-  config.toml     # Main configuration file
-  skills/         # Skill definitions
-    skill-name/
-      SKILL.md    # Skill instructions
-      scripts/    # Optional scripts
-      docs/       # Optional documentation
-  README.md       # This file
-```
+- `AGENTS.md`
+- `docs/product/PLAIVRA_PRODUCT_CONSTITUTION.md`
+- the task-specific architecture or design document
 
-## Configuration
+## Enabled local skills
 
-The `config.toml` file controls:
-- Model selection
-- Approval policies
-- Sandbox modes
-- MCP server connections
-- Skills configuration
+- `swarm-orchestration` — repo-wide work that has genuinely independent workstreams
+- `memory-management` — reusable implementation context
+- `security-audit` — auth, MCP, privacy, Supabase, and sensitive-data review
+- `performance-analysis` — measured performance investigation
+- `agent-coder` — implementation
+- `agent-reviewer` — focused code and architecture review
+- `agent-tester` — verification
 
-## Skills
+Do not restore the removed generic skill corpus unless a recurring Plaivra use case is demonstrated.
 
-Skills are invoked using `$skill-name` syntax. Each skill has:
-- YAML frontmatter with metadata
-- Trigger and skip conditions
-- Commands and examples
+## Model selection
 
-## Documentation
+Model and reasoning level are chosen per task in Codex CLI. They are not hardcoded in `.agents/config.toml`.
 
-- Main instructions: `AGENTS.md` (project root)
-- Local overrides: `.codex/AGENTS.override.md` (gitignored)
-- Ruflo: https://github.com/ruvnet/ruflo
+Repository size alone does not justify maximum or parallel reasoning. Use the smallest relevant scope and the lightest model/reasoning combination that can meet the quality requirement.
+
+## Invocation
+
+Skills use `$skill-name` syntax. Use only the skills needed for the current task; do not invoke every enabled skill by default.

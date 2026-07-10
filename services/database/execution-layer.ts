@@ -3,9 +3,6 @@
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
 import type {
-  AiActionRequest,
-  AiActionRequestStatus,
-  AiActionType,
   DailyCheckinType,
   ExerciseAlternativeReason,
   GroceryStoreSection,
@@ -15,11 +12,8 @@ import type {
   UserGroceryItem,
   UserNutritionPreferenceProfile,
   UserNutritionTargetProfile,
-  UserProgressionTarget,
-  UserSafetyProfile
+  UserProgressionTarget
 } from "@/types";
-
-type JsonContext = Record<string, unknown>;
 
 function requireUser(userId: string) {
   if (!supabase || !isUuid(userId)) throw new Error("Please refresh, sign in again, and retry.");
@@ -29,67 +23,63 @@ function cleanText(value: string | null | undefined) {
   return value?.trim() || null;
 }
 
-export async function createAiActionRequest(input: {
-  userId: string;
-  actionType: AiActionType;
-  sourceType: string;
-  sourceId?: string | null;
-  context: JsonContext;
-  userNote?: string | null;
-  status?: AiActionRequestStatus;
-}) {
-  requireUser(input.userId);
+function cleanStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.map(String).map((item) => item.trim()).filter(Boolean)
+    : [];
+}
 
-  const now = new Date().toISOString();
+export type FitnessConstraintInput = {
+  injury_or_limitation_labels: string[];
+  areas_to_protect: string[];
+  movement_restrictions: string | null;
+  nutrition_restrictions: string | null;
+};
 
+const emptyFitnessConstraints: FitnessConstraintInput = {
+  injury_or_limitation_labels: [],
+  areas_to_protect: [],
+  movement_restrictions: null,
+  nutrition_restrictions: null
+};
+
+function mapFitnessConstraints(data: Record<string, unknown> | null): FitnessConstraintInput | null {
+  if (!data) return null;
   return {
-    id: `local-${crypto.randomUUID()}`,
-    user_id: input.userId,
-    action_type: input.actionType,
-    source_type: input.sourceType,
-    source_id: cleanText(input.sourceId),
-    status: input.status ?? "ready_for_chatgpt",
-    context_json: input.context,
-    user_note: cleanText(input.userNote),
-    created_at: now,
-    updated_at: now,
-    resolved_at: null
-  } as AiActionRequest;
+    injury_or_limitation_labels: cleanStringArray(data.injury_or_limitation_labels),
+    areas_to_protect: cleanStringArray(data.areas_to_protect),
+    movement_restrictions: cleanText(typeof data.movement_restrictions === "string" ? data.movement_restrictions : null),
+    nutrition_restrictions: cleanText(typeof data.nutrition_restrictions === "string" ? data.nutrition_restrictions : null)
+  };
 }
 
-export async function getAiActionRequests(userId: string, status?: AiActionRequestStatus) {
+export async function getFitnessConstraints(userId: string): Promise<FitnessConstraintInput | null> {
   requireUser(userId);
-  let query = supabase!.from("ai_action_requests").select("*").eq("user_id", userId).order("created_at", { ascending: false });
-  if (status) query = query.eq("status", status);
-  const { data, error } = await query.limit(100);
+  const { data, error } = await supabase!
+    .from("user_fitness_constraints")
+    .select("injury_or_limitation_labels,areas_to_protect,movement_restrictions,nutrition_restrictions")
+    .eq("user_id", userId)
+    .maybeSingle();
   if (error) throw error;
-  return (data ?? []) as AiActionRequest[];
+  return mapFitnessConstraints(data as Record<string, unknown> | null);
 }
 
-export async function updateAiActionRequestStatus(userId: string, requestId: string, status: AiActionRequestStatus) {
+export async function upsertFitnessConstraints(userId: string, input: FitnessConstraintInput): Promise<FitnessConstraintInput> {
   requireUser(userId);
-  const { data, error } = await supabase!.from("ai_action_requests").update({
-    status,
-    resolved_at: status === "resolved" ? new Date().toISOString() : null
-  }).eq("id", requestId).eq("user_id", userId).select("*").single();
+  const payload = {
+    user_id: userId,
+    injury_or_limitation_labels: cleanStringArray(input.injury_or_limitation_labels),
+    areas_to_protect: cleanStringArray(input.areas_to_protect),
+    movement_restrictions: cleanText(input.movement_restrictions),
+    nutrition_restrictions: cleanText(input.nutrition_restrictions)
+  };
+  const { data, error } = await supabase!
+    .from("user_fitness_constraints")
+    .upsert(payload, { onConflict: "user_id" })
+    .select("injury_or_limitation_labels,areas_to_protect,movement_restrictions,nutrition_restrictions")
+    .single();
   if (error) throw error;
-  return data as AiActionRequest;
-}
-
-export async function getSafetyProfile(userId: string) {
-  requireUser(userId);
-  const { data, error } = await supabase!.from("user_safety_profiles").select("*").eq("user_id", userId).maybeSingle();
-  if (error) throw error;
-  return data as UserSafetyProfile | null;
-}
-
-export type SafetyProfileInput = Omit<UserSafetyProfile, "id" | "user_id" | "created_at" | "updated_at">;
-
-export async function upsertSafetyProfile(userId: string, input: SafetyProfileInput) {
-  requireUser(userId);
-  const { data, error } = await supabase!.from("user_safety_profiles").upsert({ user_id: userId, ...input }, { onConflict: "user_id" }).select("*").single();
-  if (error) throw error;
-  return data as UserSafetyProfile;
+  return mapFitnessConstraints(data as Record<string, unknown>) ?? emptyFitnessConstraints;
 }
 
 export async function getNutritionPreferenceProfile(userId: string) {

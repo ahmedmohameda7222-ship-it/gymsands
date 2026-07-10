@@ -1,4 +1,4 @@
-import type { AiActionRequest, AiActionType } from "@/types";
+import type { AiActionType } from "@/types";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -11,35 +11,42 @@ export type AiActionPresentation = {
   label: string;
   description: string;
   goal: string;
+  accessArea: "workouts" | "nutrition" | "meal plans" | "wellness" | "progress";
 };
 
 const presentations: Record<AiActionType, AiActionPresentation> = {
-  build_meal_plan: { label: "Import meal plan", description: "Discuss a personalized meal plan, approve the final version, then import it into Plaivra.", goal: "Create an approved meal plan for Plaivra" },
-  replace_exercise: { label: "Replace exercise", description: "Find a practical alternative for the current exercise.", goal: "Suggest a suitable replacement" },
-  adjust_next_workout: { label: "Adjust next workout", description: "Review the next workout and recommend a sensible change.", goal: "Adjust the next workout" },
-  rebalance_week: { label: "Rebalance this week", description: "Review the remaining week without changing it automatically.", goal: "Rebalance the training week" },
-  review_workout_session: { label: "Review workout", description: "Review the completed work and explain useful next steps.", goal: "Review this workout" },
-  adjust_for_low_readiness: { label: "Make today lighter", description: "Adapt today to current readiness and recovery.", goal: "Make today’s workout lighter" },
-  explain_progression: { label: "Explain progression", description: "Explain the next target using saved performance.", goal: "Explain the next progression step" },
-  reduce_workout_volume: { label: "Reduce volume", description: "Suggest which sets or exercises to reduce today.", goal: "Reduce today’s workout volume" },
-  reduce_workout_intensity: { label: "Reduce intensity", description: "Suggest a lower-intensity version of today’s work.", goal: "Reduce today’s workout intensity" },
-  recovery_workout: { label: "Recovery workout", description: "Suggest a recovery-focused version of today’s plan.", goal: "Create a recovery-focused version" },
-  reduce_next_session: { label: "Reduce next session", description: "Suggest a more manageable next training session.", goal: "Make the next session more manageable" },
-  regenerate_meal: { label: "Replace meal", description: "Suggest a practical replacement for this meal.", goal: "Replace this meal" },
-  make_meal_cheaper: { label: "Make it cheaper", description: "Suggest a lower-cost version using saved preferences.", goal: "Make this meal or list cheaper" },
-  make_meal_faster: { label: "Make it faster", description: "Suggest a quicker version using saved cooking preferences.", goal: "Make this meal faster" },
-  make_meal_higher_protein: { label: "More protein", description: "Suggest a practical higher-protein version.", goal: "Increase protein in this meal" },
-  replace_meal_ingredient: { label: "Replace ingredient", description: "Suggest an ingredient swap that respects saved preferences.", goal: "Replace one ingredient" },
-  make_meal_dairy_free: { label: "Make dairy-free", description: "Suggest a dairy-free version with updated nutrition values.", goal: "Make this meal dairy-free" },
-  make_meal_gluten_free: { label: "Make gluten-free", description: "Suggest a gluten-free version with updated nutrition values.", goal: "Make this meal gluten-free" },
-  make_meal_cuisine: { label: "Change cuisine", description: "Adapt the meal to the selected cuisine and saved preferences.", goal: "Adapt this meal’s cuisine" },
-  build_grocery_list: { label: "Build ingredient list", description: "Turn planned meals into an ingredient-level shopping list.", goal: "Build a practical ingredient list" },
-  review_week: { label: "Review week", description: "Review training, meals, hydration, and recovery for small improvements.", goal: "Review this week and suggest small practical improvements" }
+  build_meal_plan: {
+    label: "Create meal plan with ChatGPT",
+    description: "Use my authorized Plaivra nutrition context to create and save a structured meal plan.",
+    goal: "Create a realistic meal plan and save it to Plaivra",
+    accessArea: "meal plans"
+  },
+  replace_exercise: { label: "Replace exercise", description: "Find and save a practical alternative for the current exercise.", goal: "Replace this exercise", accessArea: "workouts" },
+  adjust_next_workout: { label: "Adjust next workout", description: "Review the next workout and save the requested adjustment.", goal: "Adjust the next workout", accessArea: "workouts" },
+  rebalance_week: { label: "Rebalance this week", description: "Review the remaining training week and save the requested changes.", goal: "Rebalance the training week", accessArea: "workouts" },
+  review_workout_session: { label: "Review workout", description: "Review the completed work and explain useful next steps.", goal: "Review this workout", accessArea: "workouts" },
+  adjust_for_low_readiness: { label: "Make today lighter", description: "Use my authorized training context to adapt today to my current readiness.", goal: "Make today’s workout lighter", accessArea: "workouts" },
+  explain_progression: { label: "Explain progression", description: "Explain the next target using my saved performance.", goal: "Explain the next progression step", accessArea: "progress" },
+  reduce_workout_volume: { label: "Reduce volume", description: "Reduce the requested sets or exercises and save the update.", goal: "Reduce today’s workout volume", accessArea: "workouts" },
+  reduce_workout_intensity: { label: "Reduce intensity", description: "Create a lower-intensity version and save the requested update.", goal: "Reduce today’s workout intensity", accessArea: "workouts" },
+  recovery_workout: { label: "Recovery workout", description: "Create a recovery-focused version that respects my authorized fitness constraints.", goal: "Create a recovery-focused workout", accessArea: "workouts" },
+  reduce_next_session: { label: "Reduce next session", description: "Make the next session more manageable and save the requested change.", goal: "Reduce the next training session", accessArea: "workouts" },
+  regenerate_meal: { label: "Replace meal", description: "Create and save a practical replacement for this planned meal.", goal: "Replace this meal", accessArea: "meal plans" },
+  make_meal_cheaper: { label: "Make it cheaper", description: "Use my authorized budget and food preferences to create a lower-cost version.", goal: "Make this meal or list cheaper", accessArea: "nutrition" },
+  make_meal_faster: { label: "Make it faster", description: "Use my authorized cooking preferences to create a quicker version.", goal: "Make this meal faster", accessArea: "nutrition" },
+  make_meal_higher_protein: { label: "More protein", description: "Create a realistic higher-protein version and save it when requested.", goal: "Increase protein in this meal", accessArea: "nutrition" },
+  replace_meal_ingredient: { label: "Replace ingredient", description: "Create an ingredient swap that respects my authorized preferences.", goal: "Replace one ingredient", accessArea: "meal plans" },
+  make_meal_dairy_free: { label: "Make dairy-free", description: "Create a dairy-free version with updated nutrition values.", goal: "Make this meal dairy-free", accessArea: "meal plans" },
+  make_meal_gluten_free: { label: "Make gluten-free", description: "Create a gluten-free version with updated nutrition values.", goal: "Make this meal gluten-free", accessArea: "meal plans" },
+  make_meal_cuisine: { label: "Change cuisine", description: "Adapt this meal to the requested cuisine and my authorized preferences.", goal: "Adapt this meal’s cuisine", accessArea: "meal plans" },
+  build_grocery_list: { label: "Build grocery list", description: "Use the saved meal plan to create and save an ingredient-level grocery list.", goal: "Build a practical grocery list", accessArea: "meal plans" },
+  review_week: { label: "Review week", description: "Review my authorized training, nutrition, hydration, and recovery context and explain useful priorities.", goal: "Review this week and suggest practical improvements", accessArea: "wellness" }
 };
 
 function record(value: unknown): UnknownRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : {};
 }
+
 function text(...values: unknown[]) {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) return value.trim();
@@ -88,42 +95,21 @@ export function buildAiActionSummary(actionType: AiActionType, context: UnknownR
 }
 
 export function buildChatGptActionPrompt(
-  request: Pick<AiActionRequest, "action_type" | "context_json" | "user_note">,
-  presentation = getAiActionPresentation(request.action_type)
+  actionType: AiActionType,
+  context: UnknownRecord,
+  userNote?: string | null
 ) {
-  if (request.action_type === "build_meal_plan") {
-    const context = record(request.context_json);
-    const planning = record(context.planning_profile);
-    const nutrition = record(context.nutrition_preference_profile);
-    const list = (value: unknown) => Array.isArray(value) && value.length ? value.join(", ") : "Not specified";
-    const value = (...values: unknown[]) => text(...values) || "Not specified";
-    return [
-      "Act as a practical, evidence-informed meal-planning assistant. Help me discuss and refine a meal plan before anything is imported into Plaivra.",
-      "MY PLANNING CONTEXT",
-      `Goal: ${value(planning.goal)}.`,
-      `Goal weight: ${value(planning.goal_weight_kg)}${planning.goal_weight_kg ? " kg" : ""}.`,
-      `Training schedule: ${value(planning.training_days_per_week)} days per week, ${value(planning.session_duration)} minutes per session, for ${value(planning.plan_duration_weeks)} weeks.`,
-      `Nutrition preferences: ${list(planning.nutrition_preferences)}.`,
-      `Food preferences: ${value(planning.food_preferences, list(nutrition.preferred_cuisines))}.`,
-      `Disliked foods: ${list(nutrition.disliked_foods)}.`,
-      `Allergies or limitations: ${value(planning.allergies_limitations, nutrition.allergies)}.`,
-      `Lifestyle constraints: ${value(planning.lifestyle_notes)}.`,
-      `Workout constraints: ${value(planning.workout_constraints)}.`,
-      `Other coaching context: ${value(planning.coaching_notes)}.`,
-      `Cooking and shopping context: budget ${value(nutrition.weekly_food_budget)} ${value(nutrition.budget_currency)}, maximum cooking time ${value(nutrition.max_cooking_time_minutes)} minutes, kitchen equipment ${list(nutrition.kitchen_equipment)}.`,
-      "First ask any essential questions and explain your recommendation. Do not finalize or import a plan until I explicitly approve it.",
-      "For the approved final plan, provide each meal with: day or date, meal type, food name, serving or quantity, calories, protein, carbohydrates, fat, and practical notes. Keep totals realistic and internally consistent.",
-      "After I approve the final version, use the Plaivra connection to import only that approved plan. Do not alter any other Plaivra data.",
-      request.user_note ? `My additional note: ${request.user_note.trim()}` : null
-    ].filter(Boolean).join("\n\n");
-  }
-  const summary = buildAiActionSummary(request.action_type, request.context_json);
+  const presentation = getAiActionPresentation(actionType);
+  const summary = buildAiActionSummary(actionType, context);
   const details = summary.map((row) => `${row.label}: ${row.value}.`);
+
   return [
-    "Please help me with this Plaivra request:",
+    "Connect to my Plaivra account for this request.",
+    `Use only the minimum authorized ${presentation.accessArea} context needed for the task. Do not ask me to repeat information that is already available in the relevant Plaivra context.`,
+    `Request: ${presentation.goal}.`,
     ...details,
-    request.user_note ? `My note: ${request.user_note.trim()}` : null,
+    userNote?.trim() ? `Additional instruction: ${userNote.trim()}` : null,
     presentation.description,
-    "Please explain your recommendation first. Do not change anything in Plaivra unless I approve it."
+    "Ask only for essential missing information. For an executable request, use the appropriate Plaivra tools to create or update the structured data. Do not claim that anything was saved until the Plaivra tool confirms success. Do not change unrelated Plaivra data."
   ].filter(Boolean).join("\n\n");
 }
