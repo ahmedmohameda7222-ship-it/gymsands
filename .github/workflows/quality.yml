@@ -16,7 +16,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-key
@@ -40,14 +40,46 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
+      - name: Run all quality checks
+        shell: bash
+        run: |
+          set +e
+          mkdir -p quality-reports
 
-      - name: Typecheck
-        run: npm run typecheck
+          npm run lint 2>&1 | tee quality-reports/lint.log
+          echo "${PIPESTATUS[0]}" > quality-reports/lint.exit
 
-      - name: Test
-        run: npm test
+          npm run typecheck 2>&1 | tee quality-reports/typecheck.log
+          echo "${PIPESTATUS[0]}" > quality-reports/typecheck.exit
 
-      - name: Build
-        run: npm run build
+          npm test 2>&1 | tee quality-reports/test.log
+          echo "${PIPESTATUS[0]}" > quality-reports/test.exit
+
+          npm run build 2>&1 | tee quality-reports/build.log
+          echo "${PIPESTATUS[0]}" > quality-reports/build.exit
+
+          exit 0
+
+      - name: Upload quality reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-reports-${{ github.run_id }}
+          path: quality-reports/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Enforce quality result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for check in lint typecheck test build; do
+            code="$(cat "quality-reports/${check}.exit")"
+            echo "${check}: exit ${code}"
+            if [ "$code" != "0" ]; then
+              failed=1
+            fi
+          done
+          exit "$failed"
