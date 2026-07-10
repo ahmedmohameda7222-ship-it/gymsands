@@ -47,70 +47,77 @@ jobs:
           mkdir -p quality-reports
 
           integrity_status=0
-          {
-            required_docs=(
-              docs/product/PLAIVRA_PRODUCT_CONSTITUTION.md
-              docs/product/PLAIVRA_LONG_TERM_PRODUCT_AND_PLATFORM_PLAN.md
-              docs/design-system/PLAIVRA_CROSS_PLATFORM_UI_CONSTITUTION.md
-              docs/design-system/platforms/web.md
-              docs/design-system/platforms/ios.md
-              docs/design-system/platforms/android.md
-              docs/chatgpt-app/README.md
-              docs/chatgpt-app/cimd-authentication-architecture.md
-              docs/architecture/canonical-domain-model.md
-            )
-            for document in "${required_docs[@]}"; do
-              if [ ! -f "$document" ]; then
-                echo "Missing authoritative document: $document"
-                integrity_status=1
-              fi
-            done
+          exec > >(tee quality-reports/integrity.log) 2>&1
 
-            temporary_workflow="$(find .github/workflows -maxdepth 1 -type f -name 'temporary-*' -print -quit)"
-            if [ -n "$temporary_workflow" ]; then
-              echo "Temporary workflow remains: $temporary_workflow"
+          required_docs=(
+            docs/product/PLAIVRA_PRODUCT_CONSTITUTION.md
+            docs/product/PLAIVRA_LONG_TERM_PRODUCT_AND_PLATFORM_PLAN.md
+            docs/design-system/PLAIVRA_CROSS_PLATFORM_UI_CONSTITUTION.md
+            docs/design-system/platforms/web.md
+            docs/design-system/platforms/ios.md
+            docs/design-system/platforms/android.md
+            docs/chatgpt-app/README.md
+            docs/chatgpt-app/cimd-authentication-architecture.md
+            docs/architecture/canonical-domain-model.md
+          )
+          for document in "${required_docs[@]}"; do
+            if [ ! -f "$document" ]; then
+              echo "Missing authoritative document: $document"
               integrity_status=1
             fi
+          done
 
-            runtime_files=(
-              lib/mcp/tools.ts
-              lib/mcp/server.ts
-              lib/mcp/tool-executor.ts
-              lib/mcp/tool-executor-safe.ts
-              services/database/execution-layer.ts
-              components/profile/execution-profiles.tsx
-              types/database.ts
-            )
-            retired_pattern='get_fitlife_status|get_ai_action_requests|create_ai_action_request|update_ai_action_request_status|get_safety_profile|update_safety_profile|save_chatgpt_workout_plan|generate_workout_plan|replace_meal_plan_item|admin_api_status|admin_search_users|get_admin_user_summary|AiActionRequestStatus|UserSafetyProfile|SafetyRiskLevel'
-            if grep -n -E "$retired_pattern" "${runtime_files[@]}"; then
-              echo "Retired Plaivra runtime names remain."
-              integrity_status=1
-            fi
+          temporary_workflow="$(find .github/workflows -maxdepth 1 -type f -name 'temporary-*' -print -quit)"
+          if [ -n "$temporary_workflow" ]; then
+            echo "Temporary workflow remains: $temporary_workflow"
+            integrity_status=1
+          fi
 
-            legacy_brand_pattern='FitLife|S&S Gym'
-            if grep -R -n -E "$legacy_brand_pattern" app components lib services types --include='*.ts' --include='*.tsx'; then
-              echo "Legacy product branding remains in active application source."
-              integrity_status=1
-            fi
+          runtime_files=(
+            lib/mcp/tools.ts
+            lib/mcp/server.ts
+            lib/mcp/tool-executor.ts
+            lib/mcp/tool-executor-safe.ts
+            services/database/execution-layer.ts
+            components/profile/execution-profiles.tsx
+            types/database.ts
+          )
+          retired_pattern='get_fitlife_status|get_ai_action_requests|create_ai_action_request|update_ai_action_request_status|get_safety_profile|update_safety_profile|save_chatgpt_workout_plan|generate_workout_plan|replace_meal_plan_item|admin_api_status|admin_search_users|get_admin_user_summary|AiActionRequestStatus|UserSafetyProfile|SafetyRiskLevel'
+          if grep -n -E "$retired_pattern" "${runtime_files[@]}"; then
+            echo "Retired Plaivra runtime names remain."
+            integrity_status=1
+          fi
 
-            if find supabase/migrations_archive -type f -print -quit 2>/dev/null | grep -q .; then
-              echo "Legacy migration archive still contains files."
-              integrity_status=1
-            fi
-          } 2>&1 | tee quality-reports/integrity.log
+          legacy_brand_pattern='FitLife|S&S Gym'
+          if grep -R -n -E "$legacy_brand_pattern" app components lib services types --include='*.ts' --include='*.tsx'; then
+            echo "Legacy product branding remains in active application source."
+            integrity_status=1
+          fi
+
+          archive_files="$(find supabase/migrations_archive -type f -print 2>/dev/null)"
+          if [ -n "$archive_files" ]; then
+            echo "Legacy migration archive still contains files:"
+            printf '%s\n' "$archive_files"
+            integrity_status=1
+          fi
+
           echo "$integrity_status" > quality-reports/integrity.exit
 
-          npm run lint 2>&1 | tee quality-reports/lint.log
-          echo "${PIPESTATUS[0]}" > quality-reports/lint.exit
+          exec > >(tee quality-reports/lint.log) 2>&1
+          npm run lint
+          echo "$?" > quality-reports/lint.exit
 
-          npm run typecheck 2>&1 | tee quality-reports/typecheck.log
-          echo "${PIPESTATUS[0]}" > quality-reports/typecheck.exit
+          exec > >(tee quality-reports/typecheck.log) 2>&1
+          npm run typecheck
+          echo "$?" > quality-reports/typecheck.exit
 
-          npm test 2>&1 | tee quality-reports/test.log
-          echo "${PIPESTATUS[0]}" > quality-reports/test.exit
+          exec > >(tee quality-reports/test.log) 2>&1
+          npm test
+          echo "$?" > quality-reports/test.exit
 
-          npm run build 2>&1 | tee quality-reports/build.log
-          echo "${PIPESTATUS[0]}" > quality-reports/build.exit
+          exec > >(tee quality-reports/build.log) 2>&1
+          NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build
+          echo "$?" > quality-reports/build.exit
 
           exit 0
 
