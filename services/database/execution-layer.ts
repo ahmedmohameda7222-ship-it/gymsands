@@ -3,9 +3,6 @@
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
 import type {
-  AiActionRequest,
-  AiActionRequestStatus,
-  AiActionType,
   DailyCheckinType,
   ExerciseAlternativeReason,
   GroceryStoreSection,
@@ -15,11 +12,8 @@ import type {
   UserGroceryItem,
   UserNutritionPreferenceProfile,
   UserNutritionTargetProfile,
-  UserProgressionTarget,
-  UserSafetyProfile
+  UserProgressionTarget
 } from "@/types";
-
-type JsonContext = Record<string, unknown>;
 
 function requireUser(userId: string) {
   if (!supabase || !isUuid(userId)) throw new Error("Please refresh, sign in again, and retry.");
@@ -27,69 +21,6 @@ function requireUser(userId: string) {
 
 function cleanText(value: string | null | undefined) {
   return value?.trim() || null;
-}
-
-export async function createAiActionRequest(input: {
-  userId: string;
-  actionType: AiActionType;
-  sourceType: string;
-  sourceId?: string | null;
-  context: JsonContext;
-  userNote?: string | null;
-  status?: AiActionRequestStatus;
-}) {
-  requireUser(input.userId);
-
-  const now = new Date().toISOString();
-
-  return {
-    id: `local-${crypto.randomUUID()}`,
-    user_id: input.userId,
-    action_type: input.actionType,
-    source_type: input.sourceType,
-    source_id: cleanText(input.sourceId),
-    status: input.status ?? "ready_for_chatgpt",
-    context_json: input.context,
-    user_note: cleanText(input.userNote),
-    created_at: now,
-    updated_at: now,
-    resolved_at: null
-  } as AiActionRequest;
-}
-
-export async function getAiActionRequests(userId: string, status?: AiActionRequestStatus) {
-  requireUser(userId);
-  let query = supabase!.from("ai_action_requests").select("*").eq("user_id", userId).order("created_at", { ascending: false });
-  if (status) query = query.eq("status", status);
-  const { data, error } = await query.limit(100);
-  if (error) throw error;
-  return (data ?? []) as AiActionRequest[];
-}
-
-export async function updateAiActionRequestStatus(userId: string, requestId: string, status: AiActionRequestStatus) {
-  requireUser(userId);
-  const { data, error } = await supabase!.from("ai_action_requests").update({
-    status,
-    resolved_at: status === "resolved" ? new Date().toISOString() : null
-  }).eq("id", requestId).eq("user_id", userId).select("*").single();
-  if (error) throw error;
-  return data as AiActionRequest;
-}
-
-export async function getSafetyProfile(userId: string) {
-  requireUser(userId);
-  const { data, error } = await supabase!.from("user_safety_profiles").select("*").eq("user_id", userId).maybeSingle();
-  if (error) throw error;
-  return data as UserSafetyProfile | null;
-}
-
-export type SafetyProfileInput = Omit<UserSafetyProfile, "id" | "user_id" | "created_at" | "updated_at">;
-
-export async function upsertSafetyProfile(userId: string, input: SafetyProfileInput) {
-  requireUser(userId);
-  const { data, error } = await supabase!.from("user_safety_profiles").upsert({ user_id: userId, ...input }, { onConflict: "user_id" }).select("*").single();
-  if (error) throw error;
-  return data as UserSafetyProfile;
 }
 
 export async function getNutritionPreferenceProfile(userId: string) {
