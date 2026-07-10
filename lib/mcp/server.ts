@@ -77,7 +77,7 @@ function mcpHasAllScopes(ctx: McpContext, scopes: string[]) {
 }
 
 const profileReadTools = new Set([
-  "get_fitlife_status",
+  "get_plaivra_status",
   "get_user_profile"
 ]);
 

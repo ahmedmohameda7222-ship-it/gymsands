@@ -91,7 +91,7 @@ const customFoodSchema = {
 };
 
 const toolDefinitions: McpToolSource[] = [
-  { name: "get_fitlife_status", title: "Get Plaivra connection status", description: "Validate the connection and return the linked Plaivra account identity. The legacy internal tool name is retained temporarily for compatibility.", inputSchema: emptyInputSchema, risk: "read" },
+  { name: "get_plaivra_status", title: "Get Plaivra connection status", description: "Validate the connection and return the linked Plaivra account identity. The legacy internal tool name is retained temporarily for compatibility.", inputSchema: emptyInputSchema, risk: "read" },
   { name: "get_user_profile", title: "Get Plaivra profile", description: "Return the authorized core fitness profile and targets. Use only when a narrower domain tool cannot satisfy the request.", inputSchema: emptyInputSchema, risk: "read" },
   { name: "get_today_summary", title: "Get today's Plaivra summary", description: "Return today's calorie totals, planned meals, workout, and water total when the user granted the required cross-domain access.", inputSchema: emptyInputSchema, risk: "read" },
 

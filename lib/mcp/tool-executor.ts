@@ -1,4 +1,3 @@
-import { configuredProviders } from "@/lib/integrations/env";
 import type { McpContext } from "@/lib/mcp/auth";
 import {
   asObject,
@@ -329,16 +328,13 @@ async function upsertTarget(ctx: McpContext, patch: Record<string, unknown>) {
   return data;
 }
 
-function assertAdmin(ctx: McpContext) {
-  if (ctx.profile.role !== "admin") throw new Error("not_admin");
-}
 
 export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput: unknown): Promise<McpToolResult> {
   const input = asObject(rawInput);
 
   try {
     switch (toolName) {
-      case "get_fitlife_status":
+      case "get_plaivra_status":
         return ok({ ok: true, connected: true, user_id: ctx.userId, connection_id: ctx.connectionId, scopes: ctx.scopes, profile: ctx.profile });
 
       case "get_user_profile": {
@@ -493,8 +489,6 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
       }
 
       case "create_custom_workout_plan":
-      case "save_chatgpt_workout_plan":
-      case "generate_workout_plan":
         return saveChatGptPlan(ctx, input);
 
       case "get_workout_plans": {
@@ -506,12 +500,6 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
       case "get_workout_plan_by_id":
         return ok({ ok: true, ...(await getFullPlan(ctx, getString(input, "plan_id"))) });
 
-      case "get_active_workout_plan": {
-        const { data, error } = await ctx.supabase.from("user_workout_plans").select("*").eq("user_id", ctx.userId).eq("is_active", true).maybeSingle();
-        if (error) throw new Error(error.message);
-        if (!data) return ok({ ok: true, plan: null, days: [], exercises: [] });
-        return ok({ ok: true, ...(await getFullPlan(ctx, String(data.id))) });
-      }
 
       case "create_workout_plan_day": {
         await requirePlan(ctx, getString(input, "plan_id"));
@@ -555,13 +543,6 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         return ok({ ok: true, inserted_count: items.length, items });
       }
 
-      case "add_cardio_to_plan": {
-        const full = await getFullPlan(ctx, getString(input, "plan_id"));
-        const rows = (full.days as Array<Record<string, unknown>>).map((day, index) => exerciseRow(String(day.id), { exercise_name: `${getNumber(input, "duration_minutes", 15)} min cardio`, reps: `${getNumber(input, "duration_minutes", 15)} min`, target_muscle: "cardiorespiratory", equipment: "Any", order_index: 900 + index, notes: getOptionalString(input, "intensity") ?? "moderate" }, "cardio"));
-        const { data, error } = await ctx.supabase.from("user_workout_plan_exercises").insert(rows).select("*");
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, inserted_count: data?.length ?? 0, items: data ?? [] });
-      }
 
       case "update_plan_exercise": {
         await requireExercise(ctx, getString(input, "plan_exercise_id"));
@@ -601,16 +582,7 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         return ok({ ok: true, deleted_plan_id: getString(input, "plan_id") });
       }
 
-      case "search_exercises":
-        return ok({ ok: true, exercises: [], message: "No exercise library is required. ChatGPT can create exercise names directly in user plans." });
 
-      case "replace_exercise": {
-        const full = await getFullPlan(ctx, getString(input, "plan_id"));
-        const ids = (full.days as Array<Record<string, unknown>>).map((day) => String(day.id));
-        const { data, error } = await ctx.supabase.from("user_workout_plan_exercises").update({ exercise_name: getString(input, "new_exercise_name"), notes: getOptionalString(input, "reason") ?? null }).in("plan_day_id", ids).ilike("exercise_name", getString(input, "old_exercise_name")).select("*");
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, replaced_count: data?.length ?? 0, exercises: data ?? [] });
-      }
 
       case "get_today_workout": {
         const today = cleanDate("today");
@@ -760,30 +732,11 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         return ok({ ok: true, deleted_water_log_id: getString(input, "water_log_id") });
       }
 
-      case "admin_api_status":
-        assertAdmin(ctx);
-        return ok({ ok: true, providers: configuredProviders() });
-
-      case "admin_search_users": {
-        assertAdmin(ctx);
-        const query = getString(input, "query");
-        const { data, error } = await ctx.supabase.from("profiles").select("id,email,full_name,role,created_at").or(`email.ilike.%${query}%,full_name.ilike.%${query}%`).limit(20);
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, users: data ?? [] });
-      }
-
-      case "get_admin_user_summary":
-      case "admin_create_global_food":
-      case "admin_create_global_workout_or_exercise":
-        assertAdmin(ctx);
-        return ok({ ok: false, deprecated: true, message: `${toolName} is not enabled in the ChatGPT-created-plan workflow.` });
-
       default:
         return fail("unknown_tool", `Unknown Plaivra MCP tool: ${toolName}`);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Plaivra MCP tool failed.";
-    if (message === "not_admin") return fail("not_admin", "Admin access is required.");
     return fail("tool_error", message);
   }
 }
