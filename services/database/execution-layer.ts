@@ -23,6 +23,65 @@ function cleanText(value: string | null | undefined) {
   return value?.trim() || null;
 }
 
+function cleanStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.map(String).map((item) => item.trim()).filter(Boolean)
+    : [];
+}
+
+export type FitnessConstraintInput = {
+  injury_or_limitation_labels: string[];
+  areas_to_protect: string[];
+  movement_restrictions: string | null;
+  nutrition_restrictions: string | null;
+};
+
+const emptyFitnessConstraints: FitnessConstraintInput = {
+  injury_or_limitation_labels: [],
+  areas_to_protect: [],
+  movement_restrictions: null,
+  nutrition_restrictions: null
+};
+
+function mapFitnessConstraints(data: Record<string, unknown> | null): FitnessConstraintInput | null {
+  if (!data) return null;
+  return {
+    injury_or_limitation_labels: cleanStringArray(data.injuries),
+    areas_to_protect: cleanStringArray(data.pain_areas),
+    movement_restrictions: cleanText(typeof data.movement_restrictions === "string" ? data.movement_restrictions : null),
+    nutrition_restrictions: cleanText(typeof data.nutrition_restrictions === "string" ? data.nutrition_restrictions : null)
+  };
+}
+
+export async function getFitnessConstraints(userId: string): Promise<FitnessConstraintInput | null> {
+  requireUser(userId);
+  const { data, error } = await supabase!
+    .from("user_safety_profiles")
+    .select("injuries,pain_areas,movement_restrictions,nutrition_restrictions")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return mapFitnessConstraints(data as Record<string, unknown> | null);
+}
+
+export async function upsertFitnessConstraints(userId: string, input: FitnessConstraintInput): Promise<FitnessConstraintInput> {
+  requireUser(userId);
+  const payload = {
+    user_id: userId,
+    injuries: cleanStringArray(input.injury_or_limitation_labels),
+    pain_areas: cleanStringArray(input.areas_to_protect),
+    movement_restrictions: cleanText(input.movement_restrictions),
+    nutrition_restrictions: cleanText(input.nutrition_restrictions)
+  };
+  const { data, error } = await supabase!
+    .from("user_safety_profiles")
+    .upsert(payload, { onConflict: "user_id" })
+    .select("injuries,pain_areas,movement_restrictions,nutrition_restrictions")
+    .single();
+  if (error) throw error;
+  return mapFitnessConstraints(data as Record<string, unknown>) ?? emptyFitnessConstraints;
+}
+
 export async function getNutritionPreferenceProfile(userId: string) {
   requireUser(userId);
   const { data, error } = await supabase!.from("user_nutrition_preference_profiles").select("*").eq("user_id", userId).maybeSingle();
