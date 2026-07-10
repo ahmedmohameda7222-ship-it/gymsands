@@ -1,139 +1,160 @@
-# ChatGPT Codex Prompt Rules for Plaivra
+# ChatGPT and Codex Prompt Rules for Plaivra
 
-Use this file in future ChatGPT conversations.
+Use this file when preparing a Codex task for Plaivra.
 
-## Main Rule
+## 1. Product authority
 
-## Plaivra Taste Skill Rule
+Every prompt must respect this read order:
 
-When a Codex task involves public landing/auth visual polish, marketing/product UI cards, mobile mockup references, or anti-generic layout review, include the relevant Taste Skill.
+1. `docs/product/PLAIVRA_PRODUCT_CONSTITUTION.md`
+2. `docs/product/PLAIVRA_LONG_TERM_PRODUCT_AND_PLATFORM_PLAN.md`
+3. `docs/product/ai-first-tracker-model.md`
+4. `docs/design-system/PLAIVRA_CROSS_PLATFORM_UI_CONSTITUTION.md`
+5. relevant platform file under `docs/design-system/platforms/`
+6. `docs/chatgpt-app/README.md`
+7. `docs/chatgpt-app/cimd-authentication-architecture.md`
+8. `docs/architecture/canonical-domain-model.md`
+9. `docs/platform-roadmap/README.md`
+10. task-specific implementation and tests
 
-Use Taste Skill only as a secondary visual-quality layer.
+Do not use removed audits, progress trackers, submission evidence, or historical prompts as current authority.
 
-Plaivra source-of-truth files override Taste Skill:
+## 2. Required product instruction
 
-- `docs/product/ai-first-tracker-model.md`
-- `docs/ux-constitution/README.md`
-- `docs/ux-constitution/flow-and-workflow-audit.md`
-- `docs/ux-constitution/motion-and-interaction.md`
-- `docs/ux-progress/README.md`
-
-Required instruction to include in those Codex prompts:
-
-```text
-Plaivra UX Constitution overrides Taste Skill. Use Taste only for landing/auth visual polish, product UI cards, mobile mockup references, and anti-generic layout review.
-
-ChatGPT should choose the exact Codex mode and Ruflo skills for each task before writing the Codex prompt.
-
-Do not rely on Codex to guess the skill list by itself.
-
-## Future User Message
-
-Use this in a new chat:
+Include this for product, UX, MCP, or data work:
 
 ```text
-Read CHATGPT_CODEX_PROMPT_RULES.md and Ruflo_usage.md from my repo.
-I want to do this task:
-[describe task]
-
-Choose the best Codex mode and Ruflo skills.
-Then write the exact prompt I should paste into Codex.
-Optimize for low token usage and launch-quality output.
+Plaivra is a persistent, user-controlled fitness context and execution platform for ChatGPT. ChatGPT is the reasoning layer and directly creates or updates structured Plaivra data through authorized tools. Plaivra is the storage, visualization, tracking, history, correction, permission, privacy, and execution layer. Do not build a copy/import queue or a second in-app approval workflow. Preserve fast direct controls for daily real-world execution and correction.
 ```
 
-## What ChatGPT Must Output
+## 3. Choose scope before model intensity
 
-For each task, ChatGPT must provide:
+Do not send the whole repository to the heaviest model for every task.
 
-1. Recommended Codex mode.
-2. Exact skill list.
-3. Whether to start with `/caveman lite`.
-4. The final Codex prompt.
-5. What Codex should avoid changing.
-6. Verification steps.
+Recommended pattern:
 
-## Default Choice Table
-
-| Task | Setup |
+| Task | Default approach |
 |---|---|
-| Tiny edit | medium |
-| Normal fix | high |
-| Non-risky work with token saving | medium plus advisor |
-| Important app change | high plus advisor |
-| Whole UX audit | medium mapping plus advisor |
-| Very hard bug | xhigh or high plus advisor |
+| Tiny mechanical edit | fast/economical model, medium reasoning |
+| Route or normal bug | everyday coding model, high reasoning |
+| Multi-file feature in one domain | everyday or strongest coding model, high reasoning |
+| Architecture, MCP, auth, privacy, security | strongest coding model, extra-high reasoning |
+| One unusually hard isolated problem | strongest coding model, maximum single-problem reasoning when necessary |
+| Multiple genuinely independent workstreams | parallel/ultra only when usage budget supports it |
 
-## Skill Sets
+Large repository size alone does not justify maximum or parallel reasoning. Relevant scope and task coupling decide.
 
-Normal fix:
+For usage-constrained plans, prefer focused vertical tasks and reuse existing repository maps.
+
+## 4. Skill selection
+
+Use only relevant skills.
+
+### Normal change
 
 ```text
-/caveman lite
-
-$memory-management $agent-coder $agent-reviewer $agent-tester
+$memory-management
+$agent-coder
+$agent-reviewer
+$agent-tester
 ```
 
-Big UX or multi-file flow:
+### Auth, MCP, Supabase, privacy, or user data
 
 ```text
-/caveman lite
-
-$swarm-orchestration $memory-management $agent-reviewer $agent-tester
+$memory-management
+$security-audit
+$agent-coder
+$agent-reviewer
+$agent-tester
 ```
 
-App data, API, login, or write-flow task:
+### Repo-wide work with independent domains
 
 ```text
-/caveman lite
-
-$memory-management $security-audit $agent-reviewer $agent-coder $agent-tester
+$swarm-orchestration
+$memory-management
+$security-audit
+$performance-analysis
+$agent-coder
+$agent-reviewer
+$agent-tester
 ```
 
-Audit only:
+Do not invoke swarm for a single route or one tightly coupled problem.
+
+## 5. Standard prompt structure
 
 ```text
 /caveman lite
 
-$swarm-orchestration $memory-management $performance-analysis $agent-reviewer
-```
-
-## Standard Prompt Shape
-
-```text
-/caveman lite
-
-[skills]
+[only the relevant skills]
 
 Task:
-[exact task]
+[one exact outcome]
 
-Mode:
-[recommended mode]
+Authoritative references:
+[list only the required constitution/architecture files]
+
+Current product rule:
+[include the Plaivra product instruction]
+
+Scope:
+[domains/routes/files to inspect]
 
 Before editing:
-1. Use memory_search before planning.
-2. Inspect only relevant files.
-3. Make a short plan.
+1. Inspect current git status and preserve compliant unfinished work.
+2. Read the authoritative references.
+3. Inspect relevant code, tests, schemas, and runtime dependencies.
+4. Produce a short implementation plan.
 
 Rules:
-1. Make the smallest clean change.
-2. Do not touch unrelated files.
-3. Preserve existing behavior.
-4. Run available checks.
+1. Complete the task; do not stop at an audit or plan.
+2. Change only what is needed for the outcome.
+3. Remove obsolete behavior when the task proves it is no longer used.
+4. Do not preserve a contradictory historical workflow.
+5. Never rewrite applied Supabase migrations.
+6. Preserve authentication, authorization, ownership, data integrity, privacy, accessibility, and rollback.
+7. Run available checks and rendered QA relevant to the change.
+8. Do not claim unrun checks passed.
 
 Final report:
-1. Changed files
-2. What changed
-3. What was tested
-4. Risks
-5. Anything not verified
-6. Whether memory_store was used
+1. Changed files.
+2. Product/architecture decision implemented.
+3. Database or migration impact.
+4. Tests and rendered checks actually run.
+5. Security/privacy impact.
+6. Remaining risks and anything not verified.
+7. Rollback/follow-up requirement.
 ```
 
-## Final Workflow
+## 6. Long-running task goal
 
-1. Ask ChatGPT for the task.
-2. ChatGPT reads this file and `Ruflo_usage.md`.
-3. ChatGPT chooses explicit skills.
-4. ChatGPT writes one exact Codex prompt.
-5. User pastes the prompt into Codex.
+For a long-running Codex CLI task, set a concise `/goal` that points to the immediately preceding detailed prompt. Do not paste an oversized prompt into `/goal`.
+
+Example:
+
+```text
+/goal Treat my immediately previous detailed Plaivra prompt as the authoritative task. Continue from the current working-tree state, preserve compliant completed work, finish implementation and verification, and do not commit or push unless explicitly requested.
+```
+
+Use `/goal resume` only when the CLI reports that the goal is paused.
+
+## 7. Taste and external design references
+
+External visual references are secondary.
+
+The Plaivra Product Constitution and Cross-Platform UI Constitution override Taste Skill, screenshots, generic app patterns, and generated design suggestions.
+
+Use external references to improve polish, not to change the product model or create inconsistent platform behavior.
+
+## 8. Future user message
+
+```text
+Read AGENTS.md, CHATGPT_CODEX_PROMPT_RULES.md, and the authoritative Plaivra documents required for this task.
+
+Task:
+[describe the exact outcome]
+
+Choose the most economical model/reasoning and only the Ruflo skills needed. Then write one exact Codex prompt that completes the implementation and verification without unrelated changes.
+```
