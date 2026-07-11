@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabase/client";
 import { env } from "@/lib/env";
 import { isUuid } from "@/lib/utils";
 import { launchAgeSchema } from "@/lib/auth/eligibility";
+import { isOnboardingComplete } from "@/lib/onboarding/adaptive-profile";
 import type { OnboardingAnswers, Profile } from "@/types";
 
 type ProfilePatch = {
@@ -40,7 +41,6 @@ const onboardingAnswerColumns = new Set([
   "workout_constraints",
   "coaching_notes",
   "setup_stage",
-  "first_useful_job",
   "completed_at"
 ]);
 
@@ -84,26 +84,29 @@ export function buildOnboardingAnswersPayload(answers: OnboardingAnswers) {
   return payload;
 }
 
+// Mock data is isolated to NEXT_PUBLIC_USE_MOCK_AUTH and is never used as a
+// production personal-data default.
 function mockOnboarding(userId: string): OnboardingAnswers {
   return {
     user_id: userId,
+    age: 25,
     age_range: "25-34",
     gender: "",
     height_cm: null,
     weight_kg: null,
     goal_weight_kg: null,
-    goal: "General fitness",
-    goals: ["General fitness"],
+    goal: "improve_health",
+    goals: ["improve_health"],
     training_cycle: null,
-    training_level: "Beginner",
-    training_place: "Gym",
+    training_level: "beginner",
+    training_place: "mixed",
     training_days_per_week: 3,
     workout_duration_minutes: 45,
-    min_workout_duration_minutes: 30,
-    max_workout_duration_minutes: 60,
+    min_workout_duration_minutes: 45,
+    max_workout_duration_minutes: 45,
     desired_duration_weeks: 4,
     available_equipment: [],
-    nutrition_preferences: [],
+    nutrition_preferences: ["no_preference"],
     allergies_limitations: null,
     injuries_limitations: null,
     training_preferences: null,
@@ -111,9 +114,8 @@ function mockOnboarding(userId: string): OnboardingAnswers {
     lifestyle_notes: null,
     workout_constraints: null,
     coaching_notes: null,
-    setup_stage: 0,
-    first_useful_job: "training_plan",
-    completed_at: null
+    setup_stage: 6,
+    completed_at: new Date(0).toISOString()
   };
 }
 
@@ -154,35 +156,14 @@ export async function saveOnboarding(answers: OnboardingAnswers) {
   if (!canUseUserData(answers.user_id)) return answers;
 
   const payload = buildOnboardingAnswersPayload(answers);
-  let { data, error } = await supabase!.from("onboarding_answers").upsert(payload, { onConflict: "user_id" }).select("*").single();
+  const { data, error } = await supabase!
+    .from("onboarding_answers")
+    .upsert(payload, { onConflict: "user_id" })
+    .select("*")
+    .single();
 
-  const optionalColumns = [
-    "age",
-    "goal_weight_kg",
-    "available_equipment",
-    "desired_duration_weeks",
-    "goals",
-    "training_cycle",
-    "min_workout_duration_minutes",
-    "max_workout_duration_minutes",
-    "injuries_limitations",
-    "training_preferences",
-    "food_preferences",
-    "lifestyle_notes",
-    "workout_constraints",
-    "coaching_notes",
-    "setup_stage",
-    "first_useful_job",
-    "completed_at"
-  ];
-  const lowerErrorMessage = error?.message.toLowerCase() ?? "";
-  if (error && optionalColumns.some((column) => lowerErrorMessage.includes(column))) {
-    const compatiblePayload = { ...payload };
-    optionalColumns.forEach((column) => delete compatiblePayload[column]);
-    const compatible = await supabase!.from("onboarding_answers").upsert(compatiblePayload, { onConflict: "user_id" }).select("*").single();
-    data = compatible.data;
-    error = compatible.error;
-  }
+  // Do not report success after dropping unsupported fields. A schema mismatch
+  // must fail clearly so required onboarding data is never silently discarded.
   if (error) throw error;
   return data as OnboardingAnswers;
 }
@@ -190,7 +171,12 @@ export async function saveOnboarding(answers: OnboardingAnswers) {
 export async function getOnboarding(userId: string) {
   if (env.useMockAuth && userId === "mock-user") return mockOnboarding(userId);
   if (!canUseUserData(userId)) return null;
-  const { data, error } = await supabase!.from("onboarding_answers").select("*").match({ user_id: userId }).maybeSingle();
+  const { data, error } = await supabase!
+    .from("onboarding_answers")
+    .select("*")
+    .match({ user_id: userId })
+    .maybeSingle();
   if (error) throw error;
-  return data as OnboardingAnswers | null;
+  const onboarding = data as OnboardingAnswers | null;
+  return isOnboardingComplete(onboarding) ? onboarding : null;
 }
