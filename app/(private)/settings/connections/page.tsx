@@ -6,8 +6,10 @@ import {
   ChatGptActivityCard,
   ChatGptConnectionStatusHero,
   ChatGptSetupCard,
-  ConnectionStatusCard
+  ConnectionStatusCard,
+  TemporaryChatGptDeveloperSetupCard
 } from "@/components/settings/connected-apps";
+import { env } from "@/lib/env";
 import { useTranslation } from "@/lib/i18n/use-translation";
 
 export default function ChatGptConnectionsSettingsPage() {
@@ -16,9 +18,10 @@ export default function ChatGptConnectionsSettingsPage() {
   return (
     <SettingsPageShell title={t("settings.aiImports")} description={t("settings.aiPageDesc")}>
       <div className="space-y-4">
+        {env.manualChatGptSetupEnabled ? <TemporaryChatGptDeveloperSetupCard /> : null}
         <ChatGptConnectionStatusHero />
         <AiPermissionsCard />
-        <ChatGptSetupCard />
+        {!env.manualChatGptSetupEnabled ? <ChatGptSetupCard /> : null}
         <ConnectionStatusCard />
         <ChatGptActivityCard />
       </div>
