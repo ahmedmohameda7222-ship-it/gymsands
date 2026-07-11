@@ -4,7 +4,8 @@ const mocks = vi.hoisted(() => ({
   createAdmin: vi.fn(),
   verify: vi.fn(),
   hash: vi.fn(() => "a".repeat(64)),
-  process: vi.fn()
+  claim: vi.fn(),
+  processClaimed: vi.fn()
 }));
 
 vi.mock("@/lib/integrations/env", () => ({
@@ -12,7 +13,10 @@ vi.mock("@/lib/integrations/env", () => ({
 }));
 vi.mock("@/lib/server/supabase-admin", () => ({ createSupabaseAdminClient: mocks.createAdmin }));
 vi.mock("@/lib/billing/stripe-server", () => ({ hashBillingPayload: mocks.hash, verifyStripeWebhook: mocks.verify }));
-vi.mock("@/lib/billing/stripe-event-processor", () => ({ processStripeSubscriptionEvent: mocks.process }));
+vi.mock("@/lib/billing/stripe-event-worker", () => ({
+  claimStripeEvent: mocks.claim,
+  processClaimedStripeEvent: mocks.processClaimed
+}));
 
 import { POST } from "@/app/api/billing/stripe/webhook/route";
 
@@ -22,6 +26,13 @@ function request(signature?: string) {
     body: "{}",
     headers: signature ? { "stripe-signature": signature } : undefined
   });
+}
+
+function duplicateLedgerAdmin() {
+  const single = vi.fn().mockResolvedValue({ data: null, error: { code: "23505" } });
+  const select = vi.fn(() => ({ single }));
+  const insert = vi.fn(() => ({ select }));
+  return { from: vi.fn(() => ({ insert })) };
 }
 
 describe("Stripe webhook route", () => {
@@ -34,16 +45,30 @@ describe("Stripe webhook route", () => {
     expect(mocks.createAdmin).not.toHaveBeenCalled();
   });
 
-  it("acknowledges a replayed provider event without processing twice", async () => {
+  it("acknowledges a duplicate that is already processed or currently leased", async () => {
     mocks.verify.mockReturnValue({ id: "evt_1", type: "customer.subscription.updated", created: 1783764000 });
-    const single = vi.fn().mockResolvedValue({ data: null, error: { code: "23505" } });
-    const select = vi.fn(() => ({ single }));
-    const insert = vi.fn(() => ({ select }));
-    mocks.createAdmin.mockReturnValue({ from: vi.fn(() => ({ insert })) });
+    mocks.createAdmin.mockReturnValue(duplicateLedgerAdmin());
+    mocks.claim.mockResolvedValue(null);
 
     const response = await POST(request("valid"));
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ received: true, duplicate: true });
-    expect(mocks.process).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toEqual({ received: true, duplicate: true, queued: true });
+    expect(mocks.processClaimed).not.toHaveBeenCalled();
+  });
+
+  it("reclaims and processes a retryable duplicate instead of silently discarding it", async () => {
+    const event = { id: "evt_retry", type: "customer.subscription.updated", created: 1783764000 };
+    const ledger = { id: 7, provider_event_id: event.id, processing_attempts: 2 };
+    const admin = duplicateLedgerAdmin();
+    mocks.verify.mockReturnValue(event);
+    mocks.createAdmin.mockReturnValue(admin);
+    mocks.claim.mockResolvedValue(ledger);
+    mocks.processClaimed.mockResolvedValue({ ok: true, status: "processed" });
+
+    const response = await POST(request("valid"));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ received: true, status: "processed" });
+    expect(mocks.claim).toHaveBeenCalledWith(admin, event.id);
+    expect(mocks.processClaimed).toHaveBeenCalledWith(admin, ledger, event);
   });
 });
