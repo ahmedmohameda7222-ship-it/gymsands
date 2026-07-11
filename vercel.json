@@ -11,7 +11,7 @@
     },
     {
       "path": "/api/internal/maintenance/billing-events",
-      "schedule": "7 * * * *"
+      "schedule": "7 4 * * *"
     }
   ]
 }
