@@ -7,7 +7,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: quality-${{ github.workflow }}-${{ github.ref }}
@@ -42,27 +42,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-
-      - name: Apply one-shot clean recheck remediation
-        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'prelaunch-remediation-2026-07' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ ! -f scripts/apply-clean-recheck-remediation.py ]; then
-            echo "No one-shot remediation script present."
-            exit 0
-          fi
-          mkdir -p quality-reports
-          if ! python3 scripts/apply-clean-recheck-remediation.py > quality-reports/remediation.log 2>&1; then
-            cat quality-reports/remediation.log
-            exit 1
-          fi
-          npm install --package-lock-only --ignore-scripts
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add --all
-          git commit -m "fix: close deep recheck correctness gaps"
-          git push origin HEAD:prelaunch-remediation-2026-07
 
       - name: Install dependencies
         run: npm ci
@@ -100,6 +79,11 @@ jobs:
             temporary_workflow="$(find .github/workflows -maxdepth 1 -type f -name 'temporary-*' -print -quit)"
             if [ -n "$temporary_workflow" ]; then
               echo "Temporary workflow remains: $temporary_workflow"
+              integrity_status=1
+            fi
+
+            if [ -e scripts/apply-clean-recheck-remediation.py ]; then
+              echo "One-shot remediation script remains in the repository."
               integrity_status=1
             fi
 
