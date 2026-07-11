@@ -17,7 +17,7 @@ const SESSION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const UPDATED_AT = "2026-07-11T12:00:00.000Z";
 
 type Row = Record<string, unknown>;
-type Filter = { kind: "eq" | "is" | "in" | "gte" | "lte" | "ilike"; field: string; value: unknown };
+type Filter = { kind: "eq" | "is" | "in" | "gte" | "gt" | "lte" | "lt" | "ilike"; field: string; value: unknown };
 
 function initialTables(): Record<string, Row[]> {
   return {
@@ -73,7 +73,9 @@ function createInMemorySupabase() {
       if (filter.kind === "is") return value === filter.value;
       if (filter.kind === "in") return Array.isArray(filter.value) && filter.value.includes(value);
       if (filter.kind === "gte") return String(value ?? "") >= String(filter.value ?? "");
+      if (filter.kind === "gt") return String(value ?? "") > String(filter.value ?? "");
       if (filter.kind === "lte") return String(value ?? "") <= String(filter.value ?? "");
+      if (filter.kind === "lt") return String(value ?? "") < String(filter.value ?? "");
       if (filter.kind === "ilike") return String(value ?? "").toLowerCase().includes(String(filter.value ?? "").replaceAll("%", "").toLowerCase());
       return true;
     });
@@ -81,7 +83,7 @@ function createInMemorySupabase() {
     const materialize = () => {
       const existing = tables[table] ?? (tables[table] = []);
       if (action === "insert" || action === "upsert") {
-        const incoming = (Array.isArray(payload) ? payload : [payload ?? {}]).map((row) => ({
+        const incoming: Row[] = (Array.isArray(payload) ? payload : [payload ?? {}]).map((row): Row => ({
           id: typeof row.id === "string" ? row.id : nextId(),
           created_at: UPDATED_AT,
           updated_at: UPDATED_AT,
@@ -119,7 +121,9 @@ function createInMemorySupabase() {
     builder.is = (field: string, value: unknown) => { filters.push({ kind: "is", field, value }); return builder; };
     builder.in = (field: string, value: unknown[]) => { filters.push({ kind: "in", field, value }); return builder; };
     builder.gte = (field: string, value: unknown) => { filters.push({ kind: "gte", field, value }); return builder; };
+    builder.gt = (field: string, value: unknown) => { filters.push({ kind: "gt", field, value }); return builder; };
     builder.lte = (field: string, value: unknown) => { filters.push({ kind: "lte", field, value }); return builder; };
+    builder.lt = (field: string, value: unknown) => { filters.push({ kind: "lt", field, value }); return builder; };
     builder.ilike = (field: string, value: unknown) => { filters.push({ kind: "ilike", field, value }); return builder; };
     builder.neq = () => builder;
     builder.or = () => builder;

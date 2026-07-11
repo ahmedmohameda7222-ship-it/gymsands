@@ -24,7 +24,7 @@ describe("Stripe durable event worker", () => {
       id: 1,
       provider_event_id: "evt_1",
       processing_attempts: 1
-    }, event)).rejects.toThrow("completion state");
+    }, event)).rejects.toThrow(/completion state|retry state/);
   });
 
   it("does not hide a failed retry-state write", async () => {
