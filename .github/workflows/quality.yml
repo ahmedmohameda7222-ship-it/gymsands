@@ -52,7 +52,11 @@ jobs:
             echo "No one-shot remediation script present."
             exit 0
           fi
-          python3 scripts/apply-clean-recheck-remediation.py
+          mkdir -p quality-reports
+          if ! python3 scripts/apply-clean-recheck-remediation.py > quality-reports/remediation.log 2>&1; then
+            cat quality-reports/remediation.log
+            exit 1
+          fi
           npm install --package-lock-only --ignore-scripts
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
