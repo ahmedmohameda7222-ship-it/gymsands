@@ -136,6 +136,122 @@ function StatusBox({ title, label, state }: { title: string; label: string; stat
   );
 }
 
+const CHATGPT_DEVELOPER_APP_NAME = "Plaivra";
+const CHATGPT_DEVELOPER_APP_DESCRIPTION =
+  "Use Plaivra to create, store, track, and update personalized workouts, meal plans, nutrition, hydration, wellness, and progress.";
+
+type DeveloperSetupValueProps = {
+  label: string;
+  value: string;
+  copyLabel: string;
+  onCopy: (value: string, successTitle: string) => void;
+  code?: boolean;
+};
+
+function DeveloperSetupValue({ label, value, copyLabel, onCopy, code = false }: DeveloperSetupValueProps) {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-foreground">{label}</p>
+        <p className={`mt-1 select-text break-words text-sm leading-6 text-muted-foreground ${code ? "font-mono text-xs sm:text-sm" : ""}`}>
+          {value}
+        </p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-11 w-full shrink-0 sm:w-auto"
+        aria-label={`Copy ${label}`}
+        onClick={() => onCopy(value, copyLabel)}
+      >
+        Copy
+      </Button>
+    </div>
+  );
+}
+
+export function TemporaryChatGptDeveloperSetupCard() {
+  const { toast } = useToast();
+  const mcpServerUrl = env.plaivraMcpServerUrl.trim();
+  const hasMcpServerUrl = Boolean(mcpServerUrl);
+
+  async function copyValue(value: string, successTitle: string) {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is unavailable.");
+      await navigator.clipboard.writeText(value);
+      toast({ title: successTitle, variant: "success" });
+    } catch {
+      toast({
+        title: "Copy failed",
+        description: "Select the value and copy it manually.",
+        variant: "error"
+      });
+    }
+  }
+
+  return (
+    <Card className="border-primary/25 bg-primary/5">
+      <CardHeader>
+        <div className="flex flex-wrap items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Bot className="h-5 w-5 text-primary" /> Manual ChatGPT setup
+          </CardTitle>
+          <Badge variant="outline">Temporary</Badge>
+        </div>
+        <CardDescription>
+          Plaivra is awaiting publication in ChatGPT. Use these values to create a developer-mode app.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <DeveloperSetupValue
+          label="App name"
+          value={CHATGPT_DEVELOPER_APP_NAME}
+          copyLabel="App name copied"
+          onCopy={(value, successTitle) => void copyValue(value, successTitle)}
+        />
+        <DeveloperSetupValue
+          label="Description"
+          value={CHATGPT_DEVELOPER_APP_DESCRIPTION}
+          copyLabel="Description copied"
+          onCopy={(value, successTitle) => void copyValue(value, successTitle)}
+        />
+        {hasMcpServerUrl ? (
+          <DeveloperSetupValue
+            label="MCP server URL"
+            value={mcpServerUrl}
+            copyLabel="MCP server URL copied"
+            onCopy={(value, successTitle) => void copyValue(value, successTitle)}
+            code
+          />
+        ) : (
+          <div className="flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground">MCP server URL</p>
+              <p className="mt-1 text-sm leading-6 text-destructive" role="alert">
+                The public Plaivra MCP server URL is not configured.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 w-full shrink-0 sm:w-auto"
+              aria-label="Copy MCP server URL"
+              disabled
+            >
+              Copy
+            </Button>
+          </div>
+        )}
+        <Button asChild variant="outline" className="min-h-11 w-full sm:w-auto">
+          <a href="https://chatgpt.com/plugins" target="_blank" rel="noreferrer">
+            <ExternalLink className="h-4 w-4" /> Open ChatGPT plugins
+          </a>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ChatGptSetupCard() {
   const connectionConfigured = Boolean(env.plaivraMcpServerUrl.trim());
   return (
@@ -313,5 +429,11 @@ export function ChatGptActivityCard() {
 }
 
 export function ConnectedApps() {
-  return <div className="space-y-4"><ChatGptSetupCard /><ConnectionStatusCard /><ChatGptActivityCard /></div>;
+  return (
+    <div className="space-y-4">
+      {env.manualChatGptSetupEnabled ? <TemporaryChatGptDeveloperSetupCard /> : <ChatGptSetupCard />}
+      <ConnectionStatusCard />
+      <ChatGptActivityCard />
+    </div>
+  );
 }
