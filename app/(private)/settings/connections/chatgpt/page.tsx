@@ -1,7 +1,8 @@
 "use client";
 
-import { ChatGptSetupFlow } from "@/components/settings/connected-apps";
+import { ChatGptSetupFlow, TemporaryChatGptDeveloperSetupCard } from "@/components/settings/connected-apps";
 import { SettingsPageShell } from "@/components/settings/settings-page-shell";
+import { env } from "@/lib/env";
 
 export default function ChatGptConnectionSetupPage() {
   return (
@@ -9,7 +10,7 @@ export default function ChatGptConnectionSetupPage() {
       title="Connect Plaivra to ChatGPT"
       description="Choose limited permissions in Plaivra, then complete the OAuth connection from ChatGPT."
     >
-      <ChatGptSetupFlow />
+      {env.manualChatGptSetupEnabled ? <TemporaryChatGptDeveloperSetupCard /> : <ChatGptSetupFlow />}
     </SettingsPageShell>
   );
 }
