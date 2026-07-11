@@ -19,6 +19,11 @@ function digest(value: string) {
 }
 
 type StoredResponse = Pick<McpToolResult, "structuredContent" | "isError">;
+type ClaimRow = {
+  action: "execute" | "replay" | "conflict" | "in_progress" | "review_required";
+  ledger_id: string | null;
+  response: unknown;
+};
 
 function restoreResponse(response: unknown): McpToolResult | null {
   if (!response || typeof response !== "object" || Array.isArray(response)) return null;
@@ -46,49 +51,46 @@ export async function executeIdempotentMcpMutation({
   if (key.length < 16 || key.length > 200) {
     return fail("invalid_idempotency_key", "Provide a stable 16-200 character idempotency_key for this mutation.");
   }
+
   const keyHash = digest(`${ctx.userId}:${toolName}:${key}`);
   const inputHash = digest(canonicalJson(input));
-  const created = await ctx.supabase
-    .from("mcp_idempotency_keys")
-    .insert({
-      user_id: ctx.userId,
-      connection_id: ctx.connectionId,
-      tool_name: toolName,
-      key_hash: keyHash,
-      input_hash: inputHash,
-      status: "pending"
-    })
-    .select("id,status,input_hash,response,expires_at")
-    .maybeSingle();
+  const claimed = await ctx.supabase.rpc("claim_mcp_idempotency_key", {
+    p_user_id: ctx.userId,
+    p_connection_id: ctx.connectionId,
+    p_tool_name: toolName,
+    p_key_hash: keyHash,
+    p_input_hash: inputHash,
+    p_lease_seconds: 120,
+    p_ttl_seconds: 7 * 24 * 60 * 60
+  });
+  if (claimed.error) {
+    return fail("idempotency_unavailable", "Plaivra could not establish replay protection. No change was attempted; retry later.");
+  }
 
-  let ledger = created.data as Record<string, unknown> | null;
-  if (created.error) {
-    const duplicate = created.error.code === "23505" || /duplicate|unique/i.test(created.error.message ?? "");
-    if (!duplicate) return fail("idempotency_unavailable", "Plaivra could not establish replay protection. No change was attempted; retry later.");
-    const existing = await ctx.supabase
-      .from("mcp_idempotency_keys")
-      .select("id,status,input_hash,response,expires_at")
-      .eq("user_id", ctx.userId)
-      .eq("tool_name", toolName)
-      .eq("key_hash", keyHash)
-      .maybeSingle();
-    if (existing.error || !existing.data) return fail("idempotency_unavailable", "Plaivra could not verify this retry. Review the affected record before trying again.");
-    ledger = existing.data as Record<string, unknown>;
-    if (ledger.input_hash !== inputHash) {
-      return fail("idempotency_conflict", "This idempotency_key was already used with different input. Use a new key for a different action.");
-    }
-    const replay = restoreResponse(ledger.response);
-    if ((ledger.status === "completed" || ledger.status === "failed") && replay) return replay;
+  const claim = (Array.isArray(claimed.data) ? claimed.data[0] : claimed.data) as ClaimRow | null;
+  if (!claim) return fail("idempotency_unavailable", "Plaivra could not establish replay protection. No change was attempted; retry later.");
+  if (claim.action === "conflict") {
+    return fail("idempotency_conflict", "This idempotency_key was already used with different input. Use a new key for a different action.");
+  }
+  if (claim.action === "in_progress") {
     return fail("idempotency_in_progress", "An identical request is still being processed. Retry with the same key after a short delay.");
   }
-  if (!ledger?.id) return fail("idempotency_unavailable", "Plaivra could not establish replay protection. No change was attempted; retry later.");
+  if (claim.action === "review_required") {
+    return fail("idempotency_review_required", "A prior action may have completed without durable replay evidence. Review the affected record before retrying.");
+  }
+  if (claim.action === "replay") {
+    return restoreResponse(claim.response)
+      ?? fail("idempotency_review_required", "Stored replay evidence is incomplete. Review the affected record before retrying.");
+  }
+  if (claim.action !== "execute" || !claim.ledger_id) {
+    return fail("idempotency_unavailable", "Plaivra could not establish replay protection. No change was attempted; retry later.");
+  }
 
   let result: McpToolResult;
   try {
     result = await execute();
-  } catch (error) {
-    await ctx.supabase.from("mcp_idempotency_keys").update({ status: "failed" }).eq("id", ledger.id);
-    throw error;
+  } catch {
+    result = fail("tool_execution_failed", "Plaivra could not complete this tool. No change should be assumed; review the affected record before retrying.");
   }
 
   const stored: StoredResponse = {
@@ -97,8 +99,14 @@ export async function executeIdempotentMcpMutation({
   };
   const persisted = await ctx.supabase
     .from("mcp_idempotency_keys")
-    .update({ status: result.isError ? "failed" : "completed", response: stored })
-    .eq("id", ledger.id);
+    .update({
+      status: result.isError ? "failed" : "completed",
+      response: stored,
+      lease_expires_at: null
+    })
+    .eq("id", claim.ledger_id)
+    .eq("user_id", ctx.userId)
+    .eq("input_hash", inputHash);
   if (persisted.error) {
     return fail("idempotency_persist_failed", "The action may have completed, but Plaivra could not save replay evidence. Review the affected record before retrying.");
   }

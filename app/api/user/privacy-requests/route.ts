@@ -272,7 +272,7 @@ async function createAccountDeletionRequest(
     .single();
   if (job.error || !job.data) {
     console.error("Plaivra deletion job enqueue failed:", job.error?.message);
-    return NextResponse.json({ error: "The deletion request was recorded but processing could not be queued. Support has been notified." }, { status: 500 });
+    return NextResponse.json({ error: "The deletion request was recorded, but processing could not be queued. Contact Plaivra support and do not submit a second request." }, { status: 500 });
   }
 
   return NextResponse.json({

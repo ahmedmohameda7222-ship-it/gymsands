@@ -213,7 +213,7 @@ export function minimizeMcpOutput(value: unknown, depth = 0): unknown {
 
   return Object.fromEntries(
     Object.entries(value)
-      .filter(([key]) => !PRIVATE_OUTPUT_KEYS.test(key))
+      .filter(([key, child]) => child !== null && child !== undefined && !PRIVATE_OUTPUT_KEYS.test(key))
       .map(([key, child]) => [key, minimizeMcpOutput(child, depth + 1)])
   );
 }

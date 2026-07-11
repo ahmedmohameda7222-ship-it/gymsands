@@ -56,7 +56,12 @@ if (!version.buildTimestamp || version.buildTimestamp === "unknown" || Number.is
   throw new Error("Deployment did not report a valid build timestamp.");
 }
 if (!version.environment || version.environment === "unknown") throw new Error("Deployment environment is missing.");
-if (!version.schemaCompatibilityVersion) throw new Error("Schema compatibility version is missing.");
+if (!version.expectedSchemaCompatibilityVersion || !version.databaseSchemaCompatibilityVersion) {
+  throw new Error("Release or database schema compatibility version is missing.");
+}
+if (version.schemaCompatible !== true) {
+  throw new Error(`Database schema ${version.databaseSchemaCompatibilityVersion} is incompatible with release requirement ${version.expectedSchemaCompatibilityVersion}.`);
+}
 if (options["expected-environment"] && version.environment !== options["expected-environment"]) {
   throw new Error(`Deployment environment ${version.environment} does not match ${options["expected-environment"]}.`);
 }

@@ -408,7 +408,7 @@ const storedTextArraySchema = { type: "array", items: storedTextSchema } as cons
 const functionalConstraintsSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["user_authored_labels", "areas_to_protect", "movement_restrictions", "retained_legacy_notes", "medical_interpretation_allowed"],
+  required: ["user_authored_labels", "areas_to_protect", "medical_interpretation_allowed"],
   properties: {
     user_authored_labels: storedTextArraySchema,
     areas_to_protect: storedTextArraySchema,
@@ -490,14 +490,14 @@ const nutritionTargetsSchema = {
 export const nutritionPlanningContextOutputSchema = projectionSchema("nutrition_planning", {
   type: "object",
   additionalProperties: false,
-  required: ["goal", "nutrition_preferences", "user_confirmed_restrictions", "default_targets", "target_profiles", "planning_preferences"],
+  required: ["nutrition_preferences", "user_confirmed_restrictions", "target_profiles", "planning_preferences"],
   properties: {
     goal: storedTextSchema,
     nutrition_preferences: storedTextArraySchema,
     user_confirmed_restrictions: {
       type: "object",
       additionalProperties: false,
-      required: ["legacy_free_text", "planning_restrictions", "allergies", "medical_interpretation_allowed"],
+      required: ["medical_interpretation_allowed"],
       properties: {
         legacy_free_text: storedTextSchema,
         planning_restrictions: storedTextSchema,
@@ -544,7 +544,7 @@ export const dailyExecutionContextOutputSchema = projectionSchema("daily_executi
     nutrition: { type: "object", additionalProperties: false, required: ["item_count", "totals"], properties: { item_count: numberValue, totals: { type: "object", additionalProperties: false, required: ["calories", "protein_g", "carbs_g", "fat_g"], properties: { calories: numberValue, protein_g: numberValue, carbs_g: numberValue, fat_g: numberValue } } } },
     meal_plan: { type: "array", items: { type: "object", additionalProperties: false, properties: { id: stringValue, meal_type: stringValue, food_name: storedTextSchema, serving_size: storedTextSchema, quantity: numberValue, status: stringValue, completed_at: stringValue } } },
     hydration: { type: "object", additionalProperties: false, required: ["total_ml"], properties: { total_ml: numberValue } },
-    wellness: { type: "object", additionalProperties: false, required: ["tasks", "habits", "recovery"], properties: { tasks: { type: "array", items: dailyNamedItemSchema }, habits: { type: "array", items: dailyNamedItemSchema }, recovery: { type: "object", additionalProperties: false, properties: { log_date: stringValue, hours_slept: numberValue, sleep_quality: stringValue, recovery_level: stringValue, fatigue_level: stringValue, soreness_level: stringValue, stress_level: stringValue } } } }
+    wellness: { type: "object", additionalProperties: false, required: ["tasks", "habits"], properties: { tasks: { type: "array", items: dailyNamedItemSchema }, habits: { type: "array", items: dailyNamedItemSchema }, recovery: { type: "object", additionalProperties: false, properties: { log_date: stringValue, hours_slept: numberValue, sleep_quality: stringValue, recovery_level: stringValue, fatigue_level: stringValue, soreness_level: stringValue, stress_level: stringValue } } } }
   }
 });
 
@@ -572,7 +572,7 @@ const adjustmentSessionSchema = { type: "object", additionalProperties: false, p
 export const workoutAdjustmentContextOutputSchema = projectionSchema("workout_adjustment", {
   type: "object",
   additionalProperties: false,
-  required: ["requested_plan_exercise_id", "active_plan", "recent_sessions", "functional_constraints"],
+  required: ["recent_sessions", "functional_constraints"],
   properties: {
     requested_plan_exercise_id: stringValue,
     active_plan: adjustmentPlanSchema,

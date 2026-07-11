@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { claimStripeEvent, processClaimedStripeEvent } from "@/lib/billing/stripe-event-worker";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { hashBillingPayload, verifyStripeWebhook } from "@/lib/billing/stripe-server";
-import { processStripeSubscriptionEvent } from "@/lib/billing/stripe-event-processor";
 import { serverEnv } from "@/lib/integrations/env";
 
 export const runtime = "nodejs";
@@ -23,32 +23,29 @@ export async function POST(request: Request) {
   }
 
   const admin = createSupabaseAdminClient();
-  const ledger = await admin
-    .from("billing_event_ledger")
-    .insert({
-      provider: "stripe",
-      provider_event_id: event.id,
-      event_type: event.type,
-      payload_sha256: hashBillingPayload(payload),
-      provider_created_at: new Date(event.created * 1000).toISOString(),
-      processing_status: "received"
-    })
-    .select("id")
-    .single();
+  const inserted = await admin.from("billing_event_ledger").insert({
+    provider: "stripe",
+    provider_event_id: event.id,
+    event_type: event.type,
+    payload_sha256: hashBillingPayload(payload),
+    provider_created_at: new Date(event.created * 1000).toISOString(),
+    processing_status: "received",
+    next_attempt_at: new Date().toISOString()
+  }).select("id").single();
 
-  if (ledger.error?.code === "23505") return NextResponse.json({ received: true, duplicate: true });
-  if (ledger.error) return NextResponse.json({ error: "Billing event could not be recorded.", code: "ledger_unavailable" }, { status: 503 });
+  if (inserted.error && inserted.error.code !== "23505") {
+    return NextResponse.json({ error: "Billing event could not be recorded.", code: "ledger_unavailable" }, { status: 503 });
+  }
 
   try {
-    const result = await processStripeSubscriptionEvent(admin, ledger.data, event);
-    return NextResponse.json({ received: true, status: result.status });
-  } catch (error) {
-    await admin.from("billing_event_ledger").update({
-      processing_status: "retryable_error",
-      processing_attempts: 1,
-      last_error_code: "processing_failed"
-    }).eq("id", ledger.data.id);
-    console.error("Stripe billing event processing failed:", error instanceof Error ? error.message : "Unknown error");
-    return NextResponse.json({ error: "Billing event processing will be retried.", code: "processing_failed" }, { status: 500 });
+    const claimed = await claimStripeEvent(admin, event.id);
+    if (!claimed) return NextResponse.json({ received: true, duplicate: Boolean(inserted.error), queued: true });
+    const result = await processClaimedStripeEvent(admin, claimed, event);
+    return NextResponse.json(
+      { received: true, status: result.status },
+      { status: result.ok ? 200 : 500 }
+    );
+  } catch {
+    return NextResponse.json({ error: "Billing event was recorded but could not be claimed safely.", code: "claim_unavailable" }, { status: 503 });
   }
 }

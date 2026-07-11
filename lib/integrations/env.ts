@@ -83,7 +83,7 @@ export async function requireUser(request: Request): Promise<RouteContext | Next
     console.error("Plaivra account state check failed:", accountState.error.message);
     return jsonError("Account access could not be verified.", 503);
   }
-  if (accountState.data?.state === "deletion_processing" || accountState.data?.state === "disabled") {
+  if (["deletion_pending", "deletion_processing", "legal_hold", "disabled"].includes(accountState.data?.state ?? "")) {
     return NextResponse.json(
       { error: "This account is being deleted and can no longer access Plaivra.", code: "account_deletion_processing" },
       { status: 403 }

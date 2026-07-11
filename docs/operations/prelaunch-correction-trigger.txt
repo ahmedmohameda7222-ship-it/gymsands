@@ -1,2 +1,0 @@
-trigger=2026-07-11T18:25:00+02:00
-purpose=execute deterministic branch-only correction patch

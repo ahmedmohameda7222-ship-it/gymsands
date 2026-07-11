@@ -4,16 +4,66 @@
   "capturedAt": "2026-07-10T17:30:00+02:00",
   "auditedRepositoryCommit": "60a204d5fc20fc396be1b1b47e748c42ebba6abf",
   "entries": [
-    { "productionVersion": "202606290000", "productionName": "clean_initial_schema", "localFile": "202606290000_clean_initial_schema.sql", "state": "applied" },
-    { "productionVersion": "202606290001", "productionName": "security_privacy_mcp_hardening", "localFile": "202606290001_security_privacy_mcp_hardening.sql", "state": "applied" },
-    { "productionVersion": "202606290002", "productionName": "seed_reference_data", "localFile": "202606290002_seed_reference_data.sql", "state": "applied" },
-    { "productionVersion": "20260701053859", "productionName": "mcp_security_launch_blockers", "localFile": "20260701053859_mcp_security_launch_blockers.sql", "state": "applied" },
-    { "productionVersion": "20260701063223", "productionName": "mcp_oauth_hardening", "localFile": "20260701063223_mcp_oauth_hardening.sql", "state": "applied" },
-    { "productionVersion": "20260702062000", "productionName": "phase6_consent_types", "localFile": "20260702062000_phase6_consent_types.sql", "state": "applied" },
-    { "productionVersion": "20260702120000", "productionName": "mcp_service_role_permissions", "localFile": "20260702120000_mcp_service_role_permissions.sql", "state": "applied" },
-    { "productionVersion": "20260702124724", "productionName": "fix_chatgpt_connection_rotation_ambiguous_columns", "localFile": "20260702124724_fix_chatgpt_connection_rotation_ambiguous_columns.sql", "state": "applied" },
-    { "productionVersion": "20260702174951", "productionName": "chatgpt_execution_layer_foundation", "localFile": "20260702174951_chatgpt_execution_layer_foundation.sql", "state": "applied" },
-    { "productionVersion": "20260702181448", "productionName": "execution_layer_reference_ownership_hardening", "localFile": "20260702181448_execution_layer_reference_ownership_hardening.sql", "state": "applied" },
+    {
+      "productionVersion": "202606290000",
+      "productionName": "clean_initial_schema",
+      "localFile": "202606290000_clean_initial_schema.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "202606290001",
+      "productionName": "security_privacy_mcp_hardening",
+      "localFile": "202606290001_security_privacy_mcp_hardening.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "202606290002",
+      "productionName": "seed_reference_data",
+      "localFile": "202606290002_seed_reference_data.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260701053859",
+      "productionName": "mcp_security_launch_blockers",
+      "localFile": "20260701053859_mcp_security_launch_blockers.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260701063223",
+      "productionName": "mcp_oauth_hardening",
+      "localFile": "20260701063223_mcp_oauth_hardening.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702062000",
+      "productionName": "phase6_consent_types",
+      "localFile": "20260702062000_phase6_consent_types.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702120000",
+      "productionName": "mcp_service_role_permissions",
+      "localFile": "20260702120000_mcp_service_role_permissions.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702124724",
+      "productionName": "fix_chatgpt_connection_rotation_ambiguous_columns",
+      "localFile": "20260702124724_fix_chatgpt_connection_rotation_ambiguous_columns.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702174951",
+      "productionName": "chatgpt_execution_layer_foundation",
+      "localFile": "20260702174951_chatgpt_execution_layer_foundation.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702181448",
+      "productionName": "execution_layer_reference_ownership_hardening",
+      "localFile": "20260702181448_execution_layer_reference_ownership_hardening.sql",
+      "state": "applied"
+    },
     {
       "productionVersion": null,
       "productionName": null,
@@ -97,6 +147,13 @@
       "localFile": "20260711004551_subscription_entitlement_foundation.sql",
       "state": "pending",
       "note": "Adds an empty owner-gated offering catalog, service-only provider records and event ledger, and user-readable provider-neutral entitlements. It seeds no price or paid capability and requires isolated RLS/webhook validation."
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260711013000_prelaunch_runtime_safety_corrections.sql",
+      "state": "pending",
+      "note": "Adds database-owned release compatibility, atomic OAuth code consumption, leased MCP idempotency recovery, stale deletion recovery, and durable billing claims. Isolated migration, concurrency, reconciliation, and RLS validation are mandatory."
     }
   ]
 }

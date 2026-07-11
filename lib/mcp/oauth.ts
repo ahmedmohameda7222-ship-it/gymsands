@@ -329,7 +329,9 @@ function oauthClientIp(request: Request) {
   return "unknown";
 }
 
-export async function oauthRateLimit(key: string, limit: number, windowSeconds: number) {
+export type OAuthRateLimitDecision = { status: 429 | 503; message: string } | null;
+
+export async function oauthRateLimit(key: string, limit: number, windowSeconds: number): Promise<OAuthRateLimitDecision> {
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase.rpc("consume_oauth_rate_limit", {
     p_key: key,
@@ -337,13 +339,20 @@ export async function oauthRateLimit(key: string, limit: number, windowSeconds: 
     p_window_seconds: windowSeconds
   });
 
-  if (error) return null; // fail open on rate-limit infra errors
+  if (error) {
+    return { status: 503, message: "OAuth request protection is temporarily unavailable. Try again later." };
+  }
 
   const row = (Array.isArray(data) ? data[0] : data) as { allowed?: boolean; reset_at?: string | null } | null;
-  if (!row) return null;
+  if (!row) {
+    return { status: 503, message: "OAuth request protection is temporarily unavailable. Try again later." };
+  }
   if (row.allowed !== false) return null;
   const resetAt = row.reset_at ? Date.parse(row.reset_at) : Date.now() + windowSeconds * 1000;
-  return `Rate limit exceeded. Try again after ${Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))} seconds.`;
+  return {
+    status: 429,
+    message: `Rate limit exceeded. Try again after ${Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))} seconds.`
+  };
 }
 
 async function createAuthorizationCode(
@@ -382,51 +391,31 @@ async function verifyAuthorizationCode(
   resource: string
 ): Promise<{ scope: string; user_id: string; connection_id: string }> {
   if (!code) throw new Error("Authorization code is required.");
+  if (!codeVerifier) throw new Error("code_verifier is required.");
 
-  const codeHash = hashAuthorizationCode(code);
   const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase.rpc("consume_mcp_oauth_authorization_code", {
+    p_code_hash: hashAuthorizationCode(code),
+    p_client_id: clientId,
+    p_redirect_uri: redirectUri,
+    p_code_challenge: pkceS256(codeVerifier),
+    p_resource: resource
+  });
+  if (error) throw new Error("Authorization code verification is temporarily unavailable.");
 
-  // Atomically mark as used and return the row
-  const { data, error } = await supabase
-    .from("mcp_oauth_authorization_codes")
-    .update({ used_at: new Date().toISOString() })
-    .eq("code_hash", codeHash)
-    .is("used_at", null)
-    .select("user_id,connection_id,client_id,redirect_uri,code_challenge,code_challenge_method,scope,expires_at,resource")
-    .maybeSingle();
-
-  if (error) throw new Error(`Failed to verify authorization code: ${error.message}`);
-  if (!data) throw new Error("Authorization code is invalid or has already been used.");
-
-  if (new Date(data.expires_at) < new Date()) {
-    throw new Error("Authorization code expired.");
-  }
-
-  if (data.client_id !== clientId) {
-    throw new Error("Authorization code does not match this client.");
-  }
-
-  if (redirectUri && data.redirect_uri !== redirectUri) {
-    throw new Error("redirect_uri does not match authorization request.");
-  }
-
-  if (data.code_challenge_method !== "S256") {
-    throw new Error("Unsupported code_challenge_method.");
-  }
-
-  const challenge = pkceS256(codeVerifier);
-  if (!safeEqual(challenge, data.code_challenge)) {
-    throw new Error("Invalid code_verifier.");
-  }
-
-  if (data.resource !== resource) {
-    throw new Error("Authorization code resource mismatch.");
+  const row = (Array.isArray(data) ? data[0] : data) as {
+    scope?: string[] | null;
+    user_id?: string | null;
+    connection_id?: string | null;
+  } | null;
+  if (!row?.user_id || !row.connection_id) {
+    throw new Error("Authorization code is invalid, expired, already used, or does not match this request.");
   }
 
   return {
-    scope: Array.isArray(data.scope) ? data.scope.join(" ") : "",
-    user_id: data.user_id,
-    connection_id: data.connection_id
+    scope: Array.isArray(row.scope) ? row.scope.join(" ") : "",
+    user_id: row.user_id,
+    connection_id: row.connection_id
   };
 }
 
@@ -591,7 +580,10 @@ export async function handleOAuthAuthorize(request: Request) {
   const rateLimitKey = `authorize:${oauthClientIp(request)}:${rateLimitDigest(clientId)}`;
   const rateLimitError = await oauthRateLimit(rateLimitKey, AUTHORIZE_RATE_LIMIT, RATE_LIMIT_WINDOW_SECONDS);
   if (rateLimitError) {
-    return NextResponse.json({ error: "invalid_request", error_description: "Too many authorization requests. Please try again later." }, { status: 429, headers: metadataHeaders() });
+    return NextResponse.json(
+      { error: rateLimitError.status === 503 ? "temporarily_unavailable" : "invalid_request", error_description: rateLimitError.message },
+      { status: rateLimitError.status, headers: metadataHeaders() }
+    );
   }
 
   if (!codeChallenge) {
@@ -687,7 +679,10 @@ export async function handleOAuthAuthorizeDecision(request: Request, authenticat
   const rateLimitKey = `authorize_decision:${oauthClientIp(request)}:${rateLimitDigest(params.clientId)}`;
   const rateLimitError = await oauthRateLimit(rateLimitKey, AUTHORIZE_RATE_LIMIT, RATE_LIMIT_WINDOW_SECONDS);
   if (rateLimitError) {
-    return NextResponse.json({ error: "invalid_request", error_description: "Too many authorization requests. Please try again later." }, { status: 429, headers: metadataHeaders() });
+    return NextResponse.json(
+      { error: rateLimitError.status === 503 ? "temporarily_unavailable" : "invalid_request", error_description: rateLimitError.message },
+      { status: rateLimitError.status, headers: metadataHeaders() }
+    );
   }
 
   let body: { decision?: unknown } = {};
@@ -826,7 +821,10 @@ export async function handleOAuthToken(request: Request) {
   const rateLimitKey = `token:${rateLimitDigest(clientId)}:${rateLimitDigest(code)}`;
   const rateLimitError = await oauthRateLimit(rateLimitKey, TOKEN_RATE_LIMIT, RATE_LIMIT_WINDOW_SECONDS);
   if (rateLimitError) {
-    return NextResponse.json({ error: "invalid_request", error_description: "Too many token requests. Please try again later." }, { status: 429, headers: metadataHeaders() });
+    return NextResponse.json(
+      { error: rateLimitError.status === 503 ? "temporarily_unavailable" : "invalid_request", error_description: rateLimitError.message },
+      { status: rateLimitError.status, headers: metadataHeaders() }
+    );
   }
 
   try {

@@ -184,7 +184,6 @@ export async function processAccountDeletionJob(admin: SupabaseClient, job: Acco
 
     let evidence = { ...(job.evidence ?? {}) };
     if (job.user_id) {
-      const providerEvidence = await verifyProviderCleanup(admin, job.user_id);
       await updateJob(admin, job.id, { stage: "revoking_connections" });
       await revokeConnections(admin, job.user_id);
 
@@ -195,6 +194,7 @@ export async function processAccountDeletionJob(admin: SupabaseClient, job: Acco
       evidence = { ...evidence, ...await deleteStorage(admin, job.user_id) };
 
       await updateJob(admin, job.id, { stage: "provider_cleanup", evidence });
+      const providerEvidence = await verifyProviderCleanup(admin, job.user_id);
       evidence = { ...evidence, ...providerEvidence };
 
       await updateJob(admin, job.id, { stage: "deleting_database", evidence });
