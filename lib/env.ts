@@ -9,6 +9,7 @@ export const env = {
     process.env.VITE_FITLIFE_MCP_SERVER_URL ||
     process.env.REACT_APP_FITLIFE_MCP_SERVER_URL ||
     "",
+  manualChatGptSetupEnabled: process.env.NEXT_PUBLIC_ENABLE_MANUAL_CHATGPT_SETUP === "true",
   useMockAuth: process.env.NEXT_PUBLIC_USE_MOCK_AUTH === "true"
 };
 
