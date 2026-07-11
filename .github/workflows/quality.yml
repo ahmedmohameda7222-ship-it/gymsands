@@ -26,7 +26,7 @@ jobs:
       PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
       PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
       PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
-      PLAIVRA_COMMIT_SHA: ${{ github.sha }}
+      PLAIVRA_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       PLAIVRA_RELEASE_ENVIRONMENT: ci
       PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
 
