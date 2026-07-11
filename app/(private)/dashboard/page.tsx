@@ -232,8 +232,8 @@ export default function DashboardPage() {
   const setupChecklist = [
     { label: "Finish profile", done: Boolean(profile?.full_name), href: "/profile", action: "Edit profile" },
     { label: "Set calorie and water targets", done: hasTargets, href: "/calories", action: "Set targets" },
-    { label: "Connect ChatGPT import", done: chatGptConnected, href: "/settings/ai-imports", action: "Connect ChatGPT" },
-    { label: "Import workout plan", done: Boolean(activePlan), href: "/my-workout/plans", action: "Import plan" },
+    { label: "Connect Plaivra to ChatGPT", done: chatGptConnected, href: "/settings/connections", action: "Connect ChatGPT" },
+    { label: "Create workout plan", done: Boolean(activePlan), href: "/my-workout/plans", action: "Create plan" },
     { label: "Add meal plan or log first meal", done: mealPlanItems.length > 0 || logs.length > 0, href: "/my-meal-plan", action: "Plan meal" },
     { label: "Add first progress entry", done: progressEntries.length > 0, href: "/progress", action: "Add progress" },
     { label: "Start first workout", done: hasStartedWorkout, href: todayPlanDay ? `/workouts/session/day/${todayPlanDay.id}` : "/my-workout/plans", action: "Start workout" }
@@ -395,10 +395,10 @@ export default function DashboardPage() {
       {!isLoading && !loadError && !hasAnyTodayData ? (
         <EmptyState
           title="No activity saved for today yet"
-          description="Start by logging food, adding water, importing a workout plan, or saving a progress entry."
+          description="Start by logging food, adding water, creating a workout plan, or saving a progress entry."
           actionLabel="Log food"
           actionHref="/calories"
-          secondaryLabel="Import workout plan"
+          secondaryLabel="Create workout plan"
           secondaryHref="/my-workout/plans"
           className="mb-4"
         />
@@ -521,11 +521,11 @@ export default function DashboardPage() {
                   <Dumbbell className="h-5 w-5 text-muted-foreground" />
                   <div>
                     <p className="font-semibold text-muted-foreground">No workout planned</p>
-                    <p className="text-sm text-muted-foreground">Import a plan to see today&apos;s workout here.</p>
+                    <p className="text-sm text-muted-foreground">Create a plan directly or ask ChatGPT to save one through an authorized Plaivra tool.</p>
                   </div>
                 </div>
                 <Button asChild variant="outline" className="mt-3 min-h-12">
-                  <Link href="/my-workout/plans">Import plan</Link>
+                  <Link href="/my-workout/plans">Create workout plan</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -658,7 +658,7 @@ export default function DashboardPage() {
             <Card variant="glass" className="border-primary/20">
               <CardHeader><CardTitle className="text-base">Weekly ChatGPT review</CardTitle></CardHeader>
               <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">Prepare this week’s real workout, nutrition, hydration, progress, habit, and recovery context for ChatGPT.</p>
+                <p className="text-sm text-muted-foreground">Ask ChatGPT to read the minimum authorized workout, nutrition, hydration, progress, habit, and recovery context needed for a weekly review.</p>
                 <AiActionRequestDialog
                   actions={[{ type: "review_week", label: "Ask ChatGPT to review my week", description: "Review the week and recommend the smallest useful changes for the next one." }]}
                   sourceType="weekly_summary"

@@ -14,6 +14,9 @@ type JsonSchema = {
   maxLength?: number;
   minItems?: number;
   maxItems?: number;
+  const?: unknown;
+  format?: string;
+  anyOf?: JsonSchema[];
 };
 
 export type McpInputValidation =
@@ -22,6 +25,7 @@ export type McpInputValidation =
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_FIELDS = new Set(["date", "start_date", "end_date", "record_date", "measured_at", "plan_date", "planned_date", "log_date"]);
+const TIMESTAMP_FIELDS = new Set(["expected_updated_at"]);
 const CALLER_IDENTITY_FIELDS = new Set(["user_id", "owner_id", "profile_id", "tenant_id"]);
 const MAX_VALIDATION_ERRORS = 20;
 
@@ -34,6 +38,11 @@ function isValidIsoDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function isValidIsoTimestamp(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/.test(value)) return false;
+  return !Number.isNaN(Date.parse(value));
 }
 
 function defaultStringLimit(field: string) {
@@ -70,6 +79,19 @@ function defaultNumberRange(field: string): [number, number] {
 function validateNode(value: unknown, schema: JsonSchema, path: string, errors: string[]) {
   if (errors.length >= MAX_VALIDATION_ERRORS) return;
   const field = path.split(".").at(-1)?.replace(/\[\d+\]$/, "") ?? path;
+  if ("const" in schema && value !== schema.const) {
+    errors.push(`${path} must equal the declared constant.`);
+    return;
+  }
+
+  if (schema.anyOf?.length) {
+    const matchesAny = schema.anyOf.some((candidate) => {
+      const candidateErrors: string[] = [];
+      validateNode(value, candidate, path, candidateErrors);
+      return candidateErrors.length === 0;
+    });
+    if (!matchesAny) errors.push(`${path} must match at least one allowed shape.`);
+  }
 
   if (schema.type === "object") {
     if (!isObject(value)) {
@@ -90,8 +112,7 @@ function validateNode(value: unknown, schema: JsonSchema, path: string, errors: 
         !(required in value) ||
         requiredValue === undefined ||
         requiredValue === null ||
-        (typeof requiredValue === "string" && !requiredValue.trim()) ||
-        (Array.isArray(requiredValue) && requiredValue.length === 0)
+        (typeof requiredValue === "string" && !requiredValue.trim())
       ) {
         errors.push(`${path}.${required} is required.`);
       }
@@ -134,6 +155,7 @@ function validateNode(value: unknown, schema: JsonSchema, path: string, errors: 
     if (schema.enum && !schema.enum.includes(value)) errors.push(`${path} must be one of: ${schema.enum.join(", ")}.`);
     if (field.endsWith("_id") && !UUID_PATTERN.test(value)) errors.push(`${path} must be a valid UUID.`);
     if (DATE_FIELDS.has(field) && !isValidIsoDate(value)) errors.push(`${path} must be YYYY-MM-DD or today.`);
+    if (TIMESTAMP_FIELDS.has(field) && !isValidIsoTimestamp(value)) errors.push(`${path} must be an ISO UTC timestamp.`);
     return;
   }
 
@@ -164,7 +186,24 @@ export function validateMcpToolInput(tool: McpToolDefinition, input: unknown): M
   return errors.length ? { success: false, errors: Array.from(new Set(errors)).slice(0, MAX_VALIDATION_ERRORS) } : { success: true, value: input };
 }
 
-const PRIVATE_OUTPUT_KEYS = /(?:^(?:user_id|owner_id|profile_id|tenant_id|connection_id|notes|created_at|updated_at)$|token|secret|authorization_code|code_hash|password|service_role)/i;
+export function validateMcpToolOutput(tool: McpToolDefinition, result: McpToolResult): McpInputValidation {
+  if (!isObject(result.structuredContent)) return { success: false, errors: ["structuredContent must be an object."] };
+  if (result.isError) {
+    const { ok, code, message } = result.structuredContent;
+    const errors: string[] = [];
+    if (ok !== false) errors.push("error structuredContent.ok must be false.");
+    if (typeof code !== "string" || !/^[a-z0-9_]{1,64}$/.test(code)) errors.push("error structuredContent.code must be a stable snake_case code.");
+    if (typeof message !== "string" || !message.trim() || message.length > 500) errors.push("error structuredContent.message must be a bounded user-safe message.");
+    return errors.length ? { success: false, errors } : { success: true, value: result.structuredContent };
+  }
+  const errors: string[] = [];
+  validateNode(result.structuredContent, tool.outputSchema as JsonSchema, "structuredContent", errors);
+  return errors.length ? { success: false, errors } : { success: true, value: result.structuredContent };
+}
+
+// `updated_at` is the public optimistic-concurrency token used by update tools.
+// Ownership identifiers and creation/internal telemetry remain private.
+const PRIVATE_OUTPUT_KEYS = /(?:^(?:user_id|owner_id|profile_id|tenant_id|connection_id|notes|created_at)$|token|secret|authorization_code|code_hash|password|service_role)/i;
 const MAX_OUTPUT_ARRAY_ITEMS = 100;
 const MAX_OUTPUT_STRING_LENGTH = 4_000;
 
@@ -183,13 +222,29 @@ export function minimizeMcpOutput(value: unknown, depth = 0): unknown {
 
   return Object.fromEntries(
     Object.entries(value)
-      .filter(([key]) => !PRIVATE_OUTPUT_KEYS.test(key))
+      .filter(([key, child]) => child !== null && child !== undefined && !PRIVATE_OUTPUT_KEYS.test(key))
       .map(([key, child]) => [key, minimizeMcpOutput(child, depth + 1)])
   );
 }
 
-export function sanitizeMcpToolResult(result: McpToolResult): McpToolResult {
-  const structuredContent = minimizeMcpOutput(result.structuredContent) as Record<string, unknown>;
+function projectMcpOutputToSchema(value: unknown, schema: JsonSchema | undefined): unknown {
+  if (!schema || value === null || value === undefined) return value;
+  if (schema.type === "array" && Array.isArray(value)) {
+    return value.map((item) => projectMcpOutputToSchema(item, schema.items));
+  }
+  if (schema.type === "object" && isObject(value)) {
+    const properties = schema.properties ?? {};
+    const entries = Object.entries(value)
+      .filter(([key]) => schema.additionalProperties !== false || key in properties)
+      .map(([key, child]) => [key, projectMcpOutputToSchema(child, properties[key])]);
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
+export function sanitizeMcpToolResult(result: McpToolResult, outputSchema?: Record<string, unknown>): McpToolResult {
+  const minimized = minimizeMcpOutput(result.structuredContent);
+  const structuredContent = projectMcpOutputToSchema(minimized, outputSchema as JsonSchema | undefined) as Record<string, unknown>;
   const originalJson = JSON.stringify(result.structuredContent);
   const content = result.content.map((item) => ({
     ...item,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/integrations/env";
 import { REQUIRED_CONSENTS } from "@/lib/legal/versions";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
+import { launchAgeSchema } from "@/lib/auth/eligibility";
 
 export const runtime = "nodejs";
 
@@ -11,11 +12,22 @@ export async function POST(request: Request) {
   const context = await requireUser(request);
   if (context instanceof NextResponse) return context;
 
-  let body: { consents?: Array<{ consent_type?: string; version?: string; granted?: boolean }> };
+  let body: {
+    declared_age?: unknown;
+    consents?: Array<{ consent_type?: string; version?: string; granted?: boolean }>;
+  };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  const age = launchAgeSchema.safeParse(body.declared_age);
+  if (!age.success) {
+    return NextResponse.json(
+      { error: age.message, code: age.code },
+      { status: age.code === "age_ineligible" ? 403 : 400 }
+    );
   }
 
   const submitted = Array.isArray(body.consents) ? body.consents : [];

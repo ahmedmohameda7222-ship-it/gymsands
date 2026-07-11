@@ -435,7 +435,7 @@ export function WorkoutPlanBuilder({
         <div className="solid-tracking-card space-y-4 border-warning/30 p-4 sm:p-5">
           <div>
             <p className="font-semibold">You skipped {skippedSession.workout_name}. What should happen next?</p>
-            <p className="text-sm text-muted-foreground">Choose a deterministic follow-up or prepare a request for ChatGPT. Plaivra will not silently rewrite the week.</p>
+            <p className="text-sm text-muted-foreground">Choose a direct follow-up or ask ChatGPT to use authorized Plaivra context and tools. Plaivra will not silently rewrite the week.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
             <select value={skipReason} onChange={(event) => setSkipReason(event.target.value as typeof skipReason)} className="h-11 rounded-[14px] border bg-card px-3 text-sm" aria-label="Skip reason">

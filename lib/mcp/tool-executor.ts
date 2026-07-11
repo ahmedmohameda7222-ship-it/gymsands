@@ -24,12 +24,6 @@ type FoodCandidate = {
   fat_g: number;
 };
 
-function dateDaysAgo(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return date.toISOString().slice(0, 10);
-}
-
 function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
@@ -151,7 +145,7 @@ async function requireExercise(ctx: McpContext, exerciseId: string) {
 async function requireWorkoutSession(ctx: McpContext, sessionId: string) {
   const { data, error } = await ctx.supabase
     .from("workout_sessions")
-    .select("id,user_id")
+    .select("id,user_id,scheduled_session_id")
     .eq("id", sessionId)
     .eq("user_id", ctx.userId)
     .maybeSingle();
@@ -337,29 +331,6 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
       case "get_plaivra_status":
         return ok({ ok: true, connected: true, user_id: ctx.userId, connection_id: ctx.connectionId, scopes: ctx.scopes, profile: ctx.profile });
 
-      case "get_user_profile": {
-        const [profile, onboarding, target] = await Promise.all([
-          ctx.supabase.from("profiles").select("*").eq("id", ctx.userId).maybeSingle(),
-          ctx.supabase.from("onboarding_answers").select("*").eq("user_id", ctx.userId).maybeSingle(),
-          ctx.supabase.from("calorie_targets").select("*").eq("user_id", ctx.userId).maybeSingle()
-        ]);
-        for (const result of [profile, onboarding, target]) if (result.error) throw new Error(result.error.message);
-        return ok({ ok: true, profile: profile.data, onboarding: onboarding.data, calorie_targets: target.data });
-      }
-
-      case "get_today_summary": {
-        const today = cleanDate("today");
-        const [calories, water, mealPlan, workout] = await Promise.all([
-          caloriesForDate(ctx, today),
-          waterLogged(ctx, today),
-          ctx.supabase.from("user_meal_plan_items").select("*").eq("user_id", ctx.userId).eq("plan_date", today),
-          ctx.supabase.from("user_workout_sessions").select("*").eq("user_id", ctx.userId).eq("scheduled_date", today).maybeSingle()
-        ]);
-        if (mealPlan.error) throw new Error(mealPlan.error.message);
-        if (workout.error) throw new Error(workout.error.message);
-        return ok({ ok: true, date: today, calories, water_ml: water, meal_plan: mealPlan.data ?? [], workout: workout.data ?? null });
-      }
-
       case "search_foods": {
         const { candidates } = await findFood(ctx, getString(input, "query"), Math.min(25, Math.max(1, getNumber(input, "limit", 10))));
         return ok({ ok: true, foods: candidates });
@@ -439,7 +410,7 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
           }
           rows.push({ user_id: ctx.userId, log_date: date, meal_type: mealType, ...scaleFood(match.exact, getNumber(item, "quantity", 1)), notes: getOptionalString(input, "notes") ?? getOptionalString(item, "serving_hint") ?? null });
         }
-        if (ambiguous.length) return ok({ ok: false, status: "needs_clarification", ambiguous_items: ambiguous }, "Some foods are ambiguous. Ask the user to choose a candidate.");
+        if (ambiguous.length) return fail("ambiguous_food", "Some foods are ambiguous. Ask the user to choose a candidate.", { ambiguous_items: ambiguous });
         const { data, error } = await ctx.supabase.from("food_logs").insert(rows).select("*");
         if (error) throw new Error(error.message);
         return ok({ ok: true, saved_items: data ?? [], totals: sumMacros((data ?? []) as Array<Record<string, unknown>>) });
@@ -460,8 +431,9 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
           if (value !== undefined) patch[key] = value;
         }
         if (getOptionalString(input, "notes") !== undefined) patch.notes = getOptionalString(input, "notes") ?? null;
-        const { data, error } = await ctx.supabase.from("food_logs").update(patch).eq("id", getString(input, "food_log_id")).eq("user_id", ctx.userId).select("*").single();
+        const { data, error } = await ctx.supabase.from("food_logs").update(patch).eq("id", getString(input, "food_log_id")).eq("user_id", ctx.userId).eq("updated_at", getString(input, "expected_updated_at")).select("*").maybeSingle();
         if (error) throw new Error(error.message);
+        if (!data) return fail("version_conflict", "This food log changed after it was read. Fetch it again before updating.");
         return ok({ ok: true, log: data });
       }
 
@@ -563,13 +535,12 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
       }
 
       case "activate_workout_plan": {
-        const confirmation = requireConfirmation(input);
-        if (confirmation) return ok(confirmation);
         const planId = getString(input, "plan_id");
-        await requirePlan(ctx, planId);
-        await ctx.supabase.from("user_workout_plans").update({ is_active: false, is_default: false }).eq("user_id", ctx.userId);
-        const { data, error } = await ctx.supabase.from("user_workout_plans").update({ is_active: true, is_default: true }).eq("id", planId).eq("user_id", ctx.userId).select("*").single();
+        const { data, error } = await ctx.supabase.from("user_workout_plans").update({ is_active: true, is_default: true }).eq("id", planId).eq("user_id", ctx.userId).eq("updated_at", getString(input, "expected_updated_at")).select("*").maybeSingle();
         if (error) throw new Error(error.message);
+        if (!data) return fail("version_conflict", "This workout plan changed after it was read. Fetch it again before activating.");
+        const deactivate = await ctx.supabase.from("user_workout_plans").update({ is_active: false, is_default: false }).eq("user_id", ctx.userId).neq("id", planId);
+        if (deactivate.error) throw new Error(deactivate.error.message);
         return ok({ ok: true, active_plan: data });
       }
 
@@ -594,7 +565,20 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
       case "start_workout": {
         const scheduledId = getOptionalString(input, "scheduled_session_id");
         if (scheduledId) {
-          const { data, error } = await ctx.supabase.from("user_workout_sessions").update({ status: "started", started_at: new Date().toISOString() }).eq("id", scheduledId).eq("user_id", ctx.userId).select("*").single();
+          const startedAt = new Date().toISOString();
+          const { data: scheduled, error: scheduledError } = await ctx.supabase.from("user_workout_sessions").update({ status: "started", started_at: startedAt }).eq("id", scheduledId).eq("user_id", ctx.userId).select("*").single();
+          if (scheduledError || !scheduled) throw new Error(scheduledError?.message ?? "Scheduled workout not found.");
+          const { data, error } = await ctx.supabase.from("workout_sessions").upsert({
+            user_id: ctx.userId,
+            scheduled_session_id: scheduled.id,
+            plan_id: scheduled.user_workout_plan_id,
+            plan_day_id: scheduled.plan_day_id,
+            workout_name: scheduled.day_title ?? "Scheduled workout",
+            workout_day_name: scheduled.day_title ?? null,
+            status: "started",
+            started_at: startedAt,
+            source: "chatgpt"
+          }, { onConflict: "scheduled_session_id" }).select("*").single();
           if (error) throw new Error(error.message);
           return ok({ ok: true, session: data });
         }
@@ -609,14 +593,6 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         const sessionId = getString(input, "workout_session_id");
         const exerciseName = getString(input, "exercise_name");
         const sets = getArray<JsonObject>(input, "sets");
-        const scheduledSession = await ctx.supabase.from("user_workout_sessions").select("id").eq("id", sessionId).eq("user_id", ctx.userId).maybeSingle();
-        if (scheduledSession.error) throw new Error(scheduledSession.error.message);
-        if (scheduledSession.data) {
-          const rows = sets.map((set, index) => ({ user_workout_session_id: sessionId, exercise_order: getNumber(set, "set_number", index + 1), exercise_name: exerciseName, weight_kg: getOptionalNumber(set, "weight_kg") ?? null, reps: getOptionalNumber(set, "reps") ?? null, notes: getOptionalString(set, "notes") ?? null, completed: true, completed_at: new Date().toISOString() }));
-          const { data, error } = await ctx.supabase.from("user_exercise_logs").upsert(rows, { onConflict: "user_workout_session_id,exercise_order" }).select("*");
-          if (error) throw new Error(error.message);
-          return ok({ ok: true, logs: data ?? [] });
-        }
         await requireWorkoutSession(ctx, sessionId);
         const rows = sets.map((set) => ({ workout_session_id: sessionId, exercise_name: exerciseName, set_number: getNumber(set, "set_number", 1), weight_kg: getOptionalNumber(set, "weight_kg") ?? null, reps: getOptionalNumber(set, "reps") ?? null, notes: getOptionalString(set, "notes") ?? null, completed_at: new Date().toISOString() }));
         const { data, error } = await ctx.supabase.from("exercise_logs").insert(rows).select("*");
@@ -627,18 +603,32 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
       case "complete_workout": {
         const sessionId = getString(input, "workout_session_id");
         const update = { status: "completed", completed_at: new Date().toISOString(), duration_minutes: getOptionalNumber(input, "duration_minutes") ?? null, notes: getOptionalString(input, "notes") ?? null };
-        const scheduledUpdate = await ctx.supabase.from("user_workout_sessions").update(update).eq("id", sessionId).eq("user_id", ctx.userId).select("*").maybeSingle();
-        if (scheduledUpdate.error) throw new Error(scheduledUpdate.error.message);
-        if (scheduledUpdate.data) return ok({ ok: true, session: scheduledUpdate.data });
+        const ownedSession = await requireWorkoutSession(ctx, sessionId);
         const { data, error } = await ctx.supabase.from("workout_sessions").update(update).eq("id", sessionId).eq("user_id", ctx.userId).select("*").single();
         if (error) throw new Error(error.message);
+        if (ownedSession.scheduled_session_id) {
+          const scheduledUpdate = await ctx.supabase.from("user_workout_sessions").update(update).eq("id", ownedSession.scheduled_session_id).eq("user_id", ctx.userId);
+          if (scheduledUpdate.error) throw new Error(scheduledUpdate.error.message);
+        }
         return ok({ ok: true, session: data });
       }
 
       case "skip_workout": {
-        const id = getOptionalString(input, "scheduled_session_id") ?? getOptionalString(input, "workout_session_id");
-        if (!id) return fail("missing_required_input", "scheduled_session_id or workout_session_id is required.");
-        const { data, error } = await ctx.supabase.from("user_workout_sessions").update({ status: "skipped", skipped_at: new Date().toISOString(), notes: getOptionalString(input, "reason") ?? null }).eq("id", id).eq("user_id", ctx.userId).select("*").single();
+        const scheduledId = getOptionalString(input, "scheduled_session_id");
+        const performedId = getOptionalString(input, "workout_session_id");
+        if (!scheduledId && !performedId) return fail("missing_required_input", "scheduled_session_id or workout_session_id is required.");
+        const skippedAt = new Date().toISOString();
+        const update = { status: "skipped", skipped_at: skippedAt, notes: getOptionalString(input, "reason") ?? null };
+        if (performedId) {
+          const ownedSession = await requireWorkoutSession(ctx, performedId);
+          const { data, error } = await ctx.supabase.from("workout_sessions").update(update).eq("id", performedId).eq("user_id", ctx.userId).select("*").single();
+          if (error) throw new Error(error.message);
+          if (ownedSession.scheduled_session_id) await ctx.supabase.from("user_workout_sessions").update(update).eq("id", ownedSession.scheduled_session_id).eq("user_id", ctx.userId);
+          return ok({ ok: true, session: data });
+        }
+        const { data: scheduled, error: scheduledError } = await ctx.supabase.from("user_workout_sessions").update(update).eq("id", scheduledId!).eq("user_id", ctx.userId).select("*").single();
+        if (scheduledError || !scheduled) throw new Error(scheduledError?.message ?? "Scheduled workout not found.");
+        const { data, error } = await ctx.supabase.from("workout_sessions").upsert({ user_id: ctx.userId, scheduled_session_id: scheduled.id, plan_id: scheduled.user_workout_plan_id, plan_day_id: scheduled.plan_day_id, workout_name: scheduled.day_title ?? "Scheduled workout", workout_day_name: scheduled.day_title ?? null, status: "skipped", skipped_at: skippedAt, notes: update.notes, source: "chatgpt" }, { onConflict: "scheduled_session_id" }).select("*").single();
         if (error) throw new Error(error.message);
         return ok({ ok: true, session: data });
       }
@@ -696,18 +686,6 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         return ok({ ok: true, measurement: data });
       }
 
-      case "get_progress_summary": {
-        const days = Math.max(1, Math.min(365, getNumber(input, "period_days", 30)));
-        const since = dateDaysAgo(days);
-        const [progress, workouts, calories] = await Promise.all([
-          ctx.supabase.from("progress_entries").select("*").eq("user_id", ctx.userId).gte("entry_date", since),
-          ctx.supabase.from("user_workout_sessions").select("*").eq("user_id", ctx.userId).gte("scheduled_date", since),
-          ctx.supabase.from("food_logs").select("*").eq("user_id", ctx.userId).gte("log_date", since)
-        ]);
-        for (const result of [progress, workouts, calories]) if (result.error) throw new Error(result.error.message);
-        return ok({ ok: true, period_days: days, progress: progress.data ?? [], workout_adherence: workouts.data ?? [], calories: sumMacros((calories.data ?? []) as Array<Record<string, unknown>>) });
-      }
-
       case "add_water_log": {
         const date = cleanDate(input.date);
         const amount = Math.round(getNumber(input, "amount_ml"));
@@ -736,7 +714,7 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         return fail("unknown_tool", `Unknown Plaivra MCP tool: ${toolName}`);
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Plaivra MCP tool failed.";
-    return fail("tool_error", message);
+    console.error(`Plaivra MCP tool execution failed for ${toolName}:`, error instanceof Error ? error.message : "Unknown error");
+    return fail("tool_execution_failed", "Plaivra could not complete this tool. No change should be assumed; retry or review the affected record in Plaivra.");
   }
 }

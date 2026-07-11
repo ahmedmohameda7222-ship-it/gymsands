@@ -23,7 +23,8 @@ const emptyConstraints: FitnessConstraintInput = {
   injury_or_limitation_labels: [],
   areas_to_protect: [],
   movement_restrictions: null,
-  nutrition_restrictions: null
+  nutrition_restrictions: null,
+  legacy_context_notes: null
 };
 
 const emptyNutrition: NutritionPreferenceInput = {
@@ -201,6 +202,22 @@ export function FitnessConstraintsCard() {
                 />
               </div>
             </ProfileSection>
+
+            {form.legacy_context_notes ? (
+              <ProfileSection
+                title="Imported onboarding notes"
+                description="These notes were retained from an earlier setup flow. Review, edit, or clear them when they are no longer useful."
+              >
+                <div className="sm:col-span-2">
+                  <Field
+                    multiline
+                    label="Legacy functional context"
+                    value={form.legacy_context_notes}
+                    onChange={(value) => setForm((current: FitnessConstraintInput) => ({ ...current, legacy_context_notes: value || null }))}
+                  />
+                </div>
+              </ProfileSection>
+            ) : null}
 
             <ProfileSection
               title="Food-planning constraints"

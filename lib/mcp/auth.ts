@@ -7,6 +7,7 @@ import {
   resolveSavedAiPermissionScopes
 } from "@/lib/mcp/scopes";
 import { getAccessTokenAuthenticationRecord } from "@/lib/mcp/oauth";
+import { checkUserLaunchEligibility } from "@/lib/auth/eligibility";
 
 export type McpProfile = {
   id: string;
@@ -127,7 +128,7 @@ async function auditMcpAuthenticationDenied(
   supabase: SupabaseClient,
   userId: string | null,
   connectionId: string | null,
-  reasonCode: "expired_token" | "revoked_connection" | "invalid_resource" | "missing_permissions" | "stale_permissions"
+  reasonCode: "expired_token" | "not_yet_valid_token" | "revoked_token" | "invalid_issuer" | "revoked_connection" | "invalid_resource" | "missing_permissions" | "stale_permissions" | "account_disabled" | "age_ineligible"
 ) {
   if (!userId || !connectionId) return;
   await supabase.from("mcp_audit_logs").insert({
@@ -170,6 +171,18 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
         await auditMcpAuthenticationDenied(supabase, userId, connectionId, "expired_token");
         return unauthorizedMcpResponse(request, "Access token is invalid or expired. Reconnect Plaivra from ChatGPT settings.");
       }
+      if (accessRecord.notYetValid) {
+        await auditMcpAuthenticationDenied(supabase, userId, connectionId, "not_yet_valid_token");
+        return unauthorizedMcpResponse(request, "Access token is not active yet. Reconnect Plaivra from ChatGPT settings.");
+      }
+      if (accessRecord.revoked) {
+        await auditMcpAuthenticationDenied(supabase, userId, connectionId, "revoked_token");
+        return unauthorizedMcpResponse(request, "Access token was revoked. Reconnect Plaivra from ChatGPT settings.");
+      }
+      if (accessRecord.issuer !== serverEnv.plaivraOAuthIssuer) {
+        await auditMcpAuthenticationDenied(supabase, userId, connectionId, "invalid_issuer");
+        return unauthorizedMcpResponse(request, "Access token issuer is invalid. Reconnect Plaivra from ChatGPT settings.");
+      }
       tokenScopes = Array.isArray(accessRecord.scope) ? accessRecord.scope : [];
       tokenResource = accessRecord.resource ?? null;
     } catch (error) {
@@ -189,12 +202,30 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
     .from("chatgpt_connections")
     .select("id,user_id,is_active,revoked_at")
     .eq("id", connectionId)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (connectionError) return badMcpRequest("Could not verify the ChatGPT connection.", connectionError);
   if (!connectionIsUsable(connection)) {
     await auditMcpAuthenticationDenied(supabase, userId, connectionId, "revoked_connection");
     return unauthorizedMcpResponse(request, "ChatGPT connection is inactive or revoked. Reconnect in Plaivra Settings.");
+  }
+
+  const { data: accessState, error: accessStateError } = await supabase
+    .from("account_access_states")
+    .select("state")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (accessStateError) return serviceUnavailable("Plaivra could not verify account access state.", accessStateError);
+  if (accessState && accessState.state !== "active") {
+    await auditMcpAuthenticationDenied(supabase, userId, connectionId, "account_disabled");
+    return unauthorizedMcpResponse(request, "This Plaivra account is not active for ChatGPT access. Use Plaivra privacy controls for next steps.", 403);
+  }
+
+  const eligibility = await checkUserLaunchEligibility(supabase, userId);
+  if (!eligibility.eligible) {
+    await auditMcpAuthenticationDenied(supabase, userId, connectionId, "age_ineligible");
+    return unauthorizedMcpResponse(request, eligibility.message, 403);
   }
 
   const limitError = await rateLimit(supabase, connectionId);
@@ -210,6 +241,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
   if (!profile) return unauthorizedMcpResponse(request, "Linked Plaivra profile was not found.", 403);
 
   await supabase.from("chatgpt_connections").update({ last_used_at: new Date().toISOString() }).eq("id", connectionId);
+  await supabase.from("mcp_oauth_access_tokens").update({ last_used_at: new Date().toISOString() }).eq("token_hash", hashConnectionToken(token));
 
   // Verify the token was minted for this protected resource.
   const canonicalResource = serverEnv.plaivraMcpBaseUrl || `${url.origin}/api/mcp`;

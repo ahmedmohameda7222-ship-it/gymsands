@@ -33,7 +33,7 @@ export function WorkoutAiActionPanel({
     <Card variant="glass" className="border-primary/20">
       <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
         <CardTitle className="flex items-center gap-2 text-base"><Bot className="h-5 w-5 text-primary" /> ChatGPT workout actions</CardTitle>
-        <p className="text-sm text-muted-foreground">Prepare a reviewable request. ChatGPT recommends; Plaivra changes nothing until you approve and save an update.</p>
+        <p className="text-sm text-muted-foreground">Use ChatGPT with your scoped Plaivra connection. Successful tool changes appear in Plaivra with direct correction controls.</p>
       </CardHeader>
       <CardContent className="p-4 sm:p-5">
         <AiActionRequestDialog actions={actions} sourceType={sourceType} sourceId={sourceId} context={context} title="Workout request" />

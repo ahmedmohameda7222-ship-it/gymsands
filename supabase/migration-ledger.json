@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "projectRef": "bkwezjxvapaeasfvlhvv",
+  "capturedAt": "2026-07-10T17:30:00+02:00",
+  "auditedRepositoryCommit": "60a204d5fc20fc396be1b1b47e748c42ebba6abf",
+  "entries": [
+    {
+      "productionVersion": "202606290000",
+      "productionName": "clean_initial_schema",
+      "localFile": "202606290000_clean_initial_schema.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "202606290001",
+      "productionName": "security_privacy_mcp_hardening",
+      "localFile": "202606290001_security_privacy_mcp_hardening.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "202606290002",
+      "productionName": "seed_reference_data",
+      "localFile": "202606290002_seed_reference_data.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260701053859",
+      "productionName": "mcp_security_launch_blockers",
+      "localFile": "20260701053859_mcp_security_launch_blockers.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260701063223",
+      "productionName": "mcp_oauth_hardening",
+      "localFile": "20260701063223_mcp_oauth_hardening.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702062000",
+      "productionName": "phase6_consent_types",
+      "localFile": "20260702062000_phase6_consent_types.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702120000",
+      "productionName": "mcp_service_role_permissions",
+      "localFile": "20260702120000_mcp_service_role_permissions.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702124724",
+      "productionName": "fix_chatgpt_connection_rotation_ambiguous_columns",
+      "localFile": "20260702124724_fix_chatgpt_connection_rotation_ambiguous_columns.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702174951",
+      "productionName": "chatgpt_execution_layer_foundation",
+      "localFile": "20260702174951_chatgpt_execution_layer_foundation.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702181448",
+      "productionName": "execution_layer_reference_ownership_hardening",
+      "localFile": "20260702181448_execution_layer_reference_ownership_hardening.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260703151807_onboarding_coaching_quick_log_preferences.sql",
+      "state": "ledger_drift_review",
+      "note": "The production schema contains the migration's onboarding columns, but the production migration ledger has no matching entry. Verify the original application evidence before any repair operation."
+    },
+    {
+      "productionVersion": "20260710140133",
+      "productionName": "functional_fitness_constraints",
+      "localFile": "20260710135000_functional_fitness_constraints.sql",
+      "state": "applied_version_alias",
+      "note": "Production application version differs from the repository filename. Preserve both records; do not rename the local migration."
+    },
+    {
+      "productionVersion": "20260710145503",
+      "productionName": "drop_retired_ai_request_and_safety_tables",
+      "localFile": "20260710170000_drop_retired_ai_request_and_safety_tables.sql",
+      "state": "applied_version_alias",
+      "note": "Production application version differs from the repository filename. Preserve both records; do not rename the local migration."
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260710164946_enforce_initial_launch_age_16.sql",
+      "state": "pending",
+      "note": "Additive, NOT VALID eligibility constraint; isolated migration execution remains required."
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260710193700_canonical_data_convergence_foundation.sql",
+      "state": "pending",
+      "note": "Additive source links and backfills for ADRs 0001-0003; isolated execution and row verification are required before cutover."
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260710194238_private_admin_rls_and_query_indexes.sql",
+      "state": "pending",
+      "note": "Moves is_admin outside the exposed schema, normalizes policy auth initplans, consolidates proven duplicates, and adds query-justified indexes. Isolated RLS/grant validation is required."
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260710195027_cimd_oauth_token_lifecycle.sql",
+      "state": "pending",
+      "note": "Adds CIMD client binding, token validity/revocation fields, assertion replay protection, and bounded service-role cleanup. Isolated OAuth/RLS validation is required."
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260710202758_mcp_idempotency_ledger.sql",
+      "state": "pending",
+      "note": "Adds a service-only hashed replay ledger and bounded cleanup for public MCP create/log/composite tools. Isolated replay/concurrency/RLS validation is required."
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260710211000_progressive_onboarding_and_legacy_constraints.sql",
+      "state": "pending",
+      "note": "Adds resumable onboarding stages and safely retains legacy user-authored functional notes in the canonical constraints model. Isolated backfill and RLS validation are required."
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260710235035_privacy_deletion_export_retention_lifecycle.sql",
+      "state": "pending",
+      "note": "Adds service-only deletion jobs, legal holds, account access state, claim/retry mechanics, and dry-run retention cleanup. Destructive execution remains feature-flag gated and requires isolated validation plus owner review."
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260711001950_legal_document_version_2026_07_11.sql",
+      "state": "pending",
+      "note": "Registers the material English legal-document versions without modifying prior consent evidence. Professional legal review is still required."
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260711004551_subscription_entitlement_foundation.sql",
+      "state": "pending",
+      "note": "Adds an empty owner-gated offering catalog, service-only provider records and event ledger, and user-readable provider-neutral entitlements. It seeds no price or paid capability and requires isolated RLS/webhook validation."
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260711013000_prelaunch_runtime_safety_corrections.sql",
+      "state": "pending",
+      "note": "Adds database-owned release compatibility, atomic OAuth code consumption, leased MCP idempotency recovery, stale deletion recovery, and durable billing claims. Isolated migration, concurrency, reconciliation, and RLS validation are mandatory."
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260711014500_idempotency_uncertain_completion_guard.sql",
+      "state": "pending",
+      "note": "Overrides the MCP idempotency claim function so expired pending work requires review instead of unsafe automatic re-execution; updates schema marker evidence. Isolated concurrency validation is mandatory."
+    }
+  ]
+}

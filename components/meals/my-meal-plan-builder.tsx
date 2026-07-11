@@ -38,7 +38,6 @@ import {
 import type { MealPlanItem, MealType, OnboardingAnswers } from "@/types";
 import { GroceryListPanel } from "@/components/meals/grocery-list-panel";
 import { MealAiActions } from "@/components/meals/meal-ai-actions";
-import { MealPlanImportReview } from "@/components/meals/meal-plan-import-review";
 import { validateMealItem, validateMealPlanDay } from "@/services/meals/meal-validation";
 import { getGroceryItems, upsertGroceryItem } from "@/services/database/execution-layer";
 import { getCalorieTargets } from "@/services/database/nutrition";
@@ -327,23 +326,8 @@ function MyMealPlanBuilderInner() {
     requested_start_date: selectedDate
   };
 
-  function handleReviewedPlanApplied(newItems: MealPlanItem[]) {
-    upsertLocalItems(newItems.map(normalizeMealPlanItem));
-    setNotice({
-      type: "success",
-      title: "Reviewed meal plan applied",
-      description: `${newItems.length} reviewed meal${newItems.length === 1 ? "" : "s"} added. Manual edits are available for corrections.`
-    });
-  }
-
   return (
     <div className="space-y-3 sm:space-y-4">
-      <MealPlanImportReview
-        defaultDate={selectedDate}
-        requestContext={mealPlanRequestContext}
-        onApplied={handleReviewedPlanApplied}
-      />
-
       <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4">
         <SummaryCard label="Planned" value={plannedTotals.calories} detail={`${Math.round(plannedTotals.protein_g)}g protein`} />
         <SummaryCard label="Done" value={doneTotals.calories} detail={`${Math.round(doneTotals.protein_g)}g protein`} />
@@ -369,20 +353,20 @@ function MyMealPlanBuilderInner() {
       <Dialog open={addSourceDialogOpen} onOpenChange={setAddSourceDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Add or import a meal</DialogTitle>
-            <DialogDescription>Use ChatGPT import first for plan updates, or choose manual fallback for corrections.</DialogDescription>
+            <DialogTitle>Add a planned meal</DialogTitle>
+            <DialogDescription>Ask ChatGPT to update the plan through authorized Plaivra tools, or use the direct controls here.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
             <AiActionRequestDialog
-              actions={[{ type: "build_meal_plan", label: "Import/update with ChatGPT", description: "Discuss, approve, and import a personalized meal plan." }]}
+              actions={[{ type: "build_meal_plan", label: "Create/update with ChatGPT", description: "Use authorized context and Plaivra tools to save a personalized meal plan." }]}
               sourceType="meal_plan_empty"
               context={mealPlanRequestContext}
               permissionSection="meal_plans"
-              title="Import a meal plan with ChatGPT"
+              title="Create a meal plan with ChatGPT"
               buttonVariant="default"
               className="grid min-h-12 [&_button]:min-h-12"
             />
-            <Button type="button" variant="outline" className="min-h-12" onClick={openQuickAdd}>Quick manual correction</Button>
+            <Button type="button" variant="outline" className="min-h-12" onClick={openQuickAdd}>Add directly</Button>
             <Button asChild variant="outline" className="min-h-12" onClick={() => setAddSourceDialogOpen(false)}><Link href="/calories/food-hub">Add from Food Hub</Link></Button>
           </div>
         </DialogContent>
@@ -416,9 +400,9 @@ function MyMealPlanBuilderInner() {
                 <p className="text-xs text-muted-foreground sm:text-sm">{dayStats.totalDone}/{dayStats.totalPlanned + dayStats.totalDone} meals marked done</p>
               </div>
               <div className="flex shrink-0 gap-1.5">
-                <Button variant="outline" type="button" className="min-h-12 min-w-12 px-3" onClick={() => changeDate(addDays(selectedDate, -1))}><ChevronLeft className="h-4 w-4" /></Button>
+                <Button aria-label="Previous day" variant="outline" type="button" className="min-h-12 min-w-12 px-3" onClick={() => changeDate(addDays(selectedDate, -1))}><ChevronLeft className="h-4 w-4" /></Button>
                 <Button variant="outline" type="button" className="min-h-12" onClick={() => changeDate(today)}>Today</Button>
-                <Button variant="outline" type="button" className="min-h-12 min-w-12 px-3" onClick={() => changeDate(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
+                <Button aria-label="Next day" variant="outline" type="button" className="min-h-12 min-w-12 px-3" onClick={() => changeDate(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
               </div>
             </div>
             <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1 mobile-card-scroll">

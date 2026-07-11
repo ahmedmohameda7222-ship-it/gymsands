@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
-import { requireUser } from "@/lib/integrations/env";
+import { requireEligibleUser } from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import {
   MCP_SCOPES,
@@ -13,7 +13,7 @@ import {
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const context = await requireUser(request);
+  const context = await requireEligibleUser(request);
   if (context instanceof NextResponse) return context;
 
   const supabase = createSupabaseAdminClient();
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   const limited = rateLimit(request, "ai-permissions-save", 10, 60_000);
   if (limited) return limited;
 
-  const context = await requireUser(request);
+  const context = await requireEligibleUser(request);
   if (context instanceof NextResponse) return context;
 
   let body: Record<string, unknown>;

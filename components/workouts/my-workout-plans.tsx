@@ -17,7 +17,7 @@ import { archiveWorkoutPlan, deleteWorkoutPlan, duplicateWorkoutPlan, getActiveW
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { WorkoutCalendar } from "@/components/workouts/workout-calendar";
 import { Input } from "@/components/ui/input";
-import { ChatGptImportCard } from "@/components/shared/chatgpt-import-card";
+import { ChatGptExecutionCard } from "@/components/shared/chatgpt-execution-card";
 import type { UserWorkoutPlan, WorkoutSession } from "@/types";
 
 type PlanMeta = Omit<UserWorkoutPlan, "source"> & {
@@ -325,13 +325,13 @@ export function MyWorkoutPlans() {
       {!isLoading && !loadError && plans.length ? (
         <Card variant="glassStrong" className="border-primary/20">
           <CardHeader>
-            <CardTitle>Add or import a plan</CardTitle>
+            <CardTitle>Add a plan</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm leading-6 text-muted-foreground">
-              ChatGPT import is the recommended creation path for most users. You can review, edit, schedule, and start workouts in Plaivra after import.
+              With scoped access, ChatGPT can create or update a structured plan through Plaivra tools. Successful changes appear here immediately for scheduling, tracking, editing, and correction.
             </p>
-            <ChatGptImportCard mode="workout" />
+            <ChatGptExecutionCard mode="workout" />
             <Button variant="outline" className="min-h-12" onClick={() => router.push("/my-workout/plans/builder")}>
               <Plus className="h-4 w-4" /> Create manually instead
             </Button>
@@ -362,7 +362,7 @@ export function MyWorkoutPlans() {
 }
 
 function sourceBadge(plan: UserWorkoutPlan) {
-  if (isChatGptPlan(plan) || plan.source === "chatgpt" || plan.source === "imported") return "Imported";
+  if (isChatGptPlan(plan) || plan.source === "chatgpt" || plan.source === "imported") return "ChatGPT";
   if (plan.source === "manual") return "Manual";
   return "Saved";
 }
@@ -425,19 +425,19 @@ function PlanSetupHero({ onCreateManual }: { onCreateManual: () => void }) {
       <CardContent className="space-y-4 p-4 sm:p-5">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Create your first plan</p>
-          <h2 className="mt-1 text-xl font-semibold text-foreground">Import a ChatGPT plan, then edit and track it in Plaivra</h2>
+          <h2 className="mt-1 text-xl font-semibold text-foreground">Create a plan with ChatGPT, then track it in Plaivra</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            ChatGPT is the recommended path for plan creation. Plaivra stores the approved plan, lets you edit days/exercises, and starts focused workout sessions from it.
+            Connect Plaivra, grant workout access, and ask ChatGPT to create the plan through an authorized tool. The saved plan appears here with direct editing and focused workout controls.
           </p>
         </div>
-        <ChatGptImportCard mode="workout" />
+        <ChatGptExecutionCard mode="workout" />
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button variant="outline" className="min-h-12" onClick={onCreateManual}>
             <Plus className="h-4 w-4" />
             Create manually instead
           </Button>
           <Button asChild variant="ghost" className="min-h-12">
-            <Link href="/settings/ai-imports">Review ChatGPT access</Link>
+            <Link href="/settings/connections">Manage ChatGPT access</Link>
           </Button>
         </div>
       </CardContent>

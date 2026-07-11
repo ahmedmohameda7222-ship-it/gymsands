@@ -55,18 +55,18 @@ function FoodHubContent() {
       {confirmDialog}
       <PageHeading
         title="Food Hub"
-        description="Use this hub for custom foods, saved meals, and manual corrections after AI/import review or when you need precise control."
+        description="Use this hub for custom foods, saved meals, direct logging, and precise corrections."
       />
       <Surface variant="glass" className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1fr_auto] lg:items-center">
         <div>
-          <p className="text-sm font-semibold text-foreground">Manual fallback and correction tools</p>
+          <p className="text-sm font-semibold text-foreground">Direct logging and correction tools</p>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
-            For normal meal logging, start with ChatGPT/photo import on Calories, review the estimate, then save. Food Hub is for corrections, reusable foods, saved meals, and power-user manual logging.
+            Log with ChatGPT through authorized Plaivra tools or use these controls directly. Food Hub keeps reusable foods, saved meals, and precise corrections close at hand.
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Button asChild className="min-h-12">
-            <Link href="/calories">Back to AI-first Calories</Link>
+            <Link href="/calories">Back to Nutrition Tracker</Link>
           </Button>
           <Button type="button" variant="outline" className="min-h-12" onClick={toggleBuilder}>
             {showBuilder ? "Close Builder" : "Create / Edit Custom Foods & Meals"}

@@ -2,7 +2,14 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { serverEnv } from "@/lib/integrations/env";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
-import { hashConnectionToken } from "@/lib/mcp/auth";
+import { createConnectionToken, hashConnectionToken } from "@/lib/mcp/auth";
+import { getSavedUserAiScopes, rotateMcpConnection } from "@/lib/mcp/connections";
+import {
+  CimdValidationError,
+  fetchAndValidateCimdMetadata,
+  verifyCimdPrivateKeyJwt,
+  type CimdClientMetadata
+} from "@/lib/mcp/cimd";
 import { MCP_DEFAULT_SCOPES, MCP_PUBLIC_OAUTH_SCOPES, MCP_SCOPES, normalizeMcpScopes, resolveSavedAiPermissionScopes } from "@/lib/mcp/scopes";
 import { CHATGPT_CONNECTION_CONSENT_VERSION } from "@/lib/legal/versions";
 
@@ -36,7 +43,8 @@ function getCanonicalResource(request: Request) {
 export function isAllowedRedirectUri(value: string, configuredRedirectUris = serverEnv.plaivraChatGptRedirectUris ?? "") {
   try {
     const url = new URL(value);
-    const matchesStrictChatGptPattern = (
+    const exactRedirectUris = configuredRedirectUris.split(",").map((item) => item.trim()).filter(Boolean);
+    const matchesCurrentChatGptPattern = (
       url.protocol === "https:" &&
       url.hostname === "chatgpt.com" &&
       !url.port &&
@@ -46,9 +54,16 @@ export function isAllowedRedirectUri(value: string, configuredRedirectUris = ser
       !url.hash &&
       /^\/connector\/oauth\/[A-Za-z0-9._~-]{1,200}$/.test(url.pathname)
     );
-    if (!matchesStrictChatGptPattern) return false;
-
-    const exactRedirectUris = configuredRedirectUris.split(",").map((item) => item.trim()).filter(Boolean);
+    const isConfiguredLegacyRedirect = url.protocol === "https:"
+      && url.hostname === "chatgpt.com"
+      && !url.port
+      && !url.username
+      && !url.password
+      && !url.search
+      && !url.hash
+      && url.pathname === "/connector_platform_oauth_redirect"
+      && exactRedirectUris.includes(value);
+    if (!matchesCurrentChatGptPattern && !isConfiguredLegacyRedirect) return false;
     return exactRedirectUris.length === 0 || exactRedirectUris.includes(value);
   } catch {
     return false;
@@ -104,6 +119,10 @@ function hashAccessToken(token: string) {
 
 function pkceS256(verifier: string) {
   return crypto.createHash("sha256").update(verifier).digest("base64url");
+}
+
+function isValidPkceValue(value: string) {
+  return /^[A-Za-z0-9._~-]{43,128}$/.test(value);
 }
 
 function safeEqual(a: string, b: string) {
@@ -176,13 +195,17 @@ type ResolvedConnection = {
   canonicalClientId: string;
 };
 
+type ResolvedOAuthClient =
+  | { kind: "cimd"; clientId: string; metadata: CimdClientMetadata; connection: null }
+  | { kind: "transitional"; clientId: string; metadata: null; connection: ResolvedConnection };
+
 async function resolveClientId(clientId: string): Promise<ResolvedConnection | null> {
   if (!clientId) return null;
 
   const supabase = createSupabaseAdminClient();
 
-  // Try UUID first (new canonical client_id)
-  if (isValidUuid(clientId)) {
+  // Transitional connection UUIDs are private-development compatibility only.
+  if (serverEnv.plaivraAllowLegacyMcpClientId && isValidUuid(clientId)) {
     const { data, error } = await supabase
       .from("chatgpt_connections")
       .select("id,user_id,scopes,is_active,revoked_at")
@@ -218,7 +241,82 @@ function getClientIdFromTokenRequest(form: URLSearchParams) {
 }
 
 function supportedClientIdFormat(clientId: string) {
-  return isValidUuid(clientId) || (serverEnv.plaivraAllowLegacyMcpClientId && isLegacyClientIdFormat(clientId));
+  if (clientId.startsWith("https://")) return true;
+  return serverEnv.plaivraAllowLegacyMcpClientId && (isValidUuid(clientId) || isLegacyClientIdFormat(clientId));
+}
+
+function oauthContinuationHash(continuation: string) {
+  return hashValue(`oauth-continuation-replay:${continuation}`);
+}
+
+async function recordOAuthContinuation(continuation: string) {
+  const issuedAt = Number(continuation.split(".")[0]);
+  if (!Number.isFinite(issuedAt)) throw new Error("OAuth authorization continuation could not be recorded.");
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase.from("mcp_oauth_authorization_continuations").insert({
+    continuation_hash: oauthContinuationHash(continuation),
+    expires_at: new Date(issuedAt + OAUTH_CONTINUATION_EXPIRY_MS).toISOString()
+  });
+  if (error) throw new Error("OAuth authorization continuation could not be recorded securely.");
+}
+
+async function consumeOAuthContinuation(continuation: string) {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("mcp_oauth_authorization_continuations")
+    .delete()
+    .eq("continuation_hash", oauthContinuationHash(continuation))
+    .select("id")
+    .maybeSingle();
+  return !error && Boolean(data?.id);
+}
+
+async function resolveOAuthClient(clientId: string, redirectUri?: string): Promise<ResolvedOAuthClient | null> {
+  if (clientId.startsWith("https://")) {
+    const metadata = await fetchAndValidateCimdMetadata({
+      clientId,
+      redirectUri,
+      allowedOrigins: serverEnv.plaivraCimdAllowedOrigins,
+      // Unit tests replace global fetch with a deterministic metadata server.
+      // Runtime requests retain the DNS-pinned HTTPS transport in cimd.ts.
+      ...(process.env.NODE_ENV === "test" ? { fetcher: fetch } : {})
+    });
+    return { kind: "cimd", clientId, metadata, connection: null };
+  }
+  const connection = await resolveClientId(clientId);
+  return connection
+    ? { kind: "transitional", clientId: connection.canonicalClientId, metadata: null, connection }
+    : null;
+}
+
+async function createCimdConnection(userId: string, clientId: string, scopes: string[]) {
+  const supabase = createSupabaseAdminClient();
+  const tokenHash = hashConnectionToken(createConnectionToken());
+  const { data, error } = await rotateMcpConnection(supabase, { userId, tokenHash, scopes });
+  const connection = Array.isArray(data) ? data[0] : data;
+  if (error || !connection?.id) throw new Error("ChatGPT connection could not be created securely.");
+  const updated = await supabase
+    .from("chatgpt_connections")
+    .update({ oauth_client_id: clientId, label: "ChatGPT (CIMD)" })
+    .eq("id", connection.id)
+    .eq("user_id", userId)
+    .select("id,user_id,scopes,is_active,revoked_at")
+    .single();
+  if (updated.error || !updated.data) throw new Error("ChatGPT connection identity could not be bound.");
+  return { ...updated.data, canonicalClientId: clientId } as ResolvedConnection;
+}
+
+async function resolveConnectionById(connectionId: string, userId: string) {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("chatgpt_connections")
+    .select("id,user_id,scopes,is_active,revoked_at,oauth_client_id")
+    .eq("id", connectionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.is_active || data.revoked_at) return null;
+  return { ...data, canonicalClientId: data.oauth_client_id ?? data.id } as ResolvedConnection;
 }
 
 function rateLimitDigest(value: string) {
@@ -231,7 +329,9 @@ function oauthClientIp(request: Request) {
   return "unknown";
 }
 
-export async function oauthRateLimit(key: string, limit: number, windowSeconds: number) {
+export type OAuthRateLimitDecision = { status: 429 | 503; message: string } | null;
+
+export async function oauthRateLimit(key: string, limit: number, windowSeconds: number): Promise<OAuthRateLimitDecision> {
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase.rpc("consume_oauth_rate_limit", {
     p_key: key,
@@ -239,13 +339,20 @@ export async function oauthRateLimit(key: string, limit: number, windowSeconds: 
     p_window_seconds: windowSeconds
   });
 
-  if (error) return null; // fail open on rate-limit infra errors
+  if (error) {
+    return { status: 503, message: "OAuth request protection is temporarily unavailable. Try again later." };
+  }
 
   const row = (Array.isArray(data) ? data[0] : data) as { allowed?: boolean; reset_at?: string | null } | null;
-  if (!row) return null;
+  if (!row) {
+    return { status: 503, message: "OAuth request protection is temporarily unavailable. Try again later." };
+  }
   if (row.allowed !== false) return null;
   const resetAt = row.reset_at ? Date.parse(row.reset_at) : Date.now() + windowSeconds * 1000;
-  return `Rate limit exceeded. Try again after ${Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))} seconds.`;
+  return {
+    status: 429,
+    message: `Rate limit exceeded. Try again after ${Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))} seconds.`
+  };
 }
 
 async function createAuthorizationCode(
@@ -284,55 +391,35 @@ async function verifyAuthorizationCode(
   resource: string
 ): Promise<{ scope: string; user_id: string; connection_id: string }> {
   if (!code) throw new Error("Authorization code is required.");
+  if (!codeVerifier) throw new Error("code_verifier is required.");
 
-  const codeHash = hashAuthorizationCode(code);
   const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase.rpc("consume_mcp_oauth_authorization_code", {
+    p_code_hash: hashAuthorizationCode(code),
+    p_client_id: clientId,
+    p_redirect_uri: redirectUri,
+    p_code_challenge: pkceS256(codeVerifier),
+    p_resource: resource
+  });
+  if (error) throw new Error("Authorization code verification is temporarily unavailable.");
 
-  // Atomically mark as used and return the row
-  const { data, error } = await supabase
-    .from("mcp_oauth_authorization_codes")
-    .update({ used_at: new Date().toISOString() })
-    .eq("code_hash", codeHash)
-    .is("used_at", null)
-    .select("user_id,connection_id,client_id,redirect_uri,code_challenge,code_challenge_method,scope,expires_at,resource")
-    .maybeSingle();
-
-  if (error) throw new Error(`Failed to verify authorization code: ${error.message}`);
-  if (!data) throw new Error("Authorization code is invalid or has already been used.");
-
-  if (new Date(data.expires_at) < new Date()) {
-    throw new Error("Authorization code expired.");
-  }
-
-  if (data.client_id !== clientId) {
-    throw new Error("Authorization code does not match this client.");
-  }
-
-  if (redirectUri && data.redirect_uri !== redirectUri) {
-    throw new Error("redirect_uri does not match authorization request.");
-  }
-
-  if (data.code_challenge_method !== "S256") {
-    throw new Error("Unsupported code_challenge_method.");
-  }
-
-  const challenge = pkceS256(codeVerifier);
-  if (!safeEqual(challenge, data.code_challenge)) {
-    throw new Error("Invalid code_verifier.");
-  }
-
-  if (data.resource !== resource) {
-    throw new Error("Authorization code resource mismatch.");
+  const row = (Array.isArray(data) ? data[0] : data) as {
+    scope?: string[] | null;
+    user_id?: string | null;
+    connection_id?: string | null;
+  } | null;
+  if (!row?.user_id || !row.connection_id) {
+    throw new Error("Authorization code is invalid, expired, already used, or does not match this request.");
   }
 
   return {
-    scope: Array.isArray(data.scope) ? data.scope.join(" ") : "",
-    user_id: data.user_id,
-    connection_id: data.connection_id
+    scope: Array.isArray(row.scope) ? row.scope.join(" ") : "",
+    user_id: row.user_id,
+    connection_id: row.connection_id
   };
 }
 
-async function createAccessToken(connection: ResolvedConnection, scope: string, resource: string) {
+async function createAccessToken(connection: ResolvedConnection, clientId: string, scope: string, resource: string, issuer: string) {
   const rawToken = `plaivra_mcp_at_${crypto.randomBytes(32).toString("base64url")}`;
   const tokenHash = hashAccessToken(rawToken);
   const supabase = createSupabaseAdminClient();
@@ -341,8 +428,11 @@ async function createAccessToken(connection: ResolvedConnection, scope: string, 
     token_hash: tokenHash,
     connection_id: connection.id,
     user_id: connection.user_id,
+    client_id: clientId,
     scope: scope.split(/\s+/).filter(Boolean),
     resource,
+    issuer,
+    not_before: new Date().toISOString(),
     expires_at: new Date(Date.now() + ACCESS_TOKEN_EXPIRY_MS).toISOString()
   });
 
@@ -356,13 +446,19 @@ export async function getAccessTokenAuthenticationRecord(token: string) {
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from("mcp_oauth_access_tokens")
-    .select("connection_id,user_id,scope,expires_at,resource")
+    .select("connection_id,user_id,client_id,scope,issuer,not_before,expires_at,revoked_at,resource")
     .eq("token_hash", tokenHash)
     .maybeSingle();
 
   if (error) throw new Error(error.message);
   if (!data) return null;
-  return { ...data, expired: new Date(data.expires_at) < new Date() };
+  const now = new Date();
+  return {
+    ...data,
+    expired: new Date(data.expires_at) <= now,
+    notYetValid: Boolean(data.not_before && new Date(data.not_before) > now),
+    revoked: Boolean(data.revoked_at)
+  };
 }
 
 async function recordChatGptConnectionConsent(userId: string, request: Request) {
@@ -382,7 +478,7 @@ async function recordChatGptConnectionConsent(userId: string, request: Request) 
 
 export async function getAccessTokenRecord(token: string) {
   const record = await getAccessTokenAuthenticationRecord(token);
-  return record && !record.expired ? record : null;
+  return record && !record.expired && !record.notYetValid && !record.revoked ? record : null;
 }
 
 async function getUserAiScopes(userId: string): Promise<string[]> {
@@ -411,16 +507,19 @@ function permittedOAuthScopes(requestedScope: string, userScopes: string[]) {
 }
 
 export function oauthAuthorizationServerMetadata(request: Request) {
-  const origin = originFromRequest(request);
+  void request;
+  const origin = serverEnv.plaivraOAuthIssuer;
 
   return NextResponse.json(
     {
       issuer: origin,
       authorization_endpoint: `${origin}/api/oauth/authorize`,
       token_endpoint: `${origin}/api/oauth/token`,
+      revocation_endpoint: `${origin}/api/oauth/revoke`,
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code"],
-      token_endpoint_auth_methods_supported: ["none"],
+      client_id_metadata_document_supported: true,
+      token_endpoint_auth_methods_supported: ["private_key_jwt", "none"],
       code_challenge_methods_supported: ["S256"],
       scopes_supported: MCP_PUBLIC_OAUTH_SCOPES
     },
@@ -429,7 +528,8 @@ export function oauthAuthorizationServerMetadata(request: Request) {
 }
 
 export function oauthProtectedResourceMetadata(request: Request) {
-  const origin = originFromRequest(request);
+  void request;
+  const origin = serverEnv.plaivraOAuthIssuer;
   const resource = serverEnv.plaivraMcpBaseUrl || `${origin}/api/mcp`;
 
   return NextResponse.json(
@@ -438,6 +538,7 @@ export function oauthProtectedResourceMetadata(request: Request) {
       authorization_servers: [origin],
       scopes_supported: MCP_PUBLIC_OAUTH_SCOPES,
       bearer_methods_supported: ["header"],
+      token_endpoint_auth_methods_supported: ["private_key_jwt", "none"],
       resource_documentation: `${origin}/legal/privacy`
     },
     { headers: metadataHeaders() }
@@ -479,11 +580,18 @@ export async function handleOAuthAuthorize(request: Request) {
   const rateLimitKey = `authorize:${oauthClientIp(request)}:${rateLimitDigest(clientId)}`;
   const rateLimitError = await oauthRateLimit(rateLimitKey, AUTHORIZE_RATE_LIMIT, RATE_LIMIT_WINDOW_SECONDS);
   if (rateLimitError) {
-    return NextResponse.json({ error: "invalid_request", error_description: "Too many authorization requests. Please try again later." }, { status: 429, headers: metadataHeaders() });
+    return NextResponse.json(
+      { error: rateLimitError.status === 503 ? "temporarily_unavailable" : "invalid_request", error_description: rateLimitError.message },
+      { status: rateLimitError.status, headers: metadataHeaders() }
+    );
   }
 
   if (!codeChallenge) {
     return oauthErrorRedirect(redirectUri, state, "invalid_request", "code_challenge is required. PKCE S256 is mandatory.");
+  }
+
+  if (clientId.startsWith("https://") && !isValidPkceValue(codeChallenge)) {
+    return oauthErrorRedirect(redirectUri, state, "invalid_request", "CIMD clients must send a valid 43-128 character PKCE code_challenge.");
   }
 
   if (codeChallengeMethod !== "S256") {
@@ -492,25 +600,37 @@ export async function handleOAuthAuthorize(request: Request) {
 
   // Validate resource if supplied; default to canonical resource for backward compat
   const resource = requestedResource || canonicalResource;
+  if (clientId.startsWith("https://") && !requestedResource) {
+    return oauthErrorRedirect(redirectUri, state, "invalid_target", "The resource parameter is required for CIMD authorization.");
+  }
   if (requestedResource && requestedResource !== canonicalResource) {
     return oauthErrorRedirect(redirectUri, state, "invalid_target", "The requested resource is not supported by this authorization server.");
   }
 
   try {
-    const connection = await resolveClientId(clientId);
-    if (!connection) {
+    const oauthClient = await resolveOAuthClient(clientId, redirectUri);
+    if (!oauthClient) {
       return oauthErrorRedirect(redirectUri, state, "invalid_client", "Plaivra OAuth client is unknown, inactive, or revoked.");
     }
-
-    const userScopes = await getUserAiScopes(connection.user_id);
-    if (!userScopes.length) {
-      return oauthErrorRedirect(redirectUri, state, "access_denied", "Review and save Plaivra AI Permissions before connecting ChatGPT.");
+    let scope: string;
+    if (oauthClient.kind === "transitional") {
+      const userScopes = await getUserAiScopes(oauthClient.connection.user_id);
+      if (!userScopes.length) {
+        return oauthErrorRedirect(redirectUri, state, "access_denied", "Review and save Plaivra AI Permissions before connecting ChatGPT.");
+      }
+      const permittedRequestedScopes = permittedOAuthScopes(requestedScope, userScopes);
+      if (requestedScope.trim() && !permittedRequestedScopes.length) {
+        return oauthErrorRedirect(redirectUri, state, "invalid_scope", "The requested Plaivra permissions are unsupported or have not been granted by the user.");
+      }
+      scope = permittedRequestedScopes.join(" ");
+    } else {
+      const requested = Array.from(new Set(requestedScope.split(/\s+/).filter(Boolean)));
+      const normalized = normalizeMcpScopes(requested, []);
+      if (!requested.length || normalized.length !== requested.length || normalized.some((item) => item === MCP_SCOPES.admin || item === MCP_SCOPES.all)) {
+        return oauthErrorRedirect(redirectUri, state, "invalid_scope", "The requested Plaivra permissions are unsupported.");
+      }
+      scope = normalized.join(" ");
     }
-    const permittedRequestedScopes = permittedOAuthScopes(requestedScope, userScopes);
-    if (requestedScope.trim() && !permittedRequestedScopes.length) {
-      return oauthErrorRedirect(redirectUri, state, "invalid_scope", "The requested Plaivra permissions are unsupported or have not been granted by the user.");
-    }
-    const scope = permittedRequestedScopes.join(" ");
 
     const consentParams: OAuthAuthorizationRequest = {
       ...params,
@@ -520,9 +640,14 @@ export async function handleOAuthAuthorize(request: Request) {
     const consentUrl = new URL("/oauth/authorize", url.origin);
     const consentSearch = canonicalAuthorizationSearch(consentParams);
     for (const [key, value] of consentSearch) consentUrl.searchParams.set(key, value);
-    consentUrl.searchParams.set("continuation", createOAuthContinuation(consentParams));
+    const continuation = createOAuthContinuation(consentParams);
+    await recordOAuthContinuation(continuation);
+    consentUrl.searchParams.set("continuation", continuation);
     return NextResponse.redirect(consentUrl);
   } catch (error) {
+    if (error instanceof CimdValidationError) {
+      return oauthErrorRedirect(redirectUri, state, error.code, error.message);
+    }
     return oauthErrorRedirect(redirectUri, state, "server_error", error instanceof Error ? error.message : "Plaivra OAuth authorization failed.");
   }
 }
@@ -554,7 +679,10 @@ export async function handleOAuthAuthorizeDecision(request: Request, authenticat
   const rateLimitKey = `authorize_decision:${oauthClientIp(request)}:${rateLimitDigest(params.clientId)}`;
   const rateLimitError = await oauthRateLimit(rateLimitKey, AUTHORIZE_RATE_LIMIT, RATE_LIMIT_WINDOW_SECONDS);
   if (rateLimitError) {
-    return NextResponse.json({ error: "invalid_request", error_description: "Too many authorization requests. Please try again later." }, { status: 429, headers: metadataHeaders() });
+    return NextResponse.json(
+      { error: rateLimitError.status === 503 ? "temporarily_unavailable" : "invalid_request", error_description: rateLimitError.message },
+      { status: rateLimitError.status, headers: metadataHeaders() }
+    );
   }
 
   let body: { decision?: unknown } = {};
@@ -568,9 +696,15 @@ export async function handleOAuthAuthorizeDecision(request: Request, authenticat
   }
 
   try {
-    const connection = await resolveClientId(params.clientId);
-    if (!connection || connection.user_id !== authenticatedUserId) {
+    const oauthClient = await resolveOAuthClient(params.clientId, params.redirectUri);
+    if (!oauthClient) {
+      return NextResponse.json({ error: "invalid_client", error_description: "OAuth client is unknown or invalid." }, { status: 401, headers: metadataHeaders() });
+    }
+    if (oauthClient.kind === "transitional" && oauthClient.connection.user_id !== authenticatedUserId) {
       return NextResponse.json({ error: "access_denied", error_description: "This OAuth client belongs to a different Plaivra account or is no longer active." }, { status: 403, headers: metadataHeaders() });
+    }
+    if (!(await consumeOAuthContinuation(continuation))) {
+      return NextResponse.json({ error: "invalid_request", error_description: "Authorization continuation was already used or is no longer available. Start the connection again from ChatGPT." }, { status: 400, headers: metadataHeaders() });
     }
 
     const callback = new URL(params.redirectUri);
@@ -581,7 +715,7 @@ export async function handleOAuthAuthorizeDecision(request: Request, authenticat
       return NextResponse.json({ redirect_to: callback.toString() }, { headers: metadataHeaders() });
     }
 
-    const userScopes = await getUserAiScopes(connection.user_id);
+    const userScopes = await getUserAiScopes(authenticatedUserId);
     if (!userScopes.length) {
       return NextResponse.json({ error: "access_denied", error_description: "Review and save Plaivra AI Permissions before connecting ChatGPT." }, { status: 403, headers: metadataHeaders() });
     }
@@ -590,16 +724,66 @@ export async function handleOAuthAuthorizeDecision(request: Request, authenticat
       return NextResponse.json({ error: "invalid_scope", error_description: "The requested Plaivra permissions are unsupported or have not been granted by the user." }, { status: 400, headers: metadataHeaders() });
     }
     const scope = permittedRequestedScopes.join(" ");
+    const connection = oauthClient.kind === "cimd"
+      ? await createCimdConnection(authenticatedUserId, params.clientId, permittedRequestedScopes)
+      : oauthClient.connection;
     const code = await createAuthorizationCode(connection, params.redirectUri, params.codeChallenge, scope, resource);
     await recordChatGptConnectionConsent(connection.user_id, request);
     callback.searchParams.set("code", code);
     return NextResponse.json({ redirect_to: callback.toString() }, { headers: metadataHeaders() });
   } catch (error) {
     return NextResponse.json(
-      { error: "server_error", error_description: error instanceof Error ? error.message : "Plaivra OAuth authorization failed." },
-      { status: 500, headers: metadataHeaders() }
+      {
+        error: error instanceof CimdValidationError ? error.code : "server_error",
+        error_description: error instanceof Error ? error.message : "Plaivra OAuth authorization failed."
+      },
+      { status: error instanceof CimdValidationError ? 400 : 500, headers: metadataHeaders() }
     );
   }
+}
+
+const CLIENT_ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
+
+async function recordClientAssertionReplayGuard(clientId: string, jti: string, kid: string | null, expiresAt: string) {
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase.from("mcp_oauth_client_assertions").insert({
+    client_id: clientId,
+    jti_hash: hashValue(`client-assertion:${clientId}:${jti}`),
+    kid,
+    expires_at: expiresAt
+  });
+  if (error) {
+    if (error.code === "23505" || /duplicate|unique/i.test(error.message)) {
+      throw new CimdValidationError("client_assertion was already used.");
+    }
+    throw new CimdValidationError("client_assertion replay protection is unavailable.");
+  }
+}
+
+async function authenticateOAuthClientForTokenRequest(form: URLSearchParams, request: Request, redirectUri: string) {
+  const clientId = getClientIdFromTokenRequest(form);
+  const oauthClient = await resolveOAuthClient(clientId, redirectUri);
+  if (!oauthClient) throw new CimdValidationError("OAuth client is unknown or revoked.");
+  if (request.headers.get("authorization") || form.has("client_secret")) {
+    throw new CimdValidationError("HTTP Basic and client secrets are not accepted.");
+  }
+
+  const assertion = form.get("client_assertion") ?? "";
+  const assertionType = form.get("client_assertion_type") ?? "";
+  if (oauthClient.kind === "cimd" && oauthClient.metadata.selectedTokenEndpointAuthMethod === "private_key_jwt") {
+    if (assertionType !== CLIENT_ASSERTION_TYPE) {
+      throw new CimdValidationError("private_key_jwt requires the standard JWT bearer client_assertion_type.");
+    }
+    const verified = await verifyCimdPrivateKeyJwt({
+      assertion,
+      metadata: oauthClient.metadata,
+      tokenEndpoint: new URL("/api/oauth/token", serverEnv.plaivraOAuthIssuer).toString()
+    });
+    await recordClientAssertionReplayGuard(clientId, verified.jti, verified.kid, verified.expiresAt);
+  } else if (assertion || assertionType) {
+    throw new CimdValidationError("This OAuth client uses public PKCE token exchange and must not send a client assertion.");
+  }
+  return oauthClient;
 }
 
 export async function handleOAuthToken(request: Request) {
@@ -614,14 +798,6 @@ export async function handleOAuthToken(request: Request) {
 
   if (grantType !== "authorization_code") {
     return NextResponse.json({ error: "unsupported_grant_type" }, { status: 400, headers: metadataHeaders() });
-  }
-
-  if (request.headers.get("authorization")) {
-    return NextResponse.json({ error: "invalid_client", error_description: "This public OAuth client must send client_id in the request body without client authentication." }, { status: 401, headers: metadataHeaders() });
-  }
-
-  if (form.has("client_secret") || form.has("client_assertion") || form.has("client_assertion_type")) {
-    return NextResponse.json({ error: "invalid_client", error_description: "Client secrets and client assertions are not supported for this public OAuth client." }, { status: 401, headers: metadataHeaders() });
   }
 
   if (!code || !clientId) {
@@ -642,30 +818,40 @@ export async function handleOAuthToken(request: Request) {
   }
 
   // Store only digests in rate-limit keys; never persist raw client secrets or authorization-code prefixes.
-  const rateLimitKey = `token:${rateLimitDigest(clientId)}:${rateLimitDigest(code)}`;
+  const rateLimitKey = `token:${oauthClientIp(request)}:${rateLimitDigest(clientId)}`;
   const rateLimitError = await oauthRateLimit(rateLimitKey, TOKEN_RATE_LIMIT, RATE_LIMIT_WINDOW_SECONDS);
   if (rateLimitError) {
-    return NextResponse.json({ error: "invalid_request", error_description: "Too many token requests. Please try again later." }, { status: 429, headers: metadataHeaders() });
+    return NextResponse.json(
+      { error: rateLimitError.status === 503 ? "temporarily_unavailable" : "invalid_request", error_description: rateLimitError.message },
+      { status: rateLimitError.status, headers: metadataHeaders() }
+    );
   }
 
   try {
-    const connection = await resolveClientId(clientId);
-    if (!connection) {
-      return NextResponse.json({ error: "invalid_client", error_description: "Plaivra connection is invalid or revoked." }, { status: 401, headers: metadataHeaders() });
-    }
+    const oauthClient = await authenticateOAuthClientForTokenRequest(form, request, redirectUri);
 
     if (!codeVerifier) {
       return NextResponse.json({ error: "invalid_request", error_description: "code_verifier is required." }, { status: 400, headers: metadataHeaders() });
     }
+    if (clientId.startsWith("https://") && !isValidPkceValue(codeVerifier)) {
+      return NextResponse.json({ error: "invalid_grant", error_description: "code_verifier must be a valid 43-128 character PKCE value." }, { status: 400, headers: metadataHeaders() });
+    }
 
     const resource = requestedResource || canonicalResource;
+    if (clientId.startsWith("https://") && !requestedResource) {
+      return NextResponse.json({ error: "invalid_target", error_description: "The resource parameter is required for CIMD token exchange." }, { status: 400, headers: metadataHeaders() });
+    }
     if (requestedResource && requestedResource !== canonicalResource) {
       return NextResponse.json({ error: "invalid_target", error_description: "The requested resource is not supported by this authorization server." }, { status: 400, headers: metadataHeaders() });
     }
 
-    const payload = await verifyAuthorizationCode(code, connection.canonicalClientId, redirectUri, codeVerifier, resource);
+    const payload = await verifyAuthorizationCode(code, clientId, redirectUri, codeVerifier, resource);
+    const connection = await resolveConnectionById(payload.connection_id, payload.user_id);
+    if (!connection || (oauthClient.kind === "cimd" && connection.canonicalClientId !== clientId)) {
+      return NextResponse.json({ error: "invalid_client", error_description: "Plaivra connection is invalid, cross-user, or revoked." }, { status: 401, headers: metadataHeaders() });
+    }
 
-    const accessToken = await createAccessToken(connection, payload.scope, resource);
+    const accessToken = await createAccessToken(connection, clientId, payload.scope, resource, serverEnv.plaivraOAuthIssuer);
 
     return NextResponse.json(
       {
@@ -678,8 +864,38 @@ export async function handleOAuthToken(request: Request) {
     );
   } catch (error) {
     return NextResponse.json(
-      { error: "invalid_grant", error_description: error instanceof Error ? error.message : "OAuth token exchange failed." },
-      { status: 400, headers: metadataHeaders() }
+      {
+        error: error instanceof CimdValidationError ? "invalid_client" : "invalid_grant",
+        error_description: error instanceof Error ? error.message : "OAuth token exchange failed."
+      },
+      { status: error instanceof CimdValidationError ? 401 : 400, headers: metadataHeaders() }
+    );
+  }
+}
+
+export async function handleOAuthRevoke(request: Request) {
+  const form = await readTokenRequestForm(request);
+  const token = form.get("token") ?? "";
+  const clientId = getClientIdFromTokenRequest(form);
+  if (!token || !clientId || !supportedClientIdFormat(clientId)) {
+    return NextResponse.json({ error: "invalid_request", error_description: "token and client_id are required." }, { status: 400, headers: metadataHeaders() });
+  }
+  try {
+    // The revocation endpoint uses the same CIMD client authentication contract.
+    await authenticateOAuthClientForTokenRequest(form, request, "");
+    const supabase = createSupabaseAdminClient();
+    const { error } = await supabase
+      .from("mcp_oauth_access_tokens")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("token_hash", hashAccessToken(token))
+      .eq("client_id", clientId)
+      .is("revoked_at", null);
+    if (error) throw new Error(error.message);
+    return new NextResponse(null, { status: 200, headers: metadataHeaders() });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "invalid_client", error_description: error instanceof Error ? error.message : "Token revocation failed." },
+      { status: 401, headers: metadataHeaders() }
     );
   }
 }
@@ -688,7 +904,7 @@ export async function handleOAuthRegister() {
   return NextResponse.json(
     {
       error: "invalid_request",
-      error_description: "Dynamic client registration is not supported. Use the pre-registered Plaivra OAuth client ID shown in Settings."
+      error_description: "Dynamic client registration is not supported. Plaivra uses HTTPS Client ID Metadata Documents (CIMD)."
     },
     { status: 404, headers: metadataHeaders() }
   );

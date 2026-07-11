@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,16 +14,23 @@ import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { getOnboarding, saveOnboarding, updateProfile } from "@/services/database/profile";
 import {
-  getDefaultAiPermissionConfig,
   getAiPermissionSettings,
   saveAiPermissionSettings,
-  type AiPermissionConfig,
-  ALL_AI_PERMISSION_SECTIONS
+  type AiPermissionConfig
 } from "@/services/database/ai-permissions";
-import { NutritionPreferenceCard } from "@/components/profile/execution-profiles";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
+import { MAXIMUM_PROFILE_AGE, MINIMUM_LAUNCH_AGE, launchAgeSchema } from "@/lib/auth/eligibility";
+import { getFitnessConstraints, upsertFitnessConstraints, type FitnessConstraintInput } from "@/services/database/execution-layer";
+import { TagInput } from "@/components/ui/tag-input";
+import {
+  FIRST_USEFUL_JOBS,
+  ONBOARDING_STEPS,
+  clampOnboardingStep,
+  permissionsForFirstJob,
+  type FirstUsefulJob
+} from "@/lib/onboarding/progressive-setup";
 
-const steps = ["Basic info", "Goals", "Training", "Schedule", "Food preferences", "Coaching context", "AI Permissions", "Review"];
+const steps = ONBOARDING_STEPS;
 const goalOptions = [
   "Lose fat",
   "Build muscle",
@@ -35,25 +42,19 @@ const goalOptions = [
   "Improve health",
   "Body recomposition"
 ];
-const trainingCycles = [
-  "Full Body",
-  "Upper / Lower",
-  "Push Pull Legs",
-  "Bro Split",
-  "Strength Split",
-  "Hybrid",
-  "Cardio + Strength",
-  "Wellness / Mobility",
-  "I don't know"
-];
-const AGE_MIN = 13;
-const AGE_MAX = 100;
 const HEIGHT_MIN = 120;
 const HEIGHT_MAX = 250;
 const WEIGHT_MIN = 35;
 const WEIGHT_MAX = 250;
 const dayOptions = Array.from({ length: 7 }, (_, index) => index + 1);
 const weightRelatedGoals = new Set(["Lose fat", "Build muscle", "Body recomposition", "Improve health"]);
+const emptyConstraints: FitnessConstraintInput = {
+  injury_or_limitation_labels: [],
+  areas_to_protect: [],
+  movement_restrictions: null,
+  nutrition_restrictions: null,
+  legacy_context_notes: null
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -105,8 +106,11 @@ export default function OnboardingPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingSavedSetup, setIsLoadingSavedSetup] = useState(true);
   const [hadSavedTargetWeight, setHadSavedTargetWeight] = useState(false);
+  const [existingCompletedAt, setExistingCompletedAt] = useState<string | null>(null);
   const [answers, setAnswers] = useState(defaultAnswers);
-  const [aiPermissions, setAiPermissions] = useState<AiPermissionConfig>(getDefaultAiPermissionConfig);
+  const [firstUsefulJob, setFirstUsefulJob] = useState<FirstUsefulJob>("training_plan");
+  const [constraints, setConstraints] = useState<FitnessConstraintInput>(emptyConstraints);
+  const [aiPermissions, setAiPermissions] = useState<AiPermissionConfig>(() => permissionsForFirstJob("training_plan"));
   useEffect(() => {
     if (!user?.id) {
       setIsLoadingSavedSetup(false);
@@ -115,14 +119,20 @@ export default function OnboardingPage() {
     const isEdit = searchParams.get("edit") === "true";
 
     setIsLoadingSavedSetup(true);
-    Promise.all([getOnboarding(user.id), getAiPermissionSettings(user.id)])
-      .then(([saved, permissions]) => {
+    Promise.all([getOnboarding(user.id), getAiPermissionSettings(user.id), getFitnessConstraints(user.id)])
+      .then(([saved, permissions, savedConstraints]) => {
         if (permissions) setAiPermissions(permissions);
+        if (savedConstraints) setConstraints(savedConstraints);
         if (!saved) return;
-        if (!isEdit) {
+        if (!isEdit && saved.completed_at) {
           router.replace("/dashboard");
           return;
         }
+        const savedJob = saved.first_useful_job ?? "training_plan";
+        setExistingCompletedAt(saved.completed_at ?? null);
+        setFirstUsefulJob(savedJob);
+        if (!permissions) setAiPermissions(permissionsForFirstJob(savedJob));
+        setStep(clampOnboardingStep(saved.setup_stage));
         const goals = saved.goals?.length ? saved.goals : saved.goal ? saved.goal.split(",").map((goal) => goal.trim()).filter(Boolean) : defaultAnswers.goals;
         const existingTargetWeight = saved.goal_weight_kg ?? profile?.target_weight_kg ?? null;
         setHadSavedTargetWeight(existingTargetWeight !== null);
@@ -150,30 +160,70 @@ export default function OnboardingPage() {
       .finally(() => setIsLoadingSavedSetup(false));
   }, [profile?.target_weight_kg, toast, user?.id, router, searchParams]);
 
-  async function finish() {
-    if (!user?.id) {
-      toast({ title: "Sign in required", description: "Please sign in before saving profile setup." });
+  function onboardingPayload(completedAt: string | null, setupStage: number) {
+    const age = launchAgeSchema.safeParse(answers.age);
+    if (!age.success) throw new Error(age.message);
+    return {
+      ...answers,
+      age: age.data,
+      age_range: ageToRange(age.data),
+      goal: answers.goals.join(", "),
+      user_id: user!.id,
+      setup_stage: setupStage,
+      first_useful_job: firstUsefulJob,
+      completed_at: completedAt
+    };
+  }
+
+  async function saveProgress(nextStep: number) {
+    if (!user?.id) return;
+    const age = launchAgeSchema.safeParse(answers.age);
+    if (!age.success) {
+      toast({ title: "Age eligibility required", description: age.message });
+      setStep(0);
       return;
     }
     setIsSaving(true);
     try {
       await Promise.all([
-        saveOnboarding({
-          ...answers,
-          age_range: ageToRange(answers.age),
-          goal: answers.goals.join(", "),
-          user_id: user.id
-        }),
+        saveOnboarding(onboardingPayload(existingCompletedAt, nextStep)),
+        upsertFitnessConstraints(user.id, constraints)
+      ]);
+      setStep(nextStep);
+    } catch (error) {
+      toast({ title: "Could not save progress", description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function finish() {
+    if (!user?.id) {
+      toast({ title: "Sign in required", description: "Please sign in before saving profile setup." });
+      return;
+    }
+    const age = launchAgeSchema.safeParse(answers.age);
+    if (!age.success) {
+      toast({ title: "Age eligibility required", description: age.message });
+      setStep(0);
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await Promise.all([
+        saveOnboarding(onboardingPayload(new Date().toISOString(), steps.length - 1)),
         updateProfile(user.id, { targetWeightKg: answers.goal_weight_kg, bodyGoal: answers.goals.join(", ") }),
+        upsertFitnessConstraints(user.id, constraints),
         saveAiPermissionSettings(user.id, aiPermissions)
       ]);
       await refreshProfile();
+      setExistingCompletedAt(new Date().toISOString());
       toast({
         title: "Profile saved",
-        description: "Create your plan in ChatGPT, then export it to Plaivra for tracking."
+        description: "Connect Plaivra to ChatGPT with limited permissions when you are ready to create your first plan."
       });
       celebrate("Profile setup saved");
-      router.push("/my-workout/plans");
+      router.push(FIRST_USEFUL_JOBS[firstUsefulJob].destination);
     } catch (error) {
       toast({ title: "Could not save profile", description: error instanceof Error ? error.message : "Please try again." });
     } finally {
@@ -200,36 +250,6 @@ export default function OnboardingPage() {
     setAnswers((current) => ({ ...current, training_days_per_week: clamp(training_days_per_week, 1, 7) }));
   }
 
-  function updatePlanDuration(desired_duration_weeks: number) {
-    setAnswers((current) => ({ ...current, desired_duration_weeks: clamp(desired_duration_weeks, 1, 52) }));
-  }
-
-  function updateMinimumSession(min: number) {
-    const safeMin = clamp(min, 1, 120);
-    setAnswers((current) => {
-      const nextMax = Math.max(safeMin, current.max_workout_duration_minutes);
-      return {
-        ...current,
-        min_workout_duration_minutes: safeMin,
-        max_workout_duration_minutes: nextMax,
-        workout_duration_minutes: Math.round((safeMin + nextMax) / 2)
-      };
-    });
-  }
-
-  function updateMaximumSession(max: number) {
-    const safeMax = clamp(max, 1, 120);
-    setAnswers((current) => {
-      const nextMin = Math.min(current.min_workout_duration_minutes, safeMax);
-      return {
-        ...current,
-        min_workout_duration_minutes: nextMin,
-        max_workout_duration_minutes: safeMax,
-        workout_duration_minutes: Math.round((nextMin + safeMax) / 2)
-      };
-    });
-  }
-
   return (
     <>
       <PageHeading title="Profile Setup" />
@@ -251,7 +271,7 @@ export default function OnboardingPage() {
                 key={item}
                 type="button"
                 variant={index === step ? "default" : "outline"}
-                onClick={() => setStep(index)}
+                onClick={() => index <= step ? setStep(index) : void saveProgress(index)}
                 className={cn(
                   "min-h-12 min-w-fit shrink-0 rounded-full px-3 text-xs shadow-none",
                   index < step && index !== step && "border-primary/35 bg-primary/10 text-primary hover:bg-primary/15",
@@ -268,29 +288,24 @@ export default function OnboardingPage() {
         <CardContent className="space-y-6 p-4 sm:p-6">
           {step === 0 ? (
             <section className="space-y-4">
-              <StepIntro title="Basic body profile" />
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Body stats</p>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <NumericStatInput label="Age" value={answers.age} unit="years" min={AGE_MIN} max={AGE_MAX} onChange={(age) => setAnswers((current) => ({ ...current, age }))} />
-                  <NumericStatInput label="Height" value={answers.height_cm} unit="cm" min={HEIGHT_MIN} max={HEIGHT_MAX} onChange={(height_cm) => setAnswers((current) => ({ ...current, height_cm }))} />
-                  <NumericStatInput label="Weight" value={answers.weight_kg} unit="kg" min={WEIGHT_MIN} max={WEIGHT_MAX} onChange={(weight_kg) => setAnswers((current) => ({ ...current, weight_kg }))} />
-                </div>
-                <div className="pt-2">
-                  <ChoiceGroup label="Gender / sex" value={answers.gender} values={["Male", "Female", "Prefer not to say"]} onChange={(gender) => setAnswers((current) => ({ ...current, gender }))} />
-                </div>
+              <StepIntro title="Essential account context" detail={`Plaivra's initial EU launch is for people aged ${MINIMUM_LAUNCH_AGE} and over. Height, weight, and gender are optional and can be edited later.`} />
+              <div className="grid gap-4 md:grid-cols-3">
+                <NumericStatInput label="Age" value={answers.age} unit="years" min={MINIMUM_LAUNCH_AGE} max={MAXIMUM_PROFILE_AGE} onChange={(age) => setAnswers((current) => ({ ...current, age }))} />
+                <NumericStatInput label="Height (optional)" value={answers.height_cm} unit="cm" min={HEIGHT_MIN} max={HEIGHT_MAX} onChange={(height_cm) => setAnswers((current) => ({ ...current, height_cm }))} />
+                <NumericStatInput label="Weight (optional)" value={answers.weight_kg} unit="kg" min={WEIGHT_MIN} max={WEIGHT_MAX} onChange={(weight_kg) => setAnswers((current) => ({ ...current, weight_kg }))} />
               </div>
+              <ChoiceGroup label="Gender / sex (optional)" value={answers.gender || "Prefer not to say"} values={["Male", "Female", "Prefer not to say"]} onChange={(gender) => setAnswers((current) => ({ ...current, gender }))} />
             </section>
           ) : null}
 
           {step === 1 ? (
-            <section className="space-y-4">
-              <StepIntro title="Choose your goals" />
+            <section className="space-y-5">
+              <StepIntro title="Goal and available schedule" detail="This is enough context to produce a useful first result. Training style and deeper preferences can wait." />
               <MultiChoice label="Goals" values={goalOptions} selected={answers.goals} onChange={updateGoals} />
               {shouldShowTargetWeight ? (
                 hasWeightRelatedGoal ? (
                   <div className="max-w-sm">
-                    <NumericStatInput label="Target weight" value={answers.goal_weight_kg} unit="kg" min={WEIGHT_MIN} max={WEIGHT_MAX} onChange={(goal_weight_kg) => setAnswers((current) => ({ ...current, goal_weight_kg }))} />
+                    <NumericStatInput label="Target weight (optional)" value={answers.goal_weight_kg} unit="kg" min={WEIGHT_MIN} max={WEIGHT_MAX} onChange={(goal_weight_kg) => setAnswers((current) => ({ ...current, goal_weight_kg }))} />
                   </div>
                 ) : (
                   <div className="max-w-xl rounded-[18px] border border-border/80 bg-card p-4">
@@ -313,180 +328,62 @@ export default function OnboardingPage() {
                   </div>
                 )
               ) : null}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ScheduleDayGrid label="Available training days" value={answers.training_days_per_week} values={dayOptions} unit="days/week" onChange={updateTrainingDays} />
+                <ScheduleStepper label="Typical session" value={answers.workout_duration_minutes} unit="minutes" min={10} max={120} step={5} onChange={(workout_duration_minutes) => setAnswers((current) => ({ ...current, workout_duration_minutes, min_workout_duration_minutes: workout_duration_minutes, max_workout_duration_minutes: workout_duration_minutes }))} />
+              </div>
             </section>
           ) : null}
 
           {step === 2 ? (
-            <section className="space-y-4">
-              <StepIntro title="Training style" />
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Experience & location</p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <ChoiceGroup label="Training level" value={answers.training_level} values={["Beginner", "Intermediate", "Advanced"]} onChange={(training_level) => setAnswers((current) => ({ ...current, training_level }))} />
-                  <ChoiceGroup label="Training place" value={answers.training_place} values={["Gym", "Home", "Both"]} onChange={(training_place) => setAnswers((current) => ({ ...current, training_place }))} />
-                </div>
+            <section className="space-y-5">
+              <StepIntro title="Optional functional constraints" detail="Use your own words to describe what planning should respect. Plaivra stores these as user-provided context, not a diagnosis, risk score, or treatment instruction." />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TagInput id="constraint-labels" label="Limitation labels" value={constraints.injury_or_limitation_labels} onChange={(injury_or_limitation_labels) => setConstraints((current) => ({ ...current, injury_or_limitation_labels }))} placeholder="For example: sensitive shoulder" />
+                <TagInput id="areas-to-protect" label="Areas to protect" value={constraints.areas_to_protect} onChange={(areas_to_protect) => setConstraints((current) => ({ ...current, areas_to_protect }))} placeholder="For example: right shoulder" />
+                <ContextField label="Movements or activities to avoid" value={constraints.movement_restrictions ?? ""} onChange={(movement_restrictions) => setConstraints((current) => ({ ...current, movement_restrictions: movement_restrictions || null }))} placeholder="Only practical movement constraints" />
+                <ContextField label="Food-planning constraints" value={constraints.nutrition_restrictions ?? ""} onChange={(nutrition_restrictions) => setConstraints((current) => ({ ...current, nutrition_restrictions: nutrition_restrictions || null }))} placeholder="Only practical meal-planning constraints" />
               </div>
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Training preferences</p>
-                <div className="grid gap-4">
-                  <div className="sm:col-span-2">
-                    <ChoiceGroup label="Preferred split" value={answers.training_cycle} values={trainingCycles} onChange={(training_cycle) => setAnswers((current) => ({ ...current, training_cycle }))} />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <MultiChoice label="Available equipment" values={["Full gym", "Bodyweight", "Dumbbells", "Barbell", "Cables", "Kettle Bells", "EZ Bar", "Bands", "Medicine Ball", "Exercise Ball"]} selected={answers.available_equipment} onChange={(available_equipment) => setAnswers((current) => ({ ...current, available_equipment }))} />
-                  </div>
+              {constraints.legacy_context_notes ? (
+                <div className="rounded-[18px] border border-border/80 bg-card p-4">
+                  <p className="font-semibold">Earlier notes retained</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{constraints.legacy_context_notes}</p>
+                  <Button type="button" variant="outline" className="mt-3 min-h-12" onClick={() => setConstraints((current) => ({ ...current, legacy_context_notes: null }))}>Clear retained notes</Button>
                 </div>
-              </div>
+              ) : null}
+              <p className="text-sm text-muted-foreground">Skip this step if there is nothing relevant to add.</p>
             </section>
           ) : null}
 
           {step === 3 ? (
             <section className="space-y-4">
-              <StepIntro title="Schedule and duration" />
-              <div className="space-y-3 rounded-[18px] border border-border/80 bg-card p-3 sm:p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Weekly schedule</p>
-                <div className="grid gap-3">
-                  <ScheduleDayGrid label="Training availability" value={answers.training_days_per_week} values={dayOptions} unit="days/week" onChange={updateTrainingDays} />
-                  <ScheduleStepper label="Plan duration" value={answers.desired_duration_weeks} unit="weeks" min={1} max={52} step={1} onChange={updatePlanDuration} />
-                </div>
-              </div>
-              <div className="space-y-3 rounded-[18px] border border-border/80 bg-card p-3 sm:p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Session length</p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <ScheduleStepper label="Minimum session" value={answers.min_workout_duration_minutes} unit="minutes" min={1} max={120} step={5} onChange={updateMinimumSession} />
-                  <ScheduleStepper label="Maximum session" value={answers.max_workout_duration_minutes} unit="minutes" min={1} max={120} step={5} onChange={updateMaximumSession} />
-                </div>
+              <StepIntro title="Choose your first useful outcome" detail="Plaivra will take you directly to this job after setup instead of an empty dashboard." />
+              <div className="grid gap-3">
+                {(Object.entries(FIRST_USEFUL_JOBS) as [FirstUsefulJob, (typeof FIRST_USEFUL_JOBS)[FirstUsefulJob]][]).map(([job, option]) => (
+                  <button key={job} type="button" aria-pressed={firstUsefulJob === job} onClick={() => { setFirstUsefulJob(job); setAiPermissions(permissionsForFirstJob(job)); }} className={cn("min-h-12 rounded-[18px] border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", firstUsefulJob === job ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/50")}>
+                    <span className="font-semibold">{option.label}</span>
+                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">{option.description}</span>
+                  </button>
+                ))}
               </div>
             </section>
           ) : null}
 
           {step === 4 ? (
-            <section className="space-y-4">
-              <StepIntro title="Food preferences" detail="Use the same preference workspace as Meal Plan so your saved tastes, allergies, budget, and kitchen constraints stay consistent." />
-              <NutritionPreferenceCard />
-            </section>
-          ) : null}
-
-          {step === 5 ? (
-            <section className="space-y-4">
-              <StepIntro title="Coaching context" detail="Tell ChatGPT what makes a plan practical for your life. Everything here is optional and stays under your approval." />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <ContextField label="Injuries or limitations" value={answers.injuries_limitations} onChange={(injuries_limitations) => setAnswers((current) => ({ ...current, injuries_limitations }))} placeholder="Movements, pain, or limitations to consider" />
-                <ContextField label="Training preferences" value={answers.training_preferences} onChange={(training_preferences) => setAnswers((current) => ({ ...current, training_preferences }))} placeholder="Styles, exercises, or pacing you enjoy" />
-                <ContextField label="Food preferences" value={answers.food_preferences} onChange={(food_preferences) => setAnswers((current) => ({ ...current, food_preferences }))} placeholder="Foods, cuisines, or routines that work for you" />
-                <ContextField label="Lifestyle notes" value={answers.lifestyle_notes} onChange={(lifestyle_notes) => setAnswers((current) => ({ ...current, lifestyle_notes }))} placeholder="Work, family, sleep, travel, or schedule context" />
-                <ContextField label="Workout constraints" value={answers.workout_constraints} onChange={(workout_constraints) => setAnswers((current) => ({ ...current, workout_constraints }))} placeholder="Time, space, equipment, or recovery limits" />
-                <ContextField label="Personal coaching notes" value={answers.coaching_notes} onChange={(coaching_notes) => setAnswers((current) => ({ ...current, coaching_notes }))} placeholder="Anything ChatGPT should consider when helping" />
-              </div>
-            </section>
-          ) : null}
-
-          {step === 6 ? (
-            <section className="space-y-4">
-              <StepIntro title="AI Permissions" detail="Choose what access AI should have to your Plaivra account during setup." />
-              <div className="space-y-4">
-                <div className="space-y-3">
-                  <ChoiceGroup
-                    label="AI Access Mode"
-                    value={aiPermissions.accessMode === "full" ? "Full AI Access" : "Custom AI Access"}
-                    values={["Full AI Access", "Custom AI Access"]}
-                    onChange={(value) =>
-                      setAiPermissions((current) => ({
-                        ...current,
-                        accessMode: value === "Full AI Access" ? "full" : "custom"
-                      }))
-                    }
-                  />
-                </div>
-
-                {aiPermissions.accessMode === "full" ? (
-                  <div className="glass-card p-4 sm:p-5">
-                    <p className="font-semibold text-foreground">Full AI Access</p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      AI can read and manage your workouts, nutrition, meal plans, food logs, hydration, wellness, progress, and profile data only through explicit Plaivra flows. Plaivra will not silently change saved data, and access can be revoked later.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Choose sections AI can access</p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {ALL_AI_PERMISSION_SECTIONS.map((section) => (
-                        <div key={section} className="solid-row space-y-3 p-4">
-                          <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
-                            <p className="text-sm font-semibold capitalize">{section.replace("_", " ")}</p>
-                            <div className="grid grid-cols-2 gap-1 rounded-[14px] border border-border/80 bg-muted/50 p-1">
-                              <PermissionToggle
-                                active={aiPermissions.sections[section].read}
-                                label="Read"
-                                onClick={() =>
-                                  setAiPermissions((current) => ({
-                                    ...current,
-                                    sections: {
-                                      ...current.sections,
-                                      [section]: {
-                                        ...current.sections[section],
-                                        read: !current.sections[section].read
-                                      }
-                                    }
-                                  }))
-                                }
-                              />
-                              <PermissionToggle
-                                active={aiPermissions.sections[section].write}
-                                label="Write"
-                                onClick={() =>
-                                  setAiPermissions((current) => {
-                                    const nextWrite = !current.sections[section].write;
-                                    return {
-                                      ...current,
-                                      sections: {
-                                        ...current.sections,
-                                        [section]: {
-                                          read: nextWrite ? true : current.sections[section].read,
-                                          write: nextWrite
-                                        }
-                                      }
-                                    };
-                                  })
-                                }
-                              />
-                            </div>
-                          </div>
-                          {aiPermissions.sections[section].write ? (
-                            <p className="text-xs text-muted-foreground">Write access includes read access for this section.</p>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="glass-card p-3 text-sm text-muted-foreground">
-                  AI can help prepare imports, corrections, and context-aware requests. Plaivra requires review/approval before AI-generated user data is saved, and you can change or revoke AI access anytime from Settings.
-                </div>
-              </div>
-            </section>
-          ) : null}
-
-          {step === 7 ? (
-            <section className="space-y-4">
-              <div className="glass-card p-4 sm:p-5">
-                <h2 className="text-lg font-semibold">Review before saving</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Plaivra will not generate plans internally. Create workout and meal plans externally, then import them for storage, scheduling, editing, display, and tracking.
-                </p>
-              </div>
+            <section className="space-y-5">
+              <StepIntro title="Connect with limited permissions" detail="For your first job, Plaivra saves only the minimum suggested access below. You can reduce or revoke it in Settings at any time." />
               <div className="grid gap-3 sm:grid-cols-2">
-                <ReviewItem label="Goals" value={answers.goals.join(", ")} />
-                <ReviewItem label="Goal weight" value={answers.goal_weight_kg ? `${answers.goal_weight_kg} kg` : "Not added"} />
-                <ReviewItem label="Training" value={`${answers.training_level} · ${answers.training_place} · ${answers.training_cycle}`} />
-                <ReviewItem label="Schedule" value={`${answers.training_days_per_week} days/week · ${answers.min_workout_duration_minutes}-${answers.max_workout_duration_minutes} min · ${answers.desired_duration_weeks} weeks`} />
-                <ReviewItem label="Equipment" value={answers.available_equipment.join(", ")} />
-                <ReviewItem label="Nutrition" value={answers.nutrition_preferences.join(", ")} />
-                <ReviewItem label="Limitations" value={answers.allergies_limitations || "None added"} />
-                <ReviewItem label="Coaching context" value={answers.coaching_notes || answers.lifestyle_notes || "None added"} />
-                <ReviewItem label="AI Access" value={aiPermissions.accessMode === "full" ? "Full AI Access" : "Custom AI Access"} />
+                {Object.entries(aiPermissions.sections).filter(([, permission]) => permission.read || permission.write).map(([section, permission]) => (
+                  <ReviewItem key={section} label={section.replace("_", " ")} value={`${permission.read ? "Read" : ""}${permission.write ? " + write" : ""}`} />
+                ))}
               </div>
+              <div className="rounded-[18px] border border-primary/20 bg-primary/5 p-4 text-sm leading-6 text-muted-foreground">
+                Start the Plaivra connection from ChatGPT. There is no client ID, token copying, MCP configuration, or second approval queue in Plaivra. Successful authorized Plaivra tools save directly and remain editable here.
+              </div>
+              <a href="https://chatgpt.com" target="_blank" rel="noreferrer" className="inline-flex min-h-12 items-center gap-2 rounded-[14px] border border-border bg-card px-4 py-3 font-semibold hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Open ChatGPT <ExternalLink className="h-4 w-4" />
+              </a>
+              <p className="text-sm text-muted-foreground">Deeper training and nutrition preferences stay available later in Settings, after you reach your first useful surface.</p>
             </section>
           ) : null}
 
@@ -496,8 +393,9 @@ export default function OnboardingPage() {
               Back
             </Button>
             {step < steps.length - 1 ? (
-              <Button onClick={() => setStep((current) => Math.min(steps.length - 1, current + 1))} className="min-h-12">
-                Next
+              <Button onClick={() => saveProgress(Math.min(steps.length - 1, step + 1))} disabled={isSaving} className="min-h-12">
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {isSaving ? "Saving..." : "Save and continue"}
                 <ChevronRight className="h-4 w-4" />
               </Button>
             ) : (
@@ -584,22 +482,6 @@ function OnboardingChoiceButton({ active, onClick, children }: { active: boolean
     >
       <span className="min-w-0">{children}</span>
       {active ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : null}
-    </button>
-  );
-}
-
-function PermissionToggle({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "min-h-12 rounded-[10px] px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]",
-        active ? "bg-card text-primary shadow-soft" : "text-muted-foreground hover:bg-card/70 hover:text-foreground"
-      )}
-    >
-      {label}
     </button>
   );
 }

@@ -1,6 +1,6 @@
 # Plaivra Canonical Domain Model
 
-**Version:** 2026.2  
+**Version:** 2026.3
 **Status:** Target data architecture and cleanup authority
 
 ## 1. Purpose
@@ -83,7 +83,7 @@ Target model concepts:
 - completed/skipped status;
 - notes and source metadata.
 
-The target physical table names must be selected in the ADR. Until then, both generations are compatibility models and neither may be dropped.
+ADR 0001 selects `workout_sessions` plus `exercise_logs` as the performed-session/set model. `user_workout_sessions` remains the schedule-instance model and `user_exercise_logs` remains a bounded compatibility snapshot until scheduled execution links and backfill gates are complete. See [`decisions/0001-performed-workout-sessions.md`](decisions/0001-performed-workout-sessions.md).
 
 ## 6. Exercise catalog
 
@@ -108,6 +108,8 @@ Target concepts:
 
 Do not seed the same 600 exercises into multiple active catalogs.
 
+ADR 0002 selects `exercises` as the target global definition table, freezes `exercise_library`, and time-bounds the existing `workouts` compatibility read. Provenance/licensing and approval gates apply to the staged backfill. See [`decisions/0002-exercise-catalog.md`](decisions/0002-exercise-catalog.md).
+
 ## 7. Nutrition catalog and logs
 
 Canonical active concepts:
@@ -128,6 +130,8 @@ Current overlapping saved-content models:
 Before consolidation, preserve records in `custom_meals` and `custom_meal_items`.
 
 Target model should support a saved item type such as meal, recipe, or template without three unrelated ownership systems.
+
+ADR 0003 selects `saved_recipes` plus `saved_recipe_ingredients` as that target. Existing custom-meal rows must be source-linked, backfilled, verified, and dual-read before writer cutover. See [`decisions/0003-saved-nutrition-content.md`](decisions/0003-saved-nutrition-content.md).
 
 `user_meal_plan_items`, `food_logs`, and `user_grocery_items` are active user-data models and must not be removed during documentation cleanup.
 

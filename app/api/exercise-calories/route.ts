@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { jsonError, requireUser } from "@/lib/integrations/env";
+import { jsonError, requireEligibleUser } from "@/lib/integrations/env";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 
 type ExerciseCalorieReference = {
@@ -22,7 +22,7 @@ function cleanNumber(value: unknown, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-async function getProfileWeight(context: Awaited<ReturnType<typeof requireUser>>) {
+async function getProfileWeight(context: Awaited<ReturnType<typeof requireEligibleUser>>) {
   if (context instanceof NextResponse) return 75;
   const { data } = await context.supabase
     .from("onboarding_answers")
@@ -35,7 +35,7 @@ async function getProfileWeight(context: Awaited<ReturnType<typeof requireUser>>
 export async function GET(request: Request) {
   const limited = rateLimit(request, "exercise-calorie-list", 30, 60_000);
   if (limited) return limited;
-  const context = await requireUser(request);
+  const context = await requireEligibleUser(request);
   if (context instanceof NextResponse) return context;
 
   const query = new URL(request.url).searchParams.get("q")?.trim().toLowerCase() ?? "";
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const limited = rateLimit(request, "exercise-calorie-estimate", 20, 60_000);
   if (limited) return limited;
-  const context = await requireUser(request);
+  const context = await requireEligibleUser(request);
   if (context instanceof NextResponse) return context;
 
   const body = await request.json().catch(() => ({}));

@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
-import { createConnectionToken, hashConnectionToken } from "@/lib/mcp/auth";
 import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
-import { requireUser, serverEnv } from "@/lib/integrations/env";
-import { getSavedUserAiScopes, rotateMcpConnection } from "@/lib/mcp/connections";
-import { oauthRateLimit } from "@/lib/mcp/oauth";
+import { requireEligibleUser, requireUser, serverEnv } from "@/lib/integrations/env";
 import { CHATGPT_CONNECTION_CONSENT_VERSION } from "@/lib/legal/versions";
 
 export const runtime = "nodejs";
@@ -26,7 +23,7 @@ export async function GET(request: Request) {
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from("chatgpt_connections")
-    .select("id,scopes,is_active,created_at,last_used_at,revoked_at")
+    .select("id,oauth_client_id,scopes,is_active,created_at,last_used_at,revoked_at")
     .eq("user_id", context.user.id)
     .order("created_at", { ascending: false })
     .limit(10);
@@ -39,68 +36,15 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const context = await requireUser(request);
+  const context = await requireEligibleUser(request);
   if (context instanceof NextResponse) return context;
-
-  const missingConfig = requireMcpConnectionConfig();
-  if (missingConfig) return missingConfig;
-
-  // Rate limit connection creation by user_id
-  const rateLimitKey = `connection_create:${context.user.id}`;
-  const rateLimitError = await oauthRateLimit(rateLimitKey, 10, 60);
-  if (rateLimitError) {
-    return NextResponse.json(
-      { error: "Too many connection requests. Please try again later.", code: "connection_rate_limited" },
-      { status: 429 }
-    );
-  }
-
-  const supabase = createSupabaseAdminClient();
-
-  let userScopes: string[];
-  try {
-    userScopes = await getSavedUserAiScopes(supabase, context.user.id);
-  } catch (error) {
-    console.error("Plaivra MCP AI permission lookup failed:", error instanceof Error ? error.message : "Unknown error");
-    return NextResponse.json(
-      { error: "AI permission settings could not be loaded. Please try again.", code: "ai_permissions_lookup_failed" },
-      { status: 500 }
-    );
-  }
-
-  if (!userScopes.length) {
-    return NextResponse.json(
-      { error: "AI permission settings are missing. Configure AI Permissions in Settings before connecting ChatGPT.", code: "missing_ai_permissions" },
-      { status: 403 }
-    );
-  }
-
-  const token = createConnectionToken();
-  const tokenHash = hashConnectionToken(token);
-  const { data, error } = await rotateMcpConnection(supabase, {
-    userId: context.user.id,
-    tokenHash,
-    scopes: userScopes
-  });
-
-  if (error || !data) {
-    console.error("Plaivra MCP secure rotation failed:", error?.message ?? "No connection returned");
-    return NextResponse.json({ error: "Could not securely rotate the ChatGPT connection. No new connection was created.", code: "connection_rotation_failed" }, { status: 500 });
-  }
-
-  const connection = Array.isArray(data) ? data[0] : data;
-  if (!connection) {
-    return NextResponse.json({ error: "Could not securely rotate the ChatGPT connection. No new connection was created.", code: "connection_rotation_failed" }, { status: 500 });
-  }
-
-  return NextResponse.json({
-    client_id: connection.id,
-    ...(serverEnv.plaivraAllowLegacyMcpClientId ? { token } : {}),
-    connection,
-    message: serverEnv.plaivraAllowLegacyMcpClientId
-      ? "Use client_id in ChatGPT OAuth settings. A temporary legacy setup code is also included for private compatibility."
-      : "Use client_id in ChatGPT OAuth settings and leave the client secret empty."
-  });
+  return NextResponse.json(
+    {
+      error: "Start the Plaivra connection from ChatGPT. Plaivra now uses CIMD and does not issue manual client IDs or setup tokens.",
+      code: "cimd_connection_starts_in_chatgpt"
+    },
+    { status: 410 }
+  );
 }
 
 export async function DELETE(request: Request) {
@@ -123,6 +67,15 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "ChatGPT access could not be revoked.", code: "connection_revoke_failed" }, { status: 500 });
     }
     const revokedAt = new Date().toISOString();
+    const tokenUpdate = await supabase
+      .from("mcp_oauth_access_tokens")
+      .update({ revoked_at: revokedAt })
+      .eq("user_id", context.user.id)
+      .is("revoked_at", null);
+    if (tokenUpdate.error) {
+      console.error("Plaivra OAuth token revocation failed:", tokenUpdate.error.message);
+      return NextResponse.json({ error: "ChatGPT access was disabled, but token revocation needs a retry.", code: "token_revoke_failed" }, { status: 500 });
+    }
     const consentUpdate = await supabase
       .from("user_consents")
       .update({ granted: false, revoked_at: revokedAt })

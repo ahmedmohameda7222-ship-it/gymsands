@@ -1,6 +1,7 @@
 [build]
   command = "npm run build"
   publish = ".next"
+  ignore = "node ./scripts/netlify-production-release-gate.mjs"
 
 [build.environment]
   NEXT_TELEMETRY_DISABLED = "1"

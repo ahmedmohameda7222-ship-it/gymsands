@@ -70,7 +70,7 @@ export function toPublicMcpActivity(row: AuditRow): PublicMcpActivity {
 }
 
 export async function getMcpActivityForUser(supabase: SupabaseClient, userId: string, limit = 25) {
-  const safeLimit = Math.min(Math.max(limit, 1), 50);
+  const safeLimit = Math.min(Math.max(limit, 1), 5000);
   const { data, error } = await supabase
     .from("mcp_audit_logs")
     .select("id,tool_name,output_summary,status,created_at")

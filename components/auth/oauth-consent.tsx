@@ -112,7 +112,7 @@ export function OAuthConsent() {
             <div className="flex gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <p>
-                Access is limited by your saved AI Permissions. You can revoke it anytime from Settings → AI & Imports. Revoking does not delete your Plaivra account or fitness data.
+                Access is limited by your saved AI Permissions. You can revoke it anytime from Settings → ChatGPT Connection. Revoking does not delete your Plaivra account or fitness data.
               </p>
             </div>
 

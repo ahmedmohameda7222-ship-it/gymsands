@@ -53,7 +53,7 @@ describe("MCP service-role ownership checks", () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.structuredContent.message).toBe("Workout session not found for this user.");
+    expect(result.structuredContent).toMatchObject({ ok: false, code: "tool_execution_failed" });
     expect(exerciseInsert).not.toHaveBeenCalled();
   });
 
@@ -71,7 +71,7 @@ describe("MCP service-role ownership checks", () => {
     const result = await executeMcpTool(contextWith(supabase), "start_workout", { plan_day_id: sessionB });
 
     expect(result.isError).toBe(true);
-    expect(result.structuredContent.message).toBe("Workout plan not found for this user.");
+    expect(result.structuredContent).toMatchObject({ ok: false, code: "tool_execution_failed" });
     expect(workoutInsert).not.toHaveBeenCalled();
   });
 

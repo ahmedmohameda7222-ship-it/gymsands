@@ -33,6 +33,9 @@ export function LegalPage({
           <h1 className="mt-3 text-4xl font-bold tracking-normal">{selectedCopy?.title ?? title}</h1>
           <p className="mt-3 text-sm text-muted-foreground">{language === "ar" ? "آخر تحديث" : "Last updated"}: <time dateTime={LEGAL_EFFECTIVE_DATE}>{updatedLabel}</time></p>
           <p className="mt-6 text-base leading-8 text-muted-foreground">{selectedCopy?.intro ?? intro}</p>
+          <div role="note" className="mt-6 rounded-2xl border border-warning/40 bg-warning/5 p-4 text-sm leading-6 text-foreground">
+            Pre-launch legal draft. Professional legal and privacy review is required before public launch. This notice is not a claim of legal approval.
+          </div>
           <div className="mt-8 space-y-8 text-base leading-8 text-muted-foreground [&_a]:font-semibold [&_a]:text-primary [&_a]:underline [&_li]:ml-5 [&_li]:list-disc">{children}</div>
         </article>
       </main>

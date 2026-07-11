@@ -1,45 +1,29 @@
 import { LegalPage, LegalSection } from "@/components/legal/legal-page";
+import { DISCLAIMER_VERSION } from "@/lib/legal/versions";
 
 export default function DisclaimerPage() {
   return (
     <LegalPage
-      eyebrow="Gesundheit & Sicherheit / Health & Safety"
-      title="Gesundheits- und medizinischer Hinweis"
-      intro="Wichtige Grenzen für Fitness-, Ernährungs-, Wellness- und AI-Inhalte in Plaivra."
-      localizedCopy={{
-        en: { eyebrow: "Health & Safety", title: "Health and Medical Disclaimer", intro: "Important limits for fitness, nutrition, wellness, and AI-assisted content in Plaivra." },
-        ar: { eyebrow: "الصحة والسلامة", title: "إخلاء المسؤولية الصحية والطبية", intro: "حدود مهمة لمحتوى اللياقة والتغذية والعافية والمحتوى المدعوم بالذكاء الاصطناعي في Plaivra." }
-      }}
+      eyebrow="Health & Safety"
+      title="Health and Medical Disclaimer"
+      intro={`Version ${DISCLAIMER_VERSION}. Read these limits before using fitness, nutrition, wellness, or AI-assisted content in Plaivra.`}
+      updatedLabel="11 July 2026"
     >
-      <div lang="de" data-legal-language className="space-y-8">
-        <LegalSection title="Keine medizinische Leistung">
-          <p>Plaivra ist kein medizinischer Dienst, kein Gesundheitsversorger, kein Notfalldienst und kein Medizinprodukt. Plaivra stellt keine Diagnose oder Behandlung bereit und ersetzt keine ärztliche, therapeutische, pharmazeutische oder klinisch-ernährungsmedizinische Beratung.</p>
+      <div lang="en" data-legal-language className="space-y-8">
+        <LegalSection title="Not a medical service">
+          <p>Plaivra is a personal fitness context, planning, tracking, and visualization service. It is not a healthcare provider, medical service, emergency service, or medical device. It does not diagnose, infer a diagnosis, prescribe, treat, monitor a disease, or provide clinical nutrition, medical, pharmaceutical, or therapeutic advice.</p>
         </LegalSection>
-        <LegalSection title="Fachlichen Rat einholen">
-          <p>Bei Verletzungen, Erkrankungen, Schwangerschaft, Essstörungen, Unverträglichkeiten oder Fragen zu Medikamenten, Supplementen oder klinischer Ernährung sollte vor Trainings-, Ernährungs- oder Wellnessentscheidungen qualifizierter Rat eingeholt werden.</p>
+        <LegalSection title="Use qualified professional advice">
+          <p>Consult an appropriately qualified professional before making training, nutrition, supplement, or wellness decisions if you have an injury, medical condition, pregnancy, eating disorder, allergy/intolerance, disability, unusual symptoms, or questions about medicines, supplements, or clinical nutrition.</p>
         </LegalSection>
-        <LegalSection title="Warnzeichen und Notfälle">
-          <p>Bei Schmerzen, Schwindel, Ohnmacht, ungewöhnlicher Atemnot oder anderen Warnzeichen ist die Aktivität sofort abzubrechen und geeignete medizinische Hilfe zu suchen. Plaivra und ChatGPT dürfen nicht für medizinische Notfälle verwendet werden.</p>
+        <LegalSection title="Warning signs and emergencies">
+          <p>Stop activity and seek appropriate help for chest pain, severe or unusual pain, dizziness, fainting, unusual shortness of breath, confusion, allergic reaction, or other concerning symptoms. Call the applicable emergency service in an emergency. Do not wait for Plaivra or ChatGPT to respond.</p>
         </LegalSection>
-        <LegalSection title="AI-Inhalte">
-          <p>AI-Ausgaben können unvollständig, falsch oder ungeeignet sein. Nutzer müssen jeden Plan und jede Aktion vor der Umsetzung selbst prüfen und dürfen automatisierte Inhalte nicht als professionelle Empfehlung behandeln.</p>
+        <LegalSection title="AI and data limitations">
+          <p>AI output and third-party food/exercise data may be wrong, incomplete, outdated, or unsuitable. Review every plan, substitution, target, calculation, and logged action. Functional constraints are user-authored planning context and are not verified medical facts or risk classifications.</p>
         </LegalSection>
-      </div>
-      <div lang="en" data-legal-language className="space-y-8 border-t border-border/70 pt-8">
-        <LegalSection title="English summary">
-          <p>Plaivra is not a medical service, healthcare provider, emergency service or medical device. It does not provide diagnosis, treatment, clinical nutrition or medical advice. People with injuries, medical conditions, pregnancy, eating disorders, intolerances, or medicine/supplement questions should consult qualified professionals.</p>
-          <p>Stop activity and seek appropriate help for pain, dizziness, faintness, unusual shortness of breath or other warning signs. AI output may be incomplete, wrong or unsuitable and must be reviewed before use.</p>
-        </LegalSection>
-      </div>
-      <div lang="ar" dir="rtl" data-legal-language className="space-y-8">
-        <LegalSection title="ليست خدمة طبية">
-          <p>Plaivra ليست خدمة صحية أو طبية أو خدمة طوارئ أو جهازًا طبيًا، ولا تقدم تشخيصًا أو علاجًا أو تغذية علاجية أو نصيحة طبية.</p>
-        </LegalSection>
-        <LegalSection title="اطلب رأيًا مختصًا">
-          <p>استشر مختصًا مؤهلًا قبل قرارات التمرين أو التغذية أو العافية إذا كانت لديك إصابة أو حالة طبية أو حمل أو اضطراب أكل أو أسئلة حول الأدوية أو المكملات.</p>
-        </LegalSection>
-        <LegalSection title="علامات التحذير ومحتوى الذكاء الاصطناعي">
-          <p>توقف واطلب المساعدة المناسبة عند الألم أو الدوار أو الإغماء أو ضيق التنفس غير المعتاد. قد تكون مخرجات ChatGPT ناقصة أو خاطئة أو غير مناسبة ويجب مراجعتها قبل التطبيق.</p>
+        <LegalSection title="Personal responsibility and mandatory rights">
+          <p>Choose activities appropriate to your circumstances, environment, equipment, and experience. Nothing in this disclaimer limits liability or consumer rights that cannot legally be limited. The final wording requires professional legal review before public launch.</p>
         </LegalSection>
       </div>
     </LegalPage>

@@ -126,7 +126,7 @@ export function NutritionTargetProfiles({ onActiveTargetChange, baseTarget }: { 
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Target className="h-5 w-5 text-primary" /> Targets by day type</CardTitle>
-        <p className="text-sm text-muted-foreground">Use different targets for training, rest, or especially active days. Values come from you or a ChatGPT recommendation you approve.</p>
+        <p className="text-sm text-muted-foreground">Use different targets for training, rest, or especially active days. Values come from you or from an explicit ChatGPT request saved through Plaivra.</p>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="rounded-[18px] border border-primary/25 bg-primary/5 p-4">

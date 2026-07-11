@@ -88,11 +88,16 @@ describe("current-user privacy export", () => {
     expect(calls.find((call) => call.table === "user_workout_plan_days")?.inFilters).toContainEqual(["plan_id", ["plan-a"]]);
     expect(calls.find((call) => call.table === "user_workout_plan_exercises")?.inFilters).toContainEqual(["plan_day_id", ["day-a"]]);
     expect(calls.find((call) => call.table === "mcp_audit_logs")?.filters).toContainEqual(["user_id", userA]);
+    expect(calls.find((call) => call.table === "user_fitness_constraints")?.filters).toContainEqual(["user_id", userA]);
+    expect(calls.find((call) => call.table === "user_nutrition_preference_profiles")?.filters).toContainEqual(["user_id", userA]);
+    expect(calls.find((call) => call.table === "user_daily_checkins")?.filters).toContainEqual(["user_id", userA]);
 
     const queriedTables = calls.map((call) => call.table);
     expect(queriedTables).not.toContain("mcp_oauth_access_tokens");
     expect(queriedTables).not.toContain("mcp_oauth_authorization_codes");
     expect(calls.find((call) => call.table === "chatgpt_connections")?.selection).not.toContain("token_hash");
+    expect(calls.find((call) => call.table === "user_integrations")?.selection).not.toContain("access_token");
+    expect(calls.find((call) => call.table === "user_integrations")?.selection).not.toContain("refresh_token");
     expect(calls.find((call) => call.table === "mcp_audit_logs")?.selection).not.toContain("input");
 
     const serialized = JSON.stringify(payload);
@@ -100,5 +105,7 @@ describe("current-user privacy export", () => {
     expect(serialized).not.toContain("authorization_code");
     expect(serialized).not.toContain("raw_prompt");
     expect(payload.data.chatgpt_activity).toEqual([expect.objectContaining({ connectionLabel: "ChatGPT" })]);
+    expect(payload.formatVersion).toBe(2);
+    expect(payload.scope).toBe("authenticated-current-user-canonical-data");
   });
 });

@@ -31,7 +31,7 @@ export function MealAiActions({ item }: { item: MealPlanItem }) {
   return (
     <div className="mt-3 space-y-2">
       <p className="text-xs font-semibold text-foreground">ChatGPT help</p>
-      <p className="text-xs leading-5 text-muted-foreground">Plaivra prepares a request. You review ChatGPT’s answer before saving any change.</p>
+      <p className="text-xs leading-5 text-muted-foreground">Open ChatGPT with Plaivra connected. Authorized tool changes appear here immediately and remain editable.</p>
       <AiActionRequestDialog
         actions={primaryFixes}
         sourceType="meal_plan_item"

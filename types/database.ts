@@ -49,6 +49,9 @@ export type OnboardingAnswers = {
   lifestyle_notes?: string | null;
   workout_constraints?: string | null;
   coaching_notes?: string | null;
+  setup_stage?: number;
+  first_useful_job?: "training_plan" | "nutrition_plan" | "daily_execution";
+  completed_at?: string | null;
 };
 
 export type FoodItem = {

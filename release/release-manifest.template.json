@@ -1,0 +1,26 @@
+{
+  "manifestSchemaVersion": 1,
+  "release": {
+    "commitSha": "",
+    "buildTimestamp": "",
+    "environment": "",
+    "schemaCompatibilityVersion": ""
+  },
+  "qualityGates": {
+    "integrity": { "status": "pending", "evidence": null },
+    "lint": { "status": "pending", "evidence": null },
+    "typecheck": { "status": "pending", "evidence": null },
+    "unitTests": { "status": "pending", "evidence": null },
+    "integrationTests": { "status": "pending", "evidence": null },
+    "productionBuild": { "status": "pending", "evidence": null }
+  },
+  "deployment": {
+    "status": "pending",
+    "url": null,
+    "providerEvidence": null
+  },
+  "postDeploySmoke": {
+    "status": "pending",
+    "evidence": null
+  }
+}

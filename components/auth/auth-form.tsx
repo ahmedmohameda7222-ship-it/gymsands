@@ -16,6 +16,12 @@ import { PENDING_CONSENTS_STORAGE_KEY, REQUIRED_CONSENTS } from "@/lib/legal/ver
 import { safeInternalRedirectPath } from "@/lib/auth/redirect";
 import { useTranslation } from "@/lib/i18n/use-translation";
 import { getPublicCopy } from "@/lib/i18n/public-copy";
+import {
+  MAXIMUM_PROFILE_AGE,
+  MINIMUM_LAUNCH_AGE,
+  PENDING_ELIGIBILITY_STORAGE_KEY,
+  launchAgeSchema
+} from "@/lib/auth/eligibility";
 import type { ReactNode } from "react";
 
 type RequiredConsentKey = "terms" | "privacy" | "fitnessData" | "disclaimer" | "age16";
@@ -28,11 +34,14 @@ const initialRequiredConsents: Record<RequiredConsentKey, boolean> = {
   age16: false
 };
 
-async function saveRequiredConsents(accessToken: string) {
+async function saveRequiredConsents(accessToken: string, declaredAge: number) {
   const response = await fetch("/api/user/consents", {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ consents: REQUIRED_CONSENTS.map((item) => ({ ...item, granted: true })) })
+    body: JSON.stringify({
+      declared_age: declaredAge,
+      consents: REQUIRED_CONSENTS.map((item) => ({ ...item, granted: true }))
+    })
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error ?? "Consent records could not be saved yet.");
@@ -58,6 +67,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const copy = getPublicCopy(language);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
+  const [declaredAge, setDeclaredAge] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -74,9 +84,11 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     special: /[^\p{L}\p{N}\s]/u.test(password)
   };
   const passwordIsValid = Object.values(passwordRequirements).every(Boolean);
+  const ageResult = launchAgeSchema.safeParse(declaredAge === "" ? "" : Number(declaredAge));
   const registerIsValid = mode === "login" || (
     passwordIsValid &&
     password === confirmPassword &&
+    ageResult.success &&
     Object.values(requiredConsents).every(Boolean)
   );
 
@@ -91,13 +103,19 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       });
       return;
     }
+    if (mode === "register" && !ageResult.success) {
+      setAuthFeedback({ type: "error", message: ageResult.message });
+      return;
+    }
 
     setIsGoogleLoading(true);
     setAuthFeedback({ type: "info", message: "Signing in with Google..." });
     setRememberSession(remember);
 
     if (mode === "register") {
+      if (!ageResult.success) return;
       window.localStorage.setItem(PENDING_CONSENTS_STORAGE_KEY, JSON.stringify(REQUIRED_CONSENTS));
+      window.localStorage.setItem(PENDING_ELIGIBILITY_STORAGE_KEY, String(ageResult.data));
       window.localStorage.setItem("plaivra.oauth.mode", "register");
     } else {
       const explicitNext = searchParams.get("next");
@@ -156,6 +174,10 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       });
       return;
     }
+    if (mode === "register" && !ageResult.success) {
+      setAuthFeedback({ type: "error", message: ageResult.message });
+      return toast({ title: "Age eligibility required", description: ageResult.message });
+    }
 
     setIsLoading(true);
     setRememberSession(remember);
@@ -173,8 +195,11 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         if (!data.session) throw new Error("Login could not finish. Please try again.");
         if (window.localStorage.getItem(PENDING_CONSENTS_STORAGE_KEY)) {
           try {
-            await saveRequiredConsents(data.session.access_token);
+            const pendingAge = launchAgeSchema.safeParse(Number(window.localStorage.getItem(PENDING_ELIGIBILITY_STORAGE_KEY)));
+            if (!pendingAge.success) throw new Error("Confirm the current age requirement before continuing.");
+            await saveRequiredConsents(data.session.access_token, pendingAge.data);
             window.localStorage.removeItem(PENDING_CONSENTS_STORAGE_KEY);
+            window.localStorage.removeItem(PENDING_ELIGIBILITY_STORAGE_KEY);
           } catch (consentError) {
             console.warn("Plaivra will retry saving required consent records later:", consentError);
           }
@@ -201,9 +226,11 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         let consentSaved = false;
         if (data.session?.access_token) {
           try {
-            await saveRequiredConsents(data.session.access_token);
+            if (!ageResult.success) throw new Error("Age eligibility could not be verified.");
+            await saveRequiredConsents(data.session.access_token, ageResult.data);
             consentSaved = true;
             window.localStorage.removeItem(PENDING_CONSENTS_STORAGE_KEY);
+            window.localStorage.removeItem(PENDING_ELIGIBILITY_STORAGE_KEY);
           } catch (consentError) {
             console.warn("Consent persistence will be retried after sign-in:", consentError);
             setAuthFeedback({ type: "info", message: "Your account was created. Plaivra will retry saving your required consent record after sign-in." });
@@ -211,6 +238,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         }
         if (!consentSaved) {
           window.localStorage.setItem(PENDING_CONSENTS_STORAGE_KEY, JSON.stringify(REQUIRED_CONSENTS));
+          if (ageResult.success) window.localStorage.setItem(PENDING_ELIGIBILITY_STORAGE_KEY, String(ageResult.data));
         }
         toast({
           title: "Plaivra account created",
@@ -283,6 +311,28 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                 onChange={(event) => setFullName(event.target.value)}
                 autoComplete="name"
               />
+            </div>
+          ) : null}
+          {mode === "register" ? (
+            <div className="space-y-2">
+              <Label htmlFor="registration-age">Age</Label>
+              <Input
+                id="registration-age"
+                type="number"
+                inputMode="numeric"
+                min={MINIMUM_LAUNCH_AGE}
+                max={MAXIMUM_PROFILE_AGE}
+                step={1}
+                className="h-12"
+                value={declaredAge}
+                onChange={(event) => setDeclaredAge(event.target.value)}
+                autoComplete="bday-year"
+                required
+                aria-describedby="registration-age-help"
+              />
+              <p id="registration-age-help" className="text-xs leading-5 text-muted-foreground">
+                Plaivra is available to people age {MINIMUM_LAUNCH_AGE} or older for the initial launch.
+              </p>
             </div>
           ) : null}
           <div className="space-y-2">

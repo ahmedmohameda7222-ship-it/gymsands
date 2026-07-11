@@ -1,6 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase/client";
+import { env } from "@/lib/env";
 import { isUuid } from "@/lib/utils";
 import type {
   DailyCheckinType,
@@ -34,13 +35,15 @@ export type FitnessConstraintInput = {
   areas_to_protect: string[];
   movement_restrictions: string | null;
   nutrition_restrictions: string | null;
+  legacy_context_notes: string | null;
 };
 
 const emptyFitnessConstraints: FitnessConstraintInput = {
   injury_or_limitation_labels: [],
   areas_to_protect: [],
   movement_restrictions: null,
-  nutrition_restrictions: null
+  nutrition_restrictions: null,
+  legacy_context_notes: null
 };
 
 function mapFitnessConstraints(data: Record<string, unknown> | null): FitnessConstraintInput | null {
@@ -49,15 +52,17 @@ function mapFitnessConstraints(data: Record<string, unknown> | null): FitnessCon
     injury_or_limitation_labels: cleanStringArray(data.injury_or_limitation_labels),
     areas_to_protect: cleanStringArray(data.areas_to_protect),
     movement_restrictions: cleanText(typeof data.movement_restrictions === "string" ? data.movement_restrictions : null),
-    nutrition_restrictions: cleanText(typeof data.nutrition_restrictions === "string" ? data.nutrition_restrictions : null)
+    nutrition_restrictions: cleanText(typeof data.nutrition_restrictions === "string" ? data.nutrition_restrictions : null),
+    legacy_context_notes: cleanText(typeof data.legacy_context_notes === "string" ? data.legacy_context_notes : null)
   };
 }
 
 export async function getFitnessConstraints(userId: string): Promise<FitnessConstraintInput | null> {
+  if (env.useMockAuth && userId === "mock-user") return emptyFitnessConstraints;
   requireUser(userId);
   const { data, error } = await supabase!
     .from("user_fitness_constraints")
-    .select("injury_or_limitation_labels,areas_to_protect,movement_restrictions,nutrition_restrictions")
+    .select("injury_or_limitation_labels,areas_to_protect,movement_restrictions,nutrition_restrictions,legacy_context_notes")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
@@ -65,18 +70,20 @@ export async function getFitnessConstraints(userId: string): Promise<FitnessCons
 }
 
 export async function upsertFitnessConstraints(userId: string, input: FitnessConstraintInput): Promise<FitnessConstraintInput> {
+  if (env.useMockAuth && userId === "mock-user") return mapFitnessConstraints(input as unknown as Record<string, unknown>) ?? emptyFitnessConstraints;
   requireUser(userId);
   const payload = {
     user_id: userId,
     injury_or_limitation_labels: cleanStringArray(input.injury_or_limitation_labels),
     areas_to_protect: cleanStringArray(input.areas_to_protect),
     movement_restrictions: cleanText(input.movement_restrictions),
-    nutrition_restrictions: cleanText(input.nutrition_restrictions)
+    nutrition_restrictions: cleanText(input.nutrition_restrictions),
+    legacy_context_notes: cleanText(input.legacy_context_notes)
   };
   const { data, error } = await supabase!
     .from("user_fitness_constraints")
     .upsert(payload, { onConflict: "user_id" })
-    .select("injury_or_limitation_labels,areas_to_protect,movement_restrictions,nutrition_restrictions")
+    .select("injury_or_limitation_labels,areas_to_protect,movement_restrictions,nutrition_restrictions,legacy_context_notes")
     .single();
   if (error) throw error;
   return mapFitnessConstraints(data as Record<string, unknown>) ?? emptyFitnessConstraints;
@@ -140,6 +147,7 @@ export async function createExerciseAlternative(userId: string, input: {
 }
 
 export async function getGroceryItems(userId: string, weekStart: string) {
+  if (env.useMockAuth && userId === "mock-user") return [];
   requireUser(userId);
   const { data, error } = await supabase!.from("user_grocery_items").select("*").eq("user_id", userId).eq("week_start", weekStart).order("store_section").order("item_name");
   if (error) throw error;

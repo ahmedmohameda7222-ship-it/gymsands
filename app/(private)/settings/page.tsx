@@ -6,6 +6,7 @@ import {
   Bell,
   Bot,
   CheckCircle2,
+  CreditCard,
   RefreshCcw,
   Shield,
   ShieldAlert,
@@ -166,8 +167,8 @@ export default function SettingsPage() {
         {
           icon: Bot,
           title: t("settings.aiImports"),
-          description: "AI access controls what context Plaivra prepares for ChatGPT requests and what ChatGPT may save after approval.",
-          href: "/settings/ai-imports",
+          description: "Choose the Plaivra context and tool actions ChatGPT may use, then monitor or revoke the connection.",
+          href: "/settings/connections",
           badge: { label: "Permissions", variant: "warning" },
         },
         {
@@ -180,7 +181,7 @@ export default function SettingsPage() {
         {
           icon: ShieldAlert,
           title: "Coaching context",
-          description: "Coaching context helps personalize prepared requests. It does not change plans automatically.",
+          description: "Coaching context helps personalize task-specific ChatGPT context. It does not change plans automatically.",
           href: "/settings/coaching-profile",
           badge: { label: "Context", variant: "outline" },
         },
@@ -215,6 +216,13 @@ export default function SettingsPage() {
           description: t("settings.accountDesc"),
           href: "/settings/account",
           badge: { label: "Session", variant: "outline" },
+        },
+        {
+          icon: CreditCard,
+          title: "Subscription",
+          description: "Review provider-neutral access and billing recovery. No price or paid capability is published before owner approval.",
+          href: "/settings/subscription",
+          badge: { label: "Not configured", variant: "outline" },
         },
       ],
     },

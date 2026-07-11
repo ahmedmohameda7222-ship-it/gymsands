@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InlineFeedback } from "@/components/motion";
 import { useToast } from "@/components/ui/toaster";
@@ -14,6 +16,12 @@ import { safeInternalRedirectPath } from "@/lib/auth/redirect";
 import { useTranslation } from "@/lib/i18n/use-translation";
 import { getPublicCopy } from "@/lib/i18n/public-copy";
 import { hasRequiredConsents } from "@/services/database/consents";
+import {
+  MAXIMUM_PROFILE_AGE,
+  MINIMUM_LAUNCH_AGE,
+  PENDING_ELIGIBILITY_STORAGE_KEY,
+  launchAgeSchema
+} from "@/lib/auth/eligibility";
 
 type RequiredConsentKey = "terms" | "privacy" | "fitnessData" | "disclaimer" | "age16";
 
@@ -25,7 +33,7 @@ const initialRequiredConsents: Record<RequiredConsentKey, boolean> = {
   age16: false
 };
 
-async function saveRequiredConsents(accessToken: string) {
+async function saveRequiredConsents(accessToken: string, declaredAge: number) {
   const response = await fetch("/api/user/consents", {
     method: "POST",
     headers: {
@@ -33,6 +41,7 @@ async function saveRequiredConsents(accessToken: string) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
+      declared_age: declaredAge,
       consents: REQUIRED_CONSENTS.map((item) => ({ ...item, granted: true }))
     })
   });
@@ -49,12 +58,19 @@ export function ConsentCompletionClient() {
   const copy = getPublicCopy(language);
 
   const [requiredConsents, setRequiredConsents] = useState(initialRequiredConsents);
+  const [declaredAge, setDeclaredAge] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
   const [saveError, setSaveError] = useState("");
 
-  const allChecked = Object.values(requiredConsents).every(Boolean);
+  const ageResult = launchAgeSchema.safeParse(declaredAge === "" ? "" : Number(declaredAge));
+  const allChecked = Object.values(requiredConsents).every(Boolean) && ageResult.success;
   const next = safeInternalRedirectPath(searchParams.get("next") ?? undefined);
+
+  useEffect(() => {
+    const pendingAge = window.localStorage.getItem(PENDING_ELIGIBILITY_STORAGE_KEY);
+    if (pendingAge) setDeclaredAge(pendingAge);
+  }, []);
 
   // If already authenticated and has consents, redirect away
   useEffect(() => {
@@ -84,6 +100,10 @@ export function ConsentCompletionClient() {
   }, [authLoading, user, router, next]);
 
   async function handleSubmit() {
+    if (!ageResult.success) {
+      setSaveError(ageResult.message);
+      return;
+    }
     if (!allChecked) {
       setSaveError("Please accept all required agreements to continue.");
       toast({
@@ -111,8 +131,9 @@ export function ConsentCompletionClient() {
     setIsSaving(true);
     setSaveError("");
     try {
-      await saveRequiredConsents(session.access_token);
+      await saveRequiredConsents(session.access_token, ageResult.data);
       window.localStorage.removeItem(PENDING_CONSENTS_STORAGE_KEY);
+      window.localStorage.removeItem(PENDING_ELIGIBILITY_STORAGE_KEY);
       toast({
         title: language === "ar" ? "تم الحفظ" : "Saved",
         description:
@@ -162,6 +183,25 @@ export function ConsentCompletionClient() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="consent-age">Age</Label>
+            <Input
+              id="consent-age"
+              type="number"
+              inputMode="numeric"
+              min={MINIMUM_LAUNCH_AGE}
+              max={MAXIMUM_PROFILE_AGE}
+              step={1}
+              className="h-12"
+              value={declaredAge}
+              onChange={(event) => setDeclaredAge(event.target.value)}
+              required
+              aria-describedby="consent-age-help"
+            />
+            <p id="consent-age-help" className="text-xs leading-5 text-muted-foreground">
+              Plaivra is available to people age {MINIMUM_LAUNCH_AGE} or older for the initial launch.
+            </p>
+          </div>
           <fieldset className="space-y-3 rounded-2xl border border-border/70 p-4">
             <legend className="px-1 text-sm font-semibold">{copy.requiredAgreements}</legend>
             <ConsentCheckbox

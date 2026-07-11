@@ -2,6 +2,7 @@ import type { McpContext } from "@/lib/mcp/auth";
 import { asObject, cleanDate, getArray, getBoolean, getNumber, getOptionalNumber, getOptionalString, getString, requireConfirmation, type JsonObject } from "@/lib/mcp/schemas";
 import { executeMcpTool as executeOriginalMcpTool } from "@/lib/mcp/tool-executor";
 import { fail, num, ok, sumMacros, type DbRow, type MacroTotals, type McpToolResult } from "@/lib/mcp/tool-helpers";
+import { ContextProjectionError, projectTaskContext, type ContextTask } from "@/lib/mcp/context-projections";
 
 type MealKey = "breakfast" | "lunch" | "dinner" | "snack";
 
@@ -90,12 +91,7 @@ async function insertPlannedMeals(ctx: McpContext, items: JsonObject[], sourceTo
   if (error) throw new Error(error.message);
   const createdItems = (data ?? []) as unknown as DbRow[];
   const createdIds = createdItems.map((item) => String(item.id));
-  const createdByDate = createdItems.reduce<Record<string, string[]>>((grouped, item) => {
-    const date = String(item.plan_date ?? "unknown");
-    grouped[date] = [...(grouped[date] ?? []), String(item.id)];
-    return grouped;
-  }, {});
-  return ok({ ok: true, source_tool: sourceTool, created_count: createdIds.length, created: createdByDate, created_meal_plan_item_ids: createdIds, planned_meal_ids: createdIds, items: createdItems });
+  return ok({ ok: true, source_tool: sourceTool, created_count: createdIds.length, created_meal_plan_item_ids: createdIds, planned_meal_ids: createdIds, items: createdItems });
 }
 
 function groupMealPlanItems(items: DbRow[]) {
@@ -126,14 +122,14 @@ async function getMealPlanForWeek(ctx: McpContext, input: JsonObject) {
   const { data, error } = await ctx.supabase.from("user_meal_plan_items").select("*").eq("user_id", ctx.userId).gte("plan_date", startDate).lte("plan_date", endDate).order("plan_date", { ascending: true }).order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
   const items = (data ?? []) as unknown as DbRow[];
-  const grouped = Array.from({ length: 7 }, (_, index) => {
+  const days = Array.from({ length: 7 }, (_, index) => {
     const day = new Date(start);
     day.setUTCDate(start.getUTCDate() + index);
     const date = day.toISOString().slice(0, 10);
     const dayItems = items.filter((item) => item.plan_date === date);
-    return [date, groupMealPlanItems(dayItems)] as const;
+    return { date, meals: groupMealPlanItems(dayItems) };
   });
-  return ok({ ok: true, start_date: startDate, end_date: endDate, days: Object.fromEntries(grouped) });
+  return ok({ ok: true, start_date: startDate, end_date: endDate, days });
 }
 
 async function generateShoppingList(ctx: McpContext, input: JsonObject) {
@@ -198,11 +194,11 @@ async function createCustomMeal(ctx: McpContext, input: JsonObject) {
   if (!items.length) return fail("missing_required_input", "Provide at least one custom meal item.");
 
   const { data: meal, error: mealError } = await ctx.supabase
-    .from("custom_meals")
+    .from("saved_recipes")
     .insert({
       user_id: ctx.userId,
-      meal_name: mealName,
-      meal_category: getOptionalString(input, "meal_category") ?? null,
+      name: mealName,
+      saved_item_type: "meal",
       notes: getOptionalString(input, "notes") ?? null,
       is_favorite: Boolean(input.is_favorite)
     })
@@ -213,11 +209,10 @@ async function createCustomMeal(ctx: McpContext, input: JsonObject) {
   const rows = items.map((item) => {
     const foodName = getString(item, "food_name");
     return {
-      meal_id: meal.id,
-      food_item_id: null,
-      user_food_item_id: null,
+      recipe_id: meal.id,
+      user_id: ctx.userId,
       food_name: foodName,
-      serving_size: getOptionalString(item, "serving_hint") ?? getOptionalString(item, "serving_size") ?? "1 serving",
+      serving_unit: getOptionalString(item, "serving_hint") ?? getOptionalString(item, "serving_size") ?? "serving",
       quantity: positive(item.quantity ?? 1),
       calories: nonNegative(item.calories, "calories"),
       protein_g: nonNegative(readMacro(item, "protein"), "protein"),
@@ -225,8 +220,11 @@ async function createCustomMeal(ctx: McpContext, input: JsonObject) {
       fat_g: nonNegative(readMacro(item, "fat"), "fat")
     };
   });
-  const { data: mealItems, error: itemsError } = await ctx.supabase.from("custom_meal_items").insert(rows).select("*");
-  if (itemsError) throw new Error(itemsError.message);
+  const { data: mealItems, error: itemsError } = await ctx.supabase.from("saved_recipe_ingredients").insert(rows).select("*");
+  if (itemsError) {
+    await ctx.supabase.from("saved_recipes").delete().eq("id", meal.id).eq("user_id", ctx.userId);
+    throw new Error(itemsError.message);
+  }
   return ok({ ok: true, meal, items: mealItems ?? [] });
 }
 
@@ -383,8 +381,9 @@ async function updateMealPlanItem(ctx: McpContext, input: JsonObject) {
   if (input.fat !== undefined || input.fat_g !== undefined) patch.fat_g = nonNegative(readMacro(input, "fat"), "fat");
   if (input.notes !== undefined) patch.notes = getOptionalString(input, "notes") ?? null;
   if (!Object.keys(patch).length) throw new Error("No meal plan item changes provided.");
-  const { data, error } = await ctx.supabase.from("user_meal_plan_items").update(patch).eq("id", id).eq("user_id", ctx.userId).select("*").single();
+  const { data, error } = await ctx.supabase.from("user_meal_plan_items").update(patch).eq("id", id).eq("user_id", ctx.userId).eq("updated_at", getString(input, "expected_updated_at")).select("*").maybeSingle();
   if (error) throw new Error(error.message);
+  if (!data) return fail("version_conflict", "This meal-plan item changed after it was read. Fetch it again before updating.");
   return ok({ ok: true, item: data });
 }
 
@@ -742,6 +741,34 @@ async function upsertNutritionTargetProfile(ctx: McpContext, input: JsonObject) 
 
 export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput: unknown): Promise<McpToolResult> {
   const input = asObject(rawInput);
+  const contextTaskByTool: Partial<Record<string, ContextTask>> = {
+    get_training_planning_context: "training_planning",
+    get_nutrition_planning_context: "nutrition_planning",
+    get_daily_execution_context: "daily_execution",
+    get_progress_context: "progress_review",
+    get_workout_adjustment_context: "workout_adjustment",
+    get_today_summary: "daily_execution",
+    get_progress_summary: "progress_review"
+  };
+  const contextTask = contextTaskByTool[toolName];
+  if (contextTask) {
+    try {
+      const projection = await projectTaskContext({
+        supabase: ctx.supabase,
+        userId: ctx.userId,
+        scopes: ctx.scopes,
+        task: contextTask,
+        input
+      });
+      return ok(projection as unknown as Record<string, unknown>);
+    } catch (error) {
+      if (error instanceof ContextProjectionError) return fail(error.code, error.message);
+      throw error;
+    }
+  }
+  if (toolName === "get_user_profile") {
+    return fail("tool_retired", "Use a task-specific Plaivra context tool instead of requesting the complete profile.");
+  }
   if (toolName === "get_nutrition_preference_profile") return getSingleUserRow(ctx, "user_nutrition_preference_profiles", "nutrition_preference_profile");
   if (toolName === "update_nutrition_preference_profile") return updateNutritionPreferences(ctx, input);
   if (toolName === "get_progression_targets") return getProgressionTargets(ctx, input);
@@ -779,12 +806,6 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
   if (toolName === "get_today_workout") {
     const today = cleanDate("today");
     return ok({ ok: true, date: today, ...(await getSafeTodayWorkout(ctx, today)) });
-  }
-  if (toolName === "get_today_summary") {
-    const today = cleanDate("today");
-    const [calories, water, mealPlan, workout] = await Promise.all([caloriesForDate(ctx, today), waterLogged(ctx, today), ctx.supabase.from("user_meal_plan_items").select("*").eq("user_id", ctx.userId).eq("plan_date", today), getSafeTodayWorkout(ctx, today)]);
-    if (mealPlan.error) throw new Error(mealPlan.error.message);
-    return ok({ ok: true, date: today, calories, water_ml: water, meal_plan: mealPlan.data ?? [], ...workout });
   }
   return executeOriginalMcpTool(ctx, toolName, rawInput);
 }

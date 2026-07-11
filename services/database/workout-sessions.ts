@@ -1,6 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase/client";
+import { env } from "@/lib/env";
 import { isUuid } from "@/lib/utils";
 import { autoDetectPersonalRecordsFromExerciseLogs } from "@/services/database/progress";
 import type {
@@ -526,6 +527,7 @@ export async function getOpenWorkoutSession(userId: string, workoutId?: string |
 }
 
 export async function getOpenWorkoutSessionWithStatus(userId: string, workoutId?: string | null): Promise<{ session: WorkoutSession | null; error?: string }> {
+  if (env.useMockAuth && userId === "mock-user") return { session: null };
   if (!canUseUserData(userId)) return { session: null, error: "Active workout could not load because the user session is invalid." };
   let query = supabase!
     .from("workout_sessions")

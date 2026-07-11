@@ -24,7 +24,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
           type="button"
           variant={language === item ? "default" : "ghost"}
           size="sm"
-          className="h-8 min-h-8 rounded-full px-2.5 text-xs"
+          className="h-11 min-h-11 min-w-11 rounded-full px-2.5 text-xs"
           aria-pressed={language === item}
           onClick={() => void choose(item)}
         >

@@ -99,7 +99,7 @@ Required controls:
 - tokens are stored hashed where server persistence is required;
 - raw tokens never appear in logs.
 
-Preferred client authentication when mutually supported: `private_key_jwt`.
+Preferred client authentication when mutually supported: `private_key_jwt`. The repository implementation validates exact allowlisted HTTPS metadata and same-origin JWKS documents without redirects, then verifies signed assertions and stores a hashed `jti` replay guard. `none` remains the PKCE public-client intersection fallback. See `lib/mcp/cimd.ts`.
 
 Fallback for public-client behavior: no client secret plus PKCE S256.
 

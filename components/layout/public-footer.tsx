@@ -4,10 +4,10 @@ import Link from "next/link";
 import { useTranslation } from "@/lib/i18n/use-translation";
 
 const legalLinks = [
-  ["Impressum", "/legal/impressum"],
-  ["Datenschutz / Privacy", "/legal/privacy"],
-  ["Nutzungsbedingungen / Terms", "/legal/terms"],
-  ["Gesundheitshinweis", "/legal/disclaimer"]
+  ["Legal notice", "/legal/impressum"],
+  ["Privacy", "/legal/privacy"],
+  ["Terms", "/legal/terms"],
+  ["Health disclaimer", "/legal/disclaimer"]
 ] as const;
 
 export function PublicFooter() {
@@ -21,8 +21,9 @@ export function PublicFooter() {
         <p>© {new Date().getFullYear()} Plaivra · {language === "ar" ? "المشغل: Ahmed Mohamed" : "Operator: Ahmed Mohamed"}</p>
         <nav aria-label="Legal" className="flex flex-wrap gap-x-4 gap-y-2">
           {links.map(([label, href]) => (
-            <Link key={href} href={href} className="hover:text-primary">{label}</Link>
+            <Link key={href} href={href} className="inline-flex min-h-11 min-w-11 items-center justify-center hover:text-primary">{label}</Link>
           ))}
+          <a href="mailto:Ahmed.Mohamed04@outlook.de?subject=Plaivra%20support%20or%20security" className="inline-flex min-h-11 items-center hover:text-primary">{language === "ar" ? "الدعم والأمان" : "Support & security"}</a>
         </nav>
       </div>
     </footer>

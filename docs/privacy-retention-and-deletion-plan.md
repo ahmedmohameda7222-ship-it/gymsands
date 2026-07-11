@@ -1,32 +1,84 @@
-# Plaivra Privacy Retention and Deletion Plan
+# Plaivra Privacy Export, Retention, and Deletion Runbook
 
-Status: Phase 6 implementation draft. This document is operational groundwork, not a claim that every cleanup job is active. Final legal and privacy review is required before public launch.
+Status: implementation prepared; destructive production execution disabled. Professional legal review and owner approval are required before launch activation. This document does not claim that a production cleanup or deletion job has run.
 
-## Current behavior
+## User export
 
-| Data | Current behavior | Phase 7+ action |
-|---|---|---|
-| Account/profile | Retained until an owner-scoped deletion request is completed or a legal reason requires retention | Define and test the admin-reviewed purge runbook, including Supabase Auth session revocation before user deletion |
-| Fitness/nutrition/wellness | User-controlled rows are retained until individually deleted or the account purge is completed | Add a two-user deletion test and verify every foreign-key cascade |
-| Progress photos | Private `progress-photos` bucket; owner folder enforced; current delete path removes the owner-scoped row and storage object | Include bulk folder deletion in the reviewed account purge runbook |
-| OAuth authorization codes | Five-minute application expiry; only the hash is stored | Add a scheduled delete for expired/used rows after an approved retention window |
-| OAuth access tokens | Seven-day application expiry; only the hash is stored; revoked connections fail closed | Add a scheduled delete for expired tokens after an approved diagnostic window |
-| ChatGPT connection metadata | Active until revoked; revoked metadata remains for security/accountability | Set and document a final follow-up retention period |
-| MCP audit logs | Redacted but currently have no automatic expiry | Select a final security/accountability period, document the legal basis, and implement bounded deletion |
-| Privacy requests | Retained to process and demonstrate handling of rights requests | Set a post-completion retention period after legal review |
-| Consent records | Versioned grant/revocation history is retained for accountability | Retain only as long as needed to demonstrate the consent lifecycle and resolve claims |
+`GET /api/user/data-export` produces an authenticated current-user ZIP containing:
 
-## Safety requirements for cleanup
+- `data.json` with canonical user-owned domains;
+- one CSV per top-level domain plus account CSV;
+- `manifest.json` with file names, record counts, format versions, and warnings;
+- `storage-manifest.json` with private bucket paths only, never signed URLs.
 
-1. Do not delete production data merely because an application timestamp has expired; deploy and verify cleanup in a controlled migration or scheduled job.
-2. Cleanup must be bounded by table, status, and timestamp and must never accept a client-supplied user ID without authenticated ownership or admin authorization.
-3. Account deletion must first revoke ChatGPT connections and Supabase sessions, then delete private storage objects, then remove database/auth records in a reviewed order.
-4. Export and deletion tests must use two users to prove that one user cannot export, request, or delete another user’s data.
-5. Cleanup logs must contain counts and internal identifiers only, never tokens, authorization codes, prompts, photos, notes, measurements, or exported user payloads.
+The export explicitly omits OAuth authorization codes, token hashes, integration access/refresh tokens, idempotency hashes, raw MCP input, and internal security telemetry. Direct rows are constrained to the authenticated `user_id`; child rows are constrained through owned parent IDs. A two-user automated test verifies that a caller-supplied user ID cannot expand the export scope.
 
-## Not activated in Phase 6
+## Deletion request and execution sequence
 
-- No destructive cleanup job or cron schedule was created.
-- No live Supabase migration was applied.
-- No automatic hard-delete endpoint was added.
-- Final retention durations remain launch blockers pending legal and operational review.
+1. The member reviews the impact summary and types `DELETE MY PLAIVRA ACCOUNT`.
+2. The API verifies a server-returned `last_sign_in_at` within ten minutes. Older sessions must sign in again with their existing provider.
+3. A client-generated idempotency key is hashed; plaintext is never stored.
+4. Active ChatGPT connections, OAuth access tokens, and Supabase refresh sessions are revoked immediately.
+5. A service-only deletion job is queued and the account is marked `deletion_pending`.
+6. The worker checks for an active legal hold and verifies that every external provider has a cleanup adapter before irreversible work.
+7. The worker marks the account `deletion_processing`; authenticated APIs then fail closed.
+8. Private Storage objects are enumerated under the authenticated owner folder and through canonical photo metadata, then removed through the Storage API in batches of at most 1,000.
+9. Provider cleanup runs. Unknown legacy `user_integrations` block the job with `provider_cleanup_adapter_required`; they are never silently abandoned.
+10. Non-cascading log/import references are deleted or detached, then Supabase Auth deletes the user server-side. Profile-owned rows cascade in the reviewed dependency graph.
+11. The completion email recipient is held only as AES-256-GCM ciphertext and cleared after notification. Delivery failures retry; an unavailable email provider is recorded as a manual action.
+12. The service-only job retains minimized evidence: stage, counts, safe error code, attempt count, timestamps, and a one-way subject hash. It retains no email, token, prompt, note, measurement, or photo path after completion.
+
+The worker claims jobs with `FOR UPDATE SKIP LOCKED`, records each stage, uses bounded exponential retries, and treats replayed requests as the same job.
+
+## Legal holds
+
+`privacy_deletion_legal_holds` is service-role-only. An active hold moves the job to `blocked_legal_hold` and keeps member access available. Releasing a hold requires an authenticated admin process and a reason code; no public/member route can create or release a hold. That admin workflow remains a manual platform action until the owner and legal reviewer define authorization and evidence requirements.
+
+## Retention cleanup
+
+The bounded `cleanup_privacy_retention_artifacts` function supports dry-run counts and execution for:
+
+- redacted MCP audit logs;
+- external API and email operational logs;
+- completed privacy requests.
+
+Expired OAuth code/token and MCP idempotency cleanup use their separate bounded functions. Every cleanup call is batch-limited, contains no client-supplied user ID, and returns counts only.
+
+No retention duration is assumed. The following environment values must remain unset until the owner and professional legal reviewer approve concrete periods and purposes:
+
+- `PRIVACY_RETENTION_MCP_AUDIT_DAYS`;
+- `PRIVACY_RETENTION_SECURITY_LOG_DAYS`;
+- `PRIVACY_RETENTION_COMPLETED_REQUEST_DAYS`;
+- `PRIVACY_RETENTION_DELETION_EVIDENCE_DAYS`;
+- `PRIVACY_RETENTION_OAUTH_CODE_HOURS`;
+- `PRIVACY_RETENTION_OAUTH_TOKEN_DAYS`;
+- `PRIVACY_RETENTION_IDEMPOTENCY_DAYS_AFTER_EXPIRY`.
+
+With approved values present, `PRIVACY_RETENTION_EXECUTION_ENABLED=false` produces dry-run metrics. Execution may be enabled only after a reviewed dry run, backup verification, alerting check, and production change record.
+
+## Production cutover gates
+
+Keep `PRIVACY_DELETION_EXECUTION_ENABLED=false` until all gates are evidenced:
+
+1. apply and verify the additive migration on an isolated database;
+2. run cross-user export, request, job-status, legal-hold, and RLS tests;
+3. create a synthetic reviewer account with private photo objects and each canonical domain;
+4. process that account in a non-production project and verify row/object counts;
+5. prove backup restore readiness;
+6. approve retention periods, legal-hold authority, provider adapters, support escalation, and notification sender;
+7. review the irreversible stage and enable the flag in a controlled production window.
+
+## Rollback and forward-fix
+
+- Before `deleting_storage`: disable the worker flag. A queued/failed job can be returned to `deletion_pending` or `active` after an owner-reviewed cancellation; remove the Auth ban with the server admin API, while revoked ChatGPT access remains safely revoked and can be reconnected by the user.
+- After Storage deletion begins: do not claim rollback. Stop new jobs, preserve the job evidence, restore objects only from a verified backup if available, and continue with a reviewed forward-fix.
+- After Auth deletion: the user ID and application rows are gone. Do not recreate an account as a rollback. Complete notification/audit repair from the surviving job, investigate the incident, and require a new registration if the former user returns.
+- Migration rollback must not rewrite applied history. Use an additive forward-fix migration to correct schema/function behavior. Do not drop lifecycle tables while queued, held, retrying, or failed jobs exist.
+
+## Manual actions and unresolved launch decisions
+
+- Owner/legal: approve concrete retention periods, legal-hold authority, completion-evidence duration, and legal wording.
+- Supabase: apply/verify the migration, review Data API exposure and RLS/grants, confirm JWT expiry, run advisors, and verify backups.
+- Vercel: configure `CRON_SECRET`, the notification encryption key, reviewed retention values, and keep destructive flags false until cutover approval.
+- Resend: verify the sender and support/security reply path; otherwise completion notifications remain `not_configured`.
+- Provider owners: implement remote revocation adapters before any legacy provider connection is eligible for deletion.

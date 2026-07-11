@@ -73,7 +73,7 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
         <CardContent className="space-y-2 p-4">
           <p className="text-sm font-semibold text-foreground">Quick repeats unavailable</p>
           <InlineFeedback message={feedback.message} variant="error" onClose={() => setFeedback(null)} />
-          <p className="text-xs leading-5 text-muted-foreground">Use ChatGPT review or manual add while Plaivra reloads recent foods.</p>
+          <p className="text-xs leading-5 text-muted-foreground">Use a ChatGPT Plaivra tool or add food directly while recent foods reload.</p>
         </CardContent>
       </Card>
     );
@@ -133,7 +133,7 @@ export function RecentFoodStrip({ onFoodLogged, defaultMealType = "Breakfast", l
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-xs leading-5 text-muted-foreground">Recent and frequent foods are fast fallbacks for repeats after the ChatGPT review path.</p>
+        <p className="text-xs leading-5 text-muted-foreground">Recent and frequent foods are fast direct controls for repeat logging and corrections.</p>
         <InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} onClose={() => setFeedback(null)} />
         <div className="flex gap-2">
           <Button
