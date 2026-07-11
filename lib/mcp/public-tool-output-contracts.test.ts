@@ -14,17 +14,24 @@ type Schema = {
   items?: Schema;
 };
 
-function sample(schema: Schema): unknown {
+const DATE_FIELD = /^(?:date|start_date|end_date|record_date|measured_at|plan_date|log_date)$/;
+
+function sample(schema: Schema, field = ""): unknown {
   if (Object.prototype.hasOwnProperty.call(schema, "const")) return schema.const;
   if (schema.enum?.length) return schema.enum[0];
   if (schema.type === "object") {
     const properties = schema.properties ?? {};
-    return Object.fromEntries((schema.required ?? []).map((key) => [key, sample(properties[key] ?? {})]));
+    return Object.fromEntries((schema.required ?? []).map((key) => [key, sample(properties[key] ?? {}, key)]));
   }
   if (schema.type === "array") return [];
   if (schema.type === "boolean") return true;
   if (schema.type === "number") return schema.minimum ?? 1;
-  if (schema.type === "string") return schema.format === "date-time" ? "2026-07-11T12:00:00.000Z" : "sample";
+  if (schema.type === "string") {
+    if (schema.format === "date-time") return "2026-07-11T12:00:00.000Z";
+    if (schema.format === "uuid" || field.endsWith("_id")) return "11111111-1111-4111-8111-111111111111";
+    if (DATE_FIELD.test(field)) return "2026-07-11";
+    return "sample";
+  }
   return {};
 }
 
@@ -38,9 +45,10 @@ describe("public MCP output contracts", () => {
     expect(mcpTools).toHaveLength(35);
     for (const tool of mcpTools) {
       expect(tool.outputSchema, tool.name).toBeTruthy();
-      expect(validateMcpToolOutput(tool, resultFor(tool)), tool.name).toEqual({
+      const result = resultFor(tool);
+      expect(validateMcpToolOutput(tool, result), tool.name).toEqual({
         success: true,
-        value: resultFor(tool).structuredContent
+        value: result.structuredContent
       });
     }
   });
