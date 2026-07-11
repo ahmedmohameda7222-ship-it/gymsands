@@ -3,31 +3,28 @@ import type { McpContext } from "@/lib/mcp/auth";
 import { executeIdempotentMcpMutation } from "@/lib/mcp/idempotency";
 import { ok } from "@/lib/mcp/tool-helpers";
 
-function ledgerClient({
-  insert,
-  existing,
-  persistError = null
-}: {
-  insert: { data: Record<string, unknown> | null; error: { code?: string; message: string } | null };
-  existing?: { data: Record<string, unknown> | null; error: { message: string } | null };
-  persistError?: { message: string } | null;
-}) {
+type Claim = {
+  action: "execute" | "replay" | "conflict" | "in_progress" | "review_required";
+  ledger_id: string | null;
+  response: unknown;
+};
+
+function ledgerClient(claim: Claim, persistError: { message: string } | null = null) {
   const updates: unknown[] = [];
+  const builder: Record<string, unknown> = {};
+  builder.update = vi.fn((value: unknown) => { updates.push(value); return builder; });
+  builder.eq = vi.fn(() => builder);
+  builder.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
+    Promise.resolve({ data: null, error: persistError }).then(resolve, reject);
+
   const client = {
-    from: vi.fn(() => {
-      let action = "select";
-      const builder: Record<string, unknown> = {};
-      builder.insert = vi.fn(() => { action = "insert"; return builder; });
-      builder.update = vi.fn((value: unknown) => { action = "update"; updates.push(value); return builder; });
-      builder.select = vi.fn(() => builder);
-      builder.eq = vi.fn(() => builder);
-      builder.maybeSingle = vi.fn(async () => action === "insert" ? insert : (existing ?? { data: null, error: null }));
-      builder.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
-        Promise.resolve(action === "update" ? { data: null, error: persistError } : { data: null, error: null }).then(resolve, reject);
-      return builder;
-    })
+    rpc: vi.fn(async (name: string) => {
+      expect(name).toBe("claim_mcp_idempotency_key");
+      return { data: claim, error: null };
+    }),
+    from: vi.fn(() => builder)
   };
-  return { client: client as unknown as McpContext["supabase"], updates };
+  return { client: client as unknown as McpContext["supabase"], updates, rpc: client.rpc };
 }
 
 function context(supabase: McpContext["supabase"]): McpContext {
@@ -40,28 +37,29 @@ function context(supabase: McpContext["supabase"]): McpContext {
   };
 }
 
+const input = { idempotency_key: "request-key-0001", amount_ml: 250 };
+
 describe("MCP mutation idempotency", () => {
-  it("executes a new mutation once and persists its minimized response", async () => {
-    const { client, updates } = ledgerClient({ insert: { data: { id: "ledger-1" }, error: null } });
+  it("executes a newly claimed mutation once and persists replay evidence", async () => {
+    const { client, updates, rpc } = ledgerClient({ action: "execute", ledger_id: "ledger-1", response: null });
     const execute = vi.fn(async () => ok({ ok: true, created_id: "record-1" }));
     const result = await executeIdempotentMcpMutation({
-      ctx: context(client), toolName: "add_water_log", input: { idempotency_key: "request-key-0001", amount_ml: 250 }, execute
+      ctx: context(client), toolName: "add_water_log", input, execute
     });
     expect(result.structuredContent).toMatchObject({ ok: true, created_id: "record-1" });
     expect(execute).toHaveBeenCalledTimes(1);
-    expect(updates).toContainEqual(expect.objectContaining({ status: "completed" }));
+    expect(rpc).toHaveBeenCalledWith("claim_mcp_idempotency_key", expect.objectContaining({
+      p_tool_name: "add_water_log",
+      p_lease_seconds: 120
+    }));
+    expect(updates).toContainEqual(expect.objectContaining({ status: "completed", lease_expires_at: null }));
   });
 
   it("replays a completed response without executing the mutation again", async () => {
-    const input = { idempotency_key: "request-key-0001", amount_ml: 250 };
-    // The input hash is intentionally learned from a first pass by using a
-    // conflict response whose hash is replaced through a matched fixture.
-    const crypto = await import("node:crypto");
-    const canonical = '{"amount_ml":250,"idempotency_key":"request-key-0001"}';
-    const inputHash = crypto.createHash("sha256").update(canonical).digest("hex");
     const { client } = ledgerClient({
-      insert: { data: null, error: { code: "23505", message: "duplicate" } },
-      existing: { data: { id: "ledger-1", status: "completed", input_hash: inputHash, response: { structuredContent: { ok: true, created_id: "record-1" } } }, error: null }
+      action: "replay",
+      ledger_id: "ledger-1",
+      response: { structuredContent: { ok: true, created_id: "record-1" } }
     });
     const execute = vi.fn(async () => ok({ ok: true, created_id: "record-2" }));
     const result = await executeIdempotentMcpMutation({ ctx: context(client), toolName: "add_water_log", input, execute });
@@ -69,26 +67,25 @@ describe("MCP mutation idempotency", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it("rejects key reuse with changed input and concurrent pending work", async () => {
-    const base = { insert: { data: null, error: { code: "23505", message: "duplicate" } } };
-    const conflictClient = ledgerClient({
-      ...base,
-      existing: { data: { id: "ledger-1", status: "completed", input_hash: "different", response: {} }, error: null }
-    }).client;
+  it("rejects changed input and an actively leased request", async () => {
     const conflict = await executeIdempotentMcpMutation({
-      ctx: context(conflictClient), toolName: "add_water_log", input: { idempotency_key: "request-key-0001", amount_ml: 250 }, execute: async () => ok({ ok: true })
+      ctx: context(ledgerClient({ action: "conflict", ledger_id: "ledger-1", response: null }).client),
+      toolName: "add_water_log", input, execute: async () => ok({ ok: true })
     });
     expect(conflict.structuredContent).toMatchObject({ code: "idempotency_conflict" });
 
-    const crypto = await import("node:crypto");
-    const inputHash = crypto.createHash("sha256").update('{"amount_ml":250,"idempotency_key":"request-key-0001"}').digest("hex");
-    const pendingClient = ledgerClient({
-      ...base,
-      existing: { data: { id: "ledger-1", status: "pending", input_hash: inputHash, response: null }, error: null }
-    }).client;
     const pending = await executeIdempotentMcpMutation({
-      ctx: context(pendingClient), toolName: "add_water_log", input: { idempotency_key: "request-key-0001", amount_ml: 250 }, execute: async () => ok({ ok: true })
+      ctx: context(ledgerClient({ action: "in_progress", ledger_id: "ledger-1", response: null }).client),
+      toolName: "add_water_log", input, execute: async () => ok({ ok: true })
     });
     expect(pending.structuredContent).toMatchObject({ code: "idempotency_in_progress" });
+  });
+
+  it("requires manual review when prior completion cannot be proven", async () => {
+    const result = await executeIdempotentMcpMutation({
+      ctx: context(ledgerClient({ action: "review_required", ledger_id: "ledger-1", response: null }).client),
+      toolName: "add_water_log", input, execute: async () => ok({ ok: true })
+    });
+    expect(result.structuredContent).toMatchObject({ code: "idempotency_review_required" });
   });
 });
