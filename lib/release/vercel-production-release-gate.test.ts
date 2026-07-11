@@ -1,7 +1,9 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const script = fileURLToPath(new URL("../../scripts/vercel-production-release-gate.mjs", import.meta.url));
 const SHA = "8481ab3ce43b9866f01d8ba0331abf6368f68956";
 
@@ -11,6 +13,13 @@ function run(overrides: NodeJS.ProcessEnv = {}) {
 }
 
 describe("Vercel production release gate", () => {
+  it("is wired into vercel.json and documented as an empty-by-default production variable", () => {
+    const config = JSON.parse(readFileSync(`${repositoryRoot}/vercel.json`, "utf8")) as { ignoreCommand?: string };
+    const envExample = readFileSync(`${repositoryRoot}/.env.example`, "utf8");
+    expect(config.ignoreCommand).toBe("node scripts/vercel-production-release-gate.mjs");
+    expect(envExample).toMatch(/^PLAIVRA_PRODUCTION_RELEASE_SHA=$/m);
+  });
+
   it("allows non-Vercel local and CI builds", () => {
     expect(run().status).toBe(1);
   });
