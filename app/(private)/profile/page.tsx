@@ -121,7 +121,7 @@ export default function ProfilePage() {
               "It is not medical advice. Speak with a doctor if you have medical conditions.",
               "Do not train through serious pain.",
               "Nutrition values are approximate and may vary by preparation and portion size.",
-              "Workout and meal plans should be created externally, then imported for tracking."
+              "ChatGPT can create structured plans through authorized Plaivra tools; direct Plaivra controls remain available for editing and correction."
             ].map((item) => (
               <div key={item} className="flex items-start gap-3 rounded-xl border border-success/20 bg-card/70 p-3">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />

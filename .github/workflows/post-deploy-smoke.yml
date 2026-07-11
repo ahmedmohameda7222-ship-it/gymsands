@@ -1,0 +1,70 @@
+name: Post-deploy release smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: Exact deployed URL to verify
+        required: true
+        type: string
+      expected_commit:
+        description: Full reviewed commit SHA expected from /api/version
+        required: true
+        type: string
+      expected_environment:
+        description: Environment reported by /api/version
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - preview
+
+permissions:
+  contents: read
+
+concurrency:
+  group: post-deploy-smoke-${{ inputs.expected_environment }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.expected_environment }}
+
+    steps:
+      - name: Checkout selected release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_commit }}
+
+      - name: Verify checkout identity
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "${{ inputs.expected_commit }}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify deployed release
+        run: >-
+          npm run smoke:postdeploy --
+          --url "${{ inputs.deployment_url }}"
+          --expected-commit "${{ inputs.expected_commit }}"
+          --expected-environment "${{ inputs.expected_environment }}"
+          --output quality-reports/post-deploy-smoke.json
+
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-deploy-smoke-${{ inputs.expected_commit }}
+          path: quality-reports/post-deploy-smoke.json
+          if-no-files-found: error
+          retention-days: 30

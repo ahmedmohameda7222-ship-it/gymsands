@@ -93,7 +93,7 @@ export function AiPermissionsCard() {
     confirmAsk({
       title: "Grant ChatGPT access to all Plaivra areas?",
       description:
-        "This lets ChatGPT view and change every supported Plaivra area, but Plaivra still only saves changes after you approve them. You can revoke or narrow access later.",
+        "This lets ChatGPT view and change every supported Plaivra area through authorized tools. You can revoke or narrow access later.",
       confirmLabel: "Grant full access",
       onConfirm: () => setConfig((current) => ({ ...current, accessMode: "full" }))
     });
@@ -277,7 +277,7 @@ export function AiPermissionsCard() {
         <div>
           <p className="font-semibold text-foreground">Change</p>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            ChatGPT can save changes you explicitly approve. Change automatically includes View for that area only.
+            ChatGPT can save changes you explicitly request in chat. Change automatically includes View for that area only.
           </p>
         </div>
       </div>

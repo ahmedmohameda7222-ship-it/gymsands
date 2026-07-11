@@ -1,0 +1,33 @@
+name: Production uptime synthetic
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-uptime-synthetic
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check public production surfaces
+        run: node scripts/uptime-synthetic.mjs --url https://app.plaivra.com --output quality-reports/uptime.json
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uptime-${{ github.run_id }}
+          path: quality-reports/uptime.json
+          if-no-files-found: error
+          retention-days: 14

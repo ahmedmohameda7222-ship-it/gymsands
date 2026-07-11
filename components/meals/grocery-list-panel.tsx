@@ -254,7 +254,7 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
       });
 
       pdf.getPages().forEach((pdfPage, index, pages) => {
-        pdfPage.drawText(`Plaivra - Plan. Import. Track.`, { x: 42, y: 25, size: 8, font: regular, color: muted });
+        pdfPage.drawText(`Plaivra - Plan. Execute. Track.`, { x: 42, y: 25, size: 8, font: regular, color: muted });
         pdfPage.drawText(`${index + 1} / ${pages.length}`, { x: pdfPage.getWidth() - 70, y: 25, size: 8, font: regular, color: muted });
       });
       const bytes = await pdf.save();
@@ -366,7 +366,7 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
             <Button className="mt-3" size="sm" onClick={() => setLoadNonce((current) => current + 1)}><RefreshCw className="h-4 w-4" /> Try again</Button>
           </div>
         ) : null}
-        {!isLoading && !loadError && !items.length ? <p className="rounded-[14px] border border-dashed p-4 text-sm leading-6 text-muted-foreground">Your list is empty. Use the actions menu for Quick add, or ask ChatGPT to prepare an ingredient-level list that you review.</p> : null}
+        {!isLoading && !loadError && !items.length ? <p className="rounded-[14px] border border-dashed p-4 text-sm leading-6 text-muted-foreground">Your list is empty. Use Quick add, or ask ChatGPT to create an ingredient-level list with an authorized Plaivra tool.</p> : null}
 
         {grouped.map((group) => (
           <div key={group.section}>

@@ -9,7 +9,7 @@ import {
   requiredScopesForTool,
   toolListPayload
 } from "./server";
-import { mcpTools } from "./tools";
+import { MCP_CATALOG_VERSION, MCP_PUBLIC_TOOL_NAMES, mcpTools } from "./tools";
 
 function mockContext(scopes: string[]): McpContext {
   return {
@@ -33,7 +33,9 @@ describe("public MCP catalog", () => {
 
     expect(names.has("create_custom_workout_plan")).toBe(true);
     expect(names.has("create_week_meal_plan")).toBe(true);
-    expect(names.has("get_nutrition_preference_profile")).toBe(true);
+    expect(names.has("get_nutrition_planning_context")).toBe(true);
+    expect(names.has("get_workout_adjustment_context")).toBe(true);
+    expect([...names].sort()).toEqual([...MCP_PUBLIC_TOOL_NAMES].sort());
 
     expect(names.has("get_ai_action_requests")).toBe(false);
     expect(names.has("create_ai_action_request")).toBe(false);
@@ -64,46 +66,41 @@ describe("public MCP catalog", () => {
 });
 
 describe("requiredScopesForTool", () => {
-  it("maps core profile tools", () => {
-    expect(requiredScopesForTool(tool("get_user_profile"))).toEqual([MCP_SCOPES.profileRead]);
-    expect(requiredScopesForTool(tool("update_user_profile"))).toEqual([MCP_SCOPES.profileWrite]);
+  it("maps task-specific planning contexts", () => {
+    expect(requiredScopesForTool(tool("get_training_planning_context"))).toEqual([MCP_SCOPES.profileRead, MCP_SCOPES.workoutsRead]);
+    expect(requiredScopesForTool(tool("get_nutrition_planning_context"))).toEqual([MCP_SCOPES.profileRead, MCP_SCOPES.nutritionRead]);
   });
 
-  it("maps nutrition preference tools to nutrition rather than broad profile access", () => {
-    expect(requiredScopesForTool(tool("get_nutrition_preference_profile"))).toEqual([MCP_SCOPES.nutritionRead]);
-    expect(requiredScopesForTool(tool("update_nutrition_preference_profile"))).toEqual([MCP_SCOPES.nutritionWrite]);
+  it("maps progress and daily contexts without blanket access", () => {
+    expect(requiredScopesForTool(tool("get_progress_context"))).toEqual([MCP_SCOPES.progressRead]);
+    expect(requiredScopesForTool(tool("get_daily_execution_context"))).toEqual([
+      MCP_SCOPES.workoutsRead,
+      MCP_SCOPES.nutritionRead,
+      MCP_SCOPES.mealPlansRead,
+      MCP_SCOPES.hydrationRead,
+      MCP_SCOPES.wellnessRead
+    ]);
   });
 
   it("maps each main write domain", () => {
     expect(requiredScopesForTool(tool("add_food_log"))).toEqual([MCP_SCOPES.nutritionWrite]);
-    expect(requiredScopesForTool(tool("create_meal_plan_item"))).toEqual([MCP_SCOPES.mealPlansWrite]);
+    expect(requiredScopesForTool(tool("create_day_meal_plan"))).toEqual([MCP_SCOPES.mealPlansWrite]);
     expect(requiredScopesForTool(tool("add_water_log"))).toEqual([MCP_SCOPES.hydrationWrite]);
     expect(requiredScopesForTool(tool("create_custom_workout_plan"))).toEqual([MCP_SCOPES.workoutsWrite]);
     expect(requiredScopesForTool(tool("add_weight_entry"))).toEqual([MCP_SCOPES.progressWrite]);
-    expect(requiredScopesForTool(tool("create_habit"))).toEqual([MCP_SCOPES.wellnessWrite]);
-    expect(requiredScopesForTool(tool("update_calorie_target"))).toEqual([MCP_SCOPES.settingsWrite]);
+    expect(requiredScopesForTool(tool("upsert_daily_checkin"))).toEqual([MCP_SCOPES.wellnessWrite]);
   });
 
-  it("requires all three read scopes for the cross-domain progress summary", () => {
-    const summary = tool("get_progress_summary");
-    expect(requiredScopesForTool(summary)).toEqual([
-      MCP_SCOPES.progressRead,
-      MCP_SCOPES.workoutsRead,
-      MCP_SCOPES.nutritionRead
-    ]);
-
-    expect(canUseTool(mockContext([MCP_SCOPES.progressRead]), summary)).toBe(false);
-    expect(canUseTool(mockContext([
-      MCP_SCOPES.progressRead,
-      MCP_SCOPES.workoutsRead,
-      MCP_SCOPES.nutritionRead
-    ]), summary)).toBe(true);
+  it("requires both scopes for training planning", () => {
+    const contextTool = tool("get_training_planning_context");
+    expect(canUseTool(mockContext([MCP_SCOPES.workoutsRead]), contextTool)).toBe(false);
+    expect(canUseTool(mockContext([MCP_SCOPES.workoutsRead, MCP_SCOPES.profileRead]), contextTool)).toBe(true);
   });
 
-  it("keeps the broad today summary behind explicit full access", () => {
-    const summary = tool("get_today_summary");
-    expect(canUseTool(mockContext([MCP_SCOPES.profileRead]), summary)).toBe(false);
-    expect(canUseTool(mockContext([MCP_SCOPES.fullAccess]), summary)).toBe(true);
+  it("shows daily context with any relevant section permission", () => {
+    const contextTool = tool("get_daily_execution_context");
+    expect(canUseTool(mockContext([MCP_SCOPES.profileRead]), contextTool)).toBe(false);
+    expect(canUseTool(mockContext([MCP_SCOPES.hydrationRead]), contextTool)).toBe(true);
   });
 });
 
@@ -143,8 +140,8 @@ describe("canUseTool", () => {
   });
 
   it("lets a section write scope use read tools from the same section only", () => {
-    expect(canUseTool(mockContext([MCP_SCOPES.nutritionWrite]), tool("get_today_calories"))).toBe(true);
-    expect(canUseTool(mockContext([MCP_SCOPES.nutritionWrite]), tool("get_workout_plans"))).toBe(false);
+    expect(canUseTool(mockContext([MCP_SCOPES.nutritionWrite]), tool("search_foods"))).toBe(true);
+    expect(canUseTool(mockContext([MCP_SCOPES.nutritionWrite]), tool("get_workout_adjustment_context"))).toBe(false);
   });
 });
 
@@ -152,6 +149,7 @@ describe("OAuth tool metadata and authentication challenges", () => {
   it("declares one canonical OAuth security scheme for every visible tool", () => {
     const payload = toolListPayload(mockContext([MCP_SCOPES.fullAccess]));
     expect(payload.tools.length).toBe(mcpTools.length);
+    expect(payload.catalogVersion).toBe(MCP_CATALOG_VERSION);
 
     for (const item of payload.tools) {
       const definition = tool(item.name);
@@ -160,6 +158,7 @@ describe("OAuth tool metadata and authentication challenges", () => {
       ]);
       expect(item.securitySchemes[0].scopes).not.toContain(MCP_SCOPES.admin);
       expect(item.securitySchemes[0].scopes).not.toContain(MCP_SCOPES.all);
+      expect(item.outputSchema).toEqual(definition.outputSchema);
     }
   });
 
@@ -185,7 +184,7 @@ describe("OAuth tool metadata and authentication challenges", () => {
         jsonrpc: "2.0",
         id: 2,
         method: "tools/call",
-        params: { name: "get_user_profile", arguments: {} }
+        params: { name: "get_progress_context", arguments: {} }
       })
     });
 
@@ -199,7 +198,7 @@ describe("OAuth tool metadata and authentication challenges", () => {
     const challenge = json.result._meta["mcp/www_authenticate"][0];
     expect(challenge).toContain('error="invalid_token"');
     expect(challenge).toContain('resource_metadata="https://plaivra.com/.well-known/oauth-protected-resource"');
-    expect(challenge).toContain(`scope="${MCP_SCOPES.profileRead}"`);
+    expect(challenge).toContain(`scope="${MCP_SCOPES.progressRead}"`);
   });
 
   it("removes legacy blanket scopes from public challenges", () => {

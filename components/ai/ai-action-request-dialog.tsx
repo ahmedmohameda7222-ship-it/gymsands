@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bot, CheckCircle2, Clipboard, ExternalLink, Loader2, ShieldCheck } from "lucide-react";
+import { Bot, ExternalLink, Loader2, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
-import { buildAiActionSummary, buildChatGptActionPrompt } from "@/components/ai/ai-action-summary";
+import { buildAiActionSummary } from "@/components/ai/ai-action-summary";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import type { AiActionType, AiPermissionSection } from "@/types";
@@ -22,8 +21,6 @@ export type AiActionOption = {
   label: string;
   description: string;
 };
-
-export { buildChatGptActionPrompt } from "@/components/ai/ai-action-summary";
 
 function inferPermissionSection(sourceType: string): AiPermissionSection {
   if (sourceType.includes("workout") || sourceType.includes("exercise") || sourceType.includes("plan_exercise")) return "workouts";
@@ -67,8 +64,6 @@ export function AiActionRequestDialog({
   const { user } = useAuth();
   const { toast } = useToast();
   const [selected, setSelected] = useState<AiActionOption | null>(null);
-  const [note, setNote] = useState("");
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [permissionConfig, setPermissionConfig] = useState<AiPermissionConfig | null>(null);
   const [isPermissionLoading, setIsPermissionLoading] = useState(true);
   const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
@@ -107,51 +102,25 @@ export function AiActionRequestDialog({
     [context, selected]
   );
 
-  const prompt = useMemo(
-    () => selected ? buildChatGptActionPrompt(selected.type, context, note) : "",
-    [context, note, selected]
-  );
-
   function openAction(action: AiActionOption, trigger: HTMLButtonElement) {
     lastTriggerRef.current = trigger;
     setSelected(action);
-    setNote("");
-    setCopyState("idle");
   }
 
   function closeDialog(open: boolean) {
     if (!open) {
       setSelected(null);
-      setCopyState("idle");
       window.setTimeout(() => lastTriggerRef.current?.focus(), 0);
     }
   }
 
-  async function copyPrompt() {
-    if (!prompt) return false;
-    try {
-      await navigator.clipboard.writeText(prompt);
-      setCopyState("copied");
-      toast({
-        title: "Prompt copied",
-        description: "Send it in ChatGPT. ChatGPT can read the authorized Plaivra context and use Plaivra tools directly."
-      });
-      return true;
-    } catch {
-      setCopyState("error");
-      toast({ title: "Could not copy the prompt", description: "Select the prompt below and copy it manually.", variant: "error" });
-      return false;
-    }
-  }
-
-  async function openChatGpt() {
-    const chatWindow = window.open("https://chatgpt.com/", "_blank");
+  function openChatGpt() {
+    const chatWindow = window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
     if (chatWindow) chatWindow.opener = null;
-    const copied = await copyPrompt();
     if (!chatWindow) {
       toast({
         title: "ChatGPT was blocked by the browser",
-        description: copied ? "The prompt is copied. Open ChatGPT in a new tab and paste it." : "Allow pop-ups, then try again.",
+        description: "Allow pop-ups, then try again.",
         variant: "error"
       });
     }
@@ -239,7 +208,7 @@ export function AiActionRequestDialog({
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
-              Plaivra prepares a route-aware prompt. ChatGPT then reads only the authorized context it needs and uses Plaivra tools for requested changes.
+              Open ChatGPT with Plaivra connected. ChatGPT reads only the authorized context needed and uses Plaivra tools for requested changes.
             </DialogDescription>
           </DialogHeader>
 
@@ -260,39 +229,16 @@ export function AiActionRequestDialog({
 
             {children}
 
-            <div className="space-y-2">
-              <Label htmlFor="chatgpt-action-note">Optional instruction</Label>
-              <textarea
-                id="chatgpt-action-note"
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                className="min-h-24 w-full rounded-[14px] border bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                placeholder="Add a preference, constraint, or detail"
-                maxLength={500}
-              />
-            </div>
-
             <div className="flex gap-3 rounded-[16px] border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <p>
-                ChatGPT receives no hidden local request record from this dialog. It uses your active Plaivra connection and the permissions saved for {sectionLabel}. Successful tool changes appear directly in Plaivra.
+                Use your active Plaivra connection and the permissions saved for {sectionLabel}. Successful tool changes appear directly in Plaivra, where you can track, edit, or correct them.
               </p>
             </div>
 
-            <details className="rounded-[16px] border border-border/70 bg-card p-3">
-              <summary className="cursor-pointer text-sm font-semibold">Preview prompt</summary>
-              <pre className="mt-3 whitespace-pre-wrap break-words text-xs leading-5 text-muted-foreground">{prompt}</pre>
-            </details>
-
-            {copyState === "copied" ? (
-              <p className="flex items-center gap-2 text-sm font-medium text-success"><CheckCircle2 className="h-4 w-4" /> Prompt copied.</p>
-            ) : null}
-            {copyState === "error" ? <p className="text-sm text-destructive">Copy failed. Use the prompt preview above.</p> : null}
-
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button type="button" variant="ghost" onClick={() => closeDialog(false)}>Cancel</Button>
-              <Button type="button" variant="outline" onClick={() => void copyPrompt()}><Clipboard className="h-4 w-4" /> Copy prompt</Button>
-              <Button type="button" onClick={() => void openChatGpt()}><ExternalLink className="h-4 w-4" /> Open ChatGPT</Button>
+              <Button type="button" onClick={openChatGpt}><ExternalLink className="h-4 w-4" /> Open ChatGPT</Button>
             </div>
           </div>
         </DialogContent>

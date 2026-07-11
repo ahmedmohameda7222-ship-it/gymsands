@@ -1,6 +1,8 @@
 node_modules
 .next
 out
+quality-reports/
+ruvector.db
 .env
 .env.local
 .env.development.local
@@ -23,6 +25,9 @@ netlify/.cache
 .claude-flow/
 .swarm/
 graphify-out/
+.ruflo/
+.ruvector/
+.codex-dev*.log
 # Environment variables
 .env
 .env.local

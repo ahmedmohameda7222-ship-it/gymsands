@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { jsonError, requireServerKeys, requireUser, serverEnv } from "@/lib/integrations/env";
+import { jsonError, requireEligibleUser, requireServerKeys, serverEnv } from "@/lib/integrations/env";
 import { sendResendEmail } from "@/lib/integrations/resend";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 
@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     ["RESEND_FROM_EMAIL", serverEnv.resendFromEmail]
   ]);
   if (missing) return missing;
-  const context = await requireUser(request);
+  const context = await requireEligibleUser(request);
   if (context instanceof NextResponse) return context;
 
   const body = await request.json().catch(() => ({}));

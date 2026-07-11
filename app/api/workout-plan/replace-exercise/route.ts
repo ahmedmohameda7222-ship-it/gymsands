@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { jsonError, requireUser } from "@/lib/integrations/env";
+import { jsonError, requireEligibleUser } from "@/lib/integrations/env";
 
 export async function POST(request: Request) {
-  const context = await requireUser(request);
+  const context = await requireEligibleUser(request);
   if (context instanceof NextResponse) return context;
 
   const body = await request.json().catch(() => ({}));

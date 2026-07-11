@@ -114,6 +114,8 @@ Server-only variables:
 - `PLAIVRA_MCP_BASE_URL`
 - `PLAIVRA_MCP_TOKEN_SECRET`
 - `PLAIVRA_CHATGPT_REDIRECT_URIS`
+- `PLAIVRA_CIMD_ALLOWED_ORIGINS`
+- `CRON_SECRET`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
 
@@ -121,7 +123,7 @@ Never commit real secrets or production tokens.
 
 ## Supabase migrations
 
-The production project currently uses the clean migration chain below. Applied migrations are immutable; future schema changes must be new migrations after the latest version.
+The production project currently reports the applied migration identities below. Applied migrations are immutable; future schema changes must be new migrations. The checked-in reconciliation authority, including version aliases, drift, and pending files, is [`supabase/migration-ledger.json`](supabase/migration-ledger.json) and [`docs/architecture/migration-ledger-reconciliation.md`](docs/architecture/migration-ledger-reconciliation.md).
 
 1. `202606290000_clean_initial_schema`
 2. `202606290001_security_privacy_mcp_hardening`
@@ -133,6 +135,10 @@ The production project currently uses the clean migration chain below. Applied m
 8. `20260702124724_fix_chatgpt_connection_rotation_ambiguous_columns`
 9. `20260702174951_chatgpt_execution_layer_foundation`
 10. `20260702181448_execution_layer_reference_ownership_hardening`
+11. `20260710140133_functional_fitness_constraints` (repository file: `20260710135000_functional_fitness_constraints.sql`)
+12. `20260710145503_drop_retired_ai_request_and_safety_tables` (repository file: `20260710170000_drop_retired_ai_request_and_safety_tables.sql`)
+
+The schema effects associated with `20260703151807_onboarding_coaching_quick_log_preferences.sql` exist in production but its version is absent from the production ledger. Do not repair or replay it without original application evidence. Run `npm run migration:ledger:check` for repository classification; it does not claim live production parity.
 
 Do not run pre-clean-rebuild migrations against the current project.
 
@@ -147,6 +153,10 @@ npm run build
 ```
 
 Run the exact scripts available in `package.json`; do not invent missing commands.
+
+## Release integrity
+
+Public launches require the reviewed commit to match the deployed commit, all repository quality gates to pass, a successful provider deployment, and post-deploy smoke evidence. See [`docs/release/README.md`](docs/release/README.md) for the version endpoint, release manifest, required gates, and release procedure.
 
 ## Safety and privacy
 

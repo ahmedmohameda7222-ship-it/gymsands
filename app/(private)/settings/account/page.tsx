@@ -12,6 +12,9 @@ import { useTranslation } from "@/lib/i18n/use-translation";
 import { useToast } from "@/components/ui/toaster";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { InlineFeedback } from "@/components/motion";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ACCOUNT_DELETION_CONFIRMATION, ACCOUNT_DELETION_IMPACT_VERSION } from "@/lib/privacy/deletion-contract";
 
 type PrivacyRequest = {
   id: string;
@@ -25,6 +28,17 @@ type PrivacyRequest = {
 type Feedback = {
   type: "info" | "error";
   message: string;
+};
+
+type DeletionJob = {
+  id: string;
+  state: string;
+  stage: string;
+  attempt_count: number;
+  next_attempt_at?: string | null;
+  last_error_code?: string | null;
+  notification_status?: string | null;
+  completed_at?: string | null;
 };
 
 function formatRequestDate(value: string | null | undefined) {
@@ -51,6 +65,14 @@ export default function AccountSettingsPage() {
   const [isRequestingDeletion, setIsRequestingDeletion] = useState(false);
   const [deletionFeedback, setDeletionFeedback] = useState<Feedback | null>(null);
   const [chatGptRevokeFeedback, setChatGptRevokeFeedback] = useState<Feedback | null>(null);
+  const [deletionJob, setDeletionJob] = useState<DeletionJob | null>(null);
+  const [deletionConfirmation, setDeletionConfirmation] = useState("");
+  const [deletionIdempotencyKey, setDeletionIdempotencyKey] = useState("");
+  const [needsRecentSignIn, setNeedsRecentSignIn] = useState(false);
+
+  useEffect(() => {
+    setDeletionIdempotencyKey(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`);
+  }, []);
 
   const loadPrivacyRequests = useCallback(async () => {
     setIsLoadingRequests(true);
@@ -70,6 +92,7 @@ export default function AccountSettingsPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error ?? "Privacy request status could not be loaded.");
       setPrivacyRequests(Array.isArray(data.requests) ? data.requests : []);
+      setDeletionJob(data.deletion_job ?? null);
     } catch (error) {
       setPrivacyRequests([]);
       setRequestLoadError(error instanceof Error ? error.message : "Privacy request status could not be loaded.");
@@ -105,11 +128,11 @@ export default function AccountSettingsPage() {
   }
 
   function requestDeletionConfirmation() {
-    if (hasActiveDeletionRequest) return;
+    if (hasActiveDeletionRequest || deletionConfirmation !== ACCOUNT_DELETION_CONFIRMATION) return;
     confirmAsk({
       title: "Submit account deletion request?",
       description:
-        "This creates a review request. Your account will not be deleted immediately. Plaivra may contact you if more verification is needed, and active ChatGPT access will be revoked when the request is submitted.",
+        "ChatGPT access is revoked immediately. After legal-hold checks, Plaivra disables access, deletes private storage, removes or anonymizes account data, and deletes the Auth account. This cannot be undone once processing begins.",
       confirmLabel: "Request deletion",
       variant: "destructive",
       onConfirm: () => void requestAccountDeletion()
@@ -131,12 +154,22 @@ export default function AccountSettingsPage() {
       const response = await fetch("/api/user/privacy-requests", {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ request_type: "deletion", message: "Submitted from Account settings." })
+        body: JSON.stringify({
+          request_type: "deletion",
+          confirmation: deletionConfirmation,
+          impact_version: ACCOUNT_DELETION_IMPACT_VERSION,
+          idempotency_key: deletionIdempotencyKey
+        })
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error ?? "The deletion request could not be submitted.");
+      if (!response.ok) {
+        if (data.code === "recent_reauthentication_required") setNeedsRecentSignIn(true);
+        throw new Error(data.error ?? "The deletion request could not be submitted.");
+      }
 
       await loadPrivacyRequests();
+      setDeletionJob(data.deletion_job ?? null);
+      setNeedsRecentSignIn(false);
       const message = data.already_exists
         ? "Deletion request is already pending. Plaivra will review it before account data is removed."
         : "Request submitted. Plaivra will review it before account data is removed.";
@@ -146,7 +179,7 @@ export default function AccountSettingsPage() {
           type: data.chatgpt_access_revoked ? "info" : "error",
           message: data.chatgpt_access_revoked
             ? "ChatGPT access revocation was requested as part of this deletion request."
-            : "Plaivra could not confirm ChatGPT access revocation. Review AI imports or contact support."
+            : "Plaivra could not confirm ChatGPT access revocation. Review ChatGPT connections or contact support."
         });
       }
       toast({
@@ -256,15 +289,19 @@ export default function AccountSettingsPage() {
             <Trash2 className="h-5 w-5" /> Delete account request
           </CardTitle>
           <CardDescription>
-            This is a request, not an immediate deletion. Review happens before removal, and verification may be needed.
+            Reauthentication, explicit impact acknowledgement, legal-hold checks, and a credential-gated deletion worker protect this irreversible process.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-2xl border bg-card p-3 text-sm leading-6 text-muted-foreground">
-            <p className="font-semibold text-foreground">Before you request deletion</p>
-            <p className="mt-1">
-              Plaivra will review the request before account data is removed. Active ChatGPT access will be revoked when deletion is requested.
-            </p>
+            <p className="font-semibold text-foreground">Deletion impact</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li>Active ChatGPT connections and OAuth tokens are revoked when the request is accepted.</li>
+              <li>Account access is disabled before private storage, database records, and the Auth account are removed.</li>
+              <li>Some operational evidence is minimized and retained only after the retention policy is owner/legal approved and configured.</li>
+              <li>An active legal hold pauses deletion without silently rejecting your request.</li>
+              <li>This cannot be reversed after deletion processing begins. Export your data first if you need a copy.</li>
+            </ul>
           </div>
 
           {isLoadingRequests ? (
@@ -302,6 +339,38 @@ export default function AccountSettingsPage() {
             </div>
           )}
 
+          {deletionJob ? (
+            <div className="rounded-xl border bg-muted/30 p-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold">Processing stage: {deletionJob.stage.replaceAll("_", " ")}</p>
+                <Badge variant={requestStatusVariant(deletionJob.state)}>{deletionJob.state.replaceAll("_", " ")}</Badge>
+              </div>
+              <p className="mt-2 text-muted-foreground">Attempts: {deletionJob.attempt_count}. {deletionJob.last_error_code ? `Safe error code: ${deletionJob.last_error_code}.` : "No processing error recorded."}</p>
+            </div>
+          ) : null}
+
+          {!hasActiveDeletionRequest ? (
+            <div className="space-y-2">
+              <Label htmlFor="delete-account-confirmation">Type {ACCOUNT_DELETION_CONFIRMATION} to confirm</Label>
+              <Input
+                id="delete-account-confirmation"
+                value={deletionConfirmation}
+                onChange={(event) => setDeletionConfirmation(event.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <p className="text-xs text-muted-foreground">A server-proven sign-in from the last 10 minutes is also required.</p>
+            </div>
+          ) : null}
+
+          {needsRecentSignIn ? (
+            <div className="rounded-xl border border-warning/40 bg-warning/5 p-3 text-sm">
+              <p className="font-semibold">Recent sign-in required</p>
+              <p className="mt-1 text-muted-foreground">Sign out, sign in again with your account provider, then return here and repeat the confirmation.</p>
+              <Button type="button" variant="outline" className="mt-3 min-h-12" onClick={() => void handleSignOut()}>Sign out to reauthenticate</Button>
+            </div>
+          ) : null}
+
           <InlineFeedback
             message={deletionFeedback?.message}
             variant={deletionFeedback?.type === "error" ? "error" : "info"}
@@ -315,7 +384,7 @@ export default function AccountSettingsPage() {
 
           <Button
             variant="destructive"
-            disabled={isRequestingDeletion || hasActiveDeletionRequest || isLoadingRequests}
+            disabled={isRequestingDeletion || hasActiveDeletionRequest || isLoadingRequests || deletionConfirmation !== ACCOUNT_DELETION_CONFIRMATION || !deletionIdempotencyKey}
             onClick={requestDeletionConfirmation}
             className="min-h-12 w-full sm:w-auto"
           >

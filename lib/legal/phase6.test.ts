@@ -21,8 +21,8 @@ function legalSource() {
   return legalFiles.map((file) => readFileSync(file, "utf8")).join("\n");
 }
 
-describe("Phase 6 legal pages", () => {
-  it("uses the supplied individual operator identity", () => {
+describe("pre-launch English legal surfaces", () => {
+  it("uses the supplied individual operator identity consistently", () => {
     expect(LEGAL_OPERATOR).toMatchObject({
       name: "Ahmed Mohamed",
       street: "Untere Himmelreichstraße 10",
@@ -35,42 +35,51 @@ describe("Phase 6 legal pages", () => {
     expect(TermsPage()).toBeTruthy();
   });
 
-  it("contains no research markers, placeholders, or invented organization details", () => {
+  it("contains no placeholders, invented organization details, or legal-approval claim", () => {
     const source = legalSource();
-    expect(source).not.toMatch(/cite|turn\d+(?:view|search)/i);
     expect(source).not.toMatch(/Plaivra\s+(?:GmbH|UG)|our company|our employees|our team|legal department/i);
-    expect(source).not.toMatch(/Data Protection Officer|Datenschutzbeauftrag|commercial register|Handelsregister|VAT ID|USt-Id/i);
-    expect(source).not.toMatch(/\[(?:Controller|Company|Legal name|Phone|VAT|Commercial register)/i);
+    expect(source).not.toMatch(/Data Protection Officer|commercial register|VAT ID|\[(?:Controller|Company|Legal name|Phone|VAT)/i);
+    expect(source).not.toMatch(/legally approved|approved by (?:counsel|a lawyer)/i);
+    expect(source).toContain("Professional legal and privacy review is required");
   });
 
-  it("explains sensitive data, ChatGPT permissions, revocation, redacted logs, and medical limits in plain language", () => {
+  it("provides full English Privacy and Terms rather than summaries", () => {
     const privacy = readFileSync("app/legal/privacy/page.tsx", "utf8");
     const terms = readFileSync("app/legal/terms/page.tsx", "utf8");
-    expect(privacy).toContain("ChatGPT-Verbindung und Berechtigungen");
-    expect(privacy).toContain("ohne passende Berechtigung wird eine Aktion abgelehnt");
-    expect(privacy).not.toContain("MCP");
-    expect(privacy).toContain("keine rohen Prompts");
-    expect(privacy).toContain("besonders schutzbedürftig");
-    expect(terms).toContain("kein Medizinprodukt");
-    expect(terms).toContain("Prompt-Injection");
+    expect(privacy).not.toContain("English summary");
+    expect(terms).not.toContain("English summary");
+    for (const required of [
+      "Data categories", "Purposes and legal bases", "Optional ChatGPT and Plaivra tools",
+      "Recipients and processors", "International transfers", "Retention",
+      "Export and account deletion", "Cookies, local storage, and analytics", "Age eligibility"
+    ]) expect(privacy).toContain(required);
+    for (const required of [
+      "Eligibility and accounts", "ChatGPT connection and authorization", "Health and medical limits",
+      "Acceptable use", "Paid plans, cancellation, and refunds", "Liability", "Governing law and disputes"
+    ]) expect(terms).toContain(required);
+    expect(privacy).toContain("does not add a generic second approval/import queue");
+    expect(privacy).toContain("Concrete periods have not yet been owner/legal approved");
+    expect(terms).toContain("No paid public plan, price, subscription capability, or checkout is represented as active");
   });
 
-  it("records separate current versions for terms, privacy, fitness data, health notice, and age", () => {
-    expect(REQUIRED_CONSENTS).toHaveLength(5);
-    expect(REQUIRED_CONSENTS.every((item) => item.version === "2026-07-02")).toBe(true);
-    expect(REQUIRED_CONSENTS.map((item) => item.consent_type)).toContain("age_16");
-
-    const migration = readFileSync("supabase/migrations/20260702062000_phase6_consent_types.sql", "utf8");
-    expect(migration).toContain("'age_16'");
-    expect(migration).toContain("'chatgpt_connection'");
-    expect(migration).toContain("'age_18'");
+  it("records material document versions without rewriting prior consent evidence", () => {
+    expect(REQUIRED_CONSENTS).toEqual([
+      { consent_type: "terms", version: "2026-07-11" },
+      { consent_type: "privacy", version: "2026-07-11" },
+      { consent_type: "fitness_data", version: "2026-07-11" },
+      { consent_type: "health_disclaimer", version: "2026-07-11" },
+      { consent_type: "age_16", version: "2026-07-02" }
+    ]);
+    const migration = readFileSync("supabase/migrations/20260711001950_legal_document_version_2026_07_11.sql", "utf8");
+    expect(migration).toContain("professional_legal_review_required");
+    expect(migration).toContain("Prior versions remain immutable evidence");
+    expect(migration).not.toMatch(/delete\s+from\s+public\.user_consents/i);
   });
 });
 
-describe("Phase 6 authenticated privacy foundations", () => {
+describe("authenticated privacy foundations", () => {
   it("requires authentication for data export and privacy-request reads/writes", async () => {
-    const request = new Request("https://plaivra.com/api/user/data-export");
-    expect((await getDataExport(request)).status).toBe(401);
+    expect((await getDataExport(new Request("https://plaivra.com/api/user/data-export"))).status).toBe(401);
     expect((await getPrivacyRequests(new Request("https://plaivra.com/api/user/privacy-requests"))).status).toBe(401);
     expect((await createPrivacyRequest(new Request("https://plaivra.com/api/user/privacy-requests", {
       method: "POST",
@@ -79,7 +88,7 @@ describe("Phase 6 authenticated privacy foundations", () => {
     }))).status).toBe(401);
   });
 
-  it("exports only explicit connection metadata and never queries token/code tables or raw audit input", () => {
+  it("exports explicit metadata and never queries secret token/code fields", () => {
     const source = readFileSync("lib/privacy/data-export.ts", "utf8");
     expect(source).toContain("id,label,scopes,is_active,last_used_at,revoked_at,created_at,updated_at");
     expect(source).toContain('.eq("user_id", user.id)');
@@ -91,7 +100,7 @@ describe("Phase 6 authenticated privacy foundations", () => {
     expect(source).not.toContain('select("input');
   });
 
-  it("requires app confirmation and no-delete copy for privacy settings reset", () => {
+  it("requires app confirmation and no-delete copy for settings reset", () => {
     const source = readFileSync("app/(private)/settings/data-privacy/page.tsx", "utf8");
     expect(source).toContain("useConfirm");
     expect(source).not.toContain("window.confirm");

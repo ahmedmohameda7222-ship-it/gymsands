@@ -26,6 +26,9 @@ jobs:
       PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
       PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
       PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+      PLAIVRA_COMMIT_SHA: ${{ github.sha }}
+      PLAIVRA_RELEASE_ENVIRONMENT: ci
+      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
 
     steps:
       - name: Checkout
@@ -39,6 +42,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Capture build timestamp
+        shell: bash
+        run: echo "PLAIVRA_BUILD_TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
 
       - name: Run all quality checks
         shell: bash
@@ -108,14 +115,28 @@ jobs:
           npm run lint 2>&1 | tee quality-reports/lint.log
           echo "${PIPESTATUS[0]}" > quality-reports/lint.exit
 
+          npm run migration:ledger:check 2>&1 | tee quality-reports/migration-ledger.log
+          echo "${PIPESTATUS[0]}" > quality-reports/migration-ledger.exit
+
+          npm audit --omit=dev --audit-level=high 2>&1 | tee quality-reports/dependency-audit.log
+          echo "${PIPESTATUS[0]}" > quality-reports/dependency-audit.exit
+
           npm run typecheck 2>&1 | tee quality-reports/typecheck.log
           echo "${PIPESTATUS[0]}" > quality-reports/typecheck.exit
 
-          npm test 2>&1 | tee quality-reports/test.log
-          echo "${PIPESTATUS[0]}" > quality-reports/test.exit
+          npm run test:unit 2>&1 | tee quality-reports/unit.log
+          echo "${PIPESTATUS[0]}" > quality-reports/unit.exit
+
+          npm run test:integration 2>&1 | tee quality-reports/integration.log
+          echo "${PIPESTATUS[0]}" > quality-reports/integration.exit
 
           NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build 2>&1 | tee quality-reports/build.log
           echo "${PIPESTATUS[0]}" > quality-reports/build.exit
+
+          npm run release:manifest -- \
+            --output quality-reports/release-manifest.json \
+            --quality-reports quality-reports 2>&1 | tee quality-reports/manifest.log
+          echo "${PIPESTATUS[0]}" > quality-reports/manifest.exit
 
           exit 0
 
@@ -134,7 +155,7 @@ jobs:
         run: |
           set -euo pipefail
           failed=0
-          for check in integrity lint typecheck test build; do
+          for check in integrity lint migration-ledger dependency-audit typecheck unit integration build manifest; do
             code="$(cat "quality-reports/${check}.exit")"
             echo "${check}: exit ${code}"
             if [ "$code" != "0" ]; then

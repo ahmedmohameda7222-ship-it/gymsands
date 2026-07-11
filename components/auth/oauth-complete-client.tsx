@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { hasRequiredConsents } from "@/services/database/consents";
 import { PENDING_CONSENTS_STORAGE_KEY, REQUIRED_CONSENTS } from "@/lib/legal/versions";
+import { PENDING_ELIGIBILITY_STORAGE_KEY, launchAgeSchema } from "@/lib/auth/eligibility";
 import { safeInternalRedirectPath } from "@/lib/auth/redirect";
 
 const OAUTH_MODE_KEY = "plaivra.oauth.mode";
@@ -14,6 +15,8 @@ const OAUTH_NEXT_KEY = "plaivra.oauth.next";
 async function savePendingConsents(accessToken: string) {
   const pending = window.localStorage.getItem(PENDING_CONSENTS_STORAGE_KEY);
   if (!pending) return { saved: true };
+  const age = launchAgeSchema.safeParse(Number(window.localStorage.getItem(PENDING_ELIGIBILITY_STORAGE_KEY)));
+  if (!age.success) return { saved: false };
 
   const response = await fetch("/api/user/consents", {
     method: "POST",
@@ -22,6 +25,7 @@ async function savePendingConsents(accessToken: string) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
+      declared_age: age.data,
       consents: REQUIRED_CONSENTS.map((item) => ({ ...item, granted: true }))
     })
   });
@@ -73,8 +77,13 @@ export function OAuthCompleteClient() {
         // Register mode: pending consents must exist; try to save them
         if (mode === "register" && pendingExists) {
           try {
-            await savePendingConsents(session.access_token);
+            const saved = await savePendingConsents(session.access_token);
+            if (!saved.saved) {
+              if (mounted) router.replace(`/auth/consent-completion?next=${encodeURIComponent(safeNext)}`);
+              return;
+            }
             window.localStorage.removeItem(PENDING_CONSENTS_STORAGE_KEY);
+            window.localStorage.removeItem(PENDING_ELIGIBILITY_STORAGE_KEY);
           } catch (saveError) {
             console.warn("Plaivra consent save failed after Google OAuth:", saveError);
             // Keep pending consents in localStorage for retry

@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { authenticateMcpRequest, type McpContext } from "@/lib/mcp/auth";
 import { hasAnyScope, hasScope, MCP_SCOPES } from "@/lib/mcp/scopes";
 import { executeMcpTool, type McpToolResult } from "@/lib/mcp/tool-executor-safe";
-import { mcpTools, type McpToolDefinition } from "@/lib/mcp/tools";
+import { MCP_CATALOG_VERSION, MCP_IDEMPOTENT_WRITE_TOOL_NAMES, mcpTools, type McpToolDefinition } from "@/lib/mcp/tools";
 import { serverEnv } from "@/lib/integrations/env";
 import { redactMcpAuditInput } from "@/lib/mcp/audit";
-import { sanitizeMcpToolResult, validateMcpToolInput } from "@/lib/mcp/safety";
+import { sanitizeMcpToolResult, validateMcpToolInput, validateMcpToolOutput } from "@/lib/mcp/safety";
+import { executeIdempotentMcpMutation } from "@/lib/mcp/idempotency";
 
 type JsonRpcRequest = {
   jsonrpc?: string;
@@ -46,11 +47,13 @@ const MCP_SERVER_INSTRUCTIONS = [
 
 export function toolListPayload(ctx: McpContext) {
   return {
+    catalogVersion: MCP_CATALOG_VERSION,
     tools: mcpTools.filter((tool) => canUseTool(ctx, tool)).map((tool) => ({
       name: tool.name,
       title: tool.title,
       description: tool.description,
       inputSchema: tool.inputSchema,
+      ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
       securitySchemes: [{ type: "oauth2" as const, scopes: oauthSecurityScopesForTool(tool) }],
       annotations: tool.annotations
     }))
@@ -194,6 +197,17 @@ const settingsWriteTools = new Set(["update_calorie_target", "update_water_targe
 export function requiredScopesForTool(tool: McpToolDefinition): string[] {
   const name = tool.name;
 
+  if (name === "get_training_planning_context" || name === "get_workout_adjustment_context") {
+    return [MCP_SCOPES.profileRead, MCP_SCOPES.workoutsRead];
+  }
+  if (name === "get_nutrition_planning_context") {
+    return [MCP_SCOPES.profileRead, MCP_SCOPES.nutritionRead];
+  }
+  if (name === "get_daily_execution_context") {
+    return [MCP_SCOPES.workoutsRead, MCP_SCOPES.nutritionRead, MCP_SCOPES.mealPlansRead, MCP_SCOPES.hydrationRead, MCP_SCOPES.wellnessRead];
+  }
+  if (name === "get_progress_context") return [MCP_SCOPES.progressRead];
+
   if (profileReadTools.has(name)) return [MCP_SCOPES.profileRead];
   if (profileWriteTools.has(name)) return [MCP_SCOPES.profileWrite];
   if (nutritionReadTools.has(name)) return [MCP_SCOPES.nutritionRead];
@@ -227,7 +241,7 @@ export function canUseTool(ctx: McpContext, tool: McpToolDefinition) {
   const requiredScopes = requiredScopesForTool(tool);
   if (!requiredScopes.length) return false;
 
-  if (tool.name === "get_progress_summary") {
+  if (["get_progress_summary", "get_training_planning_context", "get_nutrition_planning_context", "get_workout_adjustment_context"].includes(tool.name)) {
     return mcpHasAllScopes(ctx, requiredScopes);
   }
 
@@ -315,7 +329,7 @@ export async function handleMcpGet(request: Request) {
   if (auth instanceof NextResponse) return auth;
 
   return NextResponse.json(
-    { name: "Plaivra MCP", version: "1.0.0", transport: "http-json-rpc", instructions: MCP_SERVER_INSTRUCTIONS, ...toolListPayload(auth) },
+    { name: "Plaivra MCP", version: MCP_CATALOG_VERSION, transport: "http-json-rpc", instructions: MCP_SERVER_INSTRUCTIONS, ...toolListPayload(auth) },
     { headers: corsHeaders(request) }
   );
 }
@@ -331,7 +345,7 @@ export async function handleMcpPost(request: Request) {
   if (body.method === "initialize") {
     return rpcResult(
       body.id,
-      { protocolVersion: "2024-11-05", serverInfo: { name: "Plaivra", version: "1.0.0" }, capabilities: { tools: {} }, instructions: MCP_SERVER_INSTRUCTIONS },
+      { protocolVersion: "2024-11-05", serverInfo: { name: "Plaivra", version: MCP_CATALOG_VERSION }, capabilities: { tools: {} }, instructions: MCP_SERVER_INSTRUCTIONS },
       request
     );
   }
@@ -381,7 +395,50 @@ export async function handleMcpPost(request: Request) {
       return rpcResult(body.id, result, request);
     }
 
-    const result = sanitizeMcpToolResult(await executeMcpTool(auth, toolName, validation.value));
+    const execute = async () => {
+      try {
+        const safeResult = sanitizeMcpToolResult(await executeMcpTool(auth, toolName, validation.value), tool.outputSchema);
+        if (!tool.annotations.readOnlyHint && !safeResult.isError) {
+          safeResult.structuredContent = {
+            ...safeResult.structuredContent,
+            catalog_version: MCP_CATALOG_VERSION,
+            affected_at: new Date().toISOString(),
+            next_step_hint: tool.annotations.destructiveHint
+              ? "Refresh related Plaivra views and verify the intended record is no longer present."
+              : "Review the affected record in Plaivra; use its stable ID if a correction is needed."
+          };
+          safeResult.content = [{ type: "text", text: JSON.stringify(safeResult.structuredContent) }];
+        }
+        return safeResult;
+      } catch (error) {
+        console.error(`Plaivra MCP tool execution failed for ${toolName}:`, error instanceof Error ? error.message : "Unknown error");
+        return {
+          isError: true,
+          structuredContent: {
+            ok: false,
+            code: "tool_execution_failed",
+            message: "Plaivra could not complete this tool. No change should be assumed; retry or review the affected record in Plaivra."
+          },
+          content: [{ type: "text" as const, text: "Plaivra could not complete this tool. No change should be assumed; retry or review the affected record in Plaivra." }]
+        };
+      }
+    };
+    let result = MCP_IDEMPOTENT_WRITE_TOOL_NAMES.has(toolName)
+      ? await executeIdempotentMcpMutation({ ctx: auth, toolName, input: validation.value, execute })
+      : await execute();
+    const outputValidation = validateMcpToolOutput(tool, result);
+    if (!outputValidation.success) {
+      console.error(`Plaivra MCP output contract failed for ${toolName}:`, outputValidation.errors.join(" "));
+      result = {
+        isError: true,
+        structuredContent: {
+          ok: false,
+          code: "output_contract_violation",
+          message: "Plaivra could not safely return this tool result. No changes should be assumed; retry or review the affected record in Plaivra."
+        },
+        content: [{ type: "text", text: "Plaivra could not safely return this tool result. No changes should be assumed; retry or review the affected record in Plaivra." }]
+      };
+    }
     await auditToolCall(auth, toolName, body.params?.arguments ?? {}, result);
     return rpcResult(body.id, result, request);
   }

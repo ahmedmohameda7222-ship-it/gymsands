@@ -30,12 +30,7 @@ export function PublicNav() {
         </nav>
         <div className="flex min-w-0 items-center justify-end gap-1 sm:gap-2">
           <LanguageSwitcher className="hidden md:inline-flex" />
-          <Button asChild variant="ghost" className="min-h-12 px-2 text-xs sm:hidden">
-            <Link href="/legal/privacy">{copy.privacy}</Link>
-          </Button>
-          <Button asChild variant="ghost" className="min-h-12 px-2 text-xs sm:hidden">
-            <Link href="/login">{copy.login}</Link>
-          </Button>
+          <LanguageSwitcher className="md:hidden" />
           <Button asChild className="min-h-12 px-3 text-xs sm:text-sm">
             <Link href="/register">{copy.createAccount}</Link>
           </Button>

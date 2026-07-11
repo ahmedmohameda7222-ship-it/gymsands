@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/integrations/env";
+import { requireEligibleUser } from "@/lib/integrations/env";
 import { handleOAuthAuthorize, handleOAuthAuthorizeDecision } from "@/lib/mcp/oauth";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const context = await requireUser(request);
+  const context = await requireEligibleUser(request);
   if (context instanceof NextResponse) return context;
   return handleOAuthAuthorizeDecision(request, context.user.id);
 }

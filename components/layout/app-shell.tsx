@@ -7,7 +7,6 @@ import { motion } from "framer-motion";
 import {
   BarChart3,
   BedDouble,
-  CalendarCheck,
   ChefHat,
   CheckSquare,
   ClipboardList,
@@ -45,12 +44,18 @@ type NavItem = {
   exact?: boolean;
 };
 
-const navGroups: { labelKey: TranslationKey; items: NavItem[] }[] = [
-  { labelKey: "nav.today", items: [{ href: "/dashboard", labelKey: "nav.today", icon: Home }] },
+const primaryNavItems: NavItem[] = [
+  { href: "/dashboard", labelKey: "nav.today", icon: Home, activePaths: ["/dashboard"] },
+  { href: "/my-workout/plans", labelKey: "nav.train", icon: Dumbbell, activePaths: ["/today-workout", "/my-workout", "/workouts", "/workout-history"] },
+  { href: "/calories", labelKey: "nav.eat", icon: Utensils, activePaths: ["/calories", "/my-meal-plan"] },
+  { href: "/progress", labelKey: "nav.progress", icon: BarChart3, activePaths: ["/progress", "/personal-records"] },
+  { href: "/settings", labelKey: "nav.settings", icon: Settings, activePaths: ["/settings", "/profile"] }
+];
+
+const secondaryNavGroups: { labelKey: TranslationKey; items: NavItem[] }[] = [
   {
     labelKey: "nav.train",
     items: [
-      { href: "/my-workout/plans", labelKey: "nav.workoutPlans", icon: CalendarCheck, activePaths: ["/my-workout/plans", "/today-workout", "/workouts/session"] },
       { href: "/workouts", labelKey: "nav.exerciseLibrary", icon: Dumbbell },
       { href: "/workout-history", labelKey: "nav.workoutHistory", icon: History }
     ]
@@ -58,55 +63,25 @@ const navGroups: { labelKey: TranslationKey; items: NavItem[] }[] = [
   {
     labelKey: "nav.eat",
     items: [
-      { href: "/calories", labelKey: "nav.foodLog", icon: Utensils, activePaths: ["/calories"], exact: true },
       { href: "/calories/food-hub", labelKey: "nav.foodHub", icon: ChefHat },
       { href: "/my-meal-plan", labelKey: "nav.mealPlan", icon: ClipboardList },
       { href: "/calories/weekly-overview", labelKey: "nav.nutritionSummary", icon: Soup }
     ]
   },
   {
-    labelKey: "nav.progress",
-    items: [
-      { href: "/progress", labelKey: "nav.progress", icon: BarChart3 },
-      { href: "/personal-records", labelKey: "nav.personalRecords", icon: Trophy }
-    ]
+    labelKey: "nav.wellness",
+    items: [{ href: "/wellness", labelKey: "nav.wellnessDashboard", icon: CheckSquare }]
   },
   {
-    labelKey: "nav.wellness",
-    items: [
-      { href: "/wellness", labelKey: "nav.wellnessDashboard", icon: CheckSquare },
-      { href: "/hydration", labelKey: "nav.hydration", icon: Droplets },
-      { href: "/habits", labelKey: "nav.habits", icon: CalendarCheck },
-      { href: "/sleep-recovery", labelKey: "nav.sleepRecovery", icon: BedDouble },
-      { href: "/supplements", labelKey: "nav.supplements", icon: Pill },
-      { href: "/daily-fit-tasks", labelKey: "nav.dailyFitTasks", icon: CheckSquare }
-    ]
-  },
-  { labelKey: "nav.settings", items: [{ href: "/settings", labelKey: "nav.settings", icon: Settings, activePaths: ["/settings", "/profile"] }] }
+    labelKey: "nav.progress",
+    items: [{ href: "/personal-records", labelKey: "nav.personalRecords", icon: Trophy }]
+  }
 ];
 
-const mobilePrimaryItems: NavItem[] = [
-  { href: "/dashboard", labelKey: "nav.today", icon: Home, activePaths: ["/dashboard"] },
-  { href: "/my-workout/plans", labelKey: "nav.train", icon: Dumbbell, activePaths: ["/today-workout", "/my-workout", "/workouts", "/workout-history"] },
-  { href: "/calories", labelKey: "nav.eat", icon: Utensils, activePaths: ["/calories", "/my-meal-plan"] }
-];
+const mobilePrimaryItems = primaryNavItems;
 
 const adminItems: NavItem[] = [
   { href: "/admin", labelKey: "settings.accountSession", icon: Shield }
-];
-
-const moreActivePaths = [
-  "/progress",
-  "/personal-records",
-  "/wellness",
-  "/hydration",
-  "/habits",
-  "/sleep-recovery",
-  "/supplements",
-  "/daily-fit-tasks",
-  "/settings",
-  "/profile",
-  "/admin"
 ];
 
 const quickLogItems: (NavItem & { id: QuickLogSection })[] = [
@@ -126,10 +101,6 @@ function isActivePath(pathname: string, item: NavItem) {
     return paths.some((path) => pathname === path);
   }
   return paths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
-}
-
-function isMoreActive(pathname: string) {
-  return moreActivePaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -181,8 +152,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex h-20 items-center px-6">
           <Brand href="/dashboard" />
         </div>
-        <nav className="flex-1 space-y-5 overflow-y-auto px-4 pb-4" aria-label="Main navigation">
-          {navGroups.map((group) => (
+        <nav className="flex-1 space-y-6 overflow-y-auto px-4 pb-4" aria-label="Main navigation">
+          <div>
+            <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Primary</p>
+            <div className="space-y-1">
+              {primaryNavItems.map((item) => <SidebarLink key={item.href} item={item} active={isActivePath(pathname, item)} />)}
+            </div>
+          </div>
+          {secondaryNavGroups.map((group) => (
             <div key={group.labelKey}>
               <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t(group.labelKey)}</p>
               <div className="space-y-1">
@@ -236,21 +213,20 @@ export function AppShell({ children }: { children: ReactNode }) {
         </motion.div>
       </main>
       <ActiveWorkoutIndicator />
-      <MobilePrimaryNav pathname={pathname} isAdmin={isAdmin} signOut={signOut} />
+      <MobilePrimaryNav pathname={pathname} />
     </div>
   );
 }
 
-function MobilePrimaryNav({ pathname, isAdmin, signOut }: { pathname: string; isAdmin: boolean; signOut: () => Promise<void> }) {
+function MobilePrimaryNav({ pathname }: { pathname: string }) {
   return (
     <div className="fixed inset-x-0 bottom-0 z-[80] isolate lg:hidden">
       {/* Mobile overlay policy: active workout z70, bottom nav z80, Quick Log FAB z90, dialogs z100+. */}
       <QuickLogSheet />
-      <nav className="glass-shell grid grid-cols-4 !rounded-none border-x-0 border-b-0 !bg-card px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-1" aria-label="Primary mobile navigation">
+      <nav className="glass-shell grid grid-cols-5 !rounded-none border-x-0 border-b-0 !bg-card px-1 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-1" aria-label="Primary mobile navigation">
         {mobilePrimaryItems.map((item) => (
           <MobileNavLink key={item.href} item={item} active={isActivePath(pathname, item)} />
         ))}
-        <MobileMenu pathname={pathname} isAdmin={isAdmin} signOut={signOut} asNavItem active={isMoreActive(pathname)} />
       </nav>
     </div>
   );
@@ -326,15 +302,11 @@ function QuickLogSheet() {
 function MobileMenu({
   pathname,
   isAdmin,
-  signOut,
-  asNavItem = false,
-  active = false
+  signOut
 }: {
   pathname: string;
   isAdmin: boolean;
   signOut: () => Promise<void>;
-  asNavItem?: boolean;
-  active?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
@@ -347,23 +319,9 @@ function MobileMenu({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        {asNavItem ? (
-          <button
-            type="button"
-            aria-label={t("nav.more")}
-            className={cn(
-            "flex min-h-14 flex-col items-center justify-center gap-1 border-t-2 px-1 text-[11px] font-bold leading-[14px] transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-              active ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-primary"
-            )}
-          >
-            <Settings className="h-5 w-5" />
-            <span>{t("nav.more")}</span>
-          </button>
-        ) : (
-          <Button variant="outline" size="icon" className="h-12 w-12" aria-label={t("nav.more")}>
-            <Menu className="h-5 w-5" />
-          </Button>
-        )}
+        <Button variant="outline" size="icon" className="h-12 w-12" aria-label={t("nav.more")}>
+          <Menu className="h-5 w-5" />
+        </Button>
       </DialogTrigger>
       <DialogContent
         variant="glass"
@@ -377,9 +335,8 @@ function MobileMenu({
         </DialogHeader>
         <div className="h-[calc(100dvh-4.5rem)] overflow-y-auto px-4 py-4">
           <div className="space-y-4">
-            {navGroups.map((group) => {
-              const visibleInMore = group.labelKey === "nav.today" ? group.items.slice(0, 0) : group.items;
-              if (visibleInMore.length === 0) return null;
+            {secondaryNavGroups.map((group) => {
+              const visibleInMore = group.items;
               return (
                 <div key={group.labelKey}>
                   <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t(group.labelKey)}</p>

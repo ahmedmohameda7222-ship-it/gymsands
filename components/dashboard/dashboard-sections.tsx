@@ -17,7 +17,7 @@ export const defaultShortcutKeys = ["workout", "calories", "meal-plan", "water",
 
 export function getDashboardShortcuts(todayPlanDayId: string | null) {
   return [
-    { key: "workout", label: todayPlanDayId ? "Start Workout" : "Import Workout Plan", shortLabel: "Workout", href: todayPlanDayId ? `/workouts/session/day/${todayPlanDayId}` : "/my-workout/plans", icon: Activity },
+    { key: "workout", label: todayPlanDayId ? "Start Workout" : "Create Workout Plan", shortLabel: "Workout", href: todayPlanDayId ? `/workouts/session/day/${todayPlanDayId}` : "/my-workout/plans", icon: Activity },
     { key: "calories", label: "Log Food", shortLabel: "Food", href: "/calories", icon: Utensils },
     { key: "meal-plan", label: "Meal Plan", shortLabel: "Meals", href: "/my-meal-plan", icon: Soup },
     { key: "water", label: "Add Water", shortLabel: "Water", href: "/hydration", icon: Droplets },
@@ -100,7 +100,7 @@ export function buildNextBestActions({
   if (!completedToday && todayPlanDayId) {
     actions.push({ label: "Workout", title: openSessionId ? "Resume today's workout" : "Start today's workout", reason: "Your active imported workout plan has a scheduled training day today.", cta: openSessionId ? "Resume workout" : "Start workout", href: `/workouts/session/day/${todayPlanDayId}`, priority: 82 });
   } else if (!activePlanId) {
-    actions.push({ label: "Workout", title: "Import a workout plan", reason: "No active workout plan is saved, so the app cannot recommend a scheduled workout.", cta: "Import plan", href: "/my-workout/plans", priority: 78 });
+    actions.push({ label: "Workout", title: "Create a workout plan", reason: "No active workout plan is saved, so the app cannot show a scheduled workout.", cta: "Create plan", href: "/my-workout/plans", priority: 78 });
   }
 
   if (!sleepLoggedToday) {

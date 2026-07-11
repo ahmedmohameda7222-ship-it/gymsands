@@ -554,7 +554,7 @@ export function CustomNutritionManager({
       {confirmDialog}
       <div className="rounded-md border border-border/70 bg-card/80 p-4 text-sm text-muted-foreground">
         <p className="font-semibold text-foreground">Builder for manual corrections and reusable foods</p>
-        <p className="mt-1 leading-6">Use this when ChatGPT/import needs correction, when you want a reusable custom food, or when you want a saved meal for quick repeat logging.</p>
+        <p className="mt-1 leading-6">Use this to correct a ChatGPT tool result, create a reusable custom food, or save a meal for quick repeat logging.</p>
         {loadWarning ? (
           <p className="mt-2 flex gap-2 text-warning">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />

@@ -102,7 +102,7 @@ export default function DataPrivacyPage() {
     }
 
     setIsDownloadingExport(true);
-    setExportStatus({ type: "info", message: "Preparing your private CSV export..." });
+    setExportStatus({ type: "info", message: "Preparing your private portable archive..." });
     try {
       const response = await fetch("/api/user/data-export", {
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -116,14 +116,14 @@ export default function DataPrivacyPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `plaivra-data-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = `plaivra-data-export-${new Date().toISOString().slice(0, 10)}.zip`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      const message = "CSV downloaded to this device. Treat it like a private health and account record.";
+      const message = "ZIP archive downloaded. It contains JSON, CSV files, a manifest, and a private storage-object manifest.";
       setExportStatus({ type: "info", message });
-      toast({ title: "CSV export ready", description: message });
+      toast({ title: "Data archive ready", description: message });
     } catch (downloadError) {
       const message = downloadError instanceof Error ? downloadError.message : "Please try again.";
       setExportStatus({ type: "error", message: `Export failed. No file was downloaded. ${message}` });
@@ -254,7 +254,7 @@ export default function DataPrivacyPage() {
         <CardHeader>
           <CardTitle className="text-base">Export Plaivra data</CardTitle>
           <CardDescription>
-            Export CSV includes account, app settings, AI permissions, workouts, nutrition, hydration, progress, wellness, and redacted ChatGPT activity where available.
+            The portable ZIP includes canonical account data as JSON and CSV, plus a manifest of private storage objects. It excludes credentials, OAuth tokens, and internal security telemetry.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -263,13 +263,13 @@ export default function DataPrivacyPage() {
               <Download className="h-5 w-5" />
             </span>
             <div className="min-w-0 space-y-2">
-              <p className="font-semibold text-foreground">Private CSV download</p>
+              <p className="font-semibold text-foreground">Private portable archive</p>
               <p className="text-sm leading-6 text-muted-foreground">
                 This file is saved locally by your browser. Anyone with access to the downloaded file may be able to read sensitive health, nutrition, workout, and account data.
               </p>
               <Button variant="outline" disabled={isDownloadingExport} onClick={() => void downloadDataExport()} className="min-h-12 w-full sm:w-auto">
                 {isDownloadingExport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                {isDownloadingExport ? "Preparing..." : exportStatus?.type === "error" ? "Retry export CSV" : "Export CSV"}
+                {isDownloadingExport ? "Preparing..." : exportStatus?.type === "error" ? "Retry data export" : "Export data ZIP"}
               </Button>
             </div>
           </div>

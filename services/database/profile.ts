@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase/client";
 import { env } from "@/lib/env";
 import { isUuid } from "@/lib/utils";
+import { launchAgeSchema } from "@/lib/auth/eligibility";
 import type { OnboardingAnswers, Profile } from "@/types";
 
 type ProfilePatch = {
@@ -37,7 +38,10 @@ const onboardingAnswerColumns = new Set([
   "food_preferences",
   "lifestyle_notes",
   "workout_constraints",
-  "coaching_notes"
+  "coaching_notes",
+  "setup_stage",
+  "first_useful_job",
+  "completed_at"
 ]);
 
 function canUseUserData(userId: string | null | undefined) {
@@ -62,12 +66,15 @@ function ageToRange(age: number | null | undefined) {
 }
 
 export function buildOnboardingAnswersPayload(answers: OnboardingAnswers) {
+  const age = launchAgeSchema.safeParse(answers.age);
+  if (!age.success) throw new Error(age.message);
   const payload: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(answers)) {
     if (value === undefined || !onboardingAnswerColumns.has(key)) continue;
     payload[key] = value;
   }
+  payload.age = age.data;
 
   if (!payload.age_range) {
     const derivedAgeRange = ageToRange(answers.age);
@@ -103,7 +110,10 @@ function mockOnboarding(userId: string): OnboardingAnswers {
     food_preferences: null,
     lifestyle_notes: null,
     workout_constraints: null,
-    coaching_notes: null
+    coaching_notes: null,
+    setup_stage: 0,
+    first_useful_job: "training_plan",
+    completed_at: null
   };
 }
 
@@ -160,7 +170,10 @@ export async function saveOnboarding(answers: OnboardingAnswers) {
     "food_preferences",
     "lifestyle_notes",
     "workout_constraints",
-    "coaching_notes"
+    "coaching_notes",
+    "setup_stage",
+    "first_useful_job",
+    "completed_at"
   ];
   const lowerErrorMessage = error?.message.toLowerCase() ?? "";
   if (error && optionalColumns.some((column) => lowerErrorMessage.includes(column))) {

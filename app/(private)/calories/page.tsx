@@ -9,7 +9,6 @@ import { PageHeading } from "@/components/layout/page-heading";
 import { FoodLogList } from "@/components/meals/food-log-list";
 import { ApiFoodTools } from "@/components/meals/api-food-tools";
 import { RecentFoodStrip } from "@/components/meals/recent-food-strip";
-import { ChatGptMealImportReview } from "@/components/meals/chatgpt-meal-import-review";
 import {
   NutritionCoachCard,
   SavedTarget,
@@ -334,7 +333,7 @@ export default function CaloriesPage() {
     <>
       <PageHeading
         title="Nutrition Tracker"
-        description={`Review ChatGPT meal estimates, track food and water, and keep manual controls available for corrections on ${formatDay(selectedDate)}.`}
+        description={`Track food and water, see successful ChatGPT tool logs, and keep direct controls available for corrections on ${formatDay(selectedDate)}.`}
         action={
           <div className="hidden sm:flex flex-wrap gap-2">
             <Button asChild variant="outline" className="min-h-12">
@@ -411,8 +410,6 @@ export default function CaloriesPage() {
 
             <CompactNutritionSummary totals={totals} targets={displayTargets} waterTotal={waterTotal} />
 
-            <ChatGptMealImportReview selectedDate={selectedDate} onSaved={handleLogAdded} />
-
             <RecentFoodStrip logDate={selectedDate} onFoodLogged={handleLogAdded} />
 
             <FoodLogList
@@ -476,8 +473,6 @@ export default function CaloriesPage() {
               <TrackerCard label="Fat" value={totals.fat_g} target={displayTargets.fat_g} unit="g" hasTarget={displayTargets.fat_g > 0} />
               <TrackerCard label="Water" value={waterTotal} target={displayTargets.water_ml} unit=" ml" hasTarget={displayTargets.water_ml > 0} />
             </div>
-
-            <ChatGptMealImportReview selectedDate={selectedDate} onSaved={handleLogAdded} />
 
             <RecentFoodStrip logDate={selectedDate} onFoodLogged={handleLogAdded} />
 

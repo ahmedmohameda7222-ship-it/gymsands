@@ -1,96 +1,105 @@
 import { LegalPage, LegalSection } from "@/components/legal/legal-page";
 import { LEGAL_OPERATOR } from "@/lib/legal/operator";
+import { TERMS_VERSION } from "@/lib/legal/versions";
 
 const emailHref = `mailto:${LEGAL_OPERATOR.email}`;
 
 export default function TermsPage() {
   return (
     <LegalPage
-      eyebrow="Rechtliches / Legal"
-      title="Nutzungsbedingungen"
-      intro="Diese Bedingungen regeln die Nutzung von Plaivra. Die deutsche Fassung steht zuerst; eine englische Zusammenfassung folgt."
-      localizedCopy={{
-        en: { eyebrow: "Legal", title: "Terms of Use", intro: "These terms govern your use of Plaivra and its optional permission-controlled ChatGPT connection." },
-        ar: { eyebrow: "قانوني", title: "شروط الاستخدام", intro: "تنظم هذه الشروط استخدام Plaivra والربط الاختياري مع ChatGPT الخاضع لصلاحياتك." }
-      }}
+      eyebrow="Legal"
+      title="Terms of Use"
+      intro={`Version ${TERMS_VERSION}. These terms govern use of Plaivra, its tracking and planning features, and its optional permission-controlled ChatGPT connection.`}
+      updatedLabel="11 July 2026"
     >
-      <div lang="de" data-legal-language className="space-y-8">
-        <LegalSection title="1. Anbieter und Geltungsbereich">
-          <p>Plaivra wird von Ahmed Mohamed als individuellem Betreiber angeboten. Kontakt: {LEGAL_OPERATOR.name}, {LEGAL_OPERATOR.street}, {LEGAL_OPERATOR.postalCode} {LEGAL_OPERATOR.city}, {LEGAL_OPERATOR.countryDe}, <a href={emailHref}>{LEGAL_OPERATOR.email}</a>.</p>
-          <p>Diese Nutzungsbedingungen gelten für die Website, Web-Anwendung, Nutzerkonten, Tracking-Funktionen und optionalen ChatGPT-Verbindungen von Plaivra.</p>
+      <div lang="en" data-legal-language className="space-y-8">
+        <LegalSection title="1. Operator and agreement">
+          <p>Plaivra is offered by {LEGAL_OPERATOR.name}, {LEGAL_OPERATOR.street}, {LEGAL_OPERATOR.postalCode} {LEGAL_OPERATOR.city}, {LEGAL_OPERATOR.countryEn}. Contact: <a href={emailHref}>{LEGAL_OPERATOR.email}</a>.</p>
+          <p>By creating an account or using Plaivra, you agree to these Terms and acknowledge the Privacy Policy and Health and Medical Disclaimer. If you do not agree, do not use the service.</p>
         </LegalSection>
-        <LegalSection title="2. Leistungsbeschreibung">
-          <p>Plaivra unterstützt die persönliche Verwaltung von Training, Ernährung, Mahlzeiten, Kalorien, Hydration, Fortschritt, Körperdaten, Fotos, Gewohnheiten, Schlaf, Erholung, Supplementen und persönlichen Rekorden. Optional können Nutzer Inhalte und Aktionen von ChatGPT über eine freigegebene Verbindung verwalten.</p>
-          <p>Plaivra garantiert keinen Muskelaufbau, Gewichtsverlust, Gesundheitsfortschritt oder sonstigen persönlichen Erfolg. Die Richtigkeit, Vollständigkeit und Eignung AI-generierter Inhalte wird nicht garantiert.</p>
+
+        <LegalSection title="2. Eligibility and accounts">
+          <p>The initial EU launch is for people aged 16 or older. Plaivra has no parental-consent workflow. You must give accurate eligibility and account information, keep credentials confidential, use only your own account, and promptly report suspected unauthorized access.</p>
+          <p>You are responsible for activity conducted through your account unless applicable law provides otherwise. Plaivra may require renewed consent after a material policy change.</p>
         </LegalSection>
-        <LegalSection title="3. Registrierung, Alter und Kontosicherheit">
-          <p>Plaivra richtet sich an Personen ab 16 Jahren. Soweit anwendbares Recht darüber hinaus eine Zustimmung Sorgeberechtigter oder andere Voraussetzungen verlangt, muss diese vorliegen. Nutzer müssen richtige Angaben machen, Zugangsdaten schützen und erkennbare unbefugte Zugriffe unverzüglich an den Betreiber melden.</p>
+
+        <LegalSection title="3. What Plaivra provides">
+          <p>Plaivra stores and presents personal fitness context and user-controlled permissions; supports structured training, nutrition, hydration, progress, and wellness plans and tracking; provides direct editing and correction; and can expose authorized tools to ChatGPT.</p>
+          <p>ChatGPT is the optional reasoning/execution layer. Plaivra is the storage, permissions, execution, visualization, tracking, history, correction, privacy, and direct-control layer. A successful authorized tool writes the structured result directly; there is no normal copy/import or second generic approval queue.</p>
+          <p>Plaivra may change, improve, pause, or discontinue features for technical, security, legal, or operational reasons. Availability is not guaranteed and maintenance or incidents may interrupt access.</p>
         </LegalSection>
-        <LegalSection title="4. Gesundheit und medizinische Grenzen">
-          <p>Plaivra ist kein medizinischer Dienst, kein Medizinprodukt, kein Notfalldienst und ersetzt keine Diagnose, Behandlung, medizinische Untersuchung, Therapie oder klinische Ernährungsberatung. AI-generierte Pläne müssen vor der Verwendung geprüft werden.</p>
-          <p>Personen mit Erkrankungen, Verletzungen, Schwangerschaft, Essstörungen oder Fragen zu Medikamenten, Supplementen oder klinischer Ernährung sollten vor entsprechenden Entscheidungen qualifizierte ärztliche, therapeutische oder ernährungsmedizinische Beratung einholen. Bei Schmerzen, Schwindel, Atemnot oder anderen Warnzeichen ist die Aktivität abzubrechen und geeignete Hilfe zu suchen.</p>
+
+        <LegalSection title="4. ChatGPT connection and authorization">
+          <p>The ChatGPT connection is optional. It requires authentication, OAuth authorization, saved permissions, and a valid resource-bound token. Plaivra checks ownership, connection state, scope, saved permissions, expiry, revocation, and request contracts server-side.</p>
+          <p>ChatGPT receives only whitelisted task-relevant Plaivra context for the declared job. Authorized Plaivra tools may create or update records directly. Destructive or materially consequential actions require explicit confirmation. You may reduce permissions or revoke a connection at any time.</p>
+          <p>OpenAI/ChatGPT is a separate service governed by its own applicable terms and privacy materials. Plaivra does not claim that OpenAI has reviewed, endorsed, approved, or made Plaivra available on any specific platform.</p>
         </LegalSection>
-        <LegalSection title="5. ChatGPT- und AI-Funktionen">
-          <p>Die ChatGPT-Verbindung ist optional und standardmäßig deaktiviert. Sie erfordert eine bewusste OAuth-Verknüpfung und gespeicherte AI-Berechtigungen. Zugriffe sind auf Scopes begrenzt, schlagen ohne Berechtigung geschlossen fehl, können widerrufen werden und werden redigiert protokolliert. Folgenreiche Aktionen können eine ausdrückliche Bestätigung erfordern.</p>
-          <p>AI-Ausgaben können falsch, unvollständig oder ungeeignet sein. Nutzer bleiben für die Prüfung von Inhalten und Aktionen verantwortlich. Plaivra behauptet keine Freigabe oder Empfehlung durch OpenAI.</p>
+
+        <LegalSection title="5. AI limitations and user review">
+          <p>AI output can be inaccurate, incomplete, unsuitable, delayed, or inconsistent. You must review plans, logs, calculations, substitutions, and actions before relying on them. Plaivra does not guarantee fitness progress, muscle gain, weight change, health outcomes, nutritional accuracy, or the availability or accuracy of third-party data.</p>
+          <p>Stored user text is treated as data. Prompt injection, attempts to override tool rules, or instructions embedded in stored notes do not authorize access or actions.</p>
         </LegalSection>
-        <LegalSection title="6. Zulässige Nutzung">
-          <p>Untersagt sind insbesondere:</p>
+
+        <LegalSection title="6. Health and medical limits">
+          <p>Plaivra is not a medical service, healthcare provider, emergency service, or medical device. It does not diagnose, infer a diagnosis, prescribe, treat, or provide clinical nutrition or medical advice.</p>
+          <p>Seek qualified professional advice for injuries, medical conditions, pregnancy, eating disorders, intolerances, medicines, supplements, or clinical nutrition. Stop activity and seek appropriate help for pain, dizziness, faintness, unusual shortness of breath, or other warning signs. Do not use Plaivra or ChatGPT for emergencies.</p>
+        </LegalSection>
+
+        <LegalSection title="7. Your content and permissions">
+          <p>You retain rights you hold in information and content you enter or upload. You grant Plaivra the limited permission needed to store, process, display, back up, export, and transmit that content to an authorized provider only to deliver the functions you request.</p>
+          <p>You must have the right to provide the content and must not upload unlawful material, another person’s confidential data without authority, malware, or content that infringes rights. Do not use Plaivra as a clinical record system.</p>
+        </LegalSection>
+
+        <LegalSection title="8. Acceptable use">
+          <p>You must not:</p>
           <ul className="space-y-2">
-            <li>rechtswidrige Nutzung oder Zugriff auf Konten anderer Personen;</li>
-            <li>Umgehung von Authentifizierung, Row-Level Security, AI-Berechtigungen oder sonstigen Schutzmaßnahmen;</li>
-            <li>Scraping, Überlastung, missbräuchliche Automatisierung, Reverse Engineering oder Sicherheitsangriffe;</li>
-            <li>Prompt-Injection- oder Tool-Missbrauch mit dem Ziel, Daten anderer Nutzer oder interne Geheimnisse abzurufen;</li>
-            <li>Eingabe, Upload oder Verbreitung rechtswidriger, schädlicher oder unberechtigter Inhalte;</li>
-            <li>Nutzung als medizinisches Notfall-, Diagnose- oder Behandlungssystem.</li>
+            <li>access another person’s account or data, or bypass authentication, permissions, Row Level Security, rate limits, or user isolation;</li>
+            <li>probe, attack, overload, scrape, reverse engineer, or automate the service in an abusive or unauthorized manner;</li>
+            <li>use prompt injection, tool manipulation, forged tokens, replay, or misleading confirmation to obtain unauthorized data or actions;</li>
+            <li>introduce malware, unlawful content, or material you have no right to use;</li>
+            <li>use Plaivra for diagnosis, treatment, emergencies, or other high-risk purposes outside its stated scope;</li>
+            <li>misrepresent Plaivra output as professional medical, legal, or financial advice.</li>
           </ul>
         </LegalSection>
-        <LegalSection title="7. Nutzerinhalte">
-          <p>Nutzer bleiben für Inhalte verantwortlich, die sie eingeben, hochladen oder importieren. Es dürfen nur Inhalte bereitgestellt werden, zu deren Nutzung sie berechtigt sind. Der Betreiber verarbeitet diese Inhalte nur in dem Umfang, der für Speicherung, Darstellung, Export und die vom Nutzer angeforderten Plaivra-Funktionen erforderlich ist.</p>
-        </LegalSection>
-        <LegalSection title="8. Verfügbarkeit und Änderungen">
-          <p>Eine ununterbrochene oder fehlerfreie Verfügbarkeit wird nicht zugesagt. Funktionen können aus technischen, sicherheitsbezogenen, rechtlichen oder betrieblichen Gründen geändert, eingeschränkt oder eingestellt werden. Zwingende Rechte bleiben unberührt.</p>
-        </LegalSection>
-        <LegalSection title="9. Haftung">
-          <p>Der Betreiber haftet unbeschränkt bei Vorsatz und grober Fahrlässigkeit, bei schuldhafter Verletzung von Leben, Körper oder Gesundheit sowie in Fällen zwingender gesetzlicher Haftung.</p>
-          <p>Bei leicht fahrlässiger Verletzung wesentlicher Vertragspflichten ist die Haftung auf den vertragstypischen, vorhersehbaren Schaden begrenzt. Wesentliche Vertragspflichten sind Pflichten, deren Erfüllung die ordnungsgemäße Durchführung überhaupt ermöglicht und auf deren Einhaltung regelmäßig vertraut werden darf. Im Übrigen ist die Haftung ausgeschlossen, soweit dies gesetzlich zulässig ist.</p>
-        </LegalSection>
-        <LegalSection title="10. Sperrung, Beendigung und Löschung">
-          <p>Nutzer können die Nutzung beenden und über die Datenschutzeinstellungen eine Löschanfrage stellen. Eine Anfrage wird nachverfolgt und führt nicht zwingend sofort zur vollständigen technischen Löschung. Der Betreiber kann Zugriffe bei Missbrauch, Sicherheitsrisiken, Rechtsverstößen oder erheblichen Verstößen gegen diese Bedingungen vorübergehend sperren oder beenden.</p>
-        </LegalSection>
-        <LegalSection title="11. Änderungen der Bedingungen">
-          <p>Änderungen können aus rechtlichen, technischen, sicherheitsbezogenen oder funktionalen Gründen mit Wirkung für die Zukunft erfolgen. Wesentliche Änderungen werden angemessen mitgeteilt. Soweit erforderlich, wird eine neue Zustimmung eingeholt.</p>
-        </LegalSection>
-        <LegalSection title="12. Anwendbares Recht">
-          <p>Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts. Zwingende Verbraucherschutzvorschriften des Staates, in dem ein Verbraucher seinen gewöhnlichen Aufenthalt hat, bleiben unberührt. Für Verbraucher gelten die gesetzlichen Gerichtsstände.</p>
-        </LegalSection>
-      </div>
 
-      <div lang="en" data-legal-language className="space-y-8 border-t border-border/70 pt-8">
-        <LegalSection title="English summary">
-          <p>Plaivra is operated by Ahmed Mohamed as an individual operator. It provides personal fitness, nutrition, hydration, progress and wellness organization, including an optional permission-controlled ChatGPT connection. No fitness, weight-loss, health or AI-accuracy result is guaranteed.</p>
-          <p>Plaivra is intended for users aged 16 or older, subject to any additional guardian-consent requirements under applicable law. Users must protect credentials, provide accurate account information and report unauthorized access.</p>
-          <p>Plaivra is not a medical service, medical device or emergency service and does not provide diagnosis, treatment or clinical nutrition advice. Users must review AI-generated content and consult qualified professionals for medical conditions, injuries, pregnancy, eating disorders, medicines, supplements or clinical nutrition.</p>
-          <p>ChatGPT access is optional, disabled by default, OAuth-connected, scope-controlled, revocable and redacted in audit records. Attempts to bypass security, AI permissions or user isolation are prohibited.</p>
-          <p>Liability remains unlimited for intent, gross negligence, injury to life/body/health and mandatory statutory cases. For slight negligence involving essential obligations, liability is limited to typical foreseeable damage. German law applies without overriding mandatory consumer protections.</p>
-          <p>Contact: {LEGAL_OPERATOR.name}, {LEGAL_OPERATOR.street}, {LEGAL_OPERATOR.postalCode} {LEGAL_OPERATOR.city}, {LEGAL_OPERATOR.countryEn}, <a href={emailHref}>{LEGAL_OPERATOR.email}</a>.</p>
+        <LegalSection title="9. Intellectual property">
+          <p>Plaivra’s software, branding, interface, and original documentation are protected by applicable intellectual-property laws. These Terms grant a personal, limited, non-exclusive, non-transferable, revocable right to use the service as intended. They do not transfer ownership of Plaivra or third-party content.</p>
         </LegalSection>
-      </div>
-      <div lang="ar" dir="rtl" data-legal-language className="space-y-8">
-        <LegalSection title="الخدمة والحساب">
-          <p>تساعدك Plaivra على تنظيم التمارين والتغذية والماء والتقدم والعافية. يجب أن تكون بيانات الحساب صحيحة وأن تحافظ على سرية بيانات الدخول. الخدمة مخصصة لمن يبلغون 16 عامًا أو أكثر مع أي موافقات إضافية يطلبها القانون.</p>
+
+        <LegalSection title="10. Suspension, termination, and deletion">
+          <p>Plaivra may restrict or suspend access when reasonably necessary to address security risk, abuse, legal obligations, or material breach. Where appropriate, notice and an opportunity to resolve the issue will be provided.</p>
+          <p>You may stop using Plaivra and request deletion in Settings. Deletion requires recent reauthentication and explicit confirmation, revokes connected access, checks legal holds/provider cleanup, disables access, removes private objects and account rows, and deletes the Auth account. Once irreversible processing begins, deleted data may not be recoverable.</p>
         </LegalSection>
-        <LegalSection title="الصحة والمحتوى المُنشأ بالذكاء الاصطناعي">
-          <p>Plaivra ليست خدمة طبية أو جهازًا طبيًا ولا تقدم تشخيصًا أو علاجًا. راجع أي خطة ينشئها ChatGPT قبل استخدامها واطلب رأي مختص عند وجود إصابة أو مرض أو حمل أو اضطراب أكل أو أسئلة تتعلق بالأدوية أو المكملات.</p>
+
+        <LegalSection title="11. Data export and continuity">
+          <p>You can request a portable ZIP export containing canonical JSON, CSV files, and a storage manifest. Keep downloaded archives secure. Plaivra does not promise perpetual storage; export important data before deleting an account or when notified of a service discontinuation.</p>
         </LegalSection>
-        <LegalSection title="الربط مع ChatGPT والتحكم">
-          <p>الربط اختياري ويمكن إلغاؤه. لا يصل ChatGPT إلا إلى الأقسام التي تمنحها صلاحية، وتبقى الموافقة على الاستيراد أو التغيير بيدك. يُحظر تجاوز الصلاحيات أو عزل بيانات المستخدمين.</p>
+
+        <LegalSection title="12. Paid plans, cancellation, and refunds">
+          <p>No paid public plan, price, subscription capability, or checkout is represented as active in the audited launch scope. Plaivra will not invent or charge a price without an owner-approved offering and separate payment implementation.</p>
+          <p>If paid plans are introduced, the plan capabilities, total price, billing interval, renewal, cancellation, refund, trial, tax, expiry, and platform-specific purchase terms will be shown before purchase and incorporated into an updated version of these Terms. Payment credentials will be collected by the payment provider, not through Plaivra’s ChatGPT tools. Mandatory consumer rights will remain unaffected.</p>
         </LegalSection>
-        <LegalSection title="المسؤولية والإنهاء">
-          <p>لا نضمن نتيجة لياقة أو وزن أو صحة أو دقة مخرجات الذكاء الاصطناعي. تبقى المسؤولية القانونية الإلزامية دون تقييد. يمكنك إنهاء الاستخدام وطلب حذف الحساب من إعدادات الخصوصية.</p>
+
+        <LegalSection title="13. Third-party services">
+          <p>Plaivra depends on providers such as Supabase, the production hosting provider, and—when you choose them—ChatGPT or email services. Third-party outages, policy changes, data sources, or account restrictions may affect features. Third-party services have their own terms and policies.</p>
         </LegalSection>
-        <LegalSection title="التواصل والقانون المطبق">
-          <p>يطبق القانون الألماني مع بقاء قواعد حماية المستهلك الإلزامية. للتواصل: <a href={emailHref}>{LEGAL_OPERATOR.email}</a>.</p>
+
+        <LegalSection title="14. Liability">
+          <p>Nothing in these Terms excludes liability that cannot legally be excluded, including liability for intent, gross negligence, injury to life, body, or health, or mandatory product-liability and consumer-protection rules.</p>
+          <p>For slight negligence involving an essential contractual duty, liability is limited to typical foreseeable damage. An essential duty is one whose performance makes the service contract possible and on which a user may normally rely. Otherwise, liability is excluded to the extent permitted by law. This clause requires professional legal review before launch.</p>
+        </LegalSection>
+
+        <LegalSection title="15. Changes to these Terms">
+          <p>Plaivra may update these Terms for legal, security, technical, or functional reasons. Material changes receive a new version and appropriate notice; renewed consent will be requested where required. Continued use will not be treated as consent where law requires an explicit action.</p>
+        </LegalSection>
+
+        <LegalSection title="16. Governing law and disputes">
+          <p>German law applies, excluding the UN Convention on Contracts for the International Sale of Goods. Mandatory consumer protections of the country in which a consumer habitually resides remain unaffected. Statutory consumer venues apply.</p>
+          <p>The operator is not obligated or willing to participate in dispute-resolution proceedings before a consumer arbitration board. This statement and the governing-law clause require final professional review for the intended launch territories.</p>
+        </LegalSection>
+
+        <LegalSection title="17. Contact">
+          <p>Questions, support requests, and security reports may be sent to <a href={emailHref}>{LEGAL_OPERATOR.email}</a>. Include only the information needed to investigate your request.</p>
         </LegalSection>
       </div>
     </LegalPage>

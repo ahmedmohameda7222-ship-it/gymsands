@@ -249,7 +249,7 @@ export function InlineFeedback({
       <div className="flex items-start justify-between gap-2">
         <span>{message}</span>
         {onClose ? (
-          <button type="button" onClick={onClose} className="shrink-0 text-xs underline opacity-70 hover:opacity-100">
+          <button type="button" onClick={onClose} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center text-xs underline opacity-70 hover:opacity-100">
             dismiss
           </button>
         ) : null}

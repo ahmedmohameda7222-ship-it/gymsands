@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { logExternalApi } from "@/lib/integrations/api-logger";
-import { jsonError, requireUser } from "@/lib/integrations/env";
+import { jsonError, requireEligibleUser } from "@/lib/integrations/env";
 import { lookupOpenFoodFactsBarcode, type NormalizedFood } from "@/lib/integrations/open-food-facts";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { barcodeValidationMessage, normalizeProductBarcode } from "@/lib/barcodes";
@@ -50,7 +50,7 @@ function scaledMacros(food: NormalizedFood, quantity: number) {
 export async function GET(request: Request) {
   const limited = rateLimit(request, "open-food-facts");
   if (limited) return limited;
-  const context = await requireUser(request);
+  const context = await requireEligibleUser(request);
   if (context instanceof NextResponse) return context;
 
   const rawBarcode = new URL(request.url).searchParams.get("barcode")?.trim() ?? "";
@@ -70,7 +70,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const limited = rateLimit(request, "open-food-facts-save");
   if (limited) return limited;
-  const context = await requireUser(request);
+  const context = await requireEligibleUser(request);
   if (context instanceof NextResponse) return context;
 
   const body = await request.json().catch(() => ({}));

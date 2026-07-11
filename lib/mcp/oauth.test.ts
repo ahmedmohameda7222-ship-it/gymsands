@@ -6,6 +6,7 @@ import {
   handleOAuthAuthorize,
   handleOAuthAuthorizeDecision,
   handleOAuthToken,
+  handleOAuthRevoke,
   handleOAuthRegister,
   getAccessTokenRecord,
   isAllowedRedirectUri
@@ -17,7 +18,10 @@ vi.mock("@/lib/integrations/env", () => ({
   serverEnv: {
     supabaseServiceRoleKey: "test-key",
     plaivraMcpTokenSecret: "test-secret",
-    plaivraAllowLegacyMcpClientId: false
+    plaivraAllowLegacyMcpClientId: true,
+    plaivraCimdAllowedOrigins: "https://chatgpt.com",
+    plaivraOAuthIssuer: "https://plaivra.com",
+    plaivraMcpBaseUrl: "https://plaivra.com/api/mcp"
   }
 }));
 
@@ -59,12 +63,14 @@ const createMockSupabase = (overrides?: Record<string, unknown>) => {
         }),
         maybeSingle: vi.fn(() => {
           const key = JSON.stringify(query);
-          const res = responses[key] ?? responses[query.table as string] ?? { data: null, error: null };
+          const configured = responses[key] ?? responses[query.table as string];
+          const res = typeof configured === "function" ? configured(query) : configured ?? { data: null, error: null };
           return Promise.resolve(res);
         }),
         single: vi.fn(() => {
           const key = JSON.stringify(query);
-          const res = responses[key] ?? responses[query.table as string] ?? { data: null, error: null };
+          const configured = responses[key] ?? responses[query.table as string];
+          const res = typeof configured === "function" ? configured(query) : configured ?? { data: null, error: null };
           return Promise.resolve(res);
         }),
         order: vi.fn(() => builder),
@@ -107,7 +113,13 @@ const mockProfile = {
 };
 
 const setupMockSupabase = (overrides?: Record<string, unknown>) => {
-  const mock = createMockSupabase(overrides);
+  const mock = createMockSupabase({
+    account_access_states: { data: { state: "active" }, error: null },
+    user_consents: { data: { granted: true, revoked_at: null }, error: null },
+    onboarding_answers: { data: { age: 16 }, error: null },
+    mcp_oauth_authorization_continuations: { data: { id: "11111111-1111-4111-8111-111111111111" }, error: null },
+    ...overrides
+  });
   mockCreateSupabaseAdminClient.mockReturnValue(mock as unknown as ReturnType<typeof createSupabaseAdminClient>);
   return mock;
 };
@@ -124,13 +136,13 @@ describe("OAuth authorization server metadata", () => {
     expect(json.code_challenge_methods_supported).not.toContain("plain");
   });
 
-  it("advertises only the implemented pre-registered public client model", async () => {
+  it("advertises CIMD with supported public and signed client authentication", async () => {
     const request = new Request("https://plaivra.com/.well-known/oauth-authorization-server");
     const response = oauthAuthorizationServerMetadata(request);
     const json = await response.json() as Record<string, unknown>;
-    expect(json.token_endpoint_auth_methods_supported).toEqual(["none"]);
+    expect(json.token_endpoint_auth_methods_supported).toEqual(["private_key_jwt", "none"]);
     expect(json).not.toHaveProperty("registration_endpoint");
-    expect(json).not.toHaveProperty("client_id_metadata_document_supported");
+    expect(json.client_id_metadata_document_supported).toBe(true);
   });
 
   it("advertises only publicly grantable user scopes", async () => {
@@ -173,6 +185,33 @@ describe("OAuth redirect URI policy", () => {
 describe("handleOAuthAuthorize", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("accepts a valid ChatGPT CIMD client without a pre-created Plaivra connection", async () => {
+    setupMockSupabase({ consume_oauth_rate_limit: { data: { allowed: true }, error: null } });
+    const clientId = "https://chatgpt.com/oauth/plaivra/client.json";
+    const redirectUri = "https://chatgpt.com/connector/oauth/callback_123-abc";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      client_id: clientId,
+      client_name: "ChatGPT",
+      redirect_uris: [redirectUri],
+      token_endpoint_auth_methods_supported: ["none"]
+    }), { headers: { "Content-Type": "application/json" } })));
+    const url = new URL("https://plaivra.com/api/oauth/authorize");
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("client_id", clientId);
+    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("scope", "plaivra.workouts.read");
+    url.searchParams.set("code_challenge", "A".repeat(43));
+    url.searchParams.set("code_challenge_method", "S256");
+    url.searchParams.set("resource", "https://plaivra.com/api/mcp");
+    const response = await handleOAuthAuthorize(new Request(url));
+    expect(response.status).toBe(307);
+    const location = response.headers.get("location") ?? "";
+    expect(location).toContain("/oauth/authorize?");
+    expect(location).toContain(encodeURIComponent(clientId));
+    expect(location).toContain("continuation=");
   });
 
   it("rejects legacy setup secrets as client_id when compatibility is disabled", async () => {
@@ -557,6 +596,7 @@ describe("handleOAuthToken", () => {
           code_challenge_method: "S256",
           scope: ["read:workouts"],
           resource: "https://plaivra.com/api/mcp",
+          issuer: "https://plaivra.com",
           expires_at: new Date(Date.now() - 1000).toISOString()
         },
         error: null
@@ -775,6 +815,7 @@ describe("getAccessTokenRecord", () => {
           user_id: TEST_USER_ID,
           scope: ["read:workouts"],
           resource: "https://plaivra.com/api/mcp",
+          issuer: "https://plaivra.com",
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         },
         error: null
@@ -815,6 +856,7 @@ describe("authenticateMcpRequest (via auth.ts)", () => {
           user_id: TEST_USER_ID,
           scope: ["read:workouts"],
           resource: "https://plaivra.com/api/mcp",
+          issuer: "https://plaivra.com",
           expires_at: new Date(Date.now() - 1000).toISOString()
         },
         error: null
@@ -842,6 +884,7 @@ describe("authenticateMcpRequest (via auth.ts)", () => {
           user_id: TEST_USER_ID,
           scope: ["read:workouts"],
           resource: "https://plaivra.com/api/mcp",
+          issuer: "https://plaivra.com",
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         },
         error: null
@@ -873,6 +916,7 @@ describe("authenticateMcpRequest (via auth.ts)", () => {
           user_id: TEST_USER_ID,
           scope: ["read:workouts"],
           resource: "https://plaivra.com/api/mcp",
+          issuer: "https://plaivra.com",
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         },
         error: null
@@ -906,6 +950,7 @@ describe("authenticateMcpRequest (via auth.ts)", () => {
           user_id: TEST_USER_ID,
           scope: ["read:workouts"],
           resource: "https://evil.com/api/mcp",
+          issuer: "https://plaivra.com",
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         },
         error: null
@@ -938,6 +983,7 @@ describe("authenticateMcpRequest (via auth.ts)", () => {
           user_id: TEST_USER_ID,
           scope: ["read:workouts"],
           resource: null,
+          issuer: "https://plaivra.com",
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         },
         error: null
@@ -960,6 +1006,87 @@ describe("authenticateMcpRequest (via auth.ts)", () => {
     expect(nextResponse.status).toBe(401);
     const json = await nextResponse.json() as { error: string };
     expect(json.error).toContain("resource mismatch");
+  });
+
+  it("consumes an authorization continuation exactly once", async () => {
+    let consumeCount = 0;
+    setupMockSupabase({
+      chatgpt_connections: { data: mockConnection, error: null },
+      user_ai_permission_settings: { data: mockPermissionSettings, error: null },
+      mcp_oauth_authorization_codes: { data: null, error: null },
+      mcp_oauth_authorization_continuations: () => consumeCount++ === 0
+        ? { data: { id: "11111111-1111-4111-8111-111111111111" }, error: null }
+        : { data: null, error: null }
+    });
+    const url = new URL("https://plaivra.com/api/oauth/authorize");
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("client_id", TEST_CLIENT_SECRET);
+    url.searchParams.set("redirect_uri", "https://chatgpt.com/connector/oauth/callback");
+    url.searchParams.set("code_challenge", "challenge123");
+    url.searchParams.set("code_challenge_method", "S256");
+    const start = await handleOAuthAuthorize(new Request(url));
+    const decisionUrl = new URL("https://plaivra.com/api/oauth/authorize");
+    decisionUrl.search = new URL(start.headers.get("location") ?? "").search;
+    const decide = () => handleOAuthAuthorizeDecision(new Request(decisionUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: "approve" })
+    }), TEST_USER_ID);
+    expect((await decide()).status).toBe(200);
+    const replay = await decide();
+    expect(replay.status).toBe(400);
+    expect((await replay.json() as { error_description: string }).error_description).toContain("already used");
+  });
+
+  it("rejects not-yet-valid, explicitly revoked, and wrong-issuer access tokens", async () => {
+    const { authenticateMcpRequest } = await import("@/lib/mcp/auth");
+    const cases = [
+      { not_before: new Date(Date.now() + 60_000).toISOString(), revoked_at: null, issuer: "https://plaivra.com", message: "not active yet" },
+      { not_before: new Date(Date.now() - 1_000).toISOString(), revoked_at: new Date().toISOString(), issuer: "https://plaivra.com", message: "revoked" },
+      { not_before: new Date(Date.now() - 1_000).toISOString(), revoked_at: null, issuer: "https://evil.example", message: "issuer is invalid" }
+    ];
+    for (const tokenCase of cases) {
+      setupMockSupabase({
+        mcp_oauth_access_tokens: {
+          data: {
+            connection_id: TEST_CONNECTION_ID,
+            user_id: TEST_USER_ID,
+            scope: ["read:workouts"],
+            resource: "https://plaivra.com/api/mcp",
+            expires_at: new Date(Date.now() + 60_000).toISOString(),
+            ...tokenCase
+          },
+          error: null
+        }
+      });
+      const response = await authenticateMcpRequest(new Request("https://plaivra.com/api/mcp", {
+        headers: { Authorization: "Bearer plaivra_mcp_at_validtoken" }
+      })) as NextResponse;
+      expect(response.status).toBe(401);
+      expect((await response.json() as { error: string }).error).toContain(tokenCase.message);
+    }
+  });
+});
+
+describe("OAuth token revocation", () => {
+  it("revokes only a token bound to the authenticated client and stays idempotent", async () => {
+    const supabase = setupMockSupabase({ chatgpt_connections: { data: mockConnection, error: null } });
+    const response = await handleOAuthRevoke(new Request("https://plaivra.com/api/oauth/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: "plaivra_mcp_at_token", client_id: TEST_CONNECTION_ID })
+    }));
+    expect(response.status).toBe(200);
+    expect(supabase.from).toHaveBeenCalledWith("mcp_oauth_access_tokens");
+  });
+
+  it("rejects a missing token or client identity", async () => {
+    const response = await handleOAuthRevoke(new Request("https://plaivra.com/api/oauth/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: "plaivra_mcp_at_token" })
+    }));
+    expect(response.status).toBe(400);
   });
 });
 
