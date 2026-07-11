@@ -1,0 +1,4116 @@
+{
+  "generatedAt": "2026-07-11T18:07:44.753Z",
+  "branch": "prelaunch-remediation-2026-07",
+  "base": "60a204d5fc20fc396be1b1b47e748c42ebba6abf",
+  "head": "af9aa63ef4c14db4bfa389b0148d5f3fb4121029",
+  "workingTreeStatusBeforeFinalHandoffCommit": "?? docs/operations/prelaunch-review-handoff.md\n?? scripts/create-prelaunch-handoff-manifest.mjs",
+  "diffStat": " .env.example                                       |   36 +\n .github/workflows/post-deploy-smoke.yml            |   70 +\n .github/workflows/quality.yml                      |   35 +-\n .github/workflows/uptime-synthetic.yml             |   33 +\n .gitignore                                         |    5 +\n README.md                                          |   12 +-\n app/(private)/calories/food-hub/page.tsx           |    8 +-\n app/(private)/calories/page.tsx                    |    7 +-\n app/(private)/dashboard/page.tsx                   |   14 +-\n app/(private)/my-meal-plan/page.tsx                |    2 +-\n app/(private)/onboarding/page.tsx                  |  384 +--\n app/(private)/profile/page.tsx                     |    2 +-\n app/(private)/settings/account/page.tsx            |   91 +-\n .../settings/ai-imports/chatgpt-setup/page.tsx     |   16 +-\n app/(private)/settings/ai-imports/page.tsx         |   27 +-\n .../settings/connections/chatgpt/page.tsx          |   15 +\n app/(private)/settings/connections/page.tsx        |   27 +\n app/(private)/settings/data-privacy/page.tsx       |   14 +-\n app/(private)/settings/page.tsx                    |   14 +-\n app/(private)/settings/subscription/page.tsx       |  111 +\n app/api/billing/entitlements/route.ts              |   32 +\n app/api/billing/stripe/checkout/route.ts           |   82 +\n app/api/billing/stripe/portal/route.ts             |   35 +\n app/api/billing/stripe/webhook/route.ts            |   51 +\n app/api/email/send/route.ts                        |    4 +-\n app/api/email/weekly-summary/route.ts              |    4 +-\n app/api/exercise-calories/route.ts                 |    8 +-\n app/api/food/open-food-facts/route.ts              |    6 +-\n app/api/health/route.ts                            |   23 +\n .../internal/maintenance/billing-events/route.ts   |   22 +\n .../internal/maintenance/oauth-cleanup/route.ts    |   66 +\n .../maintenance/privacy-lifecycle/route.ts         |   87 +\n app/api/mcp/connections/route.ts                   |   85 +-\n app/api/oauth/authorize/route.ts                   |    4 +-\n app/api/oauth/revoke/route.ts                      |    7 +\n app/api/observability/client-error/route.ts        |   20 +\n app/api/user/ai-permissions/route.ts               |    6 +-\n app/api/user/consents/route.ts                     |   14 +-\n app/api/user/data-export/route.ts                  |   39 +-\n app/api/user/privacy-requests/route.ts             |  228 +-\n app/api/version/route.ts                           |   25 +\n app/api/workout-plan/replace-exercise/route.ts     |    4 +-\n app/error.tsx                                      |   25 +\n app/global-error.tsx                               |   28 +\n app/layout.tsx                                     |    2 +-\n app/legal/disclaimer/page.tsx                      |   48 +-\n app/legal/impressum/page.tsx                       |   40 +-\n app/legal/privacy/page.tsx                         |  161 +-\n app/legal/terms/page.tsx                           |  143 +-\n app/page.tsx                                       |  269 +-\n components/ai/ai-action-request-dialog.tsx         |   70 +-\n components/ai/workout-ai-action-panel.tsx          |    2 +-\n components/auth/auth-form.tsx                      |   58 +-\n components/auth/consent-completion-client.tsx      |   46 +-\n components/auth/oauth-complete-client.tsx          |   11 +-\n components/auth/oauth-consent.tsx                  |    2 +-\n components/auth/protected-route.tsx                |   96 +-\n components/dashboard/dashboard-sections.tsx        |    4 +-\n components/layout/app-shell.tsx                    |  107 +-\n components/layout/brand.tsx                        |    2 +-\n components/layout/language-switcher.tsx            |    2 +-\n components/layout/public-footer.tsx                |   11 +-\n components/layout/public-nav.tsx                   |    7 +-\n components/legal/legal-page.tsx                    |    3 +\n components/meals/chatgpt-meal-import-review.tsx    |  260 --\n components/meals/custom-nutrition-manager.tsx      |    2 +-\n components/meals/grocery-list-panel.tsx            |    4 +-\n components/meals/meal-ai-actions.tsx               |    2 +-\n components/meals/meal-plan-import-review.tsx       |  272 --\n components/meals/my-meal-plan-builder.tsx          |   30 +-\n components/meals/nutrition-target-profiles.tsx     |    2 +-\n components/meals/recent-food-strip.tsx             |    4 +-\n components/motion/index.tsx                        |    2 +-\n components/profile/execution-profiles.tsx          |   19 +-\n components/settings/ai-permissions-card.tsx        |    4 +-\n components/settings/connected-apps.tsx             |  658 +----\n components/shared/chatgpt-execution-card.tsx       |  121 +\n components/shared/chatgpt-import-card.tsx          |  226 --\n components/workouts/my-workout-plans.tsx           |   18 +-\n components/workouts/workout-plan-builder.tsx       |    2 +-\n docs/architecture/canonical-domain-model.md        |    8 +-\n .../decisions/0001-performed-workout-sessions.md   |   45 +\n .../decisions/0002-exercise-catalog.md             |   32 +\n .../decisions/0003-saved-nutrition-content.md      |   29 +\n .../migration-ledger-reconciliation.md             |   30 +\n docs/billing/entitlement-foundation.md             |   36 +\n docs/chatgpt-app/README.md                         |   12 +\n .../cimd-authentication-architecture.md            |    2 +-\n docs/chatgpt-app/public-tool-catalog.json          |   60 +\n docs/chatgpt-app/public-tool-catalog.md            |   37 +\n docs/native-readiness/README.md                    |   17 +\n docs/native-readiness/android-plan.md              |   10 +\n docs/native-readiness/api-auth-data-contract.md    |   26 +\n .../deep-links-offline-conflicts.md                |   19 +\n docs/native-readiness/ios-plan.md                  |   11 +\n .../notifications-analytics-privacy.md             |   22 +\n docs/native-readiness/screen-parity-matrix.md      |   20 +\n docs/operations/README.prelaunch-correction.md     |    3 +\n docs/operations/incident-response.md               |   29 +\n docs/operations/launch-runbook.md                  |   56 +\n docs/operations/prelaunch-correction-checklist.md  |   38 +\n docs/operations/prelaunch-correction-evidence.md   |   67 +\n docs/operations/prelaunch-correction-plan.md       |   17 +\n docs/operations/prelaunch-correction-status.md     |   36 +\n .../prelaunch-production-baseline-2026-07-11.md    |   56 +\n docs/operations/submission-checklists.md           |   30 +\n docs/performance/dashboard-query-fanout.md         |   18 +\n docs/privacy-retention-and-deletion-plan.md        |  116 +-\n .../evidence/2026-07-11/active-workout-390x844.png |  Bin 0 -> 33969 bytes\n docs/qa/evidence/2026-07-11/dashboard-1280x800.png |  Bin 0 -> 170346 bytes\n docs/qa/evidence/2026-07-11/disclaimer-430x932.png |  Bin 0 -> 134959 bytes\n docs/qa/evidence/2026-07-11/food-log-393x852.png   |  Bin 0 -> 88739 bytes\n docs/qa/evidence/2026-07-11/impressum-768x1024.png |  Bin 0 -> 88370 bytes\n .../landing-390x844-200-percent-text.png           |  Bin 0 -> 789574 bytes\n .../evidence/2026-07-11/landing-390x844-arabic.png |  Bin 0 -> 281715 bytes\n docs/qa/evidence/2026-07-11/landing-390x844.png    |  Bin 0 -> 309830 bytes\n docs/qa/evidence/2026-07-11/login-393x852.png      |  Bin 0 -> 37172 bytes\n .../2026-07-11/meal-plan-groceries-430x932.png     |  Bin 0 -> 70937 bytes\n .../evidence/2026-07-11/oauth-consent-1280x800.png |  Bin 0 -> 20017 bytes\n .../qa/evidence/2026-07-11/onboarding-1024x768.png |  Bin 0 -> 59526 bytes\n docs/qa/evidence/2026-07-11/privacy-390x844.png    |  Bin 0 -> 586092 bytes\n docs/qa/evidence/2026-07-11/progress-768x1024.png  |  Bin 0 -> 110143 bytes\n docs/qa/evidence/2026-07-11/recovery-768x1024.png  |  Bin 0 -> 33024 bytes\n .../evidence/2026-07-11/registration-430x932.png   |  Bin 0 -> 67355 bytes\n .../settings-privacy-deletion-1024x768.png         |  Bin 0 -> 148474 bytes\n .../evidence/2026-07-11/subscription-1440x900.png  |  Bin 0 -> 98100 bytes\n docs/qa/evidence/2026-07-11/terms-393x852.png      |  Bin 0 -> 500873 bytes\n .../evidence/2026-07-11/workout-plan-1440x900.png  |  Bin 0 -> 94341 bytes\n docs/qa/rendered-qa-2026-07-11.md                  |   51 +\n docs/qa/rendered-qa-results.json                   | 3104 ++++++++++++++++++++\n .../dashboard-offline-synthetic-390x844.png        |  Bin 0 -> 43621 bytes\n docs/qa/rendered/landing-1440x900.png              |  Bin 0 -> 96984 bytes\n .../landing-200-percent-reflow-1440x900.png        |  Bin 0 -> 107355 bytes\n docs/qa/rendered/registration-390x844-full.png     |  Bin 0 -> 70943 bytes\n docs/qa/rendered/registration-430x932.png          |  Bin 0 -> 33966 bytes\n docs/release/README.md                             |   96 +\n docs/security/supabase-launch-advisor-baseline.md  |   41 +\n lib/architecture/canonical-convergence.test.ts     |   28 +\n lib/auth/eligibility.test.ts                       |   82 +\n lib/auth/eligibility.ts                            |   95 +\n lib/billing/billing-migration.test.ts              |   33 +\n lib/billing/checkout-gate.test.ts                  |   19 +\n lib/billing/contracts.ts                           |   73 +\n lib/billing/entitlement-reducer.test.ts            |   69 +\n lib/billing/entitlement-reducer.ts                 |   71 +\n lib/billing/native-adapters.ts                     |   23 +\n lib/billing/stripe-event-ordering.test.ts          |   16 +\n lib/billing/stripe-event-processor.ts              |  162 +\n lib/billing/stripe-event-worker.test.ts            |   38 +\n lib/billing/stripe-event-worker.ts                 |   61 +\n lib/billing/stripe-server.test.ts                  |   56 +\n lib/billing/stripe-server.ts                       |   60 +\n lib/billing/stripe-webhook-route.test.ts           |   74 +\n lib/i18n/public-copy.ts                            |    8 +-\n lib/i18n/translations.ts                           |   24 +-\n lib/integrations/env.ts                            |   56 +-\n lib/legal/age-migration.test.ts                    |   24 +\n lib/legal/eligibility-consent-route.test.ts        |   56 +\n lib/legal/operator.ts                              |    8 +-\n lib/legal/phase6.test.ts                           |   65 +-\n lib/legal/versions.ts                              |    8 +-\n lib/mcp/activity.ts                                |    2 +-\n lib/mcp/auth.ts                                    |   34 +-\n lib/mcp/catalog-versioning.test.ts                 |   52 +\n lib/mcp/cimd-oauth-migration.test.ts               |   31 +\n lib/mcp/cimd.test.ts                               |  148 +\n lib/mcp/cimd.ts                                    |  381 +++\n lib/mcp/connections-route.test.ts                  |   76 +-\n lib/mcp/context-projections.test.ts                |  120 +\n lib/mcp/context-projections.ts                     |  582 ++++\n lib/mcp/idempotency-migration.test.ts              |   15 +\n lib/mcp/idempotency.test.ts                        |   91 +\n lib/mcp/idempotency.ts                             |  114 +\n lib/mcp/oauth-cleanup-route.test.ts                |   73 +\n lib/mcp/oauth-rate-limit.test.ts                   |   36 +\n lib/mcp/oauth.test.ts                              |  176 +-\n lib/mcp/oauth.ts                                   |  408 ++-\n lib/mcp/phase5.test.ts                             |    5 +-\n lib/mcp/public-tool-handler-coverage.test.ts       |  220 ++\n lib/mcp/public-tool-output-contracts.test.ts       |  106 +\n lib/mcp/safety.test.ts                             |   74 +-\n lib/mcp/safety.ts                                  |   67 +-\n lib/mcp/security.test.ts                           |    4 +-\n lib/mcp/server.test.ts                             |   65 +-\n lib/mcp/server.ts                                  |   69 +-\n lib/mcp/tool-executor-safe.ts                      |   71 +-\n lib/mcp/tool-executor.ts                           |  110 +-\n lib/mcp/tools.ts                                   |  292 +-\n lib/observability/client-error-route.test.ts       |   29 +\n lib/observability/health-route.test.ts             |   17 +\n lib/observability/structured-log.test.ts           |   24 +\n lib/observability/structured-log.ts                |   42 +\n .../progressive-onboarding-migration.test.ts       |   34 +\n lib/onboarding/progressive-setup.test.ts           |   29 +\n lib/onboarding/progressive-setup.ts                |   68 +\n lib/operations/feature-flags.test.ts               |   15 +\n lib/operations/feature-flags.ts                    |   15 +\n lib/operations/prelaunch-runtime-safety.test.ts    |   34 +\n lib/platform/contracts.test.ts                     |   39 +\n lib/platform/contracts.ts                          |  101 +\n lib/privacy/account-deletion-worker.test.ts        |   92 +\n lib/privacy/account-deletion-worker.ts             |  259 ++\n lib/privacy/data-export-archive.test.ts            |   27 +\n lib/privacy/data-export-archive.ts                 |   68 +\n lib/privacy/data-export.test.ts                    |    7 +\n lib/privacy/data-export.ts                         |  145 +-\n lib/privacy/deletion-contract.ts                   |    3 +\n lib/privacy/deletion-notification-crypto.test.ts   |   17 +\n lib/privacy/deletion-notification-crypto.ts        |   30 +\n lib/privacy/deletion-request.test.ts               |   37 +\n lib/privacy/deletion-request.ts                    |   41 +\n lib/privacy/privacy-lifecycle-route.test.ts        |   31 +\n lib/privacy/privacy-routes.test.ts                 |   69 +-\n lib/product/launch-ia-integrity.test.ts            |   48 +\n lib/product/product-model-integrity.test.ts        |  106 +\n lib/release/database-compatibility.ts              |   25 +\n lib/release/vercel-production-release-gate.test.ts |   90 +\n lib/release/version-route.integration.test.ts      |   42 +\n lib/release/version.test.ts                        |   51 +\n lib/release/version.ts                             |   57 +\n lib/security/supabase-launch-hardening.test.ts     |   44 +\n netlify.toml                                       |    1 +\n next-env.d.ts                                      |    2 +-\n next.config.mjs                                    |   24 +\n package-lock.json                                  |  353 ++-\n package.json                                       |   19 +-\n .../plaivra-registration-mobile-2026-07-11.png     |  Bin 0 -> 33966 bytes\n release/release-manifest.template.json             |   26 +\n scripts/capture-route-screenshot.mjs               |   72 +\n scripts/chatgpt-tool-acceptance.mjs                |   18 +\n scripts/check-migration-ledger.mjs                 |   53 +\n scripts/create-release-manifest.mjs                |  104 +\n scripts/netlify-production-release-gate.mjs        |   43 +\n scripts/post-deploy-smoke.mjs                      |  100 +\n scripts/run-rendered-qa.mjs                        |  153 +\n scripts/uptime-synthetic.mjs                       |   32 +\n scripts/vercel-production-release-gate.mjs         |   48 +\n services/database/consents.ts                      |    7 +-\n services/database/execution-layer.ts               |   18 +-\n services/database/profile.ts                       |   19 +-\n services/database/workout-sessions.ts              |    2 +\n supabase/migration-ledger.json                     |  166 ++\n ...0260710164946_enforce_initial_launch_age_16.sql |   26 +\n ...93700_canonical_data_convergence_foundation.sql |  311 ++\n ...0194238_private_admin_rls_and_query_indexes.sql |  201 ++\n .../20260710195027_cimd_oauth_token_lifecycle.sql  |  117 +\n .../20260710202758_mcp_idempotency_ledger.sql      |   54 +\n ...ogressive_onboarding_and_legacy_constraints.sql |   56 +\n ...privacy_deletion_export_retention_lifecycle.sql |  365 +++\n ...711001950_legal_document_version_2026_07_11.sql |   21 +\n ...1004551_subscription_entitlement_foundation.sql |  169 ++\n ...013000_prelaunch_runtime_safety_corrections.sql |  237 ++\n ...4500_idempotency_uncertain_completion_guard.sql |   85 +\n ...ogressive_onboarding_and_legacy_constraints.sql |   13 +\n ...privacy_deletion_export_retention_lifecycle.sql |   19 +\n ...711001950_legal_document_version_2026_07_11.sql |    9 +\n ...1004551_subscription_entitlement_foundation.sql |   46 +\n supabase/verification/age-eligibility-review.sql   |   40 +\n .../verification/canonical-data-convergence.sql    |   80 +\n .../verification/prelaunch-rls-policy-diff.sql     |   23 +\n .../verification/prelaunch-row-reconciliation.sql  |   31 +\n .../prelaunch-schema-compatibility.sql             |    8 +\n test/server-only.ts                                |    3 +\n types/database.ts                                  |    3 +\n vercel.json                                        |   18 +\n vitest.config.mjs                                  |    3 +-\n vitest.integration.config.mjs                      |   15 +\n vitest.unit.config.mjs                             |   16 +\n 268 files changed, 15428 insertions(+), 2880 deletions(-)",
+  "nameStatus": [
+    {
+      "status": "M",
+      "paths": [
+        ".env.example"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        ".github/workflows/post-deploy-smoke.yml"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        ".github/workflows/quality.yml"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        ".github/workflows/uptime-synthetic.yml"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        ".gitignore"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "README.md"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/(private)/calories/food-hub/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/(private)/calories/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/(private)/dashboard/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/(private)/my-meal-plan/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/(private)/onboarding/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/(private)/profile/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/(private)/settings/account/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/(private)/settings/ai-imports/chatgpt-setup/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/(private)/settings/ai-imports/page.tsx"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/(private)/settings/connections/chatgpt/page.tsx"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/(private)/settings/connections/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/(private)/settings/data-privacy/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/(private)/settings/page.tsx"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/(private)/settings/subscription/page.tsx"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/api/billing/entitlements/route.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/api/billing/stripe/checkout/route.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/api/billing/stripe/portal/route.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/api/billing/stripe/webhook/route.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/api/email/send/route.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/api/email/weekly-summary/route.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/api/exercise-calories/route.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/api/food/open-food-facts/route.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/api/health/route.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/api/internal/maintenance/billing-events/route.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/api/internal/maintenance/oauth-cleanup/route.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/api/internal/maintenance/privacy-lifecycle/route.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/api/mcp/connections/route.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/api/oauth/authorize/route.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/api/oauth/revoke/route.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/api/observability/client-error/route.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/api/user/ai-permissions/route.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/api/user/consents/route.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/api/user/data-export/route.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/api/user/privacy-requests/route.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/api/version/route.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/api/workout-plan/replace-exercise/route.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/error.tsx"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "app/global-error.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/layout.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/legal/disclaimer/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/legal/impressum/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/legal/privacy/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/legal/terms/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "app/page.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/ai/ai-action-request-dialog.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/ai/workout-ai-action-panel.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/auth/auth-form.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/auth/consent-completion-client.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/auth/oauth-complete-client.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/auth/oauth-consent.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/auth/protected-route.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/dashboard/dashboard-sections.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/layout/app-shell.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/layout/brand.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/layout/language-switcher.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/layout/public-footer.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/layout/public-nav.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/legal/legal-page.tsx"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "components/meals/chatgpt-meal-import-review.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/meals/custom-nutrition-manager.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/meals/grocery-list-panel.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/meals/meal-ai-actions.tsx"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "components/meals/meal-plan-import-review.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/meals/my-meal-plan-builder.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/meals/nutrition-target-profiles.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/meals/recent-food-strip.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/motion/index.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/profile/execution-profiles.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/settings/ai-permissions-card.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/settings/connected-apps.tsx"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "components/shared/chatgpt-execution-card.tsx"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "components/shared/chatgpt-import-card.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/workouts/my-workout-plans.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "components/workouts/workout-plan-builder.tsx"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "docs/architecture/canonical-domain-model.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/architecture/decisions/0001-performed-workout-sessions.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/architecture/decisions/0002-exercise-catalog.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/architecture/decisions/0003-saved-nutrition-content.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/architecture/migration-ledger-reconciliation.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/billing/entitlement-foundation.md"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "docs/chatgpt-app/README.md"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "docs/chatgpt-app/cimd-authentication-architecture.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/chatgpt-app/public-tool-catalog.json"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/chatgpt-app/public-tool-catalog.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/native-readiness/README.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/native-readiness/android-plan.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/native-readiness/api-auth-data-contract.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/native-readiness/deep-links-offline-conflicts.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/native-readiness/ios-plan.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/native-readiness/notifications-analytics-privacy.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/native-readiness/screen-parity-matrix.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/operations/README.prelaunch-correction.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/operations/incident-response.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/operations/launch-runbook.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/operations/prelaunch-correction-checklist.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/operations/prelaunch-correction-evidence.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/operations/prelaunch-correction-plan.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/operations/prelaunch-correction-status.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/operations/prelaunch-production-baseline-2026-07-11.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/operations/submission-checklists.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/performance/dashboard-query-fanout.md"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "docs/privacy-retention-and-deletion-plan.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/active-workout-390x844.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/dashboard-1280x800.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/disclaimer-430x932.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/food-log-393x852.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/impressum-768x1024.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/landing-390x844-200-percent-text.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/landing-390x844-arabic.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/landing-390x844.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/login-393x852.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/meal-plan-groceries-430x932.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/oauth-consent-1280x800.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/onboarding-1024x768.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/privacy-390x844.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/progress-768x1024.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/recovery-768x1024.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/registration-430x932.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/settings-privacy-deletion-1024x768.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/subscription-1440x900.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/terms-393x852.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/evidence/2026-07-11/workout-plan-1440x900.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/rendered-qa-2026-07-11.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/rendered-qa-results.json"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/rendered/dashboard-offline-synthetic-390x844.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/rendered/landing-1440x900.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/rendered/landing-200-percent-reflow-1440x900.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/rendered/registration-390x844-full.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/qa/rendered/registration-430x932.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/release/README.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "docs/security/supabase-launch-advisor-baseline.md"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/architecture/canonical-convergence.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/auth/eligibility.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/auth/eligibility.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/billing/billing-migration.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/billing/checkout-gate.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/billing/contracts.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/billing/entitlement-reducer.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/billing/entitlement-reducer.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/billing/native-adapters.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/billing/stripe-event-ordering.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/billing/stripe-event-processor.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/billing/stripe-event-worker.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/billing/stripe-event-worker.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/billing/stripe-server.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/billing/stripe-server.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/billing/stripe-webhook-route.test.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/i18n/public-copy.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/i18n/translations.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/integrations/env.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/legal/age-migration.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/legal/eligibility-consent-route.test.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/legal/operator.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/legal/phase6.test.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/legal/versions.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/activity.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/auth.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/mcp/catalog-versioning.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/mcp/cimd-oauth-migration.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/mcp/cimd.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/mcp/cimd.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/connections-route.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/mcp/context-projections.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/mcp/context-projections.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/mcp/idempotency-migration.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/mcp/idempotency.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/mcp/idempotency.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/mcp/oauth-cleanup-route.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/mcp/oauth-rate-limit.test.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/oauth.test.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/oauth.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/phase5.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/mcp/public-tool-handler-coverage.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/mcp/public-tool-output-contracts.test.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/safety.test.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/safety.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/security.test.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/server.test.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/server.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/tool-executor-safe.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/tool-executor.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/mcp/tools.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/observability/client-error-route.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/observability/health-route.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/observability/structured-log.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/observability/structured-log.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/onboarding/progressive-onboarding-migration.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/onboarding/progressive-setup.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/onboarding/progressive-setup.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/operations/feature-flags.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/operations/feature-flags.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/operations/prelaunch-runtime-safety.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/platform/contracts.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/platform/contracts.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/privacy/account-deletion-worker.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/privacy/account-deletion-worker.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/privacy/data-export-archive.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/privacy/data-export-archive.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/privacy/data-export.test.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/privacy/data-export.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/privacy/deletion-contract.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/privacy/deletion-notification-crypto.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/privacy/deletion-notification-crypto.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/privacy/deletion-request.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/privacy/deletion-request.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/privacy/privacy-lifecycle-route.test.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "lib/privacy/privacy-routes.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/product/launch-ia-integrity.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/product/product-model-integrity.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/release/database-compatibility.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/release/vercel-production-release-gate.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/release/version-route.integration.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/release/version.test.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/release/version.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "lib/security/supabase-launch-hardening.test.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "netlify.toml"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "next-env.d.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "next.config.mjs"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "package-lock.json"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "package.json"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "public/product/plaivra-registration-mobile-2026-07-11.png"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "release/release-manifest.template.json"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "scripts/capture-route-screenshot.mjs"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "scripts/chatgpt-tool-acceptance.mjs"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "scripts/check-migration-ledger.mjs"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "scripts/create-release-manifest.mjs"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "scripts/netlify-production-release-gate.mjs"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "scripts/post-deploy-smoke.mjs"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "scripts/run-rendered-qa.mjs"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "scripts/uptime-synthetic.mjs"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "scripts/vercel-production-release-gate.mjs"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "services/database/consents.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "services/database/execution-layer.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "services/database/profile.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "services/database/workout-sessions.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/migration-ledger.json"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/migrations/20260710164946_enforce_initial_launch_age_16.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/migrations/20260710193700_canonical_data_convergence_foundation.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/migrations/20260710194238_private_admin_rls_and_query_indexes.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/migrations/20260710195027_cimd_oauth_token_lifecycle.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/migrations/20260710202758_mcp_idempotency_ledger.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/migrations/20260710211000_progressive_onboarding_and_legacy_constraints.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/migrations/20260710235035_privacy_deletion_export_retention_lifecycle.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/migrations/20260711001950_legal_document_version_2026_07_11.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/migrations/20260711004551_subscription_entitlement_foundation.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/migrations/20260711013000_prelaunch_runtime_safety_corrections.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/migrations/20260711014500_idempotency_uncertain_completion_guard.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/verification/20260710211000_progressive_onboarding_and_legacy_constraints.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/verification/20260710235035_privacy_deletion_export_retention_lifecycle.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/verification/20260711001950_legal_document_version_2026_07_11.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/verification/20260711004551_subscription_entitlement_foundation.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/verification/age-eligibility-review.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/verification/canonical-data-convergence.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/verification/prelaunch-rls-policy-diff.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/verification/prelaunch-row-reconciliation.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "supabase/verification/prelaunch-schema-compatibility.sql"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "test/server-only.ts"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "types/database.ts"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "vercel.json"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "vitest.config.mjs"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "vitest.integration.config.mjs"
+      ]
+    },
+    {
+      "status": "A",
+      "paths": [
+        "vitest.unit.config.mjs"
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "sha": "db60be57acfd6fee4fb9effdb43ee42bdb9ac82b",
+      "subject": "feat: complete prelaunch remediation workstreams",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            ".env.example"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            ".github/workflows/post-deploy-smoke.yml"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            ".github/workflows/quality.yml"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            ".github/workflows/uptime-synthetic.yml"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            ".gitignore"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "README.md"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/(private)/calories/food-hub/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/(private)/calories/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/(private)/dashboard/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/(private)/my-meal-plan/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/(private)/onboarding/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/(private)/profile/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/(private)/settings/account/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/(private)/settings/ai-imports/chatgpt-setup/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/(private)/settings/ai-imports/page.tsx"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/(private)/settings/connections/chatgpt/page.tsx"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/(private)/settings/connections/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/(private)/settings/data-privacy/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/(private)/settings/page.tsx"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/(private)/settings/subscription/page.tsx"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/api/billing/entitlements/route.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/api/billing/stripe/checkout/route.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/api/billing/stripe/portal/route.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/api/billing/stripe/webhook/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/email/send/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/email/weekly-summary/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/exercise-calories/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/food/open-food-facts/route.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/api/health/route.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/api/internal/maintenance/oauth-cleanup/route.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/api/internal/maintenance/privacy-lifecycle/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/mcp/connections/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/oauth/authorize/route.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/api/oauth/revoke/route.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/api/observability/client-error/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/user/ai-permissions/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/user/consents/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/user/data-export/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/user/privacy-requests/route.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/api/version/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/workout-plan/replace-exercise/route.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/error.tsx"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/global-error.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/layout.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/legal/disclaimer/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/legal/impressum/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/legal/privacy/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/legal/terms/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/page.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/ai/ai-action-request-dialog.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/ai/workout-ai-action-panel.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/auth/auth-form.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/auth/consent-completion-client.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/auth/oauth-complete-client.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/auth/oauth-consent.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/auth/protected-route.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/dashboard/dashboard-sections.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/layout/app-shell.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/layout/brand.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/layout/language-switcher.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/layout/public-footer.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/layout/public-nav.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/legal/legal-page.tsx"
+          ]
+        },
+        {
+          "status": "D",
+          "paths": [
+            "components/meals/chatgpt-meal-import-review.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/meals/custom-nutrition-manager.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/meals/grocery-list-panel.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/meals/meal-ai-actions.tsx"
+          ]
+        },
+        {
+          "status": "D",
+          "paths": [
+            "components/meals/meal-plan-import-review.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/meals/my-meal-plan-builder.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/meals/nutrition-target-profiles.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/meals/recent-food-strip.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/motion/index.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/profile/execution-profiles.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/settings/ai-permissions-card.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/settings/connected-apps.tsx"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "components/shared/chatgpt-execution-card.tsx"
+          ]
+        },
+        {
+          "status": "D",
+          "paths": [
+            "components/shared/chatgpt-import-card.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/workouts/my-workout-plans.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "components/workouts/workout-plan-builder.tsx"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "docs/architecture/canonical-domain-model.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/architecture/decisions/0001-performed-workout-sessions.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/architecture/decisions/0002-exercise-catalog.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/architecture/decisions/0003-saved-nutrition-content.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/architecture/migration-ledger-reconciliation.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/billing/entitlement-foundation.md"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "docs/chatgpt-app/README.md"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "docs/chatgpt-app/cimd-authentication-architecture.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/chatgpt-app/public-tool-catalog.json"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/chatgpt-app/public-tool-catalog.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/native-readiness/README.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/native-readiness/android-plan.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/native-readiness/api-auth-data-contract.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/native-readiness/deep-links-offline-conflicts.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/native-readiness/ios-plan.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/native-readiness/notifications-analytics-privacy.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/native-readiness/screen-parity-matrix.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/operations/incident-response.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/operations/launch-runbook.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/operations/submission-checklists.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/performance/dashboard-query-fanout.md"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "docs/privacy-retention-and-deletion-plan.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/active-workout-390x844.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/dashboard-1280x800.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/disclaimer-430x932.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/food-log-393x852.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/impressum-768x1024.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/landing-390x844-200-percent-text.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/landing-390x844-arabic.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/landing-390x844.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/login-393x852.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/meal-plan-groceries-430x932.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/oauth-consent-1280x800.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/onboarding-1024x768.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/privacy-390x844.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/progress-768x1024.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/recovery-768x1024.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/registration-430x932.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/settings-privacy-deletion-1024x768.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/subscription-1440x900.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/terms-393x852.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/workout-plan-1440x900.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/rendered-qa-2026-07-11.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/rendered-qa-results.json"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/rendered/dashboard-offline-synthetic-390x844.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/rendered/landing-1440x900.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/rendered/landing-200-percent-reflow-1440x900.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/rendered/registration-390x844-full.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/qa/rendered/registration-430x932.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/release/README.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "docs/security/supabase-launch-advisor-baseline.md"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/architecture/canonical-convergence.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/auth/eligibility.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/auth/eligibility.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/billing/billing-migration.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/billing/checkout-gate.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/billing/contracts.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/billing/entitlement-reducer.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/billing/entitlement-reducer.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/billing/native-adapters.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/billing/stripe-event-ordering.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/billing/stripe-event-processor.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/billing/stripe-server.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/billing/stripe-server.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/billing/stripe-webhook-route.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/i18n/public-copy.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/i18n/translations.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/integrations/env.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/legal/age-migration.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/legal/eligibility-consent-route.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/legal/operator.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/legal/phase6.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/legal/versions.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/activity.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/auth.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/mcp/catalog-versioning.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/mcp/cimd-oauth-migration.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/mcp/cimd.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/mcp/cimd.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/connections-route.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/mcp/context-projections.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/mcp/context-projections.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/mcp/idempotency-migration.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/mcp/idempotency.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/mcp/idempotency.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/mcp/oauth-cleanup-route.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/oauth.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/oauth.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/phase5.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/safety.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/safety.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/security.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/server.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/server.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/tool-executor-safe.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/tool-executor.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/tools.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/observability/client-error-route.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/observability/health-route.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/observability/structured-log.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/observability/structured-log.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/onboarding/progressive-onboarding-migration.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/onboarding/progressive-setup.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/onboarding/progressive-setup.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/operations/feature-flags.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/operations/feature-flags.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/platform/contracts.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/platform/contracts.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/privacy/account-deletion-worker.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/privacy/account-deletion-worker.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/privacy/data-export-archive.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/privacy/data-export-archive.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/privacy/data-export.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/privacy/data-export.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/privacy/deletion-contract.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/privacy/deletion-notification-crypto.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/privacy/deletion-notification-crypto.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/privacy/deletion-request.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/privacy/deletion-request.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/privacy/privacy-lifecycle-route.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/privacy/privacy-routes.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/product/launch-ia-integrity.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/product/product-model-integrity.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/release/version-route.integration.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/release/version.test.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/release/version.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/security/supabase-launch-hardening.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "next-env.d.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "next.config.mjs"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "package-lock.json"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "package.json"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "public/product/plaivra-registration-mobile-2026-07-11.png"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "release/release-manifest.template.json"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "scripts/capture-route-screenshot.mjs"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "scripts/check-migration-ledger.mjs"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "scripts/create-release-manifest.mjs"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "scripts/post-deploy-smoke.mjs"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "scripts/run-rendered-qa.mjs"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "scripts/uptime-synthetic.mjs"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "services/database/consents.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "services/database/execution-layer.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "services/database/profile.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "services/database/workout-sessions.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/migration-ledger.json"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/migrations/20260710164946_enforce_initial_launch_age_16.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/migrations/20260710193700_canonical_data_convergence_foundation.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/migrations/20260710194238_private_admin_rls_and_query_indexes.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/migrations/20260710195027_cimd_oauth_token_lifecycle.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/migrations/20260710202758_mcp_idempotency_ledger.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/migrations/20260710211000_progressive_onboarding_and_legacy_constraints.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/migrations/20260710235035_privacy_deletion_export_retention_lifecycle.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/migrations/20260711001950_legal_document_version_2026_07_11.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/migrations/20260711004551_subscription_entitlement_foundation.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/verification/20260710211000_progressive_onboarding_and_legacy_constraints.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/verification/20260710235035_privacy_deletion_export_retention_lifecycle.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/verification/20260711001950_legal_document_version_2026_07_11.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/verification/20260711004551_subscription_entitlement_foundation.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/verification/age-eligibility-review.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/verification/canonical-data-convergence.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "test/server-only.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "types/database.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "vercel.json"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "vitest.config.mjs"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "vitest.integration.config.mjs"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "vitest.unit.config.mjs"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "5d879d4cab94853c251fc868a7afe1cf8b79f5cb",
+      "subject": "docs: record correction scope and external blockers",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "docs/operations/prelaunch-correction-status.md"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "8bcf0e5081b60d1e7def690c690c38f55349f410",
+      "subject": "docs: add prelaunch correction execution plan",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "docs/operations/prelaunch-correction-plan.md"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "2a953c4aadbe0512b8dac678eaaed42d1e8a9369",
+      "subject": "docs: add correction evidence ledger",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "docs/operations/prelaunch-correction-evidence.md"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "7157507ae49bce0faa094bcfaebb148d3e9bd098",
+      "subject": "docs: add correction completion checklist",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "docs/operations/prelaunch-correction-checklist.md"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "1a5621d42d6592fafa210a294d0c45b16fa8b99f",
+      "subject": "docs: add correction workspace note",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "docs/operations/README.prelaunch-correction.md"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "1caec6473c2c1abbe2f01e4bb321112bcaef19bb",
+      "subject": "chore: add deterministic prelaunch correction patcher",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "scripts/apply-prelaunch-corrections.py"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "1c5fa721be71a7f85405c38aef9c92eaa231694d",
+      "subject": "ci: apply deterministic prelaunch correction patch",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            ".github/workflows/apply-prelaunch-corrections.yml"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "a92945b044f5b4b4e1ec2d499c48c8f1b580c094",
+      "subject": "ci: trigger deterministic correction workflow",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            ".github/workflows/apply-prelaunch-corrections.yml"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "b874327bdcd94eddac397f9fa0d680bc7c6d5c8b",
+      "subject": "ci: execute correction patch inside verified quality workflow",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            ".github/workflows/quality.yml"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "102cf703c06dfce98e2b756caadebd5137c04621",
+      "subject": "ci: trigger prelaunch correction execution",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "docs/operations/prelaunch-correction-trigger.txt"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "92ec22cf7ab1b142f445ab4619490f59c656d208",
+      "subject": "ci: restore valid quality workflow with branch checkout",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            ".github/workflows/quality.yml"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "bc9d09a63da50e8e8f20f30722d3c3a65d80eb2b",
+      "subject": "ci: add guarded correction runner",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "scripts/run-prelaunch-corrections.py"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "fb799888cfa35dd3bba288e972188a36708a281c",
+      "subject": "ci: add one-shot correction executor",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "scripts/ci-apply-prelaunch-corrections.sh"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "528dd56079cea59b31188c4c0a28ab617cf2f8d7",
+      "subject": "ci: execute one-shot correction before lint",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "package.json"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "af19be8cc59a494fc3f8f3f2f821a8a13832c28b",
+      "subject": "fix: apply prelaunch runtime safety corrections",
+      "files": [
+        {
+          "status": "D",
+          "paths": [
+            ".github/workflows/apply-prelaunch-corrections.yml"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/billing/stripe/webhook/route.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "app/api/internal/maintenance/billing-events/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/user/privacy-requests/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "app/api/version/route.ts"
+          ]
+        },
+        {
+          "status": "D",
+          "paths": [
+            "docs/operations/prelaunch-correction-trigger.txt"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/billing/stripe-event-worker.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/integrations/env.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/context-projections.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/idempotency.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/oauth.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/mcp/public-tool-output-contracts.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/safety.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/operations/prelaunch-runtime-safety.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/privacy/account-deletion-worker.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/release/database-compatibility.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/release/version-route.integration.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "package.json"
+          ]
+        },
+        {
+          "status": "D",
+          "paths": [
+            "scripts/apply-prelaunch-corrections.py"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "scripts/chatgpt-tool-acceptance.mjs"
+          ]
+        },
+        {
+          "status": "D",
+          "paths": [
+            "scripts/ci-apply-prelaunch-corrections.sh"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "scripts/post-deploy-smoke.mjs"
+          ]
+        },
+        {
+          "status": "D",
+          "paths": [
+            "scripts/run-prelaunch-corrections.py"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "supabase/migration-ledger.json"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/migrations/20260711013000_prelaunch_runtime_safety_corrections.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/verification/prelaunch-rls-policy-diff.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/verification/prelaunch-row-reconciliation.sql"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "supabase/verification/prelaunch-schema-compatibility.sql"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "vercel.json"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "90726073b1098cc97099e259f73fda8b7cd6f581",
+      "subject": "ci: restore read-only quality verification",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            ".github/workflows/quality.yml"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "85950bef9c7e68c96d9affd56d733b1beb9f2299",
+      "subject": "test: generate schema-valid MCP contract fixtures",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/public-tool-output-contracts.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "149c7188a09e4366b72fbce7ff2abf010dc20ea9",
+      "subject": "test: cover leased MCP idempotency claim protocol",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/idempotency.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "76331ee2ad6e5d0a0901ffe0ed5b24307538ffae",
+      "subject": "test: verify durable Stripe duplicate claim semantics",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "lib/billing/stripe-webhook-route.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "e78546a2ce3d999da4bb0cad5d3e74153403f332",
+      "subject": "ci: add one-shot unit contract correction patch",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "scripts/apply-ci-test-fixes.py"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "3631aa131d8265500d94eb2b82784ed7fb7b44fe",
+      "subject": "ci: add one-shot unit fix executor",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "scripts/ci-apply-test-fixes.sh"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "2616b8f3ab140edb69460465b3839aab8b410be5",
+      "subject": "ci: run one-shot unit contract fixes",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "package.json"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "2a97320312c57a160afe6ce90febd6725147cef4",
+      "subject": "ci: allow one-shot verified unit fix commit",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            ".github/workflows/quality.yml"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "4a21df94075c4ee67823eb2411e6804a0406faa1",
+      "subject": "test: align unit contracts with runtime safety changes",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "lib/mcp/oauth-rate-limit.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/oauth.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/safety.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "package.json"
+          ]
+        },
+        {
+          "status": "D",
+          "paths": [
+            "scripts/apply-ci-test-fixes.py"
+          ]
+        },
+        {
+          "status": "D",
+          "paths": [
+            "scripts/ci-apply-test-fixes.sh"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "84f4ec03d58b1846d1ea7aa666e8e7c2d238d8cf",
+      "subject": "ci: restore permanent read-only quality permissions",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            ".github/workflows/quality.yml"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "35df75d3e5f02f81ada304ab3676777a41455a25",
+      "subject": "ci: bind release manifest to PR head commit",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            ".github/workflows/quality.yml"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "6662390b35be100a20f76395d2d546e8010eb8a0",
+      "subject": "fix(db): prevent unsafe replay after uncertain MCP completion",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "supabase/migrations/20260711014500_idempotency_uncertain_completion_guard.sql"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "c7e290157d13847d9d6c56b03de294384aa7695e",
+      "subject": "docs(db): ledger uncertain idempotency completion guard",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "supabase/migration-ledger.json"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "38c96922a85f486d8f9fe0f236a109a102917a30",
+      "subject": "test: assert uncertain idempotency completion fails safe",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "lib/operations/prelaunch-runtime-safety.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "612e61b72695f93a65d7d0c7f0282ba34e577c6d",
+      "subject": "fix: make billing retry sweep compatible with Vercel Hobby",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "vercel.json"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "857e4272772809c46412d0f4e6b366faac922bd3",
+      "subject": "test(mcp): execute every public tool through a concrete handler",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "lib/mcp/public-tool-handler-coverage.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "5dd975a0ecf0477d3a95f5195817fbb881f90611",
+      "subject": "docs: record verified correction status and blockers",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "docs/operations/prelaunch-correction-status.md"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "1cf3bb78f396ed42279c9bf2856265fcf1f62df3",
+      "subject": "docs: mark completed and blocked prelaunch gates",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "docs/operations/prelaunch-correction-checklist.md"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "d8fb0b7c5e6784a34fefb0a07f31a021104cf420",
+      "subject": "docs: capture read-only production reconciliation baseline",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "docs/operations/prelaunch-production-baseline-2026-07-11.md"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "ce382fae61ee550f07bf2849e1ad6bdc24b7fd05",
+      "subject": "docs: record correction verification evidence",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "docs/operations/prelaunch-correction-evidence.md"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "f82d79a42c0e62afb28ec8c7d5e529b93ed1720b",
+      "subject": "chore: stage clean recheck remediation",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "scripts/apply-clean-recheck-remediation.py"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "fb66f41a4cb89b6c5e596709fd1cf6f518e1c61d",
+      "subject": "chore: run one-shot clean recheck remediation",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            ".github/workflows/quality.yml"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "9d4ba2ab96233a11250660f74ad95526b63c5760",
+      "subject": "chore: capture remediation failure evidence",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            ".github/workflows/quality.yml"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "ec6bd74c5db538114731788e926c690b5538be6a",
+      "subject": "fix: align patched PostCSS override specification",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "package.json"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "0abd02aa17167a7eb5ff0d3aa4835f26e221fd2e",
+      "subject": "fix: close deep recheck correctness gaps",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "app/api/billing/stripe/webhook/route.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/billing/stripe-event-processor.ts"
+          ]
+        },
+        {
+          "status": "A",
+          "paths": [
+            "lib/billing/stripe-event-worker.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/billing/stripe-event-worker.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/billing/stripe-webhook-route.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/oauth.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/public-tool-handler-coverage.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/public-tool-output-contracts.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/safety.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/safety.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/tool-executor-safe.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/tools.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/privacy/account-deletion-worker.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/privacy/account-deletion-worker.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "package-lock.json"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "package.json"
+          ]
+        },
+        {
+          "status": "D",
+          "paths": [
+            "scripts/apply-clean-recheck-remediation.py"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "70773f53888e4b93576a7cd51872672e21029efd",
+      "subject": "chore: stage runtime-contract test follow-up",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "scripts/apply-clean-recheck-remediation.py"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "741de4401dded9455302eee31a81f7ba5cfad208",
+      "subject": "fix: close deep recheck correctness gaps",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "lib/billing/stripe-event-worker.test.ts"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "lib/mcp/public-tool-handler-coverage.test.ts"
+          ]
+        },
+        {
+          "status": "D",
+          "paths": [
+            "scripts/apply-clean-recheck-remediation.py"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "8481ab3ce43b9866f01d8ba0331abf6368f68956",
+      "subject": "chore: restore read-only clean quality workflow",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            ".github/workflows/quality.yml"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "8b1e73ca45280620a387d7e439c43182ea937bc2",
+      "subject": "chore(release): require exact-SHA approval for production builds",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "scripts/vercel-production-release-gate.mjs"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "c5d5912201d4a35a328667d23fda75d4c312ed91",
+      "subject": "test(release): prove merge-safe production deployment hold",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "lib/release/vercel-production-release-gate.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "2a3a89a662410a6deba99421a3ec923fd97adc41",
+      "subject": "chore(release): hold production deploys until exact SHA approval",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "vercel.json"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "59c7a1de0e90d3ff2b35c210c989f43bb3cd37e1",
+      "subject": "docs(release): document exact-SHA production approval",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            ".env.example"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "d0424b72fbc8bb16bc1ad6065c95000d4202f24c",
+      "subject": "docs(release): separate merge approval from production activation",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "docs/release/README.md"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "7d3d8db0d11b97377c9ea9cbedcc336120ee61c4",
+      "subject": "test(release): bind deployment hold to repository configuration",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "lib/release/vercel-production-release-gate.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "d0f778c1dcd696d9e5ab6300b829a2bb38a8177f",
+      "subject": "fix(test): keep release-gate environment fixture type-safe",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "lib/release/vercel-production-release-gate.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "dde31350a3f7d329d1756e7c128b759466f3acf6",
+      "subject": "chore(release): require exact-SHA approval for Netlify production",
+      "files": [
+        {
+          "status": "A",
+          "paths": [
+            "scripts/netlify-production-release-gate.mjs"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "6f4d14db2708b29a6faec353ddee195e7e9e57d4",
+      "subject": "chore(release): hold Netlify production deploys until exact SHA approval",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "netlify.toml"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "c358c2b8ca590417c40c4bcbaa9192db1bc73653",
+      "subject": "test(release): verify Vercel and Netlify production holds",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "lib/release/vercel-production-release-gate.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "768d10a9b20599ef4e489c5d3e882178b79c2b5e",
+      "subject": "docs(release): document provider-neutral exact-SHA hold",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            ".env.example"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "57d0fd7af07e279ce0d778cde1522f4d76c85ecd",
+      "subject": "docs(release): cover Vercel and Netlify merge isolation",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "docs/release/README.md"
+          ]
+        }
+      ]
+    },
+    {
+      "sha": "af9aa63ef4c14db4bfa389b0148d5f3fb4121029",
+      "subject": "test(qa): refresh rendered launch evidence",
+      "files": [
+        {
+          "status": "M",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/active-workout-390x844.png"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/dashboard-1280x800.png"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/food-log-393x852.png"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/meal-plan-groceries-430x932.png"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/progress-768x1024.png"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/settings-privacy-deletion-1024x768.png"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/subscription-1440x900.png"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "docs/qa/evidence/2026-07-11/workout-plan-1440x900.png"
+          ]
+        },
+        {
+          "status": "M",
+          "paths": [
+            "docs/qa/rendered-qa-results.json"
+          ]
+        }
+      ]
+    }
+  ]
+}
