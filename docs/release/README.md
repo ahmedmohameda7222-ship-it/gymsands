@@ -6,15 +6,19 @@ A public Plaivra release is identified by its reviewed commit, build timestamp, 
 
 Merging reviewed source into `main` does not authorize a production deployment.
 
-Vercel evaluates `scripts/vercel-production-release-gate.mjs` through `vercel.json` before every build:
+The repository applies exact-SHA production holds to both connected deployment providers:
 
-- preview and development deployments continue normally;
-- production deployments are ignored unless `PLAIVRA_PRODUCTION_RELEASE_SHA` exactly equals Vercel's full 40-character `VERCEL_GIT_COMMIT_SHA`;
-- missing, malformed, stale, or ambiguous production approval fails closed and skips the deployment.
+- Vercel evaluates `scripts/vercel-production-release-gate.mjs` through `vercel.json`;
+- Netlify evaluates `scripts/netlify-production-release-gate.mjs` through `netlify.toml`;
+- preview, deploy-preview, branch, development, and local/CI builds continue normally;
+- production builds stop unless `PLAIVRA_PRODUCTION_RELEASE_SHA` exactly equals the provider's full 40-character commit SHA;
+- missing, malformed, stale, mismatched, or ambiguous production approval fails closed.
 
-Keep `PLAIVRA_PRODUCTION_RELEASE_SHA` empty during ordinary merges. Set it only in the Vercel **Production** environment after the exact reviewed commit has passed the database migration rehearsal, production migration decision, external configuration, real ChatGPT acceptance, populated reviewer-account QA, and legal release gates. Replace or clear it after each release so approval cannot silently carry to a later commit.
+Keep `PLAIVRA_PRODUCTION_RELEASE_SHA` empty during ordinary merges. Set it in every active production deployment provider only after the exact reviewed commit has passed database migration rehearsal, the production migration decision, external configuration, real ChatGPT acceptance, populated reviewer-account QA, and legal release gates. Replace or clear it after each release so approval cannot silently carry to a later commit.
 
-This hold makes the pull request merge-safe while the version-2 application remains release-blocked. It does not make the pending migrations or external launch checks optional.
+These holds protect ordinary Git-connected deployments caused by merging. A separately invoked provider build hook is an explicit release operation and remains prohibited until the same release gates pass.
+
+This makes the pull request merge-safe while the version-2 application remains release-blocked. It does not make the pending migrations or external launch checks optional.
 
 ## Required release gates
 
@@ -71,7 +75,7 @@ Missing reports remain `missing`; deployment and smoke stay `pending` until thei
 
 ## Deployment and smoke
 
-After all release gates are complete, set `PLAIVRA_PRODUCTION_RELEASE_SHA` to the exact reviewed commit in the Vercel Production environment and trigger that exact commit's deployment. After the provider reports a successful deployment, run the **Post-deploy release smoke** workflow from the same commit. For production, use `https://app.plaivra.com`, the full expected commit SHA, and expected environment `production`. The workflow verifies the landing page, version endpoint, deployed commit, build timestamp, environment, and schema compatibility marker and uploads the resulting JSON evidence.
+After all release gates are complete, set `PLAIVRA_PRODUCTION_RELEASE_SHA` to the exact reviewed commit in every provider that can deploy production, then trigger that exact commit's deployment. After the active production provider reports success, run the **Post-deploy release smoke** workflow from the same commit. For production, use `https://app.plaivra.com`, the full expected commit SHA, and expected environment `production`. The workflow verifies the landing page, version endpoint, deployed commit, build timestamp, environment, and schema compatibility marker and uploads the resulting JSON evidence.
 
 The same check can run locally against a preview:
 
@@ -83,7 +87,7 @@ npm run smoke:postdeploy -- \
   --output quality-reports/post-deploy-smoke.json
 ```
 
-Do not run a production deployment, promote a preview, or apply production migrations automatically from this repository workflow. Preserve provider deployment evidence and obtain the required owner review before launch.
+Do not run a production deployment, promote a preview, invoke a production build hook, or apply production migrations automatically from this repository workflow. Preserve provider deployment evidence and obtain the required owner review before launch.
 
 Operational cutover, monitoring, backup evidence, incident response, and submission assets are governed by:
 
