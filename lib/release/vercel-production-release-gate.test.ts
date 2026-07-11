@@ -7,8 +7,14 @@ const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const script = fileURLToPath(new URL("../../scripts/vercel-production-release-gate.mjs", import.meta.url));
 const SHA = "8481ab3ce43b9866f01d8ba0331abf6368f68956";
 
-function run(overrides: NodeJS.ProcessEnv = {}) {
-  const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, ...overrides };
+type EnvironmentOverrides = Record<string, string | undefined>;
+
+function run(overrides: EnvironmentOverrides = {}) {
+  const env = {
+    NODE_ENV: "test",
+    PATH: process.env.PATH ?? "",
+    ...overrides
+  } as NodeJS.ProcessEnv;
   return spawnSync(process.execPath, [script], { env, encoding: "utf8" });
 }
 
