@@ -104,7 +104,7 @@ export function ProfileSummaryCard({ onboarding }: ProfileSummaryCardProps) {
             </Link>
           </Button>
           <Button asChild variant="outline" className="min-h-12 w-full">
-            <Link href="/onboarding?edit=true">
+            <Link href="/onboarding?edit=true&returnTo=%2Fsettings">
               <ExternalLink className="h-4 w-4" />
               {t("settings.fitnessProfile")}
             </Link>

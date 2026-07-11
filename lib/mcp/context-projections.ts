@@ -81,6 +81,21 @@ function storedUserTextArray(value: unknown) {
   return value.map((item) => storedUserText(item, 300)).filter((item): item is StoredUserText => Boolean(item));
 }
 
+function storedUserDataValue(value: unknown): unknown {
+  if (typeof value === "string") return storedUserText(value, 500);
+  if (Array.isArray(value)) return storedUserTextArray(value);
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "boolean") return value;
+  return null;
+}
+
+function storedSportDetails(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return Object.entries(value as Record<string, unknown>)
+    .map(([field, rawValue]) => ({ field, value: storedUserDataValue(rawValue) }))
+    .filter((item) => item.value !== null);
+}
+
 const USER_TEXT_FIELD = /^(?:name|title|goal|focus|day_name|workout_name|exercise_name|block_type|reps|weight|tempo)$/;
 
 function sanitizeNestedUserText(value: unknown, key = ""): unknown {
@@ -117,10 +132,10 @@ function throwQueryError(error: { message?: string } | null, section: string) {
 async function trainingPlanning(supabase: SupabaseClient, userId: string) {
   const [profile, constraints, plans] = await Promise.all([
     supabase.from("onboarding_answers")
-      .select("goal,training_level,training_place,training_days_per_week,workout_duration_minutes")
+      .select("goal,goals,primary_goal,primary_sport,primary_sport_other,secondary_sports,training_level,training_place,activity_level,training_days_per_week,available_days,workout_duration_minutes,preferred_workout_time,liked_activities,disliked_activities,sport_details,available_equipment")
       .eq("user_id", userId).maybeSingle(),
     supabase.from("user_fitness_constraints")
-      .select("injury_or_limitation_labels,areas_to_protect,movement_restrictions,legacy_context_notes")
+      .select("injury_or_limitation_labels,areas_to_protect,pain_sensitive_areas,movement_restrictions,movements_to_avoid,discomfort_exercises,mobility_limitations,professional_restrictions,legacy_context_notes")
       .eq("user_id", userId).maybeSingle(),
     supabase.from("user_workout_plans")
       .select("id,name,goal,is_active,start_date,program_duration_weeks,days_per_week,session_duration_minutes,updated_at")
@@ -133,16 +148,32 @@ async function trainingPlanning(supabase: SupabaseClient, userId: string) {
   const c = (constraints.data ?? {}) as Record<string, unknown>;
   return {
     planning_profile: {
-      goal: storedUserText(p.goal, 300),
+      goals: storedUserTextArray(p.goals),
+      primary_goal: storedUserText(p.primary_goal ?? p.goal, 300),
+      primary_sport: storedUserText(p.primary_sport, 100),
+      custom_primary_sport: storedUserText(p.primary_sport_other, 200),
+      secondary_sports: storedUserTextArray(p.secondary_sports),
       training_level: storedUserText(p.training_level, 100),
       training_place: storedUserText(p.training_place, 150),
+      activity_level: storedUserText(p.activity_level, 100),
       training_days_per_week: p.training_days_per_week ?? null,
-      workout_duration_minutes: p.workout_duration_minutes ?? null
+      available_days: storedUserTextArray(p.available_days),
+      workout_duration_minutes: p.workout_duration_minutes ?? null,
+      preferred_workout_time: storedUserText(p.preferred_workout_time, 100),
+      liked_activities: storedUserTextArray(p.liked_activities),
+      disliked_activities: storedUserTextArray(p.disliked_activities),
+      sport_details: storedSportDetails(p.sport_details),
+      available_equipment: storedUserTextArray(p.available_equipment)
     },
     functional_constraints: {
       user_authored_labels: storedUserTextArray(c.injury_or_limitation_labels),
-      areas_to_protect: storedUserTextArray(c.areas_to_protect),
-      movement_restrictions: storedUserText(c.movement_restrictions),
+      areas_to_protect: storedUserTextArray(c.pain_sensitive_areas ?? c.areas_to_protect),
+      pain_sensitive_areas: storedUserTextArray(c.pain_sensitive_areas ?? c.areas_to_protect),
+      movement_restrictions: storedUserText(c.movements_to_avoid ?? c.movement_restrictions),
+      movements_to_avoid: storedUserText(c.movements_to_avoid ?? c.movement_restrictions),
+      discomfort_exercises: storedUserTextArray(c.discomfort_exercises),
+      mobility_limitations: storedUserText(c.mobility_limitations),
+      professional_restrictions: storedUserText(c.professional_restrictions),
       retained_legacy_notes: storedUserText(c.legacy_context_notes),
       medical_interpretation_allowed: false
     },
@@ -163,7 +194,7 @@ async function trainingPlanning(supabase: SupabaseClient, userId: string) {
 async function nutritionPlanning(supabase: SupabaseClient, userId: string) {
   const [profile, constraints, targets, preferences, targetProfiles] = await Promise.all([
     supabase.from("onboarding_answers")
-      .select("goal,nutrition_preferences,allergies_limitations")
+      .select("goal,goals,primary_goal,nutrition_preferences,allergies_limitations")
       .eq("user_id", userId).maybeSingle(),
     supabase.from("user_fitness_constraints")
       .select("nutrition_restrictions")
@@ -172,7 +203,7 @@ async function nutritionPlanning(supabase: SupabaseClient, userId: string) {
       .select("daily_calories,protein_g,carbs_g,fat_g,water_ml,updated_at")
       .eq("user_id", userId).maybeSingle(),
     supabase.from("user_nutrition_preference_profiles")
-      .select("weekly_food_budget,budget_currency,max_cooking_time_minutes,meal_prep_days,cooking_skill,kitchen_equipment,preferred_cuisines,disliked_foods,allergies,repeat_tolerance,meals_per_day,ingredient_reuse_preference,grocery_style_preference,updated_at")
+      .select("nutrition_goal,weekly_food_budget,budget_currency,max_cooking_time_minutes,meal_prep_days,meal_prep_preference,cooking_skill,kitchen_equipment,preferred_cuisines,liked_foods,disliked_foods,allergy_items,dietary_restrictions,allergies,repeat_tolerance,meals_per_day,ingredient_reuse_preference,grocery_style_preference,eating_schedule,supplements,tracks_calories_or_macros,updated_at")
       .eq("user_id", userId).maybeSingle(),
     supabase.from("user_nutrition_target_profiles")
       .select("id,target_type,calories,protein_g,carbs_g,fat_g,water_ml,updated_at")
@@ -184,28 +215,41 @@ async function nutritionPlanning(supabase: SupabaseClient, userId: string) {
   const p = (profile.data ?? {}) as Record<string, unknown>;
   const c = (constraints.data ?? {}) as Record<string, unknown>;
   const pref = (preferences.data ?? {}) as Record<string, unknown>;
+  const canonicalAllergies = Array.isArray(pref.allergy_items) && pref.allergy_items.length
+    ? pref.allergy_items
+    : typeof pref.allergies === "string" && pref.allergies.trim()
+      ? [pref.allergies]
+      : [];
   return {
-    goal: storedUserText(p.goal, 300),
+    goal: storedUserText(p.primary_goal ?? p.goal, 300),
+    nutrition_goal: storedUserText(pref.nutrition_goal, 100),
     nutrition_preferences: storedUserTextArray(p.nutrition_preferences),
     user_confirmed_restrictions: {
+      allergies: storedUserTextArray(canonicalAllergies),
+      dietary_restrictions: storedUserTextArray(pref.dietary_restrictions),
       legacy_free_text: storedUserText(p.allergies_limitations),
       planning_restrictions: storedUserText(c.nutrition_restrictions),
-      allergies: storedUserText(pref.allergies),
+      legacy_planning_restrictions: storedUserText(c.nutrition_restrictions),
       medical_interpretation_allowed: false
     },
     default_targets: targets.data ?? null,
     target_profiles: targetProfiles.data ?? [],
     planning_preferences: {
+      meals_per_day: pref.meals_per_day ?? null,
+      preferred_cuisines: storedUserTextArray(pref.preferred_cuisines),
+      liked_foods: storedUserTextArray(pref.liked_foods),
+      disliked_foods: storedUserTextArray(pref.disliked_foods),
+      cooking_skill: storedUserText(pref.cooking_skill, 100),
+      max_cooking_time_minutes: pref.max_cooking_time_minutes ?? null,
+      meal_prep_preference: storedUserText(pref.meal_prep_preference, 100),
+      meal_prep_days: storedUserTextArray(pref.meal_prep_days),
       weekly_food_budget: pref.weekly_food_budget ?? null,
       budget_currency: storedUserText(pref.budget_currency, 20),
-      max_cooking_time_minutes: pref.max_cooking_time_minutes ?? null,
-      meal_prep_days: storedUserTextArray(pref.meal_prep_days),
-      cooking_skill: storedUserText(pref.cooking_skill, 100),
+      eating_schedule: storedUserText(pref.eating_schedule, 300),
+      supplements: storedUserTextArray(pref.supplements),
+      tracks_calories_or_macros: typeof pref.tracks_calories_or_macros === "boolean" ? pref.tracks_calories_or_macros : null,
       kitchen_equipment: storedUserTextArray(pref.kitchen_equipment),
-      preferred_cuisines: storedUserTextArray(pref.preferred_cuisines),
-      disliked_foods: storedUserTextArray(pref.disliked_foods),
       repeat_tolerance: storedUserText(pref.repeat_tolerance, 100),
-      meals_per_day: pref.meals_per_day ?? null,
       ingredient_reuse_preference: storedUserText(pref.ingredient_reuse_preference, 100),
       grocery_style_preference: storedUserText(pref.grocery_style_preference, 100)
     }
@@ -405,6 +449,16 @@ const storedTextSchema = {
 
 const storedTextArraySchema = { type: "array", items: storedTextSchema } as const;
 
+const storedSportDetailSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["field", "value"],
+  properties: {
+    field: stringValue,
+    value: { anyOf: [storedTextSchema, storedTextArraySchema, numberValue, booleanValue] }
+  }
+} as const;
+
 const functionalConstraintsSchema = {
   type: "object",
   additionalProperties: false,
@@ -412,7 +466,12 @@ const functionalConstraintsSchema = {
   properties: {
     user_authored_labels: storedTextArraySchema,
     areas_to_protect: storedTextArraySchema,
+    pain_sensitive_areas: storedTextArraySchema,
     movement_restrictions: storedTextSchema,
+    movements_to_avoid: storedTextSchema,
+    discomfort_exercises: storedTextArraySchema,
+    mobility_limitations: storedTextSchema,
+    professional_restrictions: storedTextSchema,
     retained_legacy_notes: storedTextSchema,
     medical_interpretation_allowed: { type: "boolean", const: false }
   }
@@ -459,11 +518,22 @@ export const trainingPlanningContextOutputSchema = projectionSchema("training_pl
       type: "object",
       additionalProperties: false,
       properties: {
-        goal: storedTextSchema,
+        goals: storedTextArraySchema,
+        primary_goal: storedTextSchema,
+        primary_sport: storedTextSchema,
+        custom_primary_sport: storedTextSchema,
+        secondary_sports: storedTextArraySchema,
         training_level: storedTextSchema,
         training_place: storedTextSchema,
+        activity_level: storedTextSchema,
         training_days_per_week: numberValue,
-        workout_duration_minutes: numberValue
+        available_days: storedTextArraySchema,
+        workout_duration_minutes: numberValue,
+        preferred_workout_time: storedTextSchema,
+        liked_activities: storedTextArraySchema,
+        disliked_activities: storedTextArraySchema,
+        sport_details: { type: "array", items: storedSportDetailSchema },
+        available_equipment: storedTextArraySchema
       }
     },
     functional_constraints: functionalConstraintsSchema,
@@ -493,15 +563,18 @@ export const nutritionPlanningContextOutputSchema = projectionSchema("nutrition_
   required: ["nutrition_preferences", "user_confirmed_restrictions", "target_profiles", "planning_preferences"],
   properties: {
     goal: storedTextSchema,
+    nutrition_goal: storedTextSchema,
     nutrition_preferences: storedTextArraySchema,
     user_confirmed_restrictions: {
       type: "object",
       additionalProperties: false,
       required: ["medical_interpretation_allowed"],
       properties: {
+        allergies: { anyOf: [storedTextArraySchema, storedTextSchema] },
+        dietary_restrictions: storedTextArraySchema,
         legacy_free_text: storedTextSchema,
         planning_restrictions: storedTextSchema,
-        allergies: storedTextSchema,
+        legacy_planning_restrictions: storedTextSchema,
         medical_interpretation_allowed: { type: "boolean", const: false }
       }
     },
@@ -511,16 +584,21 @@ export const nutritionPlanningContextOutputSchema = projectionSchema("nutrition_
       type: "object",
       additionalProperties: false,
       properties: {
+        meals_per_day: numberValue,
+        preferred_cuisines: storedTextArraySchema,
+        liked_foods: storedTextArraySchema,
+        disliked_foods: storedTextArraySchema,
+        cooking_skill: storedTextSchema,
+        max_cooking_time_minutes: numberValue,
+        meal_prep_preference: storedTextSchema,
+        meal_prep_days: storedTextArraySchema,
         weekly_food_budget: numberValue,
         budget_currency: storedTextSchema,
-        max_cooking_time_minutes: numberValue,
-        meal_prep_days: storedTextArraySchema,
-        cooking_skill: storedTextSchema,
+        eating_schedule: storedTextSchema,
+        supplements: storedTextArraySchema,
+        tracks_calories_or_macros: booleanValue,
         kitchen_equipment: storedTextArraySchema,
-        preferred_cuisines: storedTextArraySchema,
-        disliked_foods: storedTextArraySchema,
         repeat_tolerance: storedTextSchema,
-        meals_per_day: numberValue,
         ingredient_reuse_preference: storedTextSchema,
         grocery_style_preference: storedTextSchema
       }

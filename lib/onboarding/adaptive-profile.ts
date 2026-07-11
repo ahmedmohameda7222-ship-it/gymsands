@@ -61,13 +61,12 @@ const strengthFields: SportFieldDefinition[] = [
   { id: "available_equipment", label: "Available equipment", type: "tags" },
   { id: "training_style", label: "Preferred training style", type: "choice", options: ["strength", "hypertrophy", "functional", "mixed"] },
   { id: "preferred_split", label: "Preferred split", type: "choice", options: ["full_body", "upper_lower", "push_pull_legs", "sport_support", "no_preference"], optional: true },
-  { id: "strength_level", label: "Strength level", type: "choice", options: ["beginner", "intermediate", "advanced"], optional: true },
+  { id: "strength_level", label: "Strength level or recent training level", type: "choice", options: ["beginner", "intermediate", "advanced"], optional: true },
   { id: "recent_lifts", label: "Recent lifts", type: "text", optional: true },
   { id: "cardio_preferences", label: "Cardio preferences", type: "tags", optional: true }
 ];
 
 const runningFields: SportFieldDefinition[] = [
-  { id: "running_experience", label: "Running experience", type: "choice", options: ["new", "recreational", "experienced", "competitive"] },
   { id: "weekly_distance", label: "Current weekly distance", type: "number", min: 0, max: 500, unit: "km", optional: true },
   { id: "event_goal", label: "Preferred distance or event goal", type: "text", optional: true },
   { id: "current_pace", label: "Current pace", type: "text", optional: true },
@@ -75,34 +74,39 @@ const runningFields: SportFieldDefinition[] = [
   { id: "cardio_preferences", label: "Cardio preferences", type: "tags", optional: true }
 ];
 
+const walkingFields: SportFieldDefinition[] = [
+  { id: "walking_weekly_volume", label: "Current weekly walking or hiking duration or distance", type: "text", optional: true },
+  { id: "walking_terrain", label: "Preferred terrain", type: "choice", options: ["flat", "hilly", "mountain", "urban", "mixed"] },
+  { id: "elevation_preference", label: "Elevation preference or hill tolerance", type: "text", optional: true },
+  { id: "walking_environment", label: "Indoor, outdoor or mixed", type: "choice", options: ["indoor", "outdoor", "mixed"] },
+  { id: "walking_goal", label: "Distance or event goal", type: "text", optional: true }
+];
+
 const cyclingFields: SportFieldDefinition[] = [
   { id: "cycling_type", label: "Cycling type", type: "choice", options: ["road", "mountain", "commuting", "indoor", "mixed"] },
   { id: "weekly_cycling", label: "Current weekly distance or duration", type: "text", optional: true },
-  { id: "cycling_environment", label: "Indoor or outdoor", type: "choice", options: ["indoor", "outdoor", "both"] },
+  { id: "cycling_environment", label: "Indoor, outdoor or both", type: "choice", options: ["indoor", "outdoor", "both"] },
   { id: "cycling_equipment", label: "Equipment availability", type: "tags", optional: true },
   { id: "cycling_goal", label: "Event or endurance goal", type: "text", optional: true }
 ];
 
 const swimmingFields: SportFieldDefinition[] = [
-  { id: "swimming_experience", label: "Swimming experience", type: "choice", options: ["new", "recreational", "experienced", "competitive"] },
   { id: "pool_availability", label: "Pool availability", type: "choice", options: ["regular", "limited", "seasonal"] },
   { id: "preferred_strokes", label: "Preferred strokes", type: "tags", optional: true },
   { id: "swim_session", label: "Current session distance or duration", type: "text", optional: true },
-  { id: "swimming_goal", label: "Competition or general-fitness goal", type: "text", optional: true }
+  { id: "swimming_goal", label: "Competition or fitness goal", type: "text", optional: true }
 ];
 
 const pilatesFields: SportFieldDefinition[] = [
-  { id: "pilates_format", label: "Mat or reformer", type: "choice", options: ["mat", "reformer", "both"] },
-  { id: "pilates_location", label: "Home or studio", type: "choice", options: ["home", "studio", "both"] },
-  { id: "pilates_experience", label: "Experience level", type: "choice", options: ["new", "beginner", "intermediate", "advanced"] },
-  { id: "pilates_focus", label: "Mobility or strength focus", type: "choice", options: ["mobility", "strength", "balanced"] }
+  { id: "pilates_format", label: "Mat, reformer or both", type: "choice", options: ["mat", "reformer", "both"] },
+  { id: "reformer_availability", label: "Reformer availability", type: "choice", options: ["regular", "limited", "none"], optional: true },
+  { id: "pilates_focus", label: "Mobility, strength or balanced focus", type: "choice", options: ["mobility", "strength", "balanced"] }
 ];
 
 const yogaFields: SportFieldDefinition[] = [
-  { id: "yoga_style", label: "Style or preferred type", type: "tags", optional: true },
-  { id: "yoga_experience", label: "Experience level", type: "choice", options: ["new", "beginner", "intermediate", "advanced"] },
+  { id: "yoga_style", label: "Preferred style", type: "tags", optional: true },
   { id: "mobility_focus", label: "Mobility focus", type: "tags", optional: true },
-  { id: "yoga_location", label: "Home or studio", type: "choice", options: ["home", "studio", "both"] }
+  { id: "session_focus_intensity", label: "Session focus or intensity preference", type: "choice", options: ["gentle", "moderate", "challenging", "restorative", "mixed"], optional: true }
 ];
 
 const teamFields: SportFieldDefinition[] = [
@@ -115,7 +119,6 @@ const teamFields: SportFieldDefinition[] = [
 
 const combatFields: SportFieldDefinition[] = [
   { id: "discipline", label: "Discipline", type: "text" },
-  { id: "combat_experience", label: "Experience level", type: "choice", options: ["new", "beginner", "intermediate", "advanced", "competitive"] },
   { id: "technical_sessions", label: "Technical sessions per week", type: "number", min: 0, max: 14, unit: "sessions/week" },
   { id: "conditioning_preference", label: "Conditioning preference", type: "tags", optional: true },
   { id: "combat_equipment", label: "Equipment availability", type: "tags", optional: true }
@@ -133,7 +136,7 @@ export const SPORT_FIELD_CONFIG: Record<SportId, SportFieldDefinition[]> = {
   pilates: pilatesFields,
   yoga_mobility: yogaFields,
   running: runningFields,
-  walking_hiking: runningFields.filter((field) => field.id !== "current_pace"),
+  walking_hiking: walkingFields,
   cycling: cyclingFields,
   swimming: swimmingFields,
   football: teamFields,
@@ -254,7 +257,38 @@ export type OnboardingLoadState = {
   permissions: AiPermissionSettingsStatus["state"] | "loading";
 };
 
-export type FieldErrors = Record<string, string>;
+export type ValidationErrorCode =
+  | "age_required"
+  | "age_range"
+  | "height_range"
+  | "weight_range"
+  | "goals_required"
+  | "primary_goal_required"
+  | "primary_goal_invalid"
+  | "target_weight_range"
+  | "primary_sport_required"
+  | "custom_sport_required"
+  | "experience_required"
+  | "location_required"
+  | "activity_required"
+  | "training_days_range"
+  | "available_days_required"
+  | "session_duration_range"
+  | "preferred_time_required"
+  | "sport_field_required"
+  | "nutrition_goal_required"
+  | "meal_count_range"
+  | "cuisine_required"
+  | "cooking_time_range"
+  | "budget_range"
+  | "budget_currency_required"
+  | "permission_load_failed"
+  | "permission_loading"
+  | "permission_confirmation_required"
+  | "permission_settings_required";
+
+export type ValidationIssue = { code: ValidationErrorCode; fieldId?: string };
+export type FieldErrors = Record<string, ValidationIssue>;
 
 export function createEmptyAdaptiveOnboarding(): AdaptiveOnboardingAnswers {
   return {
@@ -405,9 +439,20 @@ export function shouldShowTargetWeight(goals: GoalId[]) {
   return goals.some((goal) => TARGET_WEIGHT_GOALS.has(goal));
 }
 
-function validateOptionalNumber(errors: FieldErrors, key: string, value: number | null, min: number, max: number, label: string) {
+function validationIssue(code: ValidationErrorCode, fieldId?: string): ValidationIssue {
+  return fieldId ? { code, fieldId } : { code };
+}
+
+function validateOptionalNumber(
+  errors: FieldErrors,
+  key: string,
+  value: number | null,
+  min: number,
+  max: number,
+  code: ValidationErrorCode
+) {
   if (value === null) return;
-  if (!Number.isFinite(value) || value < min || value > max) errors[key] = `${label} must be between ${min} and ${max}.`;
+  if (!Number.isFinite(value) || value < min || value > max) errors[key] = validationIssue(code);
 }
 
 function validateSportDetails(answers: AdaptiveOnboardingAnswers, errors: FieldErrors) {
@@ -415,11 +460,12 @@ function validateSportDetails(answers: AdaptiveOnboardingAnswers, errors: FieldE
   for (const field of SPORT_FIELD_CONFIG[answers.primary_sport]) {
     if (field.optional) continue;
     const value = answers.sport_details[field.id];
-    if (field.type === "tags") {
-      if (!Array.isArray(value) || value.length === 0) errors[`sport_details.${field.id}`] = `${field.label} is required.`;
-    } else if (field.type === "number") {
-      if (typeof value !== "number" || !Number.isFinite(value)) errors[`sport_details.${field.id}`] = `${field.label} is required.`;
-    } else if (!cleanString(value)) errors[`sport_details.${field.id}`] = `${field.label} is required.`;
+    const missing = field.type === "tags"
+      ? !Array.isArray(value) || value.length === 0
+      : field.type === "number"
+        ? typeof value !== "number" || !Number.isFinite(value)
+        : !cleanString(value);
+    if (missing) errors[`sport_details.${field.id}`] = validationIssue("sport_field_required", field.id);
   }
 }
 
@@ -430,42 +476,42 @@ export function validateOnboardingSection(
 ): FieldErrors {
   const errors: FieldErrors = {};
   if (section === 0 || section === 6) {
-    if (answers.age === null) errors.age = "Age is required.";
-    else if (!Number.isInteger(answers.age) || answers.age < 16 || answers.age > 100) errors.age = "Age must be a whole number between 16 and 100.";
-    validateOptionalNumber(errors, "height_cm", answers.height_cm, 120, 250, "Height");
-    validateOptionalNumber(errors, "weight_kg", answers.weight_kg, 35, 350, "Current weight");
+    if (answers.age === null) errors.age = validationIssue("age_required");
+    else if (!Number.isInteger(answers.age) || answers.age < 16 || answers.age > 100) errors.age = validationIssue("age_range");
+    validateOptionalNumber(errors, "height_cm", answers.height_cm, 120, 250, "height_range");
+    validateOptionalNumber(errors, "weight_kg", answers.weight_kg, 35, 350, "weight_range");
   }
   if (section === 1 || section === 6) {
-    if (answers.goals.length === 0) errors.goals = "Select at least one goal.";
-    if (!answers.primary_goal) errors.primary_goal = "Choose one primary goal.";
-    else if (!answers.goals.includes(answers.primary_goal)) errors.primary_goal = "The primary goal must be one of the selected goals.";
-    if (shouldShowTargetWeight(answers.goals)) validateOptionalNumber(errors, "goal_weight_kg", answers.goal_weight_kg, 35, 350, "Target weight");
+    if (answers.goals.length === 0) errors.goals = validationIssue("goals_required");
+    if (!answers.primary_goal) errors.primary_goal = validationIssue("primary_goal_required");
+    else if (!answers.goals.includes(answers.primary_goal)) errors.primary_goal = validationIssue("primary_goal_invalid");
+    if (shouldShowTargetWeight(answers.goals)) validateOptionalNumber(errors, "goal_weight_kg", answers.goal_weight_kg, 35, 350, "target_weight_range");
   }
   if (section === 2 || section === 6) {
-    if (!answers.primary_sport) errors.primary_sport = "Choose a primary sport or activity.";
-    if (answers.primary_sport === "other" && !answers.primary_sport_other.trim()) errors.primary_sport_other = "Enter the sport or activity.";
-    if (!answers.training_level) errors.training_level = "Choose an experience level.";
-    if (!answers.training_place) errors.training_place = "Choose a training location.";
-    if (!answers.activity_level) errors.activity_level = "Choose an activity level.";
-    if (answers.training_days_per_week === null || !Number.isInteger(answers.training_days_per_week) || answers.training_days_per_week < 1 || answers.training_days_per_week > 7) errors.training_days_per_week = "Days per week must be between 1 and 7.";
-    if (answers.available_days.length === 0) errors.available_days = "Select at least one available day.";
-    if (answers.workout_duration_minutes === null || !Number.isInteger(answers.workout_duration_minutes) || answers.workout_duration_minutes < 10 || answers.workout_duration_minutes > 240) errors.workout_duration_minutes = "Session duration must be between 10 and 240 minutes.";
-    if (!answers.preferred_workout_time) errors.preferred_workout_time = "Choose a preferred workout time.";
+    if (!answers.primary_sport) errors.primary_sport = validationIssue("primary_sport_required");
+    if (answers.primary_sport === "other" && !answers.primary_sport_other.trim()) errors.primary_sport_other = validationIssue("custom_sport_required");
+    if (!answers.training_level) errors.training_level = validationIssue("experience_required");
+    if (!answers.training_place) errors.training_place = validationIssue("location_required");
+    if (!answers.activity_level) errors.activity_level = validationIssue("activity_required");
+    if (answers.training_days_per_week === null || !Number.isInteger(answers.training_days_per_week) || answers.training_days_per_week < 1 || answers.training_days_per_week > 7) errors.training_days_per_week = validationIssue("training_days_range");
+    if (answers.available_days.length === 0) errors.available_days = validationIssue("available_days_required");
+    if (answers.workout_duration_minutes === null || !Number.isInteger(answers.workout_duration_minutes) || answers.workout_duration_minutes < 10 || answers.workout_duration_minutes > 240) errors.workout_duration_minutes = validationIssue("session_duration_range");
+    if (!answers.preferred_workout_time) errors.preferred_workout_time = validationIssue("preferred_time_required");
     validateSportDetails(answers, errors);
   }
   if (section === 3 || section === 6) {
-    if (!answers.nutrition.nutrition_goal) errors["nutrition.nutrition_goal"] = "Choose a nutrition goal.";
-    if (answers.nutrition.meals_per_day === null || !Number.isInteger(answers.nutrition.meals_per_day) || answers.nutrition.meals_per_day < 1 || answers.nutrition.meals_per_day > 12) errors["nutrition.meals_per_day"] = "Daily meal count must be between 1 and 12.";
-    if (answers.nutrition.preferred_cuisines.length === 0) errors["nutrition.preferred_cuisines"] = "Add a cuisine or choose no preference.";
-    validateOptionalNumber(errors, "nutrition.max_cooking_time_minutes", answers.nutrition.max_cooking_time_minutes, 0, 1440, "Cooking time");
-    validateOptionalNumber(errors, "nutrition.weekly_food_budget", answers.nutrition.weekly_food_budget, 0, 1_000_000, "Weekly food budget");
-    if (answers.nutrition.weekly_food_budget !== null && !answers.nutrition.budget_currency) errors["nutrition.budget_currency"] = "Choose a currency for the food budget.";
+    if (!answers.nutrition.nutrition_goal) errors["nutrition.nutrition_goal"] = validationIssue("nutrition_goal_required");
+    if (answers.nutrition.meals_per_day === null || !Number.isInteger(answers.nutrition.meals_per_day) || answers.nutrition.meals_per_day < 1 || answers.nutrition.meals_per_day > 12) errors["nutrition.meals_per_day"] = validationIssue("meal_count_range");
+    if (answers.nutrition.preferred_cuisines.length === 0) errors["nutrition.preferred_cuisines"] = validationIssue("cuisine_required");
+    validateOptionalNumber(errors, "nutrition.max_cooking_time_minutes", answers.nutrition.max_cooking_time_minutes, 0, 1440, "cooking_time_range");
+    validateOptionalNumber(errors, "nutrition.weekly_food_budget", answers.nutrition.weekly_food_budget, 0, 1_000_000, "budget_range");
+    if (answers.nutrition.weekly_food_budget !== null && !answers.nutrition.budget_currency) errors["nutrition.budget_currency"] = validationIssue("budget_currency_required");
   }
   if (section === 5 || section === 6) {
-    if (options?.permissionStatus === "failed") errors.permissions = "Retry the saved permission load before continuing.";
-    if (options?.permissionStatus === "loading") errors.permissions = "Wait for saved permissions to finish loading.";
-    if (!options?.permissionConfirmed) errors.permission_confirmation = "Confirm the ChatGPT access choice.";
-    if (!options?.permissions) errors.permissions = "Choose ChatGPT access settings.";
+    if (options?.permissionStatus === "failed") errors.permissions = validationIssue("permission_load_failed");
+    if (options?.permissionStatus === "loading") errors.permissions = validationIssue("permission_loading");
+    if (!options?.permissionConfirmed) errors.permission_confirmation = validationIssue("permission_confirmation_required");
+    if (!options?.permissions) errors.permissions = validationIssue("permission_settings_required");
   }
   return errors;
 }
