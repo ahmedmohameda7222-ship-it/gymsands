@@ -157,7 +157,7 @@ export function AdaptiveOnboardingForm() {
     setStatuses(nextStatuses); setSourceErrors(nextErrors); setExistingCompletedAt(onboarding?.completed_at ?? null);
     setStep(Math.max(0, Math.min(6, Number(onboarding?.setup_stage ?? 0))) as OnboardingSectionIndex);
     setInitialSnapshot(snapshot(merged, nextPermissions, nextPermissionConfirmed)); setIsLoading(false);
-  }, [editMode, ot, router, user?.id]);
+  }, [editMode, ot, router, user]);
 
   useEffect(() => { void loadAll(); }, [loadAll]);
   useEffect(() => { if (!dirty || isSaving) return; const handler = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; }; window.addEventListener("beforeunload", handler); return () => window.removeEventListener("beforeunload", handler); }, [dirty, isSaving]);

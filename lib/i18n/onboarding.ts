@@ -161,7 +161,7 @@ const fieldLabels: Record<"en" | "de" | "ar", Record<string, string>> = {
 
 export function useOnboardingTranslation() {
   const { language, dir } = useTranslation();
-  const locale = language === "de" || language === "ar" ? language : "en";
+  const locale: "en" | "de" | "ar" = language === "de" || language === "ar" ? language : "en";
   const dictionary = dictionaries[locale];
   return useMemo(() => ({
     language: locale,
