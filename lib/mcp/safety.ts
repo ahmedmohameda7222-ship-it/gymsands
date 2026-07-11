@@ -102,8 +102,7 @@ function validateNode(value: unknown, schema: JsonSchema, path: string, errors: 
         !(required in value) ||
         requiredValue === undefined ||
         requiredValue === null ||
-        (typeof requiredValue === "string" && !requiredValue.trim()) ||
-        (Array.isArray(requiredValue) && requiredValue.length === 0)
+        (typeof requiredValue === "string" && !requiredValue.trim())
       ) {
         errors.push(`${path}.${required} is required.`);
       }

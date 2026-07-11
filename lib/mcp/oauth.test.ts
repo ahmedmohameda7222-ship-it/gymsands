@@ -80,6 +80,31 @@ const createMockSupabase = (overrides?: Record<string, unknown>) => {
     }),
     rpc: vi.fn((name: string, params: Record<string, unknown>) => {
       const key = `rpc:${name}:${JSON.stringify(params)}`;
+      if (name === "consume_oauth_rate_limit") {
+        const res = responses[key] ?? responses[name] ?? { data: [{ allowed: true, reset_at: null }], error: null };
+        return Promise.resolve(res);
+      }
+      if (name === "consume_mcp_oauth_authorization_code") {
+        const explicitlyConfigured = responses[key] ?? responses[name];
+        if (explicitlyConfigured) return Promise.resolve(explicitlyConfigured);
+        const configured = responses.mcp_oauth_authorization_codes;
+        const source = typeof configured === "function" ? configured(params) : configured;
+        const row = (source as { data?: Record<string, unknown> | null } | undefined)?.data ?? null;
+        const expiresAt = typeof row?.expires_at === "string" ? Date.parse(row.expires_at) : Number.NaN;
+        const valid = Boolean(
+          row
+          && row.client_id === params.p_client_id
+          && row.redirect_uri === params.p_redirect_uri
+          && row.code_challenge === params.p_code_challenge
+          && row.resource === params.p_resource
+          && Number.isFinite(expiresAt)
+          && expiresAt > Date.now()
+        );
+        return Promise.resolve({
+          data: valid ? { scope: row?.scope, user_id: row?.user_id, connection_id: row?.connection_id } : null,
+          error: null
+        });
+      }
       const res = responses[key] ?? responses[name] ?? { data: null, error: null };
       return Promise.resolve(res);
     })
@@ -463,7 +488,7 @@ describe("handleOAuthToken", () => {
     expect(response.status).toBe(400);
     const json = await response.json() as { error: string; error_description: string };
     expect(json.error).toBe("invalid_grant");
-    expect(json.error_description).toContain("Invalid code_verifier");
+    expect(json.error_description).toContain("invalid, expired, already used, or does not match");
   });
 
   it("rejects wrong redirect_uri", async () => {
@@ -540,7 +565,7 @@ describe("handleOAuthToken", () => {
     expect(response.status).toBe(400);
     const json = await response.json() as { error: string; error_description: string };
     expect(json.error).toBe("invalid_grant");
-    expect(json.error_description).toContain("redirect_uri does not match");
+    expect(json.error_description).toContain("invalid, expired, already used, or does not match");
   });
 
   it("rejects wrong client_id", async () => {
@@ -580,7 +605,7 @@ describe("handleOAuthToken", () => {
     expect(response.status).toBe(400);
     const json = await response.json() as { error: string; error_description: string };
     expect(json.error).toBe("invalid_grant");
-    expect(json.error_description).toContain("Authorization code does not match this client");
+    expect(json.error_description).toContain("invalid, expired, already used, or does not match");
   });
 
   it("rejects expired code", async () => {
@@ -621,7 +646,7 @@ describe("handleOAuthToken", () => {
     expect(response.status).toBe(400);
     const json = await response.json() as { error: string; error_description: string };
     expect(json.error).toBe("invalid_grant");
-    expect(json.error_description).toContain("Authorization code expired");
+    expect(json.error_description).toContain("invalid, expired, already used, or does not match");
   });
 
   it("rejects replayed code", async () => {
@@ -651,7 +676,7 @@ describe("handleOAuthToken", () => {
     expect(response.status).toBe(400);
     const json = await response.json() as { error: string; error_description: string };
     expect(json.error).toBe("invalid_grant");
-    expect(json.error_description).toContain("already been used");
+    expect(json.error_description).toContain("invalid, expired, already used, or does not match");
   });
 
   it("returns a distinct access token, not the public client ID", async () => {
