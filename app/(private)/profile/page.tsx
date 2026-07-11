@@ -72,7 +72,7 @@ export default function ProfilePage() {
             </div>
           </div>
           <Button asChild variant="secondary">
-            <Link href="/onboarding?edit=true">
+            <Link href="/onboarding?edit=true&returnTo=%2Fprofile">
               Edit fitness profile
               <ExternalLink className="h-4 w-4" />
             </Link>

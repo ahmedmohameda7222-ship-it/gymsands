@@ -244,7 +244,7 @@ export default function AccountSettingsPage() {
             icon: Goal,
             title: t("settings.fitnessProfile"),
             detail: t("settings.fitnessProfileDesc"),
-            href: "/onboarding?edit=true",
+            href: "/onboarding?edit=true&returnTo=%2Fsettings%2Faccount",
             action: t("common.edit"),
           },
         ]}

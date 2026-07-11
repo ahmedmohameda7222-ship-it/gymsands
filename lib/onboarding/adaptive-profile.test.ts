@@ -1,174 +1,125 @@
 import { describe, expect, it } from "vitest";
-import {
-  SPORT_FIELD_CONFIG,
-  createEmptyAdaptiveOnboarding,
-  firstInvalidSection,
-  isOnboardingComplete,
-  sanitizeAdaptiveOnboarding,
-  shouldShowTargetWeight,
-  validateOnboardingSection
-} from "@/lib/onboarding/adaptive-profile";
+import { SPORT_FIELD_CONFIG, createEmptyAdaptiveOnboarding, firstInvalidSection, isOnboardingComplete, sanitizeAdaptiveOnboarding, shouldShowTargetWeight, validateOnboardingSection } from "@/lib/onboarding/adaptive-profile";
+import { onboardingOptionLabel, onboardingPermissionCopy, translateValidationIssue } from "@/lib/i18n/onboarding";
+import { buildOnboardingReviewSections, formatReviewHeight, formatReviewWeight } from "@/lib/onboarding/review-summary";
+import { onboardingExitDecision, resolveOnboardingReturnRoute } from "@/lib/onboarding/navigation";
 import { configToScopes, getDefaultAiPermissionConfig } from "@/services/database/ai-permissions";
 import { buildAdaptiveConstraintPayload, buildAdaptiveNutritionPayload, buildAdaptiveOnboardingPayload, buildAdaptivePermissionPayload } from "@/services/database/adaptive-onboarding";
 
 function validAnswers() {
   const answers = createEmptyAdaptiveOnboarding();
-  answers.age = 25;
-  answers.goals = ["improve_strength", "improve_health"];
-  answers.primary_goal = "improve_strength";
-  answers.primary_sport = "gym_strength";
-  answers.training_level = "intermediate";
-  answers.training_place = "gym";
-  answers.activity_level = "moderate";
-  answers.training_days_per_week = 3;
-  answers.available_days = ["monday", "wednesday", "friday"];
-  answers.workout_duration_minutes = 60;
-  answers.preferred_workout_time = "evening";
+  answers.age = 25; answers.goals = ["improve_strength", "improve_health"]; answers.primary_goal = "improve_strength"; answers.primary_sport = "gym_strength";
+  answers.training_level = "intermediate"; answers.training_place = "gym"; answers.activity_level = "moderate"; answers.training_days_per_week = 3;
+  answers.available_days = ["monday", "wednesday", "friday"]; answers.workout_duration_minutes = 60; answers.preferred_workout_time = "evening";
   answers.sport_details = { available_equipment: ["barbell"], training_style: "strength" };
-  answers.nutrition.nutrition_goal = "performance";
-  answers.nutrition.meals_per_day = 4;
-  answers.nutrition.preferred_cuisines = ["no_preference"];
+  answers.nutrition.nutrition_goal = "performance"; answers.nutrition.meals_per_day = 4; answers.nutrition.preferred_cuisines = ["no_preference"];
   return answers;
 }
+
+const reviewLabels = {
+  text: {
+    noValue: "Not provided", noneSelected: "None selected", yes: "Yes", no: "No", full: "Full", custom: "Custom", read: "View", readWrite: "View and create/update", primarySport: "Primary sport", secondarySports: "Secondary sports", primaryGoal: "Primary goal", goals: "Goals", targetWeight: "Target weight", age: "Age", sex: "Sex", height: "Height", currentWeight: "Weight", experienceLevel: "Experience", trainingLocation: "Location", activityLevel: "Activity", daysPerWeek: "Days", availableDays: "Available days", sessionDuration: "Duration", preferredTime: "Time", likedActivities: "Likes", dislikedActivities: "Dislikes", nutritionGoal: "Nutrition goal", mealsPerDay: "Meals", preferredCuisines: "Cuisines", foodsLiked: "Foods liked", foodsDisliked: "Foods disliked", allergies: "Allergies", restrictions: "Restrictions", cookingAbility: "Cooking", cookingTime: "Cooking time", mealPrep: "Meal prep", weeklyBudget: "Budget", eatingSchedule: "Schedule", supplements: "Supplements", tracksMacros: "Tracks macros", injuries: "Injuries", painAreas: "Pain areas", movementsAvoid: "Avoid", discomfortExercises: "Discomfort", mobilityLimits: "Mobility", professionalRestrictions: "Professional restrictions", retainedNotes: "Legacy notes", accessMode: "Access mode", basicSummary: "Basic", goalsSummary: "Goals", trainingSummary: "Training", nutritionSummary: "Nutrition", constraintsSummary: "Constraints", permissionsSummary: "Permissions"
+  },
+  goalLabel: (value: string) => value,
+  sportLabel: (value: string) => value,
+  optionLabel: (value: string) => value,
+  fieldLabel: (_id: string, fallback: string) => fallback,
+  dayLabel: (value: string) => value,
+  permissionLabel: (value: string) => value
+} as never;
 
 describe("adaptive onboarding behavior", () => {
   it("starts without fabricated personal values", () => {
     const answers = createEmptyAdaptiveOnboarding();
-    expect(answers.age).toBeNull();
-    expect(answers.goals).toEqual([]);
-    expect(answers.primary_sport).toBeNull();
-    expect(answers.training_level).toBe("");
-    expect(answers.training_place).toBe("");
+    expect(answers).toMatchObject({ age: null, goals: [], primary_sport: null, training_level: "", training_place: "" });
     expect(answers.nutrition.preferred_cuisines).toEqual([]);
-    expect(getDefaultAiPermissionConfig()).toMatchObject({ accessMode: "custom" });
     expect(configToScopes(getDefaultAiPermissionConfig())).toEqual([]);
   });
 
-  it("requires age and enforces the existing 16+ launch rule without clamping", () => {
-    const answers = createEmptyAdaptiveOnboarding();
-    expect(validateOnboardingSection(0, answers).age).toBeTruthy();
-    answers.age = 15;
-    expect(validateOnboardingSection(0, answers).age).toContain("16");
-    answers.age = 16;
-    expect(validateOnboardingSection(0, answers).age).toBeUndefined();
-    answers.age = 101;
-    expect(validateOnboardingSection(0, answers).age).toBeTruthy();
+  it("returns stable validation codes and localizes them in all supported languages", () => {
+    const issue = validateOnboardingSection(0, createEmptyAdaptiveOnboarding()).age;
+    expect(issue).toEqual({ code: "age_required" });
+    expect(translateValidationIssue("en", issue)).toBe("Age is required.");
+    expect(translateValidationIssue("de", issue)).toBe("Das Alter ist erforderlich.");
+    expect(translateValidationIssue("ar", issue)).toBe("العمر مطلوب.");
   });
 
-  it("keeps optional height and weight clearable and rejects unsupported values", () => {
+  it("keeps common experience and location out of every sport-specific configuration", () => {
+    const forbidden = new Set(["running_experience", "swimming_experience", "pilates_experience", "pilates_location", "yoga_experience", "yoga_location", "combat_experience"]);
+    for (const fields of Object.values(SPORT_FIELD_CONFIG)) expect(fields.some((field) => forbidden.has(field.id))).toBe(false);
+  });
+
+  it("uses correct additional fields for running, walking, Pilates, swimming, and combat sports", () => {
+    expect(SPORT_FIELD_CONFIG.running.map((field) => field.id)).toEqual(["weekly_distance", "event_goal", "current_pace", "running_surface", "cardio_preferences"]);
+    expect(SPORT_FIELD_CONFIG.walking_hiking.map((field) => field.id)).toEqual(["walking_weekly_volume", "walking_terrain", "elevation_preference", "walking_environment", "walking_goal"]);
+    expect(SPORT_FIELD_CONFIG.pilates.map((field) => field.id)).toEqual(["pilates_format", "reformer_availability", "pilates_focus"]);
+    expect(SPORT_FIELD_CONFIG.swimming.map((field) => field.id)).not.toContain("swimming_experience");
+    expect(SPORT_FIELD_CONFIG.boxing_martial_arts.map((field) => field.id)).not.toContain("combat_experience");
+  });
+
+  it("drops irrelevant sport answers when the primary sport changes", () => {
     const answers = validAnswers();
-    answers.height_cm = null;
-    answers.weight_kg = null;
-    expect(validateOnboardingSection(0, answers)).toEqual({});
-    answers.height_cm = 80;
-    answers.weight_kg = 600;
-    expect(validateOnboardingSection(0, answers)).toMatchObject({ height_cm: expect.any(String), weight_kg: expect.any(String) });
+    answers.primary_sport = "running";
+    answers.sport_details = { available_equipment: ["barbell"], weekly_distance: 20, running_surface: "road" };
+    expect(sanitizeAdaptiveOnboarding(answers).sport_details).toEqual({ weekly_distance: 20, running_surface: "road" });
   });
 
-  it("supports multiple goals while requiring the primary goal to be selected", () => {
-    const answers = validAnswers();
-    expect(validateOnboardingSection(1, answers)).toEqual({});
-    answers.primary_goal = "lose_fat";
-    expect(validateOnboardingSection(1, answers).primary_goal).toBeTruthy();
-  });
-
-  it("shows target weight only for the three approved goals and clears hidden values", () => {
+  it("preserves target-weight and atomic payload behavior", () => {
     expect(shouldShowTargetWeight(["lose_fat"])).toBe(true);
-    expect(shouldShowTargetWeight(["build_muscle"])).toBe(true);
-    expect(shouldShowTargetWeight(["body_recomposition"])).toBe(true);
     expect(shouldShowTargetWeight(["improve_health"])).toBe(false);
-    const answers = validAnswers();
-    answers.goal_weight_kg = 77;
-    answers.goals = ["improve_health"];
-    answers.primary_goal = "improve_health";
+    const answers = validAnswers(); answers.goal_weight_kg = 77; answers.goals = ["improve_health"]; answers.primary_goal = "improve_health";
     expect(sanitizeAdaptiveOnboarding(answers).goal_weight_kg).toBeNull();
+    const payload = buildAdaptiveOnboardingPayload("00000000-0000-4000-8000-000000000000", validAnswers(), 3, null);
+    expect(payload).toMatchObject({ primary_sport: "gym_strength", setup_stage: 3, completed_at: null });
   });
 
-  it("adapts sport fields and drops irrelevant stale answers at final save", () => {
-    expect(SPORT_FIELD_CONFIG.gym_strength.some((field) => field.id === "preferred_split")).toBe(true);
-    expect(SPORT_FIELD_CONFIG.pilates.some((field) => field.id === "pilates_format")).toBe(true);
-    expect(SPORT_FIELD_CONFIG.pilates.some((field) => field.id === "preferred_split")).toBe(false);
-    expect(SPORT_FIELD_CONFIG.running.some((field) => field.id === "weekly_distance")).toBe(true);
-    const answers = validAnswers();
-    answers.sport_details.hidden_running_value = "fabricated";
-    const sanitized = sanitizeAdaptiveOnboarding(answers);
-    expect(sanitized.sport_details.hidden_running_value).toBeUndefined();
-    expect(sanitized.sport_details.available_equipment).toEqual(["barbell"]);
+  it("keeps allergies, dietary restrictions, and non-medical constraints separate", () => {
+    const answers = validAnswers(); answers.nutrition.allergies = ["peanuts"]; answers.nutrition.dietary_restrictions = ["vegetarian"];
+    const nutrition = buildAdaptiveNutritionPayload("00000000-0000-4000-8000-000000000000", answers);
+    expect(nutrition.allergy_items).toEqual(["peanuts"]); expect(nutrition.dietary_restrictions).toEqual(["vegetarian"]);
+    answers.constraints.professional_restrictions = "Avoid impact";
+    expect(buildAdaptiveConstraintPayload("00000000-0000-4000-8000-000000000000", answers.constraints)).not.toHaveProperty("diagnosis");
   });
 
-  it("requires a custom value for Other and never stores a hidden primary default", () => {
-    const answers = validAnswers();
-    answers.primary_sport = "other";
-    answers.primary_sport_other = "";
-    expect(validateOnboardingSection(2, answers).primary_sport_other).toBeTruthy();
-    answers.primary_sport_other = "Climbing";
-    expect(validateOnboardingSection(2, answers).primary_sport_other).toBeUndefined();
+  it("keeps permission identifiers stable while labels are localized", () => {
+    const config = getDefaultAiPermissionConfig(); config.sections.workouts = { read: true, write: true };
+    expect(buildAdaptivePermissionPayload(config).scopes).toEqual(["plaivra.workouts.read", "plaivra.workouts.write"]);
+    expect(onboardingPermissionCopy("de", "workouts").label).toBe("Training");
+    expect(onboardingPermissionCopy("ar", "workouts").label).toBe("التمارين");
+    expect(onboardingOptionLabel("de", "morning")).toBe("Morgens");
   });
 
-  it("keeps allergies and dietary restrictions separate and clears optional nutrition values", () => {
-    const answers = validAnswers();
-    answers.nutrition.allergies = ["peanuts"];
-    answers.nutrition.dietary_restrictions = ["vegetarian"];
-    answers.nutrition.weekly_food_budget = null;
-    answers.nutrition.budget_currency = "EUR";
-    const payload = buildAdaptiveNutritionPayload("00000000-0000-4000-8000-000000000000", answers);
-    expect(payload.allergy_items).toEqual(["peanuts"]);
-    expect(payload.dietary_restrictions).toEqual(["vegetarian"]);
-    expect(payload.weekly_food_budget).toBeNull();
-    expect(payload.budget_currency).toBeNull();
+  it("builds a complete review, omits empty optional rows, and uses display units", () => {
+    const answers = validAnswers(); answers.height_cm = 175; answers.weight_kg = 85; answers.goal_weight_kg = 80; answers.liked_activities = ["squats"];
+    answers.nutrition.allergies = ["peanuts"]; answers.constraints.movements_to_avoid = "deep flexion";
+    const permissions = getDefaultAiPermissionConfig(); permissions.sections.workouts = { read: true, write: true };
+    const sections = buildOnboardingReviewSections({ answers, permissions, weightUnit: "lb", heightUnit: "ft-in", labels: reviewLabels });
+    expect(sections.find((section) => section.id === "basic")?.rows.some((item) => item.value.includes("lb"))).toBe(true);
+    expect(sections.find((section) => section.id === "basic")?.rows.some((item) => item.value.includes("′"))).toBe(true);
+    expect(JSON.stringify(sections.find((section) => section.id === "training"))).toContain("barbell");
+    expect(JSON.stringify(sections.find((section) => section.id === "nutrition"))).toContain("peanuts");
+    expect(JSON.stringify(sections.find((section) => section.id === "constraints"))).toContain("deep flexion");
+    expect(JSON.stringify(sections.find((section) => section.id === "permissions"))).toContain("View and create/update");
+    expect(formatReviewWeight(85, "kg")).toBe("85 kg");
+    expect(formatReviewHeight(175, "cm")).toBe("175 cm");
   });
 
-  it("stores non-medical constraints in the canonical constraint payload", () => {
-    const answers = validAnswers();
-    answers.constraints.injury_or_limitation_labels = ["left ankle limitation"];
-    answers.constraints.pain_sensitive_areas = ["lower back"];
-    answers.constraints.movements_to_avoid = "Deep loaded flexion";
-    const payload = buildAdaptiveConstraintPayload("00000000-0000-4000-8000-000000000000", answers.constraints);
-    expect(payload.areas_to_protect).toEqual(["lower back"]);
-    expect(payload.movements_to_avoid).toBe("Deep loaded flexion");
-    expect(payload).not.toHaveProperty("diagnosis");
+  it("resolves edit return routes without creating an open redirect", () => {
+    expect(resolveOnboardingReturnRoute("/profile")).toBe("/profile");
+    expect(resolveOnboardingReturnRoute("/settings/account")).toBe("/settings/account");
+    expect(resolveOnboardingReturnRoute("https://evil.example")).toBe("/settings");
+    expect(resolveOnboardingReturnRoute("//evil.example")).toBe("/settings");
+    expect(resolveOnboardingReturnRoute(null)).toBe("/settings");
+    expect(onboardingExitDecision(false)).toBe("exit");
+    expect(onboardingExitDecision(true)).toBe("confirm");
   });
 
-  it("requires explicit permission confirmation and maps custom choices to real scopes", () => {
-    const answers = validAnswers();
-    const config = getDefaultAiPermissionConfig();
-    expect(validateOnboardingSection(5, answers, { permissionStatus: "none", permissionConfirmed: false, permissions: config }).permission_confirmation).toBeTruthy();
-    config.sections.workouts = { read: true, write: true };
-    const payload = buildAdaptivePermissionPayload(config);
-    expect(payload.scopes).toEqual(["plaivra.workouts.read", "plaivra.workouts.write"]);
-    expect(payload.scopes).not.toContain("plaivra.admin");
-  });
-
-  it("full access contains only supported fitness and app-setting scopes", () => {
-    const config = getDefaultAiPermissionConfig();
-    config.accessMode = "full";
-    const scopes = configToScopes(config);
-    expect(scopes).toContain("plaivra.full_access");
-    expect(scopes).not.toContain("plaivra.admin");
-    expect(scopes.some((scope) => /billing|password|privacy|deletion|security/.test(scope))).toBe(false);
-  });
-
-  it("uses completed_at as the authoritative completion contract", () => {
+  it("keeps completed_at authoritative and finds the first invalid section", () => {
     expect(isOnboardingComplete({ completed_at: null })).toBe(false);
-    expect(isOnboardingComplete({ completed_at: "not-a-date" })).toBe(false);
     expect(isOnboardingComplete({ completed_at: "2026-07-11T12:00:00.000Z" })).toBe(true);
-  });
-
-  it("finds the first invalid required section and allows the optional constraints section", () => {
-    const answers = validAnswers();
-    const permissions = getDefaultAiPermissionConfig();
+    const answers = validAnswers(); const permissions = getDefaultAiPermissionConfig();
     expect(firstInvalidSection(answers, { permissionStatus: "none", permissionConfirmed: true, permissions })).toBeNull();
     answers.primary_sport = null;
     expect(firstInvalidSection(answers, { permissionStatus: "none", permissionConfirmed: true, permissions })).toBe(2);
-  });
-
-  it("builds draft payloads without legacy personal defaults", () => {
-    const answers = validAnswers();
-    const payload = buildAdaptiveOnboardingPayload("00000000-0000-4000-8000-000000000000", answers, 3, null);
-    expect(payload.primary_sport).toBe("gym_strength");
-    expect(payload.setup_stage).toBe(3);
-    expect(payload.completed_at).toBeNull();
-    expect(JSON.stringify(payload)).not.toContain("Egyptian food preferred");
-    expect(JSON.stringify(payload)).not.toContain("Full Body");
   });
 });

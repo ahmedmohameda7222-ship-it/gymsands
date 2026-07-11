@@ -147,7 +147,7 @@ export default function SettingsPage() {
   const setupChecklist = useMemo(
     () => [
       { label: t("setup.completeProfile"), done: Boolean(profile?.full_name), href: "/profile", action: t("common.edit") },
-      { label: t("setup.setFitnessGoal"), done: Boolean(onboarding), href: "/onboarding?edit=true", action: t("common.edit") },
+      { label: t("setup.setFitnessGoal"), done: Boolean(onboarding), href: "/onboarding?edit=true&returnTo=%2Fsettings", action: t("common.edit") },
       { label: t("setup.importWorkoutPlan"), done: hasPlan, href: "/my-workout/plans", action: t("common.open") },
       { label: t("setup.addMealPlan"), done: hasMeals || hasFoodLogs, href: "/my-meal-plan", action: t("common.open") },
       { label: t("setup.setCalorieTarget"), done: hasTargets, href: "/calories", action: t("common.edit") },
