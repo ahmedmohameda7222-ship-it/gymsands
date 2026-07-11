@@ -1,12 +1,14 @@
 name: Apply prelaunch corrections
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - prelaunch-remediation-2026-07
     paths:
       - scripts/apply-prelaunch-corrections.py
       - .github/workflows/apply-prelaunch-corrections.yml
+      - docs/operations/prelaunch-correction-trigger.txt
 
 permissions:
   contents: write
