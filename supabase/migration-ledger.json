@@ -154,6 +154,13 @@
       "localFile": "20260711013000_prelaunch_runtime_safety_corrections.sql",
       "state": "pending",
       "note": "Adds database-owned release compatibility, atomic OAuth code consumption, leased MCP idempotency recovery, stale deletion recovery, and durable billing claims. Isolated migration, concurrency, reconciliation, and RLS validation are mandatory."
+    },
+    {
+      "productionVersion": null,
+      "productionName": null,
+      "localFile": "20260711014500_idempotency_uncertain_completion_guard.sql",
+      "state": "pending",
+      "note": "Overrides the MCP idempotency claim function so expired pending work requires review instead of unsafe automatic re-execution; updates schema marker evidence. Isolated concurrency validation is mandatory."
     }
   ]
 }
