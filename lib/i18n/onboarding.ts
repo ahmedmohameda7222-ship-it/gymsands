@@ -1,10 +1,130 @@
 "use client";
 
+import { useMemo } from "react";
 import { useTranslation } from "@/lib/i18n/use-translation";
 
 const en = {
-  title: "Fitness profile setup", editTitle: "Editing fitness profile", editDescription: "Review and update the profile Plaivra uses for training, nutrition, constraints, and ChatGPT access.", firstDescription: "Tell Plaivra only what you choose to share. Nothing is inferred or silently filled in.", step: "Step", of: "of", back: "Back", next: "Next", skip: "Skip", cancel: "Cancel", stay: "Stay here", discard: "Discard changes", cancelQuestion: "Discard unsaved changes?", cancelDetail: "Changes made since the last save will be lost.", saving: "Saving…", finish: "Finish setup", saveChanges: "Save changes", retry: "Retry", edit: "Edit", optional: "Optional", required: "Required", essential: "Essential", optionalDetails: "Optional details", loading: "Loading saved setup…", loadFailure: "Saved data could not be loaded", loadFailureDetail: "Plaivra will not replace this saved category until it loads successfully.", saveFailure: "Changes could not be saved", offline: "You appear to be offline. Reconnect before saving.", reviewErrors: "Review the highlighted fields before continuing.", noValue: "Not provided", noneSelected: "None selected", noPreference: "No preference", profileSection: "Basic Profile", goalsSection: "Main Goals", trainingSection: "Training Profile", nutritionSection: "Nutrition Profile", constraintsSection: "Health and Physical Constraints", permissionsSection: "ChatGPT Access", reviewSection: "Review & Finish", basicIntro: "Age is required for the existing 16+ launch eligibility rule. Other body details are optional.", age: "Age", sex: "Sex", height: "Height", currentWeight: "Current weight", preferNotSay: "Prefer not to say", male: "Male", female: "Female", otherSex: "Other / self-described", goalsIntro: "Choose every goal that matters, then identify one primary goal.", goals: "Goals", primaryGoal: "Primary goal", targetWeight: "Target weight", trainingIntro: "What sport or activity are you training for? The remaining questions adapt to this choice.", primarySport: "Primary sport or activity", secondarySports: "Secondary sports or activities", otherSport: "Other sport or activity", experienceLevel: "Experience level", trainingLocation: "Training location", activityLevel: "Activity level", daysPerWeek: "Days per week", availableDays: "Available days", sessionDuration: "Session duration", preferredTime: "Preferred workout time", likedActivities: "Activities or exercises you like", dislikedActivities: "Activities or exercises you dislike", sportSpecific: "Questions for your primary activity", nutritionIntro: "Share practical food preferences only. Plaivra does not infer cuisines, allergies, or restrictions.", nutritionGoal: "Nutrition goal", mealsPerDay: "Daily meal count", preferredCuisines: "Preferred cuisines", foodsLiked: "Foods you like", foodsDisliked: "Foods you dislike", allergies: "Allergies", restrictions: "Dietary restrictions", cookingAbility: "Cooking ability", cookingTime: "Available cooking time", mealPrep: "Meal-prep preference", weeklyBudget: "Weekly food budget", currency: "Currency", eatingSchedule: "Eating schedule", supplements: "Supplements", tracksMacros: "Do you currently track calories or macros?", constraintsIntro: "This section is optional. Describe practical limits without providing a diagnosis.", injuries: "Injuries or limitations", painAreas: "Pain-sensitive areas", movementsAvoid: "Movements to avoid", discomfortExercises: "Exercises that cause discomfort", mobilityLimits: "Mobility limitations", professionalRestrictions: "Doctor or physiotherapist restrictions", retainedNotes: "Earlier notes retained", clearRetained: "Clear retained notes", permissionsIntro: "These choices save Plaivra tool permissions. They do not mean ChatGPT is connected.", fullAccess: "Full access", fullAccessDetail: "ChatGPT may read and update all supported Plaivra fitness areas. Account security, authentication, billing, privacy controls, deletion controls, admin functions, and internal security records are excluded.", customAccess: "Custom access", customAccessDetail: "Choose the supported Plaivra areas and actions ChatGPT may use.", viewData: "View data", updateData: "Create or update data", confirmPermissions: "I confirm these ChatGPT access permissions.", permissionLoadFailed: "Saved permissions could not be confirmed. Retry before changing or saving them.", permissionSeparate: "OAuth connection status is managed separately in Settings.", reviewIntro: "Check every section before saving. Use Edit to return without losing entered data.", basicSummary: "Basic profile", goalsSummary: "Goals", trainingSummary: "Training", nutritionSummary: "Nutrition", constraintsSummary: "Physical constraints", permissionsSummary: "ChatGPT access", custom: "Custom", full: "Full", yes: "Yes", no: "No", notSure: "Not sure", saved: "Setup saved", savedDetail: "Your profile and explicit ChatGPT permissions were saved.", sourceOnboarding: "Profile and training data", sourceNutrition: "Nutrition profile", sourceConstraints: "Physical constraints", sourcePermissions: "ChatGPT permissions"
+  title: "Fitness profile setup",
+  editTitle: "Editing fitness profile",
+  editDescription: "Review and update the profile Plaivra uses for training, nutrition, constraints, and ChatGPT access.",
+  firstDescription: "Tell Plaivra only what you choose to share. Nothing is inferred or silently filled in.",
+  step: "Step",
+  of: "of",
+  back: "Back",
+  next: "Next",
+  skip: "Skip",
+  cancel: "Cancel",
+  stay: "Stay here",
+  discard: "Discard changes",
+  cancelQuestion: "Discard unsaved changes?",
+  cancelDetail: "Changes made since the last save will be lost.",
+  saving: "Saving…",
+  finish: "Finish setup",
+  saveChanges: "Save changes",
+  retry: "Retry",
+  edit: "Edit",
+  optional: "Optional",
+  required: "Required",
+  essential: "Essential",
+  optionalDetails: "Optional details",
+  loading: "Loading saved setup…",
+  loadFailure: "Saved data could not be loaded",
+  loadFailureDetail: "Plaivra will not replace this saved category until it loads successfully.",
+  saveFailure: "Changes could not be saved",
+  offline: "You appear to be offline. Reconnect before saving.",
+  reviewErrors: "Review the highlighted fields before continuing.",
+  noValue: "Not provided",
+  noneSelected: "None selected",
+  noPreference: "No preference",
+  profileSection: "Basic Profile",
+  goalsSection: "Main Goals",
+  trainingSection: "Training Profile",
+  nutritionSection: "Nutrition Profile",
+  constraintsSection: "Health and Physical Constraints",
+  permissionsSection: "ChatGPT Access",
+  reviewSection: "Review & Finish",
+  basicIntro: "Age is required for the existing 16+ launch eligibility rule. Other body details are optional.",
+  age: "Age",
+  sex: "Sex",
+  height: "Height",
+  currentWeight: "Current weight",
+  preferNotSay: "Prefer not to say",
+  male: "Male",
+  female: "Female",
+  otherSex: "Other / self-described",
+  goalsIntro: "Choose every goal that matters, then identify one primary goal.",
+  goals: "Goals",
+  primaryGoal: "Primary goal",
+  targetWeight: "Target weight",
+  trainingIntro: "What sport or activity are you training for? The remaining questions adapt to this choice.",
+  primarySport: "Primary sport or activity",
+  secondarySports: "Secondary sports or activities",
+  otherSport: "Other sport or activity",
+  experienceLevel: "Experience level",
+  trainingLocation: "Training location",
+  activityLevel: "Activity level",
+  daysPerWeek: "Days per week",
+  availableDays: "Available days",
+  sessionDuration: "Session duration",
+  preferredTime: "Preferred workout time",
+  likedActivities: "Activities or exercises you like",
+  dislikedActivities: "Activities or exercises you dislike",
+  sportSpecific: "Questions for your primary activity",
+  nutritionIntro: "Share practical food preferences only. Plaivra does not infer cuisines, allergies, or restrictions.",
+  nutritionGoal: "Nutrition goal",
+  mealsPerDay: "Daily meal count",
+  preferredCuisines: "Preferred cuisines",
+  foodsLiked: "Foods you like",
+  foodsDisliked: "Foods you dislike",
+  allergies: "Allergies",
+  restrictions: "Dietary restrictions",
+  cookingAbility: "Cooking ability",
+  cookingTime: "Available cooking time",
+  mealPrep: "Meal-prep preference",
+  weeklyBudget: "Weekly food budget",
+  currency: "Currency",
+  eatingSchedule: "Eating schedule",
+  supplements: "Supplements",
+  tracksMacros: "Do you currently track calories or macros?",
+  constraintsIntro: "This section is optional. Describe practical limits without providing a diagnosis.",
+  injuries: "Injuries or limitations",
+  painAreas: "Pain-sensitive areas",
+  movementsAvoid: "Movements to avoid",
+  discomfortExercises: "Exercises that cause discomfort",
+  mobilityLimits: "Mobility limitations",
+  professionalRestrictions: "Doctor or physiotherapist restrictions",
+  retainedNotes: "Earlier notes retained",
+  clearRetained: "Clear retained notes",
+  permissionsIntro: "These choices save Plaivra tool permissions. They do not mean ChatGPT is connected.",
+  fullAccess: "Full access",
+  fullAccessDetail: "ChatGPT may read and update all supported Plaivra fitness areas. Account security, authentication, billing, privacy controls, deletion controls, admin functions, and internal security records are excluded.",
+  customAccess: "Custom access",
+  customAccessDetail: "Choose the supported Plaivra areas and actions ChatGPT may use.",
+  viewData: "View data",
+  updateData: "Create or update data",
+  confirmPermissions: "I confirm these ChatGPT access permissions.",
+  permissionLoadFailed: "Saved permissions could not be confirmed. Retry before changing or saving them.",
+  permissionSeparate: "OAuth connection status is managed separately in Settings.",
+  reviewIntro: "Check every section before saving. Use Edit to return without losing entered data.",
+  basicSummary: "Basic profile",
+  goalsSummary: "Goals",
+  trainingSummary: "Training",
+  nutritionSummary: "Nutrition",
+  constraintsSummary: "Physical constraints",
+  permissionsSummary: "ChatGPT access",
+  custom: "Custom",
+  full: "Full",
+  yes: "Yes",
+  no: "No",
+  notSure: "Not sure",
+  saved: "Setup saved",
+  savedDetail: "Your profile and explicit ChatGPT permissions were saved.",
+  sourceOnboarding: "Profile and training data",
+  sourceNutrition: "Nutrition profile",
+  sourceConstraints: "Physical constraints",
+  sourcePermissions: "ChatGPT permissions"
 } as const;
+
 type Key = keyof typeof en;
 
 const de: Record<Key, string> = {
@@ -16,27 +136,34 @@ const ar: Record<Key, string> = {
 };
 
 const dictionaries = { en, de, ar };
+
 export const GOAL_LABELS = {
   en: { lose_fat: "Lose fat", build_muscle: "Build muscle", improve_strength: "Improve strength", improve_endurance: "Improve endurance", body_recomposition: "Body recomposition", improve_health: "Improve health", reduce_stress: "Reduce stress", improve_mobility: "Improve mobility" },
   de: { lose_fat: "Fett verlieren", build_muscle: "Muskeln aufbauen", improve_strength: "Kraft verbessern", improve_endurance: "Ausdauer verbessern", body_recomposition: "Körperrekomposition", improve_health: "Gesundheit verbessern", reduce_stress: "Stress reduzieren", improve_mobility: "Beweglichkeit verbessern" },
   ar: { lose_fat: "خسارة الدهون", build_muscle: "بناء العضلات", improve_strength: "زيادة القوة", improve_endurance: "تحسين التحمل", body_recomposition: "إعادة تكوين الجسم", improve_health: "تحسين الصحة", reduce_stress: "تقليل التوتر", improve_mobility: "تحسين المرونة" }
 } as const;
+
 export const SPORT_LABELS = {
   en: { general_fitness: "General fitness / no specific sport", gym_strength: "Gym / strength training", pilates: "Pilates", yoga_mobility: "Yoga / mobility", running: "Running", walking_hiking: "Walking / hiking", cycling: "Cycling", swimming: "Swimming", football: "Football / soccer", basketball: "Basketball", tennis_racket: "Tennis / racket sports", boxing_martial_arts: "Boxing / martial arts", crossfit_functional: "CrossFit / functional fitness", home_workouts: "Home workouts", other: "Other" },
   de: { general_fitness: "Allgemeine Fitness / keine bestimmte Sportart", gym_strength: "Fitnessstudio / Krafttraining", pilates: "Pilates", yoga_mobility: "Yoga / Beweglichkeit", running: "Laufen", walking_hiking: "Gehen / Wandern", cycling: "Radfahren", swimming: "Schwimmen", football: "Fußball", basketball: "Basketball", tennis_racket: "Tennis / Rückschlagsport", boxing_martial_arts: "Boxen / Kampfsport", crossfit_functional: "CrossFit / funktionelle Fitness", home_workouts: "Training zu Hause", other: "Andere" },
   ar: { general_fitness: "لياقة عامة / من دون رياضة محددة", gym_strength: "الجيم / تمارين القوة", pilates: "بيلاتس", yoga_mobility: "يوغا / مرونة", running: "جري", walking_hiking: "مشي / تنزه", cycling: "دراجات", swimming: "سباحة", football: "كرة قدم", basketball: "كرة سلة", tennis_racket: "تنس / رياضات المضرب", boxing_martial_arts: "ملاكمة / فنون قتالية", crossfit_functional: "كروس فت / لياقة وظيفية", home_workouts: "تمارين منزلية", other: "أخرى" }
 } as const;
+
 const fieldLabels: Record<"en" | "de" | "ar", Record<string, string>> = {
   en: {},
-  de: { available_equipment: "Verfügbare Ausrüstung", training_style: "Bevorzugter Trainingsstil", preferred_split: "Bevorzugter Split", strength_level: "Kraftniveau", recent_lifts: "Aktuelle Kraftwerte", cardio_preferences: "Cardio-Präferenzen", running_experience: "Lauferfahrung", weekly_distance: "Aktuelle Wochenstrecke", event_goal: "Distanz- oder Wettkampfziel", current_pace: "Aktuelles Tempo", running_surface: "Üblicher Untergrund", cycling_type: "Radsportart", weekly_cycling: "Wöchentliche Strecke oder Dauer", cycling_environment: "Drinnen oder draußen", cycling_equipment: "Verfügbare Ausrüstung", cycling_goal: "Wettkampf- oder Ausdauerziel", swimming_experience: "Schwimmerfahrung", pool_availability: "Schwimmbad-Verfügbarkeit", preferred_strokes: "Bevorzugte Schwimmstile", swim_session: "Aktuelle Strecke oder Dauer", swimming_goal: "Wettkampf- oder Fitnessziel", pilates_format: "Matte oder Reformer", pilates_location: "Zu Hause oder im Studio", pilates_experience: "Pilates-Erfahrung", pilates_focus: "Beweglichkeits- oder Kraftfokus", yoga_style: "Stil oder bevorzugte Art", yoga_experience: "Yoga-Erfahrung", mobility_focus: "Beweglichkeitsfokus", yoga_location: "Zu Hause oder im Studio", sport_role: "Position oder Rolle", practice_frequency: "Trainingshäufigkeit", match_frequency: "Spielhäufigkeit", conditioning_needs: "Konditionsbedarf", strength_support_needs: "Unterstützendes Krafttraining", discipline: "Disziplin", combat_experience: "Kampfsporterfahrung", technical_sessions: "Technikeinheiten pro Woche", conditioning_preference: "Konditionspräferenz", combat_equipment: "Verfügbare Ausrüstung" },
-  ar: { available_equipment: "المعدات المتاحة", training_style: "أسلوب التدريب المفضل", preferred_split: "تقسيمة التدريب المفضلة", strength_level: "مستوى القوة", recent_lifts: "الأوزان الحديثة", cardio_preferences: "تفضيلات الكارديو", running_experience: "خبرة الجري", weekly_distance: "المسافة الأسبوعية الحالية", event_goal: "هدف المسافة أو السباق", current_pace: "الوتيرة الحالية", running_surface: "سطح الجري المعتاد", cycling_type: "نوع ركوب الدراجات", weekly_cycling: "المسافة أو المدة الأسبوعية", cycling_environment: "داخلي أم خارجي", cycling_equipment: "المعدات المتاحة", cycling_goal: "هدف سباق أو تحمل", swimming_experience: "خبرة السباحة", pool_availability: "توفر المسبح", preferred_strokes: "طرق السباحة المفضلة", swim_session: "مسافة أو مدة الحصة الحالية", swimming_goal: "هدف منافسة أو لياقة", pilates_format: "حصيرة أم ريفورمر", pilates_location: "المنزل أم الاستوديو", pilates_experience: "خبرة البيلاتس", pilates_focus: "التركيز على المرونة أو القوة", yoga_style: "الأسلوب المفضل", yoga_experience: "خبرة اليوغا", mobility_focus: "تركيز المرونة", yoga_location: "المنزل أم الاستوديو", sport_role: "المركز أو الدور", practice_frequency: "عدد التدريبات", match_frequency: "عدد المباريات", conditioning_needs: "احتياجات اللياقة", strength_support_needs: "احتياجات دعم القوة", discipline: "نوع الفن القتالي", combat_experience: "خبرة الفنون القتالية", technical_sessions: "الحصص الفنية أسبوعيًا", conditioning_preference: "تفضيل اللياقة", combat_equipment: "المعدات المتاحة" }
+  de: {
+    available_equipment: "Verfügbare Ausrüstung", training_style: "Bevorzugter Trainingsstil", preferred_split: "Bevorzugter Split", strength_level: "Kraftniveau", recent_lifts: "Aktuelle Kraftwerte", cardio_preferences: "Cardio-Präferenzen", running_experience: "Lauferfahrung", weekly_distance: "Aktuelle Wochenstrecke", event_goal: "Distanz- oder Wettkampfziel", current_pace: "Aktuelles Tempo", running_surface: "Üblicher Untergrund", cycling_type: "Radsportart", weekly_cycling: "Wöchentliche Strecke oder Dauer", cycling_environment: "Drinnen oder draußen", cycling_equipment: "Verfügbare Ausrüstung", cycling_goal: "Wettkampf- oder Ausdauerziel", swimming_experience: "Schwimmerfahrung", pool_availability: "Schwimmbad-Verfügbarkeit", preferred_strokes: "Bevorzugte Schwimmstile", swim_session: "Aktuelle Strecke oder Dauer", swimming_goal: "Wettkampf- oder Fitnessziel", pilates_format: "Matte oder Reformer", pilates_location: "Zu Hause oder im Studio", pilates_experience: "Pilates-Erfahrung", pilates_focus: "Beweglichkeits- oder Kraftfokus", yoga_style: "Stil oder bevorzugte Art", yoga_experience: "Yoga-Erfahrung", mobility_focus: "Beweglichkeitsfokus", yoga_location: "Zu Hause oder im Studio", sport_role: "Position oder Rolle", practice_frequency: "Trainingshäufigkeit", match_frequency: "Spielhäufigkeit", conditioning_needs: "Konditionsbedarf", strength_support_needs: "Unterstützendes Krafttraining", discipline: "Disziplin", combat_experience: "Kampfsporterfahrung", technical_sessions: "Technikeinheiten pro Woche", conditioning_preference: "Konditionspräferenz", combat_equipment: "Verfügbare Ausrüstung"
+  },
+  ar: {
+    available_equipment: "المعدات المتاحة", training_style: "أسلوب التدريب المفضل", preferred_split: "تقسيمة التدريب المفضلة", strength_level: "مستوى القوة", recent_lifts: "الأوزان الحديثة", cardio_preferences: "تفضيلات الكارديو", running_experience: "خبرة الجري", weekly_distance: "المسافة الأسبوعية الحالية", event_goal: "هدف المسافة أو السباق", current_pace: "الوتيرة الحالية", running_surface: "سطح الجري المعتاد", cycling_type: "نوع ركوب الدراجات", weekly_cycling: "المسافة أو المدة الأسبوعية", cycling_environment: "داخلي أم خارجي", cycling_equipment: "المعدات المتاحة", cycling_goal: "هدف سباق أو تحمل", swimming_experience: "خبرة السباحة", pool_availability: "توفر المسبح", preferred_strokes: "طرق السباحة المفضلة", swim_session: "مسافة أو مدة الحصة الحالية", swimming_goal: "هدف منافسة أو لياقة", pilates_format: "حصيرة أم ريفورمر", pilates_location: "المنزل أم الاستوديو", pilates_experience: "خبرة البيلاتس", pilates_focus: "التركيز على المرونة أو القوة", yoga_style: "الأسلوب المفضل", yoga_experience: "خبرة اليوغا", mobility_focus: "تركيز المرونة", yoga_location: "المنزل أم الاستوديو", sport_role: "المركز أو الدور", practice_frequency: "عدد التدريبات", match_frequency: "عدد المباريات", conditioning_needs: "احتياجات اللياقة", strength_support_needs: "احتياجات دعم القوة", discipline: "نوع الفن القتالي", combat_experience: "خبرة الفنون القتالية", technical_sessions: "الحصص الفنية أسبوعيًا", conditioning_preference: "تفضيل اللياقة", combat_equipment: "المعدات المتاحة"
+  }
 };
 
 export function useOnboardingTranslation() {
   const { language, dir } = useTranslation();
   const locale = language === "de" || language === "ar" ? language : "en";
   const dictionary = dictionaries[locale];
-  return {
+  return useMemo(() => ({
     language: locale,
     dir,
     ot: (key: Key) => dictionary[key],
@@ -44,5 +171,5 @@ export function useOnboardingTranslation() {
     sportLabel: (value: keyof typeof SPORT_LABELS.en) => SPORT_LABELS[locale][value],
     fieldLabel: (id: string, fallback: string) => fieldLabels[locale][id] || fallback,
     optionLabel: (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
-  };
+  }), [dictionary, dir, locale]);
 }
