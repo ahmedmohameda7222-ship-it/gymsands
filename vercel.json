@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "node scripts/vercel-production-release-gate.mjs",
   "crons": [
     {
       "path": "/api/internal/maintenance/oauth-cleanup",
