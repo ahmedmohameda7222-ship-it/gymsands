@@ -16,6 +16,7 @@ type JsonSchema = {
   maxItems?: number;
   const?: unknown;
   format?: string;
+  anyOf?: JsonSchema[];
 };
 
 export type McpInputValidation =
@@ -81,6 +82,15 @@ function validateNode(value: unknown, schema: JsonSchema, path: string, errors: 
   if ("const" in schema && value !== schema.const) {
     errors.push(`${path} must equal the declared constant.`);
     return;
+  }
+
+  if (schema.anyOf?.length) {
+    const matchesAny = schema.anyOf.some((candidate) => {
+      const candidateErrors: string[] = [];
+      validateNode(value, candidate, path, candidateErrors);
+      return candidateErrors.length === 0;
+    });
+    if (!matchesAny) errors.push(`${path} must match at least one allowed shape.`);
   }
 
   if (schema.type === "object") {

@@ -130,6 +130,21 @@ describe("MCP runtime input validation", () => {
     expect(tool("activate_workout_plan").annotations.destructiveHint).toBe(false);
   });
 
+  it("enforces anyOf requirements used by partial updates and composite tools", () => {
+    expect(validateMcpToolInput(tool("update_food_log"), {
+      food_log_id: validId,
+      expected_updated_at: "2026-07-10T20:00:00Z"
+    }).success).toBe(false);
+    expect(validateMcpToolInput(tool("skip_workout"), {}).success).toBe(false);
+    expect(validateMcpToolInput(tool("add_body_measurement"), {
+      idempotency_key: "request-key-0001"
+    }).success).toBe(false);
+    expect(validateMcpToolInput(tool("add_body_measurement"), {
+      waist_cm: 90,
+      idempotency_key: "request-key-0001"
+    }).success).toBe(true);
+  });
+
   it("keeps a direct executor confirmation guard on meal-plan deletion", async () => {
     const result = await executeMcpTool(
       context([MCP_SCOPES.mealPlansWrite]),

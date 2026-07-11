@@ -52,7 +52,7 @@ describe("Stripe webhook route", () => {
 
     const response = await POST(request("valid"));
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ received: true, duplicate: true, queued: true });
+    await expect(response.json()).resolves.toEqual({ received: true, duplicate: true, claim_status: "not_claimed" });
     expect(mocks.processClaimed).not.toHaveBeenCalled();
   });
 

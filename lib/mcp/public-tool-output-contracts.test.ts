@@ -12,6 +12,7 @@ type Schema = {
   required?: string[];
   properties?: Record<string, Schema>;
   items?: Schema;
+  additionalProperties?: boolean;
 };
 
 const DATE_FIELD = /^(?:date|start_date|end_date|record_date|measured_at|plan_date|log_date)$/;
@@ -40,11 +41,20 @@ function resultFor(tool: McpToolDefinition): McpToolResult {
   return { structuredContent, content: [{ type: "text", text: JSON.stringify(structuredContent) }] };
 }
 
+function assertClosedObjects(schema: Schema, path: string) {
+  if (schema.type === "object") {
+    expect((schema as Schema & { additionalProperties?: boolean }).additionalProperties, path).toBe(false);
+    for (const [key, child] of Object.entries(schema.properties ?? {})) assertClosedObjects(child, `${path}.${key}`);
+  }
+  if (schema.type === "array" && schema.items) assertClosedObjects(schema.items, `${path}[]`);
+}
+
 describe("public MCP output contracts", () => {
-  it("has an executable closed output contract for all 35 public tools", () => {
+  it("has an executable recursively closed output contract for all 35 public tools", () => {
     expect(mcpTools).toHaveLength(35);
     for (const tool of mcpTools) {
       expect(tool.outputSchema, tool.name).toBeTruthy();
+      assertClosedObjects(tool.outputSchema as Schema, tool.name);
       const result = resultFor(tool);
       expect(validateMcpToolOutput(tool, result), tool.name).toEqual({
         success: true,

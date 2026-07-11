@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
   try {
     const claimed = await claimStripeEvent(admin, event.id);
-    if (!claimed) return NextResponse.json({ received: true, duplicate: Boolean(inserted.error), queued: true });
+    if (!claimed) return NextResponse.json({ received: true, duplicate: Boolean(inserted.error), claim_status: "not_claimed" });
     const result = await processClaimedStripeEvent(admin, claimed, event);
     return NextResponse.json(
       { received: true, status: result.status },

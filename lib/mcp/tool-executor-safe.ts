@@ -91,12 +91,7 @@ async function insertPlannedMeals(ctx: McpContext, items: JsonObject[], sourceTo
   if (error) throw new Error(error.message);
   const createdItems = (data ?? []) as unknown as DbRow[];
   const createdIds = createdItems.map((item) => String(item.id));
-  const createdByDate = createdItems.reduce<Record<string, string[]>>((grouped, item) => {
-    const date = String(item.plan_date ?? "unknown");
-    grouped[date] = [...(grouped[date] ?? []), String(item.id)];
-    return grouped;
-  }, {});
-  return ok({ ok: true, source_tool: sourceTool, created_count: createdIds.length, created: createdByDate, created_meal_plan_item_ids: createdIds, planned_meal_ids: createdIds, items: createdItems });
+  return ok({ ok: true, source_tool: sourceTool, created_count: createdIds.length, created_meal_plan_item_ids: createdIds, planned_meal_ids: createdIds, items: createdItems });
 }
 
 function groupMealPlanItems(items: DbRow[]) {

@@ -26,6 +26,15 @@ export const ACCOUNT_DELETION_STAGES = [
   "completed"
 ] as const;
 
+const ACCOUNT_DELETION_STAGE_INDEX = new Map<string, number>([
+  ["queued", -1],
+  ...ACCOUNT_DELETION_STAGES.map((stage, index) => [stage, index] as const)
+]);
+
+function shouldRunDeletionStage(currentStage: string, targetStage: typeof ACCOUNT_DELETION_STAGES[number]) {
+  return (ACCOUNT_DELETION_STAGE_INDEX.get(currentStage) ?? -1) <= (ACCOUNT_DELETION_STAGE_INDEX.get(targetStage) ?? 0);
+}
+
 class DeletionWorkerError extends Error {
   constructor(readonly code: string) {
     super(code);
@@ -139,8 +148,10 @@ async function purgeDatabaseAndAuth(admin: SupabaseClient, userId: string) {
   }
 
   const deleted = await admin.auth.admin.deleteUser(userId, false);
-  if (deleted.error) throw new DeletionWorkerError("auth_provider_delete_failed");
-  return { auth_user_deleted: true };
+  const deletionStatus = deleted.error && "status" in deleted.error ? Number(deleted.error.status) : null;
+  const alreadyAbsent = Boolean(deleted.error) && (deletionStatus === 404 || /not found/i.test(deleted.error?.message ?? ""));
+  if (deleted.error && !alreadyAbsent) throw new DeletionWorkerError("auth_provider_delete_failed");
+  return { auth_user_deleted: !alreadyAbsent, auth_user_already_absent: alreadyAbsent };
 }
 
 async function sendCompletionNotification(job: AccountDeletionJob) {
@@ -184,25 +195,43 @@ export async function processAccountDeletionJob(admin: SupabaseClient, job: Acco
 
     let evidence = { ...(job.evidence ?? {}) };
     if (job.user_id) {
-      await updateJob(admin, job.id, { stage: "revoking_connections" });
-      await revokeConnections(admin, job.user_id);
+      // Preflight every external provider before storage or Auth deletion. The
+      // account is already denied by deletion_pending, so failing closed here
+      // does not restore access or falsely claim provider revocation.
+      if (shouldRunDeletionStage(job.stage, "provider_cleanup")) {
+        evidence = { ...evidence, ...await verifyProviderCleanup(admin, job.user_id) };
+      }
 
-      await updateJob(admin, job.id, { stage: "disabling_access" });
-      await disableAccount(admin, job.user_id);
+      if (shouldRunDeletionStage(job.stage, "revoking_connections")) {
+        await updateJob(admin, job.id, { stage: "revoking_connections", evidence });
+        await revokeConnections(admin, job.user_id);
+      }
 
-      await updateJob(admin, job.id, { stage: "deleting_storage" });
-      evidence = { ...evidence, ...await deleteStorage(admin, job.user_id) };
+      if (shouldRunDeletionStage(job.stage, "disabling_access")) {
+        await updateJob(admin, job.id, { stage: "disabling_access", evidence });
+        await disableAccount(admin, job.user_id);
+      }
 
-      await updateJob(admin, job.id, { stage: "provider_cleanup", evidence });
-      const providerEvidence = await verifyProviderCleanup(admin, job.user_id);
-      evidence = { ...evidence, ...providerEvidence };
+      if (shouldRunDeletionStage(job.stage, "deleting_storage")) {
+        await updateJob(admin, job.id, { stage: "deleting_storage", evidence });
+        evidence = { ...evidence, ...await deleteStorage(admin, job.user_id) };
+      }
 
-      await updateJob(admin, job.id, { stage: "deleting_database", evidence });
-      evidence = { ...evidence, ...await purgeDatabaseAndAuth(admin, job.user_id) };
+      if (shouldRunDeletionStage(job.stage, "provider_cleanup")) {
+        await updateJob(admin, job.id, { stage: "provider_cleanup", evidence });
+      }
+
+      if (shouldRunDeletionStage(job.stage, "deleting_database")) {
+        await updateJob(admin, job.id, { stage: "deleting_database", evidence });
+        evidence = { ...evidence, ...await purgeDatabaseAndAuth(admin, job.user_id) };
+      }
     }
 
-    await updateJob(admin, job.id, { stage: "notification", evidence });
-    const notificationStatus = await sendCompletionNotification(job);
+    let notificationStatus: "sent" | "not_configured" = "not_configured";
+    if (shouldRunDeletionStage(job.stage, "notification")) {
+      await updateJob(admin, job.id, { stage: "notification", evidence });
+      notificationStatus = await sendCompletionNotification(job);
+    }
 
     await updateJob(admin, job.id, {
       state: "completed",

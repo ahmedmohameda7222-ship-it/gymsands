@@ -17,13 +17,14 @@ function retryDelaySeconds(attempts: number) {
 async function markRetry(admin: SupabaseClient, row: BillingLedgerRow, errorCode: string) {
   const terminal = row.processing_attempts >= 8;
   const nextAttemptAt = new Date(Date.now() + retryDelaySeconds(row.processing_attempts) * 1000).toISOString();
-  await admin.from("billing_event_ledger").update({
+  const updated = await admin.from("billing_event_ledger").update({
     processing_status: terminal ? "terminal_error" : "retryable_error",
     last_error_code: errorCode,
     next_attempt_at: nextAttemptAt,
     locked_at: null,
     ...(terminal ? { processed_at: new Date().toISOString() } : {})
   }).eq("id", row.id);
+  if (updated.error) throw new Error("Billing event retry state could not be persisted.");
   return { ok: terminal, status: terminal ? "terminal_error" as const : "retryable_error" as const };
 }
 
@@ -31,7 +32,8 @@ export async function processClaimedStripeEvent(admin: SupabaseClient, row: Bill
   try {
     const event = suppliedEvent ?? await getStripeClient().events.retrieve(row.provider_event_id);
     const result = await processStripeSubscriptionEvent(admin, { id: row.id }, event);
-    await admin.from("billing_event_ledger").update({ locked_at: null, next_attempt_at: new Date().toISOString() }).eq("id", row.id);
+    const unlocked = await admin.from("billing_event_ledger").update({ locked_at: null, next_attempt_at: new Date().toISOString() }).eq("id", row.id);
+    if (unlocked.error) throw new Error("Billing event completion state could not be persisted.");
     return { ok: true, status: result.status };
   } catch (error) {
     console.error("Stripe billing event processing failed:", error instanceof Error ? error.message : "Unknown error");

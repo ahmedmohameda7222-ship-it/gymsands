@@ -31,7 +31,8 @@ function entitlementSnapshot(row: Record<string, unknown>): EntitlementSnapshot 
 }
 
 async function markLedger(admin: SupabaseClient, ledgerId: number, values: Record<string, unknown>) {
-  await admin.from("billing_event_ledger").update(values).eq("id", ledgerId);
+  const result = await admin.from("billing_event_ledger").update(values).eq("id", ledgerId);
+  if (result.error) throw result.error;
 }
 
 export async function processStripeSubscriptionEvent(admin: SupabaseClient, ledger: LedgerRow, stripeEvent: Stripe.Event) {
@@ -155,7 +156,6 @@ export async function processStripeSubscriptionEvent(admin: SupabaseClient, ledg
     processed_at: new Date().toISOString(),
     user_id: event.userId,
     subscription_id: subscription.data.id,
-    processing_attempts: 1,
     last_error_code: null
   });
   return { status: "processed" as const };

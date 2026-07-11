@@ -818,7 +818,7 @@ export async function handleOAuthToken(request: Request) {
   }
 
   // Store only digests in rate-limit keys; never persist raw client secrets or authorization-code prefixes.
-  const rateLimitKey = `token:${rateLimitDigest(clientId)}:${rateLimitDigest(code)}`;
+  const rateLimitKey = `token:${oauthClientIp(request)}:${rateLimitDigest(clientId)}`;
   const rateLimitError = await oauthRateLimit(rateLimitKey, TOKEN_RATE_LIMIT, RATE_LIMIT_WINDOW_SECONDS);
   if (rateLimitError) {
     return NextResponse.json(

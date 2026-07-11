@@ -32,7 +32,7 @@ function workerAdminMock({ legalHold = false, providers = [] as string[] } = {})
     storage: { from: () => ({ list: vi.fn(async () => ({ data: [], error: null })), remove }) },
     auth: { admin: { deleteUser, updateUserById } }
   } as unknown as SupabaseClient;
-  return { client, calls, deleteUser, remove };
+  return { client, calls, deleteUser, updateUserById, remove };
 }
 
 describe("account deletion worker contract", () => {
@@ -73,7 +73,20 @@ describe("account deletion worker contract", () => {
     });
     expect(result).toMatchObject({ state: "retry_scheduled", errorCode: "provider_cleanup_adapter_required" });
     expect(mock.remove).not.toHaveBeenCalled();
+    expect(mock.updateUserById).not.toHaveBeenCalled();
     expect(mock.deleteUser).not.toHaveBeenCalled();
     expect(mock.calls.find((call) => call.table === "user_integrations")?.filters).toContainEqual(["user_id", "user-a"]);
+  });
+
+  it("resumes a notification-stage retry without repeating deletion work", async () => {
+    const mock = workerAdminMock();
+    const result = await processAccountDeletionJob(mock.client, {
+      id: "job-a", request_id: "request-a", user_id: "user-a", state: "processing", stage: "notification",
+      attempt_count: 2, evidence: { auth_user_deleted: true }, notification_recipient_ciphertext: null
+    });
+    expect(result).toMatchObject({ state: "completed", notificationStatus: "not_configured" });
+    expect(mock.remove).not.toHaveBeenCalled();
+    expect(mock.updateUserById).not.toHaveBeenCalled();
+    expect(mock.deleteUser).not.toHaveBeenCalled();
   });
 });
