@@ -8,6 +8,66 @@ create unique index if not exists user_meal_plan_items_unique_food_log
   on public.user_meal_plan_items (food_log_id)
   where food_log_id is not null;
 
+-- Repair legacy completed rows before adding the stronger execution-state invariant.
+-- Each unlinked completed row receives one food log copied from its saved meal values.
+do $$
+declare
+  v_item public.user_meal_plan_items%rowtype;
+  v_log_id uuid;
+  v_log_created_at timestamptz;
+begin
+  for v_item in
+    select *
+    from public.user_meal_plan_items
+    where status = 'done'
+      and (food_log_id is null or completed_at is null)
+    order by created_at, id
+    for update
+  loop
+    v_log_id := v_item.food_log_id;
+    v_log_created_at := null;
+
+    if v_log_id is null then
+      insert into public.food_logs (
+        user_id, food_item_id, user_food_item_id, log_date, meal_type, food_name,
+        serving_size, quantity, calories, protein_g, carbs_g, fat_g, notes
+      ) values (
+        v_item.user_id, v_item.food_item_id, v_item.user_food_item_id, v_item.plan_date,
+        v_item.meal_type, v_item.food_name, v_item.serving_size, v_item.quantity,
+        v_item.calories, v_item.protein_g, v_item.carbs_g, v_item.fat_g, v_item.notes
+      )
+      returning id, created_at into v_log_id, v_log_created_at;
+    else
+      select created_at into v_log_created_at
+      from public.food_logs
+      where id = v_log_id and user_id = v_item.user_id;
+
+      if not found then
+        raise exception 'Legacy completed meal % references a missing or foreign food log.', v_item.id
+          using errcode = '23514';
+      end if;
+    end if;
+
+    update public.user_meal_plan_items
+    set food_log_id = v_log_id,
+        completed_at = coalesce(v_item.completed_at, v_log_created_at, clock_timestamp()),
+        updated_at = clock_timestamp()
+    where id = v_item.id;
+  end loop;
+end;
+$$;
+
+alter table public.user_meal_plan_items
+  drop constraint if exists user_meal_plan_items_execution_state_check;
+
+alter table public.user_meal_plan_items
+  add constraint user_meal_plan_items_execution_state_check
+  check (
+    (status = 'done' and completed_at is not null and food_log_id is not null)
+    or
+    (status in ('planned', 'skipped') and completed_at is null and food_log_id is null)
+  );
+
 create or replace function public.enforce_user_meal_plan_item_status_transition()
 returns trigger
 language plpgsql
@@ -193,7 +253,7 @@ grant execute on function public.complete_meal_plan_item(uuid) to authenticated;
 grant execute on function public.correct_completed_meal_plan_item(uuid, date, text, text, text, numeric, numeric, numeric, numeric, numeric, text) to authenticated;
 
 comment on function public.complete_meal_plan_item(uuid) is
-  'Atomically completes an owned planned meal and creates exactly one linked food log. Repairs legacy done rows that lack a food-log link.';
+  'Atomically completes an owned planned meal and creates exactly one linked food log. Existing completion is idempotent.';
 comment on function public.correct_completed_meal_plan_item(uuid, date, text, text, text, numeric, numeric, numeric, numeric, numeric, text) is
   'Atomically corrects an owned completed meal-plan item and its linked food log.';
 
