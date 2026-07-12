@@ -12,7 +12,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { EAT_MEAL_GROUPS, groupFoodLogs, type EatMealGroup } from "@/lib/eat/eat-model";
 import { eatEnergyDisplayValue, eatEnergyInputToKcal, formatEatEnergy } from "@/lib/eat/eat-units";
 import { useEatTranslation } from "@/lib/i18n/eat";
-import { deleteEatFoodLog, isEatLinkedEditConsistencyError, updateEatFoodLog, type EatFoodLogPatch } from "@/services/database/eat";
+import { deleteEatFoodLog, getEatFoodLogs, getEatMealPlanItems, isEatLinkedEditConsistencyError, updateEatFoodLog, type EatFoodLogPatch } from "@/services/database/eat";
 import type { UserAppSettings } from "@/services/database/user-settings";
 import type { FoodLog, MealPlanItem, MealType } from "@/types";
 
@@ -45,7 +45,7 @@ export function EatFoodLog({
   error,
   energyUnit,
   onRetry,
-  onReloadConsistency,
+  onReloadPlannedMeals,
   onAdd,
   onChanged
 }: {
@@ -56,7 +56,7 @@ export function EatFoodLog({
   error?: string;
   energyUnit: UserAppSettings["energyUnit"];
   onRetry: () => void;
-  onReloadConsistency: () => Promise<{ logs: FoodLog[]; mealPlanItems: MealPlanItem[] }>;
+  onReloadPlannedMeals: () => void;
   onAdd: (mealType: MealType) => void;
   onChanged: (logs: FoodLog[]) => void;
 }) {
@@ -105,13 +105,21 @@ export function EatFoodLog({
       setFeedback({ type: "info", message: et("successSaved") });
     } catch (saveError) {
       if (isEatLinkedEditConsistencyError(saveError)) {
-        const refreshed = await onReloadConsistency();
-        const freshLog = refreshed.logs.find((log) => log.id === editing.id) ?? null;
-        if (freshLog) {
-          setEditing(freshLog);
-          setForm(editState(freshLog, energyUnit));
+        try {
+          const [freshLogs] = await Promise.all([
+            getEatFoodLogs(userId, editing.log_date),
+            getEatMealPlanItems(userId, editing.log_date)
+          ]);
+          onChanged(freshLogs);
+          onReloadPlannedMeals();
+          const freshLog = freshLogs.find((log) => log.id === editing.id) ?? null;
+          if (freshLog) {
+            setEditing(freshLog);
+            setForm(editState(freshLog, energyUnit));
+          }
+        } finally {
+          setFeedback({ type: "error", message: et("criticalConsistencyError") });
         }
-        setFeedback({ type: "error", message: et("criticalConsistencyError") });
       } else {
         setFeedback({ type: "error", message: et("saveFailed") });
       }
