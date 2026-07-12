@@ -56,6 +56,7 @@ describe("Eat meal-log redesign contracts", () => {
   it("moves target administration to settings and removes DOM cleanup", () => {
     expect(existsSync("app/(private)/settings/nutrition-targets/page.tsx")).toBe(true);
     expect(source("components/meals/eat-day-sections.tsx")).toContain("/settings/nutrition-targets");
+    expect(source("app/(private)/settings/page.tsx")).toContain('href: "/settings/nutrition-targets"');
     expect(existsSync("components/meals/nutrition-copy-cleanup.tsx")).toBe(false);
     expect(source("app/(private)/calories/layout.tsx")).not.toContain("MutationObserver");
     expect(source("app/(private)/calories/layout.tsx")).not.toContain("NutritionCopyCleanup");
@@ -77,7 +78,37 @@ describe("Eat meal-log redesign contracts", () => {
     expect(service).toContain("foodLogDuplicateKey");
     expect(service).toContain("Copied from ${sourceDate}:${log.id}");
     expect(service).toContain('.eq("status", "planned")');
-    expect(service).toContain('status: "planned", food_log_id: null, completed_at: null');
+  });
+
+  it("prevents terminal linked-log deletion before mutating data", () => {
+    const service = source("services/database/eat.ts");
+    const deletion = service.split("export async function deleteEatFoodLog")[1].split("export async function logRepeatFood")[0];
+    expect(deletion.indexOf("if (linked.data)")).toBeLessThan(deletion.indexOf('.from("food_logs").delete()'));
+    expect(deletion).toContain("completed meal states are permanent");
+    expect(deletion).not.toContain('status: "planned"');
+  });
+
+  it("completes adjusted planned meals without reverting terminal states", () => {
+    const service = source("services/database/eat.ts");
+    const completion = service.split("export async function completeMealPlanItemWithDraft")[1];
+    expect(completion).toContain('status: "done"');
+    expect(completion).toContain('.eq("status", "planned")');
+    expect(completion).toContain('from("food_logs").delete()');
+    expect(completion).not.toContain('update({ status: "planned"');
+  });
+
+  it("initializes repeat logging from the visible suggested meal", () => {
+    const route = source("components/meals/eat-page.tsx");
+    expect(route).toContain("const initialSuggestedMeal = suggestMealType");
+    expect(route).toContain("useState<MealType>(initialSuggestedMeal)");
+    expect(route).toContain("if (!addFoodOpen) setAddFoodMeal(suggestedMeal)");
+  });
+
+  it("keeps the dedicated Food Hub builder free of date-unsafe plan writes", () => {
+    const hub = source("app/(private)/calories/food-hub/page.tsx");
+    expect(hub).toContain("CustomNutritionManager");
+    expect(hub).not.toContain("FoodBrowser");
+    expect(hub).toContain("returnHref");
   });
 
   it("keeps Week concise and avoids empty deficit language", () => {
