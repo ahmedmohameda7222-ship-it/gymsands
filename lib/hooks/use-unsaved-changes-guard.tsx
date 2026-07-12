@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UnsavedHistorySentinel } from "@/lib/hooks/unsaved-history-sentinel";
+import { bindUnsavedBeforeUnload, resolveUnsavedInternalLink } from "@/lib/hooks/unsaved-navigation-events";
 
 type PendingAction = { run: () => void; historyExit?: boolean };
 
@@ -74,12 +75,10 @@ export function useUnsavedChangesGuard({
 
   useEffect(() => {
     if (!dirty) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", beforeUnload);
-    return () => window.removeEventListener("beforeunload", beforeUnload);
+    return bindUnsavedBeforeUnload({
+      addEventListener: (_type, listener) => window.addEventListener("beforeunload", listener as (event: BeforeUnloadEvent) => void),
+      removeEventListener: (_type, listener) => window.removeEventListener("beforeunload", listener as (event: BeforeUnloadEvent) => void)
+    });
   }, [dirty]);
 
   useEffect(() => {
@@ -115,13 +114,23 @@ export function useUnsavedChangesGuard({
   useEffect(() => {
     if (!dirty) return;
     const captureLinks = (event: MouseEvent) => {
-      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const target = event.target instanceof Element ? event.target.closest("a[href]") : null;
-      if (!(target instanceof HTMLAnchorElement) || target.target === "_blank" || target.hasAttribute("download")) return;
-      const url = new URL(target.href, window.location.href);
-      if (url.origin !== window.location.origin || url.href === window.location.href) return;
+      if (!(target instanceof HTMLAnchorElement)) return;
+      const destination = resolveUnsavedInternalLink({
+        defaultPrevented: event.defaultPrevented,
+        button: event.button,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+        href: target.href,
+        currentHref: window.location.href,
+        target: target.target,
+        download: target.hasAttribute("download")
+      });
+      if (!destination) return;
       event.preventDefault();
-      request(() => router.push(`${url.pathname}${url.search}${url.hash}`));
+      request(() => router.push(destination));
     };
     document.addEventListener("click", captureLinks, true);
     return () => document.removeEventListener("click", captureLinks, true);
