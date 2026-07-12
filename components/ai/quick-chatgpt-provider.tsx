@@ -36,7 +36,7 @@ type QuickChatGptContextValue = {
 };
 
 const QuickChatGptContext = createContext<QuickChatGptContextValue | null>(null);
-const emptyContext: QuickPromptContext = { nutrition: { hasTargets: false, foodLogCount: 0, mealPlanCount: 0 }, grocery: { itemCount: 0 }, recovery: { poorRecovery: false } };
+const emptyContext: QuickPromptContext = { nutrition: { hasTargets: false, foodLogsState: "loading", foodLogCount: null, mealPlanCount: 0 }, grocery: { itemCount: 0 }, recovery: { poorRecovery: false } };
 const permissionLabelKeys: Record<AiPermissionSection, TodayKey> = {
   workouts: "permissionWorkouts",
   nutrition: "permissionNutrition",

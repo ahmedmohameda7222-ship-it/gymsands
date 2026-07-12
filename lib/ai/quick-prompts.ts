@@ -9,7 +9,7 @@ export type QuickPromptContext = {
   route?: string;
   today?: string;
   workout?: { scheduled: boolean; active: boolean; completed: boolean; title?: string | null; exerciseCount?: number; durationMinutes?: number | null };
-  nutrition?: { hasTargets: boolean; remainingCalories?: number | null; remainingProtein?: number | null; foodLogCount: number; mealPlanCount: number };
+  nutrition?: { hasTargets: boolean; foodLogsState?: "loading" | "loaded" | "failed"; remainingCalories?: number | null; remainingProtein?: number | null; foodLogCount: number | null; mealPlanCount: number };
   grocery?: { itemCount: number };
   recovery?: { sleepHours?: number | null; poorRecovery: boolean };
   endOfWeek?: boolean;
@@ -64,7 +64,7 @@ export const QUICK_PROMPTS: QuickPromptDefinition[] = [
     title: text("Help me finish today's macros", "Heutige Makros vervollständigen", "ساعدني على إكمال ماكروز اليوم"),
     description: text("Suggest practical foods for the calories and protein still remaining.", "Schlage praktische Lebensmittel für die verbleibenden Kalorien und das Protein vor.", "اقترح أطعمة عملية للسعرات والبروتين المتبقيين."),
     template: (c, l) => value(text(`Help me finish today's nutrition targets. I have about ${Math.max(0, Math.round(c.nutrition?.remainingCalories ?? 0))} kcal and ${Math.max(0, Math.round(c.nutrition?.remainingProtein ?? 0))} g protein remaining. Suggest a few realistic options. Do not log anything until I confirm.`, `Hilf mir, meine heutigen Ernährungsziele zu erreichen. Es bleiben ungefähr ${Math.max(0, Math.round(c.nutrition?.remainingCalories ?? 0))} kcal und ${Math.max(0, Math.round(c.nutrition?.remainingProtein ?? 0))} g Protein. Schlage einige realistische Optionen vor. Protokolliere nichts ohne meine Bestätigung.`, `ساعدني على إكمال أهداف التغذية اليوم. يتبقى تقريبًا ${Math.max(0, Math.round(c.nutrition?.remainingCalories ?? 0))} سعرة و${Math.max(0, Math.round(c.nutrition?.remainingProtein ?? 0))} غ بروتين. اقترح عدة خيارات واقعية ولا تسجل شيئًا قبل تأكيدي.`), l),
-    permissionSections: ["nutrition"], capability: "read", eligible: c => Boolean(c.nutrition?.hasTargets && (c.nutrition.remainingProtein ?? 0) > 10),
+    permissionSections: ["nutrition"], capability: "read", eligible: c => Boolean((c.nutrition?.foodLogsState ?? "loaded") === "loaded" && c.nutrition?.hasTargets && (c.nutrition.remainingProtein ?? 0) > 10),
     priority: c => Math.min(100, 60 + Math.round((c.nutrition?.remainingProtein ?? 0) / 2)),
     contextChips: (c, l) => [`${Math.max(0, Math.round(c.nutrition?.remainingProtein ?? 0))} g ${value(text("protein remaining", "Protein übrig", "بروتين متبقٍ"), l)}`]
   },
@@ -80,7 +80,7 @@ export const QUICK_PROMPTS: QuickPromptDefinition[] = [
     title: text("Estimate meal from photo", "Mahlzeit aus Foto schätzen", "قدّر الوجبة من الصورة"),
     description: text("Take or upload a photo in ChatGPT and estimate calories and macros.", "Nimm in ChatGPT ein Foto auf oder lade es hoch und schätze Kalorien und Makros.", "التقط صورة أو ارفعها في ChatGPT وقدّر السعرات والماكروز."),
     template: (_c, l) => value(photoPrompt, l), permissionSections: [], capability: "read", attachmentExpected: true,
-    eligible: always, priority: c => c.nutrition?.foodLogCount === 0 ? 75 : 35, contextChips: none
+    eligible: always, priority: c => (c.nutrition?.foodLogsState ?? "loaded") === "loaded" && c.nutrition?.foodLogCount === 0 ? 75 : 35, contextChips: none
   },
   {
     id: "review-recovery", category: "recovery",

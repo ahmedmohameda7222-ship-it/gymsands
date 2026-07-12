@@ -46,7 +46,7 @@ export function buildTodayActions(input: {
   workoutExerciseCount?: number;
   workoutDurationMinutes?: number | null;
   relevantMeal: MealPlanItem | null;
-  foodLogCount: number;
+  foodLogCount: number | null;
   remainingProtein: number | null;
   waterRemainingMl: number | null;
   checkinAvailable: boolean;
@@ -96,15 +96,26 @@ export function buildTodayActions(input: {
 }
 
 export function hasCurrentDayActivity(input: {
-  foodLogCount: number;
+  foodLogCount: number | null;
   waterLogCount: number;
-  mealItems: MealPlanItem[];
+  doneMealCount: number;
   workoutState: TodayWorkoutState;
-  habitsCount: number;
-  supplementsCount: number;
+  completedHabitCount: number;
+  takenSupplementCount: number;
   sleepLoggedToday: boolean;
+  checkinLoggedToday: boolean;
 }) {
-  return input.foodLogCount > 0 || input.waterLogCount > 0 || input.mealItems.length > 0 || input.workoutState !== "none" || input.habitsCount > 0 || input.supplementsCount > 0 || input.sleepLoggedToday;
+  return (
+    (input.foodLogCount ?? 0) > 0 ||
+    input.waterLogCount > 0 ||
+    input.doneMealCount > 0 ||
+    input.workoutState === "active" ||
+    input.workoutState === "completed" ||
+    input.completedHabitCount > 0 ||
+    input.takenSupplementCount > 0 ||
+    input.sleepLoggedToday ||
+    input.checkinLoggedToday
+  );
 }
 
 export const quickLogRoutes: Record<QuickLogSection, string> = {
