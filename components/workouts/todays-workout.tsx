@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError } from "@/lib/error-formatting";
+import { useTranslation } from "@/lib/i18n/use-translation";
 import Link from "next/link";
 import { getTodayMealPlanItems, markMealPlanItemDone } from "@/services/database/nutrition";
 import { getCurrentWeekday, getDefaultUserWorkoutPlan, workoutsFromPlanDay } from "@/services/database/workout-plans";
@@ -28,6 +29,7 @@ function customVideoUrl(exercise: Workout) {
 export function TodaysWorkout() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t, dir } = useTranslation();
   const [plan, setPlan] = useState<UserWorkoutPlan | null>(null);
   const [mealItems, setMealItems] = useState<MealPlanItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -60,7 +62,7 @@ export function TodaysWorkout() {
   }, [toast, user?.id]);
 
   async function markMealDone(item: MealPlanItem) {
-    if (item.status === "done" || savingMealId) return;
+    if (item.status !== "planned" || savingMealId) return;
     setSavingMealId(item.id);
     try {
       const { item: updated } = await markMealPlanItemDone(item);
@@ -110,7 +112,7 @@ export function TodaysWorkout() {
   const exercises = workoutsFromPlanDay(todayDay);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" dir={dir}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           <Badge>Default Plan</Badge>
@@ -195,17 +197,17 @@ export function TodaysWorkout() {
                     <p className="font-semibold text-foreground">{item.food_name}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{item.meal_type} | {item.calories} kcal</p>
                   </div>
-                  <Badge variant={item.status === "done" ? "success" : "outline"}>{item.status === "done" ? "Done" : "Planned"}</Badge>
+                  <Badge variant={item.status === "done" ? "success" : item.status === "skipped" ? "warning" : "outline"}>{item.status === "done" ? t("mealPlan.statusDone") : item.status === "skipped" ? t("mealPlan.statusSkipped") : t("mealPlan.statusPlanned")}</Badge>
                 </div>
                 <Button
                   type="button"
                   size="sm"
                   className="mt-3"
                   onClick={() => markMealDone(item)}
-                  disabled={item.status === "done" || savingMealId === item.id}
+                  disabled={item.status !== "planned" || savingMealId === item.id}
                 >
                   <CheckCircle2 className="h-4 w-4" />
-                  {item.status === "done" ? "Marked Done" : "Mark Food Done"}
+                  {item.status === "done" ? t("mealPlan.statusDone") : item.status === "skipped" ? t("mealPlan.statusSkipped") : "Mark Food Done"}
                 </Button>
               </div>
             ))}

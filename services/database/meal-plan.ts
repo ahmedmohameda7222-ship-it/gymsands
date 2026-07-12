@@ -204,14 +204,14 @@ export async function updateDirectMealPlanItem(userId: string, itemId: string, p
 }
 
 export async function markDirectMealPlanItemSkipped(item: MealPlanItem) {
-  if (item.status === "done") throw new Error("A completed meal cannot be skipped.");
+  if (item.status !== "planned") throw new Error("Only a planned meal can be skipped.");
   if (!canUseUserData(item.user_id)) throw new Error("User session invalid");
   const { data, error } = await supabase!
     .from("user_meal_plan_items")
     .update({ status: "skipped", completed_at: null, food_log_id: null })
     .eq("id", item.id)
     .eq("user_id", item.user_id)
-    .neq("status", "done")
+    .eq("status", "planned")
     .select("*")
     .single();
   if (error) throw error;
@@ -227,13 +227,14 @@ export async function markDirectMealPlanItemsSkipped(userId: string, itemIds: st
     .update({ status: "skipped", completed_at: null, food_log_id: null })
     .eq("user_id", userId)
     .in("id", ids)
-    .neq("status", "done")
+    .eq("status", "planned")
     .select("*");
   if (error) throw error;
   return ((data ?? []) as unknown as Record<string, unknown>[]).map(normalizeMealPlanItem);
 }
 
 export async function markDirectMealPlanItemDone(item: MealPlanItem) {
+  if (item.status === "skipped") throw new Error("A skipped meal cannot be marked done.");
   if (!canUseUserData(item.user_id)) {
     return {
       item: { ...item, status: "done", completed_at: item.completed_at ?? new Date().toISOString(), food_log_id: item.food_log_id ?? crypto.randomUUID() } as MealPlanItem,
@@ -253,6 +254,7 @@ export async function markDirectMealPlanItemDone(item: MealPlanItem) {
   if (!latestResult.data) throw new Error("Meal plan item not found.");
 
   const latest = normalizeMealPlanItem(latestResult.data as unknown as Record<string, unknown>);
+  if (latest.status === "skipped") throw new Error("A skipped meal cannot be marked done.");
   if (latest.status === "done" || latest.food_log_id) {
     return { item: latest, log: null as FoodLog | null, already_done: true };
   }
@@ -264,7 +266,7 @@ export async function markDirectMealPlanItemDone(item: MealPlanItem) {
     .eq("id", latest.id)
     .eq("user_id", latest.user_id)
     .is("food_log_id", null)
-    .neq("status", "done")
+    .eq("status", "planned")
     .select("*")
     .maybeSingle();
   if (claimed.error) throw claimed.error;

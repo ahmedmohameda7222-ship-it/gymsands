@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Edit3, PlusCircle, RefreshCw, Save, ShoppingCart, Trash2, Utensils, X } from "lucide-react";
 import { Component, useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslation } from "@/lib/i18n/use-translation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,6 +101,7 @@ export function MyMealPlanBuilder() {
 
 function MyMealPlanBuilderInner() {
   const { user, profile } = useAuth();
+  const { t, dir } = useTranslation();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -113,6 +115,7 @@ function MyMealPlanBuilderInner() {
   const [targetCalories, setTargetCalories] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
+  const [skippingId, setSkippingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(emptyDraft);
@@ -258,12 +261,14 @@ function MyMealPlanBuilderInner() {
     if (item.status !== "planned") return;
     try {
       setIsUpdatingId(item.id);
+      setSkippingId(item.id);
       const updated = normalizeMealPlanItem(await markDirectMealPlanItemSkipped(item));
       upsertLocalItems([updated]);
-      setNotice({ type: "success", title: "Meal skipped", description: `${item.food_name} remains in the plan and was not added to calories.` });
+      setNotice({ type: "success", title: t("mealPlan.skipSuccess"), description: t("mealPlan.skipSuccessDesc", { food: item.food_name }) });
     } catch (error) {
-      setNotice({ type: "error", title: "Could not skip meal", description: userSafeError(error) });
+      setNotice({ type: "error", title: t("mealPlan.skipError"), description: userSafeError(error, t("mealPlan.skipErrorDesc")) });
     } finally {
+      setSkippingId(null);
       setIsUpdatingId(null);
     }
   }
@@ -355,7 +360,7 @@ function MyMealPlanBuilderInner() {
   };
 
   return (
-    <div className="space-y-3 sm:space-y-4">
+    <div className="space-y-3 sm:space-y-4" dir={dir}>
       <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4">
         <SummaryCard label="Planned" value={plannedTotals.calories} detail={`${Math.round(plannedTotals.protein_g)}g protein`} />
         <SummaryCard label="Done" value={doneTotals.calories} detail={`${Math.round(doneTotals.protein_g)}g protein`} />
@@ -514,6 +519,7 @@ function MyMealPlanBuilderInner() {
                 editDraft={editDraft}
                 setEditDraft={setEditDraft}
                 updatingId={isUpdatingId}
+                skippingId={skippingId}
               />
             </div>
           ) : (
@@ -535,6 +541,7 @@ function MyMealPlanBuilderInner() {
                   editDraft={editDraft}
                   setEditDraft={setEditDraft}
                   updatingId={isUpdatingId}
+                skippingId={skippingId}
                 />
               ))}
             </div>
@@ -641,15 +648,16 @@ function SummaryCard({ label, value, detail, suffix = " kcal" }: { label: string
   );
 }
 
-function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () => void; onDone: (item: MealPlanItem) => void; onSkip: (item: MealPlanItem) => void; onDelete: (item: MealPlanItem) => void; onAddToGrocery: (item: MealPlanItem) => void; onStartEdit: (item: MealPlanItem) => void; onSaveEdit: (item: MealPlanItem) => void; onCancelEdit: () => void; editingId: string | null; editDraft: Draft; setEditDraft: Dispatch<SetStateAction<Draft>>; updatingId: string | null }) {
-  const { type, items, onAdd, onSkip, onDone, onDelete, onAddToGrocery, onStartEdit, onSaveEdit, onCancelEdit, editingId, editDraft, setEditDraft, updatingId } = props;
+function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () => void; onDone: (item: MealPlanItem) => void; onSkip: (item: MealPlanItem) => void; onDelete: (item: MealPlanItem) => void; onAddToGrocery: (item: MealPlanItem) => void; onStartEdit: (item: MealPlanItem) => void; onSaveEdit: (item: MealPlanItem) => void; onCancelEdit: () => void; editingId: string | null; editDraft: Draft; setEditDraft: Dispatch<SetStateAction<Draft>>; updatingId: string | null; skippingId: string | null }) {
+  const { t, dir } = useTranslation();
+  const { type, items, onAdd, onSkip, onDone, onDelete, onAddToGrocery, onStartEdit, onSaveEdit, onCancelEdit, editingId, editDraft, setEditDraft, updatingId, skippingId } = props;
   const totals = items.reduce((sum, item) => addItemToTotals(sum, item), emptyTotals());
   const plannedCount = items.filter((i) => i.status === "planned").length;
   const doneCount = items.filter((i) => i.status === "done").length;
   const skippedCount = items.filter((i) => i.status === "skipped").length;
 
   return (
-    <Card variant="glass" className="h-full">
+    <Card variant="glass" className="h-full" dir={dir}>
       <CardHeader className="p-3 sm:p-5">
         <CardTitle className="flex items-center justify-between gap-2 text-sm sm:text-base">
           <span className="flex items-center gap-2"><Utensils className="h-4 w-4" /> {displayMealType(type)}</span>
@@ -696,7 +704,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
-                  <Badge variant={item.status === "done" ? "success" : item.status === "skipped" ? "warning" : "outline"} className="text-[10px]">{item.status}</Badge>
+                  <Badge variant={item.status === "done" ? "success" : item.status === "skipped" ? "warning" : "outline"} className="text-[10px]">{item.status === "done" ? t("mealPlan.statusDone") : item.status === "skipped" ? t("mealPlan.statusSkipped") : t("mealPlan.statusPlanned")}</Badge>
                   <Badge variant={validation.tone === "success" ? "success" : validation.tone === "destructive" ? "destructive" : "warning"} className="text-[10px]" title={validation.detail}>{validation.label}</Badge>
                 </div>
               </div>
@@ -710,7 +718,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
                     <CheckCircle2 className="h-4 w-4" />
                     {updatingId === item.id ? "Saving..." : "Done"}
                   </Button>
-                  <Button type="button" className="min-h-12" variant="outline" onClick={() => onSkip(item)} disabled={item.status !== "planned" || updatingId === item.id}>Skip</Button>
+                  <Button type="button" className="min-h-12" variant="outline" aria-label={t("mealPlan.skipMealLabel", { food: item.food_name })} onClick={() => onSkip(item)} disabled={item.status !== "planned" || updatingId === item.id}>{skippingId === item.id ? t("mealPlan.skipping") : t("mealPlan.skip")}</Button>
                   <Button type="button" className="min-h-12" variant="outline" onClick={() => onStartEdit(item)} disabled={updatingId === item.id}><Edit3 className="h-4 w-4" /> Edit</Button>
                   <Button type="button" className="min-h-12" variant="outline" onClick={() => onAddToGrocery(item)} disabled={updatingId === item.id}><ShoppingCart className="h-4 w-4" /> <span className="hidden sm:inline">Grocery</span><span className="sm:hidden">Add</span></Button>
                   <Button type="button" size="icon" variant="ghost" className="h-12 min-h-12 w-12 text-destructive hover:text-destructive" onClick={() => onDelete(item)} disabled={updatingId === item.id} aria-label={`Delete ${item.food_name}`}><Trash2 className="h-4 w-4" /></Button>

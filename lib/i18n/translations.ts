@@ -218,7 +218,17 @@ export const translations: Record<SupportedLanguage, Record<TranslationKey, stri
     "profile.active": "Profile active",
     "profile.complete": "Complete your profile",
     "profile.emailLoading": "Email loading...",
-    "profile.goal": "Goal"
+    "profile.goal": "Goal",
+    "mealPlan.skip": "Skip",
+    "mealPlan.skipping": "Skipping...",
+    "mealPlan.statusPlanned": "Planned",
+    "mealPlan.statusDone": "Done",
+    "mealPlan.statusSkipped": "Skipped",
+    "mealPlan.skipSuccess": "Meal skipped",
+    "mealPlan.skipSuccessDesc": "{food} remains in the plan and was not added to consumed calories.",
+    "mealPlan.skipError": "Could not skip meal",
+    "mealPlan.skipErrorDesc": "The meal remains unchanged. Retry when the connection is stable.",
+    "mealPlan.skipMealLabel": "Skip {food}"
   },
   de: {
     "common.back": "Zurück",
@@ -437,7 +447,17 @@ export const translations: Record<SupportedLanguage, Record<TranslationKey, stri
     "profile.active": "Profil aktiv",
     "profile.complete": "Profil vervollständigen",
     "profile.emailLoading": "E-Mail wird geladen...",
-    "profile.goal": "Ziel"
+    "profile.goal": "Ziel",
+    "mealPlan.skip": "Überspringen",
+    "mealPlan.skipping": "Wird übersprungen...",
+    "mealPlan.statusPlanned": "Geplant",
+    "mealPlan.statusDone": "Erledigt",
+    "mealPlan.statusSkipped": "Übersprungen",
+    "mealPlan.skipSuccess": "Mahlzeit übersprungen",
+    "mealPlan.skipSuccessDesc": "{food} bleibt im Plan und wurde nicht zu den verbrauchten Kalorien hinzugefügt.",
+    "mealPlan.skipError": "Mahlzeit konnte nicht übersprungen werden",
+    "mealPlan.skipErrorDesc": "Die Mahlzeit bleibt unverändert. Versuche es bei stabiler Verbindung erneut.",
+    "mealPlan.skipMealLabel": "{food} überspringen"
   },
   ar: {
     "common.back": "رجوع",
@@ -656,7 +676,17 @@ export const translations: Record<SupportedLanguage, Record<TranslationKey, stri
     "profile.active": "الملف نشط",
     "profile.complete": "أكمل ملفك الشخصي",
     "profile.emailLoading": "جار تحميل البريد...",
-    "profile.goal": "الهدف"
+    "profile.goal": "الهدف",
+    "mealPlan.skip": "تخطي",
+    "mealPlan.skipping": "جارٍ التخطي...",
+    "mealPlan.statusPlanned": "مخطط",
+    "mealPlan.statusDone": "تم",
+    "mealPlan.statusSkipped": "تم التخطي",
+    "mealPlan.skipSuccess": "تم تخطي الوجبة",
+    "mealPlan.skipSuccessDesc": "ستظل {food} في الخطة ولم تُضف إلى السعرات المستهلكة.",
+    "mealPlan.skipError": "تعذر تخطي الوجبة",
+    "mealPlan.skipErrorDesc": "لم تتغير الوجبة. أعد المحاولة عند استقرار الاتصال.",
+    "mealPlan.skipMealLabel": "تخطي {food}"
   }
 };
 

@@ -877,6 +877,7 @@ export async function addFoodToMealPlan({
 }
 
 export async function markMealPlanItemDone(item: MealPlanItem) {
+  if (item.status === "skipped") throw new Error("A skipped meal cannot be marked done.");
   if (!canUseUserData(item.user_id)) {
     return {
       item: {
@@ -900,6 +901,7 @@ export async function markMealPlanItemDone(item: MealPlanItem) {
   if (!latestResult.data) throw new Error("Meal plan item not found.");
 
   const latest = latestResult.data as MealPlanItem;
+  if (latest.status === "skipped") throw new Error("A skipped meal cannot be marked done.");
   if (latest.status === "done" || latest.food_log_id) return { item: latest, log: null as FoodLog | null, already_done: true };
 
   const completedAt = new Date().toISOString();
@@ -909,7 +911,7 @@ export async function markMealPlanItemDone(item: MealPlanItem) {
     .eq("id", latest.id)
     .eq("user_id", latest.user_id)
     .is("food_log_id", null)
-    .neq("status", "done")
+    .eq("status", "planned")
     .select("*")
     .maybeSingle();
   if (claimed.error) throw claimed.error;
