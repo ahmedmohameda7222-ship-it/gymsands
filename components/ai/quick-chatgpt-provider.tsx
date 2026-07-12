@@ -43,6 +43,7 @@ const permissionLabelKeys: Record<AiPermissionSection, TodayKey> = { workouts: "
 
 export function QuickChatGptProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const permissionUserId = user?.id;
   const { language, dir } = useTranslation();
   const promptLanguage = language as PromptLanguage;
   const { tt } = useTodayTranslation();
@@ -75,16 +76,16 @@ export function QuickChatGptProvider({ children }: { children: ReactNode }) {
   const destination = view.name === "custom-detail" ? customPrompt?.destination : selected?.destination?.[promptLanguage];
   const attachmentExpected = view.name === "custom-detail" ? customPrompt?.attachmentExpected ?? false : selected?.attachmentExpected ?? false;
   const contextChips = view.name === "custom-detail" ? customPrompt?.contextChips ?? [] : selected ? getRuntimeContextChips(selected, dashboardContext, promptLanguage) : [];
-  const permissionEvaluation = evaluatePromptPermission({ userId: user?.id, loading: permissionLoading, status: permissionStatus, config: permissionConfig, sections, capability });
+  const permissionEvaluation = evaluatePromptPermission({ userId: permissionUserId, loading: permissionLoading, status: permissionStatus, config: permissionConfig, sections, capability });
   const missingSectionLabels = permissionEvaluation.state === "missing" ? permissionEvaluation.sections.map((section) => tt(permissionLabelKeys[section])).join(", ") : "";
 
   const setDashboardContext = useCallback((context: QuickPromptContext) => setDashboardContextState(context), []);
   const loadPermissions = useCallback(async () => {
-    if (!user?.id) { setPermissionConfig(null); setPermissionStatus(null); setPermissionLoading(false); return; }
+    if (!permissionUserId) { setPermissionConfig(null); setPermissionStatus(null); setPermissionLoading(false); return; }
     setPermissionLoading(true); setPermissionStatus(null);
-    const result = await getAiPermissionSettingsWithStatus(user.id);
+    const result = await getAiPermissionSettingsWithStatus(permissionUserId);
     setPermissionConfig(result.config); setPermissionStatus(result.status); setPermissionLoading(false);
-  }, [user?.id]);
+  }, [permissionUserId]);
   useEffect(() => { if (open) void loadPermissions(); }, [loadPermissions, open]);
   useEffect(() => { setEditedPrompt(generatedPrompt); setCopyError(false); }, [generatedPrompt]);
 
@@ -121,7 +122,7 @@ export function QuickChatGptProvider({ children }: { children: ReactNode }) {
   }
   const value = useMemo<QuickChatGptContextValue>(() => ({ openPrompts, openCustomPrompt, setDashboardContext, rankedPrompts, dashboardContext, isOpen: open }), [dashboardContext, open, openCustomPrompt, openPrompts, rankedPrompts, setDashboardContext]);
 
-  return <QuickChatGptContext.Provider value={value}>{children}<QuickChatGptSurface open={open} onOpenChange={closeSurface} source={source} mode={mode} view={view} setView={setView} language={promptLanguage} dir={dir} tt={tt} context={dashboardContext} homeSections={homeSections} eatHome={eatHome} mealPrompts={mealPrompts} libraryPrompts={libraryPrompts} librarySearch={librarySearch} setLibrarySearch={setLibrarySearch} libraryCategory={libraryCategory} setLibraryCategory={setLibraryCategory} title={title} description={description} editedPrompt={editedPrompt} generatedPrompt={generatedPrompt} setEditedPrompt={setEditedPrompt} attachmentExpected={attachmentExpected} contextChips={contextChips} capability={capability} destination={destination} permissionEvaluation={permissionEvaluation} permissionUserId={user?.id} permissionLoading={permissionLoading} permissionStatus={permissionStatus} permissionConfig={permissionConfig} missingSectionLabels={missingSectionLabels} retryPermissions={() => void loadPermissions()} copyError={copyError} setCopyError={setCopyError} /></QuickChatGptContext.Provider>;
+  return <QuickChatGptContext.Provider value={value}>{children}<QuickChatGptSurface open={open} onOpenChange={closeSurface} source={source} mode={mode} view={view} setView={setView} language={promptLanguage} dir={dir} tt={tt} context={dashboardContext} homeSections={homeSections} eatHome={eatHome} mealPrompts={mealPrompts} libraryPrompts={libraryPrompts} librarySearch={librarySearch} setLibrarySearch={setLibrarySearch} libraryCategory={libraryCategory} setLibraryCategory={setLibraryCategory} title={title} description={description} editedPrompt={editedPrompt} generatedPrompt={generatedPrompt} setEditedPrompt={setEditedPrompt} attachmentExpected={attachmentExpected} contextChips={contextChips} capability={capability} destination={destination} permissionEvaluation={permissionEvaluation} permissionUserId={permissionUserId} permissionLoading={permissionLoading} permissionStatus={permissionStatus} permissionConfig={permissionConfig} missingSectionLabels={missingSectionLabels} retryPermissions={() => void loadPermissions()} copyError={copyError} setCopyError={setCopyError} /></QuickChatGptContext.Provider>;
 }
 
 export function useQuickChatGpt() {
