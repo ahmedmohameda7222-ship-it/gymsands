@@ -116,7 +116,7 @@ describe("explicit task contracts", () => {
     ["build-grocery-list", "review-grocery-list"],
     ["review-recovery", "train-today"],
     ["review-week", "identify-plateau"],
-    ["review-goals", "update-training-preferences"]
+    ["review-goals", "review-constraints"]
   ])("materially differentiates %s from %s", (first: string, second: string) => {
     expect(getPromptTaskContract(prompt(first)).output.map((item) => item.en)).not.toEqual(getPromptTaskContract(prompt(second)).output.map((item) => item.en));
   });
@@ -144,6 +144,7 @@ describe("backing capability audit", () => {
       expect(status.supported, definition.id).toBe(true);
     }
     expect(RUNTIME_QUICK_PROMPTS).toHaveLength(QUICK_PROMPTS.length);
+    expect(QUICK_PROMPTS.map((item) => item.id)).not.toEqual(expect.arrayContaining(["update-training-preferences", "update-nutrition-preferences"]));
   });
 
   it("rejects partial capability matches instead of accepting one real entry", () => {
