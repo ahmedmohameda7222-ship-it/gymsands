@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Barcode, BookOpen, Camera, ChefHat, Copy, History, Loader2, Search, Utensils } from "lucide-react";
+import { ArrowLeft, Barcode, BookOpen, Camera, ChefHat, Copy, History, Loader2, Search } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { EatBarcodeMethod } from "@/components/meals/eat-barcode-method";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { InlineFeedback } from "@/components/motion";
-import { findCopyDuplicates, rankRepeatFoods, supportedServingOptions, type RepeatFoodOption, type SourceState } from "@/lib/eat/eat-model";
+import { findCopyDuplicates, supportedServingOptions, type RepeatFoodOption, type SourceState } from "@/lib/eat/eat-model";
 import { useEatTranslation } from "@/lib/i18n/eat";
 import { addGlobalFoodToToday, getCustomMeals, getFoodCategories, getFoodLibrary } from "@/services/database/nutrition";
 import { copyEatFoodLogs, getEatFoodLogs, logRepeatFood } from "@/services/database/eat";
@@ -18,15 +18,7 @@ import { logSavedMealToEat } from "@/services/database/eat-food-logging";
 import { scaleFoodMacros } from "@/services/nutrition/calculations";
 import type { CustomMeal, FoodItem, FoodLog, MealType } from "@/types";
 
-type AddFoodView =
-  | { name: "home" }
-  | { name: "repeat" }
-  | { name: "search" }
-  | { name: "saved-meals" }
-  | { name: "barcode" }
-  | { name: "custom" }
-  | { name: "photo" }
-  | { name: "copy-day" };
+type AddFoodViewName = "home" | "repeat" | "search" | "saved-meals" | "barcode" | "custom" | "photo" | "copy-day";
 
 const mealTypes: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
@@ -47,12 +39,12 @@ export function EatAddFoodSurface({
   initialMealType: MealType;
   repeats: RepeatFoodOption[];
   targetLogs: FoodLog[];
-  initialView?: AddFoodView["name"];
+  initialView?: AddFoodViewName;
   onFoodLogged: (logs: FoodLog[]) => void;
   onPhotoPrompt: (date: string, mealType: MealType) => void;
 }) {
   const { et, formatDate, mealLabel } = useEatTranslation();
-  const [view, setView] = useState<AddFoodView>({ name: initialView });
+  const [view, setView] = useState<AddFoodViewName>(initialView);
   const [date, setDate] = useState(selectedDate);
   const [mealType, setMealType] = useState<MealType>(initialMealType);
 
@@ -60,12 +52,12 @@ export function EatAddFoodSurface({
     if (!open) return;
     setDate(selectedDate);
     setMealType(initialMealType);
-    setView({ name: initialView });
+    setView(initialView);
   }, [initialMealType, initialView, open, selectedDate]);
 
   function close(next: boolean) {
     onOpenChange(next);
-    if (!next) setView({ name: "home" });
+    if (!next) setView("home");
   }
 
   const customHref = `/calories/food-hub?builder=1&date=${encodeURIComponent(date)}&meal=${encodeURIComponent(mealType.toLowerCase())}&return=${encodeURIComponent(`/calories?date=${selectedDate}&view=day`)}`;
@@ -76,8 +68,8 @@ export function EatAddFoodSurface({
         <div className="shrink-0 border-b border-border/70 px-5 py-4">
           <DialogHeader className="mb-0">
             <div className="flex items-center gap-2">
-              {view.name !== "home" ? <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" onClick={() => setView({ name: "home" })} aria-label={et("back")}><ArrowLeft className="h-4 w-4 rtl:rotate-180" /></Button> : null}
-              <div><DialogTitle>{viewTitle(view.name, et)}</DialogTitle><DialogDescription>{et("noNested")}</DialogDescription></div>
+              {view !== "home" ? <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" onClick={() => setView("home")} aria-label={et("back")}><ArrowLeft className="h-4 w-4 rtl:rotate-180" /></Button> : null}
+              <div><DialogTitle>{viewTitle(view, et)}</DialogTitle><DialogDescription>{et("noNested")}</DialogDescription></div>
             </div>
           </DialogHeader>
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -87,21 +79,21 @@ export function EatAddFoodSurface({
           <p className="mt-2 text-xs text-muted-foreground">{et("destination")}: {formatDate(date)} · {mealLabel(mealType)}</p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
-          {view.name === "home" ? <AddFoodHome setView={setView} customHref={customHref} onPhoto={() => { onPhotoPrompt(date, mealType); close(false); }} /> : null}
-          {view.name === "repeat" ? <RepeatMethod options={repeats} date={date} mealType={mealType} onLogged={(log) => onFoodLogged([log])} /> : null}
-          {view.name === "search" ? <SearchMethod date={date} mealType={mealType} onLogged={(log) => onFoodLogged([log])} /> : null}
-          {view.name === "saved-meals" ? <SavedMealsMethod date={date} mealType={mealType} customHref={customHref} onLogged={(log) => onFoodLogged([log])} /> : null}
-          {view.name === "barcode" ? <EatBarcodeMethod date={date} mealType={mealType} onLogged={(log) => onFoodLogged([log])} /> : null}
-          {view.name === "custom" ? <CustomMethod href={customHref} /> : null}
-          {view.name === "photo" ? <PhotoMethod onOpen={() => { onPhotoPrompt(date, mealType); close(false); }} /> : null}
-          {view.name === "copy-day" ? <CopyDayMethod targetDate={date} targetLogs={targetLogs} onCopied={onFoodLogged} /> : null}
+          {view === "home" ? <AddFoodHome setView={setView} customHref={customHref} onPhoto={() => { onPhotoPrompt(date, mealType); close(false); }} /> : null}
+          {view === "repeat" ? <RepeatMethod options={repeats} date={date} mealType={mealType} onLogged={(log) => onFoodLogged([log])} /> : null}
+          {view === "search" ? <SearchMethod date={date} mealType={mealType} onLogged={(log) => onFoodLogged([log])} /> : null}
+          {view === "saved-meals" ? <SavedMealsMethod date={date} mealType={mealType} customHref={customHref} onLogged={(log) => onFoodLogged([log])} /> : null}
+          {view === "barcode" ? <EatBarcodeMethod date={date} mealType={mealType} onLogged={(log) => onFoodLogged([log])} /> : null}
+          {view === "custom" ? <CustomMethod href={customHref} /> : null}
+          {view === "photo" ? <PhotoMethod onOpen={() => { onPhotoPrompt(date, mealType); close(false); }} /> : null}
+          {view === "copy-day" ? <CopyDayMethod targetDate={date} targetLogs={targetLogs} onCopied={onFoodLogged} /> : null}
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-function viewTitle(name: AddFoodView["name"], et: ReturnType<typeof useEatTranslation>["et"]) {
+function viewTitle(name: AddFoodViewName, et: ReturnType<typeof useEatTranslation>["et"]) {
   if (name === "repeat") return et("quickRepeat");
   if (name === "search") return et("searchFoods");
   if (name === "saved-meals") return et("savedMeals");
@@ -112,7 +104,7 @@ function viewTitle(name: AddFoodView["name"], et: ReturnType<typeof useEatTransl
   return et("addFoodTitle");
 }
 
-function AddFoodHome({ setView, customHref, onPhoto }: { setView: (view: AddFoodView) => void; customHref: string; onPhoto: () => void }) {
+function AddFoodHome({ setView, customHref, onPhoto }: { setView: (view: AddFoodViewName) => void; customHref: string; onPhoto: () => void }) {
   const { et } = useEatTranslation();
   const methods = [
     { name: "repeat" as const, icon: History, label: et("quickRepeat") },
@@ -122,7 +114,7 @@ function AddFoodHome({ setView, customHref, onPhoto }: { setView: (view: AddFood
     { name: "copy-day" as const, icon: Copy, label: et("copyDay") }
   ];
   return <div className="grid gap-3 sm:grid-cols-2">
-    {methods.map((method) => { const Icon = method.icon; return <button key={method.name} type="button" onClick={() => setView({ name: method.name })} className="flex min-h-16 items-center gap-3 rounded-[16px] border border-border/70 bg-card p-4 text-start transition hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Icon className="h-5 w-5 text-primary" /><span className="font-semibold">{method.label}</span></button>; })}
+    {methods.map((method) => { const Icon = method.icon; return <button key={method.name} type="button" onClick={() => setView(method.name)} className="flex min-h-16 items-center gap-3 rounded-[16px] border border-border/70 bg-card p-4 text-start transition hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Icon className="h-5 w-5 text-primary" /><span className="font-semibold">{method.label}</span></button>; })}
     <Link href={customHref} className="flex min-h-16 items-center gap-3 rounded-[16px] border border-border/70 bg-card p-4 font-semibold transition hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><ChefHat className="h-5 w-5 text-primary" />{et("customFoodMeal")}</Link>
     <button type="button" onClick={onPhoto} className="flex min-h-16 items-center gap-3 rounded-[16px] border border-border/70 bg-card p-4 text-start transition hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Camera className="h-5 w-5 text-primary" /><span className="font-semibold">{et("photoEstimate")}</span></button>
   </div>;
