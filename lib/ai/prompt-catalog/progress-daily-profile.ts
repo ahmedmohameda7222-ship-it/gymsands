@@ -12,7 +12,5 @@ export const PROGRESS_DAILY_PROFILE_PROMPTS = [
   ["prioritize-incomplete", "daily", ["Prioritize today's incomplete actions", "Heutige offene Aktionen priorisieren", "رتّب إجراءات اليوم غير المكتملة"], "read", ["workouts", "nutrition", "hydration", "wellness"], ["get_daily_execution_context"], "dailyContext", false, 51],
   ["end-day-plan", "daily", ["Build an end-of-day plan", "Plan für den Tagesabschluss erstellen", "أنشئ خطة لنهاية اليوم"], "read", ["nutrition", "hydration", "wellness"], ["get_daily_execution_context"], "dailyContext", false, 48],
   ["review-goals", "profile", ["Review my goals", "Meine Ziele prüfen", "راجع أهدافي"], "read", ["profile"], ["get_training_planning_context"], "goals", false, 39],
-  ["update-training-preferences", "profile", ["Update training preferences", "Trainingspräferenzen aktualisieren", "حدّث تفضيلات التدريب"], "write", ["profile", "settings"], ["get_training_planning_context", "update_training_goal"], "trainingPreferences", false, 38],
-  ["update-nutrition-preferences", "profile", ["Update nutrition preferences", "Ernährungspräferenzen aktualisieren", "حدّث تفضيلات التغذية"], "write", ["nutrition", "profile", "settings"], ["get_nutrition_planning_context", "update_nutrition_preference_profile"], "nutritionPreferences", false, 38],
   ["review-constraints", "profile", ["Review physical constraints", "Körperliche Einschränkungen prüfen", "راجع القيود البدنية"], "read", ["profile", "workouts"], ["get_training_planning_context"], "constraints", false, 37],
 ] as const satisfies readonly RawPromptSpec[];
