@@ -1,3 +1,8 @@
+import {
+  AI_ACTION_REGISTRY,
+  isAiActionWriteCapable as isRegisteredAiActionWriteCapable,
+  type AiActionRegistryEntry
+} from "@/lib/ai/action-registry";
 import type { AiActionType } from "@/types";
 
 type UnknownRecord = Record<string, unknown>;
@@ -7,41 +12,10 @@ export type AiActionSummaryRow = {
   value: string;
 };
 
-export type AiActionPresentation = {
-  label: string;
-  description: string;
-  goal: string;
-  accessArea: "workouts" | "nutrition" | "meal plans" | "wellness" | "progress";
-};
-
-const presentations: Record<AiActionType, AiActionPresentation> = {
-  build_meal_plan: {
-    label: "Create meal plan with ChatGPT",
-    description: "Use my authorized Plaivra nutrition context to create and save a structured meal plan.",
-    goal: "Create a realistic meal plan and save it to Plaivra",
-    accessArea: "meal plans"
-  },
-  replace_exercise: { label: "Replace exercise", description: "Find and save a practical alternative for the current exercise.", goal: "Replace this exercise", accessArea: "workouts" },
-  adjust_next_workout: { label: "Adjust next workout", description: "Review the next workout and save the requested adjustment.", goal: "Adjust the next workout", accessArea: "workouts" },
-  rebalance_week: { label: "Rebalance this week", description: "Review the remaining training week and save the requested changes.", goal: "Rebalance the training week", accessArea: "workouts" },
-  review_workout_session: { label: "Review workout", description: "Review the completed work and explain useful next steps.", goal: "Review this workout", accessArea: "workouts" },
-  adjust_for_low_readiness: { label: "Make today lighter", description: "Use my authorized training context to adapt today to my current readiness.", goal: "Make today’s workout lighter", accessArea: "workouts" },
-  explain_progression: { label: "Explain progression", description: "Explain the next target using my saved performance.", goal: "Explain the next progression step", accessArea: "progress" },
-  reduce_workout_volume: { label: "Reduce volume", description: "Reduce the requested sets or exercises and save the update.", goal: "Reduce today’s workout volume", accessArea: "workouts" },
-  reduce_workout_intensity: { label: "Reduce intensity", description: "Create a lower-intensity version and save the requested update.", goal: "Reduce today’s workout intensity", accessArea: "workouts" },
-  recovery_workout: { label: "Recovery workout", description: "Create a recovery-focused version that respects my authorized fitness constraints.", goal: "Create a recovery-focused workout", accessArea: "workouts" },
-  reduce_next_session: { label: "Reduce next session", description: "Make the next session more manageable and save the requested change.", goal: "Reduce the next training session", accessArea: "workouts" },
-  regenerate_meal: { label: "Replace meal", description: "Create and save a practical replacement for this planned meal.", goal: "Replace this meal", accessArea: "meal plans" },
-  make_meal_cheaper: { label: "Make it cheaper", description: "Use my authorized budget and food preferences to create a lower-cost version.", goal: "Make this meal or list cheaper", accessArea: "nutrition" },
-  make_meal_faster: { label: "Make it faster", description: "Use my authorized cooking preferences to create a quicker version.", goal: "Make this meal faster", accessArea: "nutrition" },
-  make_meal_higher_protein: { label: "More protein", description: "Create a realistic higher-protein version and save it when requested.", goal: "Increase protein in this meal", accessArea: "nutrition" },
-  replace_meal_ingredient: { label: "Replace ingredient", description: "Create an ingredient swap that respects my authorized preferences.", goal: "Replace one ingredient", accessArea: "meal plans" },
-  make_meal_dairy_free: { label: "Make dairy-free", description: "Create a dairy-free version with updated nutrition values.", goal: "Make this meal dairy-free", accessArea: "meal plans" },
-  make_meal_gluten_free: { label: "Make gluten-free", description: "Create a gluten-free version with updated nutrition values.", goal: "Make this meal gluten-free", accessArea: "meal plans" },
-  make_meal_cuisine: { label: "Change cuisine", description: "Adapt this meal to the requested cuisine and my authorized preferences.", goal: "Adapt this meal’s cuisine", accessArea: "meal plans" },
-  build_grocery_list: { label: "Build grocery list", description: "Use the saved meal plan to create and save an ingredient-level grocery list.", goal: "Build a practical grocery list", accessArea: "meal plans" },
-  review_week: { label: "Review week", description: "Review my authorized training, nutrition, hydration, and recovery context and explain useful priorities.", goal: "Review this week and suggest practical improvements", accessArea: "wellness" }
-};
+export type AiActionPresentation = Pick<
+  AiActionRegistryEntry,
+  "label" | "description" | "goal" | "accessArea"
+>;
 
 function record(value: unknown): UnknownRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : {};
@@ -60,11 +34,11 @@ function friendly(value: string) {
 }
 
 export function getAiActionPresentation(actionType: AiActionType) {
-  return presentations[actionType];
+  return AI_ACTION_REGISTRY[actionType];
 }
 
 export function isAiActionWriteCapable(actionType: AiActionType) {
-  return !["review_week", "review_workout_session", "explain_progression"].includes(actionType);
+  return isRegisteredAiActionWriteCapable(actionType);
 }
 
 function safeObjectNames(value: unknown, keys: string[], limit = 3) {

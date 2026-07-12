@@ -9,32 +9,32 @@ describe("Today dashboard implementation contracts", () => {
   });
 
   it("keeps prompt detail in the shared surface with editable clipboard handoff", () => {
-    const ui = source("components/ai/quick-chatgpt-provider.tsx");
-    expect(ui).toContain("textarea");
-    expect(ui).toContain("navigator.clipboard.writeText");
-    expect(ui).toContain('window.open("about:blank"');
-    expect(ui).not.toContain("Continue with ChatGPT");
+    const provider = source("components/ai/quick-chatgpt-provider.tsx");
+    const surface = source("components/ai/quick-chatgpt-surface.tsx");
+    expect(provider).toContain("QuickChatGptSurface");
+    expect(surface).toContain("textarea");
+    expect(surface).toContain("navigator.clipboard.writeText");
+    expect(surface).toContain('window.open("about:blank"');
+    expect(surface).not.toContain("Continue with ChatGPT");
   });
 
-  it("uses the bottom-sheet layout at phone widths and localized permission labels", () => {
-    const ui = source("components/ai/quick-chatgpt-provider.tsx");
-    expect(ui).toContain("inset-x-0 bottom-0 left-0 top-auto");
-    expect(ui).toContain("permissionLabelKeys");
-    expect(ui).not.toContain('missingSections.join(", ")');
+  it("uses the responsive drawer and canonical permission evaluator", () => {
+    const provider = source("components/ai/quick-chatgpt-provider.tsx");
+    const surface = source("components/ai/quick-chatgpt-surface.tsx");
+    expect(surface).toContain('layout="responsive-drawer"');
+    expect(provider).toContain("permissionLabelKeys");
+    expect(provider).toContain("evaluatePromptPermission");
+    expect(surface).toContain("getPromptPermissionLabel");
   });
 
   it("uses checked for grocery bought and a persistent skipped meal status", () => {
-    const dashboard = source("components/dashboard/today-dashboard.tsx");
-    const mealService = source("services/database/meal-plan.ts");
-    expect(dashboard).toContain("checked: !item.checked");
-    expect(mealService).toContain('status: "skipped"');
+    expect(source("components/dashboard/today-dashboard.tsx")).toContain("checked: !item.checked");
+    expect(source("services/database/meal-plan.ts")).toContain('status: "skipped"');
   });
 
   it("keeps Today action copy localized and outside the model", () => {
-    const dashboard = source("components/dashboard/today-dashboard.tsx");
-    const model = source("lib/dashboard/today-model.ts");
-    expect(dashboard).toContain('tt("noActivityToday")');
-    expect(model).not.toContain('title: "Resume active workout"');
+    expect(source("components/dashboard/today-dashboard.tsx")).toContain('tt("noActivityToday")');
+    expect(source("lib/dashboard/today-model.ts")).not.toContain('title: "Resume active workout"');
   });
 
   it("keeps unknown food totals and completed workouts out of mutating paths", () => {
