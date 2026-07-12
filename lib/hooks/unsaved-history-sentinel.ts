@@ -1,6 +1,7 @@
 export const UNSAVED_HISTORY_TOKEN_KEY = "plaivraUnsavedGuard";
 
 type HistoryState = Record<string, unknown> | null;
+type ExitDirection = "back" | "forward";
 
 export type UnsavedHistoryLike = {
   readonly state: unknown;
@@ -32,6 +33,7 @@ export class UnsavedHistorySentinel {
   private originalState: HistoryState = null;
   private originalUrl = "";
   private originalIndex: number | null = null;
+  private pendingExitDirection: ExitDirection | null = null;
   private installed = false;
   private current = false;
   private restoring = false;
@@ -57,6 +59,7 @@ export class UnsavedHistorySentinel {
       "",
       this.originalUrl
     );
+    this.pendingExitDirection = null;
     this.installed = true;
     this.current = true;
     this.restoring = false;
@@ -71,6 +74,10 @@ export class UnsavedHistorySentinel {
 
   getToken() {
     return this.token;
+  }
+
+  getPendingExitDirection() {
+    return this.pendingExitDirection;
   }
 
   isCurrentSentinel(state: unknown = this.history.state) {
@@ -94,11 +101,11 @@ export class UnsavedHistorySentinel {
     this.current = false;
     this.restoring = true;
     const destinationIndex = historyIndex(state);
-    if (destinationIndex !== null && this.originalIndex !== null && destinationIndex > this.originalIndex) {
-      this.history.back();
-    } else {
-      this.history.forward();
-    }
+    this.pendingExitDirection = destinationIndex !== null && this.originalIndex !== null && destinationIndex > this.originalIndex
+      ? "forward"
+      : "back";
+    if (this.pendingExitDirection === "forward") this.history.back();
+    else this.history.forward();
     return "intercepted";
   }
 
@@ -119,18 +126,22 @@ export class UnsavedHistorySentinel {
     this.installed = false;
     this.current = false;
     this.restoring = false;
+    this.pendingExitDirection = null;
   }
 
   continueHistoryExit() {
     if (this.current && this.isCurrentSentinel()) {
       this.history.replaceState(this.originalState, "", this.originalUrl);
     }
+    const direction = this.pendingExitDirection ?? "back";
     this.navigationInProgress = true;
     this.bypass = true;
     this.installed = false;
     this.current = false;
     this.restoring = false;
-    this.history.back();
+    this.pendingExitDirection = null;
+    if (direction === "forward") this.history.forward();
+    else this.history.back();
   }
 
   dispose() {
@@ -142,6 +153,7 @@ export class UnsavedHistorySentinel {
     this.originalState = null;
     this.originalUrl = "";
     this.originalIndex = null;
+    this.pendingExitDirection = null;
     this.installed = false;
     this.current = false;
     this.restoring = false;
