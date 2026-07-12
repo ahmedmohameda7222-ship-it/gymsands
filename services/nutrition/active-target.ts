@@ -99,6 +99,15 @@ export function detectNutritionTargetTypeForDate(plan: UserWorkoutPlan | null | 
   return plan?.days.some((day) => day.weekday === weekday && day.exercises.length > 0) ? "training_day" : "rest_day";
 }
 
+/**
+ * Backward-compatible automatic resolver for legacy callers such as Today.
+ * Per-date explicit assignments are intentionally not read from localStorage;
+ * Eat and Nutrition Targets use the server-backed assignment service.
+ */
+export function getActiveTargetOverride(_userId: string, _date: string): NutritionTargetOverride {
+  return "auto";
+}
+
 export function resolveEatTargetForDate({
   date,
   profiles,
