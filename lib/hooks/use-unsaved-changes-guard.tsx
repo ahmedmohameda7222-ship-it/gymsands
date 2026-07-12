@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { UnsavedHistorySentinel } from "@/lib/hooks/unsaved-history-sentinel";
 
 type PendingAction = { run: () => void; historyExit?: boolean };
 
@@ -31,8 +32,13 @@ export function useUnsavedChangesGuard({
 }) {
   const router = useRouter();
   const [pending, setPending] = useState<PendingAction | null>(null);
-  const bypassRef = useRef(false);
-  const historyGuardRef = useRef(false);
+  const sentinelRef = useRef<UnsavedHistorySentinel | null>(null);
+
+  const sentinel = useCallback(() => {
+    if (typeof window === "undefined") return null;
+    if (!sentinelRef.current) sentinelRef.current = new UnsavedHistorySentinel(window.history, window.location);
+    return sentinelRef.current;
+  }, []);
 
   const request = useCallback((run: () => void, options?: { historyExit?: boolean }) => {
     if (!dirty) {
@@ -43,13 +49,14 @@ export function useUnsavedChangesGuard({
   }, [dirty]);
 
   const continueNavigation = useCallback((action: PendingAction) => {
-    bypassRef.current = true;
     setPending(null);
-    action.run();
-    if (!action.historyExit) {
-      window.setTimeout(() => { bypassRef.current = false; }, 0);
+    if (action.historyExit) {
+      action.run();
+      return;
     }
-  }, []);
+    sentinel()?.prepareInAppNavigation();
+    action.run();
+  }, [sentinel]);
 
   const applyAndContinue = useCallback(async () => {
     if (!pending || applying) return;
@@ -66,7 +73,6 @@ export function useUnsavedChangesGuard({
   useEffect(() => {
     if (!dirty) return;
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (bypassRef.current) return;
       event.preventDefault();
       event.returnValue = "";
     };
@@ -75,36 +81,33 @@ export function useUnsavedChangesGuard({
   }, [dirty]);
 
   useEffect(() => {
-    if (!dirty || historyGuardRef.current) return;
-    historyGuardRef.current = true;
-    window.history.pushState({ ...window.history.state, plaivraUnsavedGuard: true }, "", window.location.href);
+    const controller = sentinel();
+    if (!controller) return;
+    if (!dirty) {
+      controller.deactivate();
+      setPending(null);
+      return;
+    }
 
-    const popState = () => {
-      if (bypassRef.current) {
-        bypassRef.current = false;
-        return;
-      }
-      window.history.pushState({ ...window.history.state, plaivraUnsavedGuard: true }, "", window.location.href);
+    controller.activate();
+    const popState = (event: PopStateEvent) => {
+      const result = controller.handlePopState(event.state);
+      if (result !== "intercepted") return;
       setPending({
         historyExit: true,
-        run: () => {
-          bypassRef.current = true;
-          window.history.go(-2);
-        }
+        run: () => controller.continueHistoryExit()
       });
     };
     window.addEventListener("popstate", popState);
-    return () => {
-      window.removeEventListener("popstate", popState);
-      historyGuardRef.current = false;
-      bypassRef.current = false;
-    };
-  }, [dirty]);
+    return () => window.removeEventListener("popstate", popState);
+  }, [dirty, sentinel]);
+
+  useEffect(() => () => sentinelRef.current?.dispose(), []);
 
   useEffect(() => {
     if (!dirty) return;
     const captureLinks = (event: MouseEvent) => {
-      if (bypassRef.current || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const target = event.target instanceof Element ? event.target.closest("a[href]") : null;
       if (!(target instanceof HTMLAnchorElement) || target.target === "_blank" || target.hasAttribute("download")) return;
       const url = new URL(target.href, window.location.href);
