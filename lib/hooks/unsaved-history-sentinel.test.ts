@@ -66,6 +66,7 @@ describe("unsaved history sentinel", () => {
     expect(history.index).toBe(1);
     expect(sentinel.handlePopState(history.state)).toBe("restored");
     expect(sentinel.isInstalled()).toBe(true);
+    expect(sentinel.getPendingExitDirection()).toBe("back");
   });
 
   it("Stay keeps the restored sentinel and dirty session active", () => {
@@ -146,7 +147,19 @@ describe("unsaved history sentinel", () => {
     expect(history.backCalls).toBe(1);
     expect(history.index).toBe(1);
     expect(sentinel.handlePopState(history.state)).toBe("restored");
+    expect(sentinel.getPendingExitDirection()).toBe("forward");
     expect(history.entries).toHaveLength(3);
+  });
+
+  it("continues to the intended Forward destination after confirmation", () => {
+    const { history, sentinel } = setup(true);
+    sentinel.activate();
+    history.forward();
+    sentinel.handlePopState(history.state);
+    sentinel.handlePopState(history.state);
+    sentinel.continueHistoryExit();
+    expect(history.index).toBe(2);
+    expect(history.url).toBe("https://plaivra.test/profile");
   });
 
   it("prepares in-app navigation by restoring the original entry without history traversal", () => {
