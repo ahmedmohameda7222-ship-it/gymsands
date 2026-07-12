@@ -1,75 +1,107 @@
-import { energyValue, liquidValue } from "@/lib/dashboard/today-units";
 import { INTERNAL_AI_ACTION_NAMES, WRITE_CAPABLE_AI_ACTION_NAMES } from "@/lib/ai/action-registry";
+import { buildPromptContextItems, validatePromptContextPermissionContract, type PromptContextField } from "@/lib/ai/prompt-context";
+import { TASK_CONTRACTS, getPromptTaskContract } from "@/lib/ai/prompt-contracts";
 import { MCP_PUBLIC_TOOL_NAMES, mcpTools } from "@/lib/mcp/tools";
-import { filterPromptLibrary, getPromptAvailability, localizePrompt, QUICK_PROMPTS, type LocalizedText, type PromptCategory, type PromptHomeSections, type PromptLanguage, type QuickPromptContext, type QuickPromptDefinition } from "@/lib/ai/quick-prompts";
+import { filterPromptLibrary, getPromptAvailability, localizePrompt, QUICK_PROMPTS, type LocalizedText, type PromptCategory, type PromptHomeSections, type PromptId, type PromptLanguage, type QuickPromptContext, type QuickPromptDefinition } from "@/lib/ai/quick-prompts";
+import type { AiPermissionSection } from "@/types";
 
-export type PromptContextField = "date" | "workout" | "workout_state" | "workout_history" | "nutrition_targets" | "nutrition_progress" | "meal_plan" | "grocery" | "hydration" | "recovery" | "wellness" | "progress" | "profile" | "selected_exercise" | "selected_meal";
-export type PromptContextItem = { field: PromptContextField; label: string; value: string };
-type TaskContract = { contextFields: PromptContextField[]; constraints: LocalizedText[]; output: LocalizedText[] };
-const text = (en: string, de: string, ar: string): LocalizedText => ({ en, de, ar });
+export type BackingCapabilityStatus = { declared: string[]; known: string[]; unknown: string[]; writeCapable: string[]; supported: boolean };
+export type PromptCatalogAuditEntry = {
+  promptId: PromptId;
+  category: PromptCategory;
+  capability: QuickPromptDefinition["capability"];
+  permissionSections: AiPermissionSection[];
+  contextFields: PromptContextField[];
+  contextPermissionContractValid: boolean;
+  taskContractExists: boolean;
+  backingActionsValid: boolean;
+  writeBackingValid: boolean;
+  prerequisites: string[];
+  runtimeExposed: boolean;
+};
+
 const value = (entry: LocalizedText, language: PromptLanguage) => entry[language];
-
-const commonContracts: Record<PromptCategory, TaskContract> = {
-  training: { contextFields: ["date", "workout", "workout_state", "workout_history", "profile"], constraints: [text("Respect equipment, available time, saved goals and user-authored physical constraints.", "Beachte Geräte, verfügbare Zeit, gespeicherte Ziele und nutzerverfasste körperliche Einschränkungen.", "احترم المعدات والوقت المتاح والأهداف المحفوظة والقيود البدنية التي أدخلها المستخدم."), text("Preserve the training intent and do not make medical conclusions.", "Erhalte den Trainingszweck und ziehe keine medizinischen Schlüsse.", "حافظ على الهدف التدريبي ولا تستنتج استنتاجات طبية.")], output: [text("Current evidence used", "Verwendete aktuelle Daten", "البيانات الحالية المستخدمة"), text("Structured recommendation", "Strukturierte Empfehlung", "توصية منظمة"), text("Exercises, sets, repetitions and rest where relevant", "Übungen, Sätze, Wiederholungen und Pausen, falls relevant", "التمارين والمجموعات والتكرارات والراحة عند الحاجة"), text("Reason for each recommendation", "Grund für jede Empfehlung", "سبب كل توصية"), text("Clear next action", "Klare nächste Aktion", "إجراء تالٍ واضح")] },
-  nutrition: { contextFields: ["date", "nutrition_targets", "nutrition_progress", "meal_plan", "profile"], constraints: [text("Use only known food logs and targets; never treat unavailable values as zero.", "Nutze nur bekannte Ernährungsprotokolle und Ziele; behandle nicht verfügbare Werte nie als null.", "استخدم سجلات الطعام والأهداف المعروفة فقط ولا تعتبر القيم غير المتاحة صفرًا."), text("Respect saved preferences, allergies, budget and cooking limits.", "Beachte gespeicherte Präferenzen, Allergien, Budget und Kochgrenzen.", "احترم التفضيلات والحساسيات والميزانية وقيود الطهي المحفوظة.")], output: [text("Known nutrition evidence", "Bekannte Ernährungsdaten", "بيانات التغذية المعروفة"), text("Practical options with portions", "Praktische Optionen mit Portionen", "خيارات عملية مع الحصص"), text("Estimated calories and macros when relevant", "Geschätzte Kalorien und Makros, falls relevant", "السعرات والماكروز التقديرية عند الحاجة"), text("Best-fitting option and reason", "Am besten passende Option mit Begründung", "الخيار الأنسب وسببه"), text("Assumptions and uncertainty", "Annahmen und Unsicherheit", "الافتراضات وعدم اليقين")] },
-  grocery: { contextFields: ["date", "meal_plan", "grocery", "profile"], constraints: [text("Do not invent ingredients or quantities that are not supported by the saved plan.", "Erfinde keine Zutaten oder Mengen, die nicht vom gespeicherten Plan gestützt werden.", "لا تخترع مكونات أو كميات لا تدعمها الخطة المحفوظة."), text("Deduplicate items while preserving meal-plan intent.", "Entferne Duplikate und erhalte den Zweck des Mahlzeitenplans.", "أزل التكرار مع الحفاظ على هدف خطة الوجبات.")], output: [text("Grouped grocery list", "Gruppierte Einkaufsliste", "قائمة تسوق مجمعة"), text("Quantities and units when known", "Mengen und Einheiten, wenn bekannt", "الكميات والوحدات عندما تكون معروفة"), text("Duplicates or missing information", "Duplikate oder fehlende Informationen", "العناصر المكررة أو المعلومات الناقصة"), text("Practical next action", "Praktische nächste Aktion", "إجراء عملي تالٍ")] },
-  recovery: { contextFields: ["date", "workout_state", "recovery", "wellness"], constraints: [text("Treat recovery data cautiously and do not diagnose or prescribe treatment or supplement doses.", "Bewerte Erholungsdaten vorsichtig und diagnostiziere oder verschreibe keine Behandlung oder Supplementdosierung.", "تعامل بحذر مع بيانات التعافي ولا تشخّص أو تصف علاجًا أو جرعات مكملات."), text("Distinguish tracked facts from interpretation.", "Trenne getrackte Fakten von Interpretation.", "افصل الحقائق المتتبعة عن التفسير.")], output: [text("Evidence used", "Verwendete Daten", "البيانات المستخدمة"), text("Practical interpretation with uncertainty", "Praktische Interpretation mit Unsicherheit", "تفسير عملي مع توضيح عدم اليقين"), text("Small non-medical actions", "Kleine nichtmedizinische Maßnahmen", "إجراءات صغيرة غير طبية"), text("Training implication when relevant", "Auswirkung aufs Training, falls relevant", "تأثير التدريب عند الحاجة")] },
-  progress: { contextFields: ["date", "workout_history", "nutrition_progress", "hydration", "recovery", "progress"], constraints: [text("Do not treat missing tracking as failure and do not invent trends.", "Behandle fehlendes Tracking nicht als Misserfolg und erfinde keine Trends.", "لا تعتبر غياب التتبع فشلًا ولا تخترع اتجاهات."), text("Separate observations, interpretation and uncertainty.", "Trenne Beobachtungen, Interpretation und Unsicherheit.", "افصل الملاحظات والتفسير وعدم اليقين.")], output: [text("Evidence reviewed", "Geprüfte Daten", "البيانات التي تمت مراجعتها"), text("Observed patterns", "Beobachtete Muster", "الأنماط الملحوظة"), text("Uncertainty or tracking gaps", "Unsicherheit oder Tracking-Lücken", "عدم اليقين أو فجوات التتبع"), text("Smallest useful improvement", "Kleinste sinnvolle Verbesserung", "أصغر تحسين مفيد")] },
-  daily: { contextFields: ["date", "workout_state", "nutrition_progress", "meal_plan", "hydration", "recovery", "wellness"], constraints: [text("Use only known current-day state; failed or loading sources are not empty.", "Nutze nur den bekannten heutigen Zustand; fehlgeschlagene oder ladende Quellen sind nicht leer.", "استخدم حالة اليوم المعروفة فقط؛ المصادر الفاشلة أو التي ما زالت تُحمّل ليست فارغة."), text("Prefer a realistic short sequence over an exhaustive plan.", "Bevorzuge eine realistische kurze Abfolge statt eines vollständigen Plans.", "فضّل تسلسلًا قصيرًا واقعيًا بدل خطة شاملة.")], output: [text("What is known now", "Was jetzt bekannt ist", "ما هو معروف الآن"), text("One highest-priority action", "Eine Aktion mit höchster Priorität", "إجراء واحد بأعلى أولوية"), text("Up to three next actions in order", "Bis zu drei nächste Aktionen in Reihenfolge", "حتى ثلاثة إجراءات تالية بالترتيب"), text("Reason and estimated effort", "Begründung und geschätzter Aufwand", "السبب والجهد التقديري")] },
-  profile: { contextFields: ["profile"], constraints: [text("Use only explicit saved goals, preferences and user-authored constraints.", "Nutze nur ausdrücklich gespeicherte Ziele, Präferenzen und nutzerverfasste Einschränkungen.", "استخدم فقط الأهداف والتفضيلات والقيود التي أدخلها المستخدم وحُفظت صراحة."), text("Do not infer medical, demographic or sensitive information.", "Leite keine medizinischen, demografischen oder sensiblen Informationen ab.", "لا تستنتج معلومات طبية أو ديموغرافية أو حساسة.")], output: [text("Saved information reviewed", "Geprüfte gespeicherte Informationen", "المعلومات المحفوظة التي تمت مراجعتها"), text("Conflicts or missing details", "Widersprüche oder fehlende Details", "التعارضات أو التفاصيل الناقصة"), text("Clear recommendation without changing data", "Klare Empfehlung ohne Datenänderung", "توصية واضحة دون تغيير البيانات")] }
-};
-
-const overrides: Record<string, Partial<TaskContract>> = {
-  "create-workout-plan": { contextFields: ["date", "profile"], output: [text("Coaching summary", "Coaching-Zusammenfassung", "ملخص تدريبي"), text("Weekly structure and training days", "Wochenstruktur und Trainingstage", "الهيكل الأسبوعي وأيام التدريب"), text("Exercises, sets, repetitions and rest times", "Übungen, Sätze, Wiederholungen und Pausenzeiten", "التمارين والمجموعات والتكرارات وأوقات الراحة"), text("Estimated session duration", "Geschätzte Einheitsdauer", "المدة التقديرية للحصة"), text("Progression rules and recovery considerations", "Progressionsregeln und Erholungsaspekte", "قواعد التدرج واعتبارات التعافي"), text("Assumptions and missing data", "Annahmen und fehlende Daten", "الافتراضات والبيانات الناقصة")] },
-  "adjust-today-workout": { contextFields: ["date", "workout", "workout_state", "profile"], output: [text("Current workout summary", "Zusammenfassung des aktuellen Trainings", "ملخص التمرين الحالي"), text("Exact proposed changes", "Genaue vorgeschlagene Änderungen", "التغييرات المقترحة بدقة"), text("Updated exercises, sets, repetitions and rest", "Aktualisierte Übungen, Sätze, Wiederholungen und Pausen", "التمارين والمجموعات والتكرارات والراحة بعد التعديل"), text("Estimated final duration", "Geschätzte Enddauer", "المدة النهائية التقديرية"), text("Reason for each change and what remains unchanged", "Grund für jede Änderung und was unverändert bleibt", "سبب كل تغيير وما سيبقى دون تغيير")] },
-  "replace-exercise": { contextFields: ["date", "workout", "selected_exercise", "profile"], output: [text("Exercise being replaced", "Zu ersetzende Übung", "التمرين المراد استبداله"), text("Two or three suitable alternatives", "Zwei oder drei geeignete Alternativen", "بديلان أو ثلاثة بدائل مناسبة"), text("Best recommendation and why it preserves the intent", "Beste Empfehlung und warum sie den Zweck erhält", "أفضل توصية ولماذا تحافظ على الهدف"), text("Replacement sets, repetitions and rest", "Sätze, Wiederholungen und Pausen für den Ersatz", "المجموعات والتكرارات والراحة للبديل"), text("Technique and constraint notes", "Technik- und Einschränkungshinweise", "ملاحظات التقنية والقيود")] },
-  "finish-macros": { contextFields: ["date", "nutrition_targets", "nutrition_progress", "profile"] },
-  "estimate-meal-photo": { contextFields: [], constraints: [text("Plaivra does not upload or store the image; I will attach it directly in ChatGPT.", "Plaivra lädt oder speichert das Bild nicht; ich hänge es direkt in ChatGPT an.", "لا يرفع Plaivra الصورة ولا يخزنها؛ سأرفقها مباشرة في ChatGPT."), text("Do not pretend the image confirms hidden oils, sauces, fillings, portions or cooking methods.", "Behaupte nicht, dass das Bild versteckte Öle, Soßen, Füllungen, Portionen oder Zubereitungsarten bestätigt.", "لا تدّعِ أن الصورة تؤكد الزيوت أو الصلصات أو الحشوات أو الحصص أو طرق الطهي غير الظاهرة."), text("Log nothing until I explicitly confirm the estimate.", "Protokolliere nichts, bis ich die Schätzung ausdrücklich bestätige.", "لا تسجل شيئًا حتى أؤكد التقدير صراحة.")], output: [text("Visible foods", "Sichtbare Lebensmittel", "الأطعمة الظاهرة"), text("Estimated portion for each item", "Geschätzte Portion je Artikel", "الحصة التقديرية لكل عنصر"), text("Calories, protein, carbohydrates and fat", "Kalorien, Protein, Kohlenhydrate und Fett", "السعرات والبروتين والكربوهيدرات والدهون"), text("Reasonable range and confidence", "Sinnvoller Bereich und Sicherheit", "نطاق معقول ودرجة الثقة"), text("Unseen ingredients and cooking uncertainties", "Unsichtbare Zutaten und Unsicherheiten der Zubereitung", "المكونات غير الظاهرة وعدم اليقين في الطهي")] },
-  "build-grocery-list": { contextFields: ["date", "meal_plan", "profile"] },
-  "review-week": { contextFields: ["date", "workout_history", "nutrition_progress", "hydration", "recovery", "progress"] }
-};
-
-const labels = {
-  en: { date: "Date", workout: "Workout", workoutState: "Workout state", history: "Completed workouts", nutritionTargets: "Nutrition targets", calorieBalance: "Calorie balance", proteinBalance: "Protein balance", foodLogs: "Food logs", mealPlan: "Saved meal-plan items", grocery: "Saved grocery items", hydration: "Hydration balance", recovery: "Recovery context", wellness: "Wellness tracking", progress: "Progress entries", profile: "Saved profile context", exercise: "Selected exercise", meal: "Selected meal", active: "active", completed: "completed", scheduled: "scheduled", notScheduled: "not scheduled", remaining: "remaining", above: "above target", unavailable: "unavailable", available: "available", minutes: "minutes", items: "items", logs: "logs", entries: "entries" },
-  de: { date: "Datum", workout: "Training", workoutState: "Trainingsstatus", history: "Abgeschlossene Trainings", nutritionTargets: "Ernährungsziele", calorieBalance: "Kalorienbilanz", proteinBalance: "Proteinbilanz", foodLogs: "Ernährungsprotokolle", mealPlan: "Gespeicherte Mahlzeiten", grocery: "Gespeicherte Einkaufsartikel", hydration: "Flüssigkeitsbilanz", recovery: "Erholungskontext", wellness: "Wohlbefinden-Tracking", progress: "Fortschrittseinträge", profile: "Gespeicherter Profilkontext", exercise: "Ausgewählte Übung", meal: "Ausgewählte Mahlzeit", active: "aktiv", completed: "abgeschlossen", scheduled: "geplant", notScheduled: "nicht geplant", remaining: "verbleibend", above: "über dem Ziel", unavailable: "nicht verfügbar", available: "verfügbar", minutes: "Minuten", items: "Elemente", logs: "Protokolle", entries: "Einträge" },
-  ar: { date: "التاريخ", workout: "التمرين", workoutState: "حالة التمرين", history: "التمارين المكتملة", nutritionTargets: "أهداف التغذية", calorieBalance: "رصيد السعرات", proteinBalance: "رصيد البروتين", foodLogs: "سجلات الطعام", mealPlan: "وجبات الخطة المحفوظة", grocery: "عناصر التسوق المحفوظة", hydration: "رصيد الترطيب", recovery: "سياق التعافي", wellness: "تتبع العافية", progress: "سجلات التقدم", profile: "سياق الملف الشخصي المحفوظ", exercise: "التمرين المحدد", meal: "الوجبة المحددة", active: "نشط", completed: "مكتمل", scheduled: "مجدول", notScheduled: "غير مجدول", remaining: "متبقٍ", above: "فوق الهدف", unavailable: "غير متاح", available: "متاح", minutes: "دقيقة", items: "عناصر", logs: "سجلات", entries: "سجلات" }
+const sectionCopy = {
+  en: { role: "Role", objective: "Objective", context: "Authorized Plaivra context", constraints: "Constraints", output: "Task-specific required output", confirmation: "Confirmation rule", noContext: "- No additional authorized context is available. State what is missing instead of inventing it." },
+  de: { role: "Rolle", objective: "Ziel", context: "Autorisierter Plaivra-Kontext", constraints: "Rahmenbedingungen", output: "Aufgabenspezifische erwartete Ausgabe", confirmation: "Bestätigungsregel", noContext: "- Kein zusätzlicher autorisierter Kontext ist verfügbar. Nenne Fehlendes, statt es zu erfinden." },
+  ar: { role: "الدور", objective: "الهدف", context: "سياق Plaivra المصرح به", constraints: "القيود", output: "المخرجات المطلوبة الخاصة بالمهمة", confirmation: "قاعدة التأكيد", noContext: "- لا يتوفر سياق إضافي مصرح به. اذكر ما ينقص بدلًا من اختراعه." }
 } as const;
-function locale(language: PromptLanguage) { return language === "de" ? "de-DE" : language === "ar" ? "ar" : "en-US"; }
-function number(value: number, language: PromptLanguage, digits = 1) { return new Intl.NumberFormat(locale(language), { maximumFractionDigits: digits }).format(value); }
-function energy(kcal: number, unit: "kcal" | "kJ", language: PromptLanguage) { return `${number(energyValue(Math.abs(kcal), unit), language, 0)} ${unit}`; }
-function liquid(ml: number, unit: "ml" | "oz", language: PromptLanguage) { return `${number(liquidValue(Math.abs(ml), unit), language, 1)} ${unit === "oz" ? (language === "ar" ? "أونصة سائلة" : "oz") : language === "ar" ? "مل" : "ml"}`; }
-function balance(raw: number, formatted: string, language: PromptLanguage) { return `${formatted} ${raw < 0 ? labels[language].above : labels[language].remaining}`; }
-function add(items: PromptContextItem[], field: PromptContextField, label: string, valueText?: string | null) { if (valueText?.trim()) items.push({ field, label, value: valueText.trim() }); }
 
-export function getPromptTaskContract(definition: QuickPromptDefinition): TaskContract { const base = commonContracts[definition.category]; const override = overrides[definition.id]; return { contextFields: override?.contextFields ?? base.contextFields, constraints: override?.constraints ?? base.constraints, output: override?.output ?? base.output }; }
-export function buildPromptContextItems(definition: QuickPromptDefinition, context: QuickPromptContext, language: PromptLanguage): PromptContextItem[] {
-  const copy = labels[language]; const items: PromptContextItem[] = []; const fields = getPromptTaskContract(definition).contextFields;
-  for (const field of fields) {
-    if (field === "date") add(items, field, copy.date, context.today);
-    if (field === "workout") { add(items, field, copy.workout, context.workout?.title); if (typeof context.workout?.exerciseCount === "number") add(items, field, copy.workout, `${number(context.workout.exerciseCount, language, 0)} ${copy.items}`); if (typeof context.workout?.durationMinutes === "number") add(items, field, copy.workout, `${number(context.workout.durationMinutes, language, 0)} ${copy.minutes}`); }
-    if (field === "workout_state" && context.workout) add(items, field, copy.workoutState, context.workout.active ? copy.active : context.workout.completed ? copy.completed : context.workout.scheduled ? copy.scheduled : copy.notScheduled);
-    if (field === "workout_history" && typeof context.workout?.historyCount === "number") add(items, field, copy.history, `${number(context.workout.historyCount, language, 0)} ${copy.entries}`);
-    if (field === "nutrition_targets") { const nutrition = context.nutrition; if (nutrition?.targetsState === "failed") add(items, field, copy.nutritionTargets, copy.unavailable); else if (nutrition?.targetsState === "loaded") add(items, field, copy.nutritionTargets, nutrition.hasTargets ? copy.available : copy.unavailable); }
-    if (field === "nutrition_progress") { const nutrition = context.nutrition; if (nutrition?.foodLogsState === "failed") add(items, field, copy.foodLogs, copy.unavailable); else if (nutrition?.foodLogsState === "loaded") { if (typeof nutrition.foodLogCount === "number") add(items, field, copy.foodLogs, `${number(nutrition.foodLogCount, language, 0)} ${copy.logs}`); if (nutrition.targetsState === "failed") add(items, field, copy.nutritionTargets, copy.unavailable); if (nutrition.targetsState === "loaded" && nutrition.hasTargets === true) { const unit = context.units?.energy ?? "kcal"; if (typeof nutrition.remainingCalories === "number") add(items, field, copy.calorieBalance, balance(nutrition.remainingCalories, energy(nutrition.remainingCalories, unit, language), language)); if (typeof nutrition.remainingProtein === "number") add(items, field, copy.proteinBalance, balance(nutrition.remainingProtein, `${number(Math.abs(nutrition.remainingProtein), language, 1)} ${language === "ar" ? "غ" : "g"}`, language)); } } }
-    if (field === "meal_plan" && typeof context.nutrition?.mealPlanCount === "number") add(items, field, copy.mealPlan, `${number(context.nutrition.mealPlanCount, language, 0)} ${copy.items}`);
-    if (field === "grocery") { if (context.grocery?.state === "failed") add(items, field, copy.grocery, copy.unavailable); else if (context.grocery?.state === "loaded" && typeof context.grocery.itemCount === "number") add(items, field, copy.grocery, `${number(context.grocery.itemCount, language, 0)} ${copy.items}`); }
-    if (field === "hydration") { if (context.hydration?.state === "failed") add(items, field, copy.hydration, copy.unavailable); else if (context.hydration?.state === "loaded" && typeof context.hydration.remainingMl === "number") { const unit = context.units?.liquid ?? "ml"; add(items, field, copy.hydration, balance(context.hydration.remainingMl, liquid(context.hydration.remainingMl, unit, language), language)); } }
-    if (field === "recovery") { if (context.recovery?.state === "failed") add(items, field, copy.recovery, copy.unavailable); else if (context.recovery?.state === "loaded" && context.recovery.hasData) { const parts: string[] = []; if (typeof context.recovery.sleepHours === "number") parts.push(`${number(context.recovery.sleepHours, language, 1)} ${language === "de" ? "Stunden Schlaf" : language === "ar" ? "ساعات نوم" : "hours sleep"}`); if (context.recovery.poorRecovery) parts.push(language === "de" ? "niedrige Erholung oder hohe Müdigkeit" : language === "ar" ? "تعافٍ منخفض أو إرهاق مرتفع" : "low recovery or high fatigue"); add(items, field, copy.recovery, parts.join(" · ")); } }
-    if (field === "wellness" && context.wellness?.state === "loaded") { const parts: string[] = []; if (typeof context.wellness.habitCount === "number") parts.push(`${number(context.wellness.habitCount, language, 0)} ${language === "de" ? "Gewohnheiten" : language === "ar" ? "عادات" : "habits"}`); if (typeof context.wellness.supplementCount === "number") parts.push(`${number(context.wellness.supplementCount, language, 0)} ${language === "de" ? "Supplemente" : language === "ar" ? "مكملات" : "supplements"}`); add(items, field, copy.wellness, parts.join(" · ")); }
-    if (field === "progress") { if (context.progress?.state === "failed") add(items, field, copy.progress, copy.unavailable); else if (context.progress?.state === "loaded" && typeof context.progress.entryCount === "number") add(items, field, copy.progress, `${number(context.progress.entryCount, language, 0)} ${copy.entries}`); }
-    if (field === "profile" && context.profile?.state === "loaded") { const parts = [context.profile.hasGoals ? (language === "de" ? "Ziele" : language === "ar" ? "أهداف" : "goals") : null, context.profile.hasTrainingPreferences ? (language === "de" ? "Trainingspräferenzen" : language === "ar" ? "تفضيلات التدريب" : "training preferences") : null, context.profile.hasNutritionPreferences ? (language === "de" ? "Ernährungspräferenzen" : language === "ar" ? "تفضيلات التغذية" : "nutrition preferences") : null, context.profile.hasConstraints ? (language === "de" ? "körperliche Einschränkungen" : language === "ar" ? "قيود بدنية" : "physical constraints") : null].filter(Boolean); add(items, field, copy.profile, parts.join(" · ")); }
-    if (field === "selected_exercise") add(items, field, copy.exercise, context.selection?.exercise);
-    if (field === "selected_meal") add(items, field, copy.meal, context.selection?.meal);
-  }
-  return items;
+export function buildRuntimePrompt(definition: QuickPromptDefinition, context: QuickPromptContext, language: PromptLanguage) {
+  const copy = sectionCopy[language];
+  const contract = getPromptTaskContract(definition);
+  const contextItems = buildPromptContextItems(definition, context, language);
+  const confirmation = definition.capability === "write"
+    ? language === "de"
+      ? ["Zeige zuerst die vollständigen vorgeschlagenen Änderungen.", "Speichere oder aktualisiere nichts, bis ich ausdrücklich bestätige.", "Nutze danach nur die autorisierte Plaivra-Funktion und behaupte keinen Erfolg, bevor das Tool ihn bestätigt."]
+      : language === "ar"
+        ? ["اعرض التغييرات المقترحة كاملة أولًا.", "لا تحفظ أو تحدّث أي شيء حتى أؤكد صراحة.", "بعد ذلك استخدم وظيفة Plaivra المصرح بها فقط ولا تدّع النجاح حتى تؤكده الأداة."]
+        : ["Show the complete proposed changes first.", "Do not save or update anything until I explicitly confirm.", "After confirmation, use only the authorized Plaivra capability and do not claim success until the tool confirms it."]
+    : [language === "de" ? "Ändere keine Plaivra-Daten." : language === "ar" ? "لا تغيّر أي بيانات في Plaivra." : "Do not change any Plaivra data."];
+  return [
+    `${copy.role}:\n${value(definition.role, language)}`,
+    `${copy.objective}:\n${value(definition.objective, language)}`,
+    `${copy.context}:\n${contextItems.length ? contextItems.map((item) => `- ${item.label}: ${item.value}`).join("\n") : copy.noContext}`,
+    `${copy.constraints}:\n${contract.constraints.map((item) => `- ${value(item, language)}`).join("\n")}`,
+    `${copy.output}:\n${contract.output.map((item, index) => `${index + 1}. ${value(item, language)}`).join("\n")}`,
+    `${copy.confirmation}:\n${confirmation.map((item) => `- ${item}`).join("\n")}`
+  ].join("\n\n");
 }
-const sectionCopy = { en: { role: "Role", objective: "Objective", context: "Authorized Plaivra context", constraints: "Constraints", output: "Task-specific required output", confirmation: "Confirmation rule", noContext: "- No additional authorized context is available. State what is missing instead of inventing it." }, de: { role: "Rolle", objective: "Ziel", context: "Autorisierter Plaivra-Kontext", constraints: "Rahmenbedingungen", output: "Aufgabenspezifische erwartete Ausgabe", confirmation: "Bestätigungsregel", noContext: "- Kein zusätzlicher autorisierter Kontext ist verfügbar. Nenne Fehlendes, statt es zu erfinden." }, ar: { role: "الدور", objective: "الهدف", context: "سياق Plaivra المصرح به", constraints: "القيود", output: "المخرجات المطلوبة الخاصة بالمهمة", confirmation: "قاعدة التأكيد", noContext: "- لا يتوفر سياق إضافي مصرح به. اذكر ما ينقص بدلًا من اختراعه." } } as const;
-export function buildRuntimePrompt(definition: QuickPromptDefinition, context: QuickPromptContext, language: PromptLanguage) { const copy = sectionCopy[language]; const contract = getPromptTaskContract(definition); const contextItems = buildPromptContextItems(definition, context, language); const confirmation = definition.capability === "write" ? language === "de" ? ["Zeige zuerst die vollständigen vorgeschlagenen Änderungen.", "Speichere oder aktualisiere nichts, bis ich ausdrücklich bestätige.", "Nutze danach nur die autorisierte Plaivra-Funktion und behaupte keinen Erfolg, bevor das Tool ihn bestätigt."] : language === "ar" ? ["اعرض التغييرات المقترحة كاملة أولًا.", "لا تحفظ أو تحدّث أي شيء حتى أؤكد صراحة.", "بعد ذلك استخدم وظيفة Plaivra المصرح بها فقط ولا تدّع النجاح حتى تؤكده الأداة."] : ["Show the complete proposed changes first.", "Do not save or update anything until I explicitly confirm.", "After confirmation, use only the authorized Plaivra capability and do not claim success until the tool confirms it."] : [language === "de" ? "Ändere keine Plaivra-Daten." : language === "ar" ? "لا تغيّر أي بيانات في Plaivra." : "Do not change any Plaivra data."]; return [`${copy.role}:\n${value(definition.role, language)}`, `${copy.objective}:\n${value(definition.objective, language)}`, `${copy.context}:\n${contextItems.length ? contextItems.map((item) => `- ${item.label}: ${item.value}`).join("\n") : copy.noContext}`, `${copy.constraints}:\n${contract.constraints.map((item) => `- ${value(item, language)}`).join("\n")}`, `${copy.output}:\n${contract.output.map((item, index) => `${index + 1}. ${value(item, language)}`).join("\n")}`, `${copy.confirmation}:\n${confirmation.map((item) => `- ${item}`).join("\n")}`].join("\n\n"); }
-export function getRuntimeContextChips(definition: QuickPromptDefinition, context: QuickPromptContext, language: PromptLanguage) { return buildPromptContextItems(definition, context, language).slice(0, 6).map((item) => `${item.label}: ${item.value}`); }
-const publicTools = new Set<string>(MCP_PUBLIC_TOOL_NAMES); const internalActions = new Set<string>(INTERNAL_AI_ACTION_NAMES); const writeInternalActions = new Set<string>(WRITE_CAPABLE_AI_ACTION_NAMES); const writePublicTools = new Set(mcpTools.filter((tool) => !tool.annotations.readOnlyHint).map((tool) => tool.name));
-export function getBackingCapabilityStatus(definition: QuickPromptDefinition) { const real = definition.supportedBy.filter((name) => publicTools.has(name) || internalActions.has(name)); const write = definition.supportedBy.filter((name) => writePublicTools.has(name) || writeInternalActions.has(name)); return { real, write, supported: real.length > 0 && (definition.capability === "read" || write.length > 0) }; }
-export const RUNTIME_QUICK_PROMPTS = QUICK_PROMPTS.filter((definition) => getBackingCapabilityStatus(definition).supported);
+
+export function getRuntimeContextChips(definition: QuickPromptDefinition, context: QuickPromptContext, language: PromptLanguage) {
+  return buildPromptContextItems(definition, context, language).slice(0, 6).map((item) => `${item.label}: ${item.value}`);
+}
+
+const publicTools = new Set<string>(MCP_PUBLIC_TOOL_NAMES);
+const internalActions = new Set<string>(INTERNAL_AI_ACTION_NAMES);
+const writeInternalActions = new Set<string>(WRITE_CAPABLE_AI_ACTION_NAMES);
+const writePublicTools = new Set<string>(mcpTools.filter((tool) => publicTools.has(tool.name) && tool.annotations.readOnlyHint === false && tool.risk !== "read").map((tool) => tool.name));
+
+export function getBackingCapabilityStatus(definition: QuickPromptDefinition): BackingCapabilityStatus {
+  const declared = [...definition.supportedBy];
+  const known = declared.filter((name) => publicTools.has(name) || internalActions.has(name));
+  const unknown = declared.filter((name) => !publicTools.has(name) && !internalActions.has(name));
+  const writeCapable = declared.filter((name) => writePublicTools.has(name) || writeInternalActions.has(name));
+  const supported = declared.length > 0 && unknown.length === 0 && (definition.capability === "read" || writeCapable.length > 0);
+  return { declared, known, unknown, writeCapable, supported };
+}
+
+function canonicalPromptIsValid(definition: QuickPromptDefinition) {
+  return validatePromptContextPermissionContract(definition).valid && getBackingCapabilityStatus(definition).supported;
+}
+export const RUNTIME_QUICK_PROMPTS = QUICK_PROMPTS.filter(canonicalPromptIsValid);
+
+export function auditPromptCatalog(): PromptCatalogAuditEntry[] {
+  const runtimeIds = new Set(RUNTIME_QUICK_PROMPTS.map((prompt) => prompt.id));
+  return QUICK_PROMPTS.map((definition) => {
+    const permission = validatePromptContextPermissionContract(definition);
+    const backing = getBackingCapabilityStatus(definition);
+    return {
+      promptId: definition.id,
+      category: definition.category,
+      capability: definition.capability,
+      permissionSections: [...definition.permissionSections],
+      contextFields: [...getPromptTaskContract(definition).contextFields],
+      contextPermissionContractValid: permission.valid,
+      taskContractExists: Boolean(TASK_CONTRACTS[definition.id]),
+      backingActionsValid: backing.unknown.length === 0 && backing.known.length === backing.declared.length,
+      writeBackingValid: definition.capability === "read" || backing.writeCapable.length > 0,
+      prerequisites: definition.prerequisites.map((item) => item.id),
+      runtimeExposed: runtimeIds.has(definition.id)
+    };
+  });
+}
+
 export function rankRuntimePrompts(context: QuickPromptContext) { return RUNTIME_QUICK_PROMPTS.filter((prompt) => prompt.eligible(context)).sort((a, b) => b.priority(context) - a.priority(context) || a.id.localeCompare(b.id)); }
-export function getRuntimeHomeSections(context: QuickPromptContext): PromptHomeSections { const ranked = rankRuntimePrompts(context); const recommended = ranked[0] ?? null; const used = new Set(recommended ? [recommended.id] : []); const quick = ranked.filter((item) => item.quick && !used.has(item.id)).slice(0, 6); quick.forEach((item) => used.add(item.id)); const dynamic = ranked.filter((item) => !used.has(item.id)).slice(0, 5); return { recommended, quick, dynamic }; }
+export function getRuntimeHomeSections(context: QuickPromptContext): PromptHomeSections {
+  const ranked = rankRuntimePrompts(context); const recommended = ranked[0] ?? null; const used = new Set(recommended ? [recommended.id] : []);
+  const quick = ranked.filter((item) => item.quick && !used.has(item.id)).slice(0, 6); quick.forEach((item) => used.add(item.id));
+  const dynamic = ranked.filter((item) => !used.has(item.id)).slice(0, 5); return { recommended, quick, dynamic };
+}
 export function filterRuntimeLibrary(input: { search?: string; category?: PromptCategory | "all"; language: PromptLanguage }) { return filterPromptLibrary({ ...input, prompts: RUNTIME_QUICK_PROMPTS }); }
+
 export { getPromptAvailability, localizePrompt };
+export { TASK_CONTRACTS, getPromptTaskContract } from "@/lib/ai/prompt-contracts";
+export { PROMPT_CONTEXT_FIELD_PERMISSIONS, assertPromptContextPermissionContract, buildPromptContextItems, normalizeNutritionTargetState, validatePromptContextPermissionContract } from "@/lib/ai/prompt-context";
+export type { NormalizedTargetState, PromptContextItem, PromptContextPermissionValidation } from "@/lib/ai/prompt-context";
+export type { PromptContextField, TaskContract } from "@/lib/ai/prompt-contracts";
