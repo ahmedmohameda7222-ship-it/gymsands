@@ -20,6 +20,11 @@ import {
   type NutritionTargetDraft,
   type PersistedNutritionTargetState
 } from "@/lib/eat/nutrition-target-draft";
+import {
+  buildNutritionTargetsDateHref,
+  resolveNutritionTargetsReturnHref,
+  type NutritionTargetsReturnDestination
+} from "@/lib/eat/nutrition-target-return";
 import { eatEnergyDisplayValue, eatLiquidDisplayValue } from "@/lib/eat/eat-units";
 import { useUnsavedChangesGuard } from "@/lib/hooks/use-unsaved-changes-guard";
 import { useNutritionTargetsTranslation } from "@/lib/i18n/nutrition-targets";
@@ -43,7 +48,13 @@ function fieldNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
-export function NutritionTargetSettings({ selectedDate, returnHref }: { selectedDate: string; returnHref: string }) {
+export function NutritionTargetSettings({
+  selectedDate,
+  returnDestination
+}: {
+  selectedDate: string;
+  returnDestination: NutritionTargetsReturnDestination;
+}) {
   const { user } = useAuth();
   const userId = user?.id;
   const router = useRouter();
@@ -57,6 +68,7 @@ export function NutritionTargetSettings({ selectedDate, returnHref }: { selected
   const [loadError, setLoadError] = useState(false);
   const [applying, setApplying] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
+  const currentReturnHref = resolveNutritionTargetsReturnHref(returnDestination, selectedDate);
 
   const load = useCallback(async ({ preserveDraft = false }: { preserveDraft?: boolean } = {}) => {
     if (!userId) return false;
@@ -177,7 +189,7 @@ export function NutritionTargetSettings({ selectedDate, returnHref }: { selected
   }, [nt]);
 
   function navigateDate(date: string) {
-    request(() => router.push(`/settings/nutrition-targets?date=${encodeURIComponent(date)}&return=${encodeURIComponent(returnHref)}`));
+    request(() => router.push(buildNutritionTargetsDateHref(date, returnDestination)));
   }
 
   function selectAssignment(assignment: NutritionTargetAssignment) {
@@ -203,7 +215,7 @@ export function NutritionTargetSettings({ selectedDate, returnHref }: { selected
   return <div className="space-y-4" dir={dir}>
     {dialog}
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <Button type="button" variant="outline" className="min-h-12" onClick={() => request(() => router.push(returnHref))}><ArrowLeft className="h-4 w-4 rtl:rotate-180" />{nt("returnEat")}</Button>
+      <Button type="button" variant="outline" className="min-h-12" onClick={() => request(() => router.push(currentReturnHref))}><ArrowLeft className="h-4 w-4 rtl:rotate-180" />{nt("returnEat")}</Button>
       <Badge variant={dirty ? "warning" : "outline"}>{dirty ? nt("pending") : nt("noChanges")}</Badge>
     </div>
 
