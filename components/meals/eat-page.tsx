@@ -10,7 +10,7 @@ import { EatAddFoodSurface } from "@/components/meals/eat-add-food-surface";
 import { EatFoodLog } from "@/components/meals/eat-food-log";
 import { EatPlannedMealAdjust } from "@/components/meals/eat-planned-meal-adjust";
 import { EatWeekView } from "@/components/meals/eat-week-view";
-import { CompactHydration, EatNutritionProgress, PlannedNextMeal, RemainingToday, RepeatFoodSection } from "@/components/meals/eat-day-sections";
+import { CompactHydration, EatNutritionProgress, PlannedNextMeal, RepeatFoodSection } from "@/components/meals/eat-day-sections";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { buildPlannedMealPromptContext } from "@/lib/ai/planned-meal-context";
@@ -250,10 +250,10 @@ export function EatPage() {
   }
 
   return <div className="space-y-4 pb-28 lg:pb-8" dir={dir}>
-    <header className="space-y-4 rounded-[20px] border border-border/70 bg-card p-4 shadow-soft sm:p-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div><h1 className="text-3xl font-extrabold tracking-tight">{et("eat")}</h1><p className="mt-1 text-sm text-muted-foreground">{formatDate(selectedDate)} · {targetLabel}</p></div>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap"><Button type="button" variant="outline" className="min-h-12" onClick={() => openPrompts({ source: "eat", mode: "home", selectedDate })}><OpenAiBlossom className="h-4 w-4" />{et("askChatGpt")}</Button><Button type="button" className="min-h-12" onClick={() => openAddFood()}><Plus className="h-4 w-4" />{et("addFood")}</Button></div>
+    <header className="space-y-4 rounded-[20px] border border-border/70 bg-card p-3 shadow-soft sm:p-5">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 sm:gap-3 lg:flex lg:justify-between">
+        <div className="min-w-0"><h1 className="text-3xl font-extrabold tracking-tight">{et("eat")}</h1><p className="mt-1 truncate text-sm text-muted-foreground">{formatDate(selectedDate)} · {targetLabel}</p></div>
+        <div className="flex shrink-0 flex-nowrap gap-1.5 sm:gap-2"><Button type="button" variant="outline" className="min-h-12 whitespace-nowrap px-2.5 text-xs sm:px-4 sm:text-sm" onClick={() => openPrompts({ source: "eat", mode: "home", selectedDate })}><OpenAiBlossom className="h-4 w-4" />{et("askChatGpt")}</Button><Button type="button" className="min-h-12 whitespace-nowrap px-2.5 text-xs sm:px-4 sm:text-sm" onClick={() => openAddFood()}><Plus className="h-4 w-4" />{et("addFood")}</Button></div>
       </div>
       <div className="grid grid-cols-[auto_1fr_auto] gap-2"><Button type="button" variant="outline" size="icon" className="min-h-12 min-w-12" onClick={() => setUrl(addIsoDays(selectedDate, -navigationStep), view)} aria-label={view === "week" ? et("previousWeek") : et("previousDay")}><ArrowLeft className="h-4 w-4 rtl:rotate-180" /></Button><label className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-3.5 h-5 w-5 text-muted-foreground rtl:left-auto rtl:right-3" /><input type="date" value={selectedDate} onChange={(event) => setUrl(parseEatDate(event.target.value, today), view)} className="h-12 w-full rounded-[14px] border border-input bg-card px-10 text-center text-sm font-semibold" aria-label={et("date")} /></label><Button type="button" variant="outline" size="icon" className="min-h-12 min-w-12" onClick={() => setUrl(addIsoDays(selectedDate, navigationStep), view)} aria-label={view === "week" ? et("nextWeek") : et("nextDay")}><ArrowRight className="h-4 w-4 rtl:rotate-180" /></Button></div>
       <div className="grid grid-cols-2 rounded-[14px] bg-muted p-1"><button type="button" aria-pressed={view === "day"} className={`min-h-11 rounded-[11px] text-sm font-semibold ${view === "day" ? "bg-card shadow-sm" : "text-muted-foreground"}`} onClick={() => setUrl(selectedDate, "day")}>{et("day")}</button><button type="button" aria-pressed={view === "week"} className={`min-h-11 rounded-[11px] text-sm font-semibold ${view === "week" ? "bg-card shadow-sm" : "text-muted-foreground"}`} onClick={() => setUrl(selectedDate, "week")}>{et("week")}</button></div>
@@ -265,7 +265,7 @@ export function EatPage() {
       {repeats.status === "failed" ? <SourceFailure message={et("repeatsFailed")} retryLabel={et("retry")} onRetry={() => void loadRepeats()} /> : <RepeatFoodSection options={repeatOptions} selectedDate={selectedDate} mealType={addFoodMeal} pendingKey={repeatPending} feedback={repeatFeedback} energyUnit={settings.energyUnit} onMealTypeChange={setAddFoodMeal} onRepeat={(option) => void repeatFood(option)} onViewAll={() => openAddFood(addFoodMeal, "repeat")} />}
       <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
         <EatFoodLog userId={userId ?? ""} logs={loadedLogs} mealPlanItems={loadedMeals} loading={logs.status === "loading"} error={logs.status === "failed" ? logs.error : undefined} energyUnit={settings.energyUnit} onRetry={() => void loadLogs()} onReloadPlannedMeals={() => void loadPlannedMeals()} onAdd={(meal) => openAddFood(meal)} onChanged={(next) => { setLogs({ status: "loaded", data: next }); void loadWeek(); void loadPlannedMeals(); void loadWeekTargets(); }} />
-        <aside className="space-y-4"><RemainingToday metrics={metrics} energyUnit={settings.energyUnit} /><CompactHydration water={water} waterTargetMl={targetValues?.water_ml ?? null} liquidUnit={settings.liquidUnit} pending={waterPending} feedback={waterFeedback} onAdd={(amount) => void addWater(amount)} onRetry={() => void loadWater()} /></aside>
+        <aside className="space-y-4"><CompactHydration water={water} waterTargetMl={targetValues?.water_ml ?? null} liquidUnit={settings.liquidUnit} pending={waterPending} feedback={waterFeedback} onAdd={(amount) => void addWater(amount)} onRetry={() => void loadWater()} /></aside>
       </div>
     </> : <EatWeekView week={week} weekTargets={weekTargets} selectedDate={selectedDate} energyUnit={settings.energyUnit} onSelectDate={(date) => setUrl(date, "week")} onAddFood={() => openAddFood()} onRetryLogs={() => void loadWeek()} onRetryTargets={() => void loadWeekTargets()} />}
 
