@@ -1,30 +1,44 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`  
-**Read-only capture:** 2026-07-10  
-**Audited repository commit:** `60a204d5fc20fc396be1b1b47e748c42ebba6abf`
+**Read-only verification:** 2026-07-13  
+**Audited repository commit:** `c1ce801d66be57054edd13f14e744548511fc331`
 
-This is an evidence record, not permission to repair the production ledger. Applied migration files and production migration history must never be renamed, rewritten, or deleted.
+This is an evidence record, not permission to edit Supabase migration history. Applied migration files and production migration identities must never be renamed, rewritten, deleted, or replayed.
 
 ## Reconciled state
 
-The machine-readable authority is [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json). `npm run migration:ledger:check` fails when a repository migration is unclassified, when a referenced file is absent, or when a production identity is incomplete or duplicated.
+The machine-readable authority is [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json).
 
-- Ten repository migrations match production by version and name.
-- `functional_fitness_constraints` was applied in production as `20260710140133`; its immutable repository filename starts with `20260710135000`.
-- `drop_retired_ai_request_and_safety_tables` was applied in production as `20260710145503`; its immutable repository filename starts with `20260710170000`.
-- Production contains the columns introduced by `20260703151807_onboarding_coaching_quick_log_preferences.sql`, but its migration ledger does not contain that version/name. This is schema/ledger drift and requires original deployment evidence before a Supabase ledger repair is considered.
-- `20260710164946_enforce_initial_launch_age_16.sql` is pending and has not been represented as applied.
+- Supabase migration history contains 24 applied migrations through `20260711014500_idempotency_uncertain_completion_guard`.
+- The earlier onboarding drift is resolved: `20260703151807_onboarding_coaching_quick_log_preferences` now appears in Supabase migration history.
+- The earlier version aliases are resolved: `functional_fitness_constraints` is recorded as `20260710135000`, and `drop_retired_ai_request_and_safety_tables` is recorded as `20260710170000`.
+- No repository migration is currently classified as pending.
+- Three repository migrations are absent from Supabase migration history but have verified production schema effects:
+  - `20260711213000_adaptive_onboarding_v2.sql`
+  - `20260712173000_persistent_meal_plan_skip_status.sql`
+  - `20260712195000_nutrition_target_date_overrides.sql`
 
-## Safe operating procedure
+## Schema verification for untracked applications
 
-1. Capture `supabase_migrations.schema_migrations` and the affected schema from production before any release.
-2. Compare the capture with the checked-in ledger; do not infer application solely from current columns.
-3. Execute pending migrations on an isolated branch/database and run verification SQL.
-4. Apply only additive migrations during convergence.
-5. Require row-count, per-user-total, ownership, RLS, export, deletion, and active-reference gates before a read cutover.
-6. Repair ledger metadata only through the approved Supabase workflow, with owner review and a backup. Never make SQL content appear to have run when its provenance is unknown.
+### Adaptive onboarding
 
-## Rollback and forward-fix
+Verified all expected onboarding, nutrition-preference, and fitness-constraint columns; both onboarding constraints; the authenticated `complete_adaptive_onboarding_v2` RPC; and denial of anonymous execution.
 
-Additive columns remain nullable until backfill verification. Application readers must tolerate their absence during rollout. If a new write path fails, disable its feature flag and return to the preceding writer; retain newly written rows for a forward-fix. Dropping legacy objects is a separate future migration after zero-reference and backup gates, not a rollback technique.
+### Persistent meal-plan skip state
+
+Verified the `planned | done | skipped` status constraint, skipped-state integrity constraint, terminal-state transition trigger, and trigger function.
+
+### Nutrition target date overrides
+
+Verified the override table, unique/index structure, RLS, four ownership policies, updated-at trigger, authenticated CRUD grants, denial of anonymous reads, and authenticated `apply_nutrition_target_changes` RPC.
+
+## Current action
+
+Do not replay the three schema-untracked migrations. Their database objects already exist. Repairing Supabase migration history requires separate owner approval and evidence of how the SQL was originally applied.
+
+Run `npm run migration:ledger:check` to validate repository classification. The checker now rejects unsupported states and requires explicit evidence and replay warnings for schema-untracked applications.
+
+## Advisor status
+
+The three verified migrations did not expose a missing RLS policy or grant problem in their own objects. Supabase still reports unrelated existing advisor items, including service-only tables with RLS and no user policies, leaked-password protection disabled on the current plan, unindexed foreign keys, duplicate indexes, and multiple permissive policies. These require separate security/performance work and were not modified during this reconciliation.
