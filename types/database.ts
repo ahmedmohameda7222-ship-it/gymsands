@@ -180,7 +180,7 @@ export type UserExerciseVideo = {
   updated_at: string;
 };
 
-export type MealPlanItemStatus = "planned" | "done";
+export type MealPlanItemStatus = "planned" | "done" | "skipped";
 
 export type MealPlanItem = {
   id: string;

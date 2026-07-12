@@ -6,35 +6,32 @@ import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   BarChart3,
-  BedDouble,
   ChefHat,
   CheckSquare,
   ClipboardList,
-  Droplets,
   Dumbbell,
   History,
   Home,
   LogOut,
   Menu,
-  Pill,
-  Plus,
   Settings,
   Shield,
   Soup,
   Trophy,
+  UserRound,
   Utensils,
   WifiOff
 } from "lucide-react";
 import { Brand } from "@/components/layout/brand";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/use-translation";
 import type { TranslationKey } from "@/lib/i18n/types";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
-import type { QuickLogSection } from "@/services/database/user-settings";
 import { ActiveWorkoutIndicator } from "@/components/workouts/active-workout-indicator";
+import { MobileFloatingNav } from "@/components/layout/mobile-floating-nav";
 
 type NavItem = {
   href: string;
@@ -78,22 +75,16 @@ const secondaryNavGroups: { labelKey: TranslationKey; items: NavItem[] }[] = [
   }
 ];
 
-const mobilePrimaryItems = primaryNavItems;
+const mobileUtilityItems: NavItem[] = [
+  { href: "/progress", labelKey: "nav.progress", icon: BarChart3, activePaths: ["/progress", "/personal-records"] },
+  { href: "/settings", labelKey: "nav.settings", icon: Settings, activePaths: ["/settings"] },
+  { href: "/profile", labelKey: "settings.profile", icon: UserRound, activePaths: ["/profile"] }
+];
 
 const adminItems: NavItem[] = [
   { href: "/admin", labelKey: "settings.accountSession", icon: Shield }
 ];
 
-const quickLogItems: (NavItem & { id: QuickLogSection })[] = [
-  { id: "water", href: "/hydration", labelKey: "nav.addWater", icon: Droplets },
-  { id: "meal", href: "/calories", labelKey: "nav.logFood", icon: Utensils },
-  { id: "weight", href: "/progress", labelKey: "settings.weight", icon: BarChart3 },
-  { id: "workout", href: "/today-workout", labelKey: "nav.startWorkout", icon: Dumbbell },
-  { id: "progress", href: "/progress", labelKey: "nav.addProgress", icon: BarChart3 },
-  { id: "sleep", href: "/sleep-recovery", labelKey: "nav.sleepRecovery", icon: BedDouble },
-  { id: "supplements", href: "/supplements", labelKey: "nav.supplements", icon: Pill },
-  { id: "wellness", href: "/wellness", labelKey: "nav.wellnessDashboard", icon: CheckSquare }
-];
 
 function isActivePath(pathname: string, item: NavItem) {
   const paths = item.activePaths ?? [item.href];
@@ -201,7 +192,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Button>
         </div>
       </header>
-      <main id="main-content" className="pb-[calc(env(safe-area-inset-bottom)+11rem)] lg:ml-72 lg:pb-0">
+      <main id="main-content" className="pb-[calc(env(safe-area-inset-bottom)+8rem)] lg:ml-72 lg:pb-0">
         <motion.div
           key={pathname}
           initial={settings.reduceAnimations ? false : { opacity: 0, y: 8 }}
@@ -213,89 +204,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </motion.div>
       </main>
       <ActiveWorkoutIndicator />
-      <MobilePrimaryNav pathname={pathname} />
+      <MobileFloatingNav pathname={pathname} />
     </div>
-  );
-}
-
-function MobilePrimaryNav({ pathname }: { pathname: string }) {
-  return (
-    <div className="fixed inset-x-0 bottom-0 z-[80] isolate lg:hidden">
-      {/* Mobile overlay policy: active workout z70, bottom nav z80, Quick Log FAB z90, dialogs z100+. */}
-      <QuickLogSheet />
-      <nav className="glass-shell grid grid-cols-5 !rounded-none border-x-0 border-b-0 !bg-card px-1 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-1" aria-label="Primary mobile navigation">
-        {mobilePrimaryItems.map((item) => (
-          <MobileNavLink key={item.href} item={item} active={isActivePath(pathname, item)} />
-        ))}
-      </nav>
-    </div>
-  );
-}
-
-function MobileNavLink({ item, active }: { item: NavItem; active: boolean }) {
-  const Icon = item.icon;
-  const { t } = useTranslation();
-  return (
-    <Link
-      href={item.href}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "flex min-h-14 flex-col items-center justify-center gap-1 border-t-2 px-1 text-[11px] font-bold leading-[14px] transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-        active ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-primary"
-      )}
-    >
-      <Icon className="h-5 w-5" />
-      <span className="truncate">{t(item.labelKey)}</span>
-    </Link>
-  );
-}
-
-function QuickLogSheet() {
-  const { t } = useTranslation();
-  const { settings } = useUserSettings();
-  const visibleItems = quickLogItems.filter((item) => settings.quickLogSections.includes(item.id));
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button
-          size="icon"
-          className="absolute left-1/2 top-0 z-[90] h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-[var(--app-bg)] bg-primary text-primary-foreground shadow-[var(--shadow-floating)] hover:bg-primary/90"
-          aria-label={t("nav.quickLog")}
-        >
-          <Plus className="h-6 w-6" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent variant="glass" className="rounded-t-[24px] p-0 sm:max-w-sm">
-        <DialogHeader className="border-b border-white/40 px-5 py-4 text-left dark:border-white/10">
-          <DialogTitle>{t("nav.quickLog")}</DialogTitle>
-        </DialogHeader>
-        <div className="grid gap-2 p-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
-          {visibleItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <DialogClose key={item.id} asChild>
-                <Link href={item.href} className="solid-row flex min-h-12 items-center gap-3 px-3 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-muted/60">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  {t(item.labelKey)}
-                </Link>
-              </DialogClose>
-            );
-          })}
-          {visibleItems.length === 0 ? (
-            <div className="space-y-3 p-3 text-center">
-              <p className="text-sm text-muted-foreground">No Quick Log shortcuts enabled.</p>
-              <DialogClose asChild>
-                <Button asChild variant="outline" className="min-h-12">
-                  <Link href="/settings/preferences">Open Preferences</Link>
-                </Button>
-              </DialogClose>
-            </div>
-          ) : null}
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -348,6 +258,14 @@ function MobileMenu({
                 </div>
               );
             })}
+            <div className="border-t border-white/40 pt-4 dark:border-white/10">
+              <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t("nav.more")}</p>
+              <div className="space-y-1">
+                {mobileUtilityItems.map((item) => (
+                  <SidebarLink key={`${item.href}-${item.labelKey}`} item={item} active={isActivePath(pathname, item)} mobile onClick={handleNavigate} />
+                ))}
+              </div>
+            </div>
             {isAdmin ? (
               <div className="border-t border-white/40 pt-4 dark:border-white/10">
                 <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Admin</p>

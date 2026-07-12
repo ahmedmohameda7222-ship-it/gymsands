@@ -21,6 +21,7 @@ import {
   getMealPlanItemsForDate,
   getMealPlanItemsForRange,
   markDirectMealPlanItemDone,
+  markDirectMealPlanItemSkipped,
   normalizeMealPlanType,
   updateDirectMealPlanItem
 } from "@/services/database/meal-plan";
@@ -46,6 +47,7 @@ import { getOnboarding } from "@/services/database/profile";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 import { motion, AnimatePresence } from "framer-motion";
+import { mealPlanUrl, resolveMealPlanTab, type MealPlanTab } from "@/lib/meals/meal-plan-navigation";
 
 type MacroTotals = { calories: number; protein_g: number; carbs_g: number; fat_g: number };
 type Notice = { type: "success" | "error" | "info"; title: string; description?: string };
@@ -118,7 +120,7 @@ function MyMealPlanBuilderInner() {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [shoppingStats, setShoppingStats] = useState({ count: 0, checked: 0 });
   const [groceryRefreshKey, setGroceryRefreshKey] = useState(0);
-  const [activeTab, setActiveTab] = useState("day");
+  const [activeTab, setActiveTab] = useState<MealPlanTab>(() => resolveMealPlanTab(searchParams.get("tab")));
   const [activeMealType, setActiveMealType] = useState<MealType>("Breakfast");
   const [addMealDialogOpen, setAddMealDialogOpen] = useState(false);
   const [addSourceDialogOpen, setAddSourceDialogOpen] = useState(false);
@@ -131,12 +133,24 @@ function MyMealPlanBuilderInner() {
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(selectedWeekStart, index)), [selectedWeekStart]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    params.set("date", selectedDate);
-    const nextUrl = `${pathname}?${params.toString()}`;
+    const nextTab = resolveMealPlanTab(searchParams.get("tab"));
+    const nextDate = safeDate(searchParams.get("date")) ?? today;
+    setActiveTab((current) => current === nextTab ? current : nextTab);
+    setSelectedDate((current) => current === nextDate ? current : nextDate);
+    setCalendarMonth((current) => current === monthStart(nextDate) ? current : monthStart(nextDate));
+  }, [searchParams, today]);
+
+  useEffect(() => {
+    const nextUrl = mealPlanUrl(pathname, activeTab, selectedDate);
     const currentUrl = `${window.location.pathname}${window.location.search}`;
-    if (currentUrl !== nextUrl) window.history.replaceState(null, "", nextUrl);
-  }, [pathname, selectedDate]);
+    if (currentUrl !== nextUrl) router.replace(nextUrl, { scroll: false });
+  }, [activeTab, pathname, router, selectedDate]);
+
+  function changeTab(nextValue: string) {
+    const nextTab = resolveMealPlanTab(nextValue);
+    setActiveTab(nextTab);
+    router.push(mealPlanUrl(pathname, nextTab, selectedDate), { scroll: false });
+  }
 
   useEffect(() => {
     let active = true;
@@ -235,6 +249,20 @@ function MyMealPlanBuilderInner() {
       if (!result.already_done) celebrate("Meal logged");
     } catch (error) {
       setNotice({ type: "error", title: "Could not mark meal done", description: userSafeError(error) });
+    } finally {
+      setIsUpdatingId(null);
+    }
+  }
+
+  async function skipItem(item: MealPlanItem) {
+    if (item.status !== "planned") return;
+    try {
+      setIsUpdatingId(item.id);
+      const updated = normalizeMealPlanItem(await markDirectMealPlanItemSkipped(item));
+      upsertLocalItems([updated]);
+      setNotice({ type: "success", title: "Meal skipped", description: `${item.food_name} remains in the plan and was not added to calories.` });
+    } catch (error) {
+      setNotice({ type: "error", title: "Could not skip meal", description: userSafeError(error) });
     } finally {
       setIsUpdatingId(null);
     }
@@ -372,7 +400,7 @@ function MyMealPlanBuilderInner() {
         </DialogContent>
       </Dialog>
 
-<Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3 sm:space-y-4">
+<Tabs value={activeTab} onValueChange={changeTab} className="space-y-3 sm:space-y-4">
   <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
     <TabsTrigger value="day">Day</TabsTrigger>
     <TabsTrigger value="week">Week</TabsTrigger>
@@ -434,7 +462,7 @@ function MyMealPlanBuilderInner() {
               <p className="text-xs text-muted-foreground sm:text-sm">{dayStats.totalPlanned} planned &middot; {dayStats.totalDone} done</p>
             </div>
             <div className="flex gap-2">
-              <Button className="min-h-12" variant="outline" onClick={() => setActiveTab("shopping")}>
+              <Button className="min-h-12" variant="outline" onClick={() => changeTab("shopping")}>
                 <ShoppingCart className="h-4 w-4" />
                 <span className="hidden sm:inline">Shopping</span>
                 <span className="sm:hidden">{shoppingCheckedCount}/{shoppingShortcutCount}</span>
@@ -476,6 +504,7 @@ function MyMealPlanBuilderInner() {
                 items={items.filter((item) => item.meal_type === activeMealType)}
                 onAdd={() => openAddMeal(activeMealType)}
                 onDone={markDone}
+                onSkip={skipItem}
                 onDelete={removeItem}
                 onAddToGrocery={addMealToGrocery}
                 onStartEdit={startEditing}
@@ -496,6 +525,7 @@ function MyMealPlanBuilderInner() {
                   items={items.filter((item) => item.meal_type === type)}
                   onAdd={() => openAddMeal(type)}
                   onDone={markDone}
+                  onSkip={skipItem}
                   onDelete={removeItem}
                   onAddToGrocery={addMealToGrocery}
                   onStartEdit={startEditing}
@@ -611,11 +641,12 @@ function SummaryCard({ label, value, detail, suffix = " kcal" }: { label: string
   );
 }
 
-function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () => void; onDone: (item: MealPlanItem) => void; onDelete: (item: MealPlanItem) => void; onAddToGrocery: (item: MealPlanItem) => void; onStartEdit: (item: MealPlanItem) => void; onSaveEdit: (item: MealPlanItem) => void; onCancelEdit: () => void; editingId: string | null; editDraft: Draft; setEditDraft: Dispatch<SetStateAction<Draft>>; updatingId: string | null }) {
-  const { type, items, onAdd, onDone, onDelete, onAddToGrocery, onStartEdit, onSaveEdit, onCancelEdit, editingId, editDraft, setEditDraft, updatingId } = props;
+function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () => void; onDone: (item: MealPlanItem) => void; onSkip: (item: MealPlanItem) => void; onDelete: (item: MealPlanItem) => void; onAddToGrocery: (item: MealPlanItem) => void; onStartEdit: (item: MealPlanItem) => void; onSaveEdit: (item: MealPlanItem) => void; onCancelEdit: () => void; editingId: string | null; editDraft: Draft; setEditDraft: Dispatch<SetStateAction<Draft>>; updatingId: string | null }) {
+  const { type, items, onAdd, onSkip, onDone, onDelete, onAddToGrocery, onStartEdit, onSaveEdit, onCancelEdit, editingId, editDraft, setEditDraft, updatingId } = props;
   const totals = items.reduce((sum, item) => addItemToTotals(sum, item), emptyTotals());
   const plannedCount = items.filter((i) => i.status === "planned").length;
   const doneCount = items.filter((i) => i.status === "done").length;
+  const skippedCount = items.filter((i) => i.status === "skipped").length;
 
   return (
     <Card variant="glass" className="h-full">
@@ -623,7 +654,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
         <CardTitle className="flex items-center justify-between gap-2 text-sm sm:text-base">
           <span className="flex items-center gap-2"><Utensils className="h-4 w-4" /> {displayMealType(type)}</span>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-[10px]">{plannedCount + doneCount}</Badge>
+            <Badge variant="outline" className="text-[10px]">{plannedCount + doneCount + skippedCount}</Badge>
             <Button type="button" size="icon" variant="ghost" className="h-12 w-12" onClick={onAdd} aria-label={`Add ${displayMealType(type)} item`}>
               <PlusCircle className="h-4 w-4" />
             </Button>
@@ -665,7 +696,7 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
-                  <Badge variant={item.status === "done" ? "success" : "outline"} className="text-[10px]">{item.status}</Badge>
+                  <Badge variant={item.status === "done" ? "success" : item.status === "skipped" ? "warning" : "outline"} className="text-[10px]">{item.status}</Badge>
                   <Badge variant={validation.tone === "success" ? "success" : validation.tone === "destructive" ? "destructive" : "warning"} className="text-[10px]" title={validation.detail}>{validation.label}</Badge>
                 </div>
               </div>
@@ -674,11 +705,12 @@ function MealColumn(props: { type: MealType; items: MealPlanItem[]; onAdd: () =>
                   <MealForm title="Edit planned food" draft={editDraft} setDraft={setEditDraft} onSave={() => onSaveEdit(item)} onCancel={onCancelEdit} saving={updatingId === item.id} />
                 </div>
               ) : (
-                <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-[1fr_1fr_1fr_auto]">
-                  <Button type="button" className="min-h-12" onClick={() => onDone(item)} disabled={item.status === "done" || updatingId === item.id}>
+                <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                  <Button type="button" className="min-h-12" onClick={() => onDone(item)} disabled={item.status !== "planned" || updatingId === item.id}>
                     <CheckCircle2 className="h-4 w-4" />
                     {updatingId === item.id ? "Saving..." : "Done"}
                   </Button>
+                  <Button type="button" className="min-h-12" variant="outline" onClick={() => onSkip(item)} disabled={item.status !== "planned" || updatingId === item.id}>Skip</Button>
                   <Button type="button" className="min-h-12" variant="outline" onClick={() => onStartEdit(item)} disabled={updatingId === item.id}><Edit3 className="h-4 w-4" /> Edit</Button>
                   <Button type="button" className="min-h-12" variant="outline" onClick={() => onAddToGrocery(item)} disabled={updatingId === item.id}><ShoppingCart className="h-4 w-4" /> <span className="hidden sm:inline">Grocery</span><span className="sm:hidden">Add</span></Button>
                   <Button type="button" size="icon" variant="ghost" className="h-12 min-h-12 w-12 text-destructive hover:text-destructive" onClick={() => onDelete(item)} disabled={updatingId === item.id} aria-label={`Delete ${item.food_name}`}><Trash2 className="h-4 w-4" /></Button>
@@ -702,7 +734,7 @@ function NoticeBox({ notice, onClose, onRetry }: { notice: Notice; onClose: () =
 function emptyTotals(): MacroTotals { return { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }; }
 function addItemToTotals(total: MacroTotals, item: Pick<MealPlanItem, "calories" | "protein_g" | "carbs_g" | "fat_g">): MacroTotals { return { calories: total.calories + toNumber(item.calories), protein_g: total.protein_g + toNumber(item.protein_g), carbs_g: total.carbs_g + toNumber(item.carbs_g), fat_g: total.fat_g + toNumber(item.fat_g) }; }
 function displayMealType(type: MealType) { return type === "Snack" ? "Snacks" : type; }
-function normalizeMealPlanItem(item: MealPlanItem): MealPlanItem { const now = new Date().toISOString(); return { ...item, id: String(item.id || crypto.randomUUID()), food_name: String(item.food_name || "Unnamed food"), serving_size: String(item.serving_size || "1 serving"), quantity: toNumber(item.quantity) || 1, calories: toNumber(item.calories), protein_g: toNumber(item.protein_g), carbs_g: toNumber(item.carbs_g), fat_g: toNumber(item.fat_g), meal_type: normalizeMealPlanType(item.meal_type), status: item.status === "done" ? "done" : "planned", created_at: item.created_at || now, updated_at: item.updated_at || now }; }
+function normalizeMealPlanItem(item: MealPlanItem): MealPlanItem { const now = new Date().toISOString(); return { ...item, id: String(item.id || crypto.randomUUID()), food_name: String(item.food_name || "Unnamed food"), serving_size: String(item.serving_size || "1 serving"), quantity: toNumber(item.quantity) || 1, calories: toNumber(item.calories), protein_g: toNumber(item.protein_g), carbs_g: toNumber(item.carbs_g), fat_g: toNumber(item.fat_g), meal_type: normalizeMealPlanType(item.meal_type), status: item.status === "done" ? "done" : item.status === "skipped" ? "skipped" : "planned", created_at: item.created_at || now, updated_at: item.updated_at || now }; }
 function draftFromItem(item: MealPlanItem): Draft { return { foodName: item.food_name, mealType: normalizeMealPlanType(item.meal_type), quantity: String(item.quantity || 1), servingInfo: item.serving_size || "1 serving", calories: String(toNumber(item.calories)), protein: String(toNumber(item.protein_g)), carbs: String(toNumber(item.carbs_g)), fat: String(toNumber(item.fat_g)), notes: item.notes ?? "" }; }
 function mergeItems(current: MealPlanItem[], nextItems: MealPlanItem[]) { const map = new Map(current.map((item) => [item.id, item])); nextItems.forEach((item) => map.set(item.id, item)); return Array.from(map.values()).sort((a, b) => a.plan_date.localeCompare(b.plan_date) || a.created_at.localeCompare(b.created_at)); }
 function toNumber(value: unknown) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
