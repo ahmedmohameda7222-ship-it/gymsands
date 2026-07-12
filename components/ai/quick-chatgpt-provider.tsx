@@ -130,7 +130,7 @@ export function QuickChatGptProvider({ children }: { children: ReactNode }) {
     setPermissionConfig(result.config);
     setPermissionStatus(result.status);
     setPermissionLoading(false);
-  }, [tt, user?.id]);
+  }, [tt, user]);
 
   useEffect(() => { if (open) void loadPermissions(); }, [loadPermissions, open]);
   useEffect(() => { setEditedPrompt(generatedPrompt); setCopyError(false); }, [generatedPrompt]);
@@ -149,8 +149,11 @@ export function QuickChatGptProvider({ children }: { children: ReactNode }) {
   }
   function openDefinition(promptId: string, backTo: "home" | "library") { setView({ name: "detail", promptId, backTo }); }
   function goBack() {
-    if (view.name === "detail") setView({ name: view.backTo });
-    else if (view.name === "library" || view.name === "custom-detail") setView({ name: "home" });
+    if (view.name === "detail") {
+      setView(view.backTo === "library" ? { name: "library" } : { name: "home" });
+    } else if (view.name === "library" || view.name === "custom-detail") {
+      setView({ name: "home" });
+    }
   }
   async function copyPrompt() {
     try {
