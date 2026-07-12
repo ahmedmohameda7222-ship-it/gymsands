@@ -17,10 +17,10 @@ describe("Eat meal-log redesign contracts", () => {
 
   it("keeps Add Food permanent and ChatGPT on the existing shared surface", () => {
     const route = source("components/meals/eat-page.tsx");
-    expect(route).toContain('openPrompts()');
+    expect(route).toContain("openPrompts()");
     expect(route).toContain('openPrompts("replace-meal")');
     expect(route).toContain('openPrompts("estimate-meal-photo")');
-    expect(route).toContain('<EatAddFoodSurface');
+    expect(route).toContain("<EatAddFoodSurface");
     expect(source("components/meals/eat-add-food-surface.tsx").match(/<Dialog /g)?.length).toBe(1);
     expect(source("components/meals/eat-add-food-surface.tsx")).toContain('layout="responsive-drawer"');
   });
@@ -80,6 +80,26 @@ describe("Eat meal-log redesign contracts", () => {
     expect(service).toContain('.eq("status", "planned")');
   });
 
+  it("compensates and verifies linked edits through one canonical service", () => {
+    const service = source("services/database/eat.ts");
+    const edit = service.split("export async function updateEatFoodLog")[1].split("export async function deleteEatFoodLog")[0];
+    expect(edit).toContain("const originalLog = await readFoodLog");
+    expect(edit).toContain("const originalLinked = await readLinkedMeal");
+    expect(edit).toContain("restoreLinkedEdit");
+    expect(edit).toContain("terminalValuesMatch");
+    expect(edit).toContain("EatLinkedEditConsistencyError");
+    expect(edit).not.toContain("status:");
+    expect(edit).not.toContain("completed_at:");
+  });
+
+  it("reloads server state after a critical linked-edit failure", () => {
+    const foodLog = source("components/meals/eat-food-log.tsx");
+    expect(foodLog).toContain("isEatLinkedEditConsistencyError");
+    expect(foodLog).toContain("getEatFoodLogs(userId, editing.log_date)");
+    expect(foodLog).toContain("getEatMealPlanItems(userId, editing.log_date)");
+    expect(foodLog).toContain('et("criticalConsistencyError")');
+  });
+
   it("prevents terminal linked-log deletion before mutating data", () => {
     const service = source("services/database/eat.ts");
     const deletion = service.split("export async function deleteEatFoodLog")[1].split("export async function logRepeatFood")[0];
@@ -111,13 +131,55 @@ describe("Eat meal-log redesign contracts", () => {
     expect(hub).toContain("returnHref");
   });
 
-  it("keeps Week concise and avoids empty deficit language", () => {
+  it("resolves Week targets independently for every date", () => {
+    const route = source("components/meals/eat-page.tsx");
     const week = source("components/meals/eat-week-view.tsx");
-    expect(week).toContain("buildWeekAnalytics");
-    expect(week).toContain('analytics.coverageLabel === "empty"');
-    expect(week).not.toContain("Large deficit");
-    expect(week).not.toContain("-14000");
-    expect(week).toContain("Macro calorie contribution");
+    const model = source("lib/eat/eat-model.ts");
+    expect(route).toContain("getEatWeekTargets(userId, selectedDate)");
+    expect(route).toContain("weekTargets={weekTargets}");
+    expect(week).toContain("applyWeekTargets");
+    expect(week).toContain("targetEligibleLoggedDays");
+    expect(model).toContain("day.planned_calories");
+    expect(week).not.toContain("targetCalories");
+  });
+
+  it("uses centralized display and reverse-conversion helpers", () => {
+    const units = source("lib/eat/eat-units.ts");
+    const targets = source("components/meals/nutrition-target-settings.tsx");
+    const foodLog = source("components/meals/eat-food-log.tsx");
+    expect(units).toContain("eatEnergyInputToKcal");
+    expect(units).toContain("eatLiquidInputToMl");
+    expect(units).toContain("eatWeightInputToKg");
+    expect(units).toContain("eatHeightInputToCm");
+    expect(targets).toContain("eatWeightInputToKg");
+    expect(targets).toContain("eatHeightInputToCm");
+    expect(foodLog).toContain("eatEnergyInputToKcal");
+  });
+
+  it("removes known prohibited inline copy and unit literals from user-facing Eat paths", () => {
+    const files = [
+      "components/meals/eat-week-view.tsx",
+      "components/meals/eat-add-food-surface.tsx",
+      "components/meals/eat-barcode-method.tsx",
+      "components/meals/nutrition-target-settings.tsx",
+      "app/(private)/calories/food-hub/page.tsx"
+    ];
+    const combined = files.map(source).join("\n");
+    [
+      ">Loading…<", ">All categories<", "Quantity must be greater than zero.",
+      "Your date, meal, and return route will be preserved.", "Opening camera…", "Camera ready.",
+      'aria-label="Previous week"', 'aria-label="Next week"', ">Macro calorie contribution<", "Water ml"
+    ].forEach((prohibited) => expect(combined).not.toContain(prohibited));
+  });
+
+  it("keeps Arabic direction and mirrored directional icons", () => {
+    const route = source("components/meals/eat-page.tsx");
+    const week = source("components/meals/eat-week-view.tsx");
+    const hub = source("app/(private)/calories/food-hub/page.tsx");
+    expect(route).toContain("dir={dir}");
+    expect(hub).toContain("dir={dir}");
+    expect(route).toContain("rtl:rotate-180");
+    expect(week).toContain("rtl:rotate-180");
   });
 
   it("keeps mobile navigation order and prioritizes food on Eat", () => {
