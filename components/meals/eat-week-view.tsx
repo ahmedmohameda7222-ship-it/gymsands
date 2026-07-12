@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { applyWeekTargets, buildWeekAnalytics, type EatWeekTargetDay, type SourceState } from "@/lib/eat/eat-model";
 import { formatEatEnergy } from "@/lib/eat/eat-units";
 import { useEatTranslation } from "@/lib/i18n/eat";
+import { useEatRefinementTranslation } from "@/lib/i18n/eat-refinement";
 import type { UserAppSettings } from "@/services/database/user-settings";
 import type { DailyNutritionSummary } from "@/types";
 
@@ -30,6 +31,7 @@ export function EatWeekView({
   onRetryTargets: () => void;
 }) {
   const { et, formatDate, locale } = useEatTranslation();
+  const { ert } = useEatRefinementTranslation();
   if (week.status === "loading" && !week.data) return <Card><CardContent className="p-6 text-sm text-muted-foreground">{et("loading")}</CardContent></Card>;
   if (week.status === "failed" && !week.data) return <Card><CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-destructive">{et("weekFailed")}</p><Button variant="outline" onClick={onRetryLogs}><RefreshCcw className="h-4 w-4" />{et("retry")}</Button></CardContent></Card>;
 
@@ -64,7 +66,7 @@ export function EatWeekView({
         <Metric label={et("adherence")} value={adherenceValue} />
       </div>
       {weekTargets.status === "failed" ? <Card className="border-warning/30 bg-warning/5"><CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-muted-foreground">{et("adherenceUnavailableTargets")}</p><Button type="button" variant="outline" onClick={onRetryTargets}><RefreshCcw className="h-4 w-4" />{et("retry")}</Button></CardContent></Card> : analytics.targetsState === "partial" ? <p className="text-sm text-muted-foreground">{et("targetCoveragePartial")}</p> : null}
-      <Card><CardHeader className="pb-2"><CardTitle className="text-base">{et("macroContributionLogged")}</CardTitle></CardHeader><CardContent className="space-y-2"><MacroLine label={et("protein")} value={analytics.proteinCalories} total={analytics.macroCaloriesTotal} display={formatEatEnergy(analytics.proteinCalories, energyUnit, locale)} /><MacroLine label={et("carbs")} value={analytics.carbCalories} total={analytics.macroCaloriesTotal} display={formatEatEnergy(analytics.carbCalories, energyUnit, locale)} /><MacroLine label={et("fat")} value={analytics.fatCalories} total={analytics.macroCaloriesTotal} display={formatEatEnergy(analytics.fatCalories, energyUnit, locale)} /></CardContent></Card>
+      <Card><CardHeader className="pb-2"><CardTitle className="text-base">{ert("macroContributionLogged")}</CardTitle></CardHeader><CardContent className="space-y-2"><MacroLine label={et("protein")} value={analytics.proteinCalories} total={analytics.macroCaloriesTotal} display={formatEatEnergy(analytics.proteinCalories, energyUnit, locale)} /><MacroLine label={et("carbs")} value={analytics.carbCalories} total={analytics.macroCaloriesTotal} display={formatEatEnergy(analytics.carbCalories, energyUnit, locale)} /><MacroLine label={et("fat")} value={analytics.fatCalories} total={analytics.macroCaloriesTotal} display={formatEatEnergy(analytics.fatCalories, energyUnit, locale)} /></CardContent></Card>
     </>}
 
     <Button asChild variant="outline" className="min-h-12 w-full"><Link href="/progress"><BarChart3 className="h-4 w-4" />{et("openReports")}</Link></Button>
