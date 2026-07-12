@@ -91,8 +91,8 @@ describe("Eat meal-log redesign contracts", () => {
 
   it("uses one server-first verified batch path for legacy target assignments", () => {
     const service = source("services/database/nutrition-target-assignments.ts");
-    const batch = service.split("export async function migrateLegacyNutritionTargetOverridesForDates")[1].split("export async function migrateLegacyNutritionTargetOverride")[0];
-    const wrapper = service.split("export async function migrateLegacyNutritionTargetOverride")[1].split("export type ApplyNutritionTargetChangesInput")[0];
+    const batch = service.split("export async function migrateLegacyNutritionTargetOverridesForDates")[1].split("export async function migrateLegacyNutritionTargetOverride(userId")[0];
+    const wrapper = service.split("export async function migrateLegacyNutritionTargetOverride(userId")[1].split("export type ApplyNutritionTargetChangesInput")[0];
     expect(batch.indexOf("getNutritionTargetDateOverrides")).toBeLessThan(batch.indexOf("window.localStorage.getItem"));
     expect(batch).toContain(".upsert(candidates");
     expect(batch.match(/getNutritionTargetDateOverrides/g)?.length).toBe(2);
@@ -106,7 +106,7 @@ describe("Eat meal-log redesign contracts", () => {
     const sentinel = source("lib/hooks/unsaved-history-sentinel.ts");
     const targets = source("components/meals/nutrition-target-settings.tsx");
     expect(targets).toContain("useUnsavedChangesGuard");
-    expect(guard).toContain('window.addEventListener("beforeunload"');
+    expect(guard).toContain("bindUnsavedBeforeUnload");
     expect(guard).toContain('window.addEventListener("popstate"');
     expect(guard).toContain('document.addEventListener("click", captureLinks, true)');
     expect(guard).toContain("applyAndContinue");
