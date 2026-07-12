@@ -123,22 +123,18 @@ Never commit real secrets or production tokens.
 
 ## Supabase migrations
 
-The production project currently reports the applied migration identities below. Applied migrations are immutable; future schema changes must be new migrations. The checked-in reconciliation authority, including version aliases, drift, and pending files, is [`supabase/migration-ledger.json`](supabase/migration-ledger.json) and [`docs/architecture/migration-ledger-reconciliation.md`](docs/architecture/migration-ledger-reconciliation.md).
+The current reconciliation authority is [`supabase/migration-ledger.json`](supabase/migration-ledger.json) and [`docs/architecture/migration-ledger-reconciliation.md`](docs/architecture/migration-ledger-reconciliation.md).
 
-1. `202606290000_clean_initial_schema`
-2. `202606290001_security_privacy_mcp_hardening`
-3. `202606290002_seed_reference_data`
-4. `20260701053859_mcp_security_launch_blockers`
-5. `20260701063223_mcp_oauth_hardening`
-6. `20260702062000_phase6_consent_types`
-7. `20260702120000_mcp_service_role_permissions`
-8. `20260702124724_fix_chatgpt_connection_rotation_ambiguous_columns`
-9. `20260702174951_chatgpt_execution_layer_foundation`
-10. `20260702181448_execution_layer_reference_ownership_hardening`
-11. `20260710140133_functional_fitness_constraints` (repository file: `20260710135000_functional_fitness_constraints.sql`)
-12. `20260710145503_drop_retired_ai_request_and_safety_tables` (repository file: `20260710170000_drop_retired_ai_request_and_safety_tables.sql`)
+Verified on 2026-07-13:
 
-The schema effects associated with `20260703151807_onboarding_coaching_quick_log_preferences.sql` exist in production but its version is absent from the production ledger. Do not repair or replay it without original application evidence. Run `npm run migration:ledger:check` for repository classification; it does not claim live production parity.
+- Supabase migration history contains 24 applied migrations through `20260711014500_idempotency_uncertain_completion_guard`.
+- No repository migration is classified as pending.
+- Three later migrations are absent from Supabase migration history but their complete schema effects were verified in production:
+  - `20260711213000_adaptive_onboarding_v2.sql`
+  - `20260712173000_persistent_meal_plan_skip_status.sql`
+  - `20260712195000_nutrition_target_date_overrides.sql`
+
+Do not replay schema-untracked migrations. Repair migration-history metadata only through an approved, evidence-backed Supabase workflow. Run `npm run migration:ledger:check` to validate repository classification.
 
 Do not run pre-clean-rebuild migrations against the current project.
 
