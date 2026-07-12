@@ -30,13 +30,21 @@ export type RepeatFoodOption = FoodLog & {
   score: number;
 };
 
+export type EatWeekTargetDay = {
+  date: string;
+  planned_calories: number;
+  has_targets: boolean;
+};
+
 export type WeekNutritionAnalytics = {
   loggedDays: number;
   coverageLabel: "empty" | "partial" | "complete";
   averageCaloriesLoggedDays: number | null;
   averageProteinLoggedDays: number | null;
   calendarAverageCalories: number | null;
+  targetEligibleLoggedDays: number;
   adherenceDays: number | null;
+  targetsState: "available" | "partial" | "not-configured";
   proteinCalories: number;
   carbCalories: number;
   fatCalories: number;
@@ -210,23 +218,40 @@ export function findCopyDuplicates(source: FoodLog[], target: FoodLog[]) {
   return source.filter((item) => existing.has(foodLogDuplicateKey(item))).map((item) => item.id);
 }
 
-export function buildWeekAnalytics(days: DailyNutritionSummary[], targetCalories: number | null, tolerance = 0.05): WeekNutritionAnalytics {
+export function applyWeekTargets(days: DailyNutritionSummary[], targets: EatWeekTargetDay[]) {
+  const byDate = new Map(targets.map((target) => [target.date, target]));
+  return days.map((day) => {
+    const target = byDate.get(day.date);
+    return target ? { ...day, planned_calories: target.planned_calories, has_targets: target.has_targets } : day;
+  });
+}
+
+export function buildWeekAnalytics(days: DailyNutritionSummary[], tolerance = 0.05): WeekNutritionAnalytics {
   const logged = days.filter((day) => day.logs.length > 0);
   const calories = logged.reduce((sum, day) => sum + finite(day.calories), 0);
   const protein = logged.reduce((sum, day) => sum + finite(day.protein_g), 0);
   const proteinCalories = logged.reduce((sum, day) => sum + finite(day.protein_g) * 4, 0);
   const carbCalories = logged.reduce((sum, day) => sum + finite(day.carbs_g) * 4, 0);
   const fatCalories = logged.reduce((sum, day) => sum + finite(day.fat_g) * 9, 0);
-  const adherenceDays = targetCalories && targetCalories > 0 && logged.length
-    ? logged.filter((day) => Math.abs(finite(day.calories) - targetCalories) / targetCalories <= tolerance).length
+  const targetEligible = logged.filter((day) => Boolean(day.has_targets) && finite(day.planned_calories) > 0);
+  const adherenceDays = targetEligible.length
+    ? targetEligible.filter((day) => Math.abs(finite(day.calories) - finite(day.planned_calories)) / finite(day.planned_calories) <= tolerance).length
     : null;
+  const configuredDays = days.filter((day) => Boolean(day.has_targets) && finite(day.planned_calories) > 0).length;
+  const targetsState = configuredDays === 0
+    ? "not-configured"
+    : targetEligible.length === logged.length
+      ? "available"
+      : "partial";
   return {
     loggedDays: logged.length,
     coverageLabel: logged.length === 0 ? "empty" : logged.length === 7 ? "complete" : "partial",
     averageCaloriesLoggedDays: logged.length ? Math.round(calories / logged.length) : null,
     averageProteinLoggedDays: logged.length ? Math.round((protein / logged.length) * 10) / 10 : null,
     calendarAverageCalories: logged.length ? Math.round(calories / 7) : null,
+    targetEligibleLoggedDays: targetEligible.length,
     adherenceDays,
+    targetsState,
     proteinCalories: Math.round(proteinCalories),
     carbCalories: Math.round(carbCalories),
     fatCalories: Math.round(fatCalories),
