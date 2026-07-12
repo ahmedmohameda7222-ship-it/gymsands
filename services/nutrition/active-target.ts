@@ -1,9 +1,7 @@
-import type { NutritionTargetProfileType, UserNutritionTargetProfile, UserWorkoutPlan } from "@/types";
+import type { NutritionTargetAssignment, NutritionTargetProfileType, UserNutritionTargetProfile, UserWorkoutPlan } from "@/types";
 import type { SavedTargets } from "@/services/nutrition/targets";
 
-export const ACTIVE_NUTRITION_TARGET_EVENT = "plaivra:active-nutrition-target-change";
-
-export type NutritionTargetOverride = NutritionTargetProfileType | "auto";
+export type NutritionTargetOverride = NutritionTargetAssignment;
 
 export type ActiveNutritionTarget = {
   values: SavedTargets;
@@ -66,7 +64,7 @@ export function resolveActiveNutritionTarget({
           ? "No workout is scheduled for this date."
           : requestedType === "high_activity_day"
             ? "A high-activity override is active for this date."
-            : "The normal-day target is active.",
+            : "The fallback target is active.",
       hasTarget
     };
   }
@@ -78,7 +76,7 @@ export function resolveActiveNutritionTarget({
       requestedType,
       sourceType,
       label: "Default day",
-      reason: `${labels[requestedType]} has no saved profile, so the default target is active.`,
+      reason: `${labels[requestedType]} has no saved profile, so the fallback target is active.`,
       hasTarget
     };
   }
@@ -90,7 +88,7 @@ export function resolveActiveNutritionTarget({
     sourceType,
     label: baseTarget ? "Base fallback" : labels[requestedType],
     reason: baseTarget
-      ? "No day-type profile is saved, so the base target is active."
+      ? "No reusable target profile is saved, so the legacy base target is used as a backend fallback."
       : "No target is saved for this date.",
     hasTarget
   };
@@ -102,41 +100,19 @@ export function detectNutritionTargetTypeForDate(plan: UserWorkoutPlan | null | 
 }
 
 export function resolveEatTargetForDate({
-  userId,
   date,
   profiles,
   baseTarget,
   plan,
-  override
+  override = "auto"
 }: {
-  userId: string;
+  userId?: string;
   date: string;
   profiles: UserNutritionTargetProfile[];
   baseTarget: SavedTargets | null;
   plan: UserWorkoutPlan | null | undefined;
   override?: NutritionTargetOverride;
 }) {
-  const selectedOverride = override ?? getActiveTargetOverride(userId, date);
-  const requestedType = selectedOverride === "auto" ? detectNutritionTargetTypeForDate(plan, date) : selectedOverride;
+  const requestedType = override === "auto" ? detectNutritionTargetTypeForDate(plan, date) : override;
   return resolveActiveNutritionTarget({ profiles, baseTarget, requestedType });
-}
-
-export function getActiveTargetOverride(userId: string, date: string): NutritionTargetOverride {
-  if (typeof window === "undefined") return "auto";
-  const value = window.localStorage.getItem(targetOverrideKey(userId, date));
-  return value === "default_day" || value === "training_day" || value === "rest_day" || value === "high_activity_day"
-    ? value
-    : "auto";
-}
-
-export function setActiveTargetOverride(userId: string, date: string, value: NutritionTargetOverride) {
-  if (typeof window === "undefined") return;
-  const key = targetOverrideKey(userId, date);
-  if (value === "auto") window.localStorage.removeItem(key);
-  else window.localStorage.setItem(key, value);
-  window.dispatchEvent(new CustomEvent(ACTIVE_NUTRITION_TARGET_EVENT, { detail: { date, value } }));
-}
-
-function targetOverrideKey(userId: string, date: string) {
-  return `plaivra:nutrition-target:${userId}:${date}`;
 }

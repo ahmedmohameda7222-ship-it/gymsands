@@ -1,0 +1,166 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { UnsavedHistorySentinel } from "@/lib/hooks/unsaved-history-sentinel";
+import { bindUnsavedBeforeUnload, resolveUnsavedInternalLink } from "@/lib/hooks/unsaved-navigation-events";
+
+type PendingAction = { run: () => void; historyExit?: boolean };
+
+type UnsavedChangesCopy = {
+  title: string;
+  description: string;
+  apply: string;
+  discard: string;
+  stay: string;
+};
+
+export function useUnsavedChangesGuard({
+  dirty,
+  applying,
+  onApply,
+  onDiscard,
+  copy
+}: {
+  dirty: boolean;
+  applying: boolean;
+  onApply: () => Promise<boolean>;
+  onDiscard: () => void;
+  copy: UnsavedChangesCopy;
+}) {
+  const router = useRouter();
+  const [pending, setPending] = useState<PendingAction | null>(null);
+  const sentinelRef = useRef<UnsavedHistorySentinel | null>(null);
+  const historyWarningPendingRef = useRef(false);
+
+  const sentinel = useCallback(() => {
+    if (typeof window === "undefined") return null;
+    if (!sentinelRef.current) sentinelRef.current = new UnsavedHistorySentinel(window.history, window.location);
+    return sentinelRef.current;
+  }, []);
+
+  const request = useCallback((run: () => void, options?: { historyExit?: boolean }) => {
+    if (!dirty) {
+      run();
+      return;
+    }
+    setPending({ run, historyExit: options?.historyExit });
+  }, [dirty]);
+
+  const continueNavigation = useCallback((action: PendingAction) => {
+    setPending(null);
+    historyWarningPendingRef.current = false;
+    if (action.historyExit) {
+      action.run();
+      return;
+    }
+    sentinel()?.prepareInAppNavigation();
+    action.run();
+  }, [sentinel]);
+
+  const applyAndContinue = useCallback(async () => {
+    if (!pending || applying) return;
+    const applied = await onApply();
+    if (applied) continueNavigation(pending);
+  }, [applying, continueNavigation, onApply, pending]);
+
+  const discardAndContinue = useCallback(() => {
+    if (!pending || applying) return;
+    onDiscard();
+    continueNavigation(pending);
+  }, [applying, continueNavigation, onDiscard, pending]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    return bindUnsavedBeforeUnload({
+      addEventListener: (_type, listener) => window.addEventListener("beforeunload", listener as (event: BeforeUnloadEvent) => void),
+      removeEventListener: (_type, listener) => window.removeEventListener("beforeunload", listener as (event: BeforeUnloadEvent) => void)
+    });
+  }, [dirty]);
+
+  useEffect(() => {
+    const controller = sentinel();
+    if (!controller) return;
+    if (!dirty) {
+      historyWarningPendingRef.current = false;
+      controller.deactivate();
+      setPending(null);
+      return;
+    }
+
+    controller.activate();
+    const popState = (event: PopStateEvent) => {
+      const result = controller.handlePopState(event.state);
+      if (result === "intercepted") {
+        historyWarningPendingRef.current = true;
+        return;
+      }
+      if (result !== "restored" || !historyWarningPendingRef.current) return;
+      historyWarningPendingRef.current = false;
+      setPending({
+        historyExit: true,
+        run: () => controller.continueHistoryExit()
+      });
+    };
+    window.addEventListener("popstate", popState);
+    return () => window.removeEventListener("popstate", popState);
+  }, [dirty, sentinel]);
+
+  useEffect(() => () => sentinelRef.current?.dispose(), []);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const captureLinks = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      if (!(target instanceof HTMLAnchorElement)) return;
+      const destination = resolveUnsavedInternalLink({
+        defaultPrevented: event.defaultPrevented,
+        button: event.button,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+        href: target.href,
+        currentHref: window.location.href,
+        target: target.target,
+        download: target.hasAttribute("download")
+      });
+      if (!destination) return;
+      event.preventDefault();
+      request(() => router.push(destination));
+    };
+    document.addEventListener("click", captureLinks, true);
+    return () => document.removeEventListener("click", captureLinks, true);
+  }, [dirty, request, router]);
+
+  const dialog = (
+    <Dialog open={Boolean(pending)} onOpenChange={(open) => {
+      if (!open && !applying) {
+        historyWarningPendingRef.current = false;
+        setPending(null);
+      }
+    }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{copy.title}</DialogTitle>
+          <DialogDescription>{copy.description}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Button type="button" onClick={() => void applyAndContinue()} disabled={applying} className="min-h-12">
+            {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{copy.apply}
+          </Button>
+          <Button type="button" variant="outline" onClick={discardAndContinue} disabled={applying} className="min-h-12">{copy.discard}</Button>
+          <Button type="button" variant="ghost" onClick={() => {
+            historyWarningPendingRef.current = false;
+            setPending(null);
+          }} disabled={applying} className="min-h-12">{copy.stay}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
+  return { request, dialog, hasPendingNavigation: Boolean(pending) };
+}
