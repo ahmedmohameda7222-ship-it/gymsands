@@ -51,7 +51,7 @@ export function buildRuntimePrompt(definition: QuickPromptDefinition, context: Q
 }
 
 export function getRuntimeContextChips(definition: QuickPromptDefinition, context: QuickPromptContext, language: PromptLanguage) {
-  return buildPromptContextItems(definition, context, language).slice(0, 8).map((item) => `${item.label}: ${item.value}`);
+  return buildPromptContextItems(definition, context, language).slice(0, 6).map((item) => `${item.label}: ${item.value}`);
 }
 
 const publicTools = new Set<string>(MCP_PUBLIC_TOOL_NAMES);
@@ -102,20 +102,26 @@ export function getRuntimeHomeSections(context: QuickPromptContext): PromptHomeS
 }
 
 export function getEatRuntimeHome(context: QuickPromptContext): EatPromptHome {
-  const byId = new Map(RUNTIME_QUICK_PROMPTS.map((prompt) => [prompt.id, prompt]));
-  const recommendedIds = ["finish-macros", "plan-rest-meals", "review-day-nutrition", "replace-meal", "review-hydration"];
-  const recommended = recommendedIds.map((id) => byId.get(id)).filter((prompt): prompt is QuickPromptDefinition => Boolean(prompt?.eligible(context)));
-  const nutrition = RUNTIME_QUICK_PROMPTS.filter((prompt) => prompt.category === "nutrition");
+  const byId = new Map<PromptId, QuickPromptDefinition>(RUNTIME_QUICK_PROMPTS.map((prompt) => [prompt.id, prompt]));
+  const recommendedIds: PromptId[] = ["finish-macros", "plan-rest-meals", "review-day-nutrition", "replace-meal", "review-hydration"];
+  const recommended = recommendedIds.flatMap((id) => {
+    const prompt = byId.get(id);
+    return prompt?.eligible(context) ? [prompt] : [];
+  });
+  const nutrition: QuickPromptDefinition[] = RUNTIME_QUICK_PROMPTS.filter((prompt) => prompt.category === "nutrition");
   return { recommended, nutrition };
 }
 
-export function getMealAdjustmentRuntimePrompts(context: QuickPromptContext) {
-  const byId = new Map(RUNTIME_QUICK_PROMPTS.map((prompt) => [prompt.id, prompt]));
+export function getMealAdjustmentRuntimePrompts(context: QuickPromptContext): QuickPromptDefinition[] {
+  const byId = new Map<PromptId, QuickPromptDefinition>(RUNTIME_QUICK_PROMPTS.map((prompt) => [prompt.id, prompt]));
   const relevance = context.selection?.plannedMeal ? detectMealPromptRelevance(context.selection.plannedMeal) : { dairy: false, gluten: false };
-  const ids = ["replace-meal", "make-meal-cheaper", "make-meal-faster", "make-meal-higher-protein", "swap-meal-ingredients"];
+  const ids: PromptId[] = ["replace-meal", "make-meal-cheaper", "make-meal-faster", "make-meal-higher-protein", "swap-meal-ingredients"];
   if (relevance.dairy) ids.push("make-meal-dairy-free");
   if (relevance.gluten) ids.push("make-meal-gluten-free");
-  return ids.map((id) => byId.get(id)).filter((prompt): prompt is QuickPromptDefinition => Boolean(prompt?.eligible(context)));
+  return ids.flatMap((id) => {
+    const prompt = byId.get(id);
+    return prompt?.eligible(context) ? [prompt] : [];
+  });
 }
 
 export function filterRuntimeLibrary(input: { search?: string; category?: PromptCategory | "all"; language: PromptLanguage }) { return filterPromptLibrary({ ...input, prompts: RUNTIME_QUICK_PROMPTS }); }
