@@ -4,11 +4,7 @@ import { addIsoDays, startOfEatWeek, type EatWeekTargetDay } from "@/lib/eat/eat
 import { getCalorieTargets } from "@/services/database/nutrition";
 import { getNutritionTargetProfiles } from "@/services/database/execution-layer";
 import { getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
-import {
-  getNutritionTargetDateOverride,
-  getNutritionTargetDateOverrides,
-  migrateLegacyNutritionTargetOverride
-} from "@/services/database/nutrition-target-assignments";
+import { migrateLegacyNutritionTargetOverridesForDates } from "@/services/database/nutrition-target-assignments";
 import { resolveEatTargetForDate, type ActiveNutritionTarget } from "@/services/nutrition/active-target";
 import type { NutritionTargetAssignment } from "@/types";
 
@@ -27,9 +23,11 @@ async function loadTargetSources(userId: string) {
 }
 
 export async function getEatTargetForDate(userId: string, date: string): Promise<ActiveNutritionTarget> {
-  const sources = await loadTargetSources(userId);
-  const migrated = await migrateLegacyNutritionTargetOverride(userId, date);
-  const override = migrated ?? await getNutritionTargetDateOverride(userId, date);
+  const [sources, overrides] = await Promise.all([
+    loadTargetSources(userId),
+    migrateLegacyNutritionTargetOverridesForDates(userId, [date])
+  ]);
+  const override = overrides.find((row) => row.target_date === date);
   return resolveEatTargetForDate({
     date,
     ...sources,
@@ -38,18 +36,16 @@ export async function getEatTargetForDate(userId: string, date: string): Promise
 }
 
 export async function getEatTargetAssignmentForDate(userId: string, date: string): Promise<NutritionTargetAssignment> {
-  const migrated = await migrateLegacyNutritionTargetOverride(userId, date);
-  const override = migrated ?? await getNutritionTargetDateOverride(userId, date);
-  return override?.target_type ?? "auto";
+  const overrides = await migrateLegacyNutritionTargetOverridesForDates(userId, [date]);
+  return overrides.find((row) => row.target_date === date)?.target_type ?? "auto";
 }
 
 export async function getEatWeekTargets(userId: string, selectedDate: string): Promise<EatWeekTargetDay[]> {
   const weekStart = startOfEatWeek(selectedDate);
-  const weekEnd = addIsoDays(weekStart, 6);
   const dates = Array.from({ length: 7 }, (_, index) => addIsoDays(weekStart, index));
   const [sources, overrides] = await Promise.all([
     loadTargetSources(userId),
-    getNutritionTargetDateOverrides(userId, weekStart, weekEnd)
+    migrateLegacyNutritionTargetOverridesForDates(userId, dates)
   ]);
   const byDate = new Map(overrides.map((override) => [override.target_date, override.target_type]));
   return dates.map((date) => {
