@@ -9,12 +9,7 @@ import type { FoodLog } from "@/types";
 
 export type TodayNutritionDependencies = {
   loadLogs: (userId: string, date: string) => Promise<FoodLog[]>;
-  loadTarget: (userId: string, date: string) => Promise<ActiveNutritionTarget>;
-};
-
-const defaultDependencies: TodayNutritionDependencies = {
-  loadLogs: (userId, date) => getTodayFoodLogs(userId, date, { throwOnError: true }),
-  loadTarget: getEatTargetForDate
+  loadTargetData: (userId: string, date: string) => Promise<TodayNutritionTargetData>;
 };
 
 export function todayTargetData(activeTarget: ActiveNutritionTarget): TodayNutritionTargetData {
@@ -24,13 +19,14 @@ export function todayTargetData(activeTarget: ActiveNutritionTarget): TodayNutri
   };
 }
 
-export async function getTodayNutritionTargetData(
-  userId: string,
-  date: string,
-  dependencies: Pick<TodayNutritionDependencies, "loadTarget"> = defaultDependencies
-): Promise<TodayNutritionTargetData> {
-  return todayTargetData(await dependencies.loadTarget(userId, date));
+export async function getTodayNutritionTargetData(userId: string, date: string): Promise<TodayNutritionTargetData> {
+  return todayTargetData(await getEatTargetForDate(userId, date));
 }
+
+const defaultDependencies: TodayNutritionDependencies = {
+  loadLogs: (userId, date) => getTodayFoodLogs(userId, date, { throwOnError: true }),
+  loadTargetData: getTodayNutritionTargetData
+};
 
 export async function getTodayNutritionData(
   userId: string,
@@ -39,12 +35,9 @@ export async function getTodayNutritionData(
 ): Promise<TodayNutritionData> {
   const [logsResult, targetResult] = await Promise.allSettled([
     dependencies.loadLogs(userId, date),
-    dependencies.loadTarget(userId, date)
+    dependencies.loadTargetData(userId, date)
   ]);
-  const mappedTargetResult: PromiseSettledResult<TodayNutritionTargetData> = targetResult.status === "fulfilled"
-    ? { status: "fulfilled", value: todayTargetData(targetResult.value) }
-    : targetResult;
-  return resolveTodayNutritionSources(logsResult, mappedTargetResult);
+  return resolveTodayNutritionSources(logsResult, targetResult);
 }
 
 export function shouldRefreshTodayNutritionTarget(eventDate: unknown, today: string) {
