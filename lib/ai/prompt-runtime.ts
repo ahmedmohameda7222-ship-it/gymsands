@@ -1,4 +1,5 @@
 import { INTERNAL_AI_ACTION_NAMES, WRITE_CAPABLE_AI_ACTION_NAMES } from "@/lib/ai/action-registry";
+import { detectMealPromptRelevance } from "@/lib/ai/planned-meal-context";
 import { buildPromptContextItems, validatePromptContextPermissionContract, type PromptContextField } from "@/lib/ai/prompt-context";
 import { TASK_CONTRACTS, getPromptTaskContract } from "@/lib/ai/prompt-contracts";
 import { MCP_PUBLIC_TOOL_NAMES, mcpTools } from "@/lib/mcp/tools";
@@ -19,6 +20,7 @@ export type PromptCatalogAuditEntry = {
   prerequisites: string[];
   runtimeExposed: boolean;
 };
+export type EatPromptHome = { recommended: QuickPromptDefinition[]; nutrition: QuickPromptDefinition[] };
 
 const value = (entry: LocalizedText, language: PromptLanguage) => entry[language];
 const sectionCopy = {
@@ -49,7 +51,7 @@ export function buildRuntimePrompt(definition: QuickPromptDefinition, context: Q
 }
 
 export function getRuntimeContextChips(definition: QuickPromptDefinition, context: QuickPromptContext, language: PromptLanguage) {
-  return buildPromptContextItems(definition, context, language).slice(0, 6).map((item) => `${item.label}: ${item.value}`);
+  return buildPromptContextItems(definition, context, language).slice(0, 8).map((item) => `${item.label}: ${item.value}`);
 }
 
 const publicTools = new Set<string>(MCP_PUBLIC_TOOL_NAMES);
@@ -77,13 +79,13 @@ export function auditPromptCatalog(): PromptCatalogAuditEntry[] {
     const permission = validatePromptContextPermissionContract(definition);
     const backing = getBackingCapabilityStatus(definition);
     return {
-      promptId: definition.id,
+      promptId: definition.id as PromptId,
       category: definition.category,
       capability: definition.capability,
       permissionSections: [...definition.permissionSections],
       contextFields: [...getPromptTaskContract(definition).contextFields],
       contextPermissionContractValid: permission.valid,
-      taskContractExists: Boolean(TASK_CONTRACTS[definition.id]),
+      taskContractExists: Boolean(TASK_CONTRACTS[definition.id as PromptId]),
       backingActionsValid: backing.unknown.length === 0 && backing.known.length === backing.declared.length,
       writeBackingValid: definition.capability === "read" || backing.writeCapable.length > 0,
       prerequisites: definition.prerequisites.map((item) => item.id),
@@ -98,6 +100,24 @@ export function getRuntimeHomeSections(context: QuickPromptContext): PromptHomeS
   const quick = ranked.filter((item) => item.quick && !used.has(item.id)).slice(0, 6); quick.forEach((item) => used.add(item.id));
   const dynamic = ranked.filter((item) => !used.has(item.id)).slice(0, 5); return { recommended, quick, dynamic };
 }
+
+export function getEatRuntimeHome(context: QuickPromptContext): EatPromptHome {
+  const byId = new Map(RUNTIME_QUICK_PROMPTS.map((prompt) => [prompt.id, prompt]));
+  const recommendedIds = ["finish-macros", "plan-rest-meals", "review-day-nutrition", "replace-meal", "review-hydration"];
+  const recommended = recommendedIds.map((id) => byId.get(id)).filter((prompt): prompt is QuickPromptDefinition => Boolean(prompt?.eligible(context)));
+  const nutrition = RUNTIME_QUICK_PROMPTS.filter((prompt) => prompt.category === "nutrition");
+  return { recommended, nutrition };
+}
+
+export function getMealAdjustmentRuntimePrompts(context: QuickPromptContext) {
+  const byId = new Map(RUNTIME_QUICK_PROMPTS.map((prompt) => [prompt.id, prompt]));
+  const relevance = context.selection?.plannedMeal ? detectMealPromptRelevance(context.selection.plannedMeal) : { dairy: false, gluten: false };
+  const ids = ["replace-meal", "make-meal-cheaper", "make-meal-faster", "make-meal-higher-protein", "swap-meal-ingredients"];
+  if (relevance.dairy) ids.push("make-meal-dairy-free");
+  if (relevance.gluten) ids.push("make-meal-gluten-free");
+  return ids.map((id) => byId.get(id)).filter((prompt): prompt is QuickPromptDefinition => Boolean(prompt?.eligible(context)));
+}
+
 export function filterRuntimeLibrary(input: { search?: string; category?: PromptCategory | "all"; language: PromptLanguage }) { return filterPromptLibrary({ ...input, prompts: RUNTIME_QUICK_PROMPTS }); }
 
 export { getPromptAvailability, localizePrompt };
