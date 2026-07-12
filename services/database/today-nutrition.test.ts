@@ -63,7 +63,22 @@ const profiles = [
   profile("high_activity_day", 2400)
 ];
 const baseTarget = { daily_calories: 1800, protein_g: 140, carbs_g: 180, fat_g: 55, water_ml: 2800 };
-const logs = [{ id: "log", user_id: userId, log_date: monday, food_name: "Meal", meal_type: "Lunch", serving_size: "1", quantity: 1, calories: 500, protein_g: 30, carbs_g: 50, fat_g: 15, notes: null, created_at: "" }] as FoodLog[];
+const logs: FoodLog[] = [{
+  id: "log",
+  user_id: userId,
+  food_item_id: null,
+  user_food_item_id: null,
+  log_date: monday,
+  food_name: "Meal",
+  meal_type: "Lunch",
+  serving_size: "1",
+  quantity: 1,
+  calories: 500,
+  protein_g: 30,
+  carbs_g: 50,
+  fat_g: 15,
+  notes: null
+}];
 
 function active(date: string, override: "auto" | UserNutritionTargetProfile["target_type"]): ActiveNutritionTarget {
   return resolveEatTargetForDate({ date, profiles, baseTarget, plan, override });
