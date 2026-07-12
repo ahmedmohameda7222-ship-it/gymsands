@@ -23,15 +23,17 @@ describe("ChatGPT action presentation", () => {
       context,
       "Keep the movement shoulder friendly."
     );
+    const lines = prompt.split("\n");
 
     expect(prompt).toContain("Connect to my Plaivra account");
     expect(prompt).toContain("minimum authorized workouts context");
-    expect(prompt).toContain("Context:");
-    expect(prompt).toContain("Workout: Push Day.");
-    expect(prompt).toContain("Exercise: Bench Press.");
-    expect(prompt).toContain("Keep the movement shoulder friendly.");
+    expect(lines).toContain("Context:");
+    expect(lines).toContain("- Workout: Push Day");
+    expect(lines).toContain("- Exercise: Bench Press");
+    expect(lines).toContain("Additional instruction: Keep the movement shoulder friendly.");
     expect(prompt).toContain("Plaivra tools");
-    expect(prompt).toContain("tool confirms success");
+    expect(prompt).toContain("do not claim success until the tool confirms it");
+    expect(prompt).not.toContain("\\n");
     expect(prompt).not.toContain("private-day-id");
     expect(prompt).not.toContain("private-exercise-id");
     expect(prompt).not.toContain("context_json");
