@@ -48,6 +48,7 @@ export function EatPage() {
   const rawView = searchParams.get("view");
   const selectedDate = parseEatDate(rawDate, today);
   const view = parseEatView(rawView);
+  const initialSuggestedMeal = suggestMealType(selectedDate, today, new Date().getHours());
 
   const [logs, setLogs] = useState<SourceState<FoodLog[]>>(loadingLogs);
   const [water, setWater] = useState<SourceState<WaterLog[]>>(loadingWater);
@@ -56,7 +57,7 @@ export function EatPage() {
   const [week, setWeek] = useState<SourceState<DailyNutritionSummary[]>>(loadingWeek);
   const [activeTarget, setActiveTarget] = useState<SourceState<ActiveNutritionTarget | null>>(loadingTarget);
   const [addFoodOpen, setAddFoodOpen] = useState(false);
-  const [addFoodMeal, setAddFoodMeal] = useState<MealType>("Lunch");
+  const [addFoodMeal, setAddFoodMeal] = useState<MealType>(initialSuggestedMeal);
   const [addFoodStart, setAddFoodStart] = useState<AddFoodStart>("home");
   const [repeatPending, setRepeatPending] = useState<string | null>(null);
   const [repeatFeedback, setRepeatFeedback] = useState("");
@@ -80,31 +81,22 @@ export function EatPage() {
   const loadLogs = useCallback(async () => {
     if (!userId) return;
     setLogs((current) => ({ status: "loading", data: current.data }));
-    try {
-      setLogs({ status: "loaded", data: await getEatFoodLogs(userId, selectedDate) });
-    } catch (error) {
-      setLogs({ status: "failed", error: error instanceof Error ? error.message : et("logsFailed") });
-    }
+    try { setLogs({ status: "loaded", data: await getEatFoodLogs(userId, selectedDate) }); }
+    catch (error) { setLogs({ status: "failed", error: error instanceof Error ? error.message : et("logsFailed") }); }
   }, [et, selectedDate, userId]);
 
   const loadWater = useCallback(async () => {
     if (!userId) return;
     setWater((current) => ({ status: "loading", data: current.data }));
-    try {
-      setWater({ status: "loaded", data: await getEatWaterLogs(userId, selectedDate) });
-    } catch (error) {
-      setWater({ status: "failed", error: error instanceof Error ? error.message : et("waterFailed") });
-    }
+    try { setWater({ status: "loaded", data: await getEatWaterLogs(userId, selectedDate) }); }
+    catch (error) { setWater({ status: "failed", error: error instanceof Error ? error.message : et("waterFailed") }); }
   }, [et, selectedDate, userId]);
 
   const loadPlannedMeals = useCallback(async () => {
     if (!userId) return;
     setPlannedMeals((current) => ({ status: "loading", data: current.data }));
-    try {
-      setPlannedMeals({ status: "loaded", data: await getEatMealPlanItems(userId, selectedDate) });
-    } catch (error) {
-      setPlannedMeals({ status: "failed", error: error instanceof Error ? error.message : et("plannedFailed") });
-    }
+    try { setPlannedMeals({ status: "loaded", data: await getEatMealPlanItems(userId, selectedDate) }); }
+    catch (error) { setPlannedMeals({ status: "failed", error: error instanceof Error ? error.message : et("plannedFailed") }); }
   }, [et, selectedDate, userId]);
 
   const loadRepeats = useCallback(async () => {
@@ -121,11 +113,8 @@ export function EatPage() {
   const loadWeek = useCallback(async () => {
     if (!userId) return;
     setWeek((current) => ({ status: "loading", data: current.data }));
-    try {
-      setWeek({ status: "loaded", data: await getEatWeek(userId, selectedDate) });
-    } catch (error) {
-      setWeek({ status: "failed", error: error instanceof Error ? error.message : et("weekFailed") });
-    }
+    try { setWeek({ status: "loaded", data: await getEatWeek(userId, selectedDate) }); }
+    catch (error) { setWeek({ status: "failed", error: error instanceof Error ? error.message : et("weekFailed") }); }
   }, [et, selectedDate, userId]);
 
   const loadTarget = useCallback(async () => {
@@ -150,12 +139,7 @@ export function EatPage() {
     setActiveTarget({ status: "loaded", data: resolveActiveNutritionTarget({ profiles: profilesResult.value, baseTarget: baseResult.value, requestedType: override === "auto" ? detected : override }) });
   }, [et, selectedDate, userId]);
 
-  useEffect(() => {
-    void loadLogs();
-    void loadWater();
-    void loadPlannedMeals();
-    void loadTarget();
-  }, [loadLogs, loadPlannedMeals, loadTarget, loadWater]);
+  useEffect(() => { void loadLogs(); void loadWater(); void loadPlannedMeals(); void loadTarget(); }, [loadLogs, loadPlannedMeals, loadTarget, loadWater]);
   useEffect(() => { void loadRepeats(); }, [loadRepeats]);
   useEffect(() => { void loadWeek(); }, [loadWeek]);
 
@@ -169,6 +153,10 @@ export function EatPage() {
   const suggestedMeal = suggestMealType(selectedDate, today, new Date().getHours());
   const nextMeal = plannedMeals.status === "loaded" ? selectNextPlannedMeal(plannedMeals.data, selectedDate, today, new Date().getHours()) : null;
   const targetLabel = activeTarget.status === "loaded" ? activeTarget.data?.label ?? et("targetUnavailable") : activeTarget.status === "failed" ? et("targetUnavailable") : "…";
+
+  useEffect(() => {
+    if (!addFoodOpen) setAddFoodMeal(suggestedMeal);
+  }, [addFoodOpen, selectedDate, suggestedMeal]);
 
   useEffect(() => {
     const calorieMetric = metrics.find((metric) => metric.key === "calories");
