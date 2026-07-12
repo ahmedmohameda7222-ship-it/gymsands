@@ -89,16 +89,21 @@ describe("Eat meal-log redesign contracts", () => {
     expect(service).toContain("NutritionTargetApplyConsistencyError");
   });
 
-  it("uses server-first legacy localStorage migration and removes the local key only after verification", () => {
+  it("uses one server-first verified batch path for legacy target assignments", () => {
     const service = source("services/database/nutrition-target-assignments.ts");
-    const migration = service.split("export async function migrateLegacyNutritionTargetOverride")[1].split("export type ApplyNutritionTargetChangesInput")[0];
-    expect(migration.indexOf("getNutritionTargetDateOverride")).toBeLessThan(migration.indexOf("window.localStorage.getItem"));
-    expect(migration.indexOf("const verified = await getNutritionTargetDateOverride")).toBeLessThan(migration.indexOf("window.localStorage.removeItem"));
-    expect(migration).not.toContain("setItem");
+    const batch = service.split("export async function migrateLegacyNutritionTargetOverridesForDates")[1].split("export async function migrateLegacyNutritionTargetOverride")[0];
+    const wrapper = service.split("export async function migrateLegacyNutritionTargetOverride")[1].split("export type ApplyNutritionTargetChangesInput")[0];
+    expect(batch.indexOf("getNutritionTargetDateOverrides")).toBeLessThan(batch.indexOf("window.localStorage.getItem"));
+    expect(batch).toContain(".upsert(candidates");
+    expect(batch.match(/getNutritionTargetDateOverrides/g)?.length).toBe(2);
+    expect(batch.indexOf("const verified =")).toBeLessThan(batch.indexOf("window.localStorage.removeItem"));
+    expect(batch).toContain("row.user_id !== userId");
+    expect(wrapper).toContain("migrateLegacyNutritionTargetOverridesForDates(userId, [date])");
   });
 
-  it("protects unapplied target changes through one reusable guard", () => {
+  it("protects unapplied target changes with a tokenized history sentinel", () => {
     const guard = source("lib/hooks/use-unsaved-changes-guard.tsx");
+    const sentinel = source("lib/hooks/unsaved-history-sentinel.ts");
     const targets = source("components/meals/nutrition-target-settings.tsx");
     expect(targets).toContain("useUnsavedChangesGuard");
     expect(guard).toContain('window.addEventListener("beforeunload"');
@@ -106,8 +111,35 @@ describe("Eat meal-log redesign contracts", () => {
     expect(guard).toContain('document.addEventListener("click", captureLinks, true)');
     expect(guard).toContain("applyAndContinue");
     expect(guard).toContain("discardAndContinue");
-    expect(guard).toContain("setPending(null)");
-    expect(guard).toContain("removeEventListener");
+    expect(sentinel).toContain("UNSAVED_HISTORY_TOKEN_KEY");
+    expect(sentinel).toContain("replaceState");
+    expect(sentinel).not.toContain("pushState");
+    expect(sentinel).not.toContain("go(-2)");
+  });
+
+  it("keeps default Return to Eat date-aware while preserving only safe custom returns", () => {
+    const page = source("app/(private)/settings/nutrition-targets/page.tsx");
+    const targets = source("components/meals/nutrition-target-settings.tsx");
+    const model = source("lib/eat/nutrition-target-return.ts");
+    expect(page).toContain("parseNutritionTargetsReturnDestination");
+    expect(targets).toContain("resolveNutritionTargetsReturnHref(returnDestination, selectedDate)");
+    expect(targets).toContain("buildNutritionTargetsDateHref(date, returnDestination)");
+    expect(model).toContain('kind: "default-eat"');
+    expect(model).toContain('kind: "custom"');
+    expect(model).toContain('value.startsWith("//")');
+    expect(model).toContain('value.includes("\\\\")');
+  });
+
+  it("loads Today targets from the same canonical server-backed resolver as Eat", () => {
+    const dashboard = source("components/dashboard/today-dashboard.tsx");
+    const service = source("services/database/today-nutrition.ts");
+    const activeTarget = source("services/nutrition/active-target.ts");
+    expect(service).toContain("getEatTargetForDate");
+    expect(dashboard).toContain("getTodayNutritionTargetData");
+    expect(dashboard).toContain("subscribeToTodayNutritionTargetChanges");
+    expect(dashboard).not.toContain("getActiveTargetOverride");
+    expect(dashboard).not.toContain("localStorage");
+    expect(activeTarget).not.toContain("getActiveTargetOverride");
   });
 
   it("keeps target administration outside Eat and removes DOM cleanup", () => {
@@ -180,13 +212,14 @@ describe("Eat meal-log redesign contracts", () => {
     expect(hub).toContain("returnHref");
   });
 
-  it("resolves Week targets independently for every date from server assignments", () => {
+  it("resolves Week targets independently after verified batch migration", () => {
     const route = source("components/meals/eat-page.tsx");
     const targets = source("services/database/eat-targets.ts");
     const week = source("components/meals/eat-week-view.tsx");
     expect(route).toContain("getEatWeekTargets(userId, selectedDate)");
-    expect(targets).toContain("getNutritionTargetDateOverrides");
+    expect(targets).toContain("migrateLegacyNutritionTargetOverridesForDates(userId, dates)");
     expect(targets).toContain("byDate.get(date)");
+    expect(targets).not.toContain("getNutritionTargetDateOverrides");
     expect(week).toContain("applyWeekTargets");
     expect(week).toContain("targetEligibleLoggedDays");
   });
@@ -262,7 +295,7 @@ describe("Eat meal-log redesign contracts", () => {
     expect(nav).toContain('section === "water" ? 1');
   });
 
-  it("records the new migration as pending without applying production changes", () => {
+  it("records the existing migration as pending without applying production changes", () => {
     const ledger = source("supabase/migration-ledger.json");
     expect(ledger).toContain("20260712195000_nutrition_target_date_overrides.sql");
     expect(ledger).toContain('"state": "pending"');
