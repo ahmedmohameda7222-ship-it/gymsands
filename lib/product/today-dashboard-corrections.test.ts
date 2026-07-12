@@ -16,9 +16,11 @@ describe("Today dashboard implementation contracts", () => {
     expect(ui).not.toContain("Continue with ChatGPT");
   });
 
-  it("uses the bottom-sheet layout at phone widths and localized permission labels", () => {
+  it("uses the responsive drawer layout and localized permission labels", () => {
     const ui = source("components/ai/quick-chatgpt-provider.tsx");
-    expect(ui).toContain("inset-x-0 bottom-0 left-0 top-auto");
+    const dialog = source("components/ui/dialog.tsx");
+    expect(ui).toContain('layout="responsive-drawer"');
+    expect(dialog).toContain("inset-x-0 bottom-0 top-auto");
     expect(ui).toContain("permissionLabelKeys");
     expect(ui).not.toContain('missingSections.join(", ")');
   });
