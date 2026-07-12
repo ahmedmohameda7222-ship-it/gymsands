@@ -8,6 +8,13 @@ const ledgerPath = path.join(root, "supabase", "migration-ledger.json");
 const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
 const files = (await readdir(migrationsDir)).filter((file) => file.endsWith(".sql")).sort();
 const errors = [];
+const allowedStates = new Set([
+  "applied",
+  "pending",
+  "applied_version_alias",
+  "ledger_drift_review",
+  "applied_schema_untracked"
+]);
 
 if (ledger.schemaVersion !== 1) errors.push("Unsupported migration ledger schemaVersion.");
 if (!/^[a-z0-9]{20}$/.test(ledger.projectRef ?? "")) errors.push("Invalid Supabase projectRef.");
@@ -17,6 +24,7 @@ const productionKeys = new Set();
 for (const entry of ledger.entries ?? []) {
   if (!files.includes(entry.localFile)) errors.push(`Ledger references missing migration: ${entry.localFile}`);
   if (classified.has(entry.localFile)) errors.push(`Migration classified more than once: ${entry.localFile}`);
+  if (!allowedStates.has(entry.state)) errors.push(`Unsupported migration state for ${entry.localFile}: ${entry.state}`);
   classified.set(entry.localFile, entry.state);
 
   if (entry.productionVersion || entry.productionName) {
@@ -29,8 +37,25 @@ for (const entry of ledger.entries ?? []) {
     }
   }
 
+  if (entry.state === "applied" && (!entry.productionVersion || !entry.productionName)) {
+    errors.push(`Applied migration lacks a production identity: ${entry.localFile}`);
+  }
+  if (entry.state === "pending" && (entry.productionVersion || entry.productionName)) {
+    errors.push(`Pending migration must not have a production identity: ${entry.localFile}`);
+  }
   if (entry.state === "applied_version_alias" && !entry.note?.includes("differs")) {
     errors.push(`Version alias lacks an explicit preservation note: ${entry.localFile}`);
+  }
+  if (entry.state === "ledger_drift_review" && !entry.note) {
+    errors.push(`Ledger drift entry lacks an evidence note: ${entry.localFile}`);
+  }
+  if (entry.state === "applied_schema_untracked") {
+    if (entry.productionVersion || entry.productionName) {
+      errors.push(`Schema-untracked migration must not claim a production identity: ${entry.localFile}`);
+    }
+    if (!entry.note?.includes("Absent from Supabase migration history") || !entry.note?.includes("Do not replay")) {
+      errors.push(`Schema-untracked migration lacks the required verification and replay warning: ${entry.localFile}`);
+    }
   }
 }
 
