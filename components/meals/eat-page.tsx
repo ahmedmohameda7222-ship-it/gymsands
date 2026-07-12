@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, CalendarDays, Loader2, Plus, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarDays, Plus, Sparkles } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useQuickChatGpt } from "@/components/ai/quick-chatgpt-provider";
 import { EatAddFoodSurface } from "@/components/meals/eat-add-food-surface";
@@ -17,8 +17,7 @@ import { useEatTranslation } from "@/lib/i18n/eat";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { getFavoriteFoodKeysAsync } from "@/services/meals/food-logging-speed";
-import { getCalorieTargets } from "@/services/database/nutrition";
-import { addWaterLog } from "@/services/database/nutrition";
+import { addWaterLog, getCalorieTargets } from "@/services/database/nutrition";
 import { getNutritionTargetProfiles } from "@/services/database/execution-layer";
 import { getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
 import { completeMealPlanItemWithDraft, getEatFoodLogs, getEatMealPlanItems, getEatRecentFoodLogs, getEatWaterLogs, getEatWeek, logRepeatFood, type EatFoodLogPatch } from "@/services/database/eat";
@@ -36,12 +35,13 @@ type AddFoodStart = "home" | "repeat" | "search" | "saved-meals" | "barcode" | "
 
 export function EatPage() {
   const { user } = useAuth();
+  const userId = user?.id;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const today = useTodayDate();
   const { settings } = useUserSettings();
-  const { et, formatDate, mealLabel, dir } = useEatTranslation();
+  const { et, formatDate, dir } = useEatTranslation();
   const { openPrompts, setDashboardContext, dashboardContext } = useQuickChatGpt();
 
   const rawDate = searchParams.get("date");
@@ -68,7 +68,8 @@ export function EatPage() {
 
   const setUrl = useCallback((date: string, nextView: EatView, replace = false) => {
     const href = `${pathname}?date=${encodeURIComponent(date)}&view=${nextView}`;
-    if (replace) router.replace(href, { scroll: false }); else router.push(href, { scroll: false });
+    if (replace) router.replace(href, { scroll: false });
+    else router.push(href, { scroll: false });
   }, [pathname, router]);
 
   useEffect(() => {
@@ -77,65 +78,91 @@ export function EatPage() {
   }, [rawDate, rawView, selectedDate, setUrl, view]);
 
   const loadLogs = useCallback(async () => {
-    if (!user?.id) return;
-    setLogs((current) => ({ status: "loading", data: current.status === "loaded" ? current.data : current.data }));
-    try { setLogs({ status: "loaded", data: await getEatFoodLogs(user.id, selectedDate) }); }
-    catch (error) { setLogs({ status: "failed", error: error instanceof Error ? error.message : et("logsFailed") }); }
-  }, [et, selectedDate, user?.id]);
+    if (!userId) return;
+    setLogs((current) => ({ status: "loading", data: current.data }));
+    try {
+      setLogs({ status: "loaded", data: await getEatFoodLogs(userId, selectedDate) });
+    } catch (error) {
+      setLogs({ status: "failed", error: error instanceof Error ? error.message : et("logsFailed") });
+    }
+  }, [et, selectedDate, userId]);
 
   const loadWater = useCallback(async () => {
-    if (!user?.id) return;
-    setWater((current) => ({ status: "loading", data: current.status === "loaded" ? current.data : current.data }));
-    try { setWater({ status: "loaded", data: await getEatWaterLogs(user.id, selectedDate) }); }
-    catch (error) { setWater({ status: "failed", error: error instanceof Error ? error.message : et("waterFailed") }); }
-  }, [et, selectedDate, user?.id]);
+    if (!userId) return;
+    setWater((current) => ({ status: "loading", data: current.data }));
+    try {
+      setWater({ status: "loaded", data: await getEatWaterLogs(userId, selectedDate) });
+    } catch (error) {
+      setWater({ status: "failed", error: error instanceof Error ? error.message : et("waterFailed") });
+    }
+  }, [et, selectedDate, userId]);
 
   const loadPlannedMeals = useCallback(async () => {
-    if (!user?.id) return;
-    setPlannedMeals((current) => ({ status: "loading", data: current.status === "loaded" ? current.data : current.data }));
-    try { setPlannedMeals({ status: "loaded", data: await getEatMealPlanItems(user.id, selectedDate) }); }
-    catch (error) { setPlannedMeals({ status: "failed", error: error instanceof Error ? error.message : et("plannedFailed") }); }
-  }, [et, selectedDate, user?.id]);
+    if (!userId) return;
+    setPlannedMeals((current) => ({ status: "loading", data: current.data }));
+    try {
+      setPlannedMeals({ status: "loaded", data: await getEatMealPlanItems(userId, selectedDate) });
+    } catch (error) {
+      setPlannedMeals({ status: "failed", error: error instanceof Error ? error.message : et("plannedFailed") });
+    }
+  }, [et, selectedDate, userId]);
 
   const loadRepeats = useCallback(async () => {
-    if (!user?.id) return;
-    setRepeats((current) => ({ status: "loading", data: current.status === "loaded" ? current.data : current.data }));
-    const [recent, favorites] = await Promise.allSettled([getEatRecentFoodLogs(user.id), getFavoriteFoodKeysAsync(user.id)]);
-    if (recent.status === "rejected") { setRepeats({ status: "failed", error: recent.reason instanceof Error ? recent.reason.message : et("repeatsFailed") }); return; }
+    if (!userId) return;
+    setRepeats((current) => ({ status: "loading", data: current.data }));
+    const [recent, favorites] = await Promise.allSettled([getEatRecentFoodLogs(userId), getFavoriteFoodKeysAsync(userId)]);
+    if (recent.status === "rejected") {
+      setRepeats({ status: "failed", error: recent.reason instanceof Error ? recent.reason.message : et("repeatsFailed") });
+      return;
+    }
     setRepeats({ status: "loaded", data: rankRepeatFoods(recent.value, favorites.status === "fulfilled" ? favorites.value : [], 6) });
-  }, [et, user?.id]);
+  }, [et, userId]);
 
   const loadWeek = useCallback(async () => {
-    if (!user?.id) return;
-    setWeek((current) => ({ status: "loading", data: current.status === "loaded" ? current.data : current.data }));
-    try { setWeek({ status: "loaded", data: await getEatWeek(user.id, selectedDate) }); }
-    catch (error) { setWeek({ status: "failed", error: error instanceof Error ? error.message : et("weekFailed") }); }
-  }, [et, selectedDate, user?.id]);
+    if (!userId) return;
+    setWeek((current) => ({ status: "loading", data: current.data }));
+    try {
+      setWeek({ status: "loaded", data: await getEatWeek(userId, selectedDate) });
+    } catch (error) {
+      setWeek({ status: "failed", error: error instanceof Error ? error.message : et("weekFailed") });
+    }
+  }, [et, selectedDate, userId]);
 
   const loadTarget = useCallback(async () => {
-    if (!user?.id) return;
-    setActiveTarget((current) => ({ status: "loading", data: current.status === "loaded" ? current.data : current.data }));
+    if (!userId) return;
+    setActiveTarget((current) => ({ status: "loading", data: current.data }));
     const [baseResult, profilesResult, planResult] = await Promise.allSettled([
-      getCalorieTargets(user.id, { throwOnError: true }),
-      user.id === "mock-user" ? Promise.resolve([]) : getNutritionTargetProfiles(user.id),
-      getDefaultUserWorkoutPlan(user.id)
+      getCalorieTargets(userId, { throwOnError: true }),
+      userId === "mock-user" ? Promise.resolve([]) : getNutritionTargetProfiles(userId),
+      getDefaultUserWorkoutPlan(userId)
     ]);
-    if (baseResult.status === "rejected" || profilesResult.status === "rejected") { setActiveTarget({ status: "failed", error: et("targetsFailed") }); return; }
-    const override = getActiveTargetOverride(user.id, selectedDate);
-    if (override === "auto" && planResult.status === "rejected") { setActiveTarget({ status: "failed", error: et("targetsFailed") }); return; }
+    if (baseResult.status === "rejected" || profilesResult.status === "rejected") {
+      setActiveTarget({ status: "failed", error: et("targetsFailed") });
+      return;
+    }
+    const override = getActiveTargetOverride(userId, selectedDate);
+    if (override === "auto" && planResult.status === "rejected") {
+      setActiveTarget({ status: "failed", error: et("targetsFailed") });
+      return;
+    }
     const weekday = new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "long" });
     const detected = planResult.status === "fulfilled" && planResult.value?.days.some((day) => day.weekday === weekday && day.exercises.length > 0) ? "training_day" : "rest_day";
     setActiveTarget({ status: "loaded", data: resolveActiveNutritionTarget({ profiles: profilesResult.value, baseTarget: baseResult.value, requestedType: override === "auto" ? detected : override }) });
-  }, [et, selectedDate, user?.id]);
+  }, [et, selectedDate, userId]);
 
-  useEffect(() => { void loadLogs(); void loadWater(); void loadPlannedMeals(); void loadTarget(); }, [loadLogs, loadPlannedMeals, loadTarget, loadWater]);
+  useEffect(() => {
+    void loadLogs();
+    void loadWater();
+    void loadPlannedMeals();
+    void loadTarget();
+  }, [loadLogs, loadPlannedMeals, loadTarget, loadWater]);
   useEffect(() => { void loadRepeats(); }, [loadRepeats]);
   useEffect(() => { void loadWeek(); }, [loadWeek]);
 
-  const loadedLogs = logs.data ?? [];
-  const loadedWater = water.data ?? [];
-  const loadedMeals = plannedMeals.data ?? [];
-  const repeatOptions = repeats.data ?? [];
+  const loadedLogs = useMemo(() => logs.data ?? [], [logs.data]);
+  const loadedWater = useMemo(() => water.data ?? [], [water.data]);
+  const loadedMeals = useMemo(() => plannedMeals.data ?? [], [plannedMeals.data]);
+  const repeatOptions = useMemo(() => repeats.data ?? [], [repeats.data]);
   const totals = useMemo(() => sumEatLogs(loadedLogs), [loadedLogs]);
   const targetValues = activeTarget.status === "loaded" && activeTarget.data?.hasTarget ? activeTarget.data.values : null;
   const metrics = useMemo(() => buildNutritionMetrics({ consumed: totals, targets: targetValues, logsAvailable: logs.status === "loaded", targetsAvailable: activeTarget.status === "loaded" && Boolean(activeTarget.data?.hasTarget) }), [activeTarget, logs.status, targetValues, totals]);
@@ -161,54 +188,85 @@ export function EatPage() {
         foodLogCount: logs.status === "loaded" ? logs.data.length : null,
         mealPlanCount: plannedMeals.status === "loaded" ? plannedMeals.data.length : null
       },
-      hydration: { state: water.status === "loading" ? "loading" : water.status === "failed" ? "failed" : "loaded", hasTarget: Boolean(targetValues?.water_ml), logCount: water.status === "loaded" ? water.data.length : null, remainingMl: water.status === "loaded" && targetValues?.water_ml ? targetValues.water_ml - water.data.reduce((sum, log) => sum + Number(log.amount_ml), 0) : null },
+      hydration: {
+        state: water.status === "loading" ? "loading" : water.status === "failed" ? "failed" : "loaded",
+        hasTarget: Boolean(targetValues?.water_ml),
+        logCount: water.status === "loaded" ? water.data.length : null,
+        remainingMl: water.status === "loaded" && targetValues?.water_ml ? targetValues.water_ml - loadedWater.reduce((sum, item) => sum + Number(item.amount_ml), 0) : null
+      },
       selection: { ...dashboardContext.selection, meal: nextMeal?.food_name ?? null }
     });
+    // dashboardContext is intentionally read as the current base snapshot; including it would make this synchronization self-triggering.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTarget, logs, metrics, nextMeal?.food_name, plannedMeals, selectedDate, settings.energyUnit, settings.liquidUnit, settings.weightUnit, water]);
+  }, [activeTarget, loadedWater, logs, metrics, nextMeal?.food_name, plannedMeals, selectedDate, settings.energyUnit, settings.liquidUnit, settings.weightUnit, water]);
 
-  function openAddFood(mealType: MealType = suggestedMeal, start: AddFoodStart = "home") { setAddFoodMeal(mealType); setAddFoodStart(start); setAddFoodOpen(true); }
+  function openAddFood(mealType: MealType = suggestedMeal, start: AddFoodStart = "home") {
+    setAddFoodMeal(mealType);
+    setAddFoodStart(start);
+    setAddFoodOpen(true);
+  }
 
   function mergeLogged(nextLogs: FoodLog[]) {
     if (!nextLogs.length) return;
     setLogs((current) => {
-      const existing = current.data ?? [];
-      const map = new Map(existing.map((log) => [log.id, log]));
-      nextLogs.filter((log) => log.log_date === selectedDate).forEach((log) => map.set(log.id, log));
-      return { status: "loaded", data: Array.from(map.values()).sort((a, b) => String(b.id).localeCompare(String(a.id))) };
+      const map = new Map((current.data ?? []).map((item) => [item.id, item]));
+      nextLogs.filter((item) => item.log_date === selectedDate).forEach((item) => map.set(item.id, item));
+      return { status: "loaded", data: Array.from(map.values()) };
     });
-    void loadWeek(); void loadPlannedMeals();
+    void loadWeek();
+    void loadPlannedMeals();
   }
 
   async function repeatFood(option: RepeatFoodOption) {
-    if (!user?.id || repeatPending) return;
-    setRepeatPending(option.repeatKey); setRepeatFeedback(et("logging"));
-    try { const log = await logRepeatFood(user.id, option, selectedDate, addFoodMeal); mergeLogged([log]); setRepeatFeedback(et("logged")); }
-    catch (error) { setRepeatFeedback(error instanceof Error ? error.message : et("saveFailed")); }
-    finally { setRepeatPending(null); }
+    if (!userId || repeatPending) return;
+    setRepeatPending(option.repeatKey);
+    setRepeatFeedback(et("logging"));
+    try {
+      const saved = await logRepeatFood(userId, option, selectedDate, addFoodMeal);
+      mergeLogged([saved]);
+      setRepeatFeedback(et("logged"));
+    } catch (error) {
+      setRepeatFeedback(error instanceof Error ? error.message : et("saveFailed"));
+    } finally {
+      setRepeatPending(null);
+    }
   }
 
   async function addWater(amountMl: number) {
-    if (!user?.id || waterPending || water.status !== "loaded") return;
+    if (!userId || waterPending || water.status !== "loaded") return;
     const previous = water.data;
-    const optimistic: WaterLog = { id: `optimistic-${Date.now()}`, user_id: user.id, log_date: selectedDate, amount_ml: amountMl, created_at: new Date().toISOString() };
-    setWaterPending(true); setWaterFeedback(`${amountMl} ml…`); setWater({ status: "loaded", data: [optimistic, ...previous] });
-    try { const saved = await addWaterLog(user.id, selectedDate, amountMl); setWater({ status: "loaded", data: [saved, ...previous] }); setWaterFeedback(et("successSaved")); }
-    catch (error) { setWater({ status: "loaded", data: previous }); setWaterFeedback(error instanceof Error ? error.message : et("saveFailed")); }
-    finally { setWaterPending(false); }
+    const optimistic: WaterLog = { id: `optimistic-${Date.now()}`, user_id: userId, log_date: selectedDate, amount_ml: amountMl, created_at: new Date().toISOString() };
+    setWaterPending(true);
+    setWaterFeedback(`${amountMl} ml…`);
+    setWater({ status: "loaded", data: [optimistic, ...previous] });
+    try {
+      const saved = await addWaterLog(userId, selectedDate, amountMl);
+      setWater({ status: "loaded", data: [saved, ...previous] });
+      setWaterFeedback(et("successSaved"));
+    } catch (error) {
+      setWater({ status: "loaded", data: previous });
+      setWaterFeedback(error instanceof Error ? error.message : et("saveFailed"));
+    } finally {
+      setWaterPending(false);
+    }
   }
 
   async function completePlanned(item: MealPlanItem, patch?: EatFoodLogPatch, updatePlan = false) {
     if (plannedPending) return;
-    const defaultPatch: EatFoodLogPatch = patch ?? { foodName: item.food_name, quantity: item.quantity, servingSize: item.serving_size, mealType: item.meal_type, calories: item.calories, proteinG: item.protein_g, carbsG: item.carbs_g, fatG: item.fat_g, notes: item.notes };
-    setPlannedPending(item.id); setAdjustError("");
+    const nextPatch: EatFoodLogPatch = patch ?? { foodName: item.food_name, quantity: item.quantity, servingSize: item.serving_size, mealType: item.meal_type, calories: item.calories, proteinG: item.protein_g, carbsG: item.carbs_g, fatG: item.fat_g, notes: item.notes };
+    setPlannedPending(item.id);
+    setAdjustError("");
     try {
-      const result = await completeMealPlanItemWithDraft({ item, patch: defaultPatch, updateSavedPlan: updatePlan });
+      const result = await completeMealPlanItemWithDraft({ item, patch: nextPatch, updateSavedPlan: updatePlan });
       if (result.log) mergeLogged([result.log]);
       setPlannedMeals((current) => ({ status: "loaded", data: (current.data ?? []).map((planned) => planned.id === result.item.id ? result.item : planned) }));
-      setAdjustingMeal(null); void loadWeek();
-    } catch (error) { setAdjustError(error instanceof Error ? error.message : et("saveFailed")); }
-    finally { setPlannedPending(null); }
+      setAdjustingMeal(null);
+      void loadWeek();
+    } catch (error) {
+      setAdjustError(error instanceof Error ? error.message : et("saveFailed"));
+    } finally {
+      setPlannedPending(null);
+    }
   }
 
   function replacePlanned(item: MealPlanItem) {
@@ -228,11 +286,11 @@ export function EatPage() {
 
     {view === "day" ? <>
       <EatNutritionProgress metrics={metrics} activeTarget={activeTarget} selectedDate={selectedDate} energyUnit={settings.energyUnit} onRetryTargets={() => void loadTarget()} />
-      {plannedMeals.status === "failed" ? <SourceFailure message={et("plannedFailed")} onRetry={() => void loadPlannedMeals()} /> : <PlannedNextMeal item={nextMeal} pending={plannedPending === nextMeal?.id} onMarkEaten={(item) => void completePlanned(item)} onAdjust={(item) => setAdjustingMeal(item)} onReplace={replacePlanned} />}
-      {repeats.status === "failed" ? <SourceFailure message={et("repeatsFailed")} onRetry={() => void loadRepeats()} /> : <RepeatFoodSection options={repeatOptions} selectedDate={selectedDate} mealType={addFoodMeal} pendingKey={repeatPending} feedback={repeatFeedback} onMealTypeChange={setAddFoodMeal} onRepeat={(option) => void repeatFood(option)} onViewAll={() => openAddFood(addFoodMeal, "repeat")} />}
+      {plannedMeals.status === "failed" ? <SourceFailure message={et("plannedFailed")} retryLabel={et("retry")} onRetry={() => void loadPlannedMeals()} /> : <PlannedNextMeal item={nextMeal} pending={plannedPending === nextMeal?.id} onMarkEaten={(item) => void completePlanned(item)} onAdjust={setAdjustingMeal} onReplace={replacePlanned} />}
+      {repeats.status === "failed" ? <SourceFailure message={et("repeatsFailed")} retryLabel={et("retry")} onRetry={() => void loadRepeats()} /> : <RepeatFoodSection options={repeatOptions} selectedDate={selectedDate} mealType={addFoodMeal} pendingKey={repeatPending} feedback={repeatFeedback} onMealTypeChange={setAddFoodMeal} onRepeat={(option) => void repeatFood(option)} onViewAll={() => openAddFood(addFoodMeal, "repeat")} />}
       <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
-        <EatFoodLog userId={user?.id ?? ""} logs={loadedLogs} mealPlanItems={loadedMeals} loading={logs.status === "loading"} error={logs.status === "failed" ? logs.error : undefined} onRetry={() => void loadLogs()} onAdd={(meal) => openAddFood(meal)} onChanged={(next) => { setLogs({ status: "loaded", data: next }); void loadWeek(); void loadPlannedMeals(); }} />
-        <aside className="space-y-4"><RemainingToday metrics={metrics} /><CompactHydration water={water} waterTargetMl={targetValues?.water_ml ?? null} liquidUnit={settings.liquidUnit} pending={waterPending} feedback={waterFeedback} onAdd={(amount) => void addWater(amount)} onRetry={() => void loadWater()} /></aside>
+        <EatFoodLog userId={userId ?? ""} logs={loadedLogs} mealPlanItems={loadedMeals} loading={logs.status === "loading"} error={logs.status === "failed" ? logs.error : undefined} onRetry={() => void loadLogs()} onAdd={(meal) => openAddFood(meal)} onChanged={(next) => { setLogs({ status: "loaded", data: next }); void loadWeek(); void loadPlannedMeals(); }} />
+        <aside className="space-y-4"><RemainingToday metrics={metrics} energyUnit={settings.energyUnit} /><CompactHydration water={water} waterTargetMl={targetValues?.water_ml ?? null} liquidUnit={settings.liquidUnit} pending={waterPending} feedback={waterFeedback} onAdd={(amount) => void addWater(amount)} onRetry={() => void loadWater()} /></aside>
       </div>
     </> : <EatWeekView week={week} selectedDate={selectedDate} targetCalories={targetValues?.daily_calories ?? null} onMoveWeek={(days) => setUrl(addIsoDays(selectedDate, days), "week")} onSelectDate={(date) => setUrl(date, "week")} onAddFood={() => openAddFood()} onRetry={() => void loadWeek()} />}
 
@@ -241,4 +299,6 @@ export function EatPage() {
   </div>;
 }
 
-function SourceFailure({ message, onRetry }: { message: string; onRetry: () => void }) { return <Card><CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-destructive">{message}</p><Button type="button" variant="outline" onClick={onRetry}>Retry</Button></CardContent></Card>; }
+function SourceFailure({ message, retryLabel, onRetry }: { message: string; retryLabel: string; onRetry: () => void }) {
+  return <Card><CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-destructive">{message}</p><Button type="button" variant="outline" onClick={onRetry}>{retryLabel}</Button></CardContent></Card>;
+}
