@@ -10,22 +10,26 @@ import { Label } from "@/components/ui/label";
 import { InlineFeedback } from "@/components/motion";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { EAT_MEAL_GROUPS, groupFoodLogs, type EatMealGroup } from "@/lib/eat/eat-model";
+import { eatEnergyDisplayValue, eatEnergyInputToKcal, formatEatEnergy } from "@/lib/eat/eat-units";
 import { useEatTranslation } from "@/lib/i18n/eat";
-import { deleteEatFoodLog, updateEatFoodLog, type EatFoodLogPatch } from "@/services/database/eat";
+import { deleteEatFoodLog, isEatLinkedEditConsistencyError, updateEatFoodLog, type EatFoodLogPatch } from "@/services/database/eat";
+import type { UserAppSettings } from "@/services/database/user-settings";
 import type { FoodLog, MealPlanItem, MealType } from "@/types";
+
+type FoodLogEditForm = Omit<EatFoodLogPatch, "calories"> & { energy: number };
 
 function numberInput(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? String(parsed) : "0";
 }
 
-function editState(log: FoodLog): EatFoodLogPatch {
+function editState(log: FoodLog, energyUnit: UserAppSettings["energyUnit"]): FoodLogEditForm {
   return {
     foodName: log.food_name,
     quantity: Number(log.quantity) || 1,
     servingSize: log.serving_size,
     mealType: (["Breakfast", "Lunch", "Dinner", "Snack"] as string[]).includes(log.meal_type) ? log.meal_type as MealType : "Lunch",
-    calories: Number(log.calories) || 0,
+    energy: eatEnergyDisplayValue(Number(log.calories) || 0, energyUnit),
     proteinG: Number(log.protein_g) || 0,
     carbsG: Number(log.carbs_g) || 0,
     fatG: Number(log.fat_g) || 0,
@@ -39,7 +43,9 @@ export function EatFoodLog({
   mealPlanItems,
   loading,
   error,
+  energyUnit,
   onRetry,
+  onReloadConsistency,
   onAdd,
   onChanged
 }: {
@@ -48,28 +54,30 @@ export function EatFoodLog({
   mealPlanItems: MealPlanItem[];
   loading: boolean;
   error?: string;
+  energyUnit: UserAppSettings["energyUnit"];
   onRetry: () => void;
+  onReloadConsistency: () => Promise<{ logs: FoodLog[]; mealPlanItems: MealPlanItem[] }>;
   onAdd: (mealType: MealType) => void;
   onChanged: (logs: FoodLog[]) => void;
 }) {
-  const { et, mealLabel } = useEatTranslation();
+  const { et, mealLabel, locale } = useEatTranslation();
   const grouped = useMemo(() => groupFoodLogs(logs), [logs]);
   const [editing, setEditing] = useState<FoodLog | null>(null);
-  const [form, setForm] = useState<EatFoodLogPatch | null>(null);
+  const [form, setForm] = useState<FoodLogEditForm | null>(null);
   const [pending, setPending] = useState<"save" | "delete" | null>(null);
   const [feedback, setFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
   const { dialog: confirmDialog, ask } = useConfirm();
 
   useEffect(() => {
-    if (editing) setForm(editState(editing));
-  }, [editing]);
+    if (editing) setForm(editState(editing, energyUnit));
+  }, [editing, energyUnit]);
 
   const linkedLogIds = useMemo(() => new Set(mealPlanItems.map((item) => item.food_log_id).filter(Boolean)), [mealPlanItems]);
 
   function open(log: FoodLog) {
     setFeedback(null);
     setEditing(log);
-    setForm(editState(log));
+    setForm(editState(log, energyUnit));
   }
 
   function close() {
@@ -84,14 +92,29 @@ export function EatFoodLog({
     if (!editing || !form || pending) return;
     setPending("save");
     setFeedback({ type: "info", message: `${et("saveChanges")}…` });
+    const patch: EatFoodLogPatch = {
+      ...form,
+      calories: eatEnergyInputToKcal(form.energy, energyUnit)
+    };
     try {
-      const saved = await updateEatFoodLog(userId, editing.id, form);
-      onChanged(logs.map((log) => log.id === saved.id ? saved : log));
-      setEditing(saved);
-      setForm(editState(saved));
+      const result = await updateEatFoodLog(userId, editing.id, patch);
+      const nextLogs = logs.map((log) => log.id === result.log.id ? result.log : log);
+      onChanged(nextLogs);
+      setEditing(result.log);
+      setForm(editState(result.log, energyUnit));
       setFeedback({ type: "info", message: et("successSaved") });
-    } catch (error) {
-      setFeedback({ type: "error", message: error instanceof Error ? error.message : et("saveFailed") });
+    } catch (saveError) {
+      if (isEatLinkedEditConsistencyError(saveError)) {
+        const refreshed = await onReloadConsistency();
+        const freshLog = refreshed.logs.find((log) => log.id === editing.id) ?? null;
+        if (freshLog) {
+          setEditing(freshLog);
+          setForm(editState(freshLog, energyUnit));
+        }
+        setFeedback({ type: "error", message: et("criticalConsistencyError") });
+      } else {
+        setFeedback({ type: "error", message: et("saveFailed") });
+      }
     } finally {
       setPending(null);
     }
@@ -102,24 +125,28 @@ export function EatFoodLog({
     const linked = linkedLogIds.has(editing.id);
     ask({
       title: et("deleteConfirm"),
-      description: linked ? et("deleteLinked") : `${editing.food_name} · ${editing.log_date}`,
+      description: linked ? et("deleteLinkedProtected") : `${editing.food_name} · ${editing.log_date}`,
       confirmLabel: et("delete"),
       cancelLabel: et("close"),
       variant: "destructive",
-      onConfirm: () => void remove()
+      onConfirm: () => void remove(linked)
     });
   }
 
-  async function remove() {
+  async function remove(linked: boolean) {
     if (!editing || pending) return;
+    if (linked) {
+      setFeedback({ type: "error", message: et("deleteLinkedProtected") });
+      return;
+    }
     setPending("delete");
     try {
       await deleteEatFoodLog(userId, editing.id);
       onChanged(logs.filter((log) => log.id !== editing.id));
       setEditing(null);
       setForm(null);
-    } catch (error) {
-      setFeedback({ type: "error", message: error instanceof Error ? error.message : et("saveFailed") });
+    } catch {
+      setFeedback({ type: "error", message: et("saveFailed") });
     } finally {
       setPending(null);
     }
@@ -142,6 +169,8 @@ export function EatFoodLog({
               group={group}
               logs={grouped[group]}
               label={mealLabel(group)}
+              energyUnit={energyUnit}
+              locale={locale}
               onAdd={() => onAdd(group === "Other" ? "Lunch" : group)}
               onOpen={open}
             />
@@ -166,10 +195,10 @@ export function EatFoodLog({
               </div>
               <Field label={et("serving")}><Input value={form.servingSize} onChange={(event) => setForm({ ...form, servingSize: event.target.value })} /></Field>
               <div className="grid grid-cols-2 gap-3">
-                <NumberField label={et("calories")} value={form.calories} onChange={(calories) => setForm({ ...form, calories })} />
-                <NumberField label={et("protein")} value={form.proteinG} onChange={(proteinG) => setForm({ ...form, proteinG })} />
-                <NumberField label={et("carbs")} value={form.carbsG} onChange={(carbsG) => setForm({ ...form, carbsG })} />
-                <NumberField label={et("fat")} value={form.fatG} onChange={(fatG) => setForm({ ...form, fatG })} />
+                <NumberField label={`${et("calories")} (${energyUnit})`} value={form.energy} onChange={(energy) => setForm({ ...form, energy })} />
+                <NumberField label={`${et("protein")} (g)`} value={form.proteinG} onChange={(proteinG) => setForm({ ...form, proteinG })} />
+                <NumberField label={`${et("carbs")} (g)`} value={form.carbsG} onChange={(carbsG) => setForm({ ...form, carbsG })} />
+                <NumberField label={`${et("fat")} (g)`} value={form.fatG} onChange={(fatG) => setForm({ ...form, fatG })} />
               </div>
               <Field label={et("notes")}><Input value={form.notes ?? ""} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></Field>
               <InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} onClose={() => setFeedback(null)} />
@@ -185,20 +214,20 @@ export function EatFoodLog({
   );
 }
 
-function MealGroup({ group, logs, label, onAdd, onOpen }: { group: EatMealGroup; logs: FoodLog[]; label: string; onAdd: () => void; onOpen: (log: FoodLog) => void }) {
+function MealGroup({ group, logs, label, energyUnit, locale, onAdd, onOpen }: { group: EatMealGroup; logs: FoodLog[]; label: string; energyUnit: UserAppSettings["energyUnit"]; locale: string; onAdd: () => void; onOpen: (log: FoodLog) => void }) {
   const { et } = useEatTranslation();
   const calories = logs.reduce((sum, log) => sum + Number(log.calories || 0), 0);
   return (
     <section aria-labelledby={`eat-group-${group}`} className="space-y-2">
       <div className="flex items-center gap-2">
         <h3 id={`eat-group-${group}`} className="text-sm font-semibold">{label}</h3>
-        <span className="text-xs text-muted-foreground">{logs.length ? `${Math.round(calories)} kcal` : ""}</span>
+        <span className="text-xs text-muted-foreground">{logs.length ? formatEatEnergy(calories, energyUnit, locale) : ""}</span>
         <div className="flex-1 border-t border-border/70" />
         <Button type="button" variant="ghost" size="sm" className="min-h-11" onClick={onAdd}><Plus className="h-4 w-4" />{et("add")}</Button>
       </div>
       {logs.length ? logs.map((log) => (
         <button key={log.id} type="button" onClick={() => onOpen(log)} className="flex min-h-16 w-full items-center justify-between gap-3 rounded-[14px] border border-border/70 bg-card p-3 text-start transition hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <div className="min-w-0"><p className="truncate text-sm font-semibold">{log.food_name}</p><p className="mt-1 text-xs text-muted-foreground">{log.quantity} × {log.serving_size}</p><p className="mt-1 text-xs text-muted-foreground">{Math.round(log.calories)} kcal · P {Math.round(log.protein_g * 10) / 10} g · C {Math.round(log.carbs_g * 10) / 10} g · F {Math.round(log.fat_g * 10) / 10} g</p></div>
+          <div className="min-w-0"><p className="truncate text-sm font-semibold">{log.food_name}</p><p className="mt-1 text-xs text-muted-foreground">{log.quantity} × {log.serving_size}</p><p className="mt-1 text-xs text-muted-foreground">{formatEatEnergy(log.calories, energyUnit, locale)} · P {Math.round(log.protein_g * 10) / 10} g · C {Math.round(log.carbs_g * 10) / 10} g · F {Math.round(log.fat_g * 10) / 10} g</p></div>
           <Edit3 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
       )) : <div className="rounded-[14px] border border-dashed border-border/70 px-3 py-2 text-xs text-muted-foreground">—</div>}
