@@ -46,7 +46,9 @@ export function useUnsavedChangesGuard({
     bypassRef.current = true;
     setPending(null);
     action.run();
-    window.setTimeout(() => { bypassRef.current = false; }, 0);
+    if (!action.historyExit) {
+      window.setTimeout(() => { bypassRef.current = false; }, 0);
+    }
   }, []);
 
   const applyAndContinue = useCallback(async () => {
@@ -78,7 +80,10 @@ export function useUnsavedChangesGuard({
     window.history.pushState({ ...window.history.state, plaivraUnsavedGuard: true }, "", window.location.href);
 
     const popState = () => {
-      if (bypassRef.current) return;
+      if (bypassRef.current) {
+        bypassRef.current = false;
+        return;
+      }
       window.history.pushState({ ...window.history.state, plaivraUnsavedGuard: true }, "", window.location.href);
       setPending({
         historyExit: true,
@@ -92,6 +97,7 @@ export function useUnsavedChangesGuard({
     return () => {
       window.removeEventListener("popstate", popState);
       historyGuardRef.current = false;
+      bypassRef.current = false;
     };
   }, [dirty]);
 
