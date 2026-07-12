@@ -11,6 +11,7 @@ import {
   Shield,
   ShieldAlert,
   SlidersHorizontal,
+  Target,
   User,
 } from "lucide-react";
 import { PageHeading } from "@/components/layout/page-heading";
@@ -25,6 +26,7 @@ import { getCalorieTargets, getTodayFoodLogs, getTodayMealPlanItems } from "@/se
 import { getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
 import type { OnboardingAnswers } from "@/types";
 import { useTranslation } from "@/lib/i18n/use-translation";
+import { useEatTranslation } from "@/lib/i18n/eat";
 
 type SetupGroup = {
   title: string;
@@ -90,9 +92,7 @@ function SettingsGroup({ title, description, cards }: SetupGroup) {
         <p className="mt-1 text-sm leading-5 text-muted-foreground">{description}</p>
       </div>
       <div className="space-y-3">
-        {cards.map((card) => (
-          <SettingsHubCard key={card.href} {...card} />
-        ))}
+        {cards.map((card) => <SettingsHubCard key={card.href} {...card} />)}
       </div>
     </section>
   );
@@ -101,6 +101,7 @@ function SettingsGroup({ title, description, cards }: SetupGroup) {
 export default function SettingsPage() {
   const { user, profile, isLoading: authLoading } = useAuth();
   const { t } = useTranslation();
+  const { et } = useEatTranslation();
   const [onboarding, setOnboarding] = useState<OnboardingAnswers | null>(null);
   const [hasTargets, setHasTargets] = useState(false);
   const [hasPlan, setHasPlan] = useState(false);
@@ -117,7 +118,6 @@ export default function SettingsPage() {
       return;
     }
     const currentUserId = userId;
-
     async function load() {
       setIsLoading(true);
       setSetupLoadError("");
@@ -128,19 +128,15 @@ export default function SettingsPage() {
         getTodayMealPlanItems(currentUserId),
         getTodayFoodLogs(currentUserId),
       ]);
-
       const failed = [onboardingResult, targetsResult, planResult, mealsResult, foodLogsResult].some((result) => result.status === "rejected");
       if (onboardingResult.status === "fulfilled") setOnboarding(onboardingResult.value);
       if (targetsResult.status === "fulfilled") setHasTargets(Boolean(targetsResult.value));
       if (planResult.status === "fulfilled") setHasPlan(Boolean(planResult.value));
       if (mealsResult.status === "fulfilled") setHasMeals(mealsResult.value.length > 0);
       if (foodLogsResult.status === "fulfilled") setHasFoodLogs(foodLogsResult.value.length > 0);
-      if (failed) {
-        setSetupLoadError("One or more setup checks failed, so Plaivra is not showing the checklist as fully reliable.");
-      }
+      if (failed) setSetupLoadError("One or more setup checks failed, so Plaivra is not showing the checklist as fully reliable.");
       setIsLoading(false);
     }
-
     void load();
   }, [reloadKey, userId]);
 
@@ -150,8 +146,8 @@ export default function SettingsPage() {
       { label: t("setup.setFitnessGoal"), done: Boolean(onboarding), href: "/onboarding?edit=true&returnTo=%2Fsettings", action: t("common.edit") },
       { label: t("setup.importWorkoutPlan"), done: hasPlan, href: "/my-workout/plans", action: t("common.open") },
       { label: t("setup.addMealPlan"), done: hasMeals || hasFoodLogs, href: "/my-meal-plan", action: t("common.open") },
-      { label: t("setup.setCalorieTarget"), done: hasTargets, href: "/calories", action: t("common.edit") },
-      { label: t("setup.addHydrationTarget"), done: hasTargets, href: "/calories", action: t("common.edit") },
+      { label: t("setup.setCalorieTarget"), done: hasTargets, href: "/settings/nutrition-targets", action: t("common.edit") },
+      { label: t("setup.addHydrationTarget"), done: hasTargets, href: "/settings/nutrition-targets", action: t("common.edit") },
     ],
     [profile?.full_name, onboarding, hasPlan, hasMeals, hasFoodLogs, hasTargets, t]
   );
@@ -164,102 +160,38 @@ export default function SettingsPage() {
       title: "Trust & data",
       description: "Sensitive controls for ChatGPT access, privacy visibility, and request context.",
       cards: [
-        {
-          icon: Bot,
-          title: t("settings.aiImports"),
-          description: "Choose the Plaivra context and tool actions ChatGPT may use, then monitor or revoke the connection.",
-          href: "/settings/connections",
-          badge: { label: "Permissions", variant: "warning" },
-        },
-        {
-          icon: Shield,
-          title: t("settings.dataPrivacy"),
-          description: "Privacy controls affect what is shown in Plaivra and explain what data can be exported.",
-          href: "/settings/data-privacy",
-          badge: { label: "Sensitive", variant: "warning" },
-        },
-        {
-          icon: ShieldAlert,
-          title: "Coaching context",
-          description: "Coaching context helps personalize task-specific ChatGPT context. It does not change plans automatically.",
-          href: "/settings/coaching-profile",
-          badge: { label: "Context", variant: "outline" },
-        },
+        { icon: Bot, title: t("settings.aiImports"), description: "Choose the Plaivra context and tool actions ChatGPT may use, then monitor or revoke the connection.", href: "/settings/connections", badge: { label: "Permissions", variant: "warning" } },
+        { icon: Shield, title: t("settings.dataPrivacy"), description: "Privacy controls affect what is shown in Plaivra and explain what data can be exported.", href: "/settings/data-privacy", badge: { label: "Sensitive", variant: "warning" } },
+        { icon: ShieldAlert, title: "Coaching context", description: "Coaching context helps personalize task-specific ChatGPT context. It does not change plans automatically.", href: "/settings/coaching-profile", badge: { label: "Context", variant: "outline" } },
       ],
     },
     {
       title: "Preferences",
-      description: "App behavior, display, reminders, and daily shortcuts.",
+      description: "App behavior, display, reminders, daily shortcuts, and nutrition targets.",
       cards: [
-        {
-          icon: SlidersHorizontal,
-          title: t("settings.preferences"),
-          description: t("settings.preferencesDesc"),
-          href: "/settings/preferences",
-          badge: { label: "App behavior", variant: "outline" },
-        },
-        {
-          icon: Bell,
-          title: t("settings.reminders"),
-          description: t("settings.remindersDesc"),
-          href: "/settings/reminders",
-        },
+        { icon: Target, title: et("settingsTitle"), description: et("settingsDesc"), href: "/settings/nutrition-targets", badge: { label: et("manage"), variant: "outline" } },
+        { icon: SlidersHorizontal, title: t("settings.preferences"), description: t("settings.preferencesDesc"), href: "/settings/preferences", badge: { label: "App behavior", variant: "outline" } },
+        { icon: Bell, title: t("settings.reminders"), description: t("settings.remindersDesc"), href: "/settings/reminders" },
       ],
     },
     {
       title: "Account",
       description: "Account actions affect sign-in, session state, and account-level requests.",
       cards: [
-        {
-          icon: User,
-          title: t("settings.account"),
-          description: t("settings.accountDesc"),
-          href: "/settings/account",
-          badge: { label: "Session", variant: "outline" },
-        },
-        {
-          icon: CreditCard,
-          title: "Subscription",
-          description: "Review provider-neutral access and billing recovery. No price or paid capability is published before owner approval.",
-          href: "/settings/subscription",
-          badge: { label: "Not configured", variant: "outline" },
-        },
+        { icon: User, title: t("settings.account"), description: t("settings.accountDesc"), href: "/settings/account", badge: { label: "Session", variant: "outline" } },
+        { icon: CreditCard, title: "Subscription", description: "Review provider-neutral access and billing recovery. No price or paid capability is published before owner approval.", href: "/settings/subscription", badge: { label: "Not configured", variant: "outline" } },
       ],
     },
   ];
 
   return (
     <>
-      <PageHeading
-        title={t("settings.title")}
-        description={t("settings.description")}
-      />
-
+      <PageHeading title={t("settings.title")} description={t("settings.description")} />
       <ProfileSummaryCard onboarding={onboarding} />
-
       <div className="mt-4">
-        {isLoading || authLoading ? (
-          <SetupLoadingCard />
-        ) : setupLoadError ? (
-          <SetupDegradedCard message={setupLoadError} onRetry={() => setReloadKey((current) => current + 1)} />
-        ) : completedCount < setupChecklist.length ? (
-          <SetupProgressCard
-            checklist={setupChecklist}
-            nextItem={nextSetupItem}
-            completedCount={completedCount}
-            totalCount={setupChecklist.length}
-          />
-        ) : (
-          <SetupCompleteCard />
-        )}
+        {isLoading || authLoading ? <SetupLoadingCard /> : setupLoadError ? <SetupDegradedCard message={setupLoadError} onRetry={() => setReloadKey((current) => current + 1)} /> : completedCount < setupChecklist.length ? <SetupProgressCard checklist={setupChecklist} nextItem={nextSetupItem} completedCount={completedCount} totalCount={setupChecklist.length} /> : <SetupCompleteCard />}
       </div>
-
-      <div className="mt-5 space-y-5">
-        {groups.map((group) => (
-          <SettingsGroup key={group.title} {...group} />
-        ))}
-      </div>
-
+      <div className="mt-5 space-y-5">{groups.map((group) => <SettingsGroup key={group.title} {...group} />)}</div>
       <div className="h-24 lg:hidden" />
     </>
   );
