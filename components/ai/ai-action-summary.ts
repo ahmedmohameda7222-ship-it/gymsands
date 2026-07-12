@@ -154,5 +154,5 @@ export function buildChatGptActionPrompt(
     presentation.description,
     writeInstruction,
     "Do not expose internal records, raw objects, or unrelated Plaivra data."
-  ].filter(Boolean).join("\\n");
+  ].filter(Boolean).join("\n");
 }
