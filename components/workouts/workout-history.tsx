@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, Dumbbell, Filter, History, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -142,6 +143,8 @@ function computeStats(items: HistoryItem[]) {
 }
 
 export function WorkoutHistory() {
+  const searchParams = useSearchParams();
+  const highlightedSessionId = searchParams.get("session");
   const { user } = useAuth();
   const userId = user?.id;
   const { toast } = useToast();
@@ -321,7 +324,7 @@ export function WorkoutHistory() {
             const sessionDate = new Date(session.date);
             const totalSets = session.exercises.reduce((sum, ex) => sum + parseSetCount(ex.sets), 0);
             return (
-              <div key={session.id} className="solid-row p-4 transition-colors hover:border-primary/40 hover:bg-muted/30">
+              <div id={`workout-session-${session.id}`} key={session.id} className={cn("solid-row scroll-mt-24 p-4 transition-colors hover:border-primary/40 hover:bg-muted/30", highlightedSessionId === session.id && "border-primary bg-primary/5 ring-2 ring-primary/20")}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-foreground">{session.title}</p>
@@ -336,7 +339,7 @@ export function WorkoutHistory() {
                   </div>
                 </div>
 
-                <details className="mt-3 group">
+                <details className="mt-3 group" open={highlightedSessionId === session.id ? true : undefined}>
                   <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-2 rounded-xl bg-muted/40 px-3 text-sm transition hover:bg-muted/60">
                     <span className="flex min-w-0 flex-col gap-1 py-2 text-muted-foreground sm:flex-row sm:items-center sm:gap-2">
                       <span className="flex items-center gap-2">
