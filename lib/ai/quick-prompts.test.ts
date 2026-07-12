@@ -7,7 +7,7 @@ const completeContext: QuickPromptContext = {
   localHour: 18,
   units: { energy: "kcal", liquid: "ml", weight: "kg" },
   workout: { hasPlan: true, scheduled: true, active: true, completed: true, title: "Upper A", exerciseCount: 6, durationMinutes: 45, historyCount: 8 },
-  nutrition: { hasTargets: true, targetsState: "loaded", foodLogsState: "loaded", remainingCalories: 620, remainingProtein: 55, foodLogCount: 2, mealPlanCount: 8 },
+  nutrition: { hasTargets: true, targetsState: "loaded", foodLogsState: "loaded", remainingCalories: 620, remainingProtein: 55, remainingCarbs: 80, remainingFat: 20, foodLogCount: 2, mealPlanCount: 8, plannedMealCount: 8 },
   grocery: { state: "loaded", itemCount: 4 },
   hydration: { state: "loaded", hasTarget: true, logCount: 2, remainingMl: 1200 },
   recovery: { state: "loaded", hasData: true, sleepHours: 5.5, poorRecovery: true },
@@ -21,7 +21,7 @@ const prompt = (id: string) => QUICK_PROMPTS.find((item) => item.id === id)!;
 
 describe("canonical ChatGPT prompt catalog", () => {
   it("contains one unique metadata definition for every supported task", () => {
-    expect(QUICK_PROMPTS).toHaveLength(44);
+    expect(QUICK_PROMPTS).toHaveLength(51);
     expect(new Set(QUICK_PROMPTS.map((item) => item.id)).size).toBe(QUICK_PROMPTS.length);
     expect(QUICK_PROMPTS.every((item) => item.supportedBy.length > 0)).toBe(true);
     expect(QUICK_PROMPTS.every((item) => !("buildPrompt" in item) && !("template" in item) && !("contextChips" in item))).toBe(true);
@@ -38,7 +38,7 @@ describe("canonical ChatGPT prompt catalog", () => {
   });
 
   it("does not rank macro completion when required values are unavailable", () => {
-    const failed: QuickPromptContext = { ...completeContext, nutrition: { ...completeContext.nutrition!, foodLogsState: "failed", foodLogCount: null, remainingCalories: null, remainingProtein: null } };
+    const failed: QuickPromptContext = { ...completeContext, nutrition: { ...completeContext.nutrition!, foodLogsState: "failed", foodLogCount: null, remainingCalories: null, remainingProtein: null, remainingCarbs: null, remainingFat: null } };
     expect(rankQuickPrompts(failed).some((item) => item.id === "finish-macros")).toBe(false);
     const unknownRemaining: QuickPromptContext = { ...completeContext, nutrition: { ...completeContext.nutrition!, remainingCalories: null } };
     expect(rankQuickPrompts(unknownRemaining).some((item) => item.id === "finish-macros")).toBe(false);
