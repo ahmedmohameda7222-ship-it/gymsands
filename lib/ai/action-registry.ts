@@ -6,7 +6,8 @@ export type AiActionAccessArea =
   | "nutrition"
   | "meal plans"
   | "wellness"
-  | "progress";
+  | "progress"
+  | "profile";
 
 export type AiActionRegistryEntry = {
   capability: AiActionCapability;
@@ -50,19 +51,25 @@ export const AI_ACTION_REGISTRY = {
   make_meal_gluten_free: write("Make gluten-free", "Create a gluten-free version with updated nutrition values.", "Make this meal gluten-free", "meal plans"),
   make_meal_cuisine: write("Change cuisine", "Adapt this meal to the requested cuisine and my authorized preferences.", "Adapt this meal’s cuisine", "meal plans"),
   build_grocery_list: write("Build grocery list", "Use the saved meal plan to create and save an ingredient-level grocery list.", "Build a practical grocery list", "meal plans"),
-  review_week: read("Review week", "Review my authorized training, nutrition, hydration, and recovery context and explain useful priorities.", "Review this week and suggest practical improvements", "wellness")
-} satisfies Record<AiActionType, AiActionRegistryEntry>;
+  review_week: read("Review week", "Review my authorized training, nutrition, hydration, and recovery context and explain useful priorities.", "Review this week and suggest practical improvements", "wellness"),
+  update_training_goal: write("Update training preferences", "Save explicit user-approved training goal, experience, or activity preference changes through the registered Plaivra action.", "Update the approved training preferences", "profile"),
+  update_nutrition_preference_profile: write("Update nutrition preferences", "Save explicit user-approved food, cooking, budget, allergy, and grocery preference changes through the registered Plaivra action.", "Update the approved nutrition preferences", "profile")
+} as const satisfies Record<string, AiActionRegistryEntry>;
 
-export const INTERNAL_AI_ACTION_NAMES = Object.keys(AI_ACTION_REGISTRY) as AiActionType[];
+export type RegisteredAiActionName = keyof typeof AI_ACTION_REGISTRY;
+type Assert<T extends true> = T;
+export type AiActionRegistryCoversLegacyActions = Assert<Exclude<AiActionType, RegisteredAiActionName> extends never ? true : false>;
+
+export const INTERNAL_AI_ACTION_NAMES = Object.keys(AI_ACTION_REGISTRY) as RegisteredAiActionName[];
 
 export const WRITE_CAPABLE_AI_ACTION_NAMES = INTERNAL_AI_ACTION_NAMES.filter(
   (name) => AI_ACTION_REGISTRY[name].capability === "write"
 );
 
-export function isRegisteredAiAction(name: string): name is AiActionType {
+export function isRegisteredAiAction(name: string): name is RegisteredAiActionName {
   return name in AI_ACTION_REGISTRY;
 }
 
-export function isAiActionWriteCapable(actionType: AiActionType) {
+export function isAiActionWriteCapable(actionType: AiActionType | RegisteredAiActionName) {
   return AI_ACTION_REGISTRY[actionType].capability === "write";
 }
