@@ -2,7 +2,7 @@
 
 import { OpenAiBlossom } from "@/components/brand/openai-blossom";
 import { Button } from "@/components/ui/button";
-import { buildAiActionSummary } from "@/components/ai/ai-action-summary";
+import { buildAiActionSummary, buildChatGptActionPrompt } from "@/components/ai/ai-action-summary";
 import { useQuickChatGpt } from "@/components/ai/quick-chatgpt-provider";
 import { cn } from "@/lib/utils";
 import type { AiActionType, AiPermissionSection } from "@/types";
@@ -72,11 +72,11 @@ export function AiActionRequestDialog({
               id: `legacy-${action.type}`,
               title: action.label,
               description: action.description,
-              prompt: `${action.description}\n\nUse only the authorized Plaivra context needed for this request. ${write ? "Show the proposed structured changes and do not save them until I explicitly confirm." : "Explain the result and do not change any Plaivra data."}`,
+              prompt: buildChatGptActionPrompt(action.type, context),
               permissionSections: [section],
               capability: write ? "write" : "read",
               destination: write ? destination(section) : undefined,
-              contextChips: summary.slice(0, 4).map((row) => `${row.label}: ${row.value}`)
+              contextChips: summary.map((row) => `${row.label}: ${row.value}`)
             });
           }}
         >
