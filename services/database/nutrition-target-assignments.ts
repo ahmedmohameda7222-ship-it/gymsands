@@ -62,6 +62,10 @@ function dispatchTargetRefresh(date: string, value: NutritionTargetAssignment) {
   window.dispatchEvent(new CustomEvent(ACTIVE_NUTRITION_TARGET_EVENT, { detail: { date, value } }));
 }
 
+function removeObsoleteAutomaticLegacyKey(key: string) {
+  window.localStorage.removeItem(key);
+}
+
 export async function getNutritionTargetDateOverride(userId: string, date: string) {
   if (!canUseUserData(userId)) return null as UserNutritionTargetDateOverride | null;
   const { data, error } = await supabase!
@@ -105,7 +109,7 @@ export async function migrateLegacyNutritionTargetOverridesForDates(userId: stri
     const legacyValue = window.localStorage.getItem(key);
     if (legacyValue === "auto") {
       // `auto` is the absence of an explicit assignment; removing this obsolete no-op key is safe.
-      window.localStorage.removeItem(key);
+      removeObsoleteAutomaticLegacyKey(key);
       continue;
     }
     if (!isExplicitNutritionTargetAssignment(legacyValue)) continue;
