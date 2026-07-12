@@ -58,12 +58,13 @@ export function detectMealPromptRelevance(context: Pick<PlannedMealPromptContext
   return { dairy, gluten };
 }
 
-export function ingredientsFromFoodMetadata({ foodName, tags = [], notes }: { foodName: string; tags?: string[] | null; notes?: string | null }) {
+export function ingredientsFromFoodMetadata({ foodName, tags, notes }: { foodName: string; tags?: string[] | null; notes?: string | null }) {
+  const safeTags = tags ?? [];
   const noteParts = (notes ?? "")
     .split(/[\n,;]+/)
     .map((item) => item.trim())
     .filter((item) => item.length >= 2 && item.length <= 80);
-  return Array.from(new Set([foodName.trim(), ...tags.map((tag) => tag.trim()), ...noteParts].filter(Boolean)));
+  return Array.from(new Set([foodName.trim(), ...safeTags.map((tag) => tag.trim()), ...noteParts].filter(Boolean)));
 }
 
 export function buildPlannedMealPromptContext(
@@ -71,6 +72,7 @@ export function buildPlannedMealPromptContext(
   metadata?: { ingredients?: string[]; structuredAllergens?: string[]; preparationTimeMinutes?: number | null }
 ): PlannedMealPromptContext {
   const numberOrNull = (value: unknown) => {
+    if (value === null || value === undefined || value === "") return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
   };
