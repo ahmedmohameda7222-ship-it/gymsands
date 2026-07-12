@@ -1,0 +1,268 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MouseEvent, type ReactNode, type SetStateAction } from "react";
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, MoreHorizontal, Plus, RefreshCw, ShoppingCart, Utensils } from "lucide-react";
+import { useAuth } from "@/components/auth/auth-provider";
+import { AiActionRequestDialog, type AiActionOption } from "@/components/ai/ai-action-request-dialog";
+import { GroceryListPanel } from "@/components/meals/grocery-list-panel";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useTodayDate } from "@/lib/hooks/use-today-date";
+import { useTranslation } from "@/lib/i18n/use-translation";
+import { useUserSettings } from "@/lib/settings/user-settings-context";
+import { getMealPlanCopy, interpolateCopy, type MealPlanCopy } from "@/lib/meals/meal-plan-copy";
+import { mealPlanUrl, resolveMealPlanTab, type MealPlanTab } from "@/lib/meals/meal-plan-navigation";
+import { summarizeMealPlanDay, summarizeMealSection } from "@/lib/meals/meal-plan-summary";
+import { cn } from "@/lib/utils";
+import { userSafeError } from "@/lib/error-formatting";
+import { createDirectMealPlanItem, deleteDirectMealPlanItem, getMealPlanItemsForDate, getMealPlanItemsForRange, markDirectMealPlanItemDone, markDirectMealPlanItemSkipped, normalizeMealPlanType, updateDirectMealPlanItem } from "@/services/database/meal-plan";
+import { getEatTargetForDate } from "@/services/database/eat-targets";
+import { getGroceryItems, upsertGroceryItem } from "@/services/database/execution-layer";
+import { getOnboarding } from "@/services/database/profile";
+import { validateMealItem, validateMealPlanDay } from "@/services/meals/meal-validation";
+import type { ActiveNutritionTarget } from "@/services/nutrition/active-target";
+import type { MealPlanItem, MealType, OnboardingAnswers } from "@/types";
+
+const MEAL_TYPES: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
+const ADJUST_ACTIONS: AiActionOption[] = [
+  { type: "regenerate_meal", label: "Replace", description: "Replace this meal while preserving its date and nutrition context." },
+  { type: "make_meal_cheaper", label: "Cheaper", description: "Create a lower-cost alternative using saved preferences." },
+  { type: "make_meal_faster", label: "Faster", description: "Create a quicker alternative using saved cooking constraints." },
+  { type: "make_meal_higher_protein", label: "More protein", description: "Increase protein and update all nutrition values." },
+  { type: "replace_meal_ingredient", label: "Swap ingredient", description: "Replace one ingredient while respecting allergies and preferences." },
+  { type: "make_meal_dairy_free", label: "Dairy-free", description: "Create a dairy-free version with updated nutrition values." },
+  { type: "make_meal_gluten_free", label: "Gluten-free", description: "Create a gluten-free version with updated nutrition values." },
+  { type: "make_meal_cuisine", label: "Change cuisine", description: "Change the cuisine while preserving the meal purpose." }
+];
+
+type Draft = { date: string; foodName: string; mealType: MealType; quantity: string; serving: string; calories: string; protein: string; carbs: string; fat: string; notes: string };
+type Notice = { kind: "success" | "error" | "info"; message: string };
+type LoadState<T> = { status: "loading" | "loaded" | "failed"; data: T; error?: string; key?: string };
+
+function isoDate(value: string | null, fallback: string) { return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback; }
+function addDays(value: string, amount: number) { const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + amount); return date.toISOString().slice(0, 10); }
+function startOfWeek(value: string, startsOn: "monday" | "sunday") { const date = new Date(`${value}T12:00:00Z`); const day = date.getUTCDay(); return addDays(value, startsOn === "monday" ? (day === 0 ? -6 : 1 - day) : -day); }
+function localeFor(language: "en" | "de" | "ar") { return language === "de" ? "de-DE" : language === "ar" ? "ar-EG" : "en-US"; }
+function formatDate(value: string, language: "en" | "de" | "ar", options: Intl.DateTimeFormatOptions) { return new Intl.DateTimeFormat(localeFor(language), { timeZone: "UTC", ...options }).format(new Date(`${value}T12:00:00Z`)); }
+function labelForType(type: MealType, c: MealPlanCopy) { return type === "Breakfast" ? c.breakfast : type === "Lunch" ? c.lunch : type === "Dinner" ? c.dinner : c.snacks; }
+function addLabelForType(type: MealType, c: MealPlanCopy) { return type === "Breakfast" ? c.addBreakfast : type === "Lunch" ? c.addLunch : type === "Dinner" ? c.addDinner : c.addSnack; }
+function replaceActionLabels(actions: AiActionOption[], c: MealPlanCopy): AiActionOption[] { const labels = [c.replace, c.cheaper, c.faster, c.moreProtein, c.swapIngredient, c.dairyFree, c.glutenFree, c.changeCuisine]; return actions.map((action, index) => ({ ...action, label: labels[index] ?? action.label })); }
+function emptyDraft(date: string, mealType: MealType): Draft { return { date, foodName: "", mealType, quantity: "1", serving: "1 serving", calories: "", protein: "", carbs: "", fat: "", notes: "" }; }
+function draftFromItem(item: MealPlanItem): Draft { return { date: item.plan_date, foodName: item.food_name, mealType: item.meal_type, quantity: String(item.quantity), serving: item.serving_size, calories: String(item.calories), protein: String(item.protein_g), carbs: String(item.carbs_g), fat: String(item.fat_g), notes: item.notes ?? "" }; }
+function draftErrors(draft: Draft, c: MealPlanCopy) {
+  const errors: Partial<Record<keyof Draft, string>> = {};
+  if (!draft.foodName.trim()) errors.foodName = c.required;
+  if (!draft.serving.trim()) errors.serving = c.required;
+  const quantity = Number(draft.quantity);
+  if (!draft.quantity.trim() || !Number.isFinite(quantity) || quantity <= 0) errors.quantity = c.positive;
+  (["calories", "protein", "carbs", "fat"] as const).forEach((field) => { const value = Number(draft[field]); if (!draft[field].trim() || !Number.isFinite(value) || value < 0) errors[field] = c.nonNegative; });
+  return errors;
+}
+function mergeItem(items: MealPlanItem[], item: MealPlanItem, rangeStart?: string, rangeEnd?: string) { const without = items.filter((existing) => existing.id !== item.id); if (rangeStart && rangeEnd && (item.plan_date < rangeStart || item.plan_date > rangeEnd)) return without; return [...without, item].sort((a, b) => a.plan_date.localeCompare(b.plan_date) || a.created_at.localeCompare(b.created_at)); }
+
+export function MyMealPlanPageClient() {
+  const { user, profile } = useAuth();
+  const { language, dir } = useTranslation();
+  const { settings } = useUserSettings();
+  const c = getMealPlanCopy(language);
+  const today = useTodayDate();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeTab = resolveMealPlanTab(searchParams.get("tab"));
+  const selectedDate = isoDate(searchParams.get("date"), today);
+  const selectedWeekStart = useMemo(() => startOfWeek(selectedDate, settings.weekStartsOn), [selectedDate, settings.weekStartsOn]);
+  const selectedWeekEnd = useMemo(() => addDays(selectedWeekStart, 6), [selectedWeekStart]);
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(selectedWeekStart, index)), [selectedWeekStart]);
+  const [dayState, setDayState] = useState<LoadState<MealPlanItem[]>>({ status: "loading", data: [] });
+  const [weekState, setWeekState] = useState<LoadState<MealPlanItem[]>>({ status: "loading", data: [] });
+  const [targetState, setTargetState] = useState<LoadState<ActiveNutritionTarget | null>>({ status: "loading", data: null });
+  const [weekTargets, setWeekTargets] = useState<Record<string, ActiveNutritionTarget | null>>({});
+  const [onboarding, setOnboarding] = useState<OnboardingAnswers | null>(null);
+  const [groceryStats, setGroceryStats] = useState({ count: 0, checked: 0 });
+  const [reload, setReload] = useState(0);
+  const [groceryRefreshKey, setGroceryRefreshKey] = useState(0);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addMode, setAddMode] = useState<"choose" | "direct">("choose");
+  const [draft, setDraft] = useState<Draft>(() => emptyDraft(selectedDate, "Breakfast"));
+  const [editItem, setEditItem] = useState<MealPlanItem | null>(null);
+  const [editDraft, setEditDraft] = useState<Draft>(() => emptyDraft(selectedDate, "Breakfast"));
+  const [adjustItem, setAdjustItem] = useState<MealPlanItem | null>(null);
+  const adjustTrigger = useRef<HTMLElement | null>(null);
+  const requestIds = useRef({ day: 0, week: 0, target: 0, targets: 0, grocery: 0 });
+  const { dialog: confirmDialog, ask: confirm } = useConfirm();
+
+  useEffect(() => {
+    const rawDate = searchParams.get("date"); const rawTab = searchParams.get("tab");
+    if (rawDate !== selectedDate || rawTab !== activeTab) router.replace(mealPlanUrl(pathname, activeTab, selectedDate), { scroll: false });
+  }, [activeTab, pathname, router, searchParams, selectedDate]);
+  const navigate = useCallback((tab: MealPlanTab, date: string) => { router.push(mealPlanUrl(pathname, tab, date), { scroll: false }); }, [pathname, router]);
+
+  useEffect(() => {
+    const id = ++requestIds.current.day;
+    setDayState((current) => ({ status: "loading", data: current.key === selectedDate ? current.data : [], key: selectedDate }));
+    if (!user?.id) { setDayState({ status: "loaded", data: [], key: selectedDate }); return; }
+    void getMealPlanItemsForDate(user.id, selectedDate).then((data) => { if (requestIds.current.day === id) setDayState({ status: "loaded", data, key: selectedDate }); }).catch((error) => { if (requestIds.current.day === id) setDayState({ status: "failed", data: [], error: userSafeError(error), key: selectedDate }); });
+  }, [reload, selectedDate, user?.id]);
+
+  useEffect(() => {
+    const id = ++requestIds.current.week;
+    setWeekState((current) => ({ status: "loading", data: current.key === selectedWeekStart ? current.data : [], key: selectedWeekStart }));
+    if (!user?.id) { setWeekState({ status: "loaded", data: [], key: selectedWeekStart }); return; }
+    void getMealPlanItemsForRange(user.id, selectedWeekStart, selectedWeekEnd).then((data) => { if (requestIds.current.week === id) setWeekState({ status: "loaded", data, key: selectedWeekStart }); }).catch((error) => { if (requestIds.current.week === id) setWeekState({ status: "failed", data: [], error: userSafeError(error), key: selectedWeekStart }); });
+  }, [reload, selectedWeekEnd, selectedWeekStart, user?.id]);
+
+  useEffect(() => {
+    const id = ++requestIds.current.target;
+    setTargetState((current) => ({ status: "loading", data: current.key === selectedDate ? current.data : null, key: selectedDate }));
+    if (!user?.id) { setTargetState({ status: "loaded", data: null, key: selectedDate }); return; }
+    void getEatTargetForDate(user.id, selectedDate).then((data) => { if (requestIds.current.target === id) setTargetState({ status: "loaded", data, key: selectedDate }); }).catch((error) => { if (requestIds.current.target === id) setTargetState({ status: "failed", data: null, error: userSafeError(error), key: selectedDate }); });
+  }, [reload, selectedDate, user?.id]);
+
+  useEffect(() => {
+    const id = ++requestIds.current.targets;
+    if (!user?.id) { setWeekTargets({}); return; }
+    void Promise.all(weekDays.map(async (date) => [date, await getEatTargetForDate(user.id, date)] as const)).then((rows) => { if (requestIds.current.targets === id) setWeekTargets(Object.fromEntries(rows)); }).catch(() => { if (requestIds.current.targets === id) setWeekTargets({}); });
+  }, [reload, user?.id, weekDays]);
+
+  useEffect(() => {
+    if (!user?.id) { setOnboarding(null); return; }
+    let active = true;
+    void getOnboarding(user.id).then((data) => { if (active) setOnboarding(data); }).catch(() => { if (active) setOnboarding(null); });
+    return () => { active = false; };
+  }, [user?.id]);
+
+  useEffect(() => {
+    const id = ++requestIds.current.grocery;
+    if (!user?.id) { setGroceryStats({ count: 0, checked: 0 }); return; }
+    void getGroceryItems(user.id, selectedWeekStart).then((items) => { if (requestIds.current.grocery === id) setGroceryStats({ count: items.length, checked: items.filter((item) => item.checked).length }); }).catch(() => { if (requestIds.current.grocery === id) setGroceryStats({ count: 0, checked: 0 }); });
+  }, [groceryRefreshKey, selectedWeekStart, user?.id]);
+
+  const dayItems = dayState.key === selectedDate ? dayState.data : [];
+  const target = targetState.key === selectedDate ? targetState.data : null;
+  const summary = useMemo(() => summarizeMealPlanDay(dayItems, target?.hasTarget ? Number(target.values.daily_calories) : null), [dayItems, target]);
+  const dayWarning = useMemo(() => validateMealPlanDay(dayItems.filter((item) => item.status !== "skipped"), target?.hasTarget ? Number(target.values.daily_calories) : null), [dayItems, target]);
+  const mealPlanContext = useMemo(() => ({ planning_profile: { goal: onboarding?.goals?.length ? onboarding.goals.join(", ") : onboarding?.goal ?? profile?.body_goal ?? "General wellness", goal_weight_kg: onboarding?.goal_weight_kg ?? profile?.target_weight_kg ?? null, training_days_per_week: onboarding?.training_days_per_week ?? null, nutrition_preferences: onboarding?.nutrition_preferences ?? [], food_preferences: onboarding?.food_preferences ?? null, allergies_limitations: onboarding?.allergies_limitations ?? null, lifestyle_notes: onboarding?.lifestyle_notes ?? null }, requested_start_date: selectedDate }), [onboarding, profile, selectedDate]);
+
+  function openAdd(mealType: MealType = "Breakfast") { setDraft(emptyDraft(selectedDate, mealType)); setAddMode("choose"); setAddOpen(true); }
+  function updateLocal(item: MealPlanItem, previousId = item.id) {
+    setDayState((current) => ({ ...current, data: item.plan_date === selectedDate ? mergeItem(current.data.filter((row) => row.id !== previousId), item) : current.data.filter((row) => row.id !== previousId) }));
+    setWeekState((current) => ({ ...current, data: mergeItem(current.data.filter((row) => row.id !== previousId), item, selectedWeekStart, selectedWeekEnd) }));
+  }
+
+  async function createMeal() {
+    if (!user?.id || Object.keys(draftErrors(draft, c)).length) return;
+    setBusyId("new");
+    try {
+      const item = await createDirectMealPlanItem({ userId: user.id, date: draft.date, mealType: draft.mealType, foodName: draft.foodName, quantity: Number(draft.quantity), servingInfo: draft.serving, calories: Number(draft.calories), protein: Number(draft.protein), carbs: Number(draft.carbs), fat: Number(draft.fat), notes: draft.notes });
+      updateLocal(item); setAddOpen(false); setNotice({ kind: "success", message: c.mealAdded });
+    } catch (error) { setNotice({ kind: "error", message: userSafeError(error, c.actionError) }); } finally { setBusyId(null); }
+  }
+
+  async function saveEdit() {
+    if (!user?.id || !editItem || Object.keys(draftErrors(editDraft, c)).length) return;
+    setBusyId(editItem.id);
+    try {
+      const item = await updateDirectMealPlanItem(user.id, editItem.id, { date: editDraft.date, mealType: editDraft.mealType, foodName: editDraft.foodName, quantity: Number(editDraft.quantity), servingInfo: editDraft.serving, calories: Number(editDraft.calories), protein: Number(editDraft.protein), carbs: Number(editDraft.carbs), fat: Number(editDraft.fat), notes: editDraft.notes });
+      updateLocal(item, editItem.id); setEditItem(null); setNotice({ kind: "success", message: c.mealUpdated });
+    } catch (error) { setNotice({ kind: "error", message: userSafeError(error, c.actionError) }); } finally { setBusyId(null); }
+  }
+
+  async function markDone(item: MealPlanItem) { setBusyId(item.id); try { const result = await markDirectMealPlanItemDone(item); updateLocal(result.item); setNotice({ kind: "success", message: result.already_done ? c.mealAlreadyDone : c.mealDone }); } catch (error) { setNotice({ kind: "error", message: userSafeError(error, c.actionError) }); } finally { setBusyId(null); } }
+  async function skip(item: MealPlanItem) { setBusyId(item.id); try { updateLocal(await markDirectMealPlanItemSkipped(item)); setNotice({ kind: "success", message: c.mealSkipped }); } catch (error) { setNotice({ kind: "error", message: userSafeError(error, c.actionError) }); } finally { setBusyId(null); } }
+  function requestDelete(item: MealPlanItem) { confirm({ title: item.status === "done" ? c.removeLoggedTitle : c.deleteTitle, description: item.status === "done" ? c.removeLoggedDesc : c.deleteDesc, confirmLabel: item.status === "done" ? c.removePlan : c.remove, variant: "destructive", onConfirm: () => { void remove(item); } }); }
+  async function remove(item: MealPlanItem) { setBusyId(item.id); try { await deleteDirectMealPlanItem(item); setDayState((current) => ({ ...current, data: current.data.filter((row) => row.id !== item.id) })); setWeekState((current) => ({ ...current, data: current.data.filter((row) => row.id !== item.id) })); setNotice({ kind: "success", message: c.mealRemoved }); } catch (error) { setNotice({ kind: "error", message: userSafeError(error, c.actionError) }); } finally { setBusyId(null); } }
+  async function addToGrocery(item: MealPlanItem) {
+    if (!user?.id) return; setBusyId(item.id);
+    try { await upsertGroceryItem(user.id, { week_start: selectedWeekStart, source_meal_plan_item_id: item.id, item_name: item.food_name, quantity: item.quantity, unit: item.serving_size, store_section: "Other", notes: `${item.meal_type} · ${item.plan_date}`, created_by: "meal_plan" }); setGroceryRefreshKey((value) => value + 1); setNotice({ kind: "success", message: c.groceryAdded }); }
+    catch (error) { const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code) : ""; setNotice({ kind: code === "23505" ? "info" : "error", message: code === "23505" ? c.groceryDuplicate : userSafeError(error, c.actionError) }); }
+    finally { setBusyId(null); }
+  }
+  function openEdit(item: MealPlanItem) { setEditItem(item); setEditDraft(draftFromItem(item)); }
+
+  return <div className="space-y-4" dir={dir}>
+    <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="min-w-0"><h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{c.title}</h1><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{c.description}</p></div>
+      <div className="flex flex-wrap gap-2">
+        <AiActionRequestDialog actions={[{ type: "build_meal_plan", label: c.updateChatGPT, description: c.description }]} sourceType="meal_plan" context={mealPlanContext} permissionSection="meal_plans" buttonVariant="outline" />
+        <Button className="min-h-12" onClick={() => openAdd()}><Plus className="h-4 w-4" />{c.addMeal}</Button>
+        <details className="relative"><summary className="inline-flex min-h-12 cursor-pointer list-none items-center gap-2 rounded-[14px] border border-input bg-card px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><MoreHorizontal className="h-4 w-4" />{c.moreActions}</summary><div className="absolute end-0 z-40 mt-2 min-w-52 rounded-[14px] border bg-card p-2 shadow-lg"><Link className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/my-meal-plan/food-preferences?date=${encodeURIComponent(selectedDate)}&tab=${activeTab}`}>{c.foodPreferences}</Link></div></details>
+      </div>
+    </header>
+    {notice ? <NoticeBox notice={notice} onClose={() => setNotice(null)} /> : null}{confirmDialog}
+    <Tabs value={activeTab} onValueChange={(value) => navigate(resolveMealPlanTab(value), selectedDate)} className="space-y-4">
+      <TabsList className="w-full justify-start overflow-x-auto sm:w-auto"><TabsTrigger value="day">{c.day}</TabsTrigger><TabsTrigger value="week">{c.week}</TabsTrigger><TabsTrigger value="shopping">{c.shopping}</TabsTrigger></TabsList>
+      <TabsContent value="day" className="space-y-4">
+        <DateNavigation selectedDate={selectedDate} today={today} weekDays={weekDays} weekItems={weekState.data} language={language} c={c} onSelect={(date) => navigate("day", date)} />
+        <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.34fr)] lg:items-start">
+          <main className="min-w-0 space-y-3" aria-busy={dayState.status === "loading"}>
+            {dayState.status === "loading" ? <MealPlanLoading c={c} /> : null}
+            {dayState.status === "failed" ? <LoadError c={c} message={dayState.error} onRetry={() => setReload((value) => value + 1)} /> : null}
+            {dayState.status === "loaded" ? MEAL_TYPES.map((type) => <MealSection key={type} type={type} items={dayItems} c={c} busyId={busyId} onAdd={() => openAdd(type)} onDone={markDone} onSkip={skip} onEdit={openEdit} onGrocery={addToGrocery} onRemove={requestDelete} onAdjust={(item, trigger) => { adjustTrigger.current = trigger; setAdjustItem(item); }} />) : null}
+          </main>
+          <aside className="order-first space-y-3 lg:order-none lg:sticky lg:top-4">
+            <DailyOverview summary={summary} target={target} targetStatus={targetState.status} c={c} />
+            {targetState.status === "failed" ? <div className="rounded-[14px] border border-warning/30 bg-warning/10 p-3 text-sm" role="status">{c.targetUnavailable}</div> : null}
+            {dayWarning ? <div className="rounded-[14px] border border-warning/30 bg-warning/10 p-3 text-sm"><p className="font-semibold">{dayWarning.label}</p><p className="mt-1 text-muted-foreground">{dayWarning.detail}</p></div> : null}
+            <Card><CardContent className="p-4"><div className="flex items-center gap-2 font-semibold"><ShoppingCart className="h-4 w-4" />{c.groceryList}</div><p className="mt-1 text-sm text-muted-foreground">{interpolateCopy(c.itemsChecked, groceryStats)}</p><Button variant="outline" className="mt-3 min-h-11 w-full" onClick={() => navigate("shopping", selectedDate)}>{c.openList}</Button></CardContent></Card>
+          </aside>
+        </div>
+      </TabsContent>
+      <TabsContent value="week"><WeekView c={c} language={language} weekStart={selectedWeekStart} weekEnd={selectedWeekEnd} days={weekDays} items={weekState.data} targets={weekTargets} loading={weekState.status === "loading"} error={weekState.error} onPrevious={() => navigate("week", addDays(selectedDate, -7))} onNext={() => navigate("week", addDays(selectedDate, 7))} onSelect={(date) => navigate("day", date)} onRetry={() => setReload((value) => value + 1)} /></TabsContent>
+      <TabsContent value="shopping"><GroceryListPanel weekStart={selectedWeekStart} weekEnd={selectedWeekEnd} mealItems={weekState.data} refreshKey={groceryRefreshKey} onStats={(count, checked) => setGroceryStats((current) => current.count === count && current.checked === checked ? current : { count, checked })} /></TabsContent>
+    </Tabs>
+    <AddMealDialog open={addOpen} onOpenChange={setAddOpen} mode={addMode} setMode={setAddMode} draft={draft} setDraft={setDraft} c={c} language={language} selectedDate={selectedDate} context={mealPlanContext} busy={busyId === "new"} onSave={createMeal} />
+    <EditMealDialog item={editItem} draft={editDraft} setDraft={setEditDraft} c={c} busy={Boolean(editItem && busyId === editItem.id)} onClose={() => setEditItem(null)} onSave={saveEdit} />
+    <Dialog open={Boolean(adjustItem)} onOpenChange={(open) => { if (!open) { setAdjustItem(null); requestAnimationFrame(() => adjustTrigger.current?.focus()); } }}><DialogContent className="sm:max-w-xl" closeLabel={c.close}><DialogHeader><DialogTitle>{c.chatAdjustTitle}</DialogTitle><DialogDescription>{c.chatAdjustDesc}</DialogDescription></DialogHeader>{adjustItem ? <AiActionRequestDialog actions={replaceActionLabels(ADJUST_ACTIONS, c)} sourceType="meal_plan_item" sourceId={adjustItem.id} permissionSection="meal_plans" context={{ meal_item: adjustItem, date: adjustItem.plan_date, meal_type: adjustItem.meal_type, saved_macros: { calories: adjustItem.calories, protein_g: adjustItem.protein_g, carbs_g: adjustItem.carbs_g, fat_g: adjustItem.fat_g } }} className="grid gap-2 sm:grid-cols-2" /> : null}</DialogContent></Dialog>
+  </div>;
+}
+
+function DateNavigation({ selectedDate, today, weekDays, weekItems, language, c, onSelect }: { selectedDate: string; today: string; weekDays: string[]; weekItems: MealPlanItem[]; language: "en" | "de" | "ar"; c: MealPlanCopy; onSelect: (date: string) => void }) {
+  return <Card variant="glass"><CardContent className="p-3 sm:p-4"><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-base font-semibold sm:text-lg">{formatDate(selectedDate, language, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p><div className="flex gap-1.5"><Button variant="outline" size="icon" className="h-12 w-12" aria-label={c.previousDay} onClick={() => onSelect(addDays(selectedDate, -1))}><ChevronLeft className="h-4 w-4 rtl:rotate-180" /></Button><Button variant="outline" className="min-h-12" onClick={() => onSelect(today)}>{c.today}</Button><Button variant="outline" size="icon" className="h-12 w-12" aria-label={c.nextDay} onClick={() => onSelect(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4 rtl:rotate-180" /></Button></div></div><div className="mt-3 flex gap-2 overflow-x-auto pb-1">{weekDays.map((date) => { const selected = date === selectedDate; const current = date === today; const count = weekItems.filter((item) => item.plan_date === date && item.status !== "skipped").length; return <button key={date} type="button" aria-current={selected ? "date" : undefined} onClick={() => onSelect(date)} className={cn("min-h-14 min-w-[78px] shrink-0 rounded-[14px] border px-3 py-2 text-start text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", selected ? "border-primary bg-primary text-primary-foreground" : current ? "border-primary/50 bg-primary/10" : "bg-card hover:border-primary/40")}><span className="block text-xs opacity-80">{formatDate(date, language, { weekday: "short" })}</span><span className="block font-semibold">{formatDate(date, language, { month: "short", day: "numeric" })}</span><span className="block text-[11px] opacity-75">{count} {c.meals}</span></button>; })}</div></CardContent></Card>;
+}
+
+function DailyOverview({ summary, target, targetStatus, c }: { summary: ReturnType<typeof summarizeMealPlanDay>; target: ActiveNutritionTarget | null; targetStatus: LoadState<unknown>["status"]; c: MealPlanCopy }) {
+  const targetCalories = target?.hasTarget ? Number(target.values.daily_calories) : null;
+  const remainingLabel = summary.remainingCalories !== null && summary.remainingCalories < 0 ? c.overTarget : c.remaining;
+  const remainingValue = summary.remainingCalories === null ? "—" : Math.round(Math.abs(summary.remainingCalories));
+  return <Card variant="glass"><CardHeader className="p-4 pb-2"><CardTitle className="text-base">{c.effectiveTarget}</CardTitle><p className="text-xs text-muted-foreground">{targetStatus === "loading" ? "…" : target?.label ?? c.targetUnavailable}</p></CardHeader><CardContent className="space-y-4 p-4 pt-2"><div className="grid grid-cols-2 gap-2"><Metric label={c.effectiveTarget} value={targetCalories === null ? "—" : Math.round(targetCalories)} suffix={targetCalories === null ? "" : " kcal"} /><Metric label={c.scheduled} value={Math.round(summary.scheduled.calories)} suffix=" kcal" /><Metric label={c.consumed} value={Math.round(summary.consumed.calories)} suffix=" kcal" /><Metric label={remainingLabel} value={remainingValue} suffix={summary.remainingCalories === null ? "" : " kcal"} emphasis={summary.overTargetCalories > 0} /></div><div className="grid grid-cols-3 gap-2 border-t pt-3 text-center"><Metric label={c.protein} value={Math.round(summary.scheduled.protein_g)} suffix=" g" compact /><Metric label={c.carbs} value={Math.round(summary.scheduled.carbs_g)} suffix=" g" compact /><Metric label={c.fat} value={Math.round(summary.scheduled.fat_g)} suffix=" g" compact /></div><div className="flex flex-wrap gap-2 border-t pt-3 text-xs"><Badge variant="outline">{c.planned}: {summary.counts.planned}</Badge><Badge variant="success">{c.done}: {summary.counts.done}</Badge><Badge variant="warning">{c.skipped}: {summary.counts.skipped}</Badge>{summary.alignmentPercent !== null ? <Badge variant="outline">{c.alignment}: {summary.alignmentPercent}%</Badge> : null}</div></CardContent></Card>;
+}
+function Metric({ label, value, suffix, compact, emphasis }: { label: string; value: string | number; suffix: string; compact?: boolean; emphasis?: boolean }) { return <div className={compact ? "min-w-0" : "rounded-[14px] border bg-card/60 p-3"}><p className="text-[11px] text-muted-foreground sm:text-xs">{label}</p><p className={cn("mt-0.5 font-bold", compact ? "text-sm" : "text-lg", emphasis && "text-destructive")}>{value}{suffix}</p></div>; }
+
+function MealSection(props: { type: MealType; items: MealPlanItem[]; c: MealPlanCopy; busyId: string | null; onAdd: () => void; onDone: (item: MealPlanItem) => void; onSkip: (item: MealPlanItem) => void; onEdit: (item: MealPlanItem) => void; onGrocery: (item: MealPlanItem) => void; onRemove: (item: MealPlanItem) => void; onAdjust: (item: MealPlanItem, trigger: HTMLElement) => void }) {
+  const section = summarizeMealSection(props.items, props.type);
+  return <details open className="group rounded-[18px] border bg-card"><summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"><div className="min-w-0"><div className="flex items-center gap-2"><Utensils className="h-4 w-4" /><h2 className="font-semibold">{labelForType(props.type, props.c)}</h2><Badge variant="outline">{section.activeCount}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{Math.round(section.totals.calories)} kcal · {Math.round(section.totals.protein_g)} g {props.c.protein.toLowerCase()}</p></div><Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label={addLabelForType(props.type, props.c)} onClick={(event) => { event.preventDefault(); props.onAdd(); }}><Plus className="h-4 w-4" /></Button></summary><div className="border-t">{!section.items.length ? <div className="flex flex-wrap items-center justify-between gap-2 p-4"><p className="text-sm text-muted-foreground">{props.c.noMeals}</p><Button variant="outline" className="min-h-11" onClick={props.onAdd}><Plus className="h-4 w-4" />{addLabelForType(props.type, props.c)}</Button></div> : null}{section.items.map((item) => <MealRow key={item.id} item={item} c={props.c} busyId={props.busyId} onDone={props.onDone} onSkip={props.onSkip} onEdit={props.onEdit} onGrocery={props.onGrocery} onRemove={props.onRemove} onAdjust={props.onAdjust} />)}</div></details>;
+}
+
+function MealRow({ item, c, busyId, onDone, onSkip, onEdit, onGrocery, onRemove, onAdjust }: { item: MealPlanItem; c: MealPlanCopy; busyId: string | null; onDone: (item: MealPlanItem) => void; onSkip: (item: MealPlanItem) => void; onEdit: (item: MealPlanItem) => void; onGrocery: (item: MealPlanItem) => void; onRemove: (item: MealPlanItem) => void; onAdjust: (item: MealPlanItem, trigger: HTMLElement) => void }) {
+  const validation = validateMealItem(item); const busy = busyId === item.id; const needsRepair = item.status === "done" && (!item.food_log_id || !item.completed_at); const statusLabel = item.status === "done" ? c.statusDone : item.status === "skipped" ? c.statusSkipped : c.statusPlanned;
+  return <div className={cn("border-b px-4 py-3 last:border-b-0", item.status === "skipped" && "opacity-65")}><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="min-w-0 break-words font-semibold">{item.food_name}</h3><Badge variant={item.status === "done" ? "success" : item.status === "skipped" ? "warning" : "outline"}>{statusLabel}</Badge></div><p className="mt-1 text-sm text-muted-foreground">{interpolateCopy(c.quantityServing, { quantity: item.quantity, serving: item.serving_size })}</p><p className="mt-1 text-xs text-muted-foreground">{Math.round(item.calories)} kcal · P {Math.round(item.protein_g)} g · C {Math.round(item.carbs_g)} g · F {Math.round(item.fat_g)} g</p>{validation.tone !== "success" ? <p className="mt-2 flex items-center gap-1.5 text-xs text-warning"><AlertTriangle className="h-3.5 w-3.5" />{validation.detail}</p> : null}{needsRepair ? <p className="mt-2 text-xs text-destructive" role="alert">{c.invalidRow}</p> : null}</div><div className="flex shrink-0 items-center gap-2">{item.status === "planned" || needsRepair ? <Button className="min-h-11" disabled={busy} onClick={() => onDone(item)}><CheckCircle2 className="h-4 w-4" />{busy ? c.saving : needsRepair ? c.repairCompletion : c.markDone}</Button> : null}<details className="relative"><summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-[12px] border px-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><MoreHorizontal className="h-4 w-4" />{c.adjust}</summary><div className="absolute end-0 z-30 mt-2 grid min-w-52 gap-1 rounded-[14px] border bg-card p-2 shadow-lg">{item.status === "planned" ? <MenuButton onClick={() => onSkip(item)} disabled={busy}>{c.skip}</MenuButton> : null}<MenuButton onClick={() => onEdit(item)} disabled={busy}>{item.status === "done" ? c.completedCorrection : c.edit}</MenuButton><MenuButton onClick={() => onGrocery(item)} disabled={busy}>{c.addGrocery}</MenuButton><MenuButton onClick={(event) => onAdjust(item, event.currentTarget)} disabled={busy}>{c.adjustChatGPT}</MenuButton><MenuButton onClick={() => onRemove(item)} disabled={busy} destructive>{item.status === "done" ? c.removePlan : c.remove}</MenuButton></div></details></div></div></div>;
+}
+function MenuButton({ children, onClick, disabled, destructive }: { children: ReactNode; onClick: (event: MouseEvent<HTMLButtonElement>) => void; disabled?: boolean; destructive?: boolean }) { return <button type="button" className={cn("min-h-11 rounded-xl px-3 text-start text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50", destructive && "text-destructive")} onClick={onClick} disabled={disabled}>{children}</button>; }
+
+function AddMealDialog({ open, onOpenChange, mode, setMode, draft, setDraft, c, language, selectedDate, context, busy, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; mode: "choose" | "direct"; setMode: (mode: "choose" | "direct") => void; draft: Draft; setDraft: Dispatch<SetStateAction<Draft>>; c: MealPlanCopy; language: "en" | "de" | "ar"; selectedDate: string; context: Record<string, unknown>; busy: boolean; onSave: () => void }) {
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="sm:max-w-2xl" closeLabel={c.close}><DialogHeader><DialogTitle>{mode === "choose" ? c.addTitle : c.directTitle}</DialogTitle><DialogDescription>{interpolateCopy(c.addDescription, { date: formatDate(selectedDate, language, { month: "long", day: "numeric", year: "numeric" }) })}</DialogDescription></DialogHeader>{mode === "choose" ? <div className="grid gap-2"><AiActionRequestDialog actions={[{ type: "build_meal_plan", label: c.createChatGPT, description: c.description }]} sourceType="meal_plan" context={context} permissionSection="meal_plans" buttonVariant="default" className="grid [&_button]:min-h-12" /><Button variant="outline" className="min-h-12" onClick={() => setMode("direct")}>{c.addDirectly}</Button><Button asChild variant="outline" className="min-h-12"><Link href={`/calories/food-hub?returnTo=${encodeURIComponent(`/my-meal-plan?tab=day&date=${selectedDate}`)}&date=${encodeURIComponent(selectedDate)}&mealType=${encodeURIComponent(draft.mealType)}`}>{c.openFoodHub}</Link></Button></div> : <MealForm draft={draft} setDraft={setDraft} c={c} busy={busy} showDate={false} onSave={onSave} onCancel={() => setMode("choose")} />}</DialogContent></Dialog>;
+}
+function EditMealDialog({ item, draft, setDraft, c, busy, onClose, onSave }: { item: MealPlanItem | null; draft: Draft; setDraft: Dispatch<SetStateAction<Draft>>; c: MealPlanCopy; busy: boolean; onClose: () => void; onSave: () => void }) { return <Dialog open={Boolean(item)} onOpenChange={(open) => { if (!open) onClose(); }}><DialogContent className="sm:max-w-2xl" closeLabel={c.close}><DialogHeader><DialogTitle>{item?.status === "done" ? c.completedCorrection : c.edit}</DialogTitle><DialogDescription>{item?.status === "done" ? c.completedCorrectionDesc : c.description}</DialogDescription></DialogHeader><MealForm draft={draft} setDraft={setDraft} c={c} busy={busy} showDate onSave={onSave} onCancel={onClose} /></DialogContent></Dialog>; }
+function MealForm({ draft, setDraft, c, busy, showDate, onSave, onCancel }: { draft: Draft; setDraft: Dispatch<SetStateAction<Draft>>; c: MealPlanCopy; busy: boolean; showDate: boolean; onSave: () => void; onCancel: () => void }) {
+  const errors = draftErrors(draft, c); const valid = Object.keys(errors).length === 0; const field = (key: keyof Draft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
+  return <div className="space-y-4"><div className="grid gap-4 sm:grid-cols-2">{showDate ? <FormField id="meal-date" label="Date"><Input id="meal-date" type="date" value={draft.date} onChange={(event) => field("date", event.target.value)} /></FormField> : null}<FormField id="meal-name" label={c.foodName} error={errors.foodName}><Input id="meal-name" value={draft.foodName} aria-describedby={errors.foodName ? "meal-name-error" : undefined} onChange={(event) => field("foodName", event.target.value)} /></FormField><FormField id="meal-type" label={c.mealType}><select id="meal-type" value={draft.mealType} onChange={(event) => setDraft((current) => ({ ...current, mealType: normalizeMealPlanType(event.target.value) }))} className="h-12 w-full rounded-[14px] border border-input bg-card px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">{MEAL_TYPES.map((type) => <option key={type} value={type}>{labelForType(type, c)}</option>)}</select></FormField><FormField id="meal-quantity" label={c.quantity} error={errors.quantity}><Input id="meal-quantity" type="number" min="0.01" step="0.01" inputMode="decimal" value={draft.quantity} aria-describedby={errors.quantity ? "meal-quantity-error" : undefined} onChange={(event) => field("quantity", event.target.value)} /></FormField><FormField id="meal-serving" label={c.serving} error={errors.serving}><Input id="meal-serving" value={draft.serving} aria-describedby={errors.serving ? "meal-serving-error" : undefined} onChange={(event) => field("serving", event.target.value)} /></FormField></div><details open className="rounded-[14px] border"><summary className="min-h-12 cursor-pointer list-none px-4 py-3 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">{c.nutritionDetails}</summary><div className="grid gap-4 border-t p-4 sm:grid-cols-2">{([["calories", c.calories], ["protein", c.protein], ["carbs", c.carbs], ["fat", c.fat]] as Array<["calories" | "protein" | "carbs" | "fat", string]>).map(([key, label]) => <FormField key={key} id={`meal-${key}`} label={label} error={errors[key]}><Input id={`meal-${key}`} type="number" min="0" step="0.1" inputMode="decimal" value={draft[key]} aria-describedby={errors[key] ? `meal-${key}-error` : undefined} onChange={(event) => field(key, event.target.value)} /></FormField>)}</div></details><FormField id="meal-notes" label={c.notes}><textarea id="meal-notes" value={draft.notes} onChange={(event) => field("notes", event.target.value)} className="min-h-24 w-full rounded-[14px] border border-input bg-card px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring" /></FormField><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" className="min-h-12" onClick={onCancel}>{c.cancel}</Button><Button className="min-h-12" disabled={!valid || busy} onClick={onSave}>{busy ? c.saving : c.save}</Button></div></div>;
+}
+function FormField({ id, label, error, children }: { id: string; label: string; error?: string; children: ReactNode }) { return <div className="space-y-2"><Label htmlFor={id}>{label}</Label>{children}{error ? <p id={`${id}-error`} className="text-xs text-destructive" role="alert">{error}</p> : null}</div>; }
+
+function WeekView({ c, language, weekStart, weekEnd, days, items, targets, loading, error, onPrevious, onNext, onSelect, onRetry }: { c: MealPlanCopy; language: "en" | "de" | "ar"; weekStart: string; weekEnd: string; days: string[]; items: MealPlanItem[]; targets: Record<string, ActiveNutritionTarget | null>; loading: boolean; error?: string; onPrevious: () => void; onNext: () => void; onSelect: (date: string) => void; onRetry: () => void }) {
+  return <div className="space-y-4"><Card variant="glass"><CardContent className="flex flex-wrap items-center justify-between gap-3 p-4"><Button variant="outline" size="icon" className="h-12 w-12" onClick={onPrevious} aria-label={c.previousWeek}><ChevronLeft className="h-4 w-4 rtl:rotate-180" /></Button><p className="font-semibold">{interpolateCopy(c.weekRange, { start: formatDate(weekStart, language, { month: "short", day: "numeric" }), end: formatDate(weekEnd, language, { month: "short", day: "numeric", year: "numeric" }) })}</p><Button variant="outline" size="icon" className="h-12 w-12" onClick={onNext} aria-label={c.nextWeek}><ChevronRight className="h-4 w-4 rtl:rotate-180" /></Button></CardContent></Card>{loading ? <MealPlanLoading c={c} /> : null}{error ? <LoadError c={c} message={error} onRetry={onRetry} /> : null}{!loading && !error ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">{days.map((date) => { const dayItems = items.filter((item) => item.plan_date === date); const daySummary = summarizeMealPlanDay(dayItems, targets[date]?.hasTarget ? Number(targets[date]?.values.daily_calories) : null); return <button key={date} type="button" onClick={() => onSelect(date)} className="min-h-44 rounded-[18px] border bg-card p-4 text-start transition hover:border-primary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><p className="font-semibold">{formatDate(date, language, { weekday: "short", month: "short", day: "numeric" })}</p><div className="mt-3 space-y-1 text-xs text-muted-foreground"><p>{c.planned}: {daySummary.counts.planned} · {c.done}: {daySummary.counts.done} · {c.skipped}: {daySummary.counts.skipped}</p><p>{c.activeCalories}: {Math.round(daySummary.scheduled.calories)} kcal</p><p>{c.consumedCalories}: {Math.round(daySummary.consumed.calories)} kcal</p><p>{c.target}: {targets[date]?.hasTarget ? Math.round(Number(targets[date]?.values.daily_calories)) : "—"} kcal</p>{daySummary.alignmentPercent !== null ? <p>{c.alignment}: {daySummary.alignmentPercent}%</p> : null}</div>{!dayItems.length ? <p className="mt-3 text-xs text-muted-foreground">{c.noWeekMeals}</p> : null}</button>; })}</div> : null}</div>;
+}
+function MealPlanLoading({ c }: { c: MealPlanCopy }) { return <div className="space-y-3" role="status" aria-live="polite"><span className="sr-only">{c.loadingMeals}</span>{Array.from({ length: 4 }, (_, index) => <div key={index} className="h-24 animate-pulse rounded-[18px] border bg-muted/45 motion-reduce:animate-none" />)}</div>; }
+function LoadError({ c, message, onRetry }: { c: MealPlanCopy; message?: string; onRetry: () => void }) { return <div className="rounded-[18px] border border-destructive/30 bg-destructive/10 p-4" role="alert"><p className="font-semibold">{c.loadMealsError}</p>{message ? <p className="mt-1 text-sm text-muted-foreground">{message}</p> : null}<Button className="mt-3 min-h-11" onClick={onRetry}><RefreshCw className="h-4 w-4" />{c.retry}</Button></div>; }
+function NoticeBox({ notice, onClose }: { notice: Notice; onClose: () => void }) { return <div className={cn("flex items-start justify-between gap-3 rounded-[14px] border p-3 text-sm", notice.kind === "error" ? "border-destructive/30 bg-destructive/10" : notice.kind === "success" ? "border-success/30 bg-success/10" : "border-primary/30 bg-primary/5")} role={notice.kind === "error" ? "alert" : "status"}><p>{notice.message}</p><button className="min-h-11 px-2 text-xs font-semibold underline" onClick={onClose}>×</button></div>; }
