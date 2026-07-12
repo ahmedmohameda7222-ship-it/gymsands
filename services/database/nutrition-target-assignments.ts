@@ -43,6 +43,12 @@ export function isExplicitNutritionTargetAssignment(value: unknown): value is Nu
   return typeof value === "string" && explicitAssignments.has(value as NutritionTargetProfileType);
 }
 
+export function isValidNutritionTargetDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 export function legacyNutritionTargetOverrideKey(userId: string, date: string) {
   return `plaivra:nutrition-target:${userId}:${date}`;
 }
@@ -81,28 +87,60 @@ export async function getNutritionTargetDateOverrides(userId: string, startDate:
   return (data ?? []) as UserNutritionTargetDateOverride[];
 }
 
-export async function migrateLegacyNutritionTargetOverride(userId: string, date: string) {
-  const existing = await getNutritionTargetDateOverride(userId, date);
-  if (existing || typeof window === "undefined" || !canUseUserData(userId)) return existing;
+export async function migrateLegacyNutritionTargetOverridesForDates(userId: string, inputDates: string[]) {
+  const dates = Array.from(new Set(inputDates.filter(isValidNutritionTargetDate))).sort();
+  if (!dates.length || !canUseUserData(userId)) return [] as UserNutritionTargetDateOverride[];
 
-  const key = legacyNutritionTargetOverrideKey(userId, date);
-  const legacyValue = window.localStorage.getItem(key);
-  if (!isExplicitNutritionTargetAssignment(legacyValue)) return null;
+  const requested = new Set(dates);
+  const existing = (await getNutritionTargetDateOverrides(userId, dates[0], dates[dates.length - 1]))
+    .filter((row) => requested.has(row.target_date));
+  const existingByDate = new Map(existing.map((row) => [row.target_date, row]));
+
+  if (typeof window === "undefined") return existing;
+
+  const candidates: Array<{ user_id: string; target_date: string; target_type: NutritionTargetProfileType }> = [];
+  for (const date of dates) {
+    if (existingByDate.has(date)) continue;
+    const key = legacyNutritionTargetOverrideKey(userId, date);
+    const legacyValue = window.localStorage.getItem(key);
+    if (legacyValue === "auto") {
+      // `auto` is the absence of an explicit assignment; removing this obsolete no-op key is safe.
+      window.localStorage.removeItem(key);
+      continue;
+    }
+    if (!isExplicitNutritionTargetAssignment(legacyValue)) continue;
+    candidates.push({ user_id: userId, target_date: date, target_type: legacyValue });
+  }
+
+  if (!candidates.length) return existing;
 
   const { error } = await supabase!
     .from("user_nutrition_target_date_overrides")
-    .insert({ user_id: userId, target_date: date, target_type: legacyValue });
+    .upsert(candidates, { onConflict: "user_id,target_date", ignoreDuplicates: true });
+  if (error) throw new Error("Could not migrate the saved nutrition target assignments.");
 
-  if (error && error.code !== "23505") {
-    throw new Error("Could not migrate the saved nutrition target assignment.");
+  const verified = (await getNutritionTargetDateOverrides(userId, dates[0], dates[dates.length - 1]))
+    .filter((row) => requested.has(row.target_date));
+  const verifiedByDate = new Map(verified.map((row) => [row.target_date, row]));
+
+  for (const candidate of candidates) {
+    const row = verifiedByDate.get(candidate.target_date);
+    if (!row || row.user_id !== userId || row.target_type !== candidate.target_type) {
+      throw new Error(`Could not verify the migrated nutrition target assignment for ${candidate.target_date}.`);
+    }
   }
 
-  const verified = await getNutritionTargetDateOverride(userId, date);
-  if (!verified) throw new Error("Could not verify the migrated nutrition target assignment.");
+  for (const candidate of candidates) {
+    window.localStorage.removeItem(legacyNutritionTargetOverrideKey(userId, candidate.target_date));
+    dispatchTargetRefresh(candidate.target_date, candidate.target_type);
+  }
 
-  window.localStorage.removeItem(key);
-  dispatchTargetRefresh(date, verified.target_type);
   return verified;
+}
+
+export async function migrateLegacyNutritionTargetOverride(userId: string, date: string) {
+  const overrides = await migrateLegacyNutritionTargetOverridesForDates(userId, [date]);
+  return overrides.find((row) => row.target_date === date) ?? null;
 }
 
 export type ApplyNutritionTargetChangesInput = {
