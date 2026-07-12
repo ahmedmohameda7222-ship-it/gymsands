@@ -2,8 +2,32 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
-import { addIsoDays, foodLogDuplicateKey, startOfEatWeek } from "@/lib/eat/eat-model";
+import { addIsoDays, foodLogDuplicateKey, startOfEatWeek, type EatWeekTargetDay } from "@/lib/eat/eat-model";
+import { getCalorieTargets } from "@/services/database/nutrition";
+import { getNutritionTargetProfiles } from "@/services/database/execution-layer";
+import { getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
+import { resolveEatTargetForDate, type ActiveNutritionTarget } from "@/services/nutrition/active-target";
 import type { DailyNutritionSummary, FoodLog, MealPlanItem, MealType, WaterLog } from "@/types";
+
+export const EAT_LINKED_EDIT_CRITICAL_CODE = "EAT_LINKED_EDIT_CRITICAL";
+
+export class EatLinkedEditConsistencyError extends Error {
+  readonly code = EAT_LINKED_EDIT_CRITICAL_CODE;
+  readonly requiresReload = true;
+  readonly debugDetail: string;
+
+  constructor(debugDetail: string) {
+    super("Linked food-log consistency could not be guaranteed.");
+    this.name = "EatLinkedEditConsistencyError";
+    this.debugDetail = debugDetail;
+  }
+}
+
+export function isEatLinkedEditConsistencyError(error: unknown): error is EatLinkedEditConsistencyError {
+  return error instanceof EatLinkedEditConsistencyError || (
+    typeof error === "object" && error !== null && "code" in error && error.code === EAT_LINKED_EDIT_CRITICAL_CODE
+  );
+}
 
 function canUseUserData(userId: string | null | undefined): userId is string {
   return Boolean(supabase && userId && isUuid(userId));
@@ -101,6 +125,39 @@ export async function getEatWeek(userId: string, selectedDate: string) {
   });
 }
 
+async function loadTargetSources(userId: string) {
+  const [baseTarget, profiles, plan] = await Promise.all([
+    getCalorieTargets(userId, { throwOnError: true }),
+    getNutritionTargetProfiles(userId),
+    getDefaultUserWorkoutPlan(userId)
+  ]);
+  return { baseTarget, profiles, plan };
+}
+
+export async function getEatTargetForDate(userId: string, date: string): Promise<ActiveNutritionTarget> {
+  if (!canUseUserData(userId)) {
+    return resolveEatTargetForDate({ userId, date, profiles: [], baseTarget: null, plan: null, override: "auto" });
+  }
+  const sources = await loadTargetSources(userId);
+  return resolveEatTargetForDate({ userId, date, ...sources });
+}
+
+export async function getEatWeekTargets(userId: string, selectedDate: string): Promise<EatWeekTargetDay[]> {
+  const weekStart = startOfEatWeek(selectedDate);
+  const dates = Array.from({ length: 7 }, (_, index) => addIsoDays(weekStart, index));
+  if (!canUseUserData(userId)) return dates.map((date) => ({ date, planned_calories: 0, has_targets: false }));
+  const sources = await loadTargetSources(userId);
+  return dates.map((date) => {
+    const active = resolveEatTargetForDate({ userId, date, ...sources });
+    const plannedCalories = number(active.values.daily_calories);
+    return {
+      date,
+      planned_calories: active.hasTarget && plannedCalories > 0 ? plannedCalories : 0,
+      has_targets: active.hasTarget && plannedCalories > 0
+    };
+  });
+}
+
 export type EatFoodLogPatch = {
   foodName: string;
   quantity: number;
@@ -110,6 +167,23 @@ export type EatFoodLogPatch = {
   proteinG: number;
   carbsG: number;
   fatG: number;
+  notes: string | null;
+};
+
+export type UpdateEatFoodLogResult = {
+  log: FoodLog;
+  linkedMeal: MealPlanItem | null;
+};
+
+type EditableNutritionPayload = {
+  food_name: string;
+  quantity: number;
+  serving_size: string;
+  meal_type: MealType;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
   notes: string | null;
 };
 
@@ -123,38 +197,189 @@ function validateFoodPatch(patch: EatFoodLogPatch) {
   requireNonNegative(patch.fatG, "Fat");
 }
 
-export async function updateEatFoodLog(userId: string, logId: string, patch: EatFoodLogPatch) {
+function payloadFromPatch(patch: EatFoodLogPatch): EditableNutritionPayload {
+  return {
+    food_name: patch.foodName.trim(),
+    quantity: patch.quantity,
+    serving_size: patch.servingSize.trim(),
+    meal_type: patch.mealType,
+    calories: patch.calories,
+    protein_g: patch.proteinG,
+    carbs_g: patch.carbsG,
+    fat_g: patch.fatG,
+    notes: patch.notes?.trim() || null
+  };
+}
+
+function payloadFromRow(row: FoodLog | MealPlanItem): EditableNutritionPayload {
+  return {
+    food_name: row.food_name,
+    quantity: number(row.quantity),
+    serving_size: row.serving_size,
+    meal_type: row.meal_type as MealType,
+    calories: number(row.calories),
+    protein_g: number(row.protein_g),
+    carbs_g: number(row.carbs_g),
+    fat_g: number(row.fat_g),
+    notes: row.notes ?? null
+  };
+}
+
+function editableValuesMatch(row: FoodLog | MealPlanItem | null, expected: EditableNutritionPayload) {
+  if (!row) return false;
+  return row.food_name === expected.food_name
+    && number(row.quantity) === expected.quantity
+    && row.serving_size === expected.serving_size
+    && row.meal_type === expected.meal_type
+    && number(row.calories) === expected.calories
+    && number(row.protein_g) === expected.protein_g
+    && number(row.carbs_g) === expected.carbs_g
+    && number(row.fat_g) === expected.fat_g
+    && (row.notes ?? null) === expected.notes;
+}
+
+function terminalValuesMatch(current: MealPlanItem, original: MealPlanItem) {
+  return current.status === original.status
+    && current.food_log_id === original.food_log_id
+    && current.completed_at === original.completed_at;
+}
+
+async function readFoodLog(userId: string, logId: string) {
+  const result = await supabase!
+    .from("food_logs")
+    .select("*")
+    .eq("id", logId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (result.error) throw result.error;
+  return result.data as FoodLog | null;
+}
+
+async function readLinkedMeal(userId: string, logId: string) {
+  const result = await supabase!
+    .from("user_meal_plan_items")
+    .select("*")
+    .eq("food_log_id", logId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (result.error) throw result.error;
+  return result.data as MealPlanItem | null;
+}
+
+async function restoreLinkedEdit({
+  userId,
+  originalLog,
+  originalLinked
+}: {
+  userId: string;
+  originalLog: FoodLog;
+  originalLinked: MealPlanItem | null;
+}) {
+  const errors: string[] = [];
+  const restoredLog = await supabase!
+    .from("food_logs")
+    .update(payloadFromRow(originalLog))
+    .eq("id", originalLog.id)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (restoredLog.error) errors.push(`food_log_restore:${restoredLog.error.message}`);
+
+  if (originalLinked) {
+    const restoredMeal = await supabase!
+      .from("user_meal_plan_items")
+      .update(payloadFromRow(originalLinked))
+      .eq("id", originalLinked.id)
+      .eq("user_id", userId)
+      .select("*")
+      .single();
+    if (restoredMeal.error) errors.push(`meal_restore:${restoredMeal.error.message}`);
+  }
+
+  let verifiedLog: FoodLog | null = null;
+  let verifiedMeal: MealPlanItem | null = null;
+  try {
+    [verifiedLog, verifiedMeal] = await Promise.all([
+      readFoodLog(userId, originalLog.id),
+      originalLinked ? readLinkedMeal(userId, originalLog.id) : Promise.resolve(null)
+    ]);
+  } catch (error) {
+    errors.push(`restore_verify:${error instanceof Error ? error.message : "unknown"}`);
+  }
+
+  const logRestored = editableValuesMatch(verifiedLog, payloadFromRow(originalLog));
+  const mealRestored = !originalLinked || (
+    editableValuesMatch(verifiedMeal, payloadFromRow(originalLinked))
+    && Boolean(verifiedMeal)
+    && terminalValuesMatch(verifiedMeal!, originalLinked)
+  );
+  if (!logRestored) errors.push("food_log_restore_mismatch");
+  if (!mealRestored) errors.push("meal_restore_mismatch");
+  return { ok: errors.length === 0, errors, log: verifiedLog, linkedMeal: verifiedMeal };
+}
+
+export async function updateEatFoodLog(userId: string, logId: string, patch: EatFoodLogPatch): Promise<UpdateEatFoodLogResult> {
   validateFoodPatch(patch);
   if (!canUseUserData(userId)) throw new Error("User session invalid");
-  const payload = {
-    food_name: patch.foodName.trim(), quantity: patch.quantity, serving_size: patch.servingSize.trim(), meal_type: patch.mealType,
-    calories: patch.calories, protein_g: patch.proteinG, carbs_g: patch.carbsG, fat_g: patch.fatG, notes: patch.notes?.trim() || null
-  };
-  const { data, error } = await supabase!
+  const requested = payloadFromPatch(patch);
+  const originalLog = await readFoodLog(userId, logId);
+  if (!originalLog) throw new Error("Food log not found.");
+  const originalLinked = await readLinkedMeal(userId, logId);
+
+  const firstWrite = await supabase!
     .from("food_logs")
-    .update(payload)
+    .update(requested)
     .eq("id", logId)
     .eq("user_id", userId)
     .select("*")
     .single();
-  if (error) throw error;
+  if (firstWrite.error) throw firstWrite.error;
 
-  const linked = await supabase!
-    .from("user_meal_plan_items")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("food_log_id", logId)
-    .maybeSingle();
-  if (linked.error) throw linked.error;
-  if (linked.data) {
-    const sync = await supabase!
-      .from("user_meal_plan_items")
-      .update(payload)
-      .eq("id", linked.data.id)
-      .eq("user_id", userId);
-    if (sync.error) throw sync.error;
+  if (!originalLinked) {
+    const verifiedLog = await readFoodLog(userId, logId);
+    if (!editableValuesMatch(verifiedLog, requested)) {
+      const compensation = await restoreLinkedEdit({ userId, originalLog, originalLinked: null });
+      if (!compensation.ok) throw new EatLinkedEditConsistencyError(compensation.errors.join(";"));
+      throw new Error("Food log verification failed and the original values were restored.");
+    }
+    return { log: verifiedLog!, linkedMeal: null };
   }
-  return data as FoodLog;
+
+  const secondWrite = await supabase!
+    .from("user_meal_plan_items")
+    .update(requested)
+    .eq("id", originalLinked.id)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+
+  if (secondWrite.error) {
+    const compensation = await restoreLinkedEdit({ userId, originalLog, originalLinked });
+    if (!compensation.ok) throw new EatLinkedEditConsistencyError(`linked_write:${secondWrite.error.message};${compensation.errors.join(";")}`);
+    throw new Error("The linked meal update failed and the food log was restored.");
+  }
+
+  let verifiedLog: FoodLog | null;
+  let verifiedMeal: MealPlanItem | null;
+  try {
+    [verifiedLog, verifiedMeal] = await Promise.all([readFoodLog(userId, logId), readLinkedMeal(userId, logId)]);
+  } catch (error) {
+    const compensation = await restoreLinkedEdit({ userId, originalLog, originalLinked });
+    if (!compensation.ok) throw new EatLinkedEditConsistencyError(`success_verify_read:${error instanceof Error ? error.message : "unknown"};${compensation.errors.join(";")}`);
+    throw new Error("The linked edit could not be verified and the original values were restored.");
+  }
+
+  const success = editableValuesMatch(verifiedLog, requested)
+    && editableValuesMatch(verifiedMeal, requested)
+    && Boolean(verifiedMeal)
+    && terminalValuesMatch(verifiedMeal!, originalLinked);
+  if (!success) {
+    const compensation = await restoreLinkedEdit({ userId, originalLog, originalLinked });
+    if (!compensation.ok) throw new EatLinkedEditConsistencyError(`success_verify_mismatch;${compensation.errors.join(";")}`);
+    throw new Error("The linked edit did not persist consistently and the original values were restored.");
+  }
+
+  return { log: verifiedLog!, linkedMeal: verifiedMeal! };
 }
 
 export async function deleteEatFoodLog(userId: string, logId: string) {
