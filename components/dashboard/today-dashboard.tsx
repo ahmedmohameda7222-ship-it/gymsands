@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Check, CheckCircle2, ChevronDown, ChevronUp, Dumbbell, Droplets, Flame, Loader2, ShoppingCart, Soup, Utensils, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useQuickChatGpt } from "@/components/ai/quick-chatgpt-provider";
@@ -21,18 +21,22 @@ import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { buildTodayActions, enabledQuickLogs, hasCurrentDayActivity, quickLogRoutes, resolveTodayWorkout, selectRelevantMeal, todayWorkoutActionHref, type TodayAction, type TodayWorkoutState } from "@/lib/dashboard/today-model";
 import { formatEnergy, formatLiquid } from "@/lib/dashboard/today-units";
 import { percent, remainingMacros, sumFoodLogs } from "@/services/nutrition/calculations";
-import { getActiveTargetOverride, resolveActiveNutritionTarget } from "@/services/nutrition/active-target";
 import { startOfWeek } from "@/services/reports/reporting";
 import { getOnboarding } from "@/services/database/profile";
 import { getProgressEntries } from "@/services/database/progress";
-import { addWaterLog, getCalorieTargets, getTodayFoodLogs, getWaterLogs } from "@/services/database/nutrition";
+import { addWaterLog, getTodayFoodLogs, getWaterLogs } from "@/services/database/nutrition";
 import { getMealPlanItemsForDate, markDirectMealPlanItemDone, markDirectMealPlanItemSkipped, markDirectMealPlanItemsSkipped } from "@/services/database/meal-plan";
 import { getDefaultUserWorkoutPlan, getCurrentWeekday } from "@/services/database/workout-plans";
 import { getOpenWorkoutDaySession, getWorkoutHistory } from "@/services/database/workout-sessions";
-import { getDailyCheckins, getGroceryItems, getNutritionTargetProfiles, upsertGroceryItem } from "@/services/database/execution-layer";
+import { getDailyCheckins, getGroceryItems, upsertGroceryItem } from "@/services/database/execution-layer";
 import { getFitnessHabits, getSleepRecoveryLogs, getSupplementLogs } from "@/services/database/wellness";
+import {
+  getTodayNutritionData,
+  getTodayNutritionTargetData,
+  subscribeToTodayNutritionTargetChanges
+} from "@/services/database/today-nutrition";
 import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
-import { initialTodayNutritionData, knownFoodLogCount, resolveTodayNutritionSources, type TodayNutritionData, type TodayNutritionTargetData } from "@/lib/dashboard/today-nutrition";
+import { initialTodayNutritionData, knownFoodLogCount, type TodayNutritionData, type TodayNutritionTargetData } from "@/lib/dashboard/today-nutrition";
 import type { FitnessHabit, MealPlanItem, OnboardingAnswers, ProgressEntry, SleepRecoveryLog, SupplementLog, UserDailyCheckin, UserGroceryItem, UserWorkoutPlan, UserWorkoutPlanDay, WaterLog, WorkoutSession } from "@/types";
 
 const sourceNames = ["workout", "meals", "nutrition", "hydration", "shopping", "wellness", "connection", "setup"] as const;
@@ -110,11 +114,22 @@ export function TodayDashboard() {
   const [pendingGroceryIds, setPendingGroceryIds] = useState<Set<string>>(new Set());
   const [waterPending, setWaterPending] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const targetLoadRef = useRef<Promise<TodayNutritionTargetData> | null>(null);
 
   const setSource = useCallback((source: SourceName, state: SourceState, error?: string) => {
     setStates((current) => ({ ...current, [source]: state }));
     setErrors((current) => ({ ...current, [source]: error }));
   }, []);
+
+  const loadTodayTargetOnce = useCallback(() => {
+    if (!user?.id) return Promise.reject(new Error("A signed-in user is required."));
+    if (targetLoadRef.current) return targetLoadRef.current;
+    const request = getTodayNutritionTargetData(user.id, today).finally(() => {
+      if (targetLoadRef.current === request) targetLoadRef.current = null;
+    });
+    targetLoadRef.current = request;
+    return request;
+  }, [today, user?.id]);
 
   const loadDashboard = useCallback(async () => {
     if (!user?.id) return;
@@ -127,33 +142,10 @@ export function TodayDashboard() {
       const open = day ? await getOpenWorkoutDaySession(user.id, day.id) : null;
       return { plan, day, sessions, openSessionId: open?.id ?? null };
     };
-    const loadNutrition = async (): Promise<TodayNutritionData> => {
-      const [logsResult, targetResult, profilesResult, planResult] = await Promise.allSettled([
-        getTodayFoodLogs(user.id, today, { throwOnError: true }),
-        getCalorieTargets(user.id, { throwOnError: true }),
-        user.id === "mock-user" ? Promise.resolve([]) : getNutritionTargetProfiles(user.id),
-        getDefaultUserWorkoutPlan(user.id)
-      ]);
-
-      let resolvedTargets: PromiseSettledResult<TodayNutritionTargetData>;
-      if (targetResult.status === "fulfilled" || profilesResult.status === "fulfilled") {
-        const base = targetResult.status === "fulfilled" ? targetResult.value : null;
-        const profiles = profilesResult.status === "fulfilled" ? profilesResult.value : [];
-        const targetPlan = planResult.status === "fulfilled" ? planResult.value : null;
-        const targetDay = targetPlan?.days.find((item) => item.weekday === getCurrentWeekday() && item.exercises.length > 0) ?? null;
-        const automaticType = targetDay ? "training_day" : "rest_day";
-        const override = getActiveTargetOverride(user.id, today);
-        const activeTarget = resolveActiveNutritionTarget({ profiles, baseTarget: base, requestedType: override === "auto" ? automaticType : override });
-        resolvedTargets = {
-          status: "fulfilled",
-          value: { targets: activeTarget.hasTarget ? activeTarget.values : null, activeTarget }
-        };
-      } else {
-        resolvedTargets = { status: "rejected", reason: targetResult.reason };
-      }
-
-      return resolveTodayNutritionSources(logsResult, resolvedTargets);
-    };
+    const loadNutrition = () => getTodayNutritionData(user.id, today, {
+      loadLogs: (id, date) => getTodayFoodLogs(id, date, { throwOnError: true }),
+      loadTargetData: () => loadTodayTargetOnce()
+    });
     const loadWellness = async (): Promise<WellnessData> => {
       const results = await Promise.allSettled([
         getFitnessHabits(user.id, today),
@@ -214,7 +206,7 @@ export function TodayDashboard() {
         if (!value.onboarding) router.replace("/onboarding");
       }
     });
-  }, [router, session, setSource, today, tt, user]);
+  }, [loadTodayTargetOnce, router, session, setSource, today, tt, user]);
 
   useEffect(() => { void loadDashboard(); }, [loadDashboard]);
 
@@ -236,6 +228,33 @@ export function TodayDashboard() {
       return false;
     }
   }, [today, tt, user?.id]);
+
+  const retryNutritionTarget = useCallback(async () => {
+    if (!user?.id) return false;
+    setNutritionData((current) => ({ ...current, targetsState: "loading", targetsError: null }));
+    try {
+      const result = await loadTodayTargetOnce();
+      setNutritionData((current) => ({
+        ...current,
+        targets: result.targets,
+        activeTarget: result.activeTarget,
+        targetsState: "loaded",
+        targetsError: null
+      }));
+      return true;
+    } catch (error) {
+      setNutritionData((current) => ({
+        ...current,
+        targets: null,
+        activeTarget: null,
+        targetsState: "failed",
+        targetsError: userSafeError(error, tt("targetUnavailable"))
+      }));
+      return false;
+    }
+  }, [loadTodayTargetOnce, tt, user?.id]);
+
+  useEffect(() => subscribeToTodayNutritionTargetChanges(window, today, () => { void retryNutritionTarget(); }), [retryNutritionTarget, today]);
 
   const totals = useMemo(() => nutritionData.logs ? sumFoodLogs(nutritionData.logs) : null, [nutritionData.logs]);
   const targets = nutritionData.targets;
@@ -284,57 +303,57 @@ export function TodayDashboard() {
   const bought = groceryItems.filter((item) => item.checked);
   const alreadyHave = groceryItems.filter((item) => item.already_have);
   const workoutTitle = workoutData.day?.day_name ?? null;
-const workoutExerciseCount = workoutData.day?.exercises.length ?? 0;
-const workoutDurationMinutes = workoutData.plan?.session_duration_minutes ?? null;
-const foodLogCount = knownFoodLogCount(nutritionData);
-const mealPlanCount = mealItems.length;
-const groceryItemCount = groceryItems.length;
-const remainingCalories = remaining?.calories ?? null;
-const remainingProtein = remaining?.protein_g ?? null;
-const hasTargets = Boolean(targets);
-const sleepHours = todaySleep?.hours_slept ?? null;
-const poorRecovery = Boolean(todaySleep && (todaySleep.recovery_level === "low" || todaySleep.fatigue_level === "high"));
-const endOfWeek = new Date(`${today}T12:00:00`).getDay() === 0;
-useEffect(() => {
-  const normalizeSourceState = (state: SourceState) => state === "idle" ? "unknown" : state;
-  setDashboardContext({
-    route: "/dashboard",
-    today,
-    localHour: new Date().getHours(),
-    units: { energy: settings.energyUnit, liquid: settings.liquidUnit, weight: settings.weightUnit },
-    workout: {
-      hasPlan: Boolean(workoutData.plan),
-      scheduled: workoutState === "scheduled",
-      active: workoutState === "active",
-      completed: workoutState === "completed",
-      title: workoutTitle,
-      exerciseCount: workoutExerciseCount,
-      durationMinutes: workoutDurationMinutes,
-      historyCount: workoutData.sessions.filter((session) => session.status === "completed").length
-    },
-    nutrition: {
-      hasTargets,
-      targetsState: nutritionData.targetsState,
-      foodLogsState: nutritionData.logsState,
-      remainingCalories,
-      remainingProtein,
-      foodLogCount,
-      mealPlanCount
-    },
-    grocery: { state: normalizeSourceState(states.shopping), itemCount: states.shopping === "loaded" ? groceryItemCount : null },
-    hydration: {
-      state: normalizeSourceState(states.hydration),
-      hasTarget: Boolean(targets?.water_ml),
-      logCount: states.hydration === "loaded" ? waterLogs.length : null,
-      remainingMl: states.hydration === "loaded" && targets?.water_ml ? Math.max(0, targets.water_ml - waterTotal) : null
-    },
-    recovery: { state: normalizeSourceState(states.wellness), hasData: states.wellness === "loaded" && Boolean(todaySleep), sleepHours, poorRecovery },
-    wellness: { state: normalizeSourceState(states.wellness), habitCount: states.wellness === "loaded" ? wellnessData.habits.length : null, supplementCount: states.wellness === "loaded" ? wellnessData.supplements.length : null },
-    progress: { state: normalizeSourceState(states.setup), entryCount: states.setup === "loaded" ? setupData.progress.length : null },
-    profile: { state: normalizeSourceState(states.setup), hasGoals: Boolean(setupData.onboarding?.goals?.length), hasTrainingPreferences: Boolean(setupData.onboarding), hasNutritionPreferences: false, hasConstraints: Boolean(setupData.onboarding) },
-    endOfWeek
-  });
-}, [endOfWeek, foodLogCount, groceryItemCount, hasTargets, mealPlanCount, nutritionData.logsState, nutritionData.targetsState, poorRecovery, remainingCalories, remainingProtein, setDashboardContext, settings.energyUnit, settings.liquidUnit, settings.weightUnit, sleepHours, states.hydration, states.setup, states.shopping, states.wellness, setupData.onboarding, setupData.progress.length, targets?.water_ml, today, todaySleep, waterLogs.length, waterTotal, wellnessData.habits.length, wellnessData.supplements.length, workoutData.plan, workoutData.sessions, workoutDurationMinutes, workoutExerciseCount, workoutState, workoutTitle]);
+  const workoutExerciseCount = workoutData.day?.exercises.length ?? 0;
+  const workoutDurationMinutes = workoutData.plan?.session_duration_minutes ?? null;
+  const foodLogCount = knownFoodLogCount(nutritionData);
+  const mealPlanCount = mealItems.length;
+  const groceryItemCount = groceryItems.length;
+  const remainingCalories = remaining?.calories ?? null;
+  const remainingProtein = remaining?.protein_g ?? null;
+  const hasTargets = Boolean(targets);
+  const sleepHours = todaySleep?.hours_slept ?? null;
+  const poorRecovery = Boolean(todaySleep && (todaySleep.recovery_level === "low" || todaySleep.fatigue_level === "high"));
+  const endOfWeek = new Date(`${today}T12:00:00`).getDay() === 0;
+  useEffect(() => {
+    const normalizeSourceState = (state: SourceState) => state === "idle" ? "unknown" : state;
+    setDashboardContext({
+      route: "/dashboard",
+      today,
+      localHour: new Date().getHours(),
+      units: { energy: settings.energyUnit, liquid: settings.liquidUnit, weight: settings.weightUnit },
+      workout: {
+        hasPlan: Boolean(workoutData.plan),
+        scheduled: workoutState === "scheduled",
+        active: workoutState === "active",
+        completed: workoutState === "completed",
+        title: workoutTitle,
+        exerciseCount: workoutExerciseCount,
+        durationMinutes: workoutDurationMinutes,
+        historyCount: workoutData.sessions.filter((session) => session.status === "completed").length
+      },
+      nutrition: {
+        hasTargets,
+        targetsState: nutritionData.targetsState,
+        foodLogsState: nutritionData.logsState,
+        remainingCalories,
+        remainingProtein,
+        foodLogCount,
+        mealPlanCount
+      },
+      grocery: { state: normalizeSourceState(states.shopping), itemCount: states.shopping === "loaded" ? groceryItemCount : null },
+      hydration: {
+        state: normalizeSourceState(states.hydration),
+        hasTarget: Boolean(targets?.water_ml),
+        logCount: states.hydration === "loaded" ? waterLogs.length : null,
+        remainingMl: states.hydration === "loaded" && targets?.water_ml ? Math.max(0, targets.water_ml - waterTotal) : null
+      },
+      recovery: { state: normalizeSourceState(states.wellness), hasData: states.wellness === "loaded" && Boolean(todaySleep), sleepHours, poorRecovery },
+      wellness: { state: normalizeSourceState(states.wellness), habitCount: states.wellness === "loaded" ? wellnessData.habits.length : null, supplementCount: states.wellness === "loaded" ? wellnessData.supplements.length : null },
+      progress: { state: normalizeSourceState(states.setup), entryCount: states.setup === "loaded" ? setupData.progress.length : null },
+      profile: { state: normalizeSourceState(states.setup), hasGoals: Boolean(setupData.onboarding?.goals?.length), hasTrainingPreferences: Boolean(setupData.onboarding), hasNutritionPreferences: false, hasConstraints: Boolean(setupData.onboarding) },
+      endOfWeek
+    });
+  }, [endOfWeek, foodLogCount, groceryItemCount, hasTargets, mealPlanCount, nutritionData.logsState, nutritionData.targetsState, poorRecovery, remainingCalories, remainingProtein, setDashboardContext, settings.energyUnit, settings.liquidUnit, settings.weightUnit, sleepHours, states.hydration, states.setup, states.shopping, states.wellness, setupData.onboarding, setupData.progress.length, targets?.water_ml, today, todaySleep, waterLogs.length, waterTotal, wellnessData.habits.length, wellnessData.supplements.length, workoutData.plan, workoutData.sessions, workoutDurationMinutes, workoutExerciseCount, workoutState, workoutTitle]);
   const isInitialLoading = sourceNames.every((source) => states[source] === "loading" || states[source] === "idle");
   const localizedDate = new Intl.DateTimeFormat(language === "de" ? "de-DE" : language === "ar" ? "ar" : "en-GB", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${today}T12:00:00`));
 
@@ -431,7 +450,6 @@ useEffect(() => {
       <div className="grid gap-4 lg:grid-cols-2"><Card><CardHeader><CardTitle className="text-base">{tt("quickLog")}</CardTitle></CardHeader><CardContent className="flex flex-wrap gap-2">{enabledLogs.map((section) => <Button key={section} asChild variant="outline" className="min-h-12"><Link href={quickLogRoutes[section]}>{tt(quickLogLabels[section])}</Link></Button>)}{!enabledLogs.length ? <p className="text-sm text-muted-foreground">{tt("noQuickLogs")}</p> : null}</CardContent></Card><Card><CardHeader><CardTitle className="text-base">{tt("wellnessToday")}</CardTitle></CardHeader><CardContent className="space-y-3"><p className="text-sm text-muted-foreground">{todaySleep?.hours_slept ? `${tt("sleep")} ${todaySleep.hours_slept} h · ` : ""}{wellnessData.habits.filter((item) => !item.completed).length} {tt("habitsOpen")} · {wellnessData.supplements.filter((item) => !item.taken_today).length} {tt("supplementsOpen")}</p>{wellnessData.partialErrors.length ? <p className="text-xs text-warning">{tt("sectionUnavailable")}</p> : null}<p className="font-medium">{tt("checkInQuestion")}</p><DailyCheckins compact /></CardContent></Card></div>
 
       {groceryItems.length ? <Card className="lg:max-w-[calc(50%-0.5rem)]"><CardHeader className="cursor-pointer" onClick={() => setShoppingExpanded((value) => !value)}><button type="button" className="flex w-full items-center justify-between gap-3 text-start" aria-expanded={shoppingExpanded}><span><CardTitle className="flex items-center gap-2 text-base"><ShoppingCart className="h-5 w-5" />{tt("shoppingList")}</CardTitle><span className="mt-1 block text-xs text-muted-foreground">{unbought.length} {tt("remaining")} · {bought.length} {tt("bought")}{alreadyHave.length ? ` · ${alreadyHave.length} ${tt("alreadyHave")}` : ""}</span></span>{shoppingExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}</button></CardHeader>{shoppingExpanded ? <CardContent className="space-y-3"><div className="space-y-2">{unbought.slice(0, 6).map((item) => <label key={item.id} className="flex min-h-12 items-center gap-3 rounded-[12px] border border-border/70 px-3"><input type="checkbox" checked={item.checked} disabled={pendingGroceryIds.has(item.id)} onChange={() => void toggleBought(item)} className="h-5 w-5 accent-primary" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{item.item_name}</span><span className="block text-xs text-muted-foreground">{item.quantity ?? ""} {item.unit ?? ""}</span></span></label>)}</div>{bought.length ? <div><button type="button" onClick={() => setBoughtExpanded((value) => !value)} className="flex min-h-11 items-center gap-2 text-sm font-semibold" aria-expanded={boughtExpanded}>{tt("boughtItems")}{boughtExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>{boughtExpanded ? <div className="space-y-2">{bought.map((item) => <label key={item.id} className="flex min-h-11 items-center gap-3 rounded-[12px] border border-border/70 px-3 opacity-75"><input type="checkbox" checked disabled={pendingGroceryIds.has(item.id)} onChange={() => void toggleBought(item)} className="h-5 w-5 accent-primary" /><span className="line-through">{item.item_name}</span></label>)}</div> : null}</div> : null}<Button asChild variant="outline" className="min-h-12"><Link href={`/my-meal-plan?tab=shopping&date=${today}`}>{tt("openFullGrocery")}</Link></Button></CardContent> : null}</Card> : null}
-
 
       {activitySourcesKnown && !currentActivity && !isInitialLoading ? <EmptyState title={tt("noActivityToday")} description={tt("noActivityDetail")} actionLabel={tt("quickLog")} actionHref="/calories" /> : null}
     </div>}
