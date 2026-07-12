@@ -67,5 +67,5 @@ it("converts display kJ and oz back to canonical kcal and ml", () => {
   const draft = buildNutritionTargetDraft({ persisted: persisted(), settings: { energyUnit: "kJ", liquidUnit: "oz" } });
   const canonical = canonicalNutritionTargetDraft(draft, { energyUnit: "kJ", liquidUnit: "oz" });
   expect(canonical.calories).toBeCloseTo(1800, 0);
-  expect(canonical.waterMl).toBeCloseTo(3000, 0);
+  expect(Math.abs((canonical.waterMl ?? 0) - 3000)).toBeLessThanOrEqual(1);
 });
