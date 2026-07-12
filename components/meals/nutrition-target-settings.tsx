@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, CalendarDays, Loader2, RotateCcw, Save, Target } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -20,7 +20,7 @@ import {
   type NutritionTargetDraft,
   type PersistedNutritionTargetState
 } from "@/lib/eat/nutrition-target-draft";
-import { eatEnergyDisplayValue, eatLiquidDisplayValue, formatEatEnergy, formatEatLiquid } from "@/lib/eat/eat-units";
+import { eatEnergyDisplayValue, eatLiquidDisplayValue } from "@/lib/eat/eat-units";
 import { useUnsavedChangesGuard } from "@/lib/hooks/use-unsaved-changes-guard";
 import { useNutritionTargetsTranslation } from "@/lib/i18n/nutrition-targets";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
@@ -50,6 +50,7 @@ export function NutritionTargetSettings({ selectedDate, returnHref }: { selected
   const { settings } = useUserSettings();
   const { nt, dir, locale } = useNutritionTargetsTranslation();
   const [persisted, setPersisted] = useState<PersistedNutritionTargetState | null>(null);
+  const persistedRef = useRef<PersistedNutritionTargetState | null>(null);
   const [persistedDraft, setPersistedDraft] = useState<NutritionTargetDraft | null>(null);
   const [draft, setDraft] = useState<NutritionTargetDraft | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,6 +78,7 @@ export function NutritionTargetSettings({ selectedDate, returnHref }: { selected
         baseTarget
       };
       const nextPersistedDraft = buildNutritionTargetDraft({ persisted: nextPersisted, settings });
+      persistedRef.current = nextPersisted;
       setPersisted(nextPersisted);
       setPersistedDraft(nextPersistedDraft);
       if (!preserveDraft) setDraft(nextPersistedDraft);
@@ -179,18 +181,18 @@ export function NutritionTargetSettings({ selectedDate, returnHref }: { selected
   }
 
   function selectAssignment(assignment: NutritionTargetAssignment) {
-    if (!persisted) return;
-    const select = () => {
-      const editorTargetType = targetChoiceEditorType(assignment, persisted.resolvedTargetType);
+    if (draft?.assignment === assignment) return;
+    request(() => {
+      const currentPersisted = persistedRef.current;
+      if (!currentPersisted) return;
+      const editorTargetType = targetChoiceEditorType(assignment, currentPersisted.resolvedTargetType);
       const next = buildNutritionTargetDraft({
-        persisted: { ...persisted, assignment },
+        persisted: { ...currentPersisted, assignment },
         settings
       });
       setDraft({ ...next, assignment, editorTargetType });
       setFeedback(null);
-    };
-    if (draft?.assignment === assignment) return;
-    request(select);
+    });
   }
 
   const source = useMemo(() => draft && persisted ? profileForEditor(draft.editorTargetType, persisted.profiles, persisted.baseTarget) : null, [draft, persisted]);
