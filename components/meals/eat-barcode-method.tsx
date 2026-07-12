@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InlineFeedback } from "@/components/motion";
 import { barcodeValidationMessage, normalizeProductBarcode } from "@/lib/barcodes";
+import { formatEatEnergy } from "@/lib/eat/eat-units";
 import { useEatTranslation } from "@/lib/i18n/eat";
+import type { UserAppSettings } from "@/services/database/user-settings";
 import type { FoodLog, MealType } from "@/types";
 
 type BarcodeFood = {
@@ -24,20 +26,21 @@ type BarcodeDetectorResult = { rawValue?: string };
 type BarcodeDetectorInstance = { detect: (source: HTMLVideoElement) => Promise<BarcodeDetectorResult[]> };
 type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => BarcodeDetectorInstance;
 type BarcodeWindow = Window & { BarcodeDetector?: BarcodeDetectorConstructor };
-
 type ScannerControls = { stop: () => void };
 
 export function EatBarcodeMethod({
   date,
   mealType,
+  energyUnit,
   onLogged
 }: {
   date: string;
   mealType: MealType;
+  energyUnit: UserAppSettings["energyUnit"];
   onLogged: (log: FoodLog) => void;
 }) {
   const { session } = useAuth();
-  const { et, formatDate, mealLabel } = useEatTranslation();
+  const { et, formatDate, mealLabel, locale } = useEatTranslation();
   const [barcode, setBarcode] = useState("");
   const [food, setFood] = useState<BarcodeFood | null>(null);
   const [quantity, setQuantity] = useState("1");
@@ -81,13 +84,13 @@ export function EatBarcodeMethod({
     setFeedback(null);
     try {
       const response = await fetch(`/api/food/open-food-facts?barcode=${encodeURIComponent(clean)}`, { headers: headers() });
-      const data = await response.json().catch(() => ({})) as { food?: BarcodeFood; error?: string };
-      if (!response.ok || !data.food) throw new Error(data.error ?? "Product could not be loaded.");
+      const data = await response.json().catch(() => ({})) as { food?: BarcodeFood };
+      if (!response.ok || !data.food) throw new Error(et("productLoadFailed"));
       setFood(data.food);
       setFeedback({ type: "info", message: `${data.food.name} · ${formatDate(date)} · ${mealLabel(mealType)}` });
-    } catch (error) {
+    } catch {
       setFood(null);
-      setFeedback({ type: "error", message: error instanceof Error ? error.message : "Barcode lookup failed." });
+      setFeedback({ type: "error", message: et("barcodeLookupFailed") });
     } finally {
       setIsLookingUp(false);
     }
@@ -107,7 +110,7 @@ export function EatBarcodeMethod({
       return;
     }
     stopScanner();
-    setFeedback({ type: "info", message: "Opening camera…" });
+    setFeedback({ type: "info", message: et("openingCamera") });
     setIsScanning(true);
     try {
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
@@ -135,17 +138,17 @@ export function EatBarcodeMethod({
           if (value) void handleDetected(value);
         });
       }
-      setFeedback({ type: "info", message: "Camera ready." });
-    } catch (error) {
+      setFeedback({ type: "info", message: et("cameraReady") });
+    } catch {
       stopScanner();
-      setFeedback({ type: "error", message: error instanceof Error ? error.message : et("cameraUnavailable") });
+      setFeedback({ type: "error", message: et("cameraUnavailable") });
     }
   }
 
   async function save() {
     const parsedQuantity = Number(quantity);
     if (!food || !Number.isFinite(parsedQuantity) || parsedQuantity <= 0 || isSaving) {
-      setFeedback({ type: "error", message: "Review the product and quantity before logging." });
+      setFeedback({ type: "error", message: et("reviewProductQuantity") });
       return;
     }
     setIsSaving(true);
@@ -156,12 +159,12 @@ export function EatBarcodeMethod({
         headers: headers(true),
         body: JSON.stringify({ barcode, quantity: parsedQuantity, mealType, date, saveToLibrary: false, addToLog: true, addToMealPlan: false })
       });
-      const data = await response.json().catch(() => ({})) as { log?: FoodLog; error?: string };
-      if (!response.ok || !data.log) throw new Error(data.error ?? "Product could not be logged.");
+      const data = await response.json().catch(() => ({})) as { log?: FoodLog };
+      if (!response.ok || !data.log) throw new Error(et("productLogFailed"));
       onLogged(data.log);
       setFeedback({ type: "info", message: et("logged") });
-    } catch (error) {
-      setFeedback({ type: "error", message: error instanceof Error ? error.message : et("saveFailed") });
+    } catch {
+      setFeedback({ type: "error", message: et("productLogFailed") });
     } finally {
       setIsSaving(false);
     }
@@ -170,7 +173,7 @@ export function EatBarcodeMethod({
   return (
     <div className="space-y-4">
       <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-        <Input value={barcode} inputMode="numeric" onChange={(event) => { setBarcode(event.target.value.replace(/\D/g, "")); setFood(null); }} placeholder="EAN / UPC / GTIN" aria-label={et("barcode")} />
+        <Input value={barcode} inputMode="numeric" onChange={(event) => { setBarcode(event.target.value.replace(/\D/g, "")); setFood(null); }} placeholder={et("barcodePlaceholder")} aria-label={et("barcode")} />
         <Button type="button" variant="outline" className="min-h-12" onClick={isScanning ? stopScanner : startScanner}>{isScanning ? <Square className="h-4 w-4" /> : <Camera className="h-4 w-4" />}{isScanning ? et("stop") : et("scan")}</Button>
         <Button type="button" className="min-h-12" onClick={() => void lookup()} disabled={isLookingUp}>{isLookingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}{et("lookup")}</Button>
       </div>
@@ -178,7 +181,7 @@ export function EatBarcodeMethod({
       {food ? <div className="rounded-[14px] border border-border/70 p-3">
         <p className="font-semibold">{food.name}</p>
         <p className="mt-1 text-sm text-muted-foreground">{food.brand ?? ""}</p>
-        <p className="mt-2 text-sm">{food.calories ?? "—"} kcal · P {food.protein ?? "—"} g · C {food.carbs ?? "—"} g · F {food.fat ?? "—"} g</p>
+        <p className="mt-2 text-sm">{food.calories === null || food.calories === undefined ? "—" : formatEatEnergy(food.calories, energyUnit, locale)} · P {food.protein ?? "—"} g · C {food.carbs ?? "—"} g · F {food.fat ?? "—"} g</p>
         <p className="mt-1 text-xs text-muted-foreground">{food.servingSize ?? et("storedServingOnly")}</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-[140px_1fr]"><Input type="number" min="0.1" step="0.1" value={quantity} onChange={(event) => setQuantity(event.target.value)} aria-label={et("quantity")} /><Button type="button" className="min-h-12" onClick={save} disabled={isSaving}>{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("logFood")}</Button></div>
       </div> : null}
