@@ -9,31 +9,16 @@ export type NormalizedTargetState =
 export type PromptContextPermissionValidation = { valid: boolean; illegalFields: PromptContextField[] };
 
 export const PROMPT_CONTEXT_FIELD_PERMISSIONS: Record<PromptContextField, AiPermissionSection[]> = {
-  date: [],
-  workout: ["workouts"],
-  workout_state: ["workouts"],
-  workout_history: ["workouts"],
-  nutrition_targets: ["nutrition"],
-  nutrition_progress: ["nutrition"],
-  meal_plan: ["meal_plans"],
-  grocery: ["meal_plans"],
-  hydration: ["hydration"],
-  recovery: ["wellness"],
-  wellness: ["wellness"],
-  progress: ["progress"],
-  profile_goals: ["profile"],
-  profile_training_preferences: ["profile"],
-  profile_nutrition_preferences: ["profile"],
-  profile_constraints: ["profile"],
-  selected_exercise: ["workouts"],
-  selected_meal: ["meal_plans"]
+  date: [], workout: ["workouts"], workout_state: ["workouts"], workout_history: ["workouts"],
+  nutrition_targets: ["nutrition"], nutrition_progress: ["nutrition"], meal_plan: ["meal_plans"], grocery: ["meal_plans"],
+  hydration: ["hydration"], recovery: ["wellness"], wellness: ["wellness"], progress: ["progress"],
+  profile_goals: ["profile"], profile_training_preferences: ["profile"], profile_nutrition_preferences: ["profile"], profile_constraints: ["profile"],
+  selected_exercise: ["workouts"], selected_meal: ["meal_plans"]
 };
 
 export function validatePromptContextPermissionContract(definition: QuickPromptDefinition): PromptContextPermissionValidation {
   const declared = new Set(definition.permissionSections);
-  const illegalFields = getPromptTaskContract(definition).contextFields.filter((field) =>
-    PROMPT_CONTEXT_FIELD_PERMISSIONS[field].some((section) => !declared.has(section))
-  );
+  const illegalFields = getPromptTaskContract(definition).contextFields.filter((field) => PROMPT_CONTEXT_FIELD_PERMISSIONS[field].some((section) => !declared.has(section)));
   return { valid: illegalFields.length === 0, illegalFields };
 }
 
@@ -43,9 +28,9 @@ export function assertPromptContextPermissionContract(definition: QuickPromptDef
 }
 
 const labels = {
-  en: { date: "Date", workout: "Workout", workoutState: "Workout state", history: "Completed workouts", nutritionTargets: "Nutrition targets", calorieBalance: "Calorie balance", proteinBalance: "Protein balance", foodLogs: "Food logs", mealPlan: "Saved meal-plan items", grocery: "Saved grocery items", hydration: "Hydration balance", recovery: "Recovery context", wellness: "Wellness tracking", progress: "Progress entries", goals: "Saved goals", trainingPreferences: "Training preferences", nutritionPreferences: "Nutrition preferences", constraints: "Physical constraints", exercise: "Selected exercise", meal: "Selected meal", active: "active", completed: "completed", scheduled: "scheduled", notScheduled: "not scheduled", remaining: "remaining", above: "above target", unavailable: "unavailable", available: "available", notConfigured: "not configured", minutes: "minutes", items: "items", logs: "logs", entries: "entries", habits: "habits", supplements: "supplements", hoursSleep: "hours sleep", lowRecovery: "low recovery or high fatigue" },
-  de: { date: "Datum", workout: "Training", workoutState: "Trainingsstatus", history: "Abgeschlossene Trainings", nutritionTargets: "Ernährungsziele", calorieBalance: "Kalorienbilanz", proteinBalance: "Proteinbilanz", foodLogs: "Ernährungsprotokolle", mealPlan: "Gespeicherte Mahlzeiten", grocery: "Gespeicherte Einkaufsartikel", hydration: "Flüssigkeitsbilanz", recovery: "Erholungskontext", wellness: "Wohlbefinden-Tracking", progress: "Fortschrittseinträge", goals: "Gespeicherte Ziele", trainingPreferences: "Trainingspräferenzen", nutritionPreferences: "Ernährungspräferenzen", constraints: "Körperliche Einschränkungen", exercise: "Ausgewählte Übung", meal: "Ausgewählte Mahlzeit", active: "aktiv", completed: "abgeschlossen", scheduled: "geplant", notScheduled: "nicht geplant", remaining: "verbleibend", above: "über dem Ziel", unavailable: "nicht verfügbar", available: "verfügbar", notConfigured: "nicht eingerichtet", minutes: "Minuten", items: "Elemente", logs: "Protokolle", entries: "Einträge", habits: "Gewohnheiten", supplements: "Supplemente", hoursSleep: "Stunden Schlaf", lowRecovery: "niedrige Erholung oder hohe Müdigkeit" },
-  ar: { date: "التاريخ", workout: "التمرين", workoutState: "حالة التمرين", history: "التمارين المكتملة", nutritionTargets: "أهداف التغذية", calorieBalance: "رصيد السعرات", proteinBalance: "رصيد البروتين", foodLogs: "سجلات الطعام", mealPlan: "وجبات الخطة المحفوظة", grocery: "عناصر التسوق المحفوظة", hydration: "رصيد الترطيب", recovery: "سياق التعافي", wellness: "تتبع العافية", progress: "سجلات التقدم", goals: "الأهداف المحفوظة", trainingPreferences: "تفضيلات التدريب", nutritionPreferences: "تفضيلات التغذية", constraints: "القيود البدنية", exercise: "التمرين المحدد", meal: "الوجبة المحددة", active: "نشط", completed: "مكتمل", scheduled: "مجدول", notScheduled: "غير مجدول", remaining: "متبقٍ", above: "فوق الهدف", unavailable: "غير متاحة", available: "متاحة", notConfigured: "غير مُعدّة", minutes: "دقيقة", items: "عناصر", logs: "سجلات", entries: "سجلات", habits: "عادات", supplements: "مكملات", hoursSleep: "ساعات نوم", lowRecovery: "تعافٍ منخفض أو إرهاق مرتفع" }
+  en: { date: "Date", workout: "Workout", workoutState: "Workout state", history: "Completed workouts", nutritionTargets: "Nutrition targets", calorieBalance: "Calorie balance", proteinBalance: "Protein balance", carbBalance: "Carbohydrate balance", fatBalance: "Fat balance", foodLogs: "Food logs", mealPlan: "Saved meal-plan items", grocery: "Saved grocery items", hydration: "Hydration balance", recovery: "Recovery context", wellness: "Wellness tracking", progress: "Progress entries", goals: "Saved goals", trainingPreferences: "Training preferences", nutritionPreferences: "Nutrition preferences", constraints: "Relevant saved constraints", exercise: "Selected exercise", meal: "Selected meal", mealType: "Meal type", serving: "Serving", ingredients: "Known ingredients", mealMacros: "Meal nutrition", preparation: "Preparation time", allergens: "Structured allergen metadata", active: "active", completed: "completed", scheduled: "scheduled", notScheduled: "not scheduled", remaining: "remaining", above: "above target", unavailable: "unavailable", available: "available", notConfigured: "not configured", minutes: "minutes", items: "items", logs: "logs", entries: "entries", habits: "habits", supplements: "supplements", hoursSleep: "hours sleep", lowRecovery: "low recovery or high fatigue" },
+  de: { date: "Datum", workout: "Training", workoutState: "Trainingsstatus", history: "Abgeschlossene Trainings", nutritionTargets: "Ernährungsziele", calorieBalance: "Kalorienbilanz", proteinBalance: "Proteinbilanz", carbBalance: "Kohlenhydratbilanz", fatBalance: "Fettbilanz", foodLogs: "Ernährungsprotokolle", mealPlan: "Gespeicherte Mahlzeiten", grocery: "Gespeicherte Einkaufsartikel", hydration: "Flüssigkeitsbilanz", recovery: "Erholungskontext", wellness: "Wohlbefinden-Tracking", progress: "Fortschrittseinträge", goals: "Gespeicherte Ziele", trainingPreferences: "Trainingspräferenzen", nutritionPreferences: "Ernährungspräferenzen", constraints: "Relevante gespeicherte Einschränkungen", exercise: "Ausgewählte Übung", meal: "Ausgewählte Mahlzeit", mealType: "Mahlzeitentyp", serving: "Portion", ingredients: "Bekannte Zutaten", mealMacros: "Nährwerte der Mahlzeit", preparation: "Zubereitungszeit", allergens: "Strukturierte Allergenmetadaten", active: "aktiv", completed: "abgeschlossen", scheduled: "geplant", notScheduled: "nicht geplant", remaining: "verbleibend", above: "über dem Ziel", unavailable: "nicht verfügbar", available: "verfügbar", notConfigured: "nicht eingerichtet", minutes: "Minuten", items: "Elemente", logs: "Protokolle", entries: "Einträge", habits: "Gewohnheiten", supplements: "Supplemente", hoursSleep: "Stunden Schlaf", lowRecovery: "niedrige Erholung oder hohe Müdigkeit" },
+  ar: { date: "التاريخ", workout: "التمرين", workoutState: "حالة التمرين", history: "التمارين المكتملة", nutritionTargets: "أهداف التغذية", calorieBalance: "رصيد السعرات", proteinBalance: "رصيد البروتين", carbBalance: "رصيد الكربوهيدرات", fatBalance: "رصيد الدهون", foodLogs: "سجلات الطعام", mealPlan: "وجبات الخطة المحفوظة", grocery: "عناصر التسوق المحفوظة", hydration: "رصيد الترطيب", recovery: "سياق التعافي", wellness: "تتبع العافية", progress: "سجلات التقدم", goals: "الأهداف المحفوظة", trainingPreferences: "تفضيلات التدريب", nutritionPreferences: "تفضيلات التغذية", constraints: "القيود المحفوظة ذات الصلة", exercise: "التمرين المحدد", meal: "الوجبة المحددة", mealType: "نوع الوجبة", serving: "الحصة", ingredients: "المكونات المعروفة", mealMacros: "القيم الغذائية للوجبة", preparation: "وقت التحضير", allergens: "بيانات مسببات الحساسية المنظمة", active: "نشط", completed: "مكتمل", scheduled: "مجدول", notScheduled: "غير مجدول", remaining: "متبقٍ", above: "فوق الهدف", unavailable: "غير متاحة", available: "متاحة", notConfigured: "غير مُعدّة", minutes: "دقيقة", items: "عناصر", logs: "سجلات", entries: "سجلات", habits: "عادات", supplements: "مكملات", hoursSleep: "ساعات نوم", lowRecovery: "تعافٍ منخفض أو إرهاق مرتفع" }
 } as const;
 
 function locale(language: PromptLanguage) { return language === "de" ? "de-DE" : language === "ar" ? "ar" : "en-US"; }
@@ -64,9 +49,7 @@ export function normalizeNutritionTargetState(context: QuickPromptContext): Norm
 
 function permissionCompatibleFields(definition: QuickPromptDefinition) {
   const declared = new Set(definition.permissionSections);
-  return getPromptTaskContract(definition).contextFields.filter((field) =>
-    PROMPT_CONTEXT_FIELD_PERMISSIONS[field].every((section) => declared.has(section))
-  );
+  return getPromptTaskContract(definition).contextFields.filter((field) => PROMPT_CONTEXT_FIELD_PERMISSIONS[field].every((section) => declared.has(section)));
 }
 
 export function buildPromptContextItems(definition: QuickPromptDefinition, context: QuickPromptContext, language: PromptLanguage): PromptContextItem[] {
@@ -96,6 +79,8 @@ export function buildPromptContextItems(definition: QuickPromptDefinition, conte
           const unit = context.units?.energy ?? "kcal";
           if (typeof nutrition.remainingCalories === "number") add(items, field, copy.calorieBalance, balance(nutrition.remainingCalories, energy(nutrition.remainingCalories, unit, language), language));
           if (typeof nutrition.remainingProtein === "number") add(items, field, copy.proteinBalance, balance(nutrition.remainingProtein, `${numberText(Math.abs(nutrition.remainingProtein), language, 1)} ${language === "ar" ? "غ" : "g"}`, language));
+          if (typeof nutrition.remainingCarbs === "number") add(items, field, copy.carbBalance, balance(nutrition.remainingCarbs, `${numberText(Math.abs(nutrition.remainingCarbs), language, 1)} ${language === "ar" ? "غ" : "g"}`, language));
+          if (typeof nutrition.remainingFat === "number") add(items, field, copy.fatBalance, balance(nutrition.remainingFat, `${numberText(Math.abs(nutrition.remainingFat), language, 1)} ${language === "ar" ? "غ" : "g"}`, language));
         }
       }
     }
@@ -138,7 +123,27 @@ export function buildPromptContextItems(definition: QuickPromptDefinition, conte
     if (field === "profile_nutrition_preferences" && context.profile?.state === "loaded" && context.profile.hasNutritionPreferences) add(items, field, copy.nutritionPreferences, copy.available);
     if (field === "profile_constraints" && context.profile?.state === "loaded" && context.profile.hasConstraints) add(items, field, copy.constraints, copy.available);
     if (field === "selected_exercise") add(items, field, copy.exercise, context.selection?.exercise);
-    if (field === "selected_meal") add(items, field, copy.meal, context.selection?.meal);
+    if (field === "selected_meal") {
+      const meal = context.selection?.plannedMeal;
+      if (!meal) add(items, field, copy.meal, context.selection?.meal);
+      else {
+        add(items, field, copy.meal, meal.name);
+        add(items, field, copy.mealType, meal.mealType);
+        const serving = [meal.quantity, meal.servingSize].filter((value) => value !== null && value !== "").join(" × ");
+        add(items, field, copy.serving, serving);
+        if (meal.ingredients.length) add(items, field, copy.ingredients, meal.ingredients.join(", "));
+        const unit = context.units?.energy ?? "kcal";
+        const nutrition = [
+          typeof meal.calories === "number" ? energy(meal.calories, unit, language) : null,
+          typeof meal.proteinG === "number" ? `P ${numberText(meal.proteinG, language)} g` : null,
+          typeof meal.carbsG === "number" ? `C ${numberText(meal.carbsG, language)} g` : null,
+          typeof meal.fatG === "number" ? `F ${numberText(meal.fatG, language)} g` : null
+        ].filter(Boolean).join(" · ");
+        add(items, field, copy.mealMacros, nutrition);
+        if (typeof meal.preparationTimeMinutes === "number") add(items, field, copy.preparation, `${numberText(meal.preparationTimeMinutes, language, 0)} ${copy.minutes}`);
+        if (meal.structuredAllergens.length) add(items, field, copy.allergens, meal.structuredAllergens.join(", "));
+      }
+    }
   }
   return items;
 }
