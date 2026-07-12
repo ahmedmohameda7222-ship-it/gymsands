@@ -83,7 +83,7 @@ function normalizeMealPlanItem(row: Record<string, unknown>): MealPlanItem {
     protein_g: nonNegative(row.protein_g ?? row.protein),
     carbs_g: nonNegative(row.carbs_g ?? row.carbs),
     fat_g: nonNegative(row.fat_g ?? row.fat),
-    status: row.status === "done" || row.completed_at ? "done" : "planned",
+    status: row.status === "done" || row.completed_at ? "done" : row.status === "skipped" ? "skipped" : "planned",
     food_log_id: typeof row.food_log_id === "string" ? row.food_log_id : null,
     completed_at: typeof row.completed_at === "string" ? row.completed_at : null,
     notes: typeof row.notes === "string" ? row.notes : null,
@@ -203,7 +203,38 @@ export async function updateDirectMealPlanItem(userId: string, itemId: string, p
   return normalizeMealPlanItem(data as unknown as Record<string, unknown>);
 }
 
+export async function markDirectMealPlanItemSkipped(item: MealPlanItem) {
+  if (item.status !== "planned") throw new Error("Only a planned meal can be skipped.");
+  if (!canUseUserData(item.user_id)) throw new Error("User session invalid");
+  const { data, error } = await supabase!
+    .from("user_meal_plan_items")
+    .update({ status: "skipped", completed_at: null, food_log_id: null })
+    .eq("id", item.id)
+    .eq("user_id", item.user_id)
+    .eq("status", "planned")
+    .select("*")
+    .single();
+  if (error) throw error;
+  return normalizeMealPlanItem(data as unknown as Record<string, unknown>);
+}
+
+export async function markDirectMealPlanItemsSkipped(userId: string, itemIds: string[]) {
+  const ids = [...new Set(itemIds)].filter(isUuid);
+  if (!ids.length) return [];
+  if (!canUseUserData(userId)) throw new Error("User session invalid");
+  const { data, error } = await supabase!
+    .from("user_meal_plan_items")
+    .update({ status: "skipped", completed_at: null, food_log_id: null })
+    .eq("user_id", userId)
+    .in("id", ids)
+    .eq("status", "planned")
+    .select("*");
+  if (error) throw error;
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map(normalizeMealPlanItem);
+}
+
 export async function markDirectMealPlanItemDone(item: MealPlanItem) {
+  if (item.status === "skipped") throw new Error("A skipped meal cannot be marked done.");
   if (!canUseUserData(item.user_id)) {
     return {
       item: { ...item, status: "done", completed_at: item.completed_at ?? new Date().toISOString(), food_log_id: item.food_log_id ?? crypto.randomUUID() } as MealPlanItem,
@@ -223,6 +254,7 @@ export async function markDirectMealPlanItemDone(item: MealPlanItem) {
   if (!latestResult.data) throw new Error("Meal plan item not found.");
 
   const latest = normalizeMealPlanItem(latestResult.data as unknown as Record<string, unknown>);
+  if (latest.status === "skipped") throw new Error("A skipped meal cannot be marked done.");
   if (latest.status === "done" || latest.food_log_id) {
     return { item: latest, log: null as FoodLog | null, already_done: true };
   }
@@ -234,7 +266,7 @@ export async function markDirectMealPlanItemDone(item: MealPlanItem) {
     .eq("id", latest.id)
     .eq("user_id", latest.user_id)
     .is("food_log_id", null)
-    .neq("status", "done")
+    .eq("status", "planned")
     .select("*")
     .maybeSingle();
   if (claimed.error) throw claimed.error;

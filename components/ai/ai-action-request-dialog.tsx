@@ -1,20 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bot, ExternalLink, Loader2, ShieldCheck } from "lucide-react";
-import { useAuth } from "@/components/auth/auth-provider";
-import { buildAiActionSummary } from "@/components/ai/ai-action-summary";
+import { OpenAiBlossom } from "@/components/brand/openai-blossom";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useToast } from "@/components/ui/toaster";
+import { buildAiActionSummary, buildChatGptActionPrompt } from "@/components/ai/ai-action-summary";
+import { useQuickChatGpt } from "@/components/ai/quick-chatgpt-provider";
 import { cn } from "@/lib/utils";
 import type { AiActionType, AiPermissionSection } from "@/types";
-import {
-  getAiPermissionSettings,
-  getDefaultAiPermissionConfig,
-  saveAiPermissionSettings,
-  type AiPermissionConfig
-} from "@/services/database/ai-permissions";
+import type { ReactNode } from "react";
 
 export type AiActionOption = {
   type: AiActionType;
@@ -30,22 +22,22 @@ function inferPermissionSection(sourceType: string): AiPermissionSection {
   return "progress";
 }
 
-const permissionLabels: Record<AiPermissionSection, string> = {
-  workouts: "workouts",
-  nutrition: "nutrition",
-  meal_plans: "meal plans",
-  hydration: "hydration",
-  wellness: "wellness",
-  progress: "progress",
-  profile: "profile",
-  settings: "settings"
-};
+function isWriteAction(type: AiActionType) {
+  return !["review_week", "review_workout_session", "explain_progression"].includes(type);
+}
+
+function destination(section: AiPermissionSection) {
+  const labels: Record<AiPermissionSection, string> = {
+    workouts: "Workout Plan", nutrition: "Nutrition Log", meal_plans: "Meal Plan", hydration: "Hydration",
+    wellness: "Wellness", progress: "Progress", profile: "Profile", settings: "Settings"
+  };
+  return labels[section];
+}
 
 export function AiActionRequestDialog({
   actions,
   sourceType,
   context,
-  title = "Continue with ChatGPT",
   children,
   buttonVariant = "outline",
   permissionSection,
@@ -61,188 +53,38 @@ export function AiActionRequestDialog({
   permissionSection?: AiPermissionSection;
   className?: string;
 }) {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [selected, setSelected] = useState<AiActionOption | null>(null);
-  const [permissionConfig, setPermissionConfig] = useState<AiPermissionConfig | null>(null);
-  const [isPermissionLoading, setIsPermissionLoading] = useState(true);
-  const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
-  const [isSavingPermission, setIsSavingPermission] = useState(false);
-  const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
-
+  const { openCustomPrompt } = useQuickChatGpt();
   const section = permissionSection ?? inferPermissionSection(sourceType);
-  const sectionLabel = permissionLabels[section];
-  const sectionPermission = permissionConfig?.sections[section];
-  const hasSectionAccess = permissionConfig?.accessMode === "full" || Boolean(sectionPermission?.read || sectionPermission?.write);
-
-  useEffect(() => {
-    let mounted = true;
-    if (!user?.id) {
-      setPermissionConfig(null);
-      setIsPermissionLoading(false);
-      return;
-    }
-
-    setIsPermissionLoading(true);
-    getAiPermissionSettings(user.id)
-      .then((saved) => {
-        if (mounted) setPermissionConfig(saved);
-      })
-      .finally(() => {
-        if (mounted) setIsPermissionLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [user?.id]);
-
-  const summary = useMemo(
-    () => selected ? buildAiActionSummary(selected.type, context) : [],
-    [context, selected]
-  );
-
-  function openAction(action: AiActionOption, trigger: HTMLButtonElement) {
-    lastTriggerRef.current = trigger;
-    setSelected(action);
-  }
-
-  function closeDialog(open: boolean) {
-    if (!open) {
-      setSelected(null);
-      window.setTimeout(() => lastTriggerRef.current?.focus(), 0);
-    }
-  }
-
-  function openChatGpt() {
-    const chatWindow = window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
-    if (chatWindow) chatWindow.opener = null;
-    if (!chatWindow) {
-      toast({
-        title: "ChatGPT was blocked by the browser",
-        description: "Allow pop-ups, then try again.",
-        variant: "error"
-      });
-    }
-  }
-
-  async function grantAccess(mode: "read" | "write" | "both") {
-    if (!user?.id) return;
-    setIsSavingPermission(true);
-    try {
-      const base = permissionConfig ?? getDefaultAiPermissionConfig();
-      const next: AiPermissionConfig = {
-        ...base,
-        accessMode: "custom",
-        sections: {
-          ...base.sections,
-          [section]: {
-            read: mode === "read" || mode === "write" || mode === "both",
-            write: mode === "write" || mode === "both"
-          }
-        }
-      };
-      await saveAiPermissionSettings(user.id, next);
-      setPermissionConfig(next);
-      setPermissionDialogOpen(false);
-      toast({ title: "ChatGPT access updated", description: `Access for ${sectionLabel} is now available.` });
-    } catch {
-      toast({ title: "Could not update ChatGPT access", description: "Please refresh and try again.", variant: "error" });
-    } finally {
-      setIsSavingPermission(false);
-    }
-  }
-
-  if (isPermissionLoading) {
-    return <p className="flex min-h-11 items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Checking ChatGPT access…</p>;
-  }
-
-  if (!hasSectionAccess) {
-    return (
-      <>
-        <button
-          type="button"
-          onClick={() => setPermissionDialogOpen(true)}
-          className={cn("min-h-11 rounded-xl border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", className)}
-        >
-          Give ChatGPT access for {sectionLabel}
-        </button>
-        <Dialog open={permissionDialogOpen} onOpenChange={setPermissionDialogOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Give ChatGPT access to {sectionLabel}?</DialogTitle>
-              <DialogDescription>
-                Choose the smallest access level needed. Plaivra enforces the current saved permissions on every tool request, and you can revoke access later.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-2">
-              <Button type="button" variant="outline" onClick={() => void grantAccess("read")} disabled={isSavingPermission}>Read only</Button>
-              <Button type="button" onClick={() => void grantAccess("both")} disabled={isSavingPermission}>Read and write</Button>
-              <Button type="button" variant="ghost" onClick={() => setPermissionDialogOpen(false)} disabled={isSavingPermission}>Do not give access</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </>
-    );
-  }
 
   return (
-    <>
-      <div className={className ?? "flex flex-wrap gap-2"}>
-        {actions.map((action) => (
-          <Button
-            key={action.type}
-            type="button"
-            variant={buttonVariant}
-            size="sm"
-            onClick={(event) => openAction(action, event.currentTarget)}
-          >
-            <Bot className="h-4 w-4" />
-            {action.label}
-          </Button>
-        ))}
-      </div>
-
-      <Dialog open={Boolean(selected)} onOpenChange={closeDialog}>
-        <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>
-              Open ChatGPT with Plaivra connected. ChatGPT reads only the authorized context needed and uses Plaivra tools for requested changes.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-5">
-            <div>
-              <p className="text-sm font-semibold text-foreground">{selected?.label}</p>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">{selected?.description}</p>
-            </div>
-
-            <div className="divide-y divide-border/70 rounded-[16px] border border-border/70 bg-muted/20 px-4">
-              {summary.map((row) => (
-                <div key={row.label} className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 py-3 text-sm">
-                  <span className="font-medium text-muted-foreground">{row.label}</span>
-                  <span className="font-semibold text-foreground">{row.value}</span>
-                </div>
-              ))}
-            </div>
-
-            {children}
-
-            <div className="flex gap-3 rounded-[16px] border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              <p>
-                Use your active Plaivra connection and the permissions saved for {sectionLabel}. Successful tool changes appear directly in Plaivra, where you can track, edit, or correct them.
-              </p>
-            </div>
-
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button type="button" variant="ghost" onClick={() => closeDialog(false)}>Cancel</Button>
-              <Button type="button" onClick={openChatGpt}><ExternalLink className="h-4 w-4" /> Open ChatGPT</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+    <div className={className ?? "flex flex-wrap gap-2"}>
+      {actions.map((action) => (
+        <Button
+          key={action.type}
+          type="button"
+          variant={buttonVariant}
+          size="sm"
+          className={cn("min-h-11", className && "w-full")}
+          onClick={() => {
+            const summary = buildAiActionSummary(action.type, context);
+            const write = isWriteAction(action.type);
+            openCustomPrompt({
+              id: `legacy-${action.type}`,
+              title: action.label,
+              description: action.description,
+              prompt: buildChatGptActionPrompt(action.type, context),
+              permissionSections: [section],
+              capability: write ? "write" : "read",
+              destination: write ? destination(section) : undefined,
+              contextChips: summary.map((row) => `${row.label}: ${row.value}`)
+            });
+          }}
+        >
+          <OpenAiBlossom className="h-4 w-4" />
+          {action.label}
+        </Button>
+      ))}
+      {children}
+    </div>
   );
 }

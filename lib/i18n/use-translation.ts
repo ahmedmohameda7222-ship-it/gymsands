@@ -12,6 +12,10 @@ export function useTranslation() {
   return {
     language,
     dir: language === "ar" ? "rtl" : "ltr",
-    t: (key: TranslationKey) => dictionary[key] ?? translations.en[key] ?? key
+    t: (key: TranslationKey, values?: Record<string, string | number>) => {
+      const template = dictionary[key] ?? translations.en[key] ?? key;
+      if (!values) return template;
+      return Object.entries(values).reduce((result, [name, value]) => result.replaceAll(`{${name}}`, String(value)), template);
+    }
   };
 }

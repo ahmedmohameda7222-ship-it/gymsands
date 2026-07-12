@@ -162,7 +162,7 @@ export async function getGlobalFoods(
   return result;
 }
 
-export async function getCalorieTargets(userId: string) {
+export async function getCalorieTargets(userId: string, options?: { throwOnError?: boolean }) {
   if (!canUseUserData(userId)) return null;
 
   const { data, error } = await supabase!
@@ -173,6 +173,7 @@ export async function getCalorieTargets(userId: string) {
 
   if (error) {
     console.warn("Plaivra could not load calorie targets.", error.message);
+    if (options?.throwOnError) throw new Error(`Could not load calorie targets. ${error.message}`);
     return null;
   }
 
@@ -215,7 +216,11 @@ export async function upsertCalorieTargets({
   return data;
 }
 
-export async function getTodayFoodLogs(userId: string, date = todayIso()) {
+export async function getTodayFoodLogs(
+  userId: string,
+  date = todayIso(),
+  options?: { throwOnError?: boolean }
+) {
   if (!canUseUserData(userId)) return [];
   const { data, error } = await supabase!
     .from("food_logs")
@@ -225,6 +230,7 @@ export async function getTodayFoodLogs(userId: string, date = todayIso()) {
     .order("created_at", { ascending: false });
   if (error) {
     console.warn("Plaivra could not load today's food logs.", error.message);
+    if (options?.throwOnError) throw new Error(`Could not load today's food logs. ${error.message}`);
     return [];
   }
   return (data ?? []) as FoodLog[];
@@ -871,6 +877,7 @@ export async function addFoodToMealPlan({
 }
 
 export async function markMealPlanItemDone(item: MealPlanItem) {
+  if (item.status === "skipped") throw new Error("A skipped meal cannot be marked done.");
   if (!canUseUserData(item.user_id)) {
     return {
       item: {
@@ -894,6 +901,7 @@ export async function markMealPlanItemDone(item: MealPlanItem) {
   if (!latestResult.data) throw new Error("Meal plan item not found.");
 
   const latest = latestResult.data as MealPlanItem;
+  if (latest.status === "skipped") throw new Error("A skipped meal cannot be marked done.");
   if (latest.status === "done" || latest.food_log_id) return { item: latest, log: null as FoodLog | null, already_done: true };
 
   const completedAt = new Date().toISOString();
@@ -903,7 +911,7 @@ export async function markMealPlanItemDone(item: MealPlanItem) {
     .eq("id", latest.id)
     .eq("user_id", latest.user_id)
     .is("food_log_id", null)
-    .neq("status", "done")
+    .eq("status", "planned")
     .select("*")
     .maybeSingle();
   if (claimed.error) throw claimed.error;

@@ -218,4 +218,14 @@ export type TranslationKey =
   | "profile.active"
   | "profile.complete"
   | "profile.emailLoading"
-  | "profile.goal";
+  | "profile.goal"
+  | "mealPlan.skip"
+  | "mealPlan.skipping"
+  | "mealPlan.statusPlanned"
+  | "mealPlan.statusDone"
+  | "mealPlan.statusSkipped"
+  | "mealPlan.skipSuccess"
+  | "mealPlan.skipSuccessDesc"
+  | "mealPlan.skipError"
+  | "mealPlan.skipErrorDesc"
+  | "mealPlan.skipMealLabel";
