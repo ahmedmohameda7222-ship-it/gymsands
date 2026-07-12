@@ -11,11 +11,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { InlineFeedback } from "@/components/motion";
 import { findCopyDuplicates, supportedServingOptions, type RepeatFoodOption, type SourceState } from "@/lib/eat/eat-model";
+import { formatEatEnergy } from "@/lib/eat/eat-units";
 import { useEatTranslation } from "@/lib/i18n/eat";
 import { addGlobalFoodToToday, getCustomMeals, getFoodCategories, getFoodLibrary } from "@/services/database/nutrition";
 import { copyEatFoodLogs, getEatFoodLogs, logRepeatFood } from "@/services/database/eat";
 import { logSavedMealToEat } from "@/services/database/eat-food-logging";
 import { scaleFoodMacros } from "@/services/nutrition/calculations";
+import type { UserAppSettings } from "@/services/database/user-settings";
 import type { CustomMeal, FoodItem, FoodLog, MealType } from "@/types";
 
 type AddFoodViewName = "home" | "repeat" | "search" | "saved-meals" | "barcode" | "custom" | "photo" | "copy-day";
@@ -29,6 +31,7 @@ export function EatAddFoodSurface({
   initialMealType,
   repeats,
   targetLogs,
+  energyUnit,
   initialView = "home",
   onFoodLogged,
   onPhotoPrompt
@@ -39,6 +42,7 @@ export function EatAddFoodSurface({
   initialMealType: MealType;
   repeats: RepeatFoodOption[];
   targetLogs: FoodLog[];
+  energyUnit: UserAppSettings["energyUnit"];
   initialView?: AddFoodViewName;
   onFoodLogged: (logs: FoodLog[]) => void;
   onPhotoPrompt: (date: string, mealType: MealType) => void;
@@ -80,13 +84,13 @@ export function EatAddFoodSurface({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
           {view === "home" ? <AddFoodHome setView={setView} customHref={customHref} onPhoto={() => { onPhotoPrompt(date, mealType); close(false); }} /> : null}
-          {view === "repeat" ? <RepeatMethod options={repeats} date={date} mealType={mealType} onLogged={(log) => onFoodLogged([log])} /> : null}
-          {view === "search" ? <SearchMethod date={date} mealType={mealType} onLogged={(log) => onFoodLogged([log])} /> : null}
-          {view === "saved-meals" ? <SavedMealsMethod date={date} mealType={mealType} customHref={customHref} onLogged={(log) => onFoodLogged([log])} /> : null}
-          {view === "barcode" ? <EatBarcodeMethod date={date} mealType={mealType} onLogged={(log) => onFoodLogged([log])} /> : null}
+          {view === "repeat" ? <RepeatMethod options={repeats} date={date} mealType={mealType} energyUnit={energyUnit} onLogged={(log) => onFoodLogged([log])} /> : null}
+          {view === "search" ? <SearchMethod date={date} mealType={mealType} energyUnit={energyUnit} onLogged={(log) => onFoodLogged([log])} /> : null}
+          {view === "saved-meals" ? <SavedMealsMethod date={date} mealType={mealType} customHref={customHref} energyUnit={energyUnit} onLogged={(log) => onFoodLogged([log])} /> : null}
+          {view === "barcode" ? <EatBarcodeMethod date={date} mealType={mealType} energyUnit={energyUnit} onLogged={(log) => onFoodLogged([log])} /> : null}
           {view === "custom" ? <CustomMethod href={customHref} /> : null}
           {view === "photo" ? <PhotoMethod onOpen={() => { onPhotoPrompt(date, mealType); close(false); }} /> : null}
-          {view === "copy-day" ? <CopyDayMethod targetDate={date} targetLogs={targetLogs} onCopied={onFoodLogged} /> : null}
+          {view === "copy-day" ? <CopyDayMethod targetDate={date} targetLogs={targetLogs} energyUnit={energyUnit} onCopied={onFoodLogged} /> : null}
         </div>
       </DialogContent>
     </Dialog>
@@ -120,9 +124,9 @@ function AddFoodHome({ setView, customHref, onPhoto }: { setView: (view: AddFood
   </div>;
 }
 
-function RepeatMethod({ options, date, mealType, onLogged }: { options: RepeatFoodOption[]; date: string; mealType: MealType; onLogged: (log: FoodLog) => void }) {
+function RepeatMethod({ options, date, mealType, energyUnit, onLogged }: { options: RepeatFoodOption[]; date: string; mealType: MealType; energyUnit: UserAppSettings["energyUnit"]; onLogged: (log: FoodLog) => void }) {
   const { user } = useAuth();
-  const { et } = useEatTranslation();
+  const { et, locale } = useEatTranslation();
   const [pending, setPending] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
   if (!options.length) return <p className="text-sm text-muted-foreground">{et("noFoods")}</p>;
@@ -130,15 +134,15 @@ function RepeatMethod({ options, date, mealType, onLogged }: { options: RepeatFo
     if (!user?.id || pending) return;
     setPending(option.repeatKey); setFeedback({ type: "info", message: et("logging") });
     try { const log = await logRepeatFood(user.id, option, date, mealType); onLogged(log); setFeedback({ type: "info", message: et("logged") }); }
-    catch (error) { setFeedback({ type: "error", message: error instanceof Error ? error.message : et("saveFailed") }); }
+    catch { setFeedback({ type: "error", message: et("saveFailed") }); }
     finally { setPending(null); }
   }
-  return <div className="space-y-3">{options.map((option) => <Card key={option.repeatKey}><CardContent className="flex items-center justify-between gap-3 p-3"><div className="min-w-0"><p className="truncate font-semibold">{option.food_name}</p><p className="mt-1 text-xs text-muted-foreground">{option.quantity} × {option.serving_size} · {Math.round(option.calories)} kcal</p></div><Button type="button" className="min-h-12 shrink-0" onClick={() => void repeat(option)} disabled={Boolean(pending)}>{pending === option.repeatKey ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("logFood")}</Button></CardContent></Card>)}<InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} /></div>;
+  return <div className="space-y-3">{options.map((option) => <Card key={option.repeatKey}><CardContent className="flex items-center justify-between gap-3 p-3"><div className="min-w-0"><p className="truncate font-semibold">{option.food_name}</p><p className="mt-1 text-xs text-muted-foreground">{option.quantity} × {option.serving_size} · {formatEatEnergy(option.calories, energyUnit, locale)}</p></div><Button type="button" className="min-h-12 shrink-0" onClick={() => void repeat(option)} disabled={Boolean(pending)}>{pending === option.repeatKey ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("logFood")}</Button></CardContent></Card>)}<InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} /></div>;
 }
 
-function SearchMethod({ date, mealType, onLogged }: { date: string; mealType: MealType; onLogged: (log: FoodLog) => void }) {
+function SearchMethod({ date, mealType, energyUnit, onLogged }: { date: string; mealType: MealType; energyUnit: UserAppSettings["energyUnit"]; onLogged: (log: FoodLog) => void }) {
   const { user } = useAuth();
-  const { et } = useEatTranslation();
+  const { et, locale } = useEatTranslation();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
@@ -162,47 +166,56 @@ function SearchMethod({ date, mealType, onLogged }: { date: string; mealType: Me
   async function log(food: FoodItem) {
     if (!user?.id || pending) return;
     const quantity = quantities[food.id] ?? 1;
-    if (!Number.isFinite(quantity) || quantity <= 0) { setFeedback({ type: "error", message: "Quantity must be greater than zero." }); return; }
+    if (!Number.isFinite(quantity) || quantity <= 0) { setFeedback({ type: "error", message: et("quantityPositive") }); return; }
     setPending(food.id); setFeedback({ type: "info", message: et("logging") });
     try { const saved = await addGlobalFoodToToday({ userId: user.id, food, quantity, mealType, date }); onLogged(saved); setFeedback({ type: "info", message: et("logged") }); }
-    catch (error) { setFeedback({ type: "error", message: error instanceof Error ? error.message : et("saveFailed") }); }
+    catch { setFeedback({ type: "error", message: et("saveFailed") }); }
     finally { setPending(null); }
   }
 
   return <div className="space-y-4">
-    <div className="grid gap-2 sm:grid-cols-[1fr_180px]"><Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={et("foodSearchPlaceholder")} /><select value={category} onChange={(event) => setCategory(event.target.value)} className="h-12 rounded-[14px] border border-input bg-card px-3 text-sm"><option value="">All categories</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
-    {state === "loading" ? <p className="text-sm text-muted-foreground">Loading…</p> : state === "failed" ? <p className="text-sm text-destructive">{et("saveFailed")}</p> : !foods.length ? <p className="text-sm text-muted-foreground">{et("noFoods")}</p> : null}
-    <div className="grid gap-3">{foods.map((food) => { const quantity = quantities[food.id] ?? 1; const macros = scaleFoodMacros(food, quantity); const serving = supportedServingOptions(food)[0]; return <Card key={food.id}><CardContent className="space-y-3 p-3"><div><p className="font-semibold">{food.food_name}</p><p className="mt-1 text-xs text-muted-foreground">{serving.label} · {et("storedServingOnly")}</p><p className="mt-2 text-sm">{macros.calories} kcal · P {macros.protein_g} g · C {macros.carbs_g} g · F {macros.fat_g} g</p></div><div className="grid gap-2 sm:grid-cols-[120px_1fr]"><Input type="number" min="0.1" step="0.1" value={quantity} onChange={(event) => setQuantities((current) => ({ ...current, [food.id]: Number(event.target.value) }))} aria-label={et("quantity")} /><Button type="button" className="min-h-12" onClick={() => void log(food)} disabled={Boolean(pending)}>{pending === food.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("logFood")}</Button></div></CardContent></Card>; })}</div>
+    <div className="grid gap-2 sm:grid-cols-[1fr_180px]"><Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={et("foodSearchPlaceholder")} aria-label={et("searchFoods")} /><select value={category} onChange={(event) => setCategory(event.target.value)} className="h-12 rounded-[14px] border border-input bg-card px-3 text-sm" aria-label={et("allCategories")}><option value="">{et("allCategories")}</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
+    {state === "loading" ? <p className="text-sm text-muted-foreground">{et("loading")}</p> : state === "failed" ? <p className="text-sm text-destructive">{et("searchFailed")}</p> : !foods.length ? <p className="text-sm text-muted-foreground">{et("noFoods")}</p> : null}
+    <div className="grid gap-3">{foods.map((food) => { const quantity = quantities[food.id] ?? 1; const macros = scaleFoodMacros(food, quantity); const serving = supportedServingOptions(food)[0]; return <Card key={food.id}><CardContent className="space-y-3 p-3"><div><p className="font-semibold">{food.food_name}</p><p className="mt-1 text-xs text-muted-foreground">{serving.label} · {et("storedServingOnly")}</p><p className="mt-2 text-sm">{formatEatEnergy(macros.calories, energyUnit, locale)} · P {macros.protein_g} g · C {macros.carbs_g} g · F {macros.fat_g} g</p></div><div className="grid gap-2 sm:grid-cols-[120px_1fr]"><Input type="number" min="0.1" step="0.1" value={quantity} onChange={(event) => setQuantities((current) => ({ ...current, [food.id]: Number(event.target.value) }))} aria-label={`${et("quantity")} · ${food.food_name}`} /><Button type="button" className="min-h-12" onClick={() => void log(food)} disabled={Boolean(pending)}>{pending === food.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("logFood")}</Button></div></CardContent></Card>; })}</div>
     <InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} />
   </div>;
 }
 
-function SavedMealsMethod({ date, mealType, customHref, onLogged }: { date: string; mealType: MealType; customHref: string; onLogged: (log: FoodLog) => void }) {
+function SavedMealsMethod({ date, mealType, customHref, energyUnit, onLogged }: { date: string; mealType: MealType; customHref: string; energyUnit: UserAppSettings["energyUnit"]; onLogged: (log: FoodLog) => void }) {
   const { user } = useAuth();
-  const { et } = useEatTranslation();
+  const { et, locale } = useEatTranslation();
   const [meals, setMeals] = useState<SourceState<CustomMeal[]>>({ status: "loading" });
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [pending, setPending] = useState<string | null>(null);
-  useEffect(() => { if (!user?.id) return; let active = true; getCustomMeals(user.id).then((data) => { if (active) setMeals({ status: "loaded", data }); }).catch((error) => { if (active) setMeals({ status: "failed", error: error instanceof Error ? error.message : et("saveFailed") }); }); return () => { active = false; }; }, [et, user?.id]);
-  async function log(meal: CustomMeal) { if (!user?.id || pending) return; const quantity = quantities[meal.id] ?? 1; setPending(meal.id); try { const saved = await logSavedMealToEat({ userId: user.id, meal, date, mealType, quantity }); onLogged(saved); } finally { setPending(null); } }
-  if (meals.status === "loading") return <p className="text-sm text-muted-foreground">Loading…</p>;
+  const [feedback, setFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
+  useEffect(() => { if (!user?.id) return; let active = true; getCustomMeals(user.id).then((data) => { if (active) setMeals({ status: "loaded", data }); }).catch(() => { if (active) setMeals({ status: "failed", error: et("savedMealsFailed") }); }); return () => { active = false; }; }, [et, user?.id]);
+  async function log(meal: CustomMeal) {
+    if (!user?.id || pending) return;
+    const quantity = quantities[meal.id] ?? 1;
+    if (!Number.isFinite(quantity) || quantity <= 0) { setFeedback({ type: "error", message: et("quantityPositive") }); return; }
+    setPending(meal.id); setFeedback({ type: "info", message: et("logging") });
+    try { const saved = await logSavedMealToEat({ userId: user.id, meal, date, mealType, quantity }); onLogged(saved); setFeedback({ type: "info", message: et("logged") }); }
+    catch { setFeedback({ type: "error", message: et("saveFailed") }); }
+    finally { setPending(null); }
+  }
+  if (meals.status === "loading") return <p className="text-sm text-muted-foreground">{et("loading")}</p>;
   if (meals.status === "failed") return <p className="text-sm text-destructive">{meals.error}</p>;
-  return <div className="space-y-3">{!meals.data.length ? <div className="space-y-3"><p className="text-sm text-muted-foreground">{et("noSavedMeals")}</p><Button asChild variant="outline"><Link href={customHref}>{et("customFoodMeal")}</Link></Button></div> : meals.data.map((meal) => { const quantity = quantities[meal.id] ?? 1; return <Card key={meal.id}><CardContent className="space-y-3 p-3"><div><p className="font-semibold">{meal.meal_name}</p><p className="mt-1 text-sm text-muted-foreground">{meal.items.length} foods · {Math.round(meal.totals.calories * quantity)} kcal · P {Math.round(meal.totals.protein_g * quantity * 10) / 10} g</p></div><div className="grid gap-2 sm:grid-cols-[120px_1fr_auto]"><Input type="number" min="0.1" step="0.1" value={quantity} onChange={(event) => setQuantities((current) => ({ ...current, [meal.id]: Number(event.target.value) }))} /><Button type="button" className="min-h-12" onClick={() => void log(meal)} disabled={Boolean(pending)}>{pending === meal.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("logFood")}</Button><Button asChild variant="outline" className="min-h-12"><Link href={customHref}>{et("editSavedMeal")}</Link></Button></div></CardContent></Card>; })}</div>;
+  return <div className="space-y-3">{!meals.data.length ? <div className="space-y-3"><p className="text-sm text-muted-foreground">{et("noSavedMeals")}</p><Button asChild variant="outline"><Link href={customHref}>{et("customFoodMeal")}</Link></Button></div> : meals.data.map((meal) => { const quantity = quantities[meal.id] ?? 1; return <Card key={meal.id}><CardContent className="space-y-3 p-3"><div><p className="font-semibold">{meal.meal_name}</p><p className="mt-1 text-sm text-muted-foreground">{et("foodItemsCount", { count: meal.items.length })} · {formatEatEnergy(meal.totals.calories * quantity, energyUnit, locale)} · P {Math.round(meal.totals.protein_g * quantity * 10) / 10} g</p></div><div className="grid gap-2 sm:grid-cols-[120px_1fr_auto]"><Input type="number" min="0.1" step="0.1" value={quantity} onChange={(event) => setQuantities((current) => ({ ...current, [meal.id]: Number(event.target.value) }))} aria-label={`${et("quantity")} · ${meal.meal_name}`} /><Button type="button" className="min-h-12" onClick={() => void log(meal)} disabled={Boolean(pending)}>{pending === meal.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("logFood")}</Button><Button asChild variant="outline" className="min-h-12"><Link href={customHref}>{et("editSavedMeal")}</Link></Button></div></CardContent></Card>; })}<InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} /></div>;
 }
 
-function CustomMethod({ href }: { href: string }) { const { et } = useEatTranslation(); return <div className="space-y-3 rounded-[16px] border border-border/70 p-4"><ChefHat className="h-6 w-6 text-primary" /><p className="font-semibold">{et("customFoodMeal")}</p><p className="text-sm text-muted-foreground">Your date, meal, and return route will be preserved.</p><Button asChild className="min-h-12"><Link href={href}>{et("customFoodMeal")}</Link></Button></div>; }
-function PhotoMethod({ onOpen }: { onOpen: () => void }) { const { et } = useEatTranslation(); return <div className="space-y-3 rounded-[16px] border border-border/70 p-4"><Camera className="h-6 w-6 text-primary" /><p className="font-semibold">{et("photoEstimate")}</p><p className="text-sm text-muted-foreground">Plaivra does not upload or store the image. Attach it directly in ChatGPT and confirm before saving.</p><Button type="button" className="min-h-12" onClick={onOpen}>{et("askChatGpt")}</Button></div>; }
+function CustomMethod({ href }: { href: string }) { const { et } = useEatTranslation(); return <div className="space-y-3 rounded-[16px] border border-border/70 p-4"><ChefHat className="h-6 w-6 text-primary" /><p className="font-semibold">{et("customFoodMeal")}</p><p className="text-sm text-muted-foreground">{et("customPreserved")}</p><Button asChild className="min-h-12"><Link href={href}>{et("customFoodMeal")}</Link></Button></div>; }
+function PhotoMethod({ onOpen }: { onOpen: () => void }) { const { et } = useEatTranslation(); return <div className="space-y-3 rounded-[16px] border border-border/70 p-4"><Camera className="h-6 w-6 text-primary" /><p className="font-semibold">{et("photoEstimate")}</p><p className="text-sm text-muted-foreground">{et("photoPrivacy")}</p><Button type="button" className="min-h-12" onClick={onOpen}>{et("askChatGpt")}</Button></div>; }
 
-function CopyDayMethod({ targetDate, targetLogs, onCopied }: { targetDate: string; targetLogs: FoodLog[]; onCopied: (logs: FoodLog[]) => void }) {
+function CopyDayMethod({ targetDate, targetLogs, energyUnit, onCopied }: { targetDate: string; targetLogs: FoodLog[]; energyUnit: UserAppSettings["energyUnit"]; onCopied: (logs: FoodLog[]) => void }) {
   const { user } = useAuth();
-  const { et, mealLabel } = useEatTranslation();
+  const { et, mealLabel, locale } = useEatTranslation();
   const [sourceDate, setSourceDate] = useState("");
   const [source, setSource] = useState<SourceState<FoodLog[]> | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
   const duplicates = useMemo(() => source?.status === "loaded" ? findCopyDuplicates(source.data.filter((log) => selected.includes(log.id)), targetLogs) : [], [selected, source, targetLogs]);
-  async function load() { if (!user?.id || !sourceDate) return; setSource({ status: "loading" }); setFeedback(null); try { const logs = await getEatFoodLogs(user.id, sourceDate); setSource({ status: "loaded", data: logs }); setSelected(logs.map((log) => log.id)); } catch (error) { setSource({ status: "failed", error: error instanceof Error ? error.message : et("sourceFailed") }); } }
-  async function copy() { if (!user?.id || pending || !sourceDate || !selected.length) return; setPending(true); try { const logs = await copyEatFoodLogs({ userId: user.id, sourceDate, targetDate, selectedIds: selected }); onCopied(logs); setFeedback({ type: "info", message: `${logs.length} ${et("copied")}` }); } catch (error) { setFeedback({ type: "error", message: error instanceof Error ? error.message : et("saveFailed") }); } finally { setPending(false); } }
-  return <div className="space-y-4"><div className="grid gap-2 sm:grid-cols-[1fr_auto]"><Input type="date" value={sourceDate} onChange={(event) => setSourceDate(event.target.value)} aria-label={et("sourceDate")} /><Button type="button" className="min-h-12" onClick={() => void load()} disabled={!sourceDate || source?.status === "loading"}>{source?.status === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("loadSource")}</Button></div>{source?.status === "failed" ? <p className="text-sm text-destructive">{source.error}</p> : null}{source?.status === "loaded" && !source.data.length ? <p className="text-sm text-muted-foreground">{et("sourceEmpty")}</p> : null}{source?.status === "loaded" && source.data.length ? <div className="space-y-2">{source.data.map((log) => <label key={log.id} className="flex min-h-14 items-center gap-3 rounded-[14px] border border-border/70 p-3"><input type="checkbox" checked={selected.includes(log.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, log.id] : current.filter((id) => id !== log.id))} /><span className="min-w-0"><span className="block truncate font-semibold">{log.food_name}</span><span className="block text-xs text-muted-foreground">{mealLabel(log.meal_type)} · {Math.round(log.calories)} kcal</span></span></label>)}</div> : null}{duplicates.length ? <p className="rounded-[14px] border border-warning/30 bg-warning/5 p-3 text-sm text-warning">{et("duplicatesFound")}</p> : null}<Button type="button" className="min-h-12 w-full" onClick={() => void copy()} disabled={pending || !selected.length}>{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("copySelected")}</Button><InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} /></div>;
+  async function load() { if (!user?.id || !sourceDate) return; setSource({ status: "loading" }); setFeedback(null); try { const logs = await getEatFoodLogs(user.id, sourceDate); setSource({ status: "loaded", data: logs }); setSelected(logs.map((log) => log.id)); } catch { setSource({ status: "failed", error: et("sourceFailed") }); } }
+  async function copy() { if (!user?.id || pending || !sourceDate || !selected.length) return; setPending(true); try { const logs = await copyEatFoodLogs({ userId: user.id, sourceDate, targetDate, selectedIds: selected }); onCopied(logs); setFeedback({ type: "info", message: et("copiedCount", { count: logs.length }) }); } catch { setFeedback({ type: "error", message: et("saveFailed") }); } finally { setPending(false); } }
+  return <div className="space-y-4"><div className="grid gap-2 sm:grid-cols-[1fr_auto]"><Input type="date" value={sourceDate} onChange={(event) => setSourceDate(event.target.value)} aria-label={et("sourceDate")} /><Button type="button" className="min-h-12" onClick={() => void load()} disabled={!sourceDate || source?.status === "loading"}>{source?.status === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("loadSource")}</Button></div>{source?.status === "failed" ? <p className="text-sm text-destructive">{source.error}</p> : null}{source?.status === "loaded" && !source.data.length ? <p className="text-sm text-muted-foreground">{et("sourceEmpty")}</p> : null}{source?.status === "loaded" && source.data.length ? <div className="space-y-2">{source.data.map((log) => <label key={log.id} className="flex min-h-14 items-center gap-3 rounded-[14px] border border-border/70 p-3"><input type="checkbox" checked={selected.includes(log.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, log.id] : current.filter((id) => id !== log.id))} /><span className="min-w-0"><span className="block truncate font-semibold">{log.food_name}</span><span className="block text-xs text-muted-foreground">{mealLabel(log.meal_type)} · {formatEatEnergy(log.calories, energyUnit, locale)}</span></span></label>)}</div> : null}{duplicates.length ? <p className="rounded-[14px] border border-warning/30 bg-warning/5 p-3 text-sm text-warning">{et("duplicatesFound")}</p> : null}<Button type="button" className="min-h-12 w-full" onClick={() => void copy()} disabled={pending || !selected.length}>{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{et("copySelected")}</Button><InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} /></div>;
 }
