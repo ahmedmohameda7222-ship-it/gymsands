@@ -19,6 +19,15 @@ describe("PR #44 correction contracts", () => {
     expect(nutrition).toContain('logs: logsResult.status === "fulfilled" ? logsResult.value : null');
   });
 
+  it("restores a fully loaded food-log state only after a successful retry", () => {
+    const dashboard = source("components/dashboard/today-dashboard.tsx");
+    expect(dashboard).toContain("const retryFoodLogs = useCallback");
+    expect(dashboard).toContain('logsState: "loading", logsError: null');
+    expect(dashboard).toContain('logsState: "loaded", logsError: null, totalsIncomplete: false');
+    expect(dashboard).toContain('logsState: "failed"');
+    expect(dashboard).toContain('onClick={() => void retryFoodLogs()}');
+  });
+
   it("uses execution-only activity values", () => {
     const model = source("lib/dashboard/today-model.ts");
     expect(model).toContain("doneMealCount");
