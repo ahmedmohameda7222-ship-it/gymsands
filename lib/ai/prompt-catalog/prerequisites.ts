@@ -18,7 +18,7 @@ const prerequisiteMessages: Record<string, LocalizedText> = {
   scheduledWorkout: l("Requires a scheduled or active workout", "Erfordert ein geplantes oder aktives Training", "يتطلب تمرينًا مجدولًا أو نشطًا"),
   workoutHistory: l("Requires recent workout history", "Erfordert einen aktuellen Trainingsverlauf", "يتطلب سجل تمارين حديثًا"),
   selectedExercise: l("Requires a selected exercise", "Erfordert eine ausgewählte Übung", "يتطلب تمرينًا محددًا"),
-  knownMacros: l("Requires available food logs and nutrition targets", "Erfordert verfügbare Ernährungsprotokolle und Ziele", "يتطلب سجلات طعام وأهداف تغذية متاحة"),
+  knownMacros: l("Requires available food logs and complete nutrition targets", "Erfordert verfügbare Ernährungsprotokolle und vollständige Ziele", "يتطلب سجلات طعام وأهداف تغذية كاملة ومتاحة"),
   foodLogsKnown: l("Requires available food-log data", "Erfordert verfügbare Ernährungsprotokolle", "يتطلب بيانات سجل طعام متاحة"),
   nutritionTargets: l("Requires nutrition targets", "Erfordert Ernährungsziele", "يتطلب أهداف تغذية"),
   nutritionPreferences: l("Requires saved nutrition preferences", "Erfordert gespeicherte Ernährungspräferenzen", "يتطلب تفضيلات تغذية محفوظة"),
@@ -53,7 +53,13 @@ function prerequisiteMet(id: string, c: QuickPromptContext) {
     scheduledWorkout: Boolean(c.workout?.scheduled || c.workout?.active),
     workoutHistory: (c.workout?.historyCount ?? 0) > 0 || c.workout?.completed === true,
     selectedExercise: Boolean(c.selection?.exercise),
-    knownMacros: c.nutrition?.foodLogsState === "loaded" && c.nutrition?.targetsState === "loaded" && c.nutrition?.hasTargets === true && typeof c.nutrition.remainingCalories === "number" && typeof c.nutrition.remainingProtein === "number",
+    knownMacros: c.nutrition?.foodLogsState === "loaded"
+      && c.nutrition?.targetsState === "loaded"
+      && c.nutrition?.hasTargets === true
+      && typeof c.nutrition.remainingCalories === "number"
+      && typeof c.nutrition.remainingProtein === "number"
+      && typeof c.nutrition.remainingCarbs === "number"
+      && typeof c.nutrition.remainingFat === "number",
     foodLogsKnown: c.nutrition?.foodLogsState === "loaded",
     nutritionTargets: c.nutrition?.targetsState === "loaded" && c.nutrition?.hasTargets === true,
     nutritionPreferences: c.profile?.state === "loaded" && c.profile?.hasNutritionPreferences === true,
