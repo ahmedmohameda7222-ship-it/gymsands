@@ -6,7 +6,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InlineFeedback } from "@/components/motion";
-import { barcodeValidationMessage, normalizeProductBarcode } from "@/lib/barcodes";
+import { normalizeProductBarcode } from "@/lib/barcodes";
 import { formatEatEnergy } from "@/lib/eat/eat-units";
 import { useEatTranslation } from "@/lib/i18n/eat";
 import type { UserAppSettings } from "@/services/database/user-settings";
@@ -76,7 +76,7 @@ export function EatBarcodeMethod({
   async function lookup(next = barcode) {
     const clean = normalizeProductBarcode(next);
     if (!clean) {
-      setFeedback({ type: "error", message: barcodeValidationMessage(next) });
+      setFeedback({ type: "error", message: et("barcodeLookupFailed") });
       return;
     }
     setBarcode(clean);
