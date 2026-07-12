@@ -11,9 +11,12 @@ describe("Meal Plan skip localization", () => {
     expect(translations.ar["mealPlan.statusSkipped"]).toBe("تم التخطي");
   });
 
-  it("keeps Arabic skip copy native and suitable for the RTL app direction", () => {
+  it("keeps rendered Arabic skip copy native and suitable for the RTL app direction", () => {
+    const renderedDescription = translations.ar["mealPlan.skipSuccessDesc"].replace("{food}", "وجبة الدجاج");
+
     expect(translations.ar["mealPlan.skipSuccess"]).toBe("تم تخطي الوجبة");
     expect(translations.ar["mealPlan.skipError"]).toBe("تعذر تخطي الوجبة");
-    expect(translations.ar["mealPlan.skipSuccessDesc"]).not.toMatch(/[A-Za-z]{4,}/);
+    expect(renderedDescription).not.toMatch(/[A-Za-z]{4,}/);
+    expect(renderedDescription).toContain("وجبة الدجاج");
   });
 });
