@@ -21,10 +21,11 @@ const prompt = (id: string) => QUICK_PROMPTS.find((item) => item.id === id)!;
 
 describe("canonical ChatGPT prompt catalog", () => {
   it("contains one unique metadata definition for every supported task", () => {
-    expect(QUICK_PROMPTS).toHaveLength(46);
+    expect(QUICK_PROMPTS).toHaveLength(44);
     expect(new Set(QUICK_PROMPTS.map((item) => item.id)).size).toBe(QUICK_PROMPTS.length);
     expect(QUICK_PROMPTS.every((item) => item.supportedBy.length > 0)).toBe(true);
     expect(QUICK_PROMPTS.every((item) => !("buildPrompt" in item) && !("template" in item) && !("contextChips" in item))).toBe(true);
+    expect(QUICK_PROMPTS.map((item) => item.id)).not.toEqual(expect.arrayContaining(["update-training-preferences", "update-nutrition-preferences"]));
   });
 
   it("creates bounded, non-duplicated home sections", () => {
