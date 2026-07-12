@@ -161,22 +161,17 @@ export async function deleteEatFoodLog(userId: string, logId: string) {
   if (!canUseUserData(userId)) throw new Error("User session invalid");
   const linked = await supabase!
     .from("user_meal_plan_items")
-    .select("id")
+    .select("id,status")
     .eq("user_id", userId)
     .eq("food_log_id", logId)
     .maybeSingle();
   if (linked.error) throw linked.error;
+  if (linked.data) {
+    throw new Error("This food log completes a planned meal and cannot be deleted because completed meal states are permanent. Edit the food log instead.");
+  }
   const deleted = await supabase!.from("food_logs").delete().eq("id", logId).eq("user_id", userId);
   if (deleted.error) throw deleted.error;
-  if (linked.data) {
-    const restored = await supabase!
-      .from("user_meal_plan_items")
-      .update({ status: "planned", food_log_id: null, completed_at: null })
-      .eq("id", linked.data.id)
-      .eq("user_id", userId);
-    if (restored.error) throw restored.error;
-  }
-  return { linkedMealRestored: Boolean(linked.data) };
+  return { linkedMealRestored: false };
 }
 
 export async function logRepeatFood(userId: string, source: FoodLog, targetDate: string, mealType: MealType, quantity = source.quantity) {
@@ -246,18 +241,6 @@ export async function completeMealPlanItemWithDraft({
   if (current.status === "done" || current.food_log_id) return { item: current, log: null as FoodLog | null, alreadyDone: true };
 
   const completedAt = new Date().toISOString();
-  const claim = await supabase!
-    .from("user_meal_plan_items")
-    .update({ status: "done", completed_at: completedAt })
-    .eq("id", current.id)
-    .eq("user_id", current.user_id)
-    .eq("status", "planned")
-    .is("food_log_id", null)
-    .select("*")
-    .maybeSingle();
-  if (claim.error) throw claim.error;
-  if (!claim.data) return { item: current, log: null as FoodLog | null, alreadyDone: true };
-
   const logPayload = {
     user_id: current.user_id, food_item_id: current.food_item_id, user_food_item_id: current.user_food_item_id,
     log_date: current.plan_date, meal_type: patch.mealType, food_name: patch.foodName.trim(), serving_size: patch.servingSize.trim(),
@@ -265,25 +248,35 @@ export async function completeMealPlanItemWithDraft({
     notes: patch.notes?.trim() || null
   };
   const inserted = await supabase!.from("food_logs").insert(logPayload).select("*").single();
-  if (inserted.error) {
-    await supabase!.from("user_meal_plan_items").update({ status: "planned", completed_at: null }).eq("id", current.id).eq("user_id", current.user_id);
-    throw inserted.error;
-  }
+  if (inserted.error) throw inserted.error;
+
   const planPatch = updateSavedPlan ? {
     food_name: logPayload.food_name, serving_size: logPayload.serving_size, quantity: logPayload.quantity, meal_type: logPayload.meal_type,
     calories: logPayload.calories, protein_g: logPayload.protein_g, carbs_g: logPayload.carbs_g, fat_g: logPayload.fat_g, notes: logPayload.notes
   } : {};
-  const linked = await supabase!
+  const completed = await supabase!
     .from("user_meal_plan_items")
-    .update({ ...planPatch, food_log_id: inserted.data.id, completed_at: completedAt })
+    .update({ ...planPatch, status: "done", food_log_id: inserted.data.id, completed_at: completedAt })
     .eq("id", current.id)
     .eq("user_id", current.user_id)
+    .eq("status", "planned")
+    .is("food_log_id", null)
     .select("*")
-    .single();
-  if (linked.error) {
+    .maybeSingle();
+  if (completed.error) {
     await supabase!.from("food_logs").delete().eq("id", inserted.data.id).eq("user_id", current.user_id);
-    await supabase!.from("user_meal_plan_items").update({ status: "planned", completed_at: null, food_log_id: null }).eq("id", current.id).eq("user_id", current.user_id);
-    throw linked.error;
+    throw completed.error;
   }
-  return { item: linked.data as MealPlanItem, log: inserted.data as FoodLog, alreadyDone: false };
+  if (!completed.data) {
+    await supabase!.from("food_logs").delete().eq("id", inserted.data.id).eq("user_id", current.user_id);
+    const reread = await supabase!
+      .from("user_meal_plan_items")
+      .select("*")
+      .eq("id", current.id)
+      .eq("user_id", current.user_id)
+      .maybeSingle();
+    if (reread.error) throw reread.error;
+    return { item: (reread.data as MealPlanItem | null) ?? current, log: null as FoodLog | null, alreadyDone: true };
+  }
+  return { item: completed.data as MealPlanItem, log: inserted.data as FoodLog, alreadyDone: false };
 }
