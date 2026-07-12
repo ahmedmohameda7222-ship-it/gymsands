@@ -1,11 +1,16 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeading } from "@/components/layout/page-heading";
 import { NutritionTargetSettings } from "@/components/meals/nutrition-target-settings";
 import { CardSkeleton } from "@/components/ui/state-views";
 import { parseEatDate } from "@/lib/eat/eat-model";
+import {
+  parseNutritionTargetsReturnDestination,
+  resolveNutritionTargetsReturnHref,
+  safeCustomNutritionTargetsReturnHref
+} from "@/lib/eat/nutrition-target-return";
 import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { useNutritionTargetsTranslation } from "@/lib/i18n/nutrition-targets";
 
@@ -21,25 +26,27 @@ function NutritionTargetsContent() {
   const { nt, dir } = useNutritionTargetsTranslation();
   const rawDate = params.get("date");
   const selectedDate = parseEatDate(rawDate, today);
-  const fallbackReturn = `/calories?date=${selectedDate}&view=day`;
-  const returnHref = safeReturnHref(params.get("return"), fallbackReturn);
+  const rawReturn = params.get("return");
+  const returnDestination = useMemo(() => parseNutritionTargetsReturnDestination(rawReturn), [rawReturn]);
 
   useEffect(() => {
     if (rawDate === selectedDate) return;
-    const next = new URLSearchParams(params.toString());
+    const next = new URLSearchParams();
     next.set("date", selectedDate);
-    if (returnHref !== fallbackReturn) next.set("return", returnHref);
-    else next.delete("return");
+    if (returnDestination.kind === "custom") next.set("return", returnDestination.href);
     router.replace(`${pathname}?${next.toString()}`, { scroll: false });
-  }, [fallbackReturn, params, pathname, rawDate, returnHref, router, selectedDate]);
+  }, [pathname, rawDate, returnDestination, router, selectedDate]);
 
   return <div className="space-y-4" dir={dir}>
     <PageHeading title={nt("title")} description={nt("description")} />
-    <NutritionTargetSettings selectedDate={selectedDate} returnHref={returnHref} />
+    <NutritionTargetSettings selectedDate={selectedDate} returnDestination={returnDestination} />
   </div>;
 }
 
 export function safeReturnHref(value: string | null | undefined, fallback: string) {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return fallback;
-  return value;
+  return safeCustomNutritionTargetsReturnHref(value) ?? fallback;
+}
+
+export function currentNutritionTargetsReturnHref(value: string | null | undefined, selectedDate: string) {
+  return resolveNutritionTargetsReturnHref(parseNutritionTargetsReturnDestination(value), selectedDate);
 }
