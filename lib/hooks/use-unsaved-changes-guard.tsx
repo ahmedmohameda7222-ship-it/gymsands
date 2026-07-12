@@ -33,6 +33,7 @@ export function useUnsavedChangesGuard({
   const router = useRouter();
   const [pending, setPending] = useState<PendingAction | null>(null);
   const sentinelRef = useRef<UnsavedHistorySentinel | null>(null);
+  const historyWarningPendingRef = useRef(false);
 
   const sentinel = useCallback(() => {
     if (typeof window === "undefined") return null;
@@ -50,6 +51,7 @@ export function useUnsavedChangesGuard({
 
   const continueNavigation = useCallback((action: PendingAction) => {
     setPending(null);
+    historyWarningPendingRef.current = false;
     if (action.historyExit) {
       action.run();
       return;
@@ -84,6 +86,7 @@ export function useUnsavedChangesGuard({
     const controller = sentinel();
     if (!controller) return;
     if (!dirty) {
+      historyWarningPendingRef.current = false;
       controller.deactivate();
       setPending(null);
       return;
@@ -92,7 +95,12 @@ export function useUnsavedChangesGuard({
     controller.activate();
     const popState = (event: PopStateEvent) => {
       const result = controller.handlePopState(event.state);
-      if (result !== "intercepted") return;
+      if (result === "intercepted") {
+        historyWarningPendingRef.current = true;
+        return;
+      }
+      if (result !== "restored" || !historyWarningPendingRef.current) return;
+      historyWarningPendingRef.current = false;
       setPending({
         historyExit: true,
         run: () => controller.continueHistoryExit()
@@ -120,7 +128,12 @@ export function useUnsavedChangesGuard({
   }, [dirty, request, router]);
 
   const dialog = (
-    <Dialog open={Boolean(pending)} onOpenChange={(open) => { if (!open && !applying) setPending(null); }}>
+    <Dialog open={Boolean(pending)} onOpenChange={(open) => {
+      if (!open && !applying) {
+        historyWarningPendingRef.current = false;
+        setPending(null);
+      }
+    }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{copy.title}</DialogTitle>
@@ -131,7 +144,10 @@ export function useUnsavedChangesGuard({
             {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{copy.apply}
           </Button>
           <Button type="button" variant="outline" onClick={discardAndContinue} disabled={applying} className="min-h-12">{copy.discard}</Button>
-          <Button type="button" variant="ghost" onClick={() => setPending(null)} disabled={applying} className="min-h-12">{copy.stay}</Button>
+          <Button type="button" variant="ghost" onClick={() => {
+            historyWarningPendingRef.current = false;
+            setPending(null);
+          }} disabled={applying} className="min-h-12">{copy.stay}</Button>
         </div>
       </DialogContent>
     </Dialog>
