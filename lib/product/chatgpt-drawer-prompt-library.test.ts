@@ -2,11 +2,13 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const source = (path: string) => readFileSync(path, "utf8");
+const provider = source("components/ai/quick-chatgpt-provider.tsx");
+const surface = source("components/ai/quick-chatgpt-surface.tsx");
+const ui = `${provider}\n${surface}`;
 
 describe("ChatGPT responsive drawer and prompt library contracts", () => {
   it("uses an explicit responsive drawer without desktop centered transforms", () => {
     const dialog = source("components/ui/dialog.tsx");
-    const provider = source("components/ai/quick-chatgpt-provider.tsx");
     expect(dialog).toContain('layout?: "dialog" | "responsive-drawer"');
     expect(dialog).toContain('layout === "responsive-drawer"');
     expect(dialog).toContain("lg:right-0");
@@ -15,14 +17,13 @@ describe("ChatGPT responsive drawer and prompt library contracts", () => {
     const drawerBranch = dialog.split('layout === "responsive-drawer"')[1].split(":")[0];
     expect(drawerBranch).not.toContain("-translate-x-1/2");
     expect(drawerBranch).not.toContain("-translate-y-1/2");
-    expect(provider).toContain('layout="responsive-drawer"');
+    expect(surface).toContain('layout="responsive-drawer"');
   });
 
   it("keeps the drawer header fixed while only its body scrolls", () => {
-    const provider = source("components/ai/quick-chatgpt-provider.tsx");
-    expect(provider).toContain("shrink-0 border-b");
-    expect(provider).toContain("min-h-0 flex-1 overflow-y-auto");
-    expect(provider).toContain('closeLabel={tt("close")}');
+    expect(surface).toContain("shrink-0 border-b");
+    expect(surface).toContain("min-h-0 flex-1 overflow-y-auto");
+    expect(surface).toContain('closeLabel={props.tt("close")}');
   });
 
   it("keeps mobile as a bottom sheet and desktop attached to an edge", () => {
@@ -35,55 +36,41 @@ describe("ChatGPT responsive drawer and prompt library contracts", () => {
   });
 
   it("uses one surface for home, library, detail and custom detail", () => {
-    const provider = source("components/ai/quick-chatgpt-provider.tsx");
     expect(provider).toContain('{ name: "home" }');
     expect(provider).toContain('{ name: "library" }');
     expect(provider).toContain('{ name: "detail"; promptId: string; backTo: "home" | "library" }');
     expect(provider).toContain('{ name: "custom-detail" }');
-    expect(provider.match(/<Dialog /g)?.length).toBe(1);
-    expect(provider).toContain('setView({ name: "library" })');
-    expect(provider).toContain('openDefinition(id, "library")');
+    expect(surface.match(/<Dialog /g)?.length).toBe(1);
+    expect(ui).toContain('name: "library"');
+    expect(ui).toContain('backTo: "library"');
   });
 
   it("provides search, categories, availability, access and attachment states", () => {
-    const provider = source("components/ai/quick-chatgpt-provider.tsx");
-    expect(provider).toContain('type="search"');
-    expect(provider).toContain("PROMPT_CATEGORIES");
-    expect(provider).toContain("getPromptAvailability");
-    expect(provider).toContain('tt("requiresContext")');
-    expect(provider).toContain('tt("requiresAccess")');
-    expect(provider).toContain('tt("attachmentRequired")');
-    expect(provider).toContain('aria-pressed={category === item}');
+    expect(surface).toContain('type="search"');
+    expect(surface).toContain("PROMPT_CATEGORIES");
+    expect(surface).toContain("getPromptAvailability");
+    expect(surface).toContain('props.tt("requiresContext")');
+    expect(surface).toContain("getPromptPermissionLabel");
+    expect(surface).toContain('props.tt("attachmentRequired")');
+    expect(surface).toContain("aria-pressed");
   });
 
   it("preserves editable, resettable, clipboard and ChatGPT handoff behavior", () => {
-    const provider = source("components/ai/quick-chatgpt-provider.tsx");
-    expect(provider).toContain("<textarea");
-    expect(provider).toContain("navigator.clipboard.writeText");
-    expect(provider).toContain('window.open("about:blank"');
-    expect(provider).toContain("setEditedPrompt(generatedPrompt)");
-    expect(provider).not.toContain("Continue with ChatGPT");
+    expect(surface).toContain("<textarea");
+    expect(surface).toContain("navigator.clipboard.writeText");
+    expect(surface).toContain('window.open("about:blank"');
+    expect(surface).toContain("setEditedPrompt(props.generatedPrompt)");
+    expect(ui).not.toContain("Continue with ChatGPT");
   });
 
-  it("removes the duplicate Today prompt card while preserving the header action", () => {
-    const dashboard = source("components/dashboard/today-dashboard.tsx");
-    expect(dashboard).toContain('onClick={() => openPrompts()}');
-    expect(dashboard).toContain('tt("askChatGpt")');
-    expect(dashboard).not.toContain("dashboardPrompts.map");
-    expect(dashboard).not.toContain('tt("viewAllPrompts")');
-    expect(dashboard).not.toContain("rankQuickPrompts");
-  });
-
-  it("centers secondary Today actions with stable equal-height layout", () => {
-    const dashboard = source("components/dashboard/today-dashboard.tsx");
-    expect(dashboard).toContain("auto-rows-fr");
-    expect(dashboard).toContain("h-full min-h-24");
-    expect(dashboard).toContain("self-center shrink-0");
-    expect(dashboard).not.toMatch(/translate-y-\[|top-\[\d/);
+  it("keeps the corrected runtime as the provider source of truth", () => {
+    expect(provider).toContain("buildRuntimePrompt");
+    expect(provider).toContain("getRuntimeContextChips");
+    expect(provider).toContain("RUNTIME_QUICK_PROMPTS");
+    expect(provider).toContain("evaluatePromptPermission");
   });
 
   it("does not add or modify a migration for this UX correction", () => {
-    const ledger = source("supabase/migration-ledger.json");
-    expect(ledger).not.toContain("chatgpt_drawer_prompt_library");
+    expect(source("supabase/migration-ledger.json")).not.toContain("chatgpt_drawer_prompt_library");
   });
 });

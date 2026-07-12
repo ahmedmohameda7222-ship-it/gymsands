@@ -8,10 +8,11 @@ export function useTranslation() {
   const { settings } = useUserSettings();
   const language = resolveLanguagePreference(settings.language);
   const dictionary = translations[language];
+  const dir: "ltr" | "rtl" = language === "ar" ? "rtl" : "ltr";
 
   return {
     language,
-    dir: language === "ar" ? "rtl" : "ltr",
+    dir,
     t: (key: TranslationKey, values?: Record<string, string | number>) => {
       const template = dictionary[key] ?? translations.en[key] ?? key;
       if (!values) return template;
