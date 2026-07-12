@@ -1,259 +1,276 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Copy, Loader2, Save, Target } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, ArrowRight, CalendarDays, Loader2, RotateCcw, Save, Target } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { InlineFeedback } from "@/components/motion";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { InlineFeedback } from "@/components/motion";
+import { addIsoDays } from "@/lib/eat/eat-model";
 import {
-  eatEnergyDisplayValue,
-  eatEnergyInputToKcal,
-  eatHeightDisplayValue,
-  eatHeightInputToCm,
-  eatLiquidDisplayValue,
-  eatLiquidInputToMl,
-  eatWeightDisplayValue,
-  eatWeightInputToKg,
-  formatEatEnergy,
-  formatEatLiquid
-} from "@/lib/eat/eat-units";
-import { useEatTranslation } from "@/lib/i18n/eat";
+  buildNutritionTargetDraft,
+  canonicalNutritionTargetDraft,
+  isNutritionTargetDraftDirty,
+  profileForEditor,
+  targetChoiceEditorType,
+  type NutritionTargetDraft,
+  type PersistedNutritionTargetState
+} from "@/lib/eat/nutrition-target-draft";
+import { eatEnergyDisplayValue, eatLiquidDisplayValue, formatEatEnergy, formatEatLiquid } from "@/lib/eat/eat-units";
+import { useUnsavedChangesGuard } from "@/lib/hooks/use-unsaved-changes-guard";
+import { useNutritionTargetsTranslation } from "@/lib/i18n/nutrition-targets";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
-import { getOnboarding } from "@/services/database/profile";
-import { getProgressEntries } from "@/services/database/progress";
-import { getCalorieTargets, upsertCalorieTargets } from "@/services/database/nutrition";
-import { getNutritionTargetProfiles, upsertNutritionTargetProfile } from "@/services/database/execution-layer";
+import { getCalorieTargets } from "@/services/database/nutrition";
+import { getNutritionTargetProfiles } from "@/services/database/execution-layer";
 import { getDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
-import { estimateTdee, type SavedTargets } from "@/services/nutrition/targets";
-import { detectNutritionTargetTypeForDate, getActiveTargetOverride, resolveActiveNutritionTarget, setActiveTargetOverride, type ActiveNutritionTarget } from "@/services/nutrition/active-target";
-import type { NutritionTargetProfileType, OnboardingAnswers, UserNutritionTargetProfile } from "@/types";
+import { getEatTargetAssignmentForDate } from "@/services/database/eat-targets";
+import {
+  applyNutritionTargetChanges,
+  isNutritionTargetApplyConsistencyError
+} from "@/services/database/nutrition-target-assignments";
+import { detectNutritionTargetTypeForDate } from "@/services/nutrition/active-target";
+import type { NutritionTargetAssignment, NutritionTargetProfileType } from "@/types";
 
-type TargetForm = { energy: string; protein: string; carbs: string; fat: string; liquid: string; notes: string };
-type EstimateForm = {
-  age: string;
-  heightCm: string;
-  heightFeet: string;
-  heightInches: string;
-  weight: string;
-  sex: "male" | "female";
-  activityLevel: "sedentary" | "light" | "moderate" | "very_active";
-  goal: "fat_loss" | "maintenance" | "muscle_gain" | "recomposition";
-};
+const choices: NutritionTargetAssignment[] = ["auto", "default_day", "training_day", "rest_day", "high_activity_day"];
 
-const emptyTarget: TargetForm = { energy: "", protein: "", carbs: "", fat: "", liquid: "", notes: "" };
-const emptyEstimate: EstimateForm = { age: "", heightCm: "", heightFeet: "", heightInches: "", weight: "", sex: "male", activityLevel: "moderate", goal: "maintenance" };
-
-function numberOrNull(value: string) {
+function fieldNumber(value: string) {
   if (!value.trim()) return null;
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function targetLabel(target: ActiveNutritionTarget, et: ReturnType<typeof useEatTranslation>["et"]) {
-  if (!target.hasTarget) return et("targetUnavailable");
-  if (target.sourceType === "training_day") return et("trainingTarget");
-  if (target.sourceType === "rest_day") return et("restTarget");
-  if (target.sourceType === "high_activity_day") return et("highActivityTarget");
-  return et("fallbackTarget");
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
 export function NutritionTargetSettings({ selectedDate, returnHref }: { selectedDate: string; returnHref: string }) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
+  const userId = user?.id;
+  const router = useRouter();
   const { settings } = useUserSettings();
-  const { et, formatDate, locale } = useEatTranslation();
-  const [base, setBase] = useState<SavedTargets | null>(null);
-  const [profiles, setProfiles] = useState<UserNutritionTargetProfile[]>([]);
-  const [onboarding, setOnboarding] = useState<OnboardingAnswers | null>(null);
-  const [suggestedType, setSuggestedType] = useState<NutritionTargetProfileType>("default_day");
-  const [override, setOverride] = useState<NutritionTargetProfileType | "auto">("auto");
-  const [editing, setEditing] = useState<NutritionTargetProfileType | "fallback" | null>(null);
-  const [form, setForm] = useState<TargetForm>(emptyTarget);
-  const [estimateForm, setEstimateForm] = useState<EstimateForm>(emptyEstimate);
-  const [estimatePreview, setEstimatePreview] = useState<ReturnType<typeof estimateTdee> | null>(null);
+  const { nt, dir, locale } = useNutritionTargetsTranslation();
+  const [persisted, setPersisted] = useState<PersistedNutritionTargetState | null>(null);
+  const [persistedDraft, setPersistedDraft] = useState<NutritionTargetDraft | null>(null);
+  const [draft, setDraft] = useState<NutritionTargetDraft | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pending, setPending] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "info" | "error"; message: string } | null>(null);
 
-  function formFromProfile(saved: UserNutritionTargetProfile | null | undefined): TargetForm {
-    return saved ? {
-      energy: saved.calories === null ? "" : String(eatEnergyDisplayValue(saved.calories, settings.energyUnit)),
-      protein: saved.protein_g === null ? "" : String(saved.protein_g),
-      carbs: saved.carbs_g === null ? "" : String(saved.carbs_g),
-      fat: saved.fat_g === null ? "" : String(saved.fat_g),
-      liquid: saved.water_ml === null ? "" : String(eatLiquidDisplayValue(saved.water_ml, settings.liquidUnit)),
-      notes: saved.notes ?? ""
-    } : emptyTarget;
-  }
-
-  function formFromBase(saved: SavedTargets | null): TargetForm {
-    return saved ? {
-      energy: saved.daily_calories ? String(eatEnergyDisplayValue(saved.daily_calories, settings.energyUnit)) : "",
-      protein: saved.protein_g ? String(saved.protein_g) : "",
-      carbs: saved.carbs_g ? String(saved.carbs_g) : "",
-      fat: saved.fat_g ? String(saved.fat_g) : "",
-      liquid: saved.water_ml ? String(eatLiquidDisplayValue(saved.water_ml, settings.liquidUnit)) : "",
-      notes: ""
-    } : emptyTarget;
-  }
-
-  useEffect(() => {
-    if (!user?.id) return;
-    let active = true;
+  const load = useCallback(async ({ preserveDraft = false }: { preserveDraft?: boolean } = {}) => {
+    if (!userId) return false;
     setLoading(true);
-    Promise.allSettled([
-      getCalorieTargets(user.id, { throwOnError: true }),
-      user.id === "mock-user" ? Promise.resolve([]) : getNutritionTargetProfiles(user.id),
-      getOnboarding(user.id),
-      getProgressEntries(user.id, { throwOnError: true }),
-      getDefaultUserWorkoutPlan(user.id)
-    ]).then(([baseResult, profilesResult, onboardingResult, progressResult, planResult]) => {
-      if (!active) return;
-      const savedBase = baseResult.status === "fulfilled" ? baseResult.value : null;
-      const savedProfiles = profilesResult.status === "fulfilled" ? profilesResult.value : [];
-      const savedOnboarding = onboardingResult.status === "fulfilled" ? onboardingResult.value : null;
-      const latestWeight = progressResult.status === "fulfilled" ? [...progressResult.value].reverse().find((entry) => entry.body_weight_kg)?.body_weight_kg ?? null : null;
-      const detected = planResult.status === "fulfilled" ? detectNutritionTargetTypeForDate(planResult.value, selectedDate) : "rest_day";
-      setBase(savedBase);
-      setProfiles(savedProfiles);
-      setOnboarding(savedOnboarding);
-      setSuggestedType(detected);
-      setOverride(getActiveTargetOverride(user.id, selectedDate));
-      const weightKg = latestWeight ?? profile?.weight_kg ?? savedOnboarding?.weight_kg ?? null;
-      const heightCm = profile?.height_cm ?? savedOnboarding?.height_cm ?? null;
-      const age = profile?.age ?? savedOnboarding?.age ?? null;
-      const gender = String(profile?.gender ?? savedOnboarding?.gender ?? "male").toLowerCase() === "female" ? "female" : "male";
-      const height = eatHeightDisplayValue(heightCm ?? 0);
-      setEstimateForm((current) => ({
-        ...current,
-        age: age ? String(age) : "",
-        heightCm: heightCm ? String(height.cm) : "",
-        heightFeet: heightCm ? String(height.feet) : "",
-        heightInches: heightCm ? String(height.inches) : "",
-        weight: weightKg ? String(eatWeightDisplayValue(weightKg, settings.weightUnit)) : "",
-        sex: gender
-      }));
-      const failures = [baseResult, profilesResult, onboardingResult, progressResult, planResult].filter((result) => result.status === "rejected");
-      if (failures.length) setFeedback({ type: "error", message: et("partialTargetLoad") });
+    setLoadError(false);
+    try {
+      const [baseTarget, profiles, plan, assignment] = await Promise.all([
+        getCalorieTargets(userId, { throwOnError: true }),
+        userId === "mock-user" ? Promise.resolve([]) : getNutritionTargetProfiles(userId),
+        getDefaultUserWorkoutPlan(userId),
+        userId === "mock-user" ? Promise.resolve<NutritionTargetAssignment>("auto") : getEatTargetAssignmentForDate(userId, selectedDate)
+      ]);
+      const resolvedTargetType = detectNutritionTargetTypeForDate(plan, selectedDate);
+      const nextPersisted: PersistedNutritionTargetState = {
+        selectedDate,
+        assignment,
+        resolvedTargetType,
+        profiles,
+        baseTarget
+      };
+      const nextPersistedDraft = buildNutritionTargetDraft({ persisted: nextPersisted, settings });
+      setPersisted(nextPersisted);
+      setPersistedDraft(nextPersistedDraft);
+      if (!preserveDraft) setDraft(nextPersistedDraft);
       setLoading(false);
-    });
-    return () => { active = false; };
-  }, [et, profile?.age, profile?.gender, profile?.height_cm, profile?.weight_kg, selectedDate, settings.heightUnit, settings.weightUnit, user?.id]);
+      return true;
+    } catch {
+      setLoading(false);
+      setLoadError(true);
+      return false;
+    }
+  }, [selectedDate, settings, userId]);
 
-  useEffect(() => {
-    if (!editing) return;
-    setForm(editing === "fallback" ? formFromBase(base) : formFromProfile(profiles.find((item) => item.target_type === editing)));
-    // The canonical records are the source of truth when display units change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.energyUnit, settings.liquidUnit]);
+  useEffect(() => { void load(); }, [load]);
 
-  const activeType = override === "auto" ? suggestedType : override;
-  const activeTarget = useMemo(() => resolveActiveNutritionTarget({ profiles, baseTarget: base, requestedType: activeType }), [activeType, base, profiles]);
-  const types: Array<{ type: NutritionTargetProfileType; label: string }> = [
-    { type: "default_day", label: et("fallbackTarget") },
-    { type: "training_day", label: et("trainingTarget") },
-    { type: "rest_day", label: et("restTarget") },
-    { type: "high_activity_day", label: et("highActivityTarget") }
-  ];
+  const dirty = Boolean(draft && persistedDraft && isNutritionTargetDraftDirty(draft, persistedDraft));
 
-  function edit(target: NutritionTargetProfileType | "fallback") {
-    setEditing(target);
-    setForm(target === "fallback" ? formFromBase(base) : formFromProfile(profiles.find((item) => item.target_type === target)));
-    setFeedback(null);
-  }
-
-  function validateForm() {
-    const energyDisplay = numberOrNull(form.energy);
-    const protein = numberOrNull(form.protein);
-    const carbs = numberOrNull(form.carbs);
-    const fat = numberOrNull(form.fat);
-    const liquidDisplay = numberOrNull(form.liquid);
+  const validate = useCallback((current: NutritionTargetDraft) => {
+    const energy = fieldNumber(current.calories);
+    const protein = fieldNumber(current.protein);
+    const carbs = fieldNumber(current.carbs);
+    const fat = fieldNumber(current.fat);
+    const water = fieldNumber(current.water);
     const minEnergy = eatEnergyDisplayValue(500, settings.energyUnit);
     const maxEnergy = eatEnergyDisplayValue(15000, settings.energyUnit);
-    const minLiquid = eatLiquidDisplayValue(250, settings.liquidUnit);
-    const maxLiquid = eatLiquidDisplayValue(20000, settings.liquidUnit);
-    if (energyDisplay !== null && (energyDisplay < minEnergy || energyDisplay > maxEnergy)) throw new Error(et("invalidEnergy", { min: minEnergy, max: maxEnergy, unit: settings.energyUnit }));
-    for (const [value, name] of [[protein, et("protein")], [carbs, et("carbs")], [fat, et("fat")]] as const) if (value !== null && (value < 0 || value > 2000)) throw new Error(`${name}: ${et("invalidValue")}`);
-    if (liquidDisplay !== null && (liquidDisplay < minLiquid || liquidDisplay > maxLiquid)) throw new Error(et("invalidLiquid", { min: minLiquid, max: maxLiquid, unit: settings.liquidUnit }));
-    return {
-      calories: energyDisplay === null ? null : eatEnergyInputToKcal(energyDisplay, settings.energyUnit),
-      protein,
-      carbs,
-      fat,
-      water: liquidDisplay === null ? null : eatLiquidInputToMl(liquidDisplay, settings.liquidUnit)
-    };
-  }
-
-  async function save() {
-    if (!user?.id || !editing || pending) return;
-    setPending(true);
-    setFeedback({ type: "info", message: `${et("saveChanges")}…` });
-    try {
-      const values = validateForm();
-      if (editing === "fallback") {
-        const saved = await upsertCalorieTargets({ userId: user.id, dailyCalories: values.calories ?? 0, proteinG: values.protein ?? 0, carbsG: values.carbs ?? 0, fatG: values.fat ?? 0, waterMl: values.water ?? 0 });
-        setBase({ daily_calories: Number(saved.daily_calories), protein_g: Number(saved.protein_g), carbs_g: Number(saved.carbs_g), fat_g: Number(saved.fat_g), water_ml: Number(saved.water_ml ?? 0) });
-      } else {
-        const saved = await upsertNutritionTargetProfile(user.id, { target_type: editing, calories: values.calories, protein_g: values.protein, carbs_g: values.carbs, fat_g: values.fat, water_ml: values.water, notes: form.notes.trim() || null });
-        setProfiles((current) => [...current.filter((item) => item.target_type !== saved.target_type), saved]);
-      }
-      setFeedback({ type: "info", message: et("successSaved") });
-      setEditing(null);
-    } catch (error) {
-      setFeedback({ type: "error", message: error instanceof Error ? error.message : et("saveFailed") });
-    } finally {
-      setPending(false);
+    const minWater = eatLiquidDisplayValue(250, settings.liquidUnit);
+    const maxWater = eatLiquidDisplayValue(20000, settings.liquidUnit);
+    if (energy !== null && (!Number.isFinite(energy) || energy < minEnergy || energy > maxEnergy)) {
+      throw new Error(nt("invalidEnergy", { min: minEnergy, max: maxEnergy, unit: settings.energyUnit }));
     }
+    for (const [value, label, max] of [[protein, nt("protein"), 1000], [carbs, nt("carbs"), 2000], [fat, nt("fat"), 1000]] as const) {
+      if (value !== null && (!Number.isFinite(value) || value < 0 || value > max)) throw new Error(nt("invalidMacro", { field: label }));
+    }
+    if (water !== null && (!Number.isFinite(water) || water < minWater || water > maxWater)) {
+      throw new Error(nt("invalidWater", { min: minWater, max: maxWater, unit: settings.liquidUnit }));
+    }
+    return canonicalNutritionTargetDraft(current, settings);
+  }, [nt, settings]);
+
+  const apply = useCallback(async () => {
+    if (!userId || !draft || applying) return false;
+    setApplying(true);
+    setFeedback({ type: "info", message: `${nt("apply")}…` });
+    try {
+      const canonical = validate(draft);
+      await applyNutritionTargetChanges({
+        userId,
+        targetDate: selectedDate,
+        assignment: draft.assignment,
+        editorTargetType: draft.editorTargetType,
+        ...canonical
+      });
+      const reloaded = await load();
+      if (!reloaded) throw new Error(nt("applyFailed"));
+      setFeedback({ type: "info", message: nt("applied") });
+      return true;
+    } catch (error) {
+      const failedDraft = draft;
+      if (isNutritionTargetApplyConsistencyError(error)) {
+        await load({ preserveDraft: true });
+        setDraft(failedDraft);
+        setFeedback({ type: "error", message: nt("verifyFailed") });
+      } else {
+        setFeedback({ type: "error", message: error instanceof Error && error.message ? error.message : nt("applyFailed") });
+      }
+      return false;
+    } finally {
+      setApplying(false);
+    }
+  }, [applying, draft, load, nt, selectedDate, userId, validate]);
+
+  const discard = useCallback(() => {
+    if (persistedDraft) setDraft(persistedDraft);
+    setFeedback({ type: "info", message: nt("discarded") });
+  }, [nt, persistedDraft]);
+
+  const { request, dialog } = useUnsavedChangesGuard({
+    dirty,
+    applying,
+    onApply: apply,
+    onDiscard: discard,
+    copy: {
+      title: nt("unsavedTitle"),
+      description: nt("unsavedDescription"),
+      apply: nt("applyContinue"),
+      discard: nt("discardContinue"),
+      stay: nt("stay")
+    }
+  });
+
+  const targetLabel = useCallback((type: NutritionTargetAssignment | NutritionTargetProfileType) => {
+    if (type === "auto") return nt("automatic");
+    if (type === "default_day") return nt("fallback");
+    if (type === "training_day") return nt("training");
+    if (type === "rest_day") return nt("rest");
+    return nt("highActivity");
+  }, [nt]);
+
+  function navigateDate(date: string) {
+    request(() => router.push(`/settings/nutrition-targets?date=${encodeURIComponent(date)}&return=${encodeURIComponent(returnHref)}`));
   }
 
-  function calculateEstimate() {
-    const age = Number(estimateForm.age);
-    const heightCm = eatHeightInputToCm({ cm: estimateForm.heightCm, feet: estimateForm.heightFeet, inches: estimateForm.heightInches, unit: settings.heightUnit });
-    const weightKg = eatWeightInputToKg(estimateForm.weight, settings.weightUnit);
-    if (!age || !heightCm || !weightKg) { setFeedback({ type: "error", message: et("completeEstimator") }); return; }
-    setEstimatePreview(estimateTdee({ age, heightCm, weightKg, sex: estimateForm.sex, activityLevel: estimateForm.activityLevel, goal: estimateForm.goal }));
+  function selectAssignment(assignment: NutritionTargetAssignment) {
+    if (!persisted) return;
+    const select = () => {
+      const editorTargetType = targetChoiceEditorType(assignment, persisted.resolvedTargetType);
+      const next = buildNutritionTargetDraft({
+        persisted: { ...persisted, assignment },
+        settings
+      });
+      setDraft({ ...next, assignment, editorTargetType });
+      setFeedback(null);
+    };
+    if (draft?.assignment === assignment) return;
+    request(select);
   }
 
-  function applyEstimate(targetType: NutritionTargetProfileType | "fallback") {
-    if (!estimatePreview) return;
-    setEditing(targetType);
-    setForm({
-      energy: String(eatEnergyDisplayValue(estimatePreview.daily_calories, settings.energyUnit)),
-      protein: String(estimatePreview.protein_g),
-      carbs: String(estimatePreview.carbs_g),
-      fat: String(estimatePreview.fat_g),
-      liquid: String(eatLiquidDisplayValue(estimatePreview.water_ml, settings.liquidUnit)),
-      notes: et("estimatedNote")
-    });
-    setFeedback({ type: "info", message: et("reviewEstimate") });
-  }
+  const source = useMemo(() => draft && persisted ? profileForEditor(draft.editorTargetType, persisted.profiles, persisted.baseTarget) : null, [draft, persisted]);
 
-  function setToday(type: NutritionTargetProfileType | "auto") {
-    setOverride(type);
-    if (user?.id) setActiveTargetOverride(user.id, selectedDate, type);
-  }
+  if (loading && !draft) return <Card><CardContent className="flex items-center gap-2 p-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{nt("loading")}</CardContent></Card>;
+  if (loadError || !draft || !persisted) return <Card><CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-destructive">{nt("loadFailed")}</p><Button type="button" variant="outline" onClick={() => void load()}>{nt("retry")}</Button></CardContent></Card>;
 
-  const sexOptions = [{ value: "male", label: et("male") }, { value: "female", label: et("female") }];
-  const activityOptions = [{ value: "sedentary", label: et("sedentary") }, { value: "light", label: et("light") }, { value: "moderate", label: et("moderate") }, { value: "very_active", label: et("veryActive") }];
-  const goalOptions = [{ value: "fat_loss", label: et("fatLoss") }, { value: "maintenance", label: et("maintenance") }, { value: "muscle_gain", label: et("muscleGain") }, { value: "recomposition", label: et("recomposition") }];
+  return <div className="space-y-4" dir={dir}>
+    {dialog}
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <Button type="button" variant="outline" className="min-h-12" onClick={() => request(() => router.push(returnHref))}><ArrowLeft className="h-4 w-4 rtl:rotate-180" />{nt("returnEat")}</Button>
+      <Badge variant={dirty ? "warning" : "outline"}>{dirty ? nt("pending") : nt("noChanges")}</Badge>
+    </div>
 
-  if (loading) return <Card><CardContent className="p-6 text-sm text-muted-foreground">{et("loading")}</CardContent></Card>;
-  return <div className="space-y-4">
-    <Button asChild variant="ghost" className="min-h-11"><Link href={returnHref}><ArrowLeft className="h-4 w-4 rtl:rotate-180" />{et("returnEat")}</Link></Button>
-    <Card className="border-primary/20"><CardHeader><CardTitle className="flex items-center gap-2"><Target className="h-5 w-5 text-primary" />{et("activeTargetFor")} {formatDate(selectedDate)}</CardTitle></CardHeader><CardContent className="space-y-3"><p className="text-xl font-bold">{targetLabel(activeTarget, et)} · {activeTarget.values.daily_calories ? formatEatEnergy(activeTarget.values.daily_calories, settings.energyUnit, locale) : "—"}</p><p className="text-sm text-muted-foreground">{et("protein")}: {activeTarget.values.protein_g || "—"} g · {et("carbs")}: {activeTarget.values.carbs_g || "—"} g · {et("fat")}: {activeTarget.values.fat_g || "—"} g · {et("water")}: {activeTarget.values.water_ml ? formatEatLiquid(activeTarget.values.water_ml, settings.liquidUnit, locale) : "—"}</p><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5"><Button variant={override === "auto" ? "default" : "outline"} onClick={() => setToday("auto")}>{et("automatic")}</Button>{types.map((item) => <Button key={item.type} variant={activeType === item.type && override !== "auto" ? "default" : "outline"} onClick={() => setToday(item.type)}>{item.label}</Button>)}</div></CardContent></Card>
+    <Card>
+      <CardContent className="space-y-4 p-4 sm:p-5">
+        <div className="grid grid-cols-[auto_1fr_auto] gap-2">
+          <Button type="button" variant="outline" size="icon" className="min-h-12 min-w-12" aria-label={nt("previousDay")} onClick={() => navigateDate(addIsoDays(selectedDate, -1))}><ArrowLeft className="h-4 w-4 rtl:rotate-180" /></Button>
+          <label className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-3.5 h-5 w-5 text-muted-foreground rtl:left-auto rtl:right-3" /><Input type="date" value={selectedDate} aria-label={nt("date")} onChange={(event) => navigateDate(event.target.value)} className="h-12 px-10 text-center font-semibold" /></label>
+          <Button type="button" variant="outline" size="icon" className="min-h-12 min-w-12" aria-label={nt("nextDay")} onClick={() => navigateDate(addIsoDays(selectedDate, 1))}><ArrowRight className="h-4 w-4 rtl:rotate-180" /></Button>
+        </div>
+      </CardContent>
+    </Card>
 
-    <div className="grid gap-3 md:grid-cols-2">{types.map((item) => { const saved = profiles.find((profileItem) => profileItem.target_type === item.type); return <Card key={item.type}><CardContent className="flex min-h-28 items-center justify-between gap-3 p-4"><div><p className="font-semibold">{item.label}</p><p className="mt-1 text-sm text-muted-foreground">{saved?.calories ? `${formatEatEnergy(saved.calories, settings.energyUnit, locale)} · ${et("protein")}: ${saved.protein_g ?? "—"} g` : et("notSaved")}</p></div><Button variant="outline" onClick={() => edit(item.type)}>{et("edit")}</Button></CardContent></Card>; })}<Card><CardContent className="flex min-h-28 items-center justify-between gap-3 p-4"><div><p className="font-semibold">{et("fallbackEditor")}</p><p className="mt-1 text-sm text-muted-foreground">{base ? `${formatEatEnergy(base.daily_calories, settings.energyUnit, locale)} · ${et("protein")}: ${base.protein_g} g` : et("notSaved")}</p></div><Button variant="outline" onClick={() => edit("fallback")}>{et("edit")}</Button></CardContent></Card></div>
+    <Card className="border-primary/20">
+      <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><Target className="h-5 w-5 text-primary" />{nt("targetFor", { date: new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${selectedDate}T12:00:00`)) })}</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <div role="radiogroup" aria-label={nt("dateAssignment")} className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          {choices.map((choice) => <button key={choice} type="button" role="radio" aria-checked={draft.assignment === choice} onClick={() => selectAssignment(choice)} className={`min-h-12 shrink-0 rounded-full border px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${draft.assignment === choice ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"}`}>{targetLabel(choice)}</button>)}
+        </div>
+        <div className="rounded-[14px] border border-border/70 bg-muted/20 p-3 text-sm text-muted-foreground">
+          <p className="font-semibold text-foreground">{nt("dateAssignment")}</p>
+          <p className="mt-1">{draft.assignment === "auto"
+            ? nt("automaticResolves", { target: targetLabel(persisted.resolvedTargetType), date: new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${selectedDate}T12:00:00`)) })
+            : nt("dateAssignmentDescription")}</p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-4">
+          <SummaryMetric label={nt("calories")} value={draft.calories ? `${draft.calories} ${settings.energyUnit}` : "—"} />
+          <SummaryMetric label={nt("protein")} value={draft.protein ? `${draft.protein} g` : "—"} />
+          <SummaryMetric label={nt("carbs")} value={draft.carbs ? `${draft.carbs} g` : "—"} />
+          <SummaryMetric label={nt("water")} value={draft.water ? `${draft.water} ${settings.liquidUnit}` : "—"} />
+        </div>
+      </CardContent>
+    </Card>
 
-    {editing ? <Card><CardHeader className="flex flex-row items-center justify-between space-y-0"><CardTitle className="text-base">{et("edit")} {editing === "fallback" ? et("fallbackEditor") : types.find((item) => item.type === editing)?.label}</CardTitle><Button variant="ghost" onClick={() => setEditing(null)}>{et("close")}</Button></CardHeader><CardContent className="space-y-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><TargetInput label={`${et("calories")} (${settings.energyUnit})`} value={form.energy} onChange={(energy) => setForm({ ...form, energy })} /><TargetInput label={`${et("protein")} (g)`} value={form.protein} onChange={(protein) => setForm({ ...form, protein })} /><TargetInput label={`${et("carbs")} (g)`} value={form.carbs} onChange={(carbs) => setForm({ ...form, carbs })} /><TargetInput label={`${et("fat")} (g)`} value={form.fat} onChange={(fat) => setForm({ ...form, fat })} /><TargetInput label={`${et("water")} (${settings.liquidUnit})`} value={form.liquid} onChange={(liquid) => setForm({ ...form, liquid })} /></div>{editing !== "fallback" ? <TargetInput label={et("notes")} value={form.notes} onChange={(notes) => setForm({ ...form, notes })} text /> : null}<Button className="min-h-12" onClick={() => void save()} disabled={pending}>{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{et("saveChanges")}</Button></CardContent></Card> : null}
+    <Card>
+      <CardHeader className="pb-3"><CardTitle className="text-base">{nt("editing", { target: targetLabel(draft.editorTargetType) })}</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <div className="rounded-[14px] border border-border/70 bg-muted/20 p-3 text-sm text-muted-foreground">
+          <p className="font-semibold text-foreground">{nt("reusableProfile")}</p>
+          <p className="mt-1">{draft.assignment === "auto"
+            ? nt("automaticScope", { target: targetLabel(draft.editorTargetType) })
+            : nt("explicitScope", { target: targetLabel(draft.editorTargetType), date: selectedDate })}</p>
+          {source?.source === "fallback-profile" ? <p className="mt-2 text-warning">{nt("missingProfile")}</p> : null}
+          {source?.source === "legacy-base" ? <p className="mt-2 text-warning">{nt("legacyFallback")}</p> : null}
+        </div>
 
-    <Card><CardHeader><CardTitle>{et("estimateTargets")}</CardTitle><p className="text-sm text-muted-foreground">{et("targetPrefill")}</p></CardHeader><CardContent className="space-y-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6"><EstimateInput label={et("age")} value={estimateForm.age} onChange={(age) => setEstimateForm({ ...estimateForm, age })} />{settings.heightUnit === "cm" ? <EstimateInput label={et("heightCm")} value={estimateForm.heightCm} onChange={(heightCm) => setEstimateForm({ ...estimateForm, heightCm })} /> : <><EstimateInput label={et("heightFeet")} value={estimateForm.heightFeet} onChange={(heightFeet) => setEstimateForm({ ...estimateForm, heightFeet })} /><EstimateInput label={et("heightInches")} value={estimateForm.heightInches} onChange={(heightInches) => setEstimateForm({ ...estimateForm, heightInches })} /></>}<EstimateInput label={settings.weightUnit === "kg" ? et("weightKg") : et("weightLb")} value={estimateForm.weight} onChange={(weight) => setEstimateForm({ ...estimateForm, weight })} /><SelectInput label={et("sex")} value={estimateForm.sex} options={sexOptions} onChange={(sex) => setEstimateForm({ ...estimateForm, sex: sex as EstimateForm["sex"] })} /><SelectInput label={et("activity")} value={estimateForm.activityLevel} options={activityOptions} onChange={(activityLevel) => setEstimateForm({ ...estimateForm, activityLevel: activityLevel as EstimateForm["activityLevel"] })} /><SelectInput label={et("goal")} value={estimateForm.goal} options={goalOptions} onChange={(goal) => setEstimateForm({ ...estimateForm, goal: goal as EstimateForm["goal"] })} /></div><Button variant="outline" className="min-h-12" onClick={calculateEstimate}>{et("previewEstimate")}</Button>{estimatePreview ? <div className="rounded-[16px] border border-primary/20 bg-primary/5 p-4"><p className="font-semibold">{et("previewEstimate")}: {formatEatEnergy(estimatePreview.daily_calories, settings.energyUnit, locale)} · {et("protein")}: {estimatePreview.protein_g} g · {et("carbs")}: {estimatePreview.carbs_g} g · {et("fat")}: {estimatePreview.fat_g} g · {et("water")}: {formatEatLiquid(estimatePreview.water_ml, settings.liquidUnit, locale)}</p><p className="mt-1 text-sm text-muted-foreground">{et("estimateDisclaimer")}</p><div className="mt-3 flex flex-wrap gap-2"><Button onClick={() => applyEstimate(activeType)}>{et("useTodayOnly")}</Button><Button variant="outline" onClick={() => applyEstimate("training_day")}>{et("saveTrainingTarget")}</Button><Button variant="outline" onClick={() => applyEstimate("fallback")}><Copy className="h-4 w-4" />{et("copyFallback")}</Button></div></div> : null}</CardContent></Card>
-    <InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} onClose={() => setFeedback(null)} />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <TargetField label={`${nt("calories")} (${settings.energyUnit})`} value={draft.calories} onChange={(calories) => setDraft({ ...draft, calories })} />
+          <TargetField label={`${nt("protein")} (g)`} value={draft.protein} onChange={(protein) => setDraft({ ...draft, protein })} />
+          <TargetField label={`${nt("carbs")} (g)`} value={draft.carbs} onChange={(carbs) => setDraft({ ...draft, carbs })} />
+          <TargetField label={`${nt("fat")} (g)`} value={draft.fat} onChange={(fat) => setDraft({ ...draft, fat })} />
+          <TargetField label={`${nt("water")} (${settings.liquidUnit})`} value={draft.water} onChange={(water) => setDraft({ ...draft, water })} />
+        </div>
+        <div className="space-y-2"><Label htmlFor="nutrition-target-notes">{nt("notes")}</Label><textarea id="nutrition-target-notes" value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} rows={3} className="w-full rounded-[14px] border border-input bg-card px-3 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
+
+        <InlineFeedback message={feedback?.message} variant={feedback?.type === "error" ? "error" : "info"} onClose={() => setFeedback(null)} />
+        <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-10 grid gap-2 rounded-[16px] border border-border/70 bg-card/95 p-3 shadow-soft backdrop-blur sm:static sm:grid-cols-[1fr_auto] sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
+          <Button type="button" className="min-h-12" onClick={() => void apply()} disabled={!dirty || applying}><Save className="h-4 w-4" />{applying ? `${nt("apply")}…` : nt("apply")}</Button>
+          <Button type="button" variant="outline" className="min-h-12" onClick={discard} disabled={!dirty || applying}><RotateCcw className="h-4 w-4" />{nt("discard")}</Button>
+        </div>
+      </CardContent>
+    </Card>
   </div>;
 }
 
-function TargetInput({ label, value, onChange, text = false }: { label: string; value: string; onChange: (value: string) => void; text?: boolean }) { return <div className="space-y-2"><Label>{label}</Label><Input type={text ? "text" : "number"} min={text ? undefined : "0"} step={text ? undefined : "0.1"} value={value} onChange={(event) => onChange(event.target.value)} /></div>; }
-function EstimateInput(props: { label: string; value: string; onChange: (value: string) => void }) { return <TargetInput {...props} />; }
-function SelectInput({ label, value, options, onChange }: { label: string; value: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void }) { return <div className="space-y-2"><Label>{label}</Label><select value={value} onChange={(event) => onChange(event.target.value)} className="h-12 w-full rounded-[14px] border border-input bg-card px-3 text-sm">{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>; }
+function TargetField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <div className="space-y-2"><Label>{label}</Label><Input type="number" min="0" step="0.1" inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} /></div>;
+}
+
+function SummaryMetric({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-[14px] border border-border/70 p-3"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 font-semibold tabular-nums">{value}</p></div>;
+}
