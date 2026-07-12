@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-13T00:14:25+02:00",
-  "auditedRepositoryCommit": "c1ce801d66be57054edd13f14e744548511fc331",
+  "capturedAt": "2026-07-13T16:00:00+02:00",
+  "auditedRepositoryCommit": "4e50e1cfc953c94b1f75ec2e3f73e22078fdf21a",
   "productionMigrationCount": 24,
   "schemaVerifiedUntrackedCount": 3,
   "entries": [
@@ -32,6 +32,7 @@
     { "productionVersion": "20260711014500", "productionName": "idempotency_uncertain_completion_guard", "localFile": "20260711014500_idempotency_uncertain_completion_guard.sql", "state": "applied" },
     { "productionVersion": null, "productionName": null, "localFile": "20260711213000_adaptive_onboarding_v2.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but all migration columns, constraints, the authenticated RPC, and grants were verified in production on 2026-07-13. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
     { "productionVersion": null, "productionName": null, "localFile": "20260712173000_persistent_meal_plan_skip_status.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but the planned/done/skipped constraint, skipped-state constraint, terminal-state trigger, and trigger function were verified in production on 2026-07-13. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
-    { "productionVersion": null, "productionName": null, "localFile": "20260712195000_nutrition_target_date_overrides.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but the override table, unique/index structure, RLS, four ownership policies, updated-at trigger, authenticated CRUD grants, and atomic Apply RPC were verified in production on 2026-07-13. Do not replay. Repair migration history only through an approved evidence-backed workflow." }
+    { "productionVersion": null, "productionName": null, "localFile": "20260712195000_nutrition_target_date_overrides.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but the override table, unique/index structure, RLS, four ownership policies, updated-at trigger, authenticated CRUD grants, and atomic Apply RPC were verified in production on 2026-07-13. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
+    { "productionVersion": null, "productionName": null, "localFile": "20260713153000_meal_plan_atomic_execution.sql", "state": "pending", "note": "Forward-only My Meal Plan integrity migration. Commit and review before applying to production." }
   ]
 }
