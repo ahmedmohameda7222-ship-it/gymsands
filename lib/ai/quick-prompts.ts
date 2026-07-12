@@ -4,6 +4,7 @@ import { PROGRESS_DAILY_PROFILE_PROMPTS } from "@/lib/ai/prompt-catalog/progress
 import { TRAINING_PROMPTS } from "@/lib/ai/prompt-catalog/training";
 import { createPromptPrerequisite, getPromptPrerequisiteMessage, getPromptRole } from "@/lib/ai/prompt-catalog/prerequisites";
 import type { RawPromptSpec } from "@/lib/ai/prompt-catalog/types";
+import type { PlannedMealPromptContext } from "@/lib/ai/planned-meal-context";
 import type { AiPermissionSection } from "@/types";
 
 export type PromptLanguage = "en" | "de" | "ar";
@@ -11,7 +12,17 @@ export type PromptCategory = "training" | "nutrition" | "grocery" | "recovery" |
 export type PromptCapability = "read" | "write";
 export type PromptSourceState = "loading" | "loaded" | "failed" | "unknown";
 export type LocalizedText = Record<PromptLanguage, string>;
+export type PromptSurfaceSource = "default" | "eat" | "eat-planned-meal";
+export type PromptSurfaceMode = "home" | "meal-adjustment";
 export const PROMPT_CATEGORIES: PromptCategory[] = ["training", "nutrition", "grocery", "recovery", "progress", "daily", "profile"];
+
+export type PromptOpenOptions = {
+  source: PromptSurfaceSource;
+  mode?: PromptSurfaceMode;
+  selectedDate?: string;
+  meal?: PlannedMealPromptContext | null;
+  promptId?: string;
+};
 
 export type QuickPromptContext = {
   route?: string;
@@ -19,14 +30,25 @@ export type QuickPromptContext = {
   localHour?: number;
   units?: { energy?: "kcal" | "kJ"; liquid?: "ml" | "oz"; weight?: "kg" | "lb" };
   workout?: { hasPlan?: boolean; scheduled?: boolean; active?: boolean; completed?: boolean; title?: string | null; exerciseCount?: number | null; durationMinutes?: number | null; historyCount?: number | null };
-  nutrition?: { hasTargets?: boolean; targetsState?: PromptSourceState; foodLogsState?: "loading" | "loaded" | "failed"; remainingCalories?: number | null; remainingProtein?: number | null; foodLogCount: number | null; mealPlanCount: number | null };
+  nutrition?: {
+    hasTargets?: boolean;
+    targetsState?: PromptSourceState;
+    foodLogsState?: "loading" | "loaded" | "failed";
+    remainingCalories?: number | null;
+    remainingProtein?: number | null;
+    remainingCarbs?: number | null;
+    remainingFat?: number | null;
+    foodLogCount: number | null;
+    mealPlanCount: number | null;
+    plannedMealCount?: number | null;
+  };
   grocery?: { state?: PromptSourceState; itemCount: number | null };
   hydration?: { state?: PromptSourceState; hasTarget?: boolean; logCount?: number | null; remainingMl?: number | null };
   recovery?: { state?: PromptSourceState; hasData?: boolean; sleepHours?: number | null; poorRecovery?: boolean };
   wellness?: { state?: PromptSourceState; habitCount?: number | null; supplementCount?: number | null };
   progress?: { state?: PromptSourceState; entryCount?: number | null };
   profile?: { state?: PromptSourceState; hasGoals?: boolean; hasTrainingPreferences?: boolean; hasNutritionPreferences?: boolean; hasConstraints?: boolean };
-  selection?: { exercise?: string | null; meal?: string | null };
+  selection?: { exercise?: string | null; meal?: string | null; plannedMeal?: PlannedMealPromptContext | null };
   endOfWeek?: boolean;
 };
 
