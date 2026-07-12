@@ -20,7 +20,6 @@ import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { buildTodayActions, enabledQuickLogs, hasCurrentDayActivity, quickLogRoutes, resolveTodayWorkout, selectRelevantMeal, todayWorkoutActionHref, type TodayAction, type TodayWorkoutState } from "@/lib/dashboard/today-model";
 import { formatEnergy, formatLiquid } from "@/lib/dashboard/today-units";
-import { rankQuickPrompts, localizePrompt, type QuickPromptContext } from "@/lib/ai/quick-prompts";
 import { percent, remainingMacros, sumFoodLogs } from "@/services/nutrition/calculations";
 import { getActiveTargetOverride, resolveActiveNutritionTarget } from "@/services/nutrition/active-target";
 import { startOfWeek } from "@/services/reports/reporting";
@@ -296,41 +295,46 @@ const hasTargets = Boolean(targets);
 const sleepHours = todaySleep?.hours_slept ?? null;
 const poorRecovery = Boolean(todaySleep && (todaySleep.recovery_level === "low" || todaySleep.fatigue_level === "high"));
 const endOfWeek = new Date(`${today}T12:00:00`).getDay() === 0;
-const promptContext: QuickPromptContext = {
-  route: "/dashboard",
-  today,
-  workout: {
-    scheduled: workoutState === "scheduled",
-    active: workoutState === "active",
-    completed: workoutState === "completed",
-    title: workoutTitle ?? undefined,
-    exerciseCount: workoutExerciseCount,
-    durationMinutes: workoutDurationMinutes ?? undefined
-  },
-  nutrition: { hasTargets, foodLogsState: nutritionData.logsState, remainingCalories, remainingProtein, foodLogCount, mealPlanCount },
-  grocery: { itemCount: groceryItemCount },
-  recovery: { sleepHours, poorRecovery },
-  endOfWeek
-};
 useEffect(() => {
+  const normalizeSourceState = (state: SourceState) => state === "idle" ? "unknown" : state;
   setDashboardContext({
     route: "/dashboard",
     today,
+    localHour: new Date().getHours(),
+    units: { energy: settings.energyUnit, liquid: settings.liquidUnit, weight: settings.weightUnit },
     workout: {
+      hasPlan: Boolean(workoutData.plan),
       scheduled: workoutState === "scheduled",
       active: workoutState === "active",
       completed: workoutState === "completed",
-      title: workoutTitle ?? undefined,
+      title: workoutTitle,
       exerciseCount: workoutExerciseCount,
-      durationMinutes: workoutDurationMinutes ?? undefined
+      durationMinutes: workoutDurationMinutes,
+      historyCount: workoutData.sessions.filter((session) => session.status === "completed").length
     },
-    nutrition: { hasTargets, foodLogsState: nutritionData.logsState, remainingCalories, remainingProtein, foodLogCount, mealPlanCount },
-    grocery: { itemCount: groceryItemCount },
-    recovery: { sleepHours, poorRecovery },
+    nutrition: {
+      hasTargets,
+      targetsState: nutritionData.targetsState,
+      foodLogsState: nutritionData.logsState,
+      remainingCalories,
+      remainingProtein,
+      foodLogCount,
+      mealPlanCount
+    },
+    grocery: { state: normalizeSourceState(states.shopping), itemCount: states.shopping === "loaded" ? groceryItemCount : null },
+    hydration: {
+      state: normalizeSourceState(states.hydration),
+      hasTarget: Boolean(targets?.water_ml),
+      logCount: states.hydration === "loaded" ? waterLogs.length : null,
+      remainingMl: states.hydration === "loaded" && targets?.water_ml ? Math.max(0, targets.water_ml - waterTotal) : null
+    },
+    recovery: { state: normalizeSourceState(states.wellness), hasData: states.wellness === "loaded" && Boolean(todaySleep), sleepHours, poorRecovery },
+    wellness: { state: normalizeSourceState(states.wellness), habitCount: states.wellness === "loaded" ? wellnessData.habits.length : null, supplementCount: states.wellness === "loaded" ? wellnessData.supplements.length : null },
+    progress: { state: normalizeSourceState(states.setup), entryCount: states.setup === "loaded" ? setupData.progress.length : null },
+    profile: { state: normalizeSourceState(states.setup), hasGoals: Boolean(setupData.onboarding?.goals?.length), hasTrainingPreferences: Boolean(setupData.onboarding), hasNutritionPreferences: false, hasConstraints: Boolean(setupData.onboarding) },
     endOfWeek
   });
-}, [endOfWeek, foodLogCount, groceryItemCount, hasTargets, mealPlanCount, nutritionData.logsState, poorRecovery, remainingCalories, remainingProtein, setDashboardContext, sleepHours, today, workoutDurationMinutes, workoutExerciseCount, workoutState, workoutTitle]);
-const dashboardPrompts = rankQuickPrompts(promptContext).slice(0, 4);
+}, [endOfWeek, foodLogCount, groceryItemCount, hasTargets, mealPlanCount, nutritionData.logsState, nutritionData.targetsState, poorRecovery, remainingCalories, remainingProtein, setDashboardContext, settings.energyUnit, settings.liquidUnit, settings.weightUnit, sleepHours, states.hydration, states.setup, states.shopping, states.wellness, setupData.onboarding, setupData.progress.length, targets?.water_ml, today, todaySleep, waterLogs.length, waterTotal, wellnessData.habits.length, wellnessData.supplements.length, workoutData.plan, workoutData.sessions, workoutDurationMinutes, workoutExerciseCount, workoutState, workoutTitle]);
   const isInitialLoading = sourceNames.every((source) => states[source] === "loading" || states[source] === "idle");
   const localizedDate = new Intl.DateTimeFormat(language === "de" ? "de-DE" : language === "ar" ? "ar" : "en-GB", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${today}T12:00:00`));
 
@@ -393,7 +397,7 @@ const dashboardPrompts = rankQuickPrompts(promptContext).slice(0, 4);
 
       {!setupDismissed && setupDone < setupChecklist.length ? <Card className="border-primary/20"><CardContent className="p-3 sm:p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold">{tt("completeSetup")}: {nextSetup?.label}</p><p className="text-xs text-muted-foreground">{setupDone}/{setupChecklist.length}</p></div><div className="flex items-center gap-2">{nextSetup ? <Button asChild size="sm"><Link href={nextSetup.href}>{nextSetup.label}</Link></Button> : null}<Button type="button" size="sm" variant="ghost" aria-expanded={setupExpanded} onClick={() => setSetupExpanded((value) => !value)}>{setupExpanded ? tt("hideDetails") : tt("showDetails")}{setupExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</Button><Button type="button" size="icon" variant="ghost" aria-label={tt("dismiss")} onClick={() => setSetupDismissed(true)}><X className="h-4 w-4" /></Button></div></div>{connection === "unknown" ? <p className="mt-2 rounded-[12px] border border-warning/25 bg-warning/5 p-2 text-xs text-muted-foreground">{tt("connectionUnknownDetail")}</p> : null}{setupExpanded ? <div className="mt-3 grid gap-2 sm:grid-cols-2">{setupChecklist.map((item) => <Link key={item.label} href={item.href} className="flex min-h-11 items-center gap-2 rounded-[12px] border border-border/70 px-3 text-sm"><CheckCircle2 className={`h-4 w-4 ${item.done ? "text-primary" : "text-muted-foreground"}`} />{item.label}</Link>)}</div> : null}</CardContent></Card> : null}
 
-      {primaryAction && primaryActionCopy ? <section aria-labelledby="today-now"><p id="today-now" className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">{tt("now")}</p><Card className="border-primary/30 bg-primary/5"><CardContent className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto]"><div><h2 className="text-xl font-semibold">{primaryActionCopy.title}</h2><p className="mt-1 text-sm text-muted-foreground">{primaryActionCopy.detail}</p></div>{primaryAction.waterAmountMl ? <Button type="button" disabled={waterPending} onClick={() => void addWater(primaryAction.waterAmountMl!)} className="min-h-12">{waterPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Droplets className="h-4 w-4" />}{primaryActionCopy.label}</Button> : primaryAction.href ? <Button asChild className="min-h-12"><Link href={primaryAction.href}>{primaryActionCopy.label}</Link></Button> : null}</CardContent></Card>{secondaryActionCopies.length ? <div className="mt-2 grid gap-2 sm:grid-cols-2">{secondaryActionCopies.map(({ action, copy }) => <Card key={action.id}><CardContent className="flex items-center justify-between gap-3 p-3"><div><p className="text-sm font-semibold">{copy.title}</p><p className="text-xs text-muted-foreground">{copy.detail}</p></div>{action.waterAmountMl ? <Button type="button" size="sm" onClick={() => void addWater(action.waterAmountMl!)}>{copy.label}</Button> : action.href ? <Button asChild size="sm" variant="outline"><Link href={action.href}>{copy.label}</Link></Button> : null}</CardContent></Card>)}</div> : null}</section> : null}
+      {primaryAction && primaryActionCopy ? <section aria-labelledby="today-now"><p id="today-now" className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">{tt("now")}</p><Card className="border-primary/30 bg-primary/5"><CardContent className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto]"><div><h2 className="text-xl font-semibold">{primaryActionCopy.title}</h2><p className="mt-1 text-sm text-muted-foreground">{primaryActionCopy.detail}</p></div>{primaryAction.waterAmountMl ? <Button type="button" disabled={waterPending} onClick={() => void addWater(primaryAction.waterAmountMl!)} className="min-h-12">{waterPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Droplets className="h-4 w-4" />}{primaryActionCopy.label}</Button> : primaryAction.href ? <Button asChild className="min-h-12"><Link href={primaryAction.href}>{primaryActionCopy.label}</Link></Button> : null}</CardContent></Card>{secondaryActionCopies.length ? <div className="mt-2 grid auto-rows-fr gap-2 sm:grid-cols-2">{secondaryActionCopies.map(({ action, copy }) => <Card key={action.id} className="h-full min-h-24"><CardContent className="flex h-full min-h-24 flex-col justify-between gap-3 p-3 sm:flex-row sm:items-center"><div className="min-w-0"><p className="text-sm font-semibold">{copy.title}</p><p className="text-xs text-muted-foreground">{copy.detail}</p></div>{action.waterAmountMl ? <Button type="button" size="sm" onClick={() => void addWater(action.waterAmountMl!)} className="min-h-11 w-full self-center shrink-0 sm:w-auto">{copy.label}</Button> : action.href ? <Button asChild size="sm" variant="outline" className="min-h-11 w-full self-center shrink-0 sm:w-auto"><Link href={action.href}>{copy.label}</Link></Button> : null}</CardContent></Card>)}</div> : null}</section> : null}
 
       <section aria-labelledby="today-progress">
         <div className="mb-2 flex items-center justify-between gap-2">
@@ -428,7 +432,6 @@ const dashboardPrompts = rankQuickPrompts(promptContext).slice(0, 4);
 
       {groceryItems.length ? <Card className="lg:max-w-[calc(50%-0.5rem)]"><CardHeader className="cursor-pointer" onClick={() => setShoppingExpanded((value) => !value)}><button type="button" className="flex w-full items-center justify-between gap-3 text-start" aria-expanded={shoppingExpanded}><span><CardTitle className="flex items-center gap-2 text-base"><ShoppingCart className="h-5 w-5" />{tt("shoppingList")}</CardTitle><span className="mt-1 block text-xs text-muted-foreground">{unbought.length} {tt("remaining")} · {bought.length} {tt("bought")}{alreadyHave.length ? ` · ${alreadyHave.length} ${tt("alreadyHave")}` : ""}</span></span>{shoppingExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}</button></CardHeader>{shoppingExpanded ? <CardContent className="space-y-3"><div className="space-y-2">{unbought.slice(0, 6).map((item) => <label key={item.id} className="flex min-h-12 items-center gap-3 rounded-[12px] border border-border/70 px-3"><input type="checkbox" checked={item.checked} disabled={pendingGroceryIds.has(item.id)} onChange={() => void toggleBought(item)} className="h-5 w-5 accent-primary" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{item.item_name}</span><span className="block text-xs text-muted-foreground">{item.quantity ?? ""} {item.unit ?? ""}</span></span></label>)}</div>{bought.length ? <div><button type="button" onClick={() => setBoughtExpanded((value) => !value)} className="flex min-h-11 items-center gap-2 text-sm font-semibold" aria-expanded={boughtExpanded}>{tt("boughtItems")}{boughtExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>{boughtExpanded ? <div className="space-y-2">{bought.map((item) => <label key={item.id} className="flex min-h-11 items-center gap-3 rounded-[12px] border border-border/70 px-3 opacity-75"><input type="checkbox" checked disabled={pendingGroceryIds.has(item.id)} onChange={() => void toggleBought(item)} className="h-5 w-5 accent-primary" /><span className="line-through">{item.item_name}</span></label>)}</div> : null}</div> : null}<Button asChild variant="outline" className="min-h-12"><Link href={`/my-meal-plan?tab=shopping&date=${today}`}>{tt("openFullGrocery")}</Link></Button></CardContent> : null}</Card> : null}
 
-      <Card><CardHeader><div className="flex items-center justify-between gap-3"><CardTitle className="text-base">{tt("quickPrompts")}</CardTitle><Button type="button" variant="ghost" size="sm" onClick={() => openPrompts()}>{tt("viewAllPrompts")}</Button></div></CardHeader><CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{dashboardPrompts.map((prompt) => { const localized = localizePrompt(prompt, language); return <button key={prompt.id} type="button" onClick={() => openPrompts(prompt.id)} className="rounded-[14px] border border-border/70 bg-card p-3 text-start transition hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring"><span className="font-semibold">{localized.title}</span><span className="mt-1 block text-xs text-muted-foreground">{localized.description}</span></button>; })}</CardContent></Card>
 
       {activitySourcesKnown && !currentActivity && !isInitialLoading ? <EmptyState title={tt("noActivityToday")} description={tt("noActivityDetail")} actionLabel={tt("quickLog")} actionHref="/calories" /> : null}
     </div>}
