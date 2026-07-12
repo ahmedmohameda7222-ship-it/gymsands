@@ -232,8 +232,14 @@ describe("Eat meal-log redesign contracts", () => {
     const context = source("lib/ai/planned-meal-context.ts");
     expect(provider).toContain("getEatRuntimeHome");
     expect(provider).toContain("getMealAdjustmentRuntimePrompts");
-    expect(surface.indexOf("eatHome.recommended")).toBeLessThan(surface.indexOf("eatHome.nutrition"));
-    expect(surface.indexOf("eatHome.nutrition")).toBeLessThan(surface.indexOf("BrowseAllButton"));
+    const eatBranch = surface.indexOf('if (props.source === "eat")');
+    const recommended = surface.indexOf("eatHome.recommended", eatBranch);
+    const nutrition = surface.indexOf("eatHome.nutrition", eatBranch);
+    const browseAll = surface.indexOf('<BrowseAllButton props={props} label={copy.browseAll} />', eatBranch);
+    expect(eatBranch).toBeGreaterThanOrEqual(0);
+    expect(recommended).toBeGreaterThanOrEqual(eatBranch);
+    expect(recommended).toBeLessThan(nutrition);
+    expect(nutrition).toBeLessThan(browseAll);
     expect(context).not.toContain("userId:");
     expect(context).not.toContain("mealId:");
     expect(context).not.toContain("foodLogId:");
