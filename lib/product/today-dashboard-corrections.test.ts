@@ -37,6 +37,13 @@ describe("Today dashboard implementation contracts", () => {
     expect(model).not.toContain('title: "Resume active workout"');
   });
 
+  it("keeps unknown food totals and completed workouts out of mutating paths", () => {
+    const dashboard = source("components/dashboard/today-dashboard.tsx");
+    expect(dashboard).toContain('tt("foodLogsUnavailable")');
+    expect(dashboard).toContain("activitySourcesKnown");
+    expect(dashboard).toContain("todayWorkoutActionHref");
+  });
+
   it("keeps registration, onboarding and OAuth outside this change", () => {
     expect(source("app/register/page.tsx")).toMatch(/age/i);
     expect(source("components/settings/connected-apps.tsx")).toContain("TemporaryChatGptDeveloperSetupCard");
