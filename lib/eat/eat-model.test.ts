@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyWeekTargets,
   buildNutritionMetrics,
   buildWeekAnalytics,
   findCopyDuplicates,
@@ -15,7 +16,7 @@ import {
 import type { DailyNutritionSummary, FoodItem, FoodLog, MealPlanItem } from "@/types";
 
 const log = (patch: Partial<FoodLog> = {}): FoodLog => ({
-  id: patch.id ?? "log-1", user_id: "user", food_item_id: null, user_food_item_id: null, log_date: "2026-07-12",
+  id: patch.id ?? "log-1", user_id: "user", food_item_id: null, user_food_item_id: null, log_date: patch.log_date ?? "2026-07-12",
   meal_type: patch.meal_type ?? "Lunch", food_name: patch.food_name ?? "Rice", serving_size: patch.serving_size ?? "1 bowl",
   quantity: patch.quantity ?? 1, calories: patch.calories ?? 500, protein_g: patch.protein_g ?? 20, carbs_g: patch.carbs_g ?? 70,
   fat_g: patch.fat_g ?? 10, notes: patch.notes ?? null
@@ -26,9 +27,17 @@ const plan = (patch: Partial<MealPlanItem> = {}): MealPlanItem => ({
   calories: 600, protein_g: 45, carbs_g: 70, fat_g: 15, status: patch.status ?? "planned", food_log_id: patch.food_log_id ?? null,
   completed_at: patch.completed_at ?? null, notes: null, created_at: patch.created_at ?? "2026-07-12T10:00:00Z", updated_at: "2026-07-12T10:00:00Z"
 });
-const day = (date: string, logs: FoodLog[] = []): DailyNutritionSummary => ({ date, planned_calories: 0, has_targets: false,
-  calories: logs.reduce((sum, item) => sum + item.calories, 0), protein_g: logs.reduce((sum, item) => sum + item.protein_g, 0),
-  carbs_g: logs.reduce((sum, item) => sum + item.carbs_g, 0), fat_g: logs.reduce((sum, item) => sum + item.fat_g, 0), water_ml: 0, logs });
+const day = (date: string, logs: FoodLog[] = [], target?: number): DailyNutritionSummary => ({
+  date,
+  planned_calories: target ?? 0,
+  has_targets: Boolean(target),
+  calories: logs.reduce((sum, item) => sum + item.calories, 0),
+  protein_g: logs.reduce((sum, item) => sum + item.protein_g, 0),
+  carbs_g: logs.reduce((sum, item) => sum + item.carbs_g, 0),
+  fat_g: logs.reduce((sum, item) => sum + item.fat_g, 0),
+  water_ml: 0,
+  logs
+});
 
 describe("Eat URL state", () => {
   it("defaults invalid views to day and validates real ISO dates", () => {
@@ -89,17 +98,56 @@ describe("Eat day truthfulness", () => {
 
 describe("Eat week analytics", () => {
   it("treats an empty week as no data, not a deficit", () => {
-    const analytics = buildWeekAnalytics(Array.from({ length: 7 }, (_, index) => day(`2026-07-${String(6 + index).padStart(2, "0")}`)), 2000);
-    expect(analytics).toMatchObject({ loggedDays: 0, coverageLabel: "empty", averageCaloriesLoggedDays: null, calendarAverageCalories: null, adherenceDays: null });
+    const analytics = buildWeekAnalytics(Array.from({ length: 7 }, (_, index) => day(`2026-07-${String(6 + index).padStart(2, "0")}`)));
+    expect(analytics).toMatchObject({ loggedDays: 0, coverageLabel: "empty", averageCaloriesLoggedDays: null, calendarAverageCalories: null, adherenceDays: null, targetEligibleLoggedDays: 0 });
   });
 
   it("uses logged-day averages and calorie contribution for macros", () => {
     const days = [day("2026-07-06", [log({ calories: 1000, protein_g: 100, carbs_g: 100, fat_g: 20 })]), day("2026-07-07", [log({ id: "2", calories: 2000, protein_g: 200, carbs_g: 200, fat_g: 40 })]), ...Array.from({ length: 5 }, (_, index) => day(`2026-07-${String(8 + index).padStart(2, "0")}`))];
-    const analytics = buildWeekAnalytics(days, 2000);
+    const analytics = buildWeekAnalytics(days);
     expect(analytics.averageCaloriesLoggedDays).toBe(1500);
     expect(analytics.calendarAverageCalories).toBe(Math.round(3000 / 7));
     expect(analytics.proteinCalories).toBe(1200);
     expect(analytics.carbCalories).toBe(1200);
     expect(analytics.fatCalories).toBe(540);
+  });
+
+  it("uses each logged day's own training or rest target", () => {
+    const days = [
+      day("2026-07-06", [log({ id: "monday", calories: 2200 })], 2200),
+      day("2026-07-07", [log({ id: "tuesday", calories: 1900 })], 1900),
+      ...Array.from({ length: 5 }, (_, index) => day(`2026-07-${String(8 + index).padStart(2, "0")}`))
+    ];
+    const analytics = buildWeekAnalytics(days);
+    expect(analytics).toMatchObject({ targetEligibleLoggedDays: 2, adherenceDays: 2, targetsState: "available" });
+  });
+
+  it("excludes unlogged and untargeted days from the adherence denominator", () => {
+    const days = [
+      day("2026-07-06", [log({ id: "eligible", calories: 2000 })], 2000),
+      day("2026-07-07", [log({ id: "no-target", calories: 1800 })]),
+      day("2026-07-08", [], 2200),
+      ...Array.from({ length: 4 }, (_, index) => day(`2026-07-${String(9 + index).padStart(2, "0")}`))
+    ];
+    const analytics = buildWeekAnalytics(days);
+    expect(analytics).toMatchObject({ loggedDays: 2, targetEligibleLoggedDays: 1, adherenceDays: 1, targetsState: "partial" });
+  });
+
+  it("uses the near-target tolerance independently for every day", () => {
+    const days = [
+      day("2026-07-06", [log({ id: "near", calories: 2099 })], 2000),
+      day("2026-07-07", [log({ id: "over", calories: 2101 })], 2000),
+      ...Array.from({ length: 5 }, (_, index) => day(`2026-07-${String(8 + index).padStart(2, "0")}`))
+    ];
+    expect(buildWeekAnalytics(days).adherenceDays).toBe(1);
+  });
+
+  it("applies resolved targets to matching dates only", () => {
+    const days = [day("2026-07-06", [log({ calories: 2000 })]), day("2026-07-07", [log({ calories: 1800 })])];
+    const resolved = applyWeekTargets(days, [
+      { date: "2026-07-06", planned_calories: 2200, has_targets: true },
+      { date: "2026-07-07", planned_calories: 1900, has_targets: true }
+    ]);
+    expect(resolved.map((item) => item.planned_calories)).toEqual([2200, 1900]);
   });
 });
