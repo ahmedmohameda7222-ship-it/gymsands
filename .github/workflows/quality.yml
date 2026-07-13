@@ -78,8 +78,7 @@ jobs:
           (
             set -euo pipefail
             npx playwright install --with-deps chromium
-            NEXT_PUBLIC_USE_MOCK_AUTH=true npm run build
-            NEXT_PUBLIC_USE_MOCK_AUTH=true npm start > quality-reports/train-rendered-server.log 2>&1 &
+            NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/train-rendered-server.log 2>&1 &
             server_pid=$!
             trap 'kill "$server_pid" 2>/dev/null || true' EXIT
             for attempt in $(seq 1 60); do
