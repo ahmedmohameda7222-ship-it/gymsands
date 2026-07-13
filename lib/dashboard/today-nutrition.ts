@@ -52,3 +52,7 @@ export function resolveTodayNutritionSources(
 export function knownFoodLogCount(data: Pick<TodayNutritionData, "logs" | "logsState">) {
   return data.logsState === "loaded" && data.logs ? data.logs.length : null;
 }
+
+export function upsertFoodLogById(logs: FoodLog[], incoming: FoodLog) {
+  return [incoming, ...logs.filter((item) => item.id !== incoming.id)];
+}
