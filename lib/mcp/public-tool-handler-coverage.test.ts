@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { McpContext } from "@/lib/mcp/auth";
-import { executeMcpTool, mcpTools } from "@/lib/mcp/public-surface";
+import { executeMcpTool } from "@/lib/mcp/tool-executor-safe";
 import { sanitizeMcpToolResult, validateMcpToolInput, validateMcpToolOutput } from "@/lib/mcp/safety";
+import { mcpTools } from "@/lib/mcp/tools";
 
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const CONNECTION_ID = "22222222-2222-4222-8222-222222222222";
@@ -62,7 +63,7 @@ function createInMemorySupabase() {
   function from(table: string) {
     let action: "select" | "insert" | "update" | "upsert" | "delete" = "select";
     let payload: Row | Row[] | null = null;
-    const filters: Filter[] = [];
+    let filters: Filter[] = [];
     let rowLimit: number | null = null;
 
     const matches = (row: Row) => filters.every((filter) => {
@@ -81,12 +82,7 @@ function createInMemorySupabase() {
     const materialize = () => {
       const existing = tables[table] ?? (tables[table] = []);
       if (action === "insert" || action === "upsert") {
-        const incoming: Row[] = (Array.isArray(payload) ? payload : [payload ?? {}]).map((row): Row => ({
-          id: typeof row.id === "string" ? row.id : nextId(),
-          created_at: UPDATED_AT,
-          updated_at: UPDATED_AT,
-          ...row
-        }));
+        const incoming: Row[] = (Array.isArray(payload) ? payload : [payload ?? {}]).map((row): Row => ({ id: typeof row.id === "string" ? row.id : nextId(), created_at: UPDATED_AT, updated_at: UPDATED_AT, ...row }));
         if (action === "upsert") {
           for (const row of incoming) {
             const index = existing.findIndex((candidate) => candidate.id === row.id || (row.user_id && candidate.user_id === row.user_id && row.target_type && candidate.target_type === row.target_type));
@@ -129,22 +125,41 @@ function createInMemorySupabase() {
     builder.order = () => builder;
     builder.limit = (value: number) => { rowLimit = value; return builder; };
     builder.range = () => builder;
-    builder.single = async () => {
-      const result = materialize();
-      return { data: (result.data as Row[])[0] ?? null, error: result.error };
-    };
-    builder.maybeSingle = async () => {
-      const result = materialize();
-      return { data: (result.data as Row[])[0] ?? null, error: result.error };
-    };
+    builder.single = async () => { const result = materialize(); return { data: (result.data as Row[])[0] ?? null, error: result.error }; };
+    builder.maybeSingle = async () => { const result = materialize(); return { data: (result.data as Row[])[0] ?? null, error: result.error }; };
     builder.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(materialize()).then(resolve, reject);
     return builder;
   }
 
-  return {
-    from,
-    rpc: async () => ({ data: [], error: null })
-  } as unknown as McpContext["supabase"];
+  async function rpc(name: string, args: Record<string, unknown>) {
+    if (name !== "complete_meal_plan_item") return { data: [], error: null };
+    const item = tables.user_meal_plan_items.find((row) => row.id === args.p_item_id && row.user_id === USER_ID);
+    if (!item) return { data: null, error: { message: "not found" } };
+    if (item.food_log_id) {
+      const existingLog = tables.food_logs.find((row) => row.id === item.food_log_id) ?? null;
+      return { data: { item, log: existingLog, already_done: true }, error: null };
+    }
+    const log: Row = {
+      id: nextId(),
+      user_id: USER_ID,
+      log_date: item.plan_date,
+      meal_type: item.meal_type,
+      food_name: item.food_name,
+      serving_size: item.serving_size,
+      quantity: item.quantity,
+      calories: item.calories,
+      protein_g: item.protein_g,
+      carbs_g: item.carbs_g,
+      fat_g: item.fat_g,
+      created_at: UPDATED_AT,
+      updated_at: UPDATED_AT
+    };
+    tables.food_logs.push(log);
+    Object.assign(item, { status: "done", completed_at: UPDATED_AT, food_log_id: log.id, updated_at: UPDATED_AT });
+    return { data: { item, log, already_done: false }, error: null };
+  }
+
+  return { from, rpc } as unknown as McpContext["supabase"];
 }
 
 function inputFor(name: string): Record<string, unknown> {
@@ -207,7 +222,6 @@ describe("public MCP runtime handler contracts", () => {
       const inputValidation = validateMcpToolInput(tool, input);
       expect(inputValidation, `${tool.name} input`).toMatchObject({ success: true });
       if (!inputValidation.success) continue;
-
       const result = await executeMcpTool(context(), tool.name, inputValidation.value);
       expect(result.isError, `${tool.name}: ${JSON.stringify(result.structuredContent)}`).not.toBe(true);
       const sanitized = sanitizeMcpToolResult(result, tool.outputSchema);
