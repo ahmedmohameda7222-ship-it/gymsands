@@ -7,6 +7,7 @@ const MAX_COMPONENT_STACK = 1600;
 const MAX_ROUTE = 180;
 const ALLOWED_FIELDS = new Set([
   "eventId",
+  "fingerprint",
   "errorType",
   "message",
   "stack",
@@ -23,6 +24,7 @@ const ALLOWED_FIELDS = new Set([
   "foodLogLoadState"
 ]);
 const SAFE_CODE = /^[a-z0-9_.-]{1,80}$/i;
+const SAFE_FINGERPRINT = /^[a-f0-9]{8}$/i;
 const SAFE_BROWSER = /^[a-z][a-z0-9 ._-]{0,30}\/\d{1,3}$/i;
 const EXACT_SHA = /^[a-f0-9]{40}$/i;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
@@ -46,6 +48,7 @@ export type ClientErrorDiagnosticState = {
 
 export type ClientErrorEnvelope = ClientErrorDiagnosticState & {
   eventId: string;
+  fingerprint: string;
   errorType: string;
   message: string;
   stack?: string;
@@ -102,6 +105,15 @@ export function coarseBrowser(userAgent: string | undefined) {
   return "Unknown/0";
 }
 
+export function clientErrorFingerprint(...parts: string[]) {
+  let hash = 0x811c9dc5;
+  for (const character of parts.join("|")) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
 export function validateClientErrorPayload(input: unknown): ClientErrorValidation {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false, error: "invalid_payload" };
   const record = input as Record<string, unknown>;
@@ -109,6 +121,9 @@ export function validateClientErrorPayload(input: unknown): ClientErrorValidatio
   if (unexpected.length) return { ok: false, error: "unsupported_fields" };
 
   const eventId = typeof record.eventId === "string" && UUID.test(record.eventId) ? record.eventId.toLowerCase() : "";
+  const fingerprint = typeof record.fingerprint === "string" && SAFE_FINGERPRINT.test(record.fingerprint)
+    ? record.fingerprint.toLowerCase()
+    : "";
   const errorType = typeof record.errorType === "string" && SAFE_CODE.test(record.errorType) ? record.errorType : "";
   const message = sanitizeClientErrorText(record.message, MAX_MESSAGE);
   const route = sanitizeClientRoute(record.route);
@@ -123,7 +138,7 @@ export function validateClientErrorPayload(input: unknown): ClientErrorValidatio
     : "";
   const browser = typeof record.browser === "string" && SAFE_BROWSER.test(record.browser) ? record.browser : "Unknown/0";
 
-  if (!eventId || !errorType || !message || !boundarySource || !commitSha || !buildTimestamp) {
+  if (!eventId || !fingerprint || !errorType || !message || !boundarySource || !commitSha || !buildTimestamp) {
     return { ok: false, error: "invalid_fields" };
   }
 
@@ -141,6 +156,7 @@ export function validateClientErrorPayload(input: unknown): ClientErrorValidatio
     ok: true,
     value: {
       eventId,
+      fingerprint,
       errorType,
       message,
       stack,
@@ -176,14 +192,19 @@ export function buildClientErrorEnvelope({
   const eventId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
     : "00000000-0000-4000-8000-000000000000";
+  const errorType = sanitizeClientErrorText(error.name || "Error", 80).replace(/[^a-z0-9_.-]/gi, "_") || "Error";
+  const message = sanitizeClientErrorText(error.message || "Client rendering failed.", MAX_MESSAGE);
+  const route = sanitizeClientRoute(typeof window !== "undefined" ? window.location.pathname : "/unknown");
+  const fingerprint = clientErrorFingerprint(errorType, message, route, boundarySource);
   const validation = validateClientErrorPayload({
     eventId,
-    errorType: sanitizeClientErrorText(error.name || "Error", 80).replace(/[^a-z0-9_.-]/gi, "_") || "Error",
-    message: error.message || "Client rendering failed.",
+    fingerprint,
+    errorType,
+    message,
     stack: error.stack,
     componentStack,
     digest,
-    route: typeof window !== "undefined" ? window.location.pathname : "/unknown",
+    route,
     boundarySource,
     commitSha: release.commitSha,
     buildTimestamp: release.buildTimestamp,
