@@ -17,42 +17,54 @@ describe("Train finalization UI contracts", () => {
     expect(today).toContain('redirect("/my-workout/plans")');
   });
 
-  it("uses authorized Plaivra ChatGPT surfaces and contains no external ChatGPT homepage link", () => {
+  it("uses authorized route-scoped Plaivra ChatGPT surfaces and contains no external ChatGPT homepage link", () => {
     const overview = source("components/workouts/my-workout-plans.tsx");
     const detail = source("components/workouts/workout-plan-detail.tsx");
+    const context = source("lib/workouts/train-overview-runtime.ts");
 
     expect(overview).toContain("useQuickChatGpt");
-    expect(overview).toContain("openPrompts()");
-    expect(overview).toContain('openPrompts("create-workout-plan")');
+    expect(overview).toContain("setDashboardContext(trainPromptContext)");
+    expect(overview).toContain("openPrompts(promptId)");
+    expect(overview).toContain('openTrainPrompts("create-workout-plan")');
+    expect(context).toContain("buildTrainQuickPromptContext");
+    expect(context).toContain('route: TRAIN_ROUTE');
+    expect(context).toContain("selection: { exercise: null, meal: null, plannedMeal: null }");
     expect(detail).toContain("<WorkoutAiActionPanel");
     expect(detail).toContain("selected_day: selectedDay");
+    expect(detail).toContain('allowedActions.includes("adjust")');
     expect(`${overview}\n${detail}`).not.toContain("https://chatgpt.com");
   });
 
-  it("keeps Today contextual and renders a compact selectable seven-day week", () => {
+  it("keeps Today contextual, prioritizes an open session, and renders a compact selectable seven-day week", () => {
     const overview = source("components/workouts/my-workout-plans.tsx");
-    expect(overview).toContain('activeDays.find((day) => day.weekday === todayWeekday');
+    expect(overview).toContain('activePlan?.days.find((day) => day.weekday === todayWeekday');
     expect(overview).not.toContain("activeDays[0]");
-    expect(overview).toContain("const displayedTodayDay = todayDay;");
-    expect(overview).not.toContain("todayDay ?? activeDays.find");
+    expect(overview).toContain("findOpenSessionPlanContext(visiblePlans, visibleOpenSession)");
+    expect(overview).toContain("visibleOpenSession ? openPlanContext.plan : activePlan");
+    expect(overview).toContain("openSessionId: visibleOpenSession?.id ?? null");
     expect(overview).toContain('resolution.state === "active" ? tr("resumeWorkout")');
     expect(overview).toContain('resolution.state === "completed" ? tr("viewCompletedWorkout")');
     expect(overview).toContain('tr("startWorkout")');
     expect(overview).toContain("grid-flow-col");
     expect(overview).toContain("overflow-x-auto");
     expect(overview).toContain("lg:grid-cols-7");
-    expect(overview).toContain("buildCurrentWeek(weekStartsOn)");
-    expect(overview).toContain("setSelectedIso");
+    expect(overview).toContain("buildCurrentWeek(weekStartsOn, new Date(`${today}T12:00:00`))");
+    expect(overview).toContain("resolveTrainWeekSelection");
   });
 
-  it("shows a full seven-day read-only plan and preserves honest rest and archived states", () => {
+  it("shows a full seven-day read-only plan and restricts archived plans through the action policy", () => {
     const detail = source("components/workouts/workout-plan-detail.tsx");
+    const editorRoute = source("app/(private)/my-workout/plans/[planId]/edit/page.tsx");
     expect(detail).toContain("weekdays.map((weekday, index)");
     expect(detail).toContain("weekdays[new Date().getDay()]");
     expect(detail).toContain('day?.day_name ?? tr("restDay")');
-    expect(detail).toContain("!archived && plan.is_active && selectedIsToday");
+    expect(detail).toContain("workoutPlanDetailActions(plan)");
+    expect(detail).toContain('allowedActions.includes("edit")');
+    expect(detail).toContain('allowedActions.includes("adjust")');
     expect(detail).toContain('archived ? tr("archived") : tr("reviewOnly")');
     expect(detail).toContain('tr("archivedMessage")');
+    expect(editorRoute).toContain("archivedPlanEditorRedirect(plan)");
+    expect(editorRoute).toContain("router.replace(redirect)");
     expect(detail).not.toContain("Add Day");
   });
 
