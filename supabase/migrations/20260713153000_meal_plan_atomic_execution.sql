@@ -166,6 +166,98 @@ begin
 end;
 $$;
 
+create or replace function public.complete_meal_plan_item_with_values(
+  p_item_id uuid,
+  p_meal_type text,
+  p_food_name text,
+  p_serving_size text,
+  p_quantity numeric,
+  p_calories numeric,
+  p_protein_g numeric,
+  p_carbs_g numeric,
+  p_fat_g numeric,
+  p_notes text default null,
+  p_update_saved_plan boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_item public.user_meal_plan_items%rowtype;
+  v_log public.food_logs%rowtype;
+  v_completed_at timestamptz := clock_timestamp();
+begin
+  if v_user_id is null then
+    raise exception 'Authentication required.' using errcode = '42501';
+  end if;
+  if p_food_name is null or btrim(p_food_name) = '' then
+    raise exception 'Food name is required.' using errcode = '23514';
+  end if;
+  if p_serving_size is null or btrim(p_serving_size) = '' then
+    raise exception 'Serving is required.' using errcode = '23514';
+  end if;
+  if p_meal_type not in ('Breakfast', 'Lunch', 'Dinner', 'Snack') then
+    raise exception 'Invalid meal type.' using errcode = '23514';
+  end if;
+  if p_quantity <= 0 or p_calories < 0 or p_protein_g < 0 or p_carbs_g < 0 or p_fat_g < 0 then
+    raise exception 'Quantity and nutrition values are invalid.' using errcode = '23514';
+  end if;
+
+  select * into v_item
+  from public.user_meal_plan_items
+  where id = p_item_id and user_id = v_user_id
+  for update;
+
+  if not found then
+    raise exception 'Meal-plan item not found.' using errcode = 'P0002';
+  end if;
+  if v_item.status = 'skipped' then
+    raise exception 'A skipped meal cannot be completed.' using errcode = '23514';
+  end if;
+
+  if v_item.food_log_id is not null then
+    select * into v_log
+    from public.food_logs
+    where id = v_item.food_log_id and user_id = v_user_id;
+    if not found then
+      raise exception 'The linked food log is missing or not owned by this user.' using errcode = '23514';
+    end if;
+    return jsonb_build_object('item', to_jsonb(v_item), 'log', to_jsonb(v_log), 'already_done', true);
+  end if;
+
+  insert into public.food_logs (
+    user_id, food_item_id, user_food_item_id, log_date, meal_type, food_name,
+    serving_size, quantity, calories, protein_g, carbs_g, fat_g, notes
+  ) values (
+    v_item.user_id, v_item.food_item_id, v_item.user_food_item_id, v_item.plan_date,
+    p_meal_type, btrim(p_food_name), btrim(p_serving_size), p_quantity,
+    p_calories, p_protein_g, p_carbs_g, p_fat_g, nullif(btrim(coalesce(p_notes, '')), '')
+  ) returning * into v_log;
+
+  update public.user_meal_plan_items
+  set status = 'done',
+      food_log_id = v_log.id,
+      completed_at = v_completed_at,
+      meal_type = case when p_update_saved_plan then p_meal_type else meal_type end,
+      food_name = case when p_update_saved_plan then btrim(p_food_name) else food_name end,
+      serving_size = case when p_update_saved_plan then btrim(p_serving_size) else serving_size end,
+      quantity = case when p_update_saved_plan then p_quantity else quantity end,
+      calories = case when p_update_saved_plan then p_calories else calories end,
+      protein_g = case when p_update_saved_plan then p_protein_g else protein_g end,
+      carbs_g = case when p_update_saved_plan then p_carbs_g else carbs_g end,
+      fat_g = case when p_update_saved_plan then p_fat_g else fat_g end,
+      notes = case when p_update_saved_plan then nullif(btrim(coalesce(p_notes, '')), '') else notes end,
+      updated_at = v_completed_at
+  where id = v_item.id
+  returning * into v_item;
+
+  return jsonb_build_object('item', to_jsonb(v_item), 'log', to_jsonb(v_log), 'already_done', false);
+end;
+$$;
+
 create or replace function public.correct_completed_meal_plan_item(
   p_item_id uuid,
   p_plan_date date,
@@ -248,12 +340,16 @@ end;
 $$;
 
 revoke all on function public.complete_meal_plan_item(uuid) from public, anon;
+revoke all on function public.complete_meal_plan_item_with_values(uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, text, boolean) from public, anon;
 revoke all on function public.correct_completed_meal_plan_item(uuid, date, text, text, text, numeric, numeric, numeric, numeric, numeric, text) from public, anon;
 grant execute on function public.complete_meal_plan_item(uuid) to authenticated;
+grant execute on function public.complete_meal_plan_item_with_values(uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, text, boolean) to authenticated;
 grant execute on function public.correct_completed_meal_plan_item(uuid, date, text, text, text, numeric, numeric, numeric, numeric, numeric, text) to authenticated;
 
 comment on function public.complete_meal_plan_item(uuid) is
   'Atomically completes an owned planned meal and creates exactly one linked food log. Existing completion is idempotent.';
+comment on function public.complete_meal_plan_item_with_values(uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, text, boolean) is
+  'Atomically completes an owned planned meal using confirmed execution values and optionally updates the saved plan values.';
 comment on function public.correct_completed_meal_plan_item(uuid, date, text, text, text, numeric, numeric, numeric, numeric, numeric, text) is
   'Atomically corrects an owned completed meal-plan item and its linked food log.';
 
