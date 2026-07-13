@@ -10,34 +10,5 @@
     "schemaAppliedUntrackedCount": 4,
     "note": "Production schema effects are verified. Supabase migration-history reconciliation remains pending and must only use an approved evidence-backed workflow. Do not replay schema-applied migrations."
   },
-  "entries": [
-    { "productionVersion": "202606290000", "productionName": "clean_initial_schema", "localFile": "202606290000_clean_initial_schema.sql", "state": "applied" },
-    { "productionVersion": "202606290001", "productionName": "security_privacy_mcp_hardening", "localFile": "202606290001_security_privacy_mcp_hardening.sql", "state": "applied" },
-    { "productionVersion": "202606290002", "productionName": "seed_reference_data", "localFile": "202606290002_seed_reference_data.sql", "state": "applied" },
-    { "productionVersion": "20260701053859", "productionName": "mcp_security_launch_blockers", "localFile": "20260701053859_mcp_security_launch_blockers.sql", "state": "applied" },
-    { "productionVersion": "20260701063223", "productionName": "mcp_oauth_hardening", "localFile": "20260701063223_mcp_oauth_hardening.sql", "state": "applied" },
-    { "productionVersion": "20260702062000", "productionName": "phase6_consent_types", "localFile": "20260702062000_phase6_consent_types.sql", "state": "applied" },
-    { "productionVersion": "20260702120000", "productionName": "mcp_service_role_permissions", "localFile": "20260702120000_mcp_service_role_permissions.sql", "state": "applied" },
-    { "productionVersion": "20260702124724", "productionName": "fix_chatgpt_connection_rotation_ambiguous_columns", "localFile": "20260702124724_fix_chatgpt_connection_rotation_ambiguous_columns.sql", "state": "applied" },
-    { "productionVersion": "20260702174951", "productionName": "chatgpt_execution_layer_foundation", "localFile": "20260702174951_chatgpt_execution_layer_foundation.sql", "state": "applied" },
-    { "productionVersion": "20260702181448", "productionName": "execution_layer_reference_ownership_hardening", "localFile": "20260702181448_execution_layer_reference_ownership_hardening.sql", "state": "applied" },
-    { "productionVersion": "20260703151807", "productionName": "onboarding_coaching_quick_log_preferences", "localFile": "20260703151807_onboarding_coaching_quick_log_preferences.sql", "state": "applied" },
-    { "productionVersion": "20260710135000", "productionName": "functional_fitness_constraints", "localFile": "20260710135000_functional_fitness_constraints.sql", "state": "applied" },
-    { "productionVersion": "20260710164946", "productionName": "enforce_initial_launch_age_16", "localFile": "20260710164946_enforce_initial_launch_age_16.sql", "state": "applied" },
-    { "productionVersion": "20260710170000", "productionName": "drop_retired_ai_request_and_safety_tables", "localFile": "20260710170000_drop_retired_ai_request_and_safety_tables.sql", "state": "applied" },
-    { "productionVersion": "20260710193700", "productionName": "canonical_data_convergence_foundation", "localFile": "20260710193700_canonical_data_convergence_foundation.sql", "state": "applied" },
-    { "productionVersion": "20260710194238", "productionName": "private_admin_rls_and_query_indexes", "localFile": "20260710194238_private_admin_rls_and_query_indexes.sql", "state": "applied" },
-    { "productionVersion": "20260710195027", "productionName": "cimd_oauth_token_lifecycle", "localFile": "20260710195027_cimd_oauth_token_lifecycle.sql", "state": "applied" },
-    { "productionVersion": "20260710202758", "productionName": "mcp_idempotency_ledger", "localFile": "20260710202758_mcp_idempotency_ledger.sql", "state": "applied" },
-    { "productionVersion": "20260710211000", "productionName": "progressive_onboarding_and_legacy_constraints", "localFile": "20260710211000_progressive_onboarding_and_legacy_constraints.sql", "state": "applied" },
-    { "productionVersion": "20260710235035", "productionName": "privacy_deletion_export_retention_lifecycle", "localFile": "20260710235035_privacy_deletion_export_retention_lifecycle.sql", "state": "applied" },
-    { "productionVersion": "20260711001950", "productionName": "legal_document_version_2026_07_11", "localFile": "20260711001950_legal_document_version_2026_07_11.sql", "state": "applied" },
-    { "productionVersion": "20260711004551", "productionName": "subscription_entitlement_foundation", "localFile": "20260711004551_subscription_entitlement_foundation.sql", "state": "applied" },
-    { "productionVersion": "20260711013000", "productionName": "prelaunch_runtime_safety_corrections", "localFile": "20260711013000_prelaunch_runtime_safety_corrections.sql", "state": "applied" },
-    { "productionVersion": "20260711014500", "productionName": "idempotency_uncertain_completion_guard", "localFile": "20260711014500_idempotency_uncertain_completion_guard.sql", "state": "applied" },
-    { "productionVersion": null, "productionName": null, "localFile": "20260711213000_adaptive_onboarding_v2.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but all migration columns, constraints, the authenticated RPC, and grants were verified in production on 2026-07-13. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
-    { "productionVersion": null, "productionName": null, "localFile": "20260712173000_persistent_meal_plan_skip_status.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but the planned/done/skipped constraint, skipped-state constraint, terminal-state trigger, and trigger function were verified in production on 2026-07-13. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
-    { "productionVersion": null, "productionName": null, "localFile": "20260712195000_nutrition_target_date_overrides.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but the override table, unique/index structure, RLS, four ownership policies, updated-at trigger, authenticated CRUD grants, and atomic Apply RPC were verified in production on 2026-07-13. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
-    { "productionVersion": null, "productionName": null, "localFile": "20260713153000_meal_plan_atomic_execution.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but all three ownership-checked atomic RPCs, hardened SECURITY DEFINER search paths and grants, both uniqueness indexes, the validated execution-state constraint, the terminal transition trigger, zero duplicate groups, and repair of all four incomplete legacy done rows were verified in production at 2026-07-13T00:42:16.742617+00 against audited code commit 0634ed9eb92b32ec17190de7d05b66f58c6f3836. Do not replay. Repair migration history only through an approved evidence-backed workflow." }
-  ]
+  "entries": []
 }
