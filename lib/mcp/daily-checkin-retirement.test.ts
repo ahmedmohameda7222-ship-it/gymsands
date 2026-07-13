@@ -20,7 +20,7 @@ describe("Daily Check-in MCP retirement", () => {
   });
 
   it("preserves the historical database migration instead of deleting stored records", () => {
-    const migration = readFileSync("supabase/migrations/20260708090000_daily_checkins_and_execution_layer.sql", "utf8");
+    const migration = readFileSync("supabase/migrations/20260702174951_chatgpt_execution_layer_foundation.sql", "utf8");
     expect(migration).toContain("user_daily_checkins");
     expect(migration).not.toMatch(/drop\s+table\s+(if\s+exists\s+)?(?:public\.)?user_daily_checkins/i);
   });
