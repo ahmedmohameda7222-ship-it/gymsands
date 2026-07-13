@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type CSSProperties, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   BarChart3,
@@ -86,6 +86,19 @@ const adminItems: NavItem[] = [
   { href: "/admin", labelKey: "settings.accountSession", icon: Shield }
 ];
 
+const appShellBottomLayout = {
+  "--mobile-nav-height": "4.5rem",
+  "--mobile-nav-bottom-offset": "0.75rem",
+  "--active-workout-controller-gap": "0.5rem",
+  "--active-workout-controller-bottom": "calc(env(safe-area-inset-bottom) + var(--mobile-nav-bottom-offset) + var(--mobile-nav-height) + var(--active-workout-controller-gap))",
+  "--app-bottom-overlay-stack": "calc(var(--active-workout-controller-bottom) + var(--active-workout-controller-height, 0px))",
+  "--app-bottom-reserved-space": "calc(var(--app-bottom-overlay-stack) + 2rem)",
+  "--train-sticky-footer-bottom": "calc(var(--app-bottom-overlay-stack) + 0.5rem)",
+  "--desktop-active-workout-controller-bottom": "1.25rem",
+  "--desktop-app-bottom-reserved-space": "calc(var(--desktop-active-workout-controller-bottom) + var(--active-workout-controller-height, 0px) + 2rem)",
+  "--desktop-train-sticky-footer-bottom": "calc(var(--desktop-active-workout-controller-bottom) + var(--active-workout-controller-height, 0px) + 0.5rem)"
+} as CSSProperties;
+
 function isActivePath(pathname: string, item: NavItem) {
   const trainTarget = getTrainNavigationTarget(pathname);
   if (item.href === "/my-workout/plans") return trainTarget === "train";
@@ -141,7 +154,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="premium-page-bg min-h-screen text-foreground">
+    <div className="premium-page-bg min-h-screen text-foreground" data-app-shell style={appShellBottomLayout}>
       {isOffline ? (
         <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.75rem)] z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg lg:left-72" role="status">
           <p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> You are offline. New changes may not sync until connection returns.</p>
@@ -196,7 +209,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Button>
         </div>
       </header>
-      <main id="main-content" className="pb-[calc(env(safe-area-inset-bottom)+8rem)] lg:ml-72 lg:pb-0">
+      <main id="main-content" className="pb-[var(--app-bottom-reserved-space)] lg:ml-72 lg:pb-[var(--desktop-app-bottom-reserved-space)]">
         <motion.div
           key={pathname}
           initial={settings.reduceAnimations ? false : { opacity: 0, y: 8 }}

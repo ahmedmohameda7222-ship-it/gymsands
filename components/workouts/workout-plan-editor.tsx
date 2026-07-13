@@ -20,6 +20,7 @@ import { userSafeError } from "@/lib/error-formatting";
 import { useUnsavedChangesGuard } from "@/lib/hooks/use-unsaved-changes-guard";
 import { useTrainTranslation, type TrainKey } from "@/lib/i18n/train";
 import { clearStoredValue, readStoredJson, storeJson, workoutStorageKey } from "@/lib/workout-persistence";
+import { mergeUserFacingExerciseNote, userFacingExerciseNote } from "@/lib/workouts/train-visual";
 import { getWorkoutPlanById, saveWorkoutPlan } from "@/services/database/workout-plan-loader";
 import type { UserWorkoutPlan, UserWorkoutPlanDay, UserWorkoutPlanExercise, Weekday, Workout } from "@/types";
 
@@ -256,67 +257,72 @@ export function WorkoutPlanEditor() {
   if (loading) return <div className="space-y-4" aria-busy="true"><div className="h-9 w-64 animate-pulse rounded-lg bg-muted" /><div className="h-96 animate-pulse rounded-2xl bg-muted" /></div>;
   if (loadError || !draft) return <ErrorState title={tr("editorUnavailable")} description={loadError || tr("editorLoadFallback")} fallbackHref="/my-workout/plans" fallbackLabel={tr("backToTrain")} />;
 
+
   return (
-    <div className="space-y-6 pb-24" dir={dir}>
-      <PageHeading title={`${tr("editPlanTitle")} · ${draft.name}`} description={tr("editorDescription")} action={<div className="flex flex-wrap gap-2"><Button asChild variant="ghost"><Link href={`/my-workout/plans/${draft.id}`}><ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {tr("back")}</Link></Button><Button variant="outline" onClick={cancel}>{tr("cancel")}</Button></div>} />
+    <div className="space-y-6" dir={dir} data-train-editor>
+      <PageHeading title={`${tr("editPlanTitle")} · ${draft.name}`} description={tr("editorDescription")} action={<div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"><Button asChild variant="ghost" className="min-h-11"><Link href={`/my-workout/plans/${draft.id}`}><ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {tr("back")}</Link></Button><Button variant="outline" className="min-h-11" onClick={cancel}>{tr("cancel")}</Button></div>} />
 
       {saveState === "restored" ? <div className="flex gap-3 rounded-2xl border border-warning/40 bg-warning/10 p-4 text-sm"><AlertTriangle className="h-5 w-5 shrink-0" /><div><p className="font-semibold">{tr("draftRestored")}</p><p className="text-muted-foreground">{tr("draftRestoredDescription")}</p></div></div> : null}
 
-      <Card><CardContent className="grid gap-4 p-5 md:grid-cols-2">
-        <div className="space-y-2 md:col-span-2"><Label htmlFor="plan-name">{tr("planName")}</Label><Input id="plan-name" value={draft.name} onChange={(event) => patchPlan({ name: event.target.value })} /></div>
-        <div className="space-y-2"><Label htmlFor="plan-goal">{tr("goal")}</Label><Input id="plan-goal" value={draft.goal ?? ""} onChange={(event) => patchPlan({ goal: event.target.value || null })} placeholder={tr("goalPlaceholder")} /></div>
-        <div className="space-y-2"><Label htmlFor="plan-weeks">{tr("durationWeeks")}</Label><Input id="plan-weeks" type="number" min={1} max={104} value={draft.program_duration_weeks ?? ""} onChange={(event) => patchPlan({ program_duration_weeks: event.target.value ? Number(event.target.value) : null })} /></div>
-        <div className="space-y-2 md:col-span-2"><Label htmlFor="plan-description">{tr("description")}</Label><textarea id="plan-description" className="min-h-24 w-full rounded-[14px] border bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={draft.description ?? ""} onChange={(event) => patchPlan({ description: event.target.value || null })} /></div>
+      <Card><CardContent className="grid gap-4 p-5 md:grid-cols-3">
+        <div className="space-y-2 md:col-span-3"><Label htmlFor="plan-name">{tr("planName")}</Label><Input id="plan-name" value={draft.name} onChange={(event) => patchPlan({ name: event.target.value })} /></div>
+        <div className="space-y-2 md:col-span-2"><Label htmlFor="plan-goal">{tr("goal")}</Label><Input id="plan-goal" value={draft.goal ?? ""} onChange={(event) => patchPlan({ goal: event.target.value || null })} placeholder={tr("goalPlaceholder")} /></div>
+        <div className="space-y-2"><Label htmlFor="plan-weeks">{tr("programDuration")}</Label><Input id="plan-weeks" type="number" min={1} max={104} value={draft.program_duration_weeks ?? ""} onChange={(event) => patchPlan({ program_duration_weeks: event.target.value ? Number(event.target.value) : null })} /><p className="text-xs text-muted-foreground">{tr("weeks")}</p></div>
+        <div className="space-y-2 md:col-span-3"><Label htmlFor="plan-description">{tr("description")}</Label><textarea id="plan-description" className="min-h-20 w-full resize-y rounded-[14px] border bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={draft.description ?? ""} onChange={(event) => patchPlan({ description: event.target.value || null })} /></div>
       </CardContent></Card>
 
-      <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
-      <section className="space-y-3 lg:sticky lg:top-6" aria-labelledby="editor-days-heading">
-        <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 id="editor-days-heading" className="text-xl font-semibold">{tr("trainingDaysHeading")}</h2><p className="text-sm text-muted-foreground">{tr("selectDayToEdit")}</p></div><Button variant="outline" onClick={addDay} disabled={draft.days.length >= 7}><Plus className="h-4 w-4" /> {tr("addDay")}</Button></div>
-        <div className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible" role="tablist" aria-label={tr("workoutDays")}>
-          {draft.days.map((day, index) => <div key={day.clientKey} className={`flex min-w-48 items-center gap-1 rounded-2xl border p-1 lg:min-w-0 ${day.clientKey === selectedDay?.clientKey ? "border-primary bg-primary/10" : "bg-card"}`}><button type="button" role="tab" aria-selected={day.clientKey === selectedDay?.clientKey} className="min-h-12 min-w-0 flex-1 rounded-xl px-3 text-start" onClick={() => setSelectedDayKey(day.clientKey)}><span className="block truncate font-semibold">{day.day_name}</span><span className="block text-xs text-muted-foreground">{weekdayOptions.find((option) => option.value === day.weekday)?.label ?? tr("unscheduled")}</span></button><Button type="button" variant="ghost" size="icon" aria-label={tr("moveUp", { name: day.day_name })} onClick={() => moveDay(index, -1)} disabled={index === 0}><ArrowUp className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={tr("moveDown", { name: day.day_name })} onClick={() => moveDay(index, 1)} disabled={index === draft.days.length - 1}><ArrowDown className="h-4 w-4" /></Button></div>)}
-        </div>
-      </section>
+      <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
+        <section className="space-y-3 lg:sticky lg:top-6" aria-labelledby="editor-days-heading">
+          <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 id="editor-days-heading" className="text-xl font-semibold">{tr("trainingDaysHeading")}</h2><p className="text-sm text-muted-foreground">{tr("selectDayToEdit")}</p></div><Button variant="outline" className="min-h-11" onClick={addDay} disabled={draft.days.length >= 7}><Plus className="h-4 w-4" /> {tr("addDay")}</Button></div>
+          <div className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible" role="tablist" aria-label={tr("workoutDays")} data-editor-day-tabs>
+            {draft.days.map((day, index) => {
+              const selected = day.clientKey === selectedDay?.clientKey;
+              const incomplete = !day.exercises.length;
+              return <div key={day.clientKey} className={`flex min-w-48 items-center gap-1 rounded-2xl border p-1 lg:min-w-0 ${selected ? "border-primary bg-primary/10 ring-1 ring-primary/20" : incomplete ? "border-warning/50 bg-warning/5" : "border-border/70 bg-card"}`}><button type="button" role="tab" aria-selected={selected} className="min-h-14 min-w-0 flex-1 rounded-xl px-3 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setSelectedDayKey(day.clientKey)}><span className="block truncate font-semibold">{day.day_name}</span><span className={`mt-1 block text-xs font-medium ${incomplete ? "text-warning-foreground" : "text-muted-foreground"}`}>{incomplete ? tr("noExercisesAdded") : tr("exercises", { count: day.exercises.length })}</span></button><Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={tr("moveUp", { name: day.day_name })} title={tr("moveUp", { name: day.day_name })} onClick={() => moveDay(index, -1)} disabled={index === 0}><ArrowUp className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={tr("moveDown", { name: day.day_name })} title={tr("moveDown", { name: day.day_name })} onClick={() => moveDay(index, 1)} disabled={index === draft.days.length - 1}><ArrowDown className="h-4 w-4" /></Button></div>;
+            })}
+          </div>
+        </section>
 
-      {selectedDay && selectedDayIndex >= 0 ? <Card><CardContent className="space-y-6 p-5">
-        <div className="grid gap-4 md:grid-cols-[1fr_220px_auto] md:items-end">
-          <div className="space-y-2"><Label htmlFor="day-name">{tr("dayName")}</Label><Input id="day-name" value={selectedDay.day_name} onChange={(event) => patchDay(selectedDayIndex, { day_name: event.target.value })} /></div>
-          <div className="space-y-2"><Label htmlFor="day-weekday">{tr("weekday")}</Label><Select id="day-weekday" value={selectedDay.weekday ?? ""} onChange={(value) => patchDay(selectedDayIndex, { weekday: (value || null) as Weekday | null })} placeholder={tr("unscheduled")} options={weekdayOptions} /></div>
-          <Button variant="ghost" className="text-destructive" onClick={() => removeDay(selectedDayIndex)} disabled={draft.days.length <= 1}><Trash2 className="h-4 w-4" /> {tr("removeDay")}</Button>
-        </div>
-        <div className="space-y-2"><Label htmlFor="day-notes">{tr("dayNotes")}</Label><Input id="day-notes" value={selectedDay.notes ?? ""} onChange={(event) => patchDay(selectedDayIndex, { notes: event.target.value || null })} placeholder={tr("dayNotesPlaceholder")} /></div>
+        {selectedDay && selectedDayIndex >= 0 ? <Card><CardContent className="space-y-6 p-4 sm:p-5">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_auto] lg:items-end" data-day-configuration>
+            <div className="space-y-2"><Label htmlFor="day-name">{tr("dayName")}</Label><Input id="day-name" value={selectedDay.day_name} onChange={(event) => patchDay(selectedDayIndex, { day_name: event.target.value })} /></div>
+            <div className="space-y-2"><Label htmlFor="day-weekday">{tr("weekday")}</Label><Select id="day-weekday" value={selectedDay.weekday ?? ""} onChange={(value) => patchDay(selectedDayIndex, { weekday: (value || null) as Weekday | null })} placeholder={tr("unscheduled")} options={weekdayOptions} /></div>
+            <Button variant="ghost" className="min-h-11 text-destructive" onClick={() => removeDay(selectedDayIndex)} disabled={draft.days.length <= 1}><Trash2 className="h-4 w-4" /> {tr("removeDay")}</Button>
+            <div className="space-y-2 lg:col-span-3"><Label htmlFor="day-notes">{tr("dayNotes")}</Label><Input id="day-notes" value={selectedDay.notes ?? ""} onChange={(event) => patchDay(selectedDayIndex, { notes: event.target.value || null })} placeholder={tr("dayNotesPlaceholder")} /></div>
+            {!selectedDay.exercises.length ? <p className="text-sm font-medium text-destructive lg:col-span-3">{selectedDay.day_name}: {tr("addExercisesToContinue")}</p> : null}
+          </div>
 
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">{tr("selectedExercises")}</h3><p className="text-sm text-muted-foreground">{tr("chooseThenEdit")}</p></div><div className="flex items-center gap-2"><Badge variant="outline">{selectedDay.exercises.length}</Badge><Button variant="outline" onClick={() => setPickerOpen(true)}><Plus className="h-4 w-4" /> {tr("addExercises")}</Button></div></div>
-          {selectedDay.exercises.map((exercise, exerciseIndex) => <div key={exercise.clientKey} className="rounded-2xl border bg-muted/20 p-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6 lg:items-end">
-              <div className="space-y-2 lg:col-span-2"><Label htmlFor={`exercise-name-${exercise.clientKey}`}>{tr("exerciseNumber", { count: exerciseIndex + 1 })}</Label><Input id={`exercise-name-${exercise.clientKey}`} value={exercise.exercise_name} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { exercise_name: event.target.value })} placeholder={tr("exerciseName")} /></div>
-              <div className="space-y-2"><Label htmlFor={`muscle-${exercise.clientKey}`}>{tr("target")}</Label><Input id={`muscle-${exercise.clientKey}`} value={exercise.target_muscle ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { target_muscle: event.target.value || null })} placeholder={tr("targetPlaceholder")} /></div>
-              <div className="space-y-2"><Label htmlFor={`equipment-${exercise.clientKey}`}>{tr("equipment")}</Label><Input id={`equipment-${exercise.clientKey}`} value={exercise.equipment ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { equipment: event.target.value || null })} /></div>
-              <div className="space-y-2"><Label htmlFor={`sets-${exercise.clientKey}`}>{tr("sets")}</Label><Input id={`sets-${exercise.clientKey}`} type="number" min={1} value={exercise.sets ?? 3} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { sets: Number(event.target.value) || 0 })} /></div>
-              <div className="space-y-2"><Label htmlFor={`reps-${exercise.clientKey}`}>{tr("reps")}</Label><Input id={`reps-${exercise.clientKey}`} value={exercise.reps ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { reps: event.target.value || null })} /></div>
-              <div className="space-y-2"><Label htmlFor={`rest-${exercise.clientKey}`}>{tr("restSeconds")}</Label><Input id={`rest-${exercise.clientKey}`} type="number" min={0} value={exercise.rest_seconds ?? 75} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { rest_seconds: Number(event.target.value) || 0 })} /></div>
-              <div className="space-y-2 sm:col-span-2 lg:col-span-2"><Label htmlFor={`notes-${exercise.clientKey}`}>{tr("notes")}</Label><Input id={`notes-${exercise.clientKey}`} value={exercise.notes ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { notes: event.target.value || null })} /></div>
-              <div className="flex gap-1"><Button variant="ghost" size="icon" aria-label={tr("moveUp", { name: exercise.exercise_name || tr("thisExercise") })} onClick={() => moveExercise(selectedDayIndex, exerciseIndex, -1)} disabled={exerciseIndex === 0}><ArrowUp className="h-4 w-4" /></Button><Button variant="ghost" size="icon" aria-label={tr("moveDown", { name: exercise.exercise_name || tr("thisExercise") })} onClick={() => moveExercise(selectedDayIndex, exerciseIndex, 1)} disabled={exerciseIndex === selectedDay.exercises.length - 1}><ArrowDown className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="text-destructive" aria-label={tr("removeItem", { name: exercise.exercise_name || tr("thisExercise") })} onClick={() => removeExercise(selectedDayIndex, exerciseIndex)}><Trash2 className="h-4 w-4" /></Button></div>
+          <section className="space-y-3" aria-labelledby="editor-selected-exercises"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 id="editor-selected-exercises" className="text-lg font-semibold">{tr("selectedExercises")}</h3><p className="text-sm text-muted-foreground">{tr("chooseThenEdit")}</p></div><div className="flex items-center gap-2"><Badge variant="outline">{selectedDay.exercises.length}</Badge><Button variant="outline" className="min-h-11" onClick={() => setPickerOpen(true)}><Plus className="h-4 w-4" /> {tr("addExercises")}</Button></div></div>
+            <div className="space-y-3">
+              {selectedDay.exercises.map((exercise, exerciseIndex) => (
+                <article key={exercise.clientKey} className="rounded-2xl border border-border/70 bg-card p-4" data-exercise-prescription>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="space-y-2 sm:col-span-2 lg:col-span-1"><Label htmlFor={`exercise-name-${exercise.clientKey}`}>{tr("exerciseNumber", { count: exerciseIndex + 1 })}</Label><Input id={`exercise-name-${exercise.clientKey}`} value={exercise.exercise_name} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { exercise_name: event.target.value })} placeholder={tr("exerciseName")} /></div>
+                    <div className="space-y-2"><Label htmlFor={`muscle-${exercise.clientKey}`}>{tr("target")}</Label><Input id={`muscle-${exercise.clientKey}`} value={exercise.target_muscle ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { target_muscle: event.target.value || null })} placeholder={tr("targetPlaceholder")} /></div>
+                    <div className="space-y-2"><Label htmlFor={`equipment-${exercise.clientKey}`}>{tr("equipment")}</Label><Input id={`equipment-${exercise.clientKey}`} value={exercise.equipment ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { equipment: event.target.value || null })} /></div>
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3 xl:grid-cols-[90px_120px_120px_minmax(180px,1fr)_auto] xl:items-end">
+                    <div className="space-y-2"><Label htmlFor={`sets-${exercise.clientKey}`}>{tr("sets")}</Label><Input id={`sets-${exercise.clientKey}`} type="number" min={1} value={exercise.sets ?? 3} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { sets: Number(event.target.value) || 0 })} /></div>
+                    <div className="space-y-2"><Label htmlFor={`reps-${exercise.clientKey}`}>{tr("reps")}</Label><Input id={`reps-${exercise.clientKey}`} value={exercise.reps ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { reps: event.target.value || null })} /></div>
+                    <div className="space-y-2"><Label htmlFor={`rest-${exercise.clientKey}`}>{tr("restSeconds")}</Label><Input id={`rest-${exercise.clientKey}`} type="number" min={0} value={exercise.rest_seconds ?? 75} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { rest_seconds: Number(event.target.value) || 0 })} /></div>
+                    <div className="space-y-2 sm:col-span-3 xl:col-span-1"><Label htmlFor={`notes-${exercise.clientKey}`}>{tr("notes")}</Label><Input id={`notes-${exercise.clientKey}`} value={userFacingExerciseNote(exercise.notes)} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { notes: mergeUserFacingExerciseNote(exercise.notes, event.target.value) })} /></div>
+                    <div className="flex gap-1 sm:col-span-3 xl:col-span-1 xl:justify-end"><Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={tr("moveUp", { name: exercise.exercise_name || tr("thisExercise") })} title={tr("moveUp", { name: exercise.exercise_name || tr("thisExercise") })} onClick={() => moveExercise(selectedDayIndex, exerciseIndex, -1)} disabled={exerciseIndex === 0}><ArrowUp className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={tr("moveDown", { name: exercise.exercise_name || tr("thisExercise") })} title={tr("moveDown", { name: exercise.exercise_name || tr("thisExercise") })} onClick={() => moveExercise(selectedDayIndex, exerciseIndex, 1)} disabled={exerciseIndex === selectedDay.exercises.length - 1}><ArrowDown className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="min-h-11 min-w-11 text-destructive" aria-label={tr("removeItem", { name: exercise.exercise_name || tr("thisExercise") })} title={tr("removeItem", { name: exercise.exercise_name || tr("thisExercise") })} onClick={() => removeExercise(selectedDayIndex, exerciseIndex)}><Trash2 className="h-4 w-4" /></Button></div>
+                  </div>
+                </article>
+              ))}
             </div>
-          </div>)}
-          {!selectedDay.exercises.length ? <div className="grid min-h-32 place-items-center rounded-2xl border border-dashed text-center"><div><Dumbbell className="mx-auto mb-2 h-5 w-5 text-muted-foreground" /><p className="font-medium">{tr("noExercisesYet")}</p><Button type="button" variant="ghost" className="mt-2 min-h-11" onClick={() => setPickerOpen(true)}>{tr("addExercises")}</Button></div></div> : null}
-        </div>
-      </CardContent></Card> : null}
+            {!selectedDay.exercises.length ? <div className="grid min-h-32 place-items-center rounded-2xl border border-dashed text-center"><div><Dumbbell className="mx-auto mb-2 h-5 w-5 text-muted-foreground" /><p className="font-medium">{tr("noExercisesYet")}</p><Button type="button" variant="ghost" className="mt-2 min-h-11" onClick={() => setPickerOpen(true)}>{tr("addExercises")}</Button></div></div> : null}
+          </section>
+        </CardContent></Card> : null}
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 backdrop-blur sm:static sm:rounded-2xl sm:border">
+      <div className="sticky bottom-[var(--train-sticky-footer-bottom)] z-30 border-t bg-background/95 px-3 py-3 backdrop-blur sm:rounded-2xl sm:border lg:bottom-[var(--desktop-train-sticky-footer-bottom)]" data-train-sticky-footer>
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div className="text-sm"><p className="font-semibold">{saveState === "saving" ? tr("saving") : saveState === "saved" ? tr("saved") : isDirty ? tr("unsavedChanges") : tr("noUnsavedChanges")}</p>{validationError ? <p className="text-destructive">{validationError}</p> : saveError ? <p className="text-destructive">{saveError}</p> : <p className="text-muted-foreground">{tr("atomicSaveNotice")}</p>}</div>
-          <div className="flex gap-2"><Button variant="outline" onClick={cancel}>{tr("cancel")}</Button><Button onClick={() => void save()} disabled={!isDirty || Boolean(validationError) || saveState === "saving"}>{saveState === "saved" ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}{saveState === "saving" ? tr("saving") : tr("saveChanges")}</Button></div>
+          <div className="flex gap-2"><Button variant="outline" className="min-h-11" onClick={cancel}>{tr("cancel")}</Button><Button className="min-h-11" onClick={() => void save()} disabled={!isDirty || Boolean(validationError) || saveState === "saving"}>{saveState === "saved" ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}{saveState === "saving" ? tr("saving") : tr("saveChanges")}</Button></div>
         </div>
       </div>
-      {selectedDay && selectedDayIndex >= 0 ? <ExercisePickerDialog
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        dayName={selectedDay.day_name}
-        existingKeys={selectedDay.exercises.map((exercise) => `${exercise.source_workout_id || exercise.workout_id || exercise.id}-${exercise.exercise_name}-${exercise.target_muscle || ""}`)}
-        onAdd={(workouts) => addLibraryExercises(selectedDayIndex, workouts)}
-      /> : null}
+      {selectedDay && selectedDayIndex >= 0 ? <ExercisePickerDialog open={pickerOpen} onOpenChange={setPickerOpen} dayName={selectedDay.day_name} existingKeys={selectedDay.exercises.map((exercise) => `${exercise.source_workout_id || exercise.workout_id || exercise.id}-${exercise.exercise_name}-${exercise.target_muscle || ""}`)} onAdd={(workouts) => addLibraryExercises(selectedDayIndex, workouts)} /> : null}
       {dialog}
       {unsavedDialog}
     </div>

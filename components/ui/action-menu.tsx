@@ -13,6 +13,7 @@ const ActionMenuContext = createContext<ActionMenuContextValue | null>(null);
 
 export function ActionMenu({
   label,
+  visibleLabel,
   children,
   disabled = false,
   triggerVariant = "outline",
@@ -21,6 +22,7 @@ export function ActionMenu({
   onTriggerElement
 }: {
   label: string;
+  visibleLabel?: string;
   children: ReactNode;
   disabled?: boolean;
   triggerVariant?: ButtonProps["variant"];
@@ -123,7 +125,7 @@ export function ActionMenu({
         onClick={() => setOpen((current) => !current)}
       >
         {icon}
-        <span>{label}</span>
+        <span>{visibleLabel ?? label}</span>
       </Button>
       {open && typeof document !== "undefined" ? createPortal(
         <ActionMenuContext.Provider value={{ close }}>

@@ -39,8 +39,8 @@ export function MobileFloatingNav({ pathname }: { pathname: string }) {
     return quickLogRoutes[section];
   }
   return (
-    <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[80] lg:hidden" dir={dir}>
-      <nav className="relative grid h-[72px] grid-cols-5 items-stretch rounded-[24px] border border-border/80 bg-card/92 px-1 shadow-[var(--shadow-floating)] backdrop-blur-md" aria-label={tt("primaryMobileNavigation")}>
+    <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+var(--mobile-nav-bottom-offset))] z-[80] lg:hidden" dir={dir} data-mobile-floating-nav>
+      <nav className="relative grid h-[var(--mobile-nav-height)] grid-cols-5 items-stretch rounded-[24px] border border-border/80 bg-card/92 px-1 shadow-[var(--shadow-floating)] backdrop-blur-md" aria-label={tt("primaryMobileNavigation")}>
         <RouteItem href="/dashboard" label={tt("today")} icon={<Home className="h-5 w-5" />} active={isMobileRouteActive(pathname, "today")} />
         <RouteItem href="/my-workout/plans" label={tt("train")} icon={<Dumbbell className="h-5 w-5" />} active={isMobileRouteActive(pathname, "train")} />
         <Dialog>

@@ -40,7 +40,7 @@ export function DialogContent({
         {children}
         <DialogPrimitive.Close asChild>
           <Button
-            className="absolute right-3 top-3 z-20 min-h-11 min-w-11 rtl:left-3 rtl:right-auto"
+            className="absolute right-[calc(env(safe-area-inset-right)+0.75rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-20 min-h-11 min-w-11 lg:right-3 lg:top-3 rtl:left-[calc(env(safe-area-inset-left)+0.75rem)] rtl:right-auto lg:rtl:left-3"
             variant="ghost"
             size="icon"
             aria-label={closeLabel}

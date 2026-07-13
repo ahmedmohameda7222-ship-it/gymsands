@@ -8,6 +8,14 @@ const planIds = {
   archived: "10000000-0000-4000-8000-000000000003"
 };
 
+export type MockTrainScenario = "active" | "scheduled" | "rest";
+
+export function getMockTrainScenario(): MockTrainScenario {
+  if (typeof window === "undefined") return "active";
+  const value = window.localStorage.getItem("plaivra.qa.train-scenario");
+  return value === "scheduled" || value === "rest" ? value : "active";
+}
+
 function exercise(dayId: string, index: number, name: string, target: string, equipment: string): UserWorkoutPlanExercise {
   return {
     id: `${dayId.slice(0, -1)}${index + 1}`,
@@ -44,13 +52,15 @@ function day(planId: string, suffix: string, dayNumber: number, weekday: Weekday
 }
 
 export function getMockTrainPlans(): UserWorkoutPlan[] {
+  const scenario = getMockTrainScenario();
   const todayIndex = new Date().getDay();
+  const activeOffsets = scenario === "rest" ? [1, 3, 5] : [0, 2, 4];
   const createdAt = `${addDays(todayIso(), -30)}T08:00:00.000Z`;
   const updatedAt = `${todayIso()}T08:00:00.000Z`;
   const activeDays = [
-    day(planIds.active, "11", 1, weekdays[todayIndex], "Strength A", [["Back Squat", "Legs", "Barbell"], ["Bench Press", "Chest", "Barbell"], ["Row", "Back", "Cable"], ["Plank", "Core", "Bodyweight"]]),
-    day(planIds.active, "12", 2, weekdays[(todayIndex + 2) % 7], "Strength B", [["Deadlift", "Back", "Barbell"], ["Overhead Press", "Shoulders", "Dumbbells"], ["Pulldown", "Back", "Cable"]]),
-    day(planIds.active, "13", 3, weekdays[(todayIndex + 4) % 7], "Strength C", [["Split Squat", "Legs", "Dumbbells"], ["Incline Press", "Chest", "Dumbbells"], ["Face Pull", "Shoulders", "Cable"]])
+    day(planIds.active, "11", 1, weekdays[(todayIndex + activeOffsets[0]) % 7], "Strength A", [["Back Squat", "Legs", "Barbell"], ["Bench Press", "Chest", "Barbell"], ["Row", "Back", "Cable"], ["Plank", "Core", "Bodyweight"]]),
+    day(planIds.active, "12", 2, weekdays[(todayIndex + activeOffsets[1]) % 7], "Strength B", [["Deadlift", "Back", "Barbell"], ["Overhead Press", "Shoulders", "Dumbbells"], ["Pulldown", "Back", "Cable"]]),
+    day(planIds.active, "13", 3, weekdays[(todayIndex + activeOffsets[2]) % 7], "Strength C", [["Split Squat", "Legs", "Dumbbells"], ["Incline Press", "Chest", "Dumbbells"], ["Face Pull", "Shoulders", "Cable"]])
   ];
   const inactiveDays = [day(planIds.inactive, "21", 1, weekdays[(todayIndex + 1) % 7], "Conditioning", [["Kettlebell Swing", "Full body", "Kettlebell"]])];
   const archivedDays = [day(planIds.archived, "31", 1, weekdays[(todayIndex + 3) % 7], "Foundation", [["Goblet Squat", "Legs", "Dumbbell"]])];
@@ -63,11 +73,16 @@ export function getMockTrainPlans(): UserWorkoutPlan[] {
 }
 
 export function getMockTrainActivity(): WorkoutSession[] {
+  const scenario = getMockTrainScenario();
   const plans = getMockTrainPlans();
   const todayDay = plans[0].days[0];
-  return [
-    { id: "20000000-0000-4000-8000-000000000001", user_id: "mock-user", workout_id: null, plan_id: planIds.active, plan_day_id: todayDay.id, workout_day_name: todayDay.day_name, workout_category: "strength", workout_name: todayDay.day_name, started_at: `${todayIso()}T08:00:00.000Z`, completed_at: null, skipped_at: null, duration_minutes: null, notes: null, status: "started" },
+  const history: WorkoutSession[] = [
     { id: "20000000-0000-4000-8000-000000000002", user_id: "mock-user", workout_id: null, plan_id: planIds.active, plan_day_id: plans[0].days[1].id, workout_day_name: plans[0].days[1].day_name, workout_category: "strength", workout_name: plans[0].days[1].day_name, started_at: `${addDays(todayIso(), -5)}T08:00:00.000Z`, completed_at: `${addDays(todayIso(), -5)}T08:52:00.000Z`, skipped_at: null, duration_minutes: 52, notes: "Completed fixture session", status: "completed" },
     { id: "20000000-0000-4000-8000-000000000003", user_id: "mock-user", workout_id: null, plan_id: planIds.active, plan_day_id: plans[0].days[2].id, workout_day_name: plans[0].days[2].day_name, workout_category: "strength", workout_name: plans[0].days[2].day_name, started_at: `${addDays(todayIso(), -3)}T08:00:00.000Z`, completed_at: null, skipped_at: `${addDays(todayIso(), -3)}T08:05:00.000Z`, duration_minutes: null, notes: "[skipped] Fixture", status: "skipped" }
+  ];
+  if (scenario !== "active") return history;
+  return [
+    { id: "20000000-0000-4000-8000-000000000001", user_id: "mock-user", workout_id: null, plan_id: planIds.active, plan_day_id: todayDay.id, workout_day_name: todayDay.day_name, workout_category: "strength", workout_name: todayDay.day_name, started_at: `${todayIso()}T08:00:00.000Z`, completed_at: null, skipped_at: null, duration_minutes: null, notes: null, status: "started" },
+    ...history
   ];
 }
