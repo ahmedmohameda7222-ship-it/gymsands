@@ -44,7 +44,7 @@ type NavItem = {
 const primaryNavItems: NavItem[] = [
   { href: "/dashboard", labelKey: "nav.today", icon: Home, activePaths: ["/dashboard"] },
   { href: "/my-workout/plans", labelKey: "nav.train", icon: Dumbbell, activePaths: ["/today-workout", "/my-workout", "/workouts", "/workout-history"] },
-  { href: "/calories", labelKey: "nav.eat", icon: Utensils, activePaths: ["/calories", "/my-meal-plan"] },
+  { href: "/calories", labelKey: "nav.eat", icon: Utensils, activePaths: ["/calories"] },
   { href: "/progress", labelKey: "nav.progress", icon: BarChart3, activePaths: ["/progress", "/personal-records"] },
   { href: "/settings", labelKey: "nav.settings", icon: Settings, activePaths: ["/settings", "/profile"] }
 ];
@@ -85,12 +85,9 @@ const adminItems: NavItem[] = [
   { href: "/admin", labelKey: "settings.accountSession", icon: Shield }
 ];
 
-
 function isActivePath(pathname: string, item: NavItem) {
   const paths = item.activePaths ?? [item.href];
-  if (item.exact) {
-    return paths.some((path) => pathname === path);
-  }
+  if (item.exact) return paths.some((path) => pathname === path);
   return paths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
@@ -128,21 +125,25 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (isWorkoutSessionRoute) {
     return (
       <div className="premium-page-bg relative min-h-dvh overflow-hidden text-foreground">
-        {isOffline ? <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg" role="status"><p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> You are offline. New changes may not sync until connection returns.</p></div> : null}
-        <main id="main-content" className="min-h-dvh">
-          {children}
-        </main>
+        {isOffline ? (
+          <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg" role="status">
+            <p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> You are offline. New changes may not sync until connection returns.</p>
+          </div>
+        ) : null}
+        <main id="main-content" className="min-h-dvh">{children}</main>
       </div>
     );
   }
 
   return (
     <div className="premium-page-bg min-h-screen text-foreground">
-      {isOffline ? <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.75rem)] z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg lg:left-72" role="status"><p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> You are offline. New changes may not sync until connection returns.</p></div> : null}
-      <aside className="glass-shell fixed inset-y-0 left-0 z-40 hidden w-72 border-y-0 border-l-0 lg:flex lg:flex-col">
-        <div className="flex h-20 items-center px-6">
-          <Brand href="/dashboard" />
+      {isOffline ? (
+        <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.75rem)] z-[65] mx-auto max-w-xl rounded-[14px] border border-warning/40 bg-card p-3 text-sm shadow-lg lg:left-72" role="status">
+          <p className="flex items-center justify-center gap-2 font-semibold text-foreground"><WifiOff className="h-4 w-4 text-warning" /> You are offline. New changes may not sync until connection returns.</p>
         </div>
+      ) : null}
+      <aside className="glass-shell fixed inset-y-0 left-0 z-40 hidden w-72 border-y-0 border-l-0 lg:flex lg:flex-col">
+        <div className="flex h-20 items-center px-6"><Brand href="/dashboard" /></div>
         <nav className="flex-1 space-y-6 overflow-y-auto px-4 pb-4" aria-label="Main navigation">
           <div>
             <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Primary</p>
@@ -170,8 +171,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <p className="truncate text-sm font-semibold text-foreground">{hideProfileDetails ? t("nav.member") : profile?.full_name || t("nav.member")}</p>
             {!hideProfileDetails ? <p className="truncate text-xs text-muted-foreground">{profile?.email}</p> : null}
             <Button variant="ghost" className="mt-3 min-h-12 w-full justify-start" onClick={signOut}>
-              <LogOut className="h-4 w-4" />
-              {t("nav.logout")}
+              <LogOut className="h-4 w-4" />{t("nav.logout")}
             </Button>
           </div>
         </div>
@@ -187,8 +187,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <h1 className="text-base font-semibold text-foreground">{t("nav.tagline")}</h1>
           </div>
           <Button variant="outline" onClick={signOut} className="hidden min-h-12 lg:inline-flex">
-            <LogOut className="h-4 w-4" />
-            {t("nav.logout")}
+            <LogOut className="h-4 w-4" />{t("nav.logout")}
           </Button>
         </div>
       </header>
@@ -209,15 +208,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function MobileMenu({
-  pathname,
-  isAdmin,
-  signOut
-}: {
-  pathname: string;
-  isAdmin: boolean;
-  signOut: () => Promise<void>;
-}) {
+function MobileMenu({ pathname, isAdmin, signOut }: { pathname: string; isAdmin: boolean; signOut: () => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
   const { settings } = useUserSettings();
@@ -229,9 +220,7 @@ function MobileMenu({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className="h-12 w-12" aria-label={t("nav.more")}>
-          <Menu className="h-5 w-5" />
-        </Button>
+        <Button variant="outline" size="icon" className="h-12 w-12" aria-label={t("nav.more")}><Menu className="h-5 w-5" /></Button>
       </DialogTrigger>
       <DialogContent
         variant="glass"
@@ -245,19 +234,16 @@ function MobileMenu({
         </DialogHeader>
         <div className="h-[calc(100dvh-4.5rem)] overflow-y-auto px-4 py-4">
           <div className="space-y-4">
-            {secondaryNavGroups.map((group) => {
-              const visibleInMore = group.items;
-              return (
-                <div key={group.labelKey}>
-                  <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t(group.labelKey)}</p>
-                  <div className="space-y-1">
-                    {visibleInMore.map((item) => (
-                      <SidebarLink key={`${item.href}-${item.labelKey}`} item={item} active={isActivePath(pathname, item)} mobile onClick={handleNavigate} />
-                    ))}
-                  </div>
+            {secondaryNavGroups.map((group) => (
+              <div key={group.labelKey}>
+                <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t(group.labelKey)}</p>
+                <div className="space-y-1">
+                  {group.items.map((item) => (
+                    <SidebarLink key={`${item.href}-${item.labelKey}`} item={item} active={isActivePath(pathname, item)} mobile onClick={handleNavigate} />
+                  ))}
                 </div>
-              );
-            })}
+              </div>
+            ))}
             <div className="border-t border-white/40 pt-4 dark:border-white/10">
               <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t("nav.more")}</p>
               <div className="space-y-1">
@@ -282,8 +268,7 @@ function MobileMenu({
                 void signOut();
               }}
             >
-              <LogOut className="h-4 w-4" />
-              {t("nav.logout")}
+              <LogOut className="h-4 w-4" />{t("nav.logout")}
             </Button>
           </div>
         </div>

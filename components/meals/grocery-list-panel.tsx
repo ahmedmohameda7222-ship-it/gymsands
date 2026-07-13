@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, CheckCircle2, Download, FileDown, MoreHorizontal, Plus, RefreshCw, Share2, ShoppingCart, Trash2, X } from "lucide-react";
+import { Check, FileDown, MoreHorizontal, Plus, RefreshCw, Share2, ShoppingCart, Trash2, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Disclosure } from "@/components/ui/disclosure";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toaster";
+import { useTranslation } from "@/lib/i18n/use-translation";
 import { cn } from "@/lib/utils";
 import { InlineFeedback } from "@/components/motion";
 import { userSafeError } from "@/lib/error-formatting";
@@ -22,9 +23,47 @@ import type { PDFFont } from "pdf-lib";
 const sections: GroceryStoreSection[] = ["Protein", "Carbs", "Vegetables", "Fruits", "Dairy", "Pantry", "Frozen", "Drinks", "Other"];
 const commonUnits = ["g", "kg", "ml", "L", "pcs", "slices", "cups", "tbsp", "tsp", "pack", "can", "bottle", "bunch", "item"];
 
-export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, onStats }: { weekStart: string; weekEnd: string; mealItems: MealPlanItem[]; refreshKey: number; onStats: (count: number, checked: number) => void }) {
+const shoppingCopy = {
+  en: {
+    emptyTitle: "Your grocery list is empty.",
+    emptyDescription: "Ask ChatGPT to build an ingredient-level list from your meal plan.",
+    buildLabel: "Build ingredient list with ChatGPT",
+    buildDescription: "Ask ChatGPT to turn planned meals into an ingredient-level list grouped by store section.",
+    cheaperLabel: "Find cheaper options",
+    cheaperDescription: "Ask ChatGPT for lower-cost substitutions for this grocery list.",
+    askTitle: "Ask ChatGPT for help"
+  },
+  de: {
+    emptyTitle: "Deine Einkaufsliste ist leer.",
+    emptyDescription: "Bitte ChatGPT, aus deinem Essensplan eine Zutatenliste zu erstellen.",
+    buildLabel: "Zutatenliste mit ChatGPT erstellen",
+    buildDescription: "ChatGPT erstellt aus den geplanten Mahlzeiten eine nach Ladenbereichen gruppierte Zutatenliste.",
+    cheaperLabel: "Günstigere Optionen finden",
+    cheaperDescription: "Bitte ChatGPT um günstigere Alternativen für diese Einkaufsliste.",
+    askTitle: "ChatGPT um Hilfe bitten"
+  },
+  ar: {
+    emptyTitle: "قائمة المشتريات فارغة.",
+    emptyDescription: "اطلب من ChatGPT إنشاء قائمة مكونات من خطة الوجبات.",
+    buildLabel: "إنشاء قائمة المكونات باستخدام ChatGPT",
+    buildDescription: "اطلب من ChatGPT تحويل الوجبات المخططة إلى قائمة مكونات مرتبة حسب أقسام المتجر.",
+    cheaperLabel: "العثور على بدائل أقل تكلفة",
+    cheaperDescription: "اطلب من ChatGPT اقتراح بدائل أقل تكلفة لقائمة المشتريات.",
+    askTitle: "طلب المساعدة من ChatGPT"
+  }
+} as const;
+
+export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, onStats }: {
+  weekStart: string;
+  weekEnd: string;
+  mealItems: MealPlanItem[];
+  refreshKey: number;
+  onStats: (count: number, checked: number) => void;
+}) {
   const { user } = useAuth();
   const userId = user?.id;
+  const { language } = useTranslation();
+  const copy = shoppingCopy[language];
   const { toast } = useToast();
   const { dialog: confirmDialog, ask: confirmAsk } = useConfirm();
   const [items, setItems] = useState<UserGroceryItem[]>([]);
@@ -64,9 +103,13 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
     return () => { active = false; };
   }, [loadNonce, refreshKey, toast, userId, weekStart]);
 
-  useEffect(() => { onStats(items.length, items.filter((item) => item.checked).length); }, [items, onStats]);
+  useEffect(() => {
+    onStats(items.length, items.filter((item) => item.checked).length);
+  }, [items, onStats]);
 
-  const grouped = useMemo(() => sections.map((section) => ({ section, items: items.filter((item) => item.store_section === section) })).filter((group) => group.items.length), [items]);
+  const grouped = useMemo(() => sections
+    .map((section) => ({ section, items: items.filter((item) => item.store_section === section) }))
+    .filter((group) => group.items.length), [items]);
   const importedItems = useMemo(() => items.filter((item) => item.created_by !== "manual"), [items]);
   const selectedItems = useMemo(() => items.filter((item) => selectedIds.has(item.id)), [items, selectedIds]);
 
@@ -169,23 +212,6 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
     }
   }
 
-  function exportCsv() {
-    try {
-      const rows = [["item", "quantity", "unit", "section", "checked", "already_have", "notes"], ...items.map((item) => [item.item_name, item.quantity ?? "", item.unit ?? "", item.store_section, item.checked, item.already_have, item.notes ?? ""])];
-      const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\n");
-      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `plaivra-grocery-${weekStart}.csv`;
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
-      setFeedback(`Downloaded ${anchor.download}.`);
-      toast({ title: "Grocery list downloaded", description: anchor.download });
-    } catch (error) {
-      toast({ title: "Could not download list", description: userSafeError(error), variant: "error" });
-    }
-  }
-
   async function downloadPdf() {
     if (!items.length) return;
     setIsBusy(true);
@@ -210,7 +236,10 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
         value.split(/\s+/).forEach((word) => {
           const candidate = current ? `${current} ${word}` : word;
           if (font.widthOfTextAtSize(candidate, size) <= maxWidth) current = candidate;
-          else { if (current) lines.push(current); current = word; }
+          else {
+            if (current) lines.push(current);
+            current = word;
+          }
         });
         if (current) lines.push(current);
         return lines;
@@ -254,7 +283,7 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
       });
 
       pdf.getPages().forEach((pdfPage, index, pages) => {
-        pdfPage.drawText(`Plaivra - Plan. Execute. Track.`, { x: 42, y: 25, size: 8, font: regular, color: muted });
+        pdfPage.drawText("Plaivra - Plan. Execute. Track.", { x: 42, y: 25, size: 8, font: regular, color: muted });
         pdfPage.drawText(`${index + 1} / ${pages.length}`, { x: pdfPage.getWidth() - 70, y: 25, size: 8, font: regular, color: muted });
       });
       const bytes = await pdf.save();
@@ -273,6 +302,18 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
       setIsBusy(false);
     }
   }
+
+  const buildAction = (
+    <AiActionRequestDialog
+      actions={[{ type: "build_grocery_list", label: copy.buildLabel, description: copy.buildDescription }]}
+      sourceType="grocery_week"
+      sourceId={weekStart}
+      context={{ week_start: weekStart, week_end: weekEnd, grocery_items: items, meal_plan_items: mealItems }}
+      title={copy.askTitle}
+      buttonVariant="default"
+      className="grid w-full sm:w-auto [&_button]:min-h-11 [&_button]:w-full sm:[&_button]:w-auto"
+    />
+  );
 
   return (
     <Card variant="glass">
@@ -305,37 +346,63 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
         <InlineFeedback message={feedback} onClose={() => setFeedback("")} />
 
         {showQuickAdd ? <>
-        <div className="space-y-2 rounded-[14px] border border-border/70 bg-muted/20 p-3">
-          <Label htmlFor="grocery-quick-add">Quick add</Label>
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem_auto]">
-            <Input id="grocery-quick-add" value={draft.itemName} onChange={(event) => setDraft((current) => ({ ...current, itemName: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") void addItem(); }} placeholder="Item name" />
-            <select aria-label="Unit" value={draft.unit} onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value }))} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm">
-              <option value="">Unit</option>
-              {commonUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
-              <option value="custom">Other / custom</option>
-            </select>
-            <Button onClick={addItem} disabled={!draft.itemName.trim() || isBusy}><Plus className="h-4 w-4" /> Add</Button>
+          <div className="space-y-2 rounded-[14px] border border-border/70 bg-muted/20 p-3">
+            <Label htmlFor="grocery-quick-add">Quick add</Label>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem_auto]">
+              <Input id="grocery-quick-add" value={draft.itemName} onChange={(event) => setDraft((current) => ({ ...current, itemName: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") void addItem(); }} placeholder="Item name" />
+              <select aria-label="Unit" value={draft.unit} onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value }))} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm">
+                <option value="">Unit</option>
+                {commonUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                <option value="custom">Other / custom</option>
+              </select>
+              <Button onClick={addItem} disabled={!draft.itemName.trim() || isBusy}><Plus className="h-4 w-4" /> Add</Button>
+            </div>
+            {draft.unit === "custom" ? <Input aria-label="Custom unit" value={draft.customUnit} onChange={(event) => setDraft((current) => ({ ...current, customUnit: event.target.value }))} placeholder="Enter a custom unit" /> : null}
           </div>
-          {draft.unit === "custom" ? <Input aria-label="Custom unit" value={draft.customUnit} onChange={(event) => setDraft((current) => ({ ...current, customUnit: event.target.value }))} placeholder="Enter a custom unit" /> : null}
-        </div>
-
-        <Disclosure title="Advanced details" description="Quantity, store section, and notes">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="space-y-2"><Label>Quantity</Label><Input type="number" value={draft.quantity} onChange={(event) => setDraft((current) => ({ ...current, quantity: event.target.value }))} /></div>
-            <div className="space-y-2"><Label>Section</Label><select value={draft.section} onChange={(event) => setDraft((current) => ({ ...current, section: event.target.value as GroceryStoreSection }))} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm">{sections.map((section) => <option key={section}>{section}</option>)}</select></div>
-            <div className="space-y-2"><Label>Notes</Label><Input value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional" /></div>
-          </div>
-        </Disclosure>
+          <Disclosure title="Advanced details" description="Quantity, store section, and notes">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-2"><Label>Quantity</Label><Input type="number" value={draft.quantity} onChange={(event) => setDraft((current) => ({ ...current, quantity: event.target.value }))} /></div>
+              <div className="space-y-2"><Label>Section</Label><select value={draft.section} onChange={(event) => setDraft((current) => ({ ...current, section: event.target.value as GroceryStoreSection }))} className="h-11 w-full rounded-[14px] border bg-card px-3 text-sm">{sections.map((section) => <option key={section}>{section}</option>)}</select></div>
+              <div className="space-y-2"><Label>Notes</Label><Input value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional" /></div>
+            </div>
+          </Disclosure>
         </> : null}
 
-        <AiActionRequestDialog actions={[{ type: "build_grocery_list", label: "Build ingredient list with ChatGPT", description: "Ask ChatGPT to turn planned meals into an ingredient-level list grouped by store section." }]} sourceType="grocery_week" sourceId={weekStart} context={{ week_start: weekStart, week_end: weekEnd, grocery_items: items, meal_plan_items: mealItems }} title="Ask ChatGPT for help" buttonVariant="default" className="grid" />
+        {isLoading ? <p className="text-sm text-muted-foreground">Loading grocery list...</p> : null}
+        {!isLoading && loadError ? (
+          <div className="rounded-[14px] border border-destructive/30 bg-destructive/5 p-4" role="alert">
+            <p className="font-semibold text-foreground">Grocery list could not load</p>
+            <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
+            <Button className="mt-3" size="sm" onClick={() => setLoadNonce((current) => current + 1)}><RefreshCw className="h-4 w-4" /> Try again</Button>
+          </div>
+        ) : null}
 
-        <div className="flex flex-wrap gap-2 border-t border-border/60 pt-3">
-          <Button variant="outline" size="sm" onClick={() => void downloadPdf()} disabled={!items.length || isBusy}><FileDown className="h-4 w-4" /> Download PDF</Button>
-          <Button variant="outline" size="sm" onClick={() => void shareList()} disabled={!items.length}><Share2 className="h-4 w-4" /> Share</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!items.length}><Download className="h-4 w-4" /> Download CSV</Button>
-          <AiActionRequestDialog actions={[{ type: "make_meal_cheaper", label: "Find cheaper options", description: "Ask ChatGPT for lower-cost substitutions for this grocery list." }]} sourceType="grocery_week" sourceId={weekStart} context={{ week_start: weekStart, week_end: weekEnd, grocery_items: items, meal_plan_items: mealItems }} title="Ask ChatGPT for help" buttonVariant="ghost" />
-        </div>
+        {!isLoading && !loadError && !items.length ? (
+          <div className="rounded-[14px] border border-dashed px-4 py-5 text-center sm:text-start">
+            <p className="font-semibold text-foreground">{copy.emptyTitle}</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{copy.emptyDescription}</p>
+            <div className="mt-3 flex justify-center sm:justify-start">{buildAction}</div>
+          </div>
+        ) : null}
+
+        {!isLoading && !loadError && items.length ? (
+          <div className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between">
+            {buildAction}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => void downloadPdf()} disabled={isBusy}><FileDown className="h-4 w-4" /> Download PDF</Button>
+              <Button variant="outline" size="sm" onClick={() => void shareList()}><Share2 className="h-4 w-4" /> Share</Button>
+              <AiActionRequestDialog
+                actions={[{ type: "make_meal_cheaper", label: copy.cheaperLabel, description: copy.cheaperDescription }]}
+                sourceType="grocery_week"
+                sourceId={weekStart}
+                context={{ week_start: weekStart, week_end: weekEnd, grocery_items: items, meal_plan_items: mealItems }}
+                title={copy.askTitle}
+                buttonVariant="outline"
+                className="grid [&_button]:min-h-11"
+              />
+            </div>
+          </div>
+        ) : null}
 
         <AnimatePresence>
           {selectedIds.size > 0 ? (
@@ -358,16 +425,6 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
           ) : null}
         </AnimatePresence>
 
-        {isLoading ? <p className="text-sm text-muted-foreground">Loading grocery list...</p> : null}
-        {!isLoading && loadError ? (
-          <div className="rounded-[14px] border border-destructive/30 bg-destructive/5 p-4" role="alert">
-            <p className="font-semibold text-foreground">Grocery list could not load</p>
-            <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
-            <Button className="mt-3" size="sm" onClick={() => setLoadNonce((current) => current + 1)}><RefreshCw className="h-4 w-4" /> Try again</Button>
-          </div>
-        ) : null}
-        {!isLoading && !loadError && !items.length ? <p className="rounded-[14px] border border-dashed p-4 text-sm leading-6 text-muted-foreground">Your list is empty. Use Quick add, or ask ChatGPT to create an ingredient-level list with an authorized Plaivra tool.</p> : null}
-
         {grouped.map((group) => (
           <div key={group.section}>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.section} · {group.items.filter((item) => item.checked).length}/{group.items.length} checked</p>
@@ -381,14 +438,14 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
                   transition={{ duration: 0.15 }}
                   className={cn(
                     "solid-row space-y-3 p-3 transition-all duration-200",
-                    item.checked && "opacity-75 bg-success/5",
+                    item.checked && "bg-success/5 opacity-75",
                     selectedIds.has(item.id) && "border-2 border-primary bg-primary/5"
                   )}
                 >
                   <div className="flex items-start gap-3">
                     <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelection(item.id)} aria-label={`Select ${item.item_name}`} className="mt-0.5 h-6 w-6 shrink-0 accent-primary" />
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2"><p className={cn("font-semibold transition-all duration-200", item.checked && "line-through text-muted-foreground")}>{item.item_name}</p>{item.created_by === "meal_plan" ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">Imported</span> : null}</div>
+                      <div className="flex flex-wrap items-center gap-2"><p className={cn("font-semibold transition-all duration-200", item.checked && "text-muted-foreground line-through")}>{item.item_name}</p>{item.created_by === "meal_plan" ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">Imported</span> : null}</div>
                       <p className="text-xs text-muted-foreground">{item.quantity ?? "Qty not set"} {item.unit ?? ""}{item.notes ? ` · ${item.notes}` : ""}</p>
                     </div>
                     <Button type="button" variant="ghost" size="icon" className="shrink-0 text-destructive" onClick={() => confirmDelete([item], `Delete ${item.item_name}?`, `${item.item_name} deleted.`)} aria-label={`Delete ${item.item_name}`}><Trash2 className="h-4 w-4" /></Button>
