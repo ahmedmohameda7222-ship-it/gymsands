@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { authenticateMcpRequest, type McpContext } from "@/lib/mcp/auth";
 import { hasAnyScope, hasScope, MCP_SCOPES } from "@/lib/mcp/scopes";
-import { executeMcpTool, type McpToolResult } from "@/lib/mcp/tool-executor-safe";
-import { MCP_CATALOG_VERSION, MCP_IDEMPOTENT_WRITE_TOOL_NAMES, mcpTools, type McpToolDefinition } from "@/lib/mcp/tools";
+import {
+  executeMcpTool,
+  MCP_CATALOG_VERSION,
+  MCP_IDEMPOTENT_WRITE_TOOL_NAMES,
+  mcpTools,
+  type McpToolDefinition,
+  type McpToolResult
+} from "@/lib/mcp/public-surface";
 import { serverEnv } from "@/lib/integrations/env";
 import { redactMcpAuditInput } from "@/lib/mcp/audit";
 import { sanitizeMcpToolResult, validateMcpToolInput, validateMcpToolOutput } from "@/lib/mcp/safety";
@@ -79,16 +85,8 @@ function mcpHasAllScopes(ctx: McpContext, scopes: string[]) {
   return scopes.every((scope) => hasScope(ctx.scopes, scope));
 }
 
-const profileReadTools = new Set([
-  "get_plaivra_status",
-  "get_user_profile"
-]);
-
-const profileWriteTools = new Set([
-  "update_user_profile",
-  "update_training_goal",
-  "update_body_goal"
-]);
+const profileReadTools = new Set(["get_plaivra_status", "get_user_profile"]);
+const profileWriteTools = new Set(["update_user_profile", "update_training_goal", "update_body_goal"]);
 
 const nutritionReadTools = new Set([
   "search_foods",
@@ -115,24 +113,8 @@ const nutritionWriteTools = new Set([
   "upsert_nutrition_target_profile"
 ]);
 
-const mealPlanReadTools = new Set([
-  "get_meal_plan",
-  "get_meal_plan_for_date",
-  "get_meal_plan_for_week",
-  "generate_shopping_list",
-  "get_grocery_items"
-]);
-
-const mealPlanWriteTools = new Set([
-  "create_meal_plan_item",
-  "create_day_meal_plan",
-  "create_week_meal_plan",
-  "update_meal_plan_item",
-  "delete_meal_plan_item",
-  "mark_meal_plan_item_done",
-  "upsert_grocery_item"
-]);
-
+const mealPlanReadTools = new Set(["get_meal_plan", "get_meal_plan_for_date", "get_meal_plan_for_week", "generate_shopping_list", "get_grocery_items"]);
+const mealPlanWriteTools = new Set(["create_meal_plan_item", "create_day_meal_plan", "create_week_meal_plan", "update_meal_plan_item", "delete_meal_plan_item", "mark_meal_plan_item_done", "upsert_grocery_item"]);
 const hydrationReadTools = new Set(["get_water_summary"]);
 const hydrationWriteTools = new Set(["add_water_log", "delete_water_log"]);
 
@@ -172,8 +154,7 @@ const wellnessReadTools = new Set([
   "get_daily_fit_tasks",
   "get_habits",
   "get_sleep_recovery_summary",
-  "get_today_supplements",
-  "get_daily_checkins"
+  "get_today_supplements"
 ]);
 
 const wellnessWriteTools = new Set([
@@ -184,8 +165,7 @@ const wellnessWriteTools = new Set([
   "mark_habit_done",
   "add_sleep_recovery_log",
   "add_supplement_log",
-  "mark_supplement_taken",
-  "upsert_daily_checkin"
+  "mark_supplement_taken"
 ]);
 
 const settingsWriteTools = new Set(["update_calorie_target", "update_water_target"]);
@@ -196,18 +176,10 @@ const settingsWriteTools = new Set(["update_calorie_target", "update_water_targe
  */
 export function requiredScopesForTool(tool: McpToolDefinition): string[] {
   const name = tool.name;
-
-  if (name === "get_training_planning_context" || name === "get_workout_adjustment_context") {
-    return [MCP_SCOPES.profileRead, MCP_SCOPES.workoutsRead];
-  }
-  if (name === "get_nutrition_planning_context") {
-    return [MCP_SCOPES.profileRead, MCP_SCOPES.nutritionRead];
-  }
-  if (name === "get_daily_execution_context") {
-    return [MCP_SCOPES.workoutsRead, MCP_SCOPES.nutritionRead, MCP_SCOPES.mealPlansRead, MCP_SCOPES.hydrationRead, MCP_SCOPES.wellnessRead];
-  }
+  if (name === "get_training_planning_context" || name === "get_workout_adjustment_context") return [MCP_SCOPES.profileRead, MCP_SCOPES.workoutsRead];
+  if (name === "get_nutrition_planning_context") return [MCP_SCOPES.profileRead, MCP_SCOPES.nutritionRead];
+  if (name === "get_daily_execution_context") return [MCP_SCOPES.workoutsRead, MCP_SCOPES.nutritionRead, MCP_SCOPES.mealPlansRead, MCP_SCOPES.hydrationRead, MCP_SCOPES.wellnessRead];
   if (name === "get_progress_context") return [MCP_SCOPES.progressRead];
-
   if (profileReadTools.has(name)) return [MCP_SCOPES.profileRead];
   if (profileWriteTools.has(name)) return [MCP_SCOPES.profileWrite];
   if (nutritionReadTools.has(name)) return [MCP_SCOPES.nutritionRead];
@@ -223,13 +195,8 @@ export function requiredScopesForTool(tool: McpToolDefinition): string[] {
   if (wellnessReadTools.has(name)) return [MCP_SCOPES.wellnessRead];
   if (wellnessWriteTools.has(name)) return [MCP_SCOPES.wellnessWrite];
   if (settingsWriteTools.has(name)) return [MCP_SCOPES.settingsWrite];
-
   if (name === "get_today_summary") return [MCP_SCOPES.fullAccess, MCP_SCOPES.all];
-
-  if (name === "get_progress_summary") {
-    return [MCP_SCOPES.progressRead, MCP_SCOPES.workoutsRead, MCP_SCOPES.nutritionRead];
-  }
-
+  if (name === "get_progress_summary") return [MCP_SCOPES.progressRead, MCP_SCOPES.workoutsRead, MCP_SCOPES.nutritionRead];
   return [];
 }
 
@@ -240,11 +207,7 @@ export function oauthSecurityScopesForTool(tool: McpToolDefinition): string[] {
 export function canUseTool(ctx: McpContext, tool: McpToolDefinition) {
   const requiredScopes = requiredScopesForTool(tool);
   if (!requiredScopes.length) return false;
-
-  if (["get_progress_summary", "get_training_planning_context", "get_nutrition_planning_context", "get_workout_adjustment_context"].includes(tool.name)) {
-    return mcpHasAllScopes(ctx, requiredScopes);
-  }
-
+  if (["get_progress_summary", "get_training_planning_context", "get_nutrition_planning_context", "get_workout_adjustment_context"].includes(tool.name)) return mcpHasAllScopes(ctx, requiredScopes);
   return mcpHasAnyScope(ctx, requiredScopes);
 }
 
@@ -252,26 +215,15 @@ function escapeAuthParameter(value: string) {
   return value.replace(/[\"]/g, "").replace(/[\r\n]/g, " ").slice(0, 300);
 }
 
-export function mcpAuthenticationErrorResult(
-  request: Request,
-  error: "invalid_token" | "insufficient_scope",
-  description: string,
-  requiredScopes: string[] = []
-): McpToolResult {
+export function mcpAuthenticationErrorResult(request: Request, error: "invalid_token" | "insufficient_scope", description: string, requiredScopes: string[] = []): McpToolResult {
   const resourceMetadata = `${new URL(request.url).origin}/.well-known/oauth-protected-resource`;
   const safeDescription = escapeAuthParameter(description);
   const publicScopes = requiredScopes.filter((scope) => scope !== MCP_SCOPES.all);
   const scopeParameter = publicScopes.length ? `, scope="${publicScopes.join(" ")}"` : "";
   const challenge = `Bearer resource_metadata="${resourceMetadata}", error="${error}", error_description="${safeDescription}"${scopeParameter}`;
-
   return {
     isError: true,
-    structuredContent: {
-      ok: false,
-      code: error,
-      message: safeDescription,
-      ...(publicScopes.length ? { required_scopes: publicScopes } : {})
-    },
+    structuredContent: { ok: false, code: error, message: safeDescription, ...(publicScopes.length ? { required_scopes: publicScopes } : {}) },
     content: [{ type: "text", text: safeDescription }],
     _meta: { "mcp/www_authenticate": [challenge] }
   };
@@ -281,10 +233,7 @@ export async function auditToolCall(ctx: McpContext, toolName: string, input: un
   const confirmationRequired = Boolean(result.structuredContent?.requires_confirmation);
   const resultCode = typeof result.structuredContent?.code === "string" && /^[a-z0-9_]{1,64}$/.test(result.structuredContent.code)
     ? result.structuredContent.code
-    : confirmationRequired
-      ? "confirmation_required"
-      : null;
-
+    : confirmationRequired ? "confirmation_required" : null;
   await ctx.supabase.from("mcp_audit_logs").insert({
     user_id: ctx.userId,
     connection_id: ctx.connectionId,
@@ -327,11 +276,7 @@ export function handleMcpOptions(request: Request) {
 export async function handleMcpGet(request: Request) {
   const auth = await authenticateMcpRequest(request);
   if (auth instanceof NextResponse) return auth;
-
-  return NextResponse.json(
-    { name: "Plaivra MCP", version: MCP_CATALOG_VERSION, transport: "http-json-rpc", instructions: MCP_SERVER_INSTRUCTIONS, ...toolListPayload(auth) },
-    { headers: corsHeaders(request) }
-  );
+  return NextResponse.json({ name: "Plaivra MCP", version: MCP_CATALOG_VERSION, transport: "http-json-rpc", instructions: MCP_SERVER_INSTRUCTIONS, ...toolListPayload(auth) }, { headers: corsHeaders(request) });
 }
 
 export async function handleMcpPost(request: Request) {
@@ -343,17 +288,10 @@ export async function handleMcpPost(request: Request) {
   }
 
   if (body.method === "initialize") {
-    return rpcResult(
-      body.id,
-      { protocolVersion: "2024-11-05", serverInfo: { name: "Plaivra", version: MCP_CATALOG_VERSION }, capabilities: { tools: {} }, instructions: MCP_SERVER_INSTRUCTIONS },
-      request
-    );
+    return rpcResult(body.id, { protocolVersion: "2024-11-05", serverInfo: { name: "Plaivra", version: MCP_CATALOG_VERSION }, capabilities: { tools: {} }, instructions: MCP_SERVER_INSTRUCTIONS }, request);
   }
 
-  const requestedPublicTool = body.method === "tools/call"
-    ? mcpTools.find((tool) => tool.name === body.params?.name)
-    : undefined;
-
+  const requestedPublicTool = body.method === "tools/call" ? mcpTools.find((tool) => tool.name === body.params?.name) : undefined;
   const auth = await authenticateMcpRequest(request);
   if (auth instanceof NextResponse) {
     if (body.method === "tools/call" && (auth.status === 401 || auth.status === 403)) {
@@ -368,18 +306,15 @@ export async function handleMcpPost(request: Request) {
   }
 
   if (body.method === "tools/list") return rpcResult(body.id, toolListPayload(auth), request);
-
   if (body.method === "tools/call") {
     const toolName = body.params?.name;
     if (!toolName) return rpcError(body.id, -32602, "tools/call requires params.name.", request);
-
     const tool = mcpTools.find((item) => item.name === toolName);
     if (!tool) return rpcError(body.id, -32601, `Unknown MCP tool: ${toolName}.`, request);
 
     if (!canUseTool(auth, tool)) {
       const requiredScopes = oauthSecurityScopesForTool(tool);
-      const required = requiredScopes.join(", ");
-      const message = `This Plaivra connection is missing the required scope for ${tool.name}: ${required}. Reconnect Plaivra after updating AI Permissions.`;
+      const message = `This Plaivra connection is missing the required scope for ${tool.name}: ${requiredScopes.join(", ")}. Reconnect Plaivra after updating AI Permissions.`;
       await auditDeniedToolCall(auth, tool, body.params?.arguments ?? {}, message);
       return rpcResult(body.id, mcpAuthenticationErrorResult(request, "insufficient_scope", message, requiredScopes), request);
     }
@@ -414,15 +349,12 @@ export async function handleMcpPost(request: Request) {
         console.error(`Plaivra MCP tool execution failed for ${toolName}:`, error instanceof Error ? error.message : "Unknown error");
         return {
           isError: true,
-          structuredContent: {
-            ok: false,
-            code: "tool_execution_failed",
-            message: "Plaivra could not complete this tool. No change should be assumed; retry or review the affected record in Plaivra."
-          },
+          structuredContent: { ok: false, code: "tool_execution_failed", message: "Plaivra could not complete this tool. No change should be assumed; retry or review the affected record in Plaivra." },
           content: [{ type: "text" as const, text: "Plaivra could not complete this tool. No change should be assumed; retry or review the affected record in Plaivra." }]
         };
       }
     };
+
     let result = MCP_IDEMPOTENT_WRITE_TOOL_NAMES.has(toolName)
       ? await executeIdempotentMcpMutation({ ctx: auth, toolName, input: validation.value, execute })
       : await execute();
@@ -431,17 +363,12 @@ export async function handleMcpPost(request: Request) {
       console.error(`Plaivra MCP output contract failed for ${toolName}:`, outputValidation.errors.join(" "));
       result = {
         isError: true,
-        structuredContent: {
-          ok: false,
-          code: "output_contract_violation",
-          message: "Plaivra could not safely return this tool result. No changes should be assumed; retry or review the affected record in Plaivra."
-        },
+        structuredContent: { ok: false, code: "output_contract_violation", message: "Plaivra could not safely return this tool result. No changes should be assumed; retry or review the affected record in Plaivra." },
         content: [{ type: "text", text: "Plaivra could not safely return this tool result. No changes should be assumed; retry or review the affected record in Plaivra." }]
       };
     }
     await auditToolCall(auth, toolName, body.params?.arguments ?? {}, result);
     return rpcResult(body.id, result, request);
   }
-
   return rpcError(body.id, -32601, `Unsupported MCP method: ${body.method ?? "missing"}.`, request);
 }
