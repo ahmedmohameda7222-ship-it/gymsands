@@ -45,7 +45,7 @@ describe("Today dashboard implementation contracts", () => {
     const dashboard = source("components/dashboard/today-dashboard.tsx");
     const progress = source("components/dashboard/today-progress.tsx");
     expect(progress).toContain('status === "unavailable"');
-    expect(dashboard).toContain('nutritionData.logsState === "failed"');
+    expect(dashboard).toContain('visibleNutritionData.logsState === "failed"');
     expect(dashboard).toContain("todayWorkoutActionHref");
     expect(source("lib/dashboard/today-model.ts")).toContain("/workout-history?session=");
   });
