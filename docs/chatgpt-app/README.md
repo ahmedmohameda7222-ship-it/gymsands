@@ -1,6 +1,6 @@
 # Plaivra ChatGPT App
 
-**Version:** 2026.2
+**Version:** 2026.2  
 **Status:** ChatGPT app source of truth
 
 ## 1. Purpose

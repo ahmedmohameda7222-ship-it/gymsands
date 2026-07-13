@@ -1,7 +1,7 @@
 # Plaivra AI-First Context and Tracking Model
 
-**Version:** 2026.2
-**Status:** Required product source of truth
+**Version:** 2026.2  
+**Status:** Required product source of truth  
 **Authority:** Subordinate to `PLAIVRA_PRODUCT_CONSTITUTION.md`
 
 ## 1. Core decision

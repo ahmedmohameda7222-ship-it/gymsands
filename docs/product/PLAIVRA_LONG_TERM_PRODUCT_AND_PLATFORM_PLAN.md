@@ -1,7 +1,7 @@
 # Plaivra Long-Term Product and Platform Plan
 
-**Version:** 2026.2
-**Status:** Strategic source of truth
+**Version:** 2026.2  
+**Status:** Strategic source of truth  
 **Time horizon:** Multi-year
 
 ## 1. Mission

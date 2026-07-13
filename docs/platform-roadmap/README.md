@@ -1,7 +1,7 @@
 # Plaivra Platform Roadmap
 
-**Version:** 2026.2
-**Status:** Strategic source of truth
+**Version:** 2026.2  
+**Status:** Strategic source of truth  
 **Authority:** Subordinate to the Product Constitution and Long-Term Plan
 
 ## 1. Platform sequence

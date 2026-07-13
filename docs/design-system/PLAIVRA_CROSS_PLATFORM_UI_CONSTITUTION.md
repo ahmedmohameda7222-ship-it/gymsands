@@ -1,7 +1,7 @@
 # Plaivra Cross-Platform UI Constitution
 
-**Version:** 2026.2
-**Status:** Highest UI authority
+**Version:** 2026.2  
+**Status:** Highest UI authority  
 **Platforms:** Responsive web, iOS, Android, and selective ChatGPT UI
 
 ## 1. Objective

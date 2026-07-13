@@ -1,7 +1,7 @@
 # Plaivra Product Constitution
 
-**Version:** 2026.2
-**Status:** Highest product authority
+**Version:** 2026.2  
+**Status:** Highest product authority  
 **Applies to:** Product, UX, data, ChatGPT integration, web, iOS, Android, documentation, and agent work
 
 ## 1. Product definition
