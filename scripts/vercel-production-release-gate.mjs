@@ -5,9 +5,12 @@
  * - exit 0: ignore/skip this deployment
  * - exit 1: continue building
  *
- * Preview and development builds remain available. A production build proceeds
- * only when the owner-controlled PLAIVRA_PRODUCTION_RELEASE_SHA exactly matches
- * Vercel's commit SHA. This makes merging independent from production release.
+ * vercel.json disables automatic Git-connected deployments for every branch
+ * except main. This script separately permits an explicitly invoked preview or
+ * development build, while production proceeds only when the owner-controlled
+ * PLAIVRA_PRODUCTION_RELEASE_SHA exactly matches Vercel's commit SHA. Merging,
+ * explicit preview creation, production promotion, and rollback remain separate
+ * operations.
  */
 
 const environment = process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV || "";
@@ -31,7 +34,7 @@ if (!runningOnVercel) {
 }
 
 if (isPreview && !isProduction) {
-  console.log("Preview/development deployment allowed.");
+  console.log("Explicit preview/development deployment allowed. Automatic branch deployments remain disabled by vercel.json.");
   process.exit(1);
 }
 
