@@ -1,6 +1,9 @@
 "use client";
 
 import { defaultExerciseInstructions } from "@/data/workouts";
+import { isIsoDate, todayIso } from "@/lib/date-utils";
+import { getMockTrainPlans } from "@/lib/fixtures/train-mock";
+import { env } from "@/lib/env";
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
 import type { UserWorkoutPlan, UserWorkoutPlanDay, UserWorkoutPlanExercise, Weekday, Workout, WorkoutPlanDaySession } from "@/types";
@@ -163,6 +166,7 @@ async function queryPlans(userId: string, select: string) {
 }
 
 export async function getAllUserWorkoutPlans(userId: string) {
+  if (env.useMockAuth && userId === "mock-user") return getMockTrainPlans();
   if (!supabase || !isUuid(userId)) return [];
 
   for (const select of [fullPlanSelect, compatPlanSelect, legacyPlanSelect]) {
@@ -187,12 +191,14 @@ export async function getWorkoutPlanById(userId: string, planId: string) {
   return plans.find((plan) => plan.id === planId) ?? null;
 }
 
-export async function deleteWorkoutPlan(userId: string, planId: string) {
+export async function deleteWorkoutPlan(userId: string, planId: string, scheduleStartDate = todayIso()) {
   if (!supabase || !isUuid(userId) || !isUuid(planId)) return true;
+  if (!isIsoDate(scheduleStartDate)) throw new Error("Schedule start date must use YYYY-MM-DD.");
   const { error } = await supabase.rpc("delete_workout_plan_atomic", {
     p_user_id: userId,
     p_plan_id: planId,
-    p_confirmed: true
+    p_confirmed: true,
+    p_schedule_start_date: scheduleStartDate
   });
   if (error) throw error;
   return true;
@@ -295,25 +301,30 @@ export async function saveWorkoutPlan(
   userId: string,
   planId: string,
   plan: UserWorkoutPlan,
-  expectedUpdatedAt: string | null = plan.updated_at
+  expectedUpdatedAt: string | null = plan.updated_at,
+  scheduleStartDate = todayIso()
 ) {
   if (!supabase || !isUuid(userId) || !isUuid(planId)) throw new Error("Workout plan is invalid.");
+  if (!isIsoDate(scheduleStartDate)) throw new Error("Schedule start date must use YYYY-MM-DD.");
   const { data, error } = await supabase.rpc("save_workout_plan_atomic", {
     p_user_id: userId,
     p_plan_id: planId,
     p_plan: loadedPlanPayload(plan),
+    p_schedule_start_date: scheduleStartDate,
     p_expected_updated_at: expectedUpdatedAt
   });
   if (error) throw error;
   return data;
 }
 
-export async function archiveWorkoutPlan(userId: string, planId: string) {
+export async function archiveWorkoutPlan(userId: string, planId: string, scheduleStartDate = todayIso()) {
   if (!supabase || !isUuid(userId) || !isUuid(planId)) return true;
+  if (!isIsoDate(scheduleStartDate)) throw new Error("Schedule start date must use YYYY-MM-DD.");
   const { error } = await supabase.rpc("archive_workout_plan_atomic", {
     p_user_id: userId,
     p_plan_id: planId,
-    p_reason: "Archived by user"
+    p_reason: "Archived by user",
+    p_schedule_start_date: scheduleStartDate
   });
   if (error) throw error;
   return true;
@@ -451,9 +462,11 @@ function exerciseInsertRow(dayId: string, workout: Workout, index: number) {
 
 export async function updateLoadedWorkoutPlanDay(
   dayId: string,
-  day: { dayName: string; weekday: Weekday | null; notes?: string; exercises: Workout[] }
+  day: { dayName: string; weekday: Weekday | null; notes?: string; exercises: Workout[] },
+  scheduleStartDate = todayIso()
 ) {
   if (!supabase || !isUuid(dayId)) return true;
+  if (!isIsoDate(scheduleStartDate)) throw new Error("Schedule start date must use YYYY-MM-DD.");
 
   if (!day.dayName.trim()) throw new Error("Workout day name is required.");
   if (!day.exercises.length) throw new Error("Add at least one exercise before saving this workout day.");
@@ -474,7 +487,9 @@ export async function updateLoadedWorkoutPlanDay(
       notes: day.notes?.trim() || null,
       exercises
     },
-    p_expected_updated_at: null
+    p_schedule_start_date: scheduleStartDate,
+    p_expected_updated_at: null,
+    p_rebuild_schedule: true
   });
   if (error) throw error;
   return true;

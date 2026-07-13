@@ -229,6 +229,7 @@ async function saveChatGptPlan(ctx: McpContext, input: JsonObject) {
   if (validationError) return fail("invalid_workout_plan", validationError);
 
   const activate = input.activate !== false;
+  const scheduleStartDate = cleanDate(input.start_date);
   let savedExercisesCount = 0;
   const rpcDays = days.map((day, dayIndex) => {
     const exercises = ([
@@ -265,10 +266,10 @@ async function saveChatGptPlan(ctx: McpContext, input: JsonObject) {
       duration_weeks: getOptionalNumber(input, "duration_weeks") ?? getOptionalNumber(input, "desired_duration_weeks") ?? 1,
       days_per_week: getOptionalNumber(input, "days_per_week") ?? days.length,
       session_duration_minutes: getOptionalNumber(input, "session_duration_minutes") ?? getOptionalNumber(input, "workout_duration_minutes") ?? null,
-      start_date: cleanDate(input.start_date ?? "today"),
       days: rpcDays
     },
-    p_activate: activate
+    p_activate: activate,
+    p_schedule_start_date: scheduleStartDate
   });
   if (error || !plan) throw new Error(error?.message ?? "Could not save workout plan.");
   const savedPlan = plan as Record<string, unknown>;
@@ -498,6 +499,7 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         const { data, error } = await ctx.supabase.rpc("activate_workout_plan_atomic", {
           p_user_id: ctx.userId,
           p_plan_id: planId,
+          p_schedule_start_date: cleanDate(input.schedule_start_date),
           p_expected_updated_at: getString(input, "expected_updated_at")
         });
         if (error) {
@@ -511,11 +513,11 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         const confirmation = requireConfirmation(input);
         if (confirmation) return ok(confirmation);
         const planId = getString(input, "plan_id");
-        await requirePlan(ctx, planId);
         const { error } = await ctx.supabase.rpc("delete_workout_plan_atomic", {
           p_user_id: ctx.userId,
           p_plan_id: planId,
-          p_confirmed: true
+          p_confirmed: true,
+          p_schedule_start_date: cleanDate(input.schedule_start_date)
         });
         if (error) throw new Error(error.message);
         return ok({ ok: true, deleted_plan_id: planId });

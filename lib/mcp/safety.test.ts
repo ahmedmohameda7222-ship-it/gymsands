@@ -117,9 +117,10 @@ describe("MCP runtime input validation", () => {
 
     for (const item of mcpTools.filter((candidate) => candidate.annotations.destructiveHint)) {
       const idField = ids[item.name];
+      const requiredContext = item.name === "delete_workout_plan" ? { schedule_start_date: "2026-07-13" } : {};
       expect(idField, item.name).toBeDefined();
-      expect(validateMcpToolInput(item, { [idField]: validId }).success).toBe(false);
-      expect(validateMcpToolInput(item, { [idField]: validId, confirm: true }).success).toBe(true);
+      expect(validateMcpToolInput(item, { [idField]: validId, ...requiredContext }).success).toBe(false);
+      expect(validateMcpToolInput(item, { [idField]: validId, ...requiredContext, confirm: true }).success).toBe(true);
     }
   });
 

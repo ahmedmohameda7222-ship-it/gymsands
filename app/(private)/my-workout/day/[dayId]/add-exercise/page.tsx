@@ -1,63 +1,38 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { PageHeading } from "@/components/layout/page-heading";
-import { WorkoutDayAddExercise } from "@/components/workouts/workout-day-add-exercise";
-import { useToast } from "@/components/ui/toaster";
-import { CardSkeleton, ErrorState } from "@/components/ui/state-views";
-import { getUserWorkoutPlanDay } from "@/services/database/workout-plans";
-import type { WorkoutPlanDaySession } from "@/types";
+import { ErrorState } from "@/components/ui/state-views";
 import { userSafeError } from "@/lib/error-formatting";
+import { useTrainTranslation } from "@/lib/i18n/train";
+import { getUserWorkoutPlanDay } from "@/services/database/workout-plans";
 
-export default function AddExerciseToWorkoutDayPage() {
+export default function AddExerciseToWorkoutDayRedirectPage() {
   const params = useParams<{ dayId: string }>();
-  const { toast } = useToast();
-  const [day, setDay] = useState<WorkoutPlanDaySession | null>(null);
-  const [loadError, setLoadError] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-
-  function loadDay() {
-    setIsLoading(true);
-    setLoadError("");
-    getUserWorkoutPlanDay(params.dayId)
-      .then((nextDay) => {
-        setDay(nextDay);
-        setLoadError(nextDay ? "" : "Workout day was not found. Save your plan again and try opening it from Workout Plans.");
-      })
-      .catch((error) => {
-        const message = userSafeError(error, "Could not load this workout day. Please refresh and try again.");
-        setLoadError(message);
-        toast({ title: "Could not load workout day", description: message });
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-  }
+  const router = useRouter();
+  const { dir, tr } = useTrainTranslation();
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    loadDay();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.dayId, toast]);
+    let current = true;
+    getUserWorkoutPlanDay(params.dayId)
+      .then((day) => {
+        if (!current) return;
+        if (!day?.plan_id) {
+          setError(tr("workoutDayNotFound"));
+          return;
+        }
+        router.replace(`/my-workout/plans/${day.plan_id}/edit?day=${encodeURIComponent(day.id)}&picker=exercise`);
+      })
+      .catch((loadError) => {
+        if (current) setError(userSafeError(loadError, tr("pickerOpenFailed")));
+      });
+    return () => { current = false; };
+  }, [params.dayId, router, tr]);
 
-  if (isLoading) return <CardSkeleton rows={5} />;
-
-  if (!day) {
-    return (
-      <ErrorState
-        title="Exercise browser could not load"
-        description={loadError || "This workout day was not found. Save your plan again and try opening it from Workout Plans."}
-        onRetry={loadDay}
-        fallbackLabel="Back to workout plans"
-        fallbackHref="/my-workout/plans"
-      />
-    );
+  if (error) {
+    return <div dir={dir}><ErrorState title={tr("pickerUnavailable")} description={error} fallbackHref="/my-workout/plans" fallbackLabel={tr("backToTrain")} /></div>;
   }
 
-  return (
-    <>
-      <PageHeading title={`Add Exercises to ${day.day_name}`} description="Browse, search, select several exercises, and add them to this workout day together." />
-      <WorkoutDayAddExercise day={day} />
-    </>
-  );
+  return <div className="min-h-48 animate-pulse rounded-2xl bg-muted" dir={dir} aria-busy="true" aria-label={tr("openingPicker")} />;
 }

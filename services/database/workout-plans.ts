@@ -1,6 +1,7 @@
 "use client";
 
 import { defaultExerciseInstructions } from "@/data/workouts";
+import { isIsoDate, todayIso } from "@/lib/date-utils";
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
 import type { UserWorkoutPlan, Weekday, Workout, WorkoutPlanDaySession } from "@/types";
@@ -312,23 +313,27 @@ export async function getUserWorkoutPlan(userId: string, planId: string) {
   return data ? normalizeWorkoutPlan(data as unknown as RawWorkoutPlan) : null;
 }
 
-export async function setDefaultUserWorkoutPlan(userId: string, planId: string) {
+export async function setDefaultUserWorkoutPlan(userId: string, planId: string, scheduleStartDate = todayIso()) {
   if (!canUseUserData(userId) || !isUuid(planId)) throw new Error("User session invalid");
+  if (!isIsoDate(scheduleStartDate)) throw new Error("Schedule start date must use YYYY-MM-DD.");
   const { error } = await supabase!.rpc("activate_workout_plan_atomic", {
     p_user_id: userId,
     p_plan_id: planId,
+    p_schedule_start_date: scheduleStartDate,
     p_expected_updated_at: null
   });
   if (error) throw error;
   return true;
 }
 
-export async function deleteUserWorkoutPlan(userId: string, planId: string) {
+export async function deleteUserWorkoutPlan(userId: string, planId: string, scheduleStartDate = todayIso()) {
   if (!canUseUserData(userId) || !isUuid(planId)) throw new Error("User session invalid");
+  if (!isIsoDate(scheduleStartDate)) throw new Error("Schedule start date must use YYYY-MM-DD.");
   const { error } = await supabase!.rpc("delete_workout_plan_atomic", {
     p_user_id: userId,
     p_plan_id: planId,
-    p_confirmed: true
+    p_confirmed: true,
+    p_schedule_start_date: scheduleStartDate
   });
   if (error) throw error;
   return true;
@@ -393,7 +398,7 @@ export async function getUserWorkoutPlanDay(dayId: string) {
   };
 }
 
-export async function updateUserWorkoutPlanDay(dayId: string, day: WorkoutPlanDayInput) {
+export async function updateUserWorkoutPlanDay(dayId: string, day: WorkoutPlanDayInput, scheduleStartDate = todayIso()) {
   const cleanExercises = day.exercises.filter(Boolean);
   const cleanName = day.dayName.trim();
 
@@ -401,12 +406,15 @@ export async function updateUserWorkoutPlanDay(dayId: string, day: WorkoutPlanDa
   if (!cleanExercises.length) throw new Error("Add at least one exercise before saving this workout day.");
 
   if (!supabase || !isUuid(dayId)) throw new Error("Database not connected");
+  if (!isIsoDate(scheduleStartDate)) throw new Error("Schedule start date must use YYYY-MM-DD.");
   const userId = await authenticatedUserId();
   const { error } = await supabase.rpc("save_workout_plan_day_atomic", {
     p_user_id: userId,
     p_day_id: dayId,
     p_day: workoutDayPayload({ ...day, dayName: cleanName, exercises: cleanExercises }),
-    p_expected_updated_at: null
+    p_schedule_start_date: scheduleStartDate,
+    p_expected_updated_at: null,
+    p_rebuild_schedule: true
   });
   if (error) throw error;
   return true;
@@ -492,15 +500,19 @@ export async function createUserWorkoutPlan({
   userId,
   planName,
   goal,
+  description,
   programDurationWeeks,
   sessionDurationMinutes,
+  startDate,
   days
 }: {
   userId: string;
   planName: string;
   goal?: string | null;
+  description?: string | null;
   programDurationWeeks?: number | null;
   sessionDurationMinutes?: number | null;
+  startDate?: string | null;
   days: WorkoutPlanDayInput[];
 }) {
   const cleanDays = days
@@ -515,6 +527,8 @@ export async function createUserWorkoutPlan({
   if (!cleanDays.length) throw new Error("Add at least one weekday with one workout.");
 
   if (!canUseUserData(userId)) throw new Error("User session invalid");
+  const scheduleStartDate = startDate ?? todayIso();
+  if (!isIsoDate(scheduleStartDate)) throw new Error("Schedule start date must use YYYY-MM-DD.");
 
   const { data: plan, error: planError } = await supabase!.rpc("create_workout_plan_atomic", {
     p_user_id: userId,
@@ -522,12 +536,14 @@ export async function createUserWorkoutPlan({
       name: planName.trim(),
       source: "manual",
       goal: goal?.trim() || null,
+      description: description?.trim() || null,
       program_duration_weeks: programDurationWeeks ?? null,
       session_duration_minutes: sessionDurationMinutes ?? null,
       days_per_week: cleanDays.length,
       days: cleanDays.map(workoutDayPayload)
     },
-    p_activate: true
+    p_activate: true,
+    p_schedule_start_date: scheduleStartDate
   });
   if (planError) throw planError;
   if (!plan) throw new Error("Workout plan could not be created.");

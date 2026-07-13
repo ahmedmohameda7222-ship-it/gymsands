@@ -114,13 +114,14 @@ describe("atomic workout plan browser persistence", () => {
     state.rpcData.create_workout_plan_atomic = { id: planId };
     const { createUserWorkoutPlan, setDefaultUserWorkoutPlan } = await import("@/services/database/workout-plans");
 
-    await expect(createUserWorkoutPlan({ userId, planName: " Strength plan ", days: [{ dayName: "Push", weekday: "Monday", exercises: [workout] }] }))
+    await expect(createUserWorkoutPlan({ userId, planName: " Strength plan ", startDate: "2026-07-13", days: [{ dayName: "Push", weekday: "Monday", exercises: [workout] }] }))
       .resolves.toEqual({ id: planId });
-    await setDefaultUserWorkoutPlan(userId, planId);
+    await setDefaultUserWorkoutPlan(userId, planId, "2026-07-13");
 
     expect(supabase.rpc).toHaveBeenCalledWith("create_workout_plan_atomic", expect.objectContaining({
       p_user_id: userId,
       p_activate: true,
+      p_schedule_start_date: "2026-07-13",
       p_plan: expect.objectContaining({
         name: "Strength plan",
         days: [expect.objectContaining({ exercises: [expect.objectContaining({ exercise_name: "Bench press" })] })]
@@ -129,13 +130,14 @@ describe("atomic workout plan browser persistence", () => {
     expect(supabase.rpc).toHaveBeenCalledWith("activate_workout_plan_atomic", {
       p_user_id: userId,
       p_plan_id: planId,
+      p_schedule_start_date: "2026-07-13",
       p_expected_updated_at: null
     });
   });
 
   it("saves a day with stable exercise identity through one RPC", async () => {
     const { updateUserWorkoutPlanDay } = await import("@/services/database/workout-plans");
-    await updateUserWorkoutPlanDay(dayId, { dayName: " Push ", weekday: "Monday", notes: "Focus", exercises: [workout] });
+    await updateUserWorkoutPlanDay(dayId, { dayName: " Push ", weekday: "Monday", notes: "Focus", exercises: [workout] }, "2026-07-13");
     expect(supabase.rpc).toHaveBeenCalledOnce();
     expect(supabase.rpc).toHaveBeenCalledWith("save_workout_plan_day_atomic", {
       p_user_id: userId,
@@ -144,26 +146,39 @@ describe("atomic workout plan browser persistence", () => {
         day_name: "Push",
         exercises: [expect.objectContaining({ id: exerciseId, exercise_name: "Bench press" })]
       }),
-      p_expected_updated_at: null
+      p_schedule_start_date: "2026-07-13",
+      p_expected_updated_at: null,
+      p_rebuild_schedule: true
     });
   });
 
   it("routes full save, duplicate, archive, and delete through atomic RPCs", async () => {
     state.rpcData.duplicate_workout_plan_atomic = { id: "77777777-7777-4777-8777-777777777777" };
     const { archiveWorkoutPlan, deleteWorkoutPlan, duplicateWorkoutPlan, saveWorkoutPlan } = await import("@/services/database/workout-plan-loader");
-    await saveWorkoutPlan(userId, planId, plan);
+    await saveWorkoutPlan(userId, planId, plan, plan.updated_at, "2026-07-13");
     await expect(duplicateWorkoutPlan(userId, planId)).resolves.toBe("77777777-7777-4777-8777-777777777777");
-    await archiveWorkoutPlan(userId, planId);
-    await deleteWorkoutPlan(userId, planId);
+    await archiveWorkoutPlan(userId, planId, "2026-07-13");
+    await deleteWorkoutPlan(userId, planId, "2026-07-13");
 
     expect(supabase.rpc).toHaveBeenCalledWith("save_workout_plan_atomic", expect.objectContaining({
       p_plan_id: planId,
       p_expected_updated_at: plan.updated_at,
+      p_schedule_start_date: "2026-07-13",
       p_plan: expect.objectContaining({ days: [expect.objectContaining({ id: dayId })] })
     }));
     expect(supabase.rpc).toHaveBeenCalledWith("duplicate_workout_plan_atomic", { p_user_id: userId, p_plan_id: planId });
-    expect(supabase.rpc).toHaveBeenCalledWith("archive_workout_plan_atomic", expect.objectContaining({ p_user_id: userId, p_plan_id: planId }));
-    expect(supabase.rpc).toHaveBeenCalledWith("delete_workout_plan_atomic", { p_user_id: userId, p_plan_id: planId, p_confirmed: true });
+    expect(supabase.rpc).toHaveBeenCalledWith("archive_workout_plan_atomic", {
+      p_user_id: userId,
+      p_plan_id: planId,
+      p_reason: "Archived by user",
+      p_schedule_start_date: "2026-07-13"
+    });
+    expect(supabase.rpc).toHaveBeenCalledWith("delete_workout_plan_atomic", {
+      p_user_id: userId,
+      p_plan_id: planId,
+      p_confirmed: true,
+      p_schedule_start_date: "2026-07-13"
+    });
   });
 
   it("filters archived days and exercises without replacing active IDs", async () => {

@@ -19,7 +19,10 @@ function isClearlyDisposableDatabase(value: string | undefined) {
 
 const disposableDatabaseUrl = isClearlyDisposableDatabase(databaseUrl) ? databaseUrl : undefined;
 const databaseDescribe = disposableDatabaseUrl ? describe.sequential : describe.skip;
-const migration = resolve(process.cwd(), "supabase/migrations/20260713160000_train_section_atomic_integrity.sql");
+const migrations = [
+  resolve(process.cwd(), "supabase/migrations/20260713160000_train_section_atomic_integrity.sql"),
+  resolve(process.cwd(), "supabase/migrations/20260713170000_finalize_train_schedule_delete_integrity.sql")
+];
 const userA = "11111111-1111-4111-8111-111111111111";
 const userB = "22222222-2222-4222-8222-222222222222";
 
@@ -32,19 +35,21 @@ function sql(query: string) {
   ).trim();
 }
 
-function applyMigration() {
+function applyMigrations() {
   if (!disposableDatabaseUrl) throw new Error("A clearly disposable DATABASE_URL is required.");
-  execFileSync("psql", [disposableDatabaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-f", migration], {
-    encoding: "utf8",
-    stdio: "pipe"
-  });
+  for (const migration of migrations) {
+    execFileSync("psql", [disposableDatabaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-f", migration], {
+      encoding: "utf8",
+      stdio: "pipe"
+    });
+  }
 }
 
 function expectMigrationFailure(evidence: RegExp) {
   if (!disposableDatabaseUrl) throw new Error("A clearly disposable DATABASE_URL is required.");
   const result = spawnSync(
     "psql",
-    [disposableDatabaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-f", migration],
+    [disposableDatabaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-f", migrations[0]],
     { encoding: "utf8" }
   );
   expect(result.status).not.toBe(0);
@@ -218,7 +223,7 @@ databaseDescribe("Train atomic RPC migration", () => {
     expectMigrationFailure(/multiple active plans/i);
     expect(sql(`select count(*) from public.user_workout_plans where user_id='${userA}'`)).toBe("2");
     resetDomainRows();
-    applyMigration();
+    applyMigrations();
   });
 
   it("creates the four reviewed partial unique indexes and grants only runtime roles", () => {
@@ -242,11 +247,11 @@ databaseDescribe("Train atomic RPC migration", () => {
       return new; end $$;
       create trigger zz_test_fail_create before insert on public.user_workout_plan_exercises for each row execute function public.test_fail_train_write();`);
     const payload = `{"name":"Atomic new","source":"manual","days":[{"day_name":"Day A","weekday":"Tuesday","exercises":[{"exercise_name":"Good","sets":3,"reps":"8","rest_seconds":60},{"exercise_name":"FAIL_CREATE","sets":3,"reps":"8","rest_seconds":60}]}]}`;
-    expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.create_workout_plan_atomic('${userA}',$json$${payload}$json$::jsonb,true); commit;`, /controlled create failure/i);
+    expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.create_workout_plan_atomic('${userA}',$json$${payload}$json$::jsonb,true,'2026-07-13'::date); commit;`, /controlled create failure/i);
     expect(sql(`select count(*) from public.user_workout_plans where name='Atomic new'`)).toBe("0");
     expect(sql(`select is_active from public.user_workout_plans where name='Baseline'`)).toBe("t");
     sql("drop trigger zz_test_fail_create on public.user_workout_plan_exercises");
-    authQuery(userA, `select public.create_workout_plan_atomic('${userA}',$json$${payload.replace("FAIL_CREATE", "Second")}$json$::jsonb,true)`);
+    authQuery(userA, `select public.create_workout_plan_atomic('${userA}',$json$${payload.replace("FAIL_CREATE", "Second")}$json$::jsonb,true,'2026-07-13'::date)`);
     expect(sql(`select p.is_active,count(distinct d.id),count(e.id) from public.user_workout_plans p join public.user_workout_plan_days d on d.plan_id=p.id join public.user_workout_plan_exercises e on e.plan_day_id=d.id where p.name='Atomic new' group by p.is_active`)).toBe("t\t1\t2");
 
     const target = sql("select id from public.user_workout_plans where name='Baseline'");
@@ -254,11 +259,61 @@ databaseDescribe("Train atomic RPC migration", () => {
     sql(`create or replace function public.test_fail_activation() returns trigger language plpgsql as $$ begin
       if new.id='${target}' and new.is_active then raise exception 'controlled activation failure'; end if; return new; end $$;
       create trigger zz_test_fail_activation before update on public.user_workout_plans for each row execute function public.test_fail_activation();`);
-    expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.activate_workout_plan_atomic('${userA}','${target}',null); commit;`, /controlled activation failure/i);
+    expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.activate_workout_plan_atomic('${userA}','${target}','2026-07-13'::date,null); commit;`, /controlled activation failure/i);
     expect(sql(`select id from public.user_workout_plans where is_active`)).toBe(current);
     sql("drop trigger zz_test_fail_activation on public.user_workout_plans");
-    authQuery(userA, `select public.activate_workout_plan_atomic('${userA}','${target}',null)`);
+    authQuery(userA, `select public.activate_workout_plan_atomic('${userA}','${target}','2026-07-13'::date,null)`);
     expect(sql(`select id from public.user_workout_plans where is_active`)).toBe(target);
+  });
+
+  it("creates one explicit-date schedule for Monday and Sunday without timezone drift or duplicates", () => {
+    resetDomainRows();
+    const payload = `{"name":"Explicit Monday","duration_weeks":2,"days":[{"day_name":"Monday session","weekday":"Monday","exercises":[{"exercise_name":"Press","sets":3,"reps":"8","rest_seconds":60}]},{"day_name":"Sunday session","weekday":"Sunday","exercises":[{"exercise_name":"Row","sets":3,"reps":"8","rest_seconds":60}]}]}`;
+    authQuery(
+      userA,
+      `set local timezone to 'Pacific/Kiritimati'; select public.create_workout_plan_atomic('${userA}',$json$${payload}$json$::jsonb,true,'2026-07-13'::date)`
+    );
+    expect(sql(`select count(*),count(distinct (plan_day_id,scheduled_date)),min(scheduled_date),max(scheduled_date)
+      from public.user_workout_sessions s join public.user_workout_plans p on p.id=s.user_workout_plan_id
+      where p.name='Explicit Monday'`)).toBe("4\t4\t2026-07-13\t2026-07-26");
+
+    resetDomainRows();
+    const sundayPayload = payload.replace("Explicit Monday", "Explicit Sunday");
+    authQuery(
+      userA,
+      `set local timezone to 'America/Adak'; select public.create_workout_plan_atomic('${userA}',$json$${sundayPayload}$json$::jsonb,true,'2026-08-02'::date)`
+    );
+    expect(sql(`select count(*),count(distinct (plan_day_id,scheduled_date)),min(scheduled_date),max(scheduled_date)
+      from public.user_workout_sessions s join public.user_workout_plans p on p.id=s.user_workout_plan_id
+      where p.name='Explicit Sunday'`)).toBe("4\t4\t2026-08-02\t2026-08-10");
+  });
+
+  it("activation replaces only future unstarted rows and preserves started, completed, and skipped history", () => {
+    resetDomainRows();
+    const oldPlan = "23000000-0000-4000-8000-000000000001";
+    const oldDay = "23100000-0000-4000-8000-000000000001";
+    const targetPlan = "24000000-0000-4000-8000-000000000001";
+    const targetDay = "24100000-0000-4000-8000-000000000001";
+    seedPlan(oldPlan, oldDay, ["23200000-0000-4000-8000-000000000001"], { active: true, name: "Old active" });
+    seedPlan(targetPlan, targetDay, ["24200000-0000-4000-8000-000000000001"], { name: "Future target" });
+    sql(`update public.user_workout_plans set program_duration_weeks=2 where id='${targetPlan}';
+      insert into public.user_workout_sessions
+        (id,user_id,user_workout_plan_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at)
+      values
+        ('23300000-0000-4000-8000-000000000001','${userA}','${oldPlan}','${oldDay}',1,1,1,'2026-08-03','Future scheduled','scheduled',null,null,null),
+        ('23300000-0000-4000-8000-000000000002','${userA}','${oldPlan}','${oldDay}',1,1,2,'2026-08-03','Started','started','2026-08-03T09:00:00Z',null,null),
+        ('23300000-0000-4000-8000-000000000003','${userA}','${oldPlan}','${oldDay}',1,1,3,'2026-08-03','Completed','completed','2026-08-03T09:00:00Z','2026-08-03T10:00:00Z',null),
+        ('23300000-0000-4000-8000-000000000004','${userA}','${oldPlan}','${oldDay}',1,1,4,'2026-08-03','Skipped','skipped',null,null,'2026-08-03T09:00:00Z')`);
+
+    authQuery(userA, `select public.activate_workout_plan_atomic('${userA}','${targetPlan}','2026-08-03'::date,null)`);
+    expect(sql(`select string_agg(status,',' order by status) from public.user_workout_sessions where user_workout_plan_id='${oldPlan}'`))
+      .toBe("completed,skipped,started");
+    expect(sql(`select count(*),count(distinct (plan_day_id,scheduled_date)),min(scheduled_date),max(scheduled_date)
+      from public.user_workout_sessions where user_workout_plan_id='${targetPlan}'`)).toBe("2\t2\t2026-08-03\t2026-08-10");
+
+    authQuery(userA, `select public.activate_workout_plan_atomic('${userA}','${targetPlan}','2026-08-03'::date,null)`);
+    expect(sql(`select count(*),count(distinct (plan_day_id,scheduled_date))
+      from public.user_workout_sessions where user_workout_plan_id='${targetPlan}'`)).toBe("2\t2");
   });
 
   it("rolls back a late day save, then updates by stable id and archives omissions", () => {
@@ -272,12 +327,12 @@ databaseDescribe("Train atomic RPC migration", () => {
       if new.exercise_name='FAIL_DAY' then raise exception 'controlled day failure'; end if; return new; end $$;
       create trigger zz_test_fail_day before insert or update on public.user_workout_plan_exercises for each row execute function public.test_fail_day_save();`);
     const failing = `{"day_name":"Changed","exercises":[{"id":"${first}","exercise_name":"Updated","sets":4,"reps":"6","rest_seconds":90},{"exercise_name":"FAIL_DAY","sets":3,"reps":"8","rest_seconds":60}]}`;
-    expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.save_workout_plan_day_atomic('${userA}','${day}',$json$${failing}$json$::jsonb,null); commit;`, /controlled day failure/i);
+    expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.save_workout_plan_day_atomic('${userA}','${day}',$json$${failing}$json$::jsonb,'2026-07-13'::date,null); commit;`, /controlled day failure/i);
     expect(sql(`select day_name from public.user_workout_plan_days where id='${day}'`)).toBe("Strength");
     expect(sql(`select exercise_name from public.user_workout_plan_exercises where id='${first}'`)).toBe("Exercise 1");
     sql("drop trigger zz_test_fail_day on public.user_workout_plan_exercises");
     const valid = `{"day_name":"Changed","exercises":[{"id":"${first}","exercise_name":"Updated","sets":4,"reps":"6","rest_seconds":90}]}`;
-    authQuery(userA, `select public.save_workout_plan_day_atomic('${userA}','${day}',$json$${valid}$json$::jsonb,null)`);
+    authQuery(userA, `select public.save_workout_plan_day_atomic('${userA}','${day}',$json$${valid}$json$::jsonb,'2026-07-13'::date,null)`);
     expect(sql(`select day_name,(select exercise_name from public.user_workout_plan_exercises where id='${first}'),(select archived_at is not null from public.user_workout_plan_exercises where id='${second}') from public.user_workout_plan_days where id='${day}'`)).toBe("Changed\tUpdated\tt");
   });
 
@@ -298,17 +353,91 @@ databaseDescribe("Train atomic RPC migration", () => {
     sql(`create or replace function public.test_fail_replacement() returns trigger language plpgsql as $$ begin
       if new.id='${replacement}' and new.is_active then raise exception 'controlled replacement failure'; end if; return new; end $$;
       create trigger zz_test_fail_replacement before update on public.user_workout_plans for each row execute function public.test_fail_replacement();`);
-    expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.delete_workout_plan_atomic('${userA}','${source}',true); commit;`, /controlled replacement failure/i);
+    expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.delete_workout_plan_atomic('${userA}','${source}',true,'2026-07-13'::date); commit;`, /controlled replacement failure/i);
     expect(sql(`select (select count(*) from public.user_workout_plans where id='${source}'),(select count(*) from public.user_workout_plan_exercises where plan_day_id='41000000-0000-4000-8000-000000000001')`)).toBe("1\t1");
-    expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.archive_workout_plan_atomic('${userA}','${source}','test'); commit;`, /controlled replacement failure/i);
+    expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.archive_workout_plan_atomic('${userA}','${source}','test','2026-07-13'::date); commit;`, /controlled replacement failure/i);
     expect(sql(`select is_active,archived_at is null from public.user_workout_plans where id='${source}'`)).toBe("t\tt");
     sql("drop trigger zz_test_fail_replacement on public.user_workout_plans");
-    authQuery(userA, `select public.archive_workout_plan_atomic('${userA}','${source}','test')`);
+    authQuery(userA, `select public.archive_workout_plan_atomic('${userA}','${source}','test','2026-07-13'::date)`);
     expect(sql(`select archived_at is not null,is_active from public.user_workout_plans where id='${source}'`)).toBe("t\tf");
 
-    expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.delete_workout_plan_atomic('${userA}','${replacement}',false); commit;`, /Explicit confirmation/i);
-    authQuery(userA, `select public.delete_workout_plan_atomic('${userA}','${replacement}',true)`);
+    expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.delete_workout_plan_atomic('${userA}','${replacement}',false,'2026-07-13'::date); commit;`, /Explicit confirmation/i);
+    authQuery(userA, `select public.delete_workout_plan_atomic('${userA}','${replacement}',true,'2026-07-13'::date)`);
     expect(sql(`select count(*) from public.user_workout_plans where id='${replacement}'`)).toBe("0");
+  });
+
+  it("deletes future scheduled-only rows atomically, activates a replacement, and is idempotent", () => {
+    resetDomainRows();
+    const source = "43000000-0000-4000-8000-000000000001";
+    const sourceDay = "43100000-0000-4000-8000-000000000001";
+    const replacement = "44000000-0000-4000-8000-000000000001";
+    const replacementDay = "44100000-0000-4000-8000-000000000001";
+    seedPlan(source, sourceDay, ["43200000-0000-4000-8000-000000000001"], { active: true, name: "Delete source" });
+    seedPlan(replacement, replacementDay, ["44200000-0000-4000-8000-000000000001"], { name: "Safe replacement" });
+    sql(`insert into public.user_workout_sessions
+      (id,user_id,user_workout_plan_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status)
+      values ('43300000-0000-4000-8000-000000000001','${userA}','${source}','${sourceDay}',1,1,1,'2026-08-03','Future only','scheduled')`);
+
+    authQuery(userA, `select public.delete_workout_plan_atomic('${userA}','${source}',true,'2026-08-03'::date)`);
+    expect(sql(`select
+      (select count(*) from public.user_workout_plans where id='${source}'),
+      (select count(*) from public.user_workout_sessions where user_workout_plan_id='${source}'),
+      (select count(*) from public.user_workout_plan_days where plan_id='${source}'),
+      (select is_active::integer from public.user_workout_plans where id='${replacement}')`)).toBe("0\t0\t0\t1");
+
+    authQuery(userA, `select public.delete_workout_plan_atomic('${userA}','${source}',true,'2026-08-03'::date)`);
+    expect(sql(`select count(*) from public.user_workout_plans where id='${source}'`)).toBe("0");
+  });
+
+  it.each(["started", "completed", "skipped"])("rejects permanent deletion when a %s scheduled session exists", (status) => {
+    resetDomainRows();
+    const plan = "45000000-0000-4000-8000-000000000001";
+    const day = "45100000-0000-4000-8000-000000000001";
+    seedPlan(plan, day, ["45200000-0000-4000-8000-000000000001"], { name: `History ${status}` });
+    sql(`insert into public.user_workout_sessions
+      (id,user_id,user_workout_plan_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status)
+      values (gen_random_uuid(),'${userA}','${plan}','${day}',1,1,1,'2026-08-03','History','${status}')`);
+    expectSqlFailure(
+      `begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.delete_workout_plan_atomic('${userA}','${plan}',true,'2026-08-03'::date); commit;`,
+      /history|archive/i
+    );
+    expect(sql(`select count(*) from public.user_workout_plans where id='${plan}'`)).toBe("1");
+  });
+
+  it("archives an active plan without losing schedule history and activates a safe replacement", () => {
+    resetDomainRows();
+    const source = "46000000-0000-4000-8000-000000000001";
+    const sourceDay = "46100000-0000-4000-8000-000000000001";
+    const replacement = "47000000-0000-4000-8000-000000000001";
+    seedPlan(source, sourceDay, ["46200000-0000-4000-8000-000000000001"], { active: true, name: "Archive source" });
+    seedPlan(replacement, "47100000-0000-4000-8000-000000000001", ["47200000-0000-4000-8000-000000000001"], { name: "Archive replacement" });
+    sql(`insert into public.user_workout_sessions
+      (id,user_id,user_workout_plan_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,completed_at)
+      values ('46300000-0000-4000-8000-000000000001','${userA}','${source}','${sourceDay}',1,1,1,'2026-07-06','Completed','completed','2026-07-06T10:00:00Z')`);
+
+    authQuery(userA, `select public.archive_workout_plan_atomic('${userA}','${source}','history','2026-08-03'::date)`);
+    expect(sql(`select archived_at is not null,is_active from public.user_workout_plans where id='${source}'`)).toBe("t\tf");
+    expect(sql(`select count(*) from public.user_workout_sessions where user_workout_plan_id='${source}' and status='completed'`)).toBe("1");
+    expect(sql(`select is_active from public.user_workout_plans where id='${replacement}'`)).toBe("t");
+  });
+
+  it("rejects deletion when performed exercise history exists", () => {
+    resetDomainRows();
+    const plan = "48000000-0000-4000-8000-000000000001";
+    const day = "48100000-0000-4000-8000-000000000001";
+    const exercise = "48200000-0000-4000-8000-000000000001";
+    seedPlan(plan, day, [exercise], { name: "Exercise history" });
+    sql(`insert into public.workout_sessions
+      (id,user_id,plan_id,plan_day_id,workout_name,status,completed_at)
+      values ('48300000-0000-4000-8000-000000000001','${userA}','${plan}','${day}','History','completed','2026-07-06T10:00:00Z');
+      insert into public.exercise_logs
+      (id,workout_session_id,plan_exercise_id,exercise_order,exercise_name,set_number,reps,completed_at)
+      values ('48400000-0000-4000-8000-000000000001','48300000-0000-4000-8000-000000000001','${exercise}',1,'Exercise',1,8,'2026-07-06T10:00:00Z')`);
+    expectSqlFailure(
+      `begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.delete_workout_plan_atomic('${userA}','${plan}',true,'2026-08-03'::date); commit;`,
+      /history|archive/i
+    );
+    expect(sql(`select count(*) from public.exercise_logs where plan_exercise_id='${exercise}'`)).toBe("1");
   });
 
   it("serializes concurrent session start and upserts repeated names by stable exercise identity", async () => {
@@ -352,7 +481,7 @@ databaseDescribe("Train atomic RPC migration", () => {
     seedPlan(plan, "71000000-0000-4000-8000-000000000001", ["72000000-0000-4000-8000-000000000001"], { userId: userB });
     expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userA}',true); select public.duplicate_workout_plan_atomic('${userB}','${plan}'); commit;`, /another user/i);
     expectSqlFailure(`begin; set local role anon; select public.duplicate_workout_plan_atomic('${userB}','${plan}'); commit;`, /permission denied/i);
-    expectSqlFailure(`begin; set local role authenticated; select public.assert_workout_actor('${userA}'); commit;`, /user|claim|authenticated/i);
+    expectSqlFailure(`begin; set local role authenticated; select public.assert_workout_actor('${userA}'); commit;`, /Authentication required\./i);
     expect(sql(`select count(*) from public.user_workout_plans where user_id='${userB}'`)).toBe("1");
   });
 });
