@@ -82,13 +82,13 @@ jobs:
             server_pid=$!
             trap 'kill "$server_pid" 2>/dev/null || true' EXIT
             for attempt in $(seq 1 60); do
-              if curl -fsS http://127.0.0.1:3000/my-workout/plans >/dev/null; then
+              if curl -fsS http://localhost:3000/my-workout/plans >/dev/null; then
                 break
               fi
               sleep 1
             done
-            curl -fsS http://127.0.0.1:3000/my-workout/plans >/dev/null
-            QA_BASE_URL=http://127.0.0.1:3000 node scripts/run-train-visual-qa.mjs
+            curl -fsS http://localhost:3000/my-workout/plans >/dev/null
+            QA_BASE_URL=http://localhost:3000 node scripts/run-train-visual-qa.mjs
           ) 2>&1 | tee quality-reports/train-rendered.log
           echo "${PIPESTATUS[0]}" > quality-reports/train-rendered.exit
 
