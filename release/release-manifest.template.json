@@ -1,26 +1,50 @@
 {
-  "manifestSchemaVersion": 1,
+  "manifestSchemaVersion": 2,
   "release": {
     "commitSha": "",
     "buildTimestamp": "",
     "environment": "",
-    "schemaCompatibilityVersion": ""
+    "schemaCompatibilityVersion": "",
+    "expectedDatabaseMigrationVersion": "",
+    "migrationLedgerReconciliationState": "",
+    "schemaAppliedUntrackedCount": null
+  },
+  "runtime": {
+    "nodeVersion": "",
+    "npmVersion": "",
+    "nextVersion": "",
+    "lockfileVersion": null,
+    "lockfileSha256": "",
+    "platform": "",
+    "architecture": ""
   },
   "qualityGates": {
-    "integrity": { "status": "pending", "evidence": null },
+    "repositoryIntegrity": { "status": "pending", "evidence": null },
+    "fullMigrationChain": { "status": "pending", "evidence": null },
+    "databaseLint": { "status": "pending", "evidence": null },
+    "databasePreflight": { "status": "pending", "evidence": null },
+    "migrationLedger": { "status": "pending", "evidence": null },
+    "dependencyAudit": { "status": "pending", "evidence": null },
     "lint": { "status": "pending", "evidence": null },
     "typecheck": { "status": "pending", "evidence": null },
     "unitTests": { "status": "pending", "evidence": null },
     "integrationTests": { "status": "pending", "evidence": null },
-    "productionBuild": { "status": "pending", "evidence": null }
+    "scriptTests": { "status": "pending", "evidence": null },
+    "telemetryTests": { "status": "pending", "evidence": null },
+    "environmentValidation": { "status": "pending", "evidence": null },
+    "releaseMetadata": { "status": "pending", "evidence": null },
+    "productionBuild": { "status": "pending", "evidence": null },
+    "renderedBrowserQa": { "status": "pending", "evidence": null }
   },
   "deployment": {
     "status": "pending",
     "url": null,
-    "providerEvidence": null
+    "providerEvidence": null,
+    "deployedCommitSha": null
   },
-  "postDeploySmoke": {
-    "status": "pending",
-    "evidence": null
+  "smoke": {
+    "anonymous": { "status": "pending", "evidence": null },
+    "authenticatedPopulated": { "status": "pending", "evidence": null },
+    "authenticatedEmpty": { "status": "pending", "evidence": null }
   }
 }
