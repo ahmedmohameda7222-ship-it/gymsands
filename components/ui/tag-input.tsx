@@ -12,7 +12,10 @@ export function TagInput({
   value,
   onChange,
   placeholder,
-  helperText
+  helperText,
+  addLabel = "Add",
+  removeLabel = "Remove",
+  disabled = false
 }: {
   id: string;
   label: string;
@@ -20,10 +23,14 @@ export function TagInput({
   onChange: (value: string[]) => void;
   placeholder?: string;
   helperText?: string;
+  addLabel?: string;
+  removeLabel?: string;
+  disabled?: boolean;
 }) {
   const [draft, setDraft] = useState("");
 
   function add(raw = draft) {
+    if (disabled) return;
     const additions = raw.split(",").map((item) => item.trim()).filter(Boolean);
     if (!additions.length) return;
     onChange(Array.from(new Set([...value, ...additions])));
@@ -37,9 +44,19 @@ export function TagInput({
         {value.length ? (
           <div className="mb-2 flex flex-wrap gap-2">
             {value.map((item) => (
-              <span key={item} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary/10 py-1 pl-3 pr-1 text-sm font-semibold text-primary">
+              <span key={item} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary/10 py-1 ps-3 pe-1 text-sm font-semibold text-primary">
                 {item}
-                <button type="button" onClick={() => onChange(value.filter((entry) => entry !== item))} aria-label={`Remove ${item}`} title={`Remove ${item}`} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs hover:bg-primary/10"><X className="h-4 w-4" /><span>Remove</span></button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onChange(value.filter((entry) => entry !== item))}
+                  aria-label={`${removeLabel} ${item}`}
+                  title={`${removeLabel} ${item}`}
+                  className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                >
+                  <X className="h-4 w-4" />
+                  <span>{removeLabel}</span>
+                </button>
               </span>
             ))}
           </div>
@@ -48,6 +65,7 @@ export function TagInput({
           <Input
             id={id}
             value={draft}
+            disabled={disabled}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key !== "Enter" && event.key !== ",") return;
@@ -58,7 +76,17 @@ export function TagInput({
             placeholder={placeholder}
             className="h-11 min-h-11 border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
           />
-          <Button type="button" variant="outline" className="shrink-0" onMouseDown={(event) => event.preventDefault()} onClick={() => add()} aria-label={`Add ${label.toLowerCase()}`}><Plus className="h-4 w-4" /> Add</Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0"
+            disabled={disabled}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => add()}
+            aria-label={`${addLabel}: ${label}`}
+          >
+            <Plus className="h-4 w-4" /> {addLabel}
+          </Button>
         </div>
       </div>
       {helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null}
