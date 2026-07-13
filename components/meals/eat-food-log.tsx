@@ -12,7 +12,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { EAT_MEAL_GROUPS, groupFoodLogs, type EatMealGroup } from "@/lib/eat/eat-model";
 import { eatEnergyDisplayValue, eatEnergyInputToKcal, formatEatEnergy } from "@/lib/eat/eat-units";
 import { useEatTranslation } from "@/lib/i18n/eat";
-import { deleteEatFoodLog, type EatFoodLogPatch } from "@/services/database/eat";
+import { deleteEatFoodLog, getEatFoodLogs, getEatMealPlanItems, isEatLinkedEditConsistencyError, type EatFoodLogPatch } from "@/services/database/eat";
 import { updateEatFoodLogAtomic } from "@/services/database/eat-meal-plan-atomic";
 import type { UserAppSettings } from "@/services/database/user-settings";
 import type { FoodLog, MealPlanItem, MealType } from "@/types";
@@ -105,8 +105,26 @@ export function EatFoodLog({
       setEditing(result.log);
       setForm(editState(result.log, energyUnit));
       setFeedback({ type: "info", message: et("successSaved") });
-    } catch {
-      setFeedback({ type: "error", message: et("saveFailed") });
+    } catch (saveError) {
+      if (isEatLinkedEditConsistencyError(saveError)) {
+        try {
+          const [freshLogs] = await Promise.all([
+            getEatFoodLogs(userId, editing.log_date),
+            getEatMealPlanItems(userId, editing.log_date)
+          ]);
+          onChanged(freshLogs);
+          onReloadPlannedMeals();
+          const freshLog = freshLogs.find((log) => log.id === editing.id) ?? null;
+          if (freshLog) {
+            setEditing(freshLog);
+            setForm(editState(freshLog, energyUnit));
+          }
+        } finally {
+          setFeedback({ type: "error", message: et("criticalConsistencyError") });
+        }
+      } else {
+        setFeedback({ type: "error", message: et("saveFailed") });
+      }
     } finally {
       setPending(null);
     }
