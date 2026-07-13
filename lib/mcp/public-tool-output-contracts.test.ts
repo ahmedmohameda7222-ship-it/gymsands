@@ -50,8 +50,8 @@ function assertClosedObjects(schema: Schema, path: string) {
 }
 
 describe("public MCP output contracts", () => {
-  it("has an executable recursively closed output contract for all 35 public tools", () => {
-    expect(mcpTools).toHaveLength(35);
+  it("has an executable recursively closed output contract for all 34 public tools", () => {
+    expect(mcpTools).toHaveLength(34);
     for (const tool of mcpTools) {
       expect(tool.outputSchema, tool.name).toBeTruthy();
       assertClosedObjects(tool.outputSchema as Schema, tool.name);
