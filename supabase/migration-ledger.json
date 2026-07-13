@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-13T00:42:16.742617+00",
-  "auditedRepositoryCommit": "0634ed9eb92b32ec17190de7d05b66f58c6f3836",
+  "capturedAt": "2026-07-13T17:12:53.584192+00",
+  "auditedRepositoryCommit": "778f4dc896147f81a7e404802af13d7af3dd2fba",
   "productionMigrationCount": 24,
-  "schemaVerifiedUntrackedCount": 4,
+  "schemaVerifiedUntrackedCount": 6,
   "historyRepair": {
     "state": "pending",
-    "schemaAppliedUntrackedCount": 4,
+    "schemaAppliedUntrackedCount": 6,
     "note": "Production schema effects are verified. Supabase migration-history reconciliation remains pending and must only use an approved evidence-backed workflow. Do not replay schema-applied migrations."
   },
   "entries": [
@@ -39,7 +39,7 @@
     { "productionVersion": null, "productionName": null, "localFile": "20260712173000_persistent_meal_plan_skip_status.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but the planned/done/skipped constraint, skipped-state constraint, terminal-state trigger, and trigger function were verified in production on 2026-07-13. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
     { "productionVersion": null, "productionName": null, "localFile": "20260712195000_nutrition_target_date_overrides.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but the override table, unique/index structure, RLS, four ownership policies, updated-at trigger, authenticated CRUD grants, and atomic Apply RPC were verified in production on 2026-07-13. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
     { "productionVersion": null, "productionName": null, "localFile": "20260713153000_meal_plan_atomic_execution.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but all three ownership-checked atomic RPCs, hardened SECURITY DEFINER search paths and grants, both uniqueness indexes, the validated execution-state constraint, the terminal transition trigger, zero duplicate groups, and repair of all four incomplete legacy done rows were verified in production at 2026-07-13T00:42:16.742617+00 against audited code commit 0634ed9eb92b32ec17190de7d05b66f58c6f3836. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
-    { "productionVersion": null, "productionName": null, "localFile": "20260713160000_train_section_atomic_integrity.sql", "state": "pending", "note": "Append-only Train integrity migration. Requires disposable-database rollback, concurrency, ownership, RLS, and idempotency verification before production application." },
-    { "productionVersion": null, "productionName": null, "localFile": "20260713170000_finalize_train_schedule_delete_integrity.sql", "state": "pending", "note": "Append-only correction for explicit local schedule dates, single-path schedule generation, and history-safe plan deletion. Requires the full disposable-database Train integration suite before production application." }
+    { "productionVersion": null, "productionName": null, "localFile": "20260713160000_train_section_atomic_integrity.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but the Train atomic RPCs, ownership assertions, reference-integrity and history-preservation triggers, archived day/exercise columns, active-plan constraint, six required indexes, hardened empty search paths and grants, and zero production integrity conflicts were verified at 2026-07-13T17:12:53.584192+00 against audited code commit 778f4dc896147f81a7e404802af13d7af3dd2fba. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
+    { "productionVersion": null, "productionName": null, "localFile": "20260713170000_finalize_train_schedule_delete_integrity.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but the explicit-local-date activate/create/save/archive/delete RPC signatures, removal of legacy overloads, schedule-safe behavior, authenticated/service-role grants, anon denial, empty search paths, and zero checked production reference, duplication, schedule-history, active-plan, or orphan conflicts were verified at 2026-07-13T17:12:53.584192+00 against audited code commit 778f4dc896147f81a7e404802af13d7af3dd2fba. Do not replay. Repair migration history only through an approved evidence-backed workflow." }
   ]
 }
