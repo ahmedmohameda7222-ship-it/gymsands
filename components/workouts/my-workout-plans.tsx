@@ -49,6 +49,7 @@ import {
   type TrainRequestIdentity
 } from "@/lib/workouts/train-overview-runtime";
 import { resolveTrainWeekSelection, startTrainLocalDateRefresh } from "@/lib/workouts/train-local-date";
+import { shouldShowRestDayPlanAction } from "@/lib/workouts/train-visual";
 import { getDashboardProfileContext } from "@/services/database/dashboard-today-sources";
 import { setDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
 import {
@@ -632,6 +633,14 @@ function TodayCard({
         : plan?.name || "";
   const showActiveAction = active && Boolean(actionHref);
   const showWorkoutAction = showActiveAction || (statusState !== "loading" && !statusError && Boolean(actionHref));
+  const showRestDayPlanAction = shouldShowRestDayPlanAction({
+    resolutionState: resolution.state,
+    hasOpenSession: Boolean(openSession),
+    hasWorkoutDay: Boolean(day),
+    hasPlan: Boolean(plan),
+    statusState,
+    statusError
+  });
 
   return (
     <Card className="overflow-hidden border-primary/25 bg-primary/[0.045]" data-train-today-card>
@@ -673,7 +682,13 @@ function TodayCard({
             {showWorkoutAction ? (
               <Button asChild className="min-h-12 w-full"><Link href={actionHref!}>{resolution.state === "completed" ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}{actionLabel}</Link></Button>
             ) : null}
-            {statusState !== "loading" && !statusError && !actionHref ? <div className="text-center"><Dumbbell className="mx-auto h-5 w-5 text-muted-foreground" /><p className="mt-2 text-sm font-semibold">{tr("restDay")}</p></div> : null}
+            {showRestDayPlanAction ? (
+              <div className="space-y-3 text-center" data-rest-day-weekly-plan>
+                <div><Dumbbell className="mx-auto h-5 w-5 text-muted-foreground" /><p className="mt-2 text-sm font-semibold">{tr("restDay")}</p>{subtitle ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{subtitle}</p> : null}</div>
+                <Button asChild variant="outline" className="min-h-12 w-full"><Link href={`/my-workout/plans/${plan!.id}`}>{tr("viewWeeklyPlan")}</Link></Button>
+              </div>
+            ) : null}
+            {statusState !== "loading" && !statusError && !actionHref && !showRestDayPlanAction ? <div className="text-center"><Dumbbell className="mx-auto h-5 w-5 text-muted-foreground" /><p className="mt-2 text-sm font-semibold">{tr("restDay")}</p></div> : null}
           </div>
         </div>
       </CardContent>

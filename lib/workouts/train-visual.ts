@@ -26,3 +26,19 @@ export function mergeUserFacingExerciseNote(original: string | null | undefined,
   const visibleLines = noteLines(nextUserText).filter((line) => !isInternalExerciseNoteLine(line));
   return [...hiddenLines, ...visibleLines].join("\n") || null;
 }
+
+export function shouldShowRestDayPlanAction(input: {
+  resolutionState: "none" | "scheduled" | "active" | "completed" | "skipped";
+  hasOpenSession: boolean;
+  hasWorkoutDay: boolean;
+  hasPlan: boolean;
+  statusState: "idle" | "loading" | "loaded" | "failed";
+  statusError: string | null;
+}) {
+  return input.resolutionState === "none"
+    && !input.hasOpenSession
+    && !input.hasWorkoutDay
+    && input.hasPlan
+    && input.statusState === "loaded"
+    && !input.statusError;
+}

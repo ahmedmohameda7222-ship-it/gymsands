@@ -170,7 +170,7 @@ export function WorkoutPlanBuilder({ onSaved }: { loadActivePlan?: boolean; onSa
 
 
   return (
-    <div className="space-y-6 pb-28" dir={dir} data-train-builder>
+    <div className="space-y-6" dir={dir} data-train-builder>
       <ol className="mx-auto grid w-full max-w-4xl grid-cols-3 gap-2" aria-label={tr("builderProgress")}>
         {[tr("planDetailsStep"), tr("trainingDaysStep"), tr("reviewStep")].map((label, index) => {
           const number = index + 1;
@@ -248,7 +248,7 @@ export function WorkoutPlanBuilder({ onSaved }: { loadActivePlan?: boolean; onSa
         <div className="rounded-2xl border bg-card p-4 text-sm text-muted-foreground">{tr("atomicCreateNotice")}</div>
       </div> : null}
 
-      <div className="sticky bottom-0 z-20 -mx-4 border-t bg-background/95 px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur sm:static sm:mx-auto sm:flex sm:w-full sm:max-w-5xl sm:items-center sm:justify-between sm:rounded-2xl sm:border sm:px-4 sm:pb-3">
+      <div className="sticky bottom-[var(--train-sticky-footer-bottom)] z-20 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur sm:mx-auto sm:flex sm:w-full sm:max-w-5xl sm:items-center sm:justify-between sm:rounded-2xl sm:border sm:px-4 lg:bottom-[var(--desktop-train-sticky-footer-bottom)]" data-train-sticky-footer>
         <Button variant="outline" className="min-h-11" onClick={() => setStep((current) => Math.max(1, current - 1))} disabled={step === 1}><ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {tr("back")}</Button>
         {step < 3 ? <Button className="min-h-11" onClick={() => setStep((current) => Math.min(3, current + 1))} disabled={step === 1 ? !planDetailsValid : !scheduleValid || !exerciseStepValid}>{tr("continue")} <ArrowRight className="h-4 w-4 rtl:rotate-180" /></Button> : <Button className="min-h-11" onClick={() => void savePlan()} disabled={saving || !basicsValid || !exerciseStepValid}>{saving ? tr("savingPlan") : tr("savePlan")}</Button>}
       </div>

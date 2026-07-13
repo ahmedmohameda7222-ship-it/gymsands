@@ -259,7 +259,7 @@ export function WorkoutPlanEditor() {
 
 
   return (
-    <div className="space-y-6 pb-32" dir={dir} data-train-editor>
+    <div className="space-y-6" dir={dir} data-train-editor>
       <PageHeading title={`${tr("editPlanTitle")} · ${draft.name}`} description={tr("editorDescription")} action={<div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"><Button asChild variant="ghost" className="min-h-11"><Link href={`/my-workout/plans/${draft.id}`}><ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {tr("back")}</Link></Button><Button variant="outline" className="min-h-11" onClick={cancel}>{tr("cancel")}</Button></div>} />
 
       {saveState === "restored" ? <div className="flex gap-3 rounded-2xl border border-warning/40 bg-warning/10 p-4 text-sm"><AlertTriangle className="h-5 w-5 shrink-0" /><div><p className="font-semibold">{tr("draftRestored")}</p><p className="text-muted-foreground">{tr("draftRestoredDescription")}</p></div></div> : null}
@@ -316,7 +316,7 @@ export function WorkoutPlanEditor() {
         </CardContent></Card> : null}
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-3 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur sm:static sm:rounded-2xl sm:border">
+      <div className="sticky bottom-[var(--train-sticky-footer-bottom)] z-30 border-t bg-background/95 px-3 py-3 backdrop-blur sm:rounded-2xl sm:border lg:bottom-[var(--desktop-train-sticky-footer-bottom)]" data-train-sticky-footer>
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div className="text-sm"><p className="font-semibold">{saveState === "saving" ? tr("saving") : saveState === "saved" ? tr("saved") : isDirty ? tr("unsavedChanges") : tr("noUnsavedChanges")}</p>{validationError ? <p className="text-destructive">{validationError}</p> : saveError ? <p className="text-destructive">{saveError}</p> : <p className="text-muted-foreground">{tr("atomicSaveNotice")}</p>}</div>
           <div className="flex gap-2"><Button variant="outline" className="min-h-11" onClick={cancel}>{tr("cancel")}</Button><Button className="min-h-11" onClick={() => void save()} disabled={!isDirty || Boolean(validationError) || saveState === "saving"}>{saveState === "saved" ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}{saveState === "saving" ? tr("saving") : tr("saveChanges")}</Button></div>

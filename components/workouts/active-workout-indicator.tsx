@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CirclePause, CirclePlay, Dumbbell, Flag, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -34,6 +34,7 @@ export function ActiveWorkoutIndicator() {
   const [actionPending, setActionPending] = useState<"pause" | "finish" | "cancel" | null>(null);
   const [actionError, setActionError] = useState("");
   const [loadError, setLoadError] = useState("");
+  const controllerRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -77,6 +78,35 @@ export function ActiveWorkoutIndicator() {
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
   }, [state]);
+
+  const controllerVisible = Boolean(loadError || (session && state)) && !pathname.startsWith("/workouts/session");
+
+  useLayoutEffect(() => {
+    const shell = document.querySelector<HTMLElement>("[data-app-shell]");
+    if (!shell) return;
+
+    const updateHeight = () => {
+      const height = controllerVisible && controllerRef.current
+        ? Math.ceil(controllerRef.current.getBoundingClientRect().height)
+        : 0;
+      shell.style.setProperty("--active-workout-controller-height", `${height}px`);
+      shell.dataset.activeWorkoutControllerState = height > 0 ? "present" : "absent";
+    };
+
+    updateHeight();
+    const observer = typeof ResizeObserver === "undefined" || !controllerRef.current
+      ? null
+      : new ResizeObserver(updateHeight);
+    if (observer && controllerRef.current) observer.observe(controllerRef.current);
+    window.addEventListener("resize", updateHeight);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateHeight);
+      shell.style.removeProperty("--active-workout-controller-height");
+      shell.dataset.activeWorkoutControllerState = "absent";
+    };
+  }, [actionError, controllerVisible, loadError, pathname, state?.label, state?.paused]);
 
   async function togglePause() {
     if (!userId || !state || !session) return;
@@ -140,12 +170,12 @@ export function ActiveWorkoutIndicator() {
     }
   }
 
-  if (((!session || !state) && !loadError) || pathname.startsWith("/workouts/session")) return dialog;
+  if (!controllerVisible) return dialog;
 
   return (
     <>
       {dialog}
-      <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+5.75rem)] z-[70] mx-auto max-w-2xl rounded-[18px] border border-primary/25 bg-card/95 p-3 shadow-xl backdrop-blur lg:inset-x-auto lg:bottom-5 lg:right-5 lg:w-[34rem]">
+      <div ref={controllerRef} data-active-workout-controller className="fixed inset-x-3 bottom-[var(--active-workout-controller-bottom)] z-[70] mx-auto max-w-2xl rounded-[18px] border border-primary/25 bg-card/95 p-3 shadow-xl backdrop-blur lg:inset-x-auto lg:bottom-[var(--desktop-active-workout-controller-bottom)] lg:right-5 lg:w-[34rem]">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground"><Dumbbell className="h-5 w-5" /></span>
