@@ -45,6 +45,9 @@ jobs:
       - name: Apply focused corrections
         run: python .github/pr53-final-corrections.py
 
+      - name: Apply responsive desktop stacking
+        run: python .github/pr53-desktop-corrections.py
+
       - name: Install dependencies
         run: npm ci
 
@@ -108,6 +111,7 @@ jobs:
           if [ -f /tmp/pr53-next.pid ]; then kill "$(cat /tmp/pr53-next.pid)" || true; fi
           rm -rf qa-artifacts .next
           rm .github/pr53-final-corrections.py
+          rm .github/pr53-desktop-corrections.py
           rm .github/workflows/pr53-final-corrections-pr.yml
           git add -A
           git diff --cached --check
