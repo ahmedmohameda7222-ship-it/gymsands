@@ -67,9 +67,12 @@ describe("dashboard render-loop regression", () => {
     }
   });
 
-  it("keeps the remaining-macro calculation referentially stabilized in the dashboard component", () => {
-    const source = readFileSync(resolve(process.cwd(), "components/dashboard/today-dashboard.tsx"), "utf8");
-    expect(source).toMatch(/const remaining = useMemo\(\(\) => targets && totals/);
-    expect(source).toMatch(/\[targets, totals\]\)/);
+  it("keeps both runtime protections wired into the production components", () => {
+    const dashboard = readFileSync(resolve(process.cwd(), "components/dashboard/today-dashboard.tsx"), "utf8");
+    const provider = readFileSync(resolve(process.cwd(), "components/ai/quick-chatgpt-provider.tsx"), "utf8");
+
+    expect(dashboard).toMatch(/const remaining = useMemo\(\(\) => targets && totals/);
+    expect(dashboard).toMatch(/\[targets, totals\]\)/);
+    expect(provider).toMatch(/preserveEquivalentDashboardContext\(current, context\)/);
   });
 });
