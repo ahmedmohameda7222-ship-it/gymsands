@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { MoreHorizontal } from "lucide-react";
 import { Button, type ButtonProps } from "@/components/ui/button";
@@ -17,7 +17,8 @@ export function ActionMenu({
   disabled = false,
   triggerVariant = "outline",
   triggerClassName,
-  icon = <MoreHorizontal className="h-4 w-4" />
+  icon = <MoreHorizontal className="h-4 w-4" />,
+  onTriggerElement
 }: {
   label: string;
   children: ReactNode;
@@ -25,6 +26,7 @@ export function ActionMenu({
   triggerVariant?: ButtonProps["variant"];
   triggerClassName?: string;
   icon?: ReactNode;
+  onTriggerElement?: (element: HTMLButtonElement | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<Position>({ top: 0, left: 0 });
@@ -32,10 +34,15 @@ export function ActionMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
 
-  function close() {
+  const close = useCallback(() => {
     setOpen(false);
     requestAnimationFrame(() => triggerRef.current?.focus());
-  }
+  }, []);
+
+  const setTriggerRef = useCallback((element: HTMLButtonElement | null) => {
+    triggerRef.current = element;
+    onTriggerElement?.(element);
+  }, [onTriggerElement]);
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current || !menuRef.current) return;
@@ -79,7 +86,7 @@ export function ActionMenu({
       window.removeEventListener("resize", onViewportChange);
       window.removeEventListener("scroll", onViewportChange, true);
     };
-  }, [open]);
+  }, [close, open]);
 
   function handleMenuKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']:not(:disabled)") ?? []);
@@ -101,7 +108,7 @@ export function ActionMenu({
   return (
     <>
       <Button
-        ref={triggerRef}
+        ref={setTriggerRef}
         type="button"
         variant={triggerVariant}
         className={cn("min-h-11", triggerClassName)}
