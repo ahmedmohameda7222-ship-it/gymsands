@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const baseUrl = process.env.QA_BASE_URL || "http://localhost:3000";
-const evidenceDir = path.join(process.cwd(), "docs", "qa", "evidence", "2026-07-11");
+const evidenceDir = path.resolve(process.env.QA_EVIDENCE_DIR || path.join(process.cwd(), "quality-reports", "rendered-qa-evidence"));
 const viewports = [
   { name: "390x844", width: 390, height: 844 },
   { name: "393x852", width: 393, height: 852 },
@@ -107,7 +107,7 @@ for (let viewportIndex = 0; viewportIndex < viewports.length; viewportIndex += 1
       surface: route.name,
       viewport: viewport.name,
       status: response?.status() ?? null,
-      finalUrl: page.url(),
+      finalPath: new URL(page.url()).pathname,
       reducedMotion: true,
       ...metrics,
       keyboardFocusVisible: focus.visible,
@@ -141,6 +141,7 @@ const report = {
   generatedAt: new Date().toISOString(),
   baseUrl,
   mockAuthExpected: true,
+  productionAcceptanceEvidence: false,
   viewports,
   routes: routes.map((item) => item.path),
   checks: { reducedMotion: true, keyboardFocus: true, screenReaderNames: true, touchTargetsMeasured: true, textZoomPercent: 200, zoomOverflowPx: zoomOverflow, longLocalizedTextLanguage: "ar", localizedOverflowPx: localizedOverflow },
@@ -148,6 +149,6 @@ const report = {
   failures,
   observations: results
 };
-await writeFile(path.join(process.cwd(), "docs", "qa", "rendered-qa-results.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+await writeFile(path.join(evidenceDir, "rendered-qa-results.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
 console.log(`Rendered QA: ${report.summary.observations} observations, ${report.summary.failures} failures, zoom overflow ${zoomOverflow}px.`);
 if (!report.summary.passed) process.exitCode = 1;
