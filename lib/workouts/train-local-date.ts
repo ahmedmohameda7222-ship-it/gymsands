@@ -7,8 +7,8 @@ export type TrainDateEventTarget = {
 
 export type TrainDateRefreshDependencies = {
   getNow: () => Date;
-  setTimer: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
-  clearTimer: (timer: ReturnType<typeof setTimeout>) => void;
+  setTimer: (callback: () => void, delayMs: number) => number;
+  clearTimer: (timer: number) => void;
   windowTarget: TrainDateEventTarget;
   documentTarget: TrainDateEventTarget;
   isDocumentVisible: () => boolean;
@@ -27,15 +27,8 @@ export function startTrainLocalDateRefresh(input: {
 }) {
   let active = true;
   let currentDate = input.initialDate;
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  let timer: number | null = null;
   const { dependencies } = input;
-
-  const schedule = () => {
-    if (!active) return;
-    if (timer !== null) dependencies.clearTimer(timer);
-    const now = dependencies.getNow();
-    timer = dependencies.setTimer(checkDate, millisecondsUntilNextLocalMidnight(now));
-  };
 
   const checkDate = () => {
     if (!active) return;
@@ -46,6 +39,13 @@ export function startTrainLocalDateRefresh(input: {
     }
     input.onWake?.();
     schedule();
+  };
+
+  const schedule = () => {
+    if (!active) return;
+    if (timer !== null) dependencies.clearTimer(timer);
+    const now = dependencies.getNow();
+    timer = dependencies.setTimer(checkDate, millisecondsUntilNextLocalMidnight(now));
   };
 
   const onFocus = () => checkDate();
