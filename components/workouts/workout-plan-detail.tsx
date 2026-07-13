@@ -18,6 +18,7 @@ import { todayIso } from "@/lib/date-utils";
 import { resolveTodayWorkout, todayWorkoutActionHref } from "@/lib/dashboard/today-model";
 import { userSafeError } from "@/lib/error-formatting";
 import { useTrainTranslation } from "@/lib/i18n/train";
+import { workoutPlanDetailActions } from "@/lib/workouts/train-overview-runtime";
 import {
   archiveWorkoutPlan,
   deleteWorkoutPlan,
@@ -95,15 +96,17 @@ export function WorkoutPlanDetail() {
   const selectedDay = useMemo(() => plan?.days.find((day) => day.weekday === selectedWeekday) ?? null, [plan, selectedWeekday]);
   const exercises = useMemo(() => selectedDay ? workoutsFromLoadedPlanDay(selectedDay) : [], [selectedDay]);
   const selectedIsToday = selectedWeekday === weekdays[new Date().getDay()];
+  const resolvedPlanDayId = selectedIsToday ? openSession?.plan_day_id ?? selectedDay?.id ?? null : null;
   const resolution = useMemo(() => resolveTodayWorkout({
     today: todayIso(),
-    planDayId: selectedIsToday ? selectedDay?.id ?? null : null,
-    openSessionId: selectedIsToday && openSession?.plan_day_id === selectedDay?.id ? openSession?.id ?? null : null,
+    planDayId: resolvedPlanDayId,
+    openSessionId: selectedIsToday ? openSession?.id ?? null : null,
     sessions: activity
-  }), [activity, openSession, selectedDay, selectedIsToday]);
-  const actionHref = selectedIsToday ? todayWorkoutActionHref(resolution, selectedDay?.id ?? null) : null;
+  }), [activity, openSession?.id, resolvedPlanDayId, selectedIsToday]);
+  const actionHref = selectedIsToday ? todayWorkoutActionHref(resolution, resolvedPlanDayId, openSession) : null;
   const actionLabel = resolution.state === "completed" ? tr("viewCompletedWorkout") : resolution.state === "active" ? tr("resumeWorkout") : tr("startWorkout");
   const archived = Boolean(plan?.archived_at);
+  const allowedActions = plan ? workoutPlanDetailActions(plan) : [];
   const nextTrainingDay = useMemo(() => {
     if (!plan) return null;
     const selectedIndex = weekdays.indexOf(selectedWeekday);
@@ -154,12 +157,12 @@ export function WorkoutPlanDetail() {
         description={plan.description || tr("planDetailsDescription")}
         action={
           <div className="flex flex-wrap gap-2">
-            {!archived ? <Button asChild><Link href={`/my-workout/plans/${plan.id}/edit`}><Pencil className="h-4 w-4" /> {tr("editPlan")}</Link></Button> : null}
+            {allowedActions.includes("edit") ? <Button asChild><Link href={`/my-workout/plans/${plan.id}/edit`}><Pencil className="h-4 w-4" /> {tr("editPlan")}</Link></Button> : null}
             <ActionMenu label={`${tr("moreActions")}: ${plan.name}`} disabled={busy}>
-              {!plan.is_active ? <ActionMenuItem onSelect={() => void runAction(() => setDefaultUserWorkoutPlan(user!.id, plan.id), tr("activePlanUpdated"))}><Star className="me-2 inline h-4 w-4" /> {archived ? tr("restoreActivate") : tr("setActive")}</ActionMenuItem> : null}
-              <ActionMenuItem onSelect={() => void runAction(() => duplicateWorkoutPlan(user!.id, plan.id), tr("planDuplicated"))}><Copy className="me-2 inline h-4 w-4" /> {tr("duplicate")}</ActionMenuItem>
-              {!archived ? <ActionMenuItem onSelect={() => ask({ title: tr("archive"), description: tr("planArchivedDescription"), confirmLabel: tr("archive"), onConfirm: () => void runAction(() => archiveWorkoutPlan(user!.id, plan.id), tr("planArchived"), true) })}><Archive className="me-2 inline h-4 w-4" /> {tr("archive")}</ActionMenuItem> : null}
-              <ActionMenuItem destructive onSelect={() => ask({ title: tr("deleteTitle"), description: tr("deleteDescription"), confirmLabel: tr("deletePermanently"), variant: "destructive", onConfirm: () => void runAction(() => deleteWorkoutPlan(user!.id, plan.id), tr("planDeleted"), true) })}><Trash2 className="me-2 inline h-4 w-4" /> {tr("deletePermanently")}</ActionMenuItem>
+              {allowedActions.includes("activate") && !plan.is_active ? <ActionMenuItem onSelect={() => void runAction(() => setDefaultUserWorkoutPlan(user!.id, plan.id), tr("activePlanUpdated"))}><Star className="me-2 inline h-4 w-4" /> {archived ? tr("restoreActivate") : tr("setActive")}</ActionMenuItem> : null}
+              {allowedActions.includes("duplicate") ? <ActionMenuItem onSelect={() => void runAction(() => duplicateWorkoutPlan(user!.id, plan.id), tr("planDuplicated"))}><Copy className="me-2 inline h-4 w-4" /> {tr("duplicate")}</ActionMenuItem> : null}
+              {allowedActions.includes("archive") ? <ActionMenuItem onSelect={() => ask({ title: tr("archive"), description: tr("planArchivedDescription"), confirmLabel: tr("archive"), onConfirm: () => void runAction(() => archiveWorkoutPlan(user!.id, plan.id), tr("planArchived"), true) })}><Archive className="me-2 inline h-4 w-4" /> {tr("archive")}</ActionMenuItem> : null}
+              {allowedActions.includes("delete") ? <ActionMenuItem destructive onSelect={() => ask({ title: tr("deleteTitle"), description: tr("deleteDescription"), confirmLabel: tr("deletePermanently"), variant: "destructive", onConfirm: () => void runAction(() => deleteWorkoutPlan(user!.id, plan.id), tr("planDeleted"), true) })}><Trash2 className="me-2 inline h-4 w-4" /> {tr("deletePermanently")}</ActionMenuItem> : null}
             </ActionMenu>
           </div>
         }
@@ -192,7 +195,7 @@ export function WorkoutPlanDetail() {
         <CardContent className="p-0">
           <div className="flex flex-col gap-4 border-b bg-muted/30 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div><p className="text-sm text-muted-foreground">{new Intl.DateTimeFormat(locale, { weekday: "long" }).format(new Date(2024, 0, 7 + weekdays.indexOf(selectedWeekday)))}</p><h2 className="text-2xl font-semibold">{selectedDay?.day_name || tr("restDay")}</h2>{selectedDay && plan.session_duration_minutes ? <p className="mt-1 text-sm text-muted-foreground">{tr("aboutMinutes", { count: plan.session_duration_minutes })}</p> : null}{selectedDay?.notes ? <p className="mt-1 text-sm text-muted-foreground">{selectedDay.notes}</p> : !selectedDay && nextTrainingDay ? <p className="mt-1 text-sm text-muted-foreground">{tr("nextWorkout", { workout: nextTrainingDay.day_name, weekday: new Intl.DateTimeFormat(locale, { weekday: "long" }).format(new Date(2024, 0, 7 + weekdays.indexOf(nextTrainingDay.weekday!))) })}</p> : null}</div>
-            {!archived && plan.is_active && selectedIsToday && statusLoading ? <Badge variant="outline">{tr("checkingStatus")}</Badge> : !archived && plan.is_active && selectedIsToday && statusUnavailable ? <Badge variant="outline">{tr("statusUnavailable")}</Badge> : !archived && plan.is_active && selectedIsToday && resolution.state === "skipped" ? <Badge variant="outline">{tr("skippedToday")}</Badge> : !archived && plan.is_active && selectedIsToday && actionHref && exercises.length ? <Button asChild size="lg"><Link href={actionHref}>{resolution.state === "completed" ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}{actionLabel}</Link></Button> : <Badge variant="outline">{archived ? tr("archived") : tr("reviewOnly")}</Badge>}
+            {allowedActions.includes("start") && plan.is_active && selectedIsToday && statusLoading ? <Badge variant="outline">{tr("checkingStatus")}</Badge> : allowedActions.includes("start") && plan.is_active && selectedIsToday && statusUnavailable && resolution.state !== "active" ? <Badge variant="outline">{tr("statusUnavailable")}</Badge> : allowedActions.includes("start") && plan.is_active && selectedIsToday && resolution.state === "skipped" ? <Badge variant="outline">{tr("skippedToday")}</Badge> : allowedActions.includes(resolution.state === "active" ? "resume" : "start") && plan.is_active && selectedIsToday && actionHref && (exercises.length || resolution.state === "active") ? <Button asChild size="lg"><Link href={actionHref}>{resolution.state === "completed" ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}{actionLabel}</Link></Button> : <Badge variant="outline">{archived ? tr("archived") : tr("reviewOnly")}</Badge>}
           </div>
           <ol className="divide-y">
             {exercises.map((exercise, index) => <li key={exercise.id || `${exercise.name}-${index}`} className="flex min-h-20 items-center gap-4 p-4 sm:p-5"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate font-semibold">{exercise.name}</p><p className="text-sm text-muted-foreground">{exercise.target_muscle || tr("general")} · {exercise.equipment || tr("noEquipment")}</p></div><div className="text-end text-sm"><p className="font-medium">{tr("setsReps", { sets: exercise.sets ?? 3, reps: exercise.reps || "8–12" })}</p>{exercise.rest_seconds !== null && exercise.rest_seconds !== undefined ? <p className="text-muted-foreground">{tr("secondsRest", { count: exercise.rest_seconds })}</p> : null}</div></li>)}
@@ -201,10 +204,10 @@ export function WorkoutPlanDetail() {
         </CardContent>
       </Card>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
+      {allowedActions.includes("adjust") ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
         <div><p className="font-semibold">{tr("adjustPlanTitle")}</p><p className="text-sm text-muted-foreground">{tr("adjustPlanDescription")}</p></div>
         <WorkoutAiActionPanel compact sourceType="workout_plan" sourceId={plan.id} context={{ workout_plan: plan, selected_day: selectedDay }} actions={[{ type: "rebalance_week", label: tr("adjustPlan"), description: tr("adjustPlanDescription") }]} />
-      </div>
+      </div> : null}
       <Button asChild variant="ghost"><Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {tr("backToTrain")}</Link></Button>
       {dialog}
     </div>
