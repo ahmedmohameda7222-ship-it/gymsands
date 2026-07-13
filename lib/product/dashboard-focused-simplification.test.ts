@@ -59,8 +59,9 @@ describe("focused Today dashboard", () => {
     expect(copy).toContain('openWellness: "فتح العافية"');
   });
 
-  it("preserves historical schema and adds no migration", () => {
-    const migrationLedger = source("supabase/migration-ledger.json");
-    expect(migrationLedger).toContain("user_daily_checkins");
+  it("preserves historical schema and adds no destructive migration", () => {
+    const migration = source("supabase/migrations/20260702174951_chatgpt_execution_layer_foundation.sql");
+    expect(migration).toContain("user_daily_checkins");
+    expect(migration).not.toMatch(/drop\s+table\s+(if\s+exists\s+)?(?:public\.)?user_daily_checkins/i);
   });
 });
