@@ -78,9 +78,12 @@ export function ActionMenu({
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     window.addEventListener("resize", onViewportChange);
-    window.addEventListener("scroll", onViewportChange, true);
+    // Focusing the first menu item can scroll compact mobile viewports. Give
+    // that accessibility-driven scroll time to settle before scroll-to-close.
+    const scrollListenerTimer = window.setTimeout(() => window.addEventListener("scroll", onViewportChange, true), 250);
     return () => {
       window.cancelAnimationFrame(focusFirst);
+      window.clearTimeout(scrollListenerTimer);
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", onViewportChange);

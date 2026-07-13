@@ -132,6 +132,30 @@ function createInMemorySupabase() {
   }
 
   async function rpc(name: string, args: Record<string, unknown>) {
+    if (name === "create_workout_plan_atomic") {
+      const plan = { id: nextId(), user_id: USER_ID, name: String((args.p_plan as Row)?.name ?? "Plan"), is_active: args.p_activate !== false, updated_at: UPDATED_AT };
+      tables.user_workout_plans.push(plan);
+      return { data: plan, error: null };
+    }
+    if (name === "activate_workout_plan_atomic") {
+      const plan = tables.user_workout_plans.find((row) => row.id === args.p_plan_id && row.user_id === USER_ID) ?? null;
+      return { data: plan ? { ...plan, is_active: true, is_default: true } : null, error: plan ? null : { message: "not found" } };
+    }
+    if (name === "delete_workout_plan_atomic") return { data: { deleted: true }, error: null };
+    if (name === "start_or_resume_workout_session_atomic") {
+      const session = tables.workout_sessions.find((row) => row.user_id === USER_ID && row.plan_day_id === args.p_plan_day_id) ?? tables.workout_sessions[0];
+      return { data: { session }, error: null };
+    }
+    if (name === "upsert_workout_set_logs_atomic") {
+      const logs = ((args.p_logs as Row[]) ?? []).map((row) => ({ id: nextId(), workout_session_id: args.p_session_id, ...row }));
+      tables.exercise_logs.push(...logs);
+      return { data: logs, error: null };
+    }
+    if (name === "complete_workout_session_atomic") {
+      const session = tables.workout_sessions.find((row) => row.id === args.p_session_id) ?? tables.workout_sessions[0];
+      Object.assign(session, { status: "completed", completed_at: UPDATED_AT, duration_minutes: args.p_duration_minutes });
+      return { data: { session }, error: null };
+    }
     if (name !== "complete_meal_plan_item") return { data: [], error: null };
     const item = tables.user_meal_plan_items.find((row) => row.id === args.p_item_id && row.user_id === USER_ID);
     if (!item) return { data: null, error: { message: "not found" } };

@@ -1,209 +1,192 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, Play, Plus } from "lucide-react";
+import { Archive, ArrowLeft, Check, Copy, Dumbbell, Pencil, Play, Star, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
+import { useAuth } from "@/components/auth/auth-provider";
+import { PageHeading } from "@/components/layout/page-heading";
+import { ActionMenu, ActionMenuItem } from "@/components/ui/action-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/components/auth/auth-provider";
+import { Card, CardContent } from "@/components/ui/card";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { ErrorState } from "@/components/ui/state-views";
 import { useToast } from "@/components/ui/toaster";
-import Link from "next/link";
-import { createUserWorkoutPlanDay, getCurrentWeekday, getUserWorkoutPlan, weekDays, workoutsFromPlanDay } from "@/services/database/workout-plans";
-import { getWorkoutActivity } from "@/services/database/workout-sessions";
-import { WorkoutCalendar, type WeeklyPlanDay } from "@/components/workouts/workout-calendar";
-import type { UserWorkoutPlan, WorkoutSession } from "@/types";
-import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
-import { Disclosure } from "@/components/ui/disclosure";
+import { todayIso } from "@/lib/date-utils";
+import { resolveTodayWorkout, todayWorkoutActionHref } from "@/lib/dashboard/today-model";
 import { userSafeError } from "@/lib/error-formatting";
+import {
+  archiveWorkoutPlan,
+  deleteWorkoutPlan,
+  duplicateWorkoutPlan,
+  getWorkoutPlanById,
+  workoutsFromLoadedPlanDay
+} from "@/services/database/workout-plan-loader";
+import { setDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
+import { getOpenWorkoutSessionWithStatus, getWorkoutActivity } from "@/services/database/workout-sessions";
+import type { UserWorkoutPlan, WorkoutSession } from "@/types";
 
-function daysFromPlan(plan: UserWorkoutPlan): WeeklyPlanDay[] {
-  return plan.days.map((day) => ({
-    id: day.id,
-    planId: day.plan_id,
-    dayName: day.day_name,
-    weekday: day.weekday,
-    notes: day.notes ?? "",
-    exercises: workoutsFromPlanDay(day)
-  }));
-}
+const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 
 export function WorkoutPlanDetail() {
   const params = useParams<{ planId: string }>();
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { dialog, ask } = useConfirm();
   const [plan, setPlan] = useState<UserWorkoutPlan | null>(null);
   const [activity, setActivity] = useState<WorkoutSession[]>([]);
-  const [activeDayIndex, setActiveDayIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAddingDay, setIsAddingDay] = useState(false);
+  const [openSession, setOpenSession] = useState<WorkoutSession | null>(null);
+  const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusUnavailable, setStatusUnavailable] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    let active = true;
-    async function loadPlan() {
+    let current = true;
+    async function load() {
       if (!user?.id) return;
-      setIsLoading(true);
+      setLoading(true);
+      setError(null);
       try {
-        const [nextPlan, nextActivity] = await Promise.all([
-          getUserWorkoutPlan(user.id, params.planId),
-          getWorkoutActivity(user.id)
-        ]);
-        if (!active) return;
+        const nextPlan = await getWorkoutPlanById(user.id, params.planId);
+        if (!current) return;
         setPlan(nextPlan);
-        setActivity(nextActivity);
-      } catch (error) {
-        toast({ title: "Could not load plan", description: userSafeError(error, "Please refresh and try again.") });
+        const today = weekdays[new Date().getDay()];
+        setSelectedDayId(nextPlan?.days.find((day) => day.weekday === today)?.id ?? nextPlan?.days[0]?.id ?? null);
+      } catch (loadError) {
+        if (current) setError(userSafeError(loadError, "This plan could not load. Your saved data was not changed."));
       } finally {
-        if (active) setIsLoading(false);
+        if (current) setLoading(false);
       }
     }
-    loadPlan();
-    return () => {
-      active = false;
-    };
-  }, [params.planId, toast, user?.id]);
+    void load();
+    return () => { current = false; };
+  }, [params.planId, user]);
 
-  const days = useMemo(() => (plan ? daysFromPlan(plan) : []), [plan]);
-  const activeDay = days[activeDayIndex] ?? days[0];
-
-  function startDay(day: WeeklyPlanDay | undefined) {
-    if (!day?.id) return;
-    router.push(`/workouts/session/day/${day.id}`);
-  }
-
-  function editDay(day: WeeklyPlanDay | undefined) {
-    if (!day?.id) return;
-    router.push(`/my-workout/day/${day.id}`);
-  }
-
-  function startToday() {
-    const today = getCurrentWeekday();
-    const todayIndex = days.findIndex((day) => day.weekday === today && day.exercises.length > 0);
-    if (todayIndex < 0) {
-      toast({ title: "No workout for today", description: `Today is ${today}. Choose another day from the calendar.` });
-      return;
+  useEffect(() => {
+    let current = true;
+    async function loadStatus() {
+      if (!user?.id) return;
+      setStatusLoading(true);
+      setStatusUnavailable(false);
+      const [historyResult, openResult] = await Promise.allSettled([
+        getWorkoutActivity(user.id, 180, { throwOnError: true }),
+        getOpenWorkoutSessionWithStatus(user.id)
+      ]);
+      if (!current) return;
+      if (historyResult.status === "fulfilled") setActivity(historyResult.value);
+      if (openResult.status === "fulfilled") setOpenSession(openResult.value.session);
+      if (historyResult.status === "rejected" || openResult.status === "rejected" || (openResult.status === "fulfilled" && openResult.value.error)) setStatusUnavailable(true);
+      setStatusLoading(false);
     }
-    startDay(days[todayIndex]);
-  }
+    void loadStatus();
+    return () => { current = false; };
+  }, [user]);
 
-  async function addDay() {
-    if (!plan || isAddingDay) return;
-    const usedWeekdays = new Set(plan.days.map((day) => day.weekday).filter(Boolean));
-    const nextWeekday = weekDays.find((weekday) => !usedWeekdays.has(weekday)) ?? null;
+  const selectedDay = useMemo(() => plan?.days.find((day) => day.id === selectedDayId) ?? plan?.days[0] ?? null, [plan, selectedDayId]);
+  const exercises = useMemo(() => selectedDay ? workoutsFromLoadedPlanDay(selectedDay) : [], [selectedDay]);
+  const selectedIsToday = selectedDay?.weekday === weekdays[new Date().getDay()];
+  const resolution = useMemo(() => resolveTodayWorkout({
+    today: todayIso(),
+    planDayId: selectedIsToday ? selectedDay?.id ?? null : null,
+    openSessionId: selectedIsToday && openSession?.plan_day_id === selectedDay?.id ? openSession.id : null,
+    sessions: activity
+  }), [activity, openSession, selectedDay, selectedIsToday]);
+  const actionHref = selectedIsToday ? todayWorkoutActionHref(resolution, selectedDay?.id ?? null) : null;
+  const actionLabel = resolution.state === "completed" ? "View completed" : resolution.state === "active" ? "Resume workout" : "Start workout";
+
+  async function runAction(action: () => Promise<unknown>, success: string, redirect = false) {
+    if (busy) return;
+    setBusy(true);
     try {
-      setIsAddingDay(true);
-      const day = await createUserWorkoutPlanDay(plan.id, {
-        dayName: `Workout day ${plan.days.length + 1}`,
-        weekday: nextWeekday,
-        notes: "",
-        exercises: []
-      });
-      toast({ title: "Workout day added", description: "Add exercises to finish the new day." });
-      router.push(`/my-workout/day/${day.id}/add-exercise`);
-    } catch (error) {
-      toast({ title: "Could not add day", description: userSafeError(error) });
+      await action();
+      toast({ title: success });
+      if (redirect) router.push("/my-workout/plans");
+      else router.refresh();
+    } catch (actionError) {
+      toast({ title: "Plan was not changed", description: userSafeError(actionError), variant: "error" });
     } finally {
-      setIsAddingDay(false);
+      setBusy(false);
     }
   }
 
-  if (isLoading) return <p className="text-sm text-muted-foreground">Loading plan...</p>;
+  if (loading) {
+    return <div className="space-y-4" aria-busy="true"><div className="h-9 w-56 animate-pulse rounded-lg bg-muted" /><div className="h-64 animate-pulse rounded-2xl bg-muted" /></div>;
+  }
+
+  if (error) return <ErrorState title="Plan unavailable" description={error} onRetry={() => window.location.reload()} />;
+
   if (!plan) {
     return (
-      <Card>
-        <CardContent className="space-y-3 pt-5">
-          <p className="text-sm text-muted-foreground">This workout plan could not be found.</p>
-          <Button asChild variant="outline">
-            <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to Workout Plans</Link>
-          </Button>
-        </CardContent>
-      </Card>
+      <Card><CardContent className="space-y-4 p-6">
+        <p className="font-semibold">This workout plan could not be found.</p>
+        <Button asChild variant="outline"><Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to Train</Link></Button>
+      </CardContent></Card>
     );
   }
 
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button asChild variant="outline">
-          <Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to Workout Plans</Link>
-        </Button>
-        <div className="flex flex-wrap gap-2">
-          {(plan.is_default ?? plan.is_active) ? <Badge>Default Plan</Badge> : null}
-          <Badge>{plan.days.length} days</Badge>
-          <Badge variant="outline">{plan.days.reduce((sum, day) => sum + day.exercises.length, 0)} exercises</Badge>
-          <Button size="sm" onClick={addDay} disabled={isAddingDay || plan.days.length >= 7}>
-            <Plus className="h-4 w-4" />
-            {isAddingDay ? "Adding..." : "Add Day"}
-          </Button>
-        </div>
-      </div>
+  const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
 
-      <WorkoutCalendar
-        days={days}
-        activity={activity}
-        activeDayIndex={activeDayIndex}
-        onSelectDay={setActiveDayIndex}
-        onStartToday={startToday}
+  return (
+    <div className="space-y-6">
+      <PageHeading
+        title={plan.name}
+        description={plan.description || "Review the plan structure, then edit it or train today's scheduled day."}
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button asChild><Link href={`/my-workout/plans/${plan.id}/edit`}><Pencil className="h-4 w-4" /> Edit plan</Link></Button>
+            <ActionMenu label="More plan actions" disabled={busy}>
+              {!plan.is_active ? <ActionMenuItem onSelect={() => void runAction(() => setDefaultUserWorkoutPlan(user!.id, plan.id), "Active plan updated")}><Star className="me-2 inline h-4 w-4" /> Make active</ActionMenuItem> : null}
+              <ActionMenuItem onSelect={() => void runAction(() => duplicateWorkoutPlan(user!.id, plan.id), "Plan duplicated")}><Copy className="me-2 inline h-4 w-4" /> Duplicate</ActionMenuItem>
+              <ActionMenuItem onSelect={() => ask({ title: "Archive this plan?", description: "History stays available and the plan leaves your active list.", confirmLabel: "Archive", onConfirm: () => void runAction(() => archiveWorkoutPlan(user!.id, plan.id), "Plan archived", true) })}><Archive className="me-2 inline h-4 w-4" /> Archive</ActionMenuItem>
+              <ActionMenuItem destructive onSelect={() => ask({ title: "Delete this plan?", description: "Plans with workout history cannot be deleted; archive them instead.", confirmLabel: "Delete", variant: "destructive", onConfirm: () => void runAction(() => deleteWorkoutPlan(user!.id, plan.id), "Plan deleted", true) })}><Trash2 className="me-2 inline h-4 w-4" /> Delete</ActionMenuItem>
+            </ActionMenu>
+          </div>
+        }
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{plan.name}</CardTitle>
-          <p className="text-sm text-muted-foreground">Select a day in the weekly calendar, then edit it or start training.</p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {activeDay ? (
-            <>
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-card p-3">
-                <div>
-                  <p className="font-semibold text-foreground">{activeDay.dayName}</p>
-                  <p className="text-sm text-muted-foreground">{activeDay.weekday ?? "No weekday"} | {activeDay.exercises.length} exercises</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" onClick={() => editDay(activeDay)}>
-                    <Pencil className="h-4 w-4" />
-                    Edit Day
-                  </Button>
-                  <Button onClick={() => startDay(activeDay)} disabled={!activeDay.exercises.length}>
-                    <Play className="h-4 w-4" />
-                    Start Day
-                  </Button>
-                </div>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                {activeDay.exercises.map((exercise, index) => (
-                  <div key={`${exercise.id}-${index}`} className="rounded-md border bg-card p-3">
-                    <p className="font-semibold">{index + 1}. {exercise.name}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{exercise.target_muscle} | {exercise.equipment}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Badge variant="outline">{exercise.sets ?? 3} sets</Badge>
-                      <Badge variant="outline">{exercise.reps ?? "8-12"}</Badge>
-                      <Badge variant="outline">{exercise.rest_seconds ?? 75}s rest</Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">Choose a workout day from the calendar.</p>
-          )}
+      <div className="flex flex-wrap gap-2">
+        {plan.is_active ? <Badge><Star className="me-1 h-3.5 w-3.5" /> Active</Badge> : null}
+        <Badge variant="outline">{plan.days.length} days</Badge>
+        <Badge variant="outline">{exerciseCount} exercises</Badge>
+        {plan.program_duration_weeks ? <Badge variant="outline">{plan.program_duration_weeks} weeks</Badge> : null}
+        {plan.goal ? <Badge variant="outline">{plan.goal}</Badge> : null}
+      </div>
+
+      <section aria-labelledby="plan-week-heading" className="space-y-3">
+        <div><h2 id="plan-week-heading" className="text-xl font-semibold">Plan week</h2><p className="text-sm text-muted-foreground">Choose a day to review. Training is only offered for today's scheduled workout.</p></div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+          {plan.days.map((day) => {
+            const active = day.id === selectedDay?.id;
+            return <button key={day.id} type="button" onClick={() => setSelectedDayId(day.id)} aria-pressed={active} className={`min-h-20 rounded-2xl border p-3 text-start transition ${active ? "border-primary bg-primary/10 ring-2 ring-primary/20" : "bg-card hover:border-primary/40"}`}><span className="block text-xs text-muted-foreground">{day.weekday || "Unscheduled"}</span><span className="mt-1 block font-semibold">{day.day_name}</span><span className="mt-1 block text-xs text-muted-foreground">{day.exercises.length} exercises</span></button>;
+          })}
+        </div>
+      </section>
+
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
+          <div className="flex flex-col gap-4 border-b bg-muted/30 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div><p className="text-sm text-muted-foreground">{selectedDay?.weekday || "Unscheduled day"}</p><h2 className="text-2xl font-semibold">{selectedDay?.day_name || "No workout day"}</h2>{plan.session_duration_minutes ? <p className="mt-1 text-sm text-muted-foreground">About {plan.session_duration_minutes} minutes</p> : null}{selectedDay?.notes ? <p className="mt-1 text-sm text-muted-foreground">{selectedDay.notes}</p> : null}</div>
+            {selectedIsToday && statusLoading ? <Badge variant="outline">Checking status…</Badge> : selectedIsToday && statusUnavailable ? <Badge variant="outline">Status unavailable</Badge> : selectedIsToday && resolution.state === "skipped" ? <Badge variant="outline">Skipped today</Badge> : selectedIsToday && actionHref && exercises.length ? <Button asChild size="lg"><Link href={actionHref}>{resolution.state === "completed" ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}{actionLabel}</Link></Button> : <Badge variant="outline">Review only</Badge>}
+          </div>
+          <ol className="divide-y">
+            {exercises.map((exercise, index) => <li key={exercise.id || `${exercise.name}-${index}`} className="flex min-h-20 items-center gap-4 p-4 sm:p-5"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate font-semibold">{exercise.name}</p><p className="text-sm text-muted-foreground">{exercise.target_muscle || "General"} · {exercise.equipment || "No equipment"}</p></div><div className="text-end text-sm"><p className="font-medium">{exercise.sets ?? 3} sets · {exercise.reps || "8–12"} reps</p>{exercise.rest_seconds !== null && exercise.rest_seconds !== undefined ? <p className="text-muted-foreground">{exercise.rest_seconds}s rest</p> : null}</div></li>)}
+            {!exercises.length ? <li className="grid min-h-40 place-items-center p-6 text-center"><div><Dumbbell className="mx-auto mb-2 h-6 w-6 text-muted-foreground" /><p className="font-medium">No exercises in this day</p><p className="text-sm text-muted-foreground">Edit the plan to add exercises.</p></div></li> : null}
+          </ol>
         </CardContent>
       </Card>
 
-      <Disclosure title="ChatGPT help" description="Rebalance the week, adjust the next workout, or explain progression">
-        <WorkoutAiActionPanel
-          compact
-          sourceType="workout_plan"
-          sourceId={plan.id}
-          context={{ workout_plan: plan, selected_day: activeDay, recent_workout_activity: activity }}
-          actions={[
-            { type: "rebalance_week", label: "Rebalance week", description: "Ask ChatGPT to review this plan and recent adherence before recommending a weekly adjustment." },
-            { type: "adjust_next_workout", label: "Adjust next", description: "Ask ChatGPT to recommend a change to the next planned workout without applying it automatically." },
-            { type: "explain_progression", label: "Explain progression", description: "Ask ChatGPT to explain progression options for the selected workout day." }
-          ]}
-        />
-      </Disclosure>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
+        <div><p className="font-semibold">Want to change the plan?</p><p className="text-sm text-muted-foreground">Ask ChatGPT with only this plan and selected day as context.</p></div>
+        <WorkoutAiActionPanel compact sourceType="workout_plan" sourceId={plan.id} context={{ workout_plan: plan, selected_day: selectedDay }} actions={[{ type: "rebalance_week", label: "Adjust plan", description: "Ask ChatGPT to adjust this plan using your saved Plaivra context." }]} />
+      </div>
+      <Button asChild variant="ghost"><Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4" /> Back to Train</Link></Button>
+      {dialog}
     </div>
   );
 }

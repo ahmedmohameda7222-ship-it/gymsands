@@ -308,7 +308,7 @@ export function WorkoutHistory() {
               title="No completed workouts yet"
               description="Start a workout session and log your sets to see your history here."
               actionLabel="Start a workout"
-              actionHref="/today-workout"
+              actionHref="/my-workout/plans"
             />
           ) : null}
           {!isLoading && !loadError && totalHistoryCount > 0 && !filteredHistory.length ? (

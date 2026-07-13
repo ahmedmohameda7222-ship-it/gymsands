@@ -1,7 +1,7 @@
 import { localDateToIso } from "@/lib/date-utils";
 import type { MealPlanItem, WorkoutSession } from "@/types";
 
-export type TodayWorkoutState = "none" | "scheduled" | "active" | "completed";
+export type TodayWorkoutState = "none" | "scheduled" | "active" | "completed" | "skipped";
 export type DashboardWorkoutSession = WorkoutSession & { scheduled_date?: string | null };
 
 export type TodayWorkoutResolution = {
@@ -28,6 +28,12 @@ export function resolveTodayWorkout(input: {
 }): TodayWorkoutResolution {
   if (!input.planDayId) return { state: "none" };
   if (input.openSessionId) return { state: "active", activeSessionId: input.openSessionId };
+  const skipped = input.sessions.find((session) => (
+    session.plan_day_id === input.planDayId
+    && session.status === "skipped"
+    && workoutSessionLocalDate(session, input.toLocalIso) === input.today
+  ));
+  if (skipped) return { state: "skipped" };
   const completed = input.sessions.find((session) => (
     session.plan_day_id === input.planDayId
     && session.status === "completed"

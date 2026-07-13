@@ -3,6 +3,7 @@
 import { supabase } from "@/lib/supabase/client";
 import { env } from "@/lib/env";
 import { isUuid } from "@/lib/utils";
+import { todayIso } from "@/lib/date-utils";
 import { autoDetectPersonalRecordsFromExerciseLogs } from "@/services/database/progress";
 import type {
   ExerciseLog,
@@ -25,6 +26,19 @@ function requireWorkoutPersistence(userIdOrSessionId: string | null | undefined,
   if (!supabase || !isUuid(userIdOrSessionId)) {
     throw new Error(`${label} could not be saved. Please refresh, sign in again, and try once more.`);
   }
+}
+
+type WorkoutSessionIdentity = Pick<WorkoutSession, "id" | "user_id" | "plan_day_id" | "status">;
+
+async function getWorkoutSessionIdentity(sessionId: string): Promise<WorkoutSessionIdentity> {
+  requireWorkoutPersistence(sessionId, "Workout session");
+  const { data, error } = await supabase!
+    .from("workout_sessions")
+    .select("id,user_id,plan_day_id,status")
+    .eq("id", sessionId)
+    .single();
+  if (error) throw error;
+  return data as WorkoutSessionIdentity;
 }
 
 function summarizeWorkoutCategory(
@@ -223,33 +237,30 @@ export async function startWorkoutSession(userId: string, workout: Workout) {
 }
 
 export async function startWorkoutDaySession(userId: string, day: WorkoutPlanDaySession) {
-  const payload = {
-    user_id: userId,
-    workout_id: null,
-    plan_id: day.plan_id,
-    plan_day_id: day.id,
-    workout_day_name: day.day_name,
-    workout_category: summarizeWorkoutCategory(day),
-    workout_name: day.weekday ? `${day.day_name} - ${day.weekday}` : day.day_name,
-    started_at: new Date().toISOString(),
-    completed_at: null,
-    duration_minutes: null,
-    notes: null,
-    status: "started"
-  };
   requireWorkoutPersistence(userId, "Workout session");
-  let { data, error } = await supabase!.from("workout_sessions").insert(payload).select("*").single();
-  if (error && isSchemaCompatibilityError(error)) {
-    const { workout_category: _category, ...compatiblePayload } = payload;
-    const compatible = await supabase!.from("workout_sessions").insert(compatiblePayload).select("*").single();
-    data = compatible.data;
-    error = compatible.error;
-  }
+  if (!isUuid(day.id)) throw new Error("Workout day is invalid.");
+  const scheduledResult = await supabase!
+    .from("user_workout_sessions")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("plan_day_id", day.id)
+    .eq("scheduled_date", todayIso())
+    .in("status", ["scheduled", "started"])
+    .limit(1)
+    .maybeSingle();
+  if (scheduledResult.error) throw scheduledResult.error;
+  const { data, error } = await supabase!.rpc("start_or_resume_workout_session_atomic", {
+    p_user_id: userId,
+    p_plan_day_id: day.id,
+    p_scheduled_session_id: scheduledResult.data?.id ?? null
+  });
   if (error) {
     console.warn("Plaivra could not start a workout day session.", error.message);
     throw error;
   }
-  return normalizeWorkoutSession(data as WorkoutSession);
+  const result = data as { session?: WorkoutSession } | null;
+  if (!result?.session) throw new Error("Workout session could not be started.");
+  return normalizeWorkoutSession(result.session);
 }
 
 export async function getOpenWorkoutDaySession(userId: string, planDayId: string) {
@@ -273,8 +284,6 @@ export async function getOpenWorkoutDaySession(userId: string, planDayId: string
 }
 
 export async function getOrStartWorkoutDaySession(userId: string, day: WorkoutPlanDaySession) {
-  const open = await getOpenWorkoutDaySession(userId, day.id);
-  if (open) return open;
   return startWorkoutDaySession(userId, day);
 }
 
@@ -322,9 +331,8 @@ export type WorkoutSetLogInput = {
   completedAt?: string | null;
 };
 
-export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogInput[]) {
-  requireWorkoutPersistence(sessionId, "Workout sets");
-  const rows = logs.map((log) => ({
+function workoutSetLogRows(sessionId: string, logs: WorkoutSetLogInput[]) {
+  return logs.map((log) => ({
     workout_session_id: sessionId,
     plan_exercise_id: log.planExerciseId ?? null,
     exercise_order: log.exerciseOrder ?? null,
@@ -339,8 +347,24 @@ export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogI
     notes: log.notes ?? null,
     completed_at: log.completedAt ?? null
   }));
+}
+
+export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogInput[]) {
+  requireWorkoutPersistence(sessionId, "Workout sets");
+  const rows = workoutSetLogRows(sessionId, logs);
 
   if (!rows.length) return true;
+  const session = await getWorkoutSessionIdentity(sessionId);
+  if (session.plan_day_id) {
+    const { error } = await supabase!.rpc("upsert_workout_set_logs_atomic", {
+      p_user_id: session.user_id,
+      p_session_id: sessionId,
+      p_logs: rows.map(({ workout_session_id: _sessionId, ...row }) => row)
+    });
+    if (error) throw error;
+    return true;
+  }
+
   const existingResult = await supabase!
     .from("exercise_logs")
     .select("id,exercise_name,set_number")
@@ -408,23 +432,42 @@ export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogI
     }
   }
 
-  const sessionResult = await supabase!.from("workout_sessions").select("user_id").eq("id", sessionId).single();
-  if (sessionResult.error) throw sessionResult.error;
-  await autoDetectPersonalRecordsFromExerciseLogs(sessionResult.data.user_id, rows, new Date().toISOString().slice(0, 10));
   return true;
 }
 
-export async function completeWorkoutSession(sessionId: string, notes: string, durationMinutes: number) {
+export async function completeWorkoutSession(sessionId: string, notes: string, durationMinutes: number, finalLogs?: WorkoutSetLogInput[]) {
   requireWorkoutPersistence(sessionId, "Workout session");
-  const { error } = await supabase!
-    .from("workout_sessions")
-    .update({ status: "completed", completed_at: new Date().toISOString(), notes, duration_minutes: durationMinutes })
-    .eq("id", sessionId);
+  const session = await getWorkoutSessionIdentity(sessionId);
+  const rows = finalLogs ? workoutSetLogRows(sessionId, finalLogs).map(({ workout_session_id: _sessionId, ...row }) => row) : null;
+  const { data, error } = await supabase!.rpc("complete_workout_session_atomic", {
+    p_user_id: session.user_id,
+    p_session_id: sessionId,
+    p_logs: rows,
+    p_duration_minutes: Math.max(0, durationMinutes),
+    p_notes: notes.trim() || null
+  });
   if (error) {
     console.warn("Plaivra could not complete this workout session.", error.message);
     throw error;
   }
+  const result = data as { logs?: ExerciseLog[] } | null;
+  const completedLogs = result?.logs;
+  void detectPersonalRecordsAfterWorkoutCompletion(session.user_id, sessionId, completedLogs);
   return true;
+}
+
+export async function detectPersonalRecordsAfterWorkoutCompletion(
+  userId: string,
+  sessionId: string,
+  completedLogs?: ExerciseLog[]
+) {
+  try {
+    const logs = completedLogs ?? await getWorkoutSessionLogs(sessionId);
+    return await autoDetectPersonalRecordsFromExerciseLogs(userId, logs, new Date().toISOString().slice(0, 10));
+  } catch (error) {
+    console.warn("Plaivra saved the workout, but personal records could not be refreshed.", error);
+    return [];
+  }
 }
 
 export async function skipWorkoutDay(userId: string, day: SkipWorkoutDayInput, notes = "") {

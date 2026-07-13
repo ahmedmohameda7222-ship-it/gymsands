@@ -1,786 +1,183 @@
 "use client";
 
-import { ExternalLink, Dumbbell, Pencil, Play, Plus, RotateCcw, Save, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Dumbbell, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/auth/auth-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useAuth } from "@/components/auth/auth-provider";
+import { Select } from "@/components/ui/select-field";
+import { CardGridSkeleton } from "@/components/ui/state-views";
 import { useToast } from "@/components/ui/toaster";
-import { WorkoutCalendar, type WeeklyPlanDay } from "@/components/workouts/workout-calendar";
-import { clearStoredValue, workoutStorageKey } from "@/lib/workout-persistence";
 import { userSafeError } from "@/lib/error-formatting";
-import Link from "next/link";
-import { getWorkoutFilterOptions, getWorkouts, type WorkoutFilterOptions, type WorkoutFilters } from "@/services/database/workout-library";
-import {
-  createUserWorkoutPlan,
-  getActiveUserWorkoutPlan,
-  getCurrentWeekday,
-  weekDays,
-  workoutsFromPlanDay
-} from "@/services/database/workout-plans";
-import { getWorkoutActivity, skipWorkoutDay } from "@/services/database/workout-sessions";
-import { updateSkippedWorkoutFollowup } from "@/services/database/workout-sessions";
-import type { Weekday, Workout, WorkoutSession } from "@/types";
-import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
+import { clearStoredValue, readStoredJson, storeJson, workoutStorageKey } from "@/lib/workout-persistence";
+import { getWorkouts } from "@/services/database/workout-library";
+import { createUserWorkoutPlan, weekDays } from "@/services/database/workout-plans";
+import type { Weekday, Workout } from "@/types";
 
-const defaultDays: WeeklyPlanDay[] = [
-  { dayName: "Push day", weekday: "Sunday", notes: "", exercises: [] },
-  { dayName: "Pull day", weekday: "Tuesday", notes: "", exercises: [] },
-  { dayName: "Leg day", weekday: "Thursday", notes: "", exercises: [] }
-];
+type BuilderDay = { dayName: string; weekday: Weekday | null; notes: string; exercises: Workout[] };
+type BuilderDraft = { planName: string; goal: string; durationWeeks: number | null; sessionMinutes: number | null; days: BuilderDay[] };
 
-type BuilderFilterState = {
-  query: string;
-  muscleCategory: string;
-  primaryMuscle: string;
-  secondaryMuscle: string;
-  forceType: string;
-  exerciseType: string;
-  equipment: string;
-  mechanics: string;
-  level: string;
+const initialDraft: BuilderDraft = {
+  planName: "My workout plan",
+  goal: "",
+  durationWeeks: 8,
+  sessionMinutes: 45,
+  days: [
+    { dayName: "Full body A", weekday: "Monday", notes: "", exercises: [] },
+    { dayName: "Full body B", weekday: "Wednesday", notes: "", exercises: [] },
+    { dayName: "Full body C", weekday: "Friday", notes: "", exercises: [] }
+  ]
 };
 
-const allValue = "all";
-
-const emptyOptions: WorkoutFilterOptions = {
-  muscleCategories: [],
-  primaryMuscles: [],
-  equipmentRequired: [],
-  mechanics: [],
-  exerciseTypes: [],
-  forceTypes: [],
-  experienceLevels: [],
-  secondaryMuscles: []
-};
-
-const emptyFilterState: BuilderFilterState = {
-  query: "",
-  muscleCategory: allValue,
-  primaryMuscle: allValue,
-  secondaryMuscle: allValue,
-  forceType: allValue,
-  exerciseType: allValue,
-  equipment: allValue,
-  mechanics: allValue,
-  level: allValue
-};
-
-function withTrainingDefaults(workout: Workout): Workout {
-  return {
-    ...workout,
-    sets: workout.sets ?? 3,
-    reps: workout.reps ?? "8-12",
-    rest_seconds: workout.rest_seconds ?? 75
-  };
+function identity(workout: Workout) {
+  return `${workout.id}-${workout.name}-${workout.target_muscle}`;
 }
 
-function isVideoLink(value: string | null | undefined) {
-  return Boolean(value && /^https?:\/\//i.test(value));
+function withDefaults(workout: Workout): Workout {
+  return { ...workout, sets: workout.sets ?? 3, reps: workout.reps ?? "8-12", rest_seconds: workout.rest_seconds ?? 75 };
 }
 
-function workoutIdentity(workout: Workout) {
-  return `${workout.name.toLowerCase()}-${(workout.muscle_category || workout.target_muscle).toLowerCase()}-${(workout.equipment_required || workout.equipment).toLowerCase()}`;
-}
-
-function selectedList(value: string) {
-  return value === allValue ? [] : [value];
-}
-
-export function WorkoutPlanBuilder({
-  loadActivePlan = true,
-  onSaved
-}: {
-  loadActivePlan?: boolean;
-  onSaved?: () => void | Promise<void>;
-}) {
+export function WorkoutPlanBuilder({ onSaved }: { loadActivePlan?: boolean; onSaved?: () => void | Promise<void> }) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const router = useRouter();
-  const [planName, setPlanName] = useState("My Plaivra plan");
-  const [days, setDays] = useState<WeeklyPlanDay[]>(defaultDays);
+  const [step, setStep] = useState(1);
+  const [draft, setDraft] = useState<BuilderDraft>(initialDraft);
   const [activeDayIndex, setActiveDayIndex] = useState(0);
-  const [filterOptions, setFilterOptions] = useState<WorkoutFilterOptions>(emptyOptions);
-  const [filters, setFilters] = useState<BuilderFilterState>(emptyFilterState);
-  const [allResults, setAllResults] = useState<Workout[]>([]);
-  const [displayCount, setDisplayCount] = useState(60);
-  const [apiPage, setApiPage] = useState(0);
-  const [hasMoreApi, setHasMoreApi] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingSavedPlan, setIsLoadingSavedPlan] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isSkipping, setIsSkipping] = useState(false);
-  const [skippedSession, setSkippedSession] = useState<WorkoutSession | null>(null);
-  const [skipReason, setSkipReason] = useState<"no_time" | "low_energy" | "sick" | "pain" | "travel" | "gym_closed" | "too_sore" | "other">("no_time");
-  const [savedMessage, setSavedMessage] = useState("");
-  const [activity, setActivity] = useState<WorkoutSession[]>([]);
-  const [showAll, setShowAll] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Workout[]>([]);
+  const [resultsError, setResultsError] = useState<string | null>(null);
+  const [loadingResults, setLoadingResults] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const draftKey = useMemo(() => workoutStorageKey(["workout-plan-builder", user?.id ?? "anonymous"]), [user?.id]);
 
   useEffect(() => {
-    getWorkoutFilterOptions()
-      .then(setFilterOptions)
-      .catch((error) => {
-        setFilterOptions(emptyOptions);
-        toast({ title: "Could not load exercise filters", description: userSafeError(error, "Please refresh and try again.") });
-      });
-  }, [toast]);
+    const stored = readStoredJson<BuilderDraft>(draftKey);
+    if (stored) setDraft(stored);
+    setHydrated(true);
+  }, [draftKey]);
+
+  useEffect(() => { if (hydrated) storeJson(draftKey, draft); }, [draft, draftKey, hydrated]);
 
   useEffect(() => {
-    if (!user || !loadActivePlan) return;
-    let active = true;
-    setIsLoadingSavedPlan(true);
-    getActiveUserWorkoutPlan(user.id)
-      .then((plan) => {
-        if (!active || !plan) return;
-        setPlanName(plan.name);
-        const hydratedDays = plan.days.map((day) => ({
-          id: day.id,
-          planId: day.plan_id,
-          dayName: day.day_name,
-          weekday: day.weekday,
-          notes: day.notes ?? "",
-          exercises: workoutsFromPlanDay(day).map(withTrainingDefaults)
-        }));
-        setDays(hydratedDays.length ? hydratedDays : defaultDays);
-        setSavedMessage(`Loaded saved plan: ${plan.name}`);
-      })
-      .catch((error) => {
-        if (!active) return;
-        toast({ title: "Could not load saved plan", description: userSafeError(error, "Please refresh and try again.") });
-      })
-      .finally(() => {
-        if (active) setIsLoadingSavedPlan(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [loadActivePlan, toast, user]);
+    if (JSON.stringify(draft) === JSON.stringify(initialDraft)) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [draft]);
 
   useEffect(() => {
-    if (!user) return;
-    let active = true;
-    getWorkoutActivity(user.id)
-      .then((items) => {
-        if (active) setActivity(items);
-      })
-      .catch((error) => {
-        if (!active) return;
-        setActivity([]);
-        toast({ title: "Could not load workout activity", description: userSafeError(error, "Please refresh and try again.") });
-      });
-    return () => {
-      active = false;
-    };
-  }, [toast, user]);
-
-  const requestFilters: WorkoutFilters = useMemo(
-    () => ({
-      muscleCategories: selectedList(filters.muscleCategory),
-      primaryMuscles: selectedList(filters.primaryMuscle),
-      secondaryMuscles: selectedList(filters.secondaryMuscle),
-      forceTypes: selectedList(filters.forceType),
-      exerciseTypes: selectedList(filters.exerciseType),
-      equipmentRequired: selectedList(filters.equipment),
-      mechanics: selectedList(filters.mechanics),
-      experienceLevels: selectedList(filters.level)
-    }),
-    [filters.equipment, filters.exerciseType, filters.forceType, filters.level, filters.mechanics, filters.muscleCategory, filters.primaryMuscle, filters.secondaryMuscle]
-  );
-
-  const activeFilterCount = useMemo(
-    () => Object.entries(filters).filter(([key, value]) => key !== "query" && value !== allValue).length + (filters.query ? 1 : 0),
-    [filters]
-  );
-
-  const hasActiveFilter = activeFilterCount > 0 || showAll;
-
-  useEffect(() => {
-    if (!hasActiveFilter) {
-      setAllResults([]);
-      setDisplayCount(60);
-      setApiPage(0);
-      setHasMoreApi(true);
-      setIsLoading(false);
-      return;
-    }
-    let active = true;
+    if (step !== 2) return;
+    let current = true;
     const timer = window.setTimeout(() => {
-      setIsLoading(true);
-      const query = showAll ? "" : filters.query.trim();
-      getWorkouts(query, requestFilters, 0)
-        .then((items) => {
-          if (!active) return;
-          setAllResults(items.map(withTrainingDefaults));
-          setDisplayCount(60);
-          setApiPage(0);
-          setHasMoreApi(items.length >= 500);
-        })
-        .catch((error) => {
-          if (!active) return;
-          setAllResults([]);
-          toast({ title: "Could not load workouts", description: userSafeError(error, "Try another filter.") });
-        })
-        .finally(() => {
-          if (active) setIsLoading(false);
-        });
-    }, 300);
+      setLoadingResults(true);
+      setResultsError(null);
+      getWorkouts(query.trim(), {}, 0)
+        .then((items) => { if (current) setResults(items.slice(0, 36).map(withDefaults)); })
+        .catch((error) => { if (current) { const message = userSafeError(error, "Try again in a moment."); setResults([]); setResultsError(message); toast({ title: "Exercise library unavailable", description: message, variant: "error" }); } })
+        .finally(() => { if (current) setLoadingResults(false); });
+    }, 220);
+    return () => { current = false; window.clearTimeout(timer); };
+  }, [query, step, toast]);
 
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [filters.query, requestFilters, toast, hasActiveFilter, showAll]);
+  const totalExercises = draft.days.reduce((sum, day) => sum + day.exercises.length, 0);
+  const activeDay = draft.days[activeDayIndex] ?? draft.days[0];
+  const basicsValid = Boolean(draft.planName.trim() && draft.days.length && draft.days.every((day) => day.dayName.trim() && day.weekday) && new Set(draft.days.map((day) => day.weekday)).size === draft.days.length);
+  const exerciseStepValid = draft.days.every((day) => day.exercises.length > 0);
 
-  const activeDay = days[activeDayIndex] ?? days[0];
-  const totalExercises = useMemo(() => days.reduce((sum, day) => sum + day.exercises.length, 0), [days]);
-  const today = getCurrentWeekday();
-  const todaysDay = days.find((day) => day.weekday === today && day.exercises.length > 0);
-
-  function updateDay(index: number, patch: Partial<WeeklyPlanDay>) {
-    setDays((current) => current.map((day, itemIndex) => (itemIndex === index ? { ...day, ...patch, id: patch.exercises ? undefined : day.id } : day)));
-    setSavedMessage("");
-  }
+  function patchDraft(patch: Partial<BuilderDraft>) { setDraft((current) => ({ ...current, ...patch })); }
+  function patchDay(index: number, patch: Partial<BuilderDay>) { setDraft((current) => ({ ...current, days: current.days.map((day, itemIndex) => itemIndex === index ? { ...day, ...patch } : day) })); }
 
   function addDay() {
-    setDays((current) => {
-      const usedWeekdays = new Set(current.map((day) => day.weekday).filter(Boolean));
-      const nextWeekday = weekDays.find((weekday) => !usedWeekdays.has(weekday)) ?? null;
-      const nextDays = [...current, { dayName: `Workout day ${current.length + 1}`, weekday: nextWeekday, notes: "", exercises: [] }];
-      setActiveDayIndex(nextDays.length - 1);
-      return nextDays;
-    });
-    setSavedMessage("");
-  }
-
-  function addWorkout(workout: Workout) {
-    const nextWorkout = withTrainingDefaults(workout);
-    updateDay(activeDayIndex, {
-      exercises: activeDay.exercises.some((item) => workoutIdentity(item) === workoutIdentity(nextWorkout)) ? activeDay.exercises : [...activeDay.exercises, nextWorkout]
-    });
-  }
-
-  function updateWorkout(workoutId: string, patch: Partial<Workout>) {
-    updateDay(activeDayIndex, {
-      exercises: activeDay.exercises.map((item) => (item.id === workoutId ? { ...item, ...patch } : item))
-    });
-  }
-
-  function removeWorkout(workoutId: string) {
-    updateDay(activeDayIndex, { exercises: activeDay.exercises.filter((item) => item.id !== workoutId) });
-  }
-
-  function patchFilters(patch: Partial<BuilderFilterState>) {
-    setFilters((current) => ({ ...current, ...patch }));
-  }
-
-  function resetFilters() {
-    setFilters({ ...emptyFilterState });
+    if (draft.days.length >= 7) return;
+    const used = new Set(draft.days.map((day) => day.weekday));
+    const weekday = weekDays.find((day) => !used.has(day)) ?? null;
+    patchDraft({ days: [...draft.days, { dayName: `Workout day ${draft.days.length + 1}`, weekday, notes: "", exercises: [] }] });
+    setActiveDayIndex(draft.days.length);
   }
 
   function removeDay(index: number) {
-    setDays((current) => current.filter((_, itemIndex) => itemIndex !== index).map((day) => ({ ...day, id: undefined, planId: undefined })));
-    setActiveDayIndex((current) => Math.max(0, Math.min(current, days.length - 2)));
-    setSavedMessage("");
+    if (draft.days.length <= 1) return;
+    patchDraft({ days: draft.days.filter((_, itemIndex) => itemIndex !== index) });
+    setActiveDayIndex((current) => Math.max(0, Math.min(current, draft.days.length - 2)));
+  }
+
+  function moveDay(index: number, direction: -1 | 1) {
+    const next = index + direction;
+    if (next < 0 || next >= draft.days.length) return;
+    const days = [...draft.days];
+    const [day] = days.splice(index, 1);
+    days.splice(next, 0, day);
+    patchDraft({ days });
+    setActiveDayIndex(next);
+  }
+
+  function toggleWorkout(workout: Workout) {
+    const key = identity(workout);
+    const exists = activeDay.exercises.some((item) => identity(item) === key);
+    patchDay(activeDayIndex, { exercises: exists ? activeDay.exercises.filter((item) => identity(item) !== key) : [...activeDay.exercises, workout] });
   }
 
   async function savePlan() {
-    if (!user?.id) {
-      toast({ title: "Sign in required", description: "Please sign in before saving workout plans." });
-      return;
-    }
-    setIsSaving(true);
+    if (!user?.id || !basicsValid || !exerciseStepValid || saving) return;
+    setSaving(true);
     try {
       await createUserWorkoutPlan({
         userId: user.id,
-        planName,
-        days
+        planName: draft.planName,
+        goal: draft.goal || null,
+        programDurationWeeks: draft.durationWeeks,
+        sessionDurationMinutes: draft.sessionMinutes,
+        days: draft.days
       });
-      const savedPlan = user ? await getActiveUserWorkoutPlan(user.id) : null;
-      if (savedPlan) {
-        setPlanName(savedPlan.name);
-        setDays(savedPlan.days.map((day) => ({
-          id: day.id,
-          planId: day.plan_id,
-          dayName: day.day_name,
-          weekday: day.weekday,
-          notes: day.notes ?? "",
-          exercises: workoutsFromPlanDay(day).map(withTrainingDefaults)
-        })));
-      }
-      setSavedMessage("Plan saved.");
-      toast({ title: "Workout plan saved", description: `${planName} saved with ${totalExercises} workouts.` });
+      clearStoredValue(draftKey);
+      toast({ title: "Workout plan created", description: `${draft.planName} is now your active plan.` });
       await onSaved?.();
     } catch (error) {
-      toast({ title: "Could not save plan", description: userSafeError(error) });
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  function startPlanDay(day: WeeklyPlanDay | undefined) {
-    if (!day) return;
-    if (!day.id) {
-      toast({ title: "Save the plan first", description: "Save your workout plan, then start the day session." });
-      return;
-    }
-    router.push(`/workouts/session/day/${day.id}`);
-  }
-
-  function editPlanDay(day: WeeklyPlanDay | undefined, fallbackIndex = activeDayIndex) {
-    if (!day) return;
-    if (!day.id) {
-      setActiveDayIndex(fallbackIndex);
-      toast({ title: "Save the plan first", description: "Saved workout days open in the dedicated editor." });
-      return;
-    }
-    router.push(`/my-workout/day/${day.id}`);
-  }
-
-  function openCalendarDay(index: number) {
-    const day = days[index];
-    if (day?.id) {
-      router.push(`/my-workout/day/${day.id}`);
-      return;
-    }
-    setActiveDayIndex(index);
-  }
-
-  function startToday() {
-    if (!todaysDay) {
-      toast({ title: "No workout for today", description: `Today is ${today}. Add exercises to ${today}, then save the plan.` });
-      return;
-    }
-    startPlanDay(todaysDay);
-  }
-
-  async function handleLoadMore() {
-    if (isLoadingMore) return;
-    const nextDisplay = displayCount + 60;
-    if (nextDisplay <= allResults.length) {
-      setDisplayCount(nextDisplay);
-      return;
-    }
-    if (!hasMoreApi) return;
-    setIsLoadingMore(true);
-    try {
-      const nextPage = apiPage + 1;
-      const query = showAll ? "" : filters.query.trim();
-      const items = await getWorkouts(query, requestFilters, nextPage);
-      const mapped = items.map(withTrainingDefaults);
-      setAllResults((prev) => [...prev, ...mapped]);
-      setApiPage(nextPage);
-      setDisplayCount(nextDisplay);
-      setHasMoreApi(items.length >= 500);
-    } catch (error) {
-      toast({ title: "Could not load more workouts", description: userSafeError(error) });
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }
-
-  async function skipToday() {
-    if (!todaysDay) {
-      toast({ title: "No workout scheduled today", description: `Today is ${today}.` });
-      return;
-    }
-    if (!todaysDay.id) {
-      toast({ title: "Save your plan first", description: "Saved days can be completed or skipped from the calendar." });
-      return;
-    }
-    const existingStatus = latestCurrentWeekStatus(activity, todaysDay.id);
-    if (existingStatus === "completed") {
-      toast({ title: "Workout already completed", description: "This day is already marked done." });
-      return;
-    }
-
-    try {
-      setIsSkipping(true);
-      if (!user?.id) throw new Error("Please sign in before skipping workouts.");
-      const skipped = await skipWorkoutDay(user.id, { ...todaysDay, id: todaysDay.id });
-      clearStoredValue(workoutStorageKey(["workout-day-session", user.id, todaysDay.id]));
-      setActivity((current) => [
-        skipped,
-        ...current.filter((session) => !(session.plan_day_id === skipped.plan_day_id && isCurrentWeekSession(session)))
-      ]);
-      setSkippedSession(skipped);
-      const todayIndex = days.findIndex((day) => day.id === todaysDay.id);
-      setActiveDayIndex(findNextWorkoutDayIndex(days, todayIndex));
-      toast({ title: "Workout skipped", description: "The next workout day is ready." });
-    } catch (error) {
-      toast({ title: "Could not skip workout", description: userSafeError(error) });
-    } finally {
-      setIsSkipping(false);
-    }
+      toast({ title: "Plan could not be created", description: userSafeError(error, "Nothing was saved. Your draft is still on this device."), variant: "error" });
+    } finally { setSaving(false); }
   }
 
   return (
-    <div className="space-y-4">
-      <WorkoutCalendar
-        days={days}
-        activity={activity}
-        activeDayIndex={activeDayIndex}
-        onSelectDay={openCalendarDay}
-        onStartToday={startToday}
-        onSkipToday={skipToday}
-        isSkipping={isSkipping}
-      />
+    <div className="space-y-6 pb-20">
+      <ol className="grid grid-cols-3 gap-2" aria-label="Plan builder progress">
+        {["Plan details", "Training days", "Review"].map((label, index) => { const number = index + 1; const active = step === number; const complete = step > number; return <li key={label} className={`rounded-2xl border p-3 ${active ? "border-primary bg-primary/10" : complete ? "border-success/40 bg-success/10" : "bg-card"}`}><span className="flex items-center gap-2 text-sm font-semibold">{complete ? <Check className="h-4 w-4" /> : <span className="grid h-5 w-5 place-items-center rounded-full border text-xs">{number}</span>} {label}</span></li>; })}
+      </ol>
 
-      {skippedSession ? (
-        <div className="solid-tracking-card space-y-4 border-warning/30 p-4 sm:p-5">
-          <div>
-            <p className="font-semibold">You skipped {skippedSession.workout_name}. What should happen next?</p>
-            <p className="text-sm text-muted-foreground">Choose a direct follow-up or ask ChatGPT to use authorized Plaivra context and tools. Plaivra will not silently rewrite the week.</p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
-            <select value={skipReason} onChange={(event) => setSkipReason(event.target.value as typeof skipReason)} className="h-11 rounded-[14px] border bg-card px-3 text-sm" aria-label="Skip reason">
-              <option value="no_time">No time</option>
-              <option value="low_energy">Low energy</option>
-              <option value="sick">Sick</option>
-              <option value="pain">Pain</option>
-              <option value="travel">Travel</option>
-              <option value="gym_closed">Gym closed</option>
-              <option value="too_sore">Too sore</option>
-              <option value="other">Other</option>
-            </select>
-            <Button type="button" variant="outline" onClick={async () => {
-              if (!user?.id) return;
-              await updateSkippedWorkoutFollowup(user.id, skippedSession.id, { reason: skipReason, action: "move_to_tomorrow" });
-              setSkippedSession(null);
-              toast({ title: "Follow-up saved", description: "Move to tomorrow was recorded. Review the calendar before changing the plan schedule." });
-            }}>Move to tomorrow</Button>
-            <Button type="button" variant="outline" onClick={async () => {
-              if (!user?.id) return;
-              await updateSkippedWorkoutFollowup(user.id, skippedSession.id, { reason: skipReason, action: "skip_and_continue" });
-              setSkippedSession(null);
-              toast({ title: "Skip recorded", description: "The plan continues without an automatic rewrite." });
-            }}>Skip and continue</Button>
-          </div>
-          <AiActionRequestDialog
-            actions={[
-              { type: "rebalance_week", label: "Ask ChatGPT to rebalance this week", description: "Review the skipped workout and remaining sessions, then recommend a revised week." },
-              { type: "reduce_next_session", label: "Ask ChatGPT to reduce next session", description: "Recommend a lower-volume or lower-intensity next session using the skip reason and recent activity." }
-            ]}
-            sourceType="skipped_workout"
-            sourceId={skippedSession.id}
-            context={{ skipped_workout: skippedSession, skip_reason: skipReason, remaining_plan_days: days, recent_workout_activity: activity }}
-            title="Skipped workout follow-up"
-          />
-        </div>
-      ) : null}
+      {step === 1 ? <div className="space-y-5">
+        <Card><CardContent className="grid gap-4 p-5 md:grid-cols-2">
+          <div className="space-y-2 md:col-span-2"><Label htmlFor="builder-name">Plan name</Label><Input id="builder-name" value={draft.planName} onChange={(event) => patchDraft({ planName: event.target.value })} /></div>
+          <div className="space-y-2"><Label htmlFor="builder-goal">Goal</Label><Input id="builder-goal" value={draft.goal} onChange={(event) => patchDraft({ goal: event.target.value })} placeholder="Strength, endurance, mobility…" /></div>
+          <div className="grid grid-cols-2 gap-3"><div className="space-y-2"><Label htmlFor="builder-weeks">Weeks</Label><Input id="builder-weeks" type="number" min={1} max={104} value={draft.durationWeeks ?? ""} onChange={(event) => patchDraft({ durationWeeks: event.target.value ? Number(event.target.value) : null })} /></div><div className="space-y-2"><Label htmlFor="builder-minutes">Minutes</Label><Input id="builder-minutes" type="number" min={5} max={300} value={draft.sessionMinutes ?? ""} onChange={(event) => patchDraft({ sessionMinutes: event.target.value ? Number(event.target.value) : null })} /></div></div>
+        </CardContent></Card>
+        <section className="space-y-3"><div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-semibold">Weekly schedule</h2><p className="text-sm text-muted-foreground">Choose one unique weekday for each training day.</p></div><Button variant="outline" onClick={addDay} disabled={draft.days.length >= 7}><Plus className="h-4 w-4" /> Add day</Button></div>
+          <div className="grid gap-3 md:grid-cols-2">{draft.days.map((day, index) => <Card key={index}><CardContent className="grid gap-3 p-4 sm:grid-cols-[1fr_180px_auto] sm:items-end"><div className="space-y-2"><Label htmlFor={`builder-day-${index}`}>Day {index + 1}</Label><Input id={`builder-day-${index}`} value={day.dayName} onChange={(event) => patchDay(index, { dayName: event.target.value })} /></div><div className="space-y-2"><Label htmlFor={`builder-weekday-${index}`}>Weekday</Label><Select id={`builder-weekday-${index}`} value={day.weekday ?? ""} onChange={(value) => patchDay(index, { weekday: value as Weekday })} options={weekDays} /></div><div className="flex"><Button variant="ghost" size="icon" aria-label={`Move ${day.dayName} up`} onClick={() => moveDay(index, -1)} disabled={index === 0}><ArrowUp className="h-4 w-4" /></Button><Button variant="ghost" size="icon" aria-label={`Move ${day.dayName} down`} onClick={() => moveDay(index, 1)} disabled={index === draft.days.length - 1}><ArrowDown className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="text-destructive" aria-label={`Remove ${day.dayName}`} onClick={() => removeDay(index)} disabled={draft.days.length <= 1}><Trash2 className="h-4 w-4" /></Button></div><div className="space-y-2 sm:col-span-3"><Label htmlFor={`builder-notes-${index}`}>Day notes</Label><Input id={`builder-notes-${index}`} value={day.notes} onChange={(event) => patchDay(index, { notes: event.target.value })} placeholder="Optional focus or coaching note" /></div></CardContent></Card>)}</div>
+        </section>
+        {!basicsValid ? <p className="text-sm text-destructive">Add a plan name and give every day a unique weekday.</p> : null}
+      </div> : null}
 
-      <div className="space-y-4">
-        {isLoadingSavedPlan ? <p className="text-sm text-muted-foreground">Loading saved plan...</p> : null}
-        {savedMessage ? <p className="text-sm text-success">{savedMessage}</p> : null}
+      {step === 2 ? <div className="space-y-5">
+        <div className="flex gap-2 overflow-x-auto pb-2" role="tablist" aria-label="Builder workout days">{draft.days.map((day, index) => <button key={`${day.weekday}-${index}`} type="button" role="tab" aria-selected={index === activeDayIndex} onClick={() => setActiveDayIndex(index)} className={`min-h-16 min-w-44 rounded-2xl border px-4 text-start ${index === activeDayIndex ? "border-primary bg-primary/10" : "bg-card"}`}><span className="block font-semibold">{day.dayName}</span><span className="text-xs text-muted-foreground">{day.exercises.length} selected</span></button>)}</div>
+        <Card><CardContent className="p-4"><div className="relative"><Search className="absolute start-3 top-3 h-5 w-5 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} className="h-12 ps-10" placeholder="Search the exercise library" /></div></CardContent></Card>
+        {loadingResults ? <CardGridSkeleton count={3} rows={3} /> : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{results.map((workout) => { const selected = activeDay.exercises.some((item) => identity(item) === identity(workout)); return <Card key={identity(workout)}><CardContent className="flex h-full flex-col p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">{workout.name}</h3><p className="text-sm text-muted-foreground">{workout.target_muscle} · {workout.equipment}</p></div><Badge variant="outline">{workout.difficulty}</Badge></div><p className="mt-3 line-clamp-2 text-sm text-muted-foreground">{workout.instructions}</p><Button className={`mt-4 ${selected ? "bg-success text-success-foreground hover:bg-success" : ""}`} variant={selected ? "default" : "outline"} aria-pressed={selected} onClick={() => toggleWorkout(workout)}>{selected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{selected ? "Selected" : "Select"}</Button></CardContent></Card>; })}</div>}
+        {!loadingResults && resultsError ? <div className="grid min-h-40 place-items-center rounded-2xl border border-destructive/40 bg-destructive/5 p-5 text-center"><div><Dumbbell className="mx-auto mb-2 h-6 w-6 text-destructive" /><p className="font-medium">Exercise library unavailable</p><p className="text-sm text-muted-foreground">{resultsError}</p></div></div> : null}
+        {!loadingResults && !resultsError && !results.length ? <div className="grid min-h-40 place-items-center rounded-2xl border border-dashed text-center"><div><Dumbbell className="mx-auto mb-2 h-6 w-6 text-muted-foreground" /><p className="font-medium">No exercises found</p><p className="text-sm text-muted-foreground">Try a broader search.</p></div></div> : null}
+        {!exerciseStepValid ? <p className="text-sm text-destructive">Select at least one exercise for every training day.</p> : null}
+      </div> : null}
 
-        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-          <div className="space-y-2">
-            <Label>Plan name</Label>
-            <Input value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder="Push Pull Legs, Ramadan plan, etc." />
-          </div>
-          <Button className="self-end" variant="outline" onClick={() => editPlanDay(activeDay)} disabled={!activeDay?.exercises.length}>
-            <Pencil className="h-4 w-4" />
-            Edit day
-          </Button>
-          <Button className="self-end" onClick={savePlan} disabled={isSaving || totalExercises === 0}>
-            <Save className="h-4 w-4" />
-            {isSaving ? "Saving..." : "Save plan"}
-          </Button>
-        </div>
+      {step === 3 ? <div className="space-y-4">
+        <Card className="border-primary/30 bg-primary/5"><CardContent className="p-5"><p className="text-sm text-muted-foreground">Ready to create</p><h2 className="mt-1 text-2xl font-semibold">{draft.planName}</h2><div className="mt-3 flex flex-wrap gap-2"><Badge>{draft.days.length} days</Badge><Badge variant="outline">{totalExercises} exercises</Badge>{draft.durationWeeks ? <Badge variant="outline">{draft.durationWeeks} weeks</Badge> : null}{draft.goal ? <Badge variant="outline">{draft.goal}</Badge> : null}</div></CardContent></Card>
+        <div className="grid gap-3 md:grid-cols-2">{draft.days.map((day) => <Card key={`${day.weekday}-${day.dayName}`}><CardContent className="p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-sm text-muted-foreground">{day.weekday}</p><h3 className="font-semibold">{day.dayName}</h3></div><Badge variant="outline">{day.exercises.length}</Badge></div><ol className="mt-3 space-y-2">{day.exercises.map((exercise, index) => <li key={`${identity(exercise)}-${index}`} className="flex justify-between gap-3 text-sm"><span>{index + 1}. {exercise.name}</span><span className="text-muted-foreground">{exercise.sets ?? 3} × {exercise.reps ?? "8–12"}</span></li>)}</ol></CardContent></Card>)}</div>
+        <div className="rounded-2xl border bg-card p-4 text-sm text-muted-foreground">Creating the plan saves every day and exercise together, then makes this the active plan. It does not start, complete, or skip a workout.</div>
+      </div> : null}
 
-        <div className="flex flex-wrap gap-2">
-          {days.map((day, index) => (
-            <Button key={`${day.dayName}-${index}`} variant={activeDayIndex === index ? "default" : "outline"} size="sm" onClick={() => openCalendarDay(index)}>
-              {day.weekday ?? `Day ${index + 1}`} <Badge className="ml-2" variant="outline">{day.exercises.length}</Badge>
-            </Button>
-          ))}
-          <Button variant="outline" size="sm" onClick={addDay} disabled={days.length >= 7}>
-            <Plus className="h-4 w-4" />
-            Add day
-          </Button>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-[1fr_1.1fr]">
-          <div className="space-y-3 rounded-md border bg-slate-50 p-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Workout day</Label>
-                <Select value={activeDay.weekday ?? undefined} onValueChange={(weekday) => updateDay(activeDayIndex, { weekday: weekday as Weekday, id: undefined, planId: undefined })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose weekday" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {weekDays.map((weekday) => (
-                      <SelectItem key={weekday} value={weekday}>{weekday}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Day name</Label>
-                <Input value={activeDay.dayName} onChange={(event) => updateDay(activeDayIndex, { dayName: event.target.value, id: undefined, planId: undefined })} placeholder="Push day, Leg day, Day 1..." />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Notes</Label>
-              <textarea
-                value={activeDay.notes}
-                onChange={(event) => updateDay(activeDayIndex, { notes: event.target.value, id: undefined, planId: undefined })}
-                placeholder="Optional notes for this day"
-                className="min-h-20 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <Label>Selected workouts</Label>
-                {days.length > 1 ? (
-                  <Button variant="ghost" size="sm" onClick={() => removeDay(activeDayIndex)}>
-                    <Trash2 className="h-4 w-4" />
-                    Remove day
-                  </Button>
-                ) : null}
-              </div>
-              {!activeDay.exercises.length ? <p className="text-sm text-muted-foreground">No workouts added to this day yet.</p> : null}
-              {activeDay.exercises.map((workout, index) => (
-                <div key={workout.id} className="space-y-3 rounded-md bg-card p-3 text-sm shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">{index + 1}. {workout.name}</p>
-                      <p className="text-muted-foreground">{workout.target_muscle} | {workout.equipment}</p>
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={() => removeWorkout(workout.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                    <div className="space-y-1">
-                      <Label>Sets</Label>
-                      <Input
-                        type="number"
-                        inputMode="numeric"
-                        enterKeyHint="done"
-                        min="1"
-                        value={workout.sets ?? 3}
-                        onChange={(event) => updateWorkout(workout.id, { sets: Math.max(1, Number(event.target.value) || 1) })}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Planned reps</Label>
-                      <Input value={workout.reps ?? "8-12"} onChange={(event) => updateWorkout(workout.id, { reps: event.target.value })} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Rest seconds</Label>
-                      <Input
-                        type="number"
-                        inputMode="numeric"
-                        enterKeyHint="done"
-                        min="0"
-                        value={workout.rest_seconds ?? 75}
-                        onChange={(event) => updateWorkout(workout.id, { rest_seconds: Math.max(0, Number(event.target.value) || 0) })}
-                      />
-                    </div>
-                    <div className="space-y-1 sm:col-span-2 xl:col-span-1">
-                      <Label>Custom video URL</Label>
-                      <Input
-                        value={workout.custom_video_url ?? ""}
-                        onChange={(event) => updateWorkout(workout.id, { custom_video_url: event.target.value, video_url: event.target.value })}
-                        placeholder="Optional user-added URL"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {isVideoLink(workout.exercise_url || workout.notes) ? (
-                      <Button asChild variant="ghost" size="sm">
-                        <a href={workout.exercise_url || workout.notes || "#"} target="_blank" rel="noreferrer">
-                          <ExternalLink className="h-4 w-4" />
-                          Open Exercise Guide
-                        </a>
-                      </Button>
-                    ) : (
-                      <Button variant="ghost" size="sm" disabled>No guide added</Button>
-                    )}
-                    {workout.custom_video_url ? (
-                      <Button asChild variant="ghost" size="sm">
-                        <a href={workout.custom_video_url} target="_blank" rel="noreferrer">
-                          <ExternalLink className="h-4 w-4" />
-                          Open Custom Video
-                        </a>
-                      </Button>
-                    ) : (
-                      <Button variant="ghost" size="sm" disabled>No custom video</Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="space-y-3 rounded-md border bg-card p-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <SlidersHorizontal className="h-5 w-5 text-primary" />
-                  <p className="font-semibold text-foreground">Exercise filters</p>
-                  {activeFilterCount ? <Badge>{activeFilterCount} selected</Badge> : null}
-                </div>
-                <p className="text-sm text-muted-foreground">{allResults.length} exercises loaded</p>
-              </div>
-              <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                  <Input
-                    value={filters.query}
-                    onChange={(event) => patchFilters({ query: event.target.value })}
-                    placeholder="Search workouts"
-                    className="pl-10"
-                  />
-                </div>
-                <Button type="button" variant="outline" onClick={() => { resetFilters(); setShowAll(false); }} disabled={!activeFilterCount && !showAll}>
-                  <RotateCcw className="h-4 w-4" />
-                  Clear filters
-                </Button>
-                <Button type="button" variant="outline" onClick={() => { setShowAll(true); setFilters({ ...emptyFilterState }); }} disabled={showAll}>
-                  <Search className="h-4 w-4" />
-                  Show all
-                </Button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-                <FilterSelect label="Muscle category" value={filters.muscleCategory} values={filterOptions.muscleCategories} onChange={(muscleCategory) => patchFilters({ muscleCategory })} />
-                <FilterSelect label="Primary muscle" value={filters.primaryMuscle} values={filterOptions.primaryMuscles} onChange={(primaryMuscle) => patchFilters({ primaryMuscle })} />
-                <FilterSelect label="Secondary muscle" value={filters.secondaryMuscle} values={filterOptions.secondaryMuscles} onChange={(secondaryMuscle) => patchFilters({ secondaryMuscle })} />
-                <FilterSelect label="Equipment" value={filters.equipment} values={filterOptions.equipmentRequired} onChange={(equipment) => patchFilters({ equipment })} />
-                <FilterSelect label="Mechanics" value={filters.mechanics} values={filterOptions.mechanics} onChange={(mechanics) => patchFilters({ mechanics })} />
-                <FilterSelect label="Exercise type" value={filters.exerciseType} values={filterOptions.exerciseTypes} onChange={(exerciseType) => patchFilters({ exerciseType })} />
-                <FilterSelect label="Force type" value={filters.forceType} values={filterOptions.forceTypes} onChange={(forceType) => patchFilters({ forceType })} />
-                <FilterSelect label="Difficulty / level" value={filters.level} values={filterOptions.experienceLevels} onChange={(level) => patchFilters({ level })} />
-              </div>
-            </div>
-
-            {isLoading ? <p className="text-sm text-muted-foreground">Loading workouts...</p> : null}
-            {!isLoading && !allResults.length && !hasActiveFilter ? (
-              <p className="text-sm text-muted-foreground">Use filters or click Show all to browse exercises.</p>
-            ) : null}
-            {!isLoading && !allResults.length && hasActiveFilter ? <p className="text-sm text-muted-foreground">No exercises found.</p> : null}
-            <div className="grid gap-3 md:grid-cols-2">
-              {allResults.slice(0, displayCount).map((workout) => (
-                <div key={workout.id} className="rounded-md border bg-card p-3">
-                  <div className="flex items-start gap-2">
-                    <Dumbbell className="mt-1 h-4 w-4 shrink-0 text-primary" />
-                    <div>
-                      <p className="font-semibold">{workout.name}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{workout.target_muscle} | {workout.equipment}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                    <Badge variant="outline">{workout.sets ?? 3} sets</Badge>
-                    <Badge variant="outline">{workout.reps ?? "8-12"}</Badge>
-                    <Badge variant="outline">{workout.rest_seconds ?? 75}s rest</Badge>
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <Button variant="outline" size="sm" onClick={() => addWorkout(workout)}>
-                      <Plus className="h-4 w-4" />
-                      Add
-                    </Button>
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href={`/workouts/${workout.id}`}>Details</Link>
-                    </Button>
-                    {isVideoLink(workout.exercise_url || workout.notes) ? (
-                      <Button asChild variant="ghost" size="sm" className="sm:col-span-2">
-                        <a href={workout.exercise_url || workout.notes || "#"} target="_blank" rel="noreferrer">
-                          <ExternalLink className="h-4 w-4" />
-                          Open Exercise Guide
-                        </a>
-                      </Button>
-                    ) : (
-                      <Button variant="ghost" size="sm" className="sm:col-span-2" disabled>
-                        No guide added
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {allResults.length > 0 && (displayCount < allResults.length || hasMoreApi) ? (
-              <div className="flex justify-center py-3">
-                <Button type="button" variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
-                  {isLoadingMore ? "Loading..." : "Load more"}
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        <Button variant="outline" onClick={() => setStep((current) => Math.max(1, current - 1))} disabled={step === 1}><ArrowLeft className="h-4 w-4" /> Back</Button>
+        {step < 3 ? <Button onClick={() => setStep((current) => Math.min(3, current + 1))} disabled={step === 1 ? !basicsValid : !exerciseStepValid}>Continue <ArrowRight className="h-4 w-4" /></Button> : <Button onClick={() => void savePlan()} disabled={saving || !basicsValid || !exerciseStepValid}>{saving ? "Creating…" : "Create plan"}</Button>}
       </div>
     </div>
   );
-}
-
-function FilterSelect({
-  label,
-  value,
-  values,
-  onChange
-}: {
-  label: string;
-  value: string;
-  values: string[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs font-semibold text-muted-foreground">{label}</Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger aria-label={label}>
-          <SelectValue placeholder={label} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={allValue}>All {label.toLowerCase()}</SelectItem>
-          {values.map((item) => (
-            <SelectItem key={item} value={item}>{item}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
-
-function sessionDate(session: WorkoutSession) {
-  return new Date(session.completed_at || session.skipped_at || session.started_at);
-}
-
-function startOfWeek(date: Date) {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  next.setDate(next.getDate() - next.getDay());
-  return next;
-}
-
-function findNextWorkoutDayIndex(days: WeeklyPlanDay[], currentIndex: number) {
-  if (!days.length) return 0;
-  for (let offset = 1; offset <= days.length; offset += 1) {
-    const nextIndex = (Math.max(0, currentIndex) + offset) % days.length;
-    if (days[nextIndex]?.exercises.length) return nextIndex;
-  }
-  return Math.max(0, currentIndex);
-}
-
-function latestCurrentWeekStatus(activity: WorkoutSession[], planDayId: string) {
-  const match = activity
-    .filter((session) => session.plan_day_id === planDayId && isCurrentWeekSession(session))
-    .sort((a, b) => sessionDate(b).getTime() - sessionDate(a).getTime())[0];
-  return match?.status ?? null;
-}
-
-function isCurrentWeekSession(session: WorkoutSession) {
-  const date = sessionDate(session);
-  const weekStart = startOfWeek(new Date());
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 7);
-  return date >= weekStart && date < weekEnd;
 }

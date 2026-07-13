@@ -56,7 +56,7 @@ export default function AddExerciseToWorkoutDayPage() {
 
   return (
     <>
-      <PageHeading title={`Add Exercise to ${day.day_name}`} description="Browse, search, filter, and add exercises to this workout day." />
+      <PageHeading title={`Add Exercises to ${day.day_name}`} description="Browse, search, select several exercises, and add them to this workout day together." />
       <WorkoutDayAddExercise day={day} />
     </>
   );

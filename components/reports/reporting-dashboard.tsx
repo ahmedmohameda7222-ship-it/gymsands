@@ -412,8 +412,8 @@ function buildSourceCoverage({
     source("workouts", "Workouts", workouts, periodWorkouts.length, {
       complete: `${periodWorkouts.length} completed/skipped workout record(s) found.`,
       empty: "No workout sessions found for this period.",
-      actionHref: "/today-workout",
-      actionLabel: "Open Today Workout"
+      actionHref: "/my-workout/plans",
+      actionLabel: "Open My Workout"
     }),
     source("progress", "Progress", progressEntries, periodProgress.length, {
       complete: `${periodProgress.length} progress entries found.`,

@@ -32,6 +32,7 @@ import type { TranslationKey } from "@/lib/i18n/types";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { ActiveWorkoutIndicator } from "@/components/workouts/active-workout-indicator";
 import { MobileFloatingNav } from "@/components/layout/mobile-floating-nav";
+import { getTrainNavigationTarget } from "@/lib/navigation/mobile-nav";
 
 type NavItem = {
   href: string;
@@ -43,7 +44,7 @@ type NavItem = {
 
 const primaryNavItems: NavItem[] = [
   { href: "/dashboard", labelKey: "nav.today", icon: Home, activePaths: ["/dashboard"] },
-  { href: "/my-workout/plans", labelKey: "nav.train", icon: Dumbbell, activePaths: ["/today-workout", "/my-workout", "/workouts", "/workout-history"] },
+  { href: "/my-workout/plans", labelKey: "nav.train", icon: Dumbbell },
   { href: "/calories", labelKey: "nav.eat", icon: Utensils, activePaths: ["/calories"] },
   { href: "/progress", labelKey: "nav.progress", icon: BarChart3, activePaths: ["/progress", "/personal-records"] },
   { href: "/settings", labelKey: "nav.settings", icon: Settings, activePaths: ["/settings", "/profile"] }
@@ -86,6 +87,10 @@ const adminItems: NavItem[] = [
 ];
 
 function isActivePath(pathname: string, item: NavItem) {
+  const trainTarget = getTrainNavigationTarget(pathname);
+  if (item.href === "/my-workout/plans") return trainTarget === "train";
+  if (item.href === "/workouts") return trainTarget === "exercise-library";
+  if (item.href === "/workout-history") return trainTarget === "workout-history";
   const paths = item.activePaths ?? [item.href];
   if (item.exact) return paths.some((path) => pathname === path);
   return paths.some((path) => pathname === path || pathname.startsWith(`${path}/`));

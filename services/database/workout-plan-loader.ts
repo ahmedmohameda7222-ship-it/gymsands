@@ -6,7 +6,7 @@ import { isUuid } from "@/lib/utils";
 import type { UserWorkoutPlan, UserWorkoutPlanDay, UserWorkoutPlanExercise, Weekday, Workout, WorkoutPlanDaySession } from "@/types";
 
 const fullPlanSelect =
-  "id,user_id,name,is_active,is_default,source,goal,description,chatgpt_source,archived_at,program_duration_weeks,days_per_week,session_duration_minutes,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,session_duration_minutes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,weight,rest_seconds,tempo,instructions,exercise_url,video_url,custom_video_url,block_type,sort_order,order_index,notes))";
+  "id,user_id,name,is_active,is_default,source,goal,description,chatgpt_source,archived_at,program_duration_weeks,days_per_week,session_duration_minutes,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,session_duration_minutes,archived_at,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,weight,rest_seconds,tempo,instructions,exercise_url,video_url,custom_video_url,block_type,sort_order,order_index,notes,archived_at))";
 
 const compatPlanSelect =
   "id,user_id,name,is_active,is_default,source,goal,description,program_duration_weeks,days_per_week,created_at,updated_at,user_workout_plan_days(id,plan_id,day_number,day_name,weekday,notes,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes))";
@@ -108,6 +108,7 @@ function normalizeExercise(row: RawPlanExercise, index: number): UserWorkoutPlan
 
 function normalizeDay(row: RawPlanDay): UserWorkoutPlanDay {
   const exercises = array(row.user_workout_plan_exercises)
+    .filter((exercise) => !nullableText((exercise as RawPlanExercise).archived_at))
     .map((exercise, index) => normalizeExercise(exercise as unknown as RawPlanExercise, index))
     .sort((a, b) => ((a as UserWorkoutPlanExercise & { order_index?: number }).order_index ?? a.sort_order) - ((b as UserWorkoutPlanExercise & { order_index?: number }).order_index ?? b.sort_order));
 
@@ -125,6 +126,7 @@ function normalizeDay(row: RawPlanDay): UserWorkoutPlanDay {
 function normalizePlan(row: RawWorkoutPlan): UserWorkoutPlan {
   const source = nullableText(row.source) ?? (row.chatgpt_source ? "chatgpt" : "manual");
   const days = array(row.user_workout_plan_days)
+    .filter((day) => !nullableText((day as RawPlanDay).archived_at))
     .map((day) => normalizeDay(day as unknown as RawPlanDay))
     .sort((a, b) => a.day_number - b.day_number);
 
@@ -167,12 +169,11 @@ export async function getAllUserWorkoutPlans(userId: string) {
     const result = await queryPlans(userId, select);
     if (result.plans) return result.plans;
     if (!isCompatibilityError(result.error)) {
-      console.warn("Plaivra could not load workout plans.", result.error?.message);
-      return [];
+      throw result.error ?? new Error("Workout plans could not load.");
     }
   }
 
-  return [];
+  throw new Error("Workout plans could not load with the available database schema.");
 }
 
 export async function getActiveWorkoutPlan(userId: string) {
@@ -188,36 +189,21 @@ export async function getWorkoutPlanById(userId: string, planId: string) {
 
 export async function deleteWorkoutPlan(userId: string, planId: string) {
   if (!supabase || !isUuid(userId) || !isUuid(planId)) return true;
-
-  // Clear plan references from workout sessions to avoid FK blocks
-  const { error: sessionError } = await supabase!
-    .from("workout_sessions")
-    .update({ plan_id: null, plan_day_id: null })
-    .eq("plan_id", planId)
-    .eq("user_id", userId);
-  if (sessionError && !isCompatibilityError(sessionError)) {
-    console.warn("Could not clear session plan references before delete.", sessionError.message);
-  }
-
-  // Delete plan exercises via days
-  const { data: dayRows } = await supabase!
-    .from("user_workout_plan_days")
-    .select("id")
-    .eq("plan_id", planId);
-  const dayIds = (dayRows ?? []).map((d) => (d as { id: string }).id);
-  if (dayIds.length) {
-    const { error: exError } = await supabase!.from("user_workout_plan_exercises").delete().in("plan_day_id", dayIds);
-    if (exError && !isCompatibilityError(exError)) throw exError;
-  }
-
-  // Delete plan days
-  const { error: dayError } = await supabase!.from("user_workout_plan_days").delete().eq("plan_id", planId);
-  if (dayError && !isCompatibilityError(dayError)) throw dayError;
-
-  // Delete the plan
-  const { error: planError } = await supabase!.from("user_workout_plans").delete().eq("id", planId).eq("user_id", userId);
-  if (planError) throw planError;
+  const { error } = await supabase.rpc("delete_workout_plan_atomic", {
+    p_user_id: userId,
+    p_plan_id: planId,
+    p_confirmed: true
+  });
+  if (error) throw error;
   return true;
+}
+
+async function authenticatedUserId() {
+  if (!supabase) throw new Error("Database not connected");
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  if (!data.user || !isUuid(data.user.id)) throw new Error("User session invalid");
+  return data.user.id;
 }
 
 export function workoutFromLoadedPlanExercise(exercise: UserWorkoutPlanExercise): Workout {
@@ -253,91 +239,108 @@ export function workoutsFromLoadedPlanDay(day: UserWorkoutPlan["days"][number] |
   return (day?.exercises ?? []).map(workoutFromLoadedPlanExercise);
 }
 
+function loadedExercisePayload(exercise: UserWorkoutPlanExercise, index: number) {
+  const extended = exercise as UserWorkoutPlanExercise & {
+    block_type?: string | null;
+    weight?: string | null;
+    tempo?: string | null;
+  };
+  return {
+    id: exercise.id,
+    source_workout_id: exercise.source_workout_id,
+    exercise_name: exercise.exercise_name,
+    category: exercise.category,
+    target_muscle: exercise.target_muscle,
+    equipment: exercise.equipment,
+    sets: exercise.sets ?? 3,
+    reps: exercise.reps ?? "8-12",
+    rest_seconds: exercise.rest_seconds ?? 75,
+    instructions: exercise.instructions ?? defaultExerciseInstructions,
+    exercise_url: exercise.exercise_url ?? null,
+    video_url: exercise.video_url ?? null,
+    custom_video_url: exercise.custom_video_url ?? null,
+    block_type: extended.block_type ?? exercise.category ?? "strength",
+    weight: extended.weight ?? null,
+    tempo: extended.tempo ?? null,
+    sort_order: index + 1,
+    order_index: index + 1,
+    notes: exercise.notes
+  };
+}
+
+function loadedPlanPayload(plan: UserWorkoutPlan) {
+  return {
+    name: plan.name.trim(),
+    source: plan.source ?? "manual",
+    goal: plan.goal?.trim() || null,
+    description: plan.description?.trim() || null,
+    chatgpt_source: Boolean(plan.chatgpt_source || plan.source === "chatgpt" || plan.source === "imported"),
+    program_duration_weeks: plan.program_duration_weeks ?? null,
+    session_duration_minutes: plan.session_duration_minutes ?? null,
+    days: plan.days.map((day) => {
+      const extended = day as UserWorkoutPlanDay & { session_duration_minutes?: number | null };
+      return {
+        id: day.id,
+        day_name: day.day_name.trim(),
+        weekday: day.weekday,
+        notes: day.notes?.trim() || null,
+        session_duration_minutes: extended.session_duration_minutes ?? null,
+        exercises: day.exercises.map(loadedExercisePayload)
+      };
+    })
+  };
+}
+
+export async function saveWorkoutPlan(
+  userId: string,
+  planId: string,
+  plan: UserWorkoutPlan,
+  expectedUpdatedAt: string | null = plan.updated_at
+) {
+  if (!supabase || !isUuid(userId) || !isUuid(planId)) throw new Error("Workout plan is invalid.");
+  const { data, error } = await supabase.rpc("save_workout_plan_atomic", {
+    p_user_id: userId,
+    p_plan_id: planId,
+    p_plan: loadedPlanPayload(plan),
+    p_expected_updated_at: expectedUpdatedAt
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function archiveWorkoutPlan(userId: string, planId: string) {
   if (!supabase || !isUuid(userId) || !isUuid(planId)) return true;
-  const update = await supabase!
-    .from("user_workout_plans")
-    .update({ archived_at: new Date().toISOString(), is_active: false, is_default: false })
-    .eq("id", planId)
-    .eq("user_id", userId);
-  if (update.error && isCompatibilityError(update.error)) {
-    const fallback = await supabase!.from("user_workout_plans").update({ is_active: false }).eq("id", planId).eq("user_id", userId);
-    if (fallback.error) throw fallback.error;
-    return true;
-  }
-  if (update.error) throw update.error;
+  const { error } = await supabase.rpc("archive_workout_plan_atomic", {
+    p_user_id: userId,
+    p_plan_id: planId,
+    p_reason: "Archived by user"
+  });
+  if (error) throw error;
   return true;
 }
 
 export async function updateWorkoutPlanMetadata(userId: string, planId: string, patch: { name?: string; goal?: string | null; description?: string | null }) {
   if (!supabase || !isUuid(userId) || !isUuid(planId)) return true;
-  const payload = {
+  if (!Object.keys(patch).length) return true;
+  const plan = await getWorkoutPlanById(userId, planId);
+  if (!plan) throw new Error("Workout plan not found.");
+  await saveWorkoutPlan(userId, planId, {
+    ...plan,
     ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
     ...(patch.goal !== undefined ? { goal: patch.goal?.trim() || null } : {}),
     ...(patch.description !== undefined ? { description: patch.description?.trim() || null } : {})
-  };
-  if (!Object.keys(payload).length) return true;
-  const update = await supabase!.from("user_workout_plans").update(payload).eq("id", planId).eq("user_id", userId);
-  if (update.error && isCompatibilityError(update.error)) {
-    const fallbackPayload = "name" in payload ? { name: payload.name } : {};
-    if (!Object.keys(fallbackPayload).length) return true;
-    const fallback = await supabase!.from("user_workout_plans").update(fallbackPayload).eq("id", planId).eq("user_id", userId);
-    if (fallback.error) throw fallback.error;
-    return true;
-  }
-  if (update.error) throw update.error;
+  }, plan.updated_at);
   return true;
 }
 
 export async function duplicateWorkoutPlan(userId: string, planId: string) {
   if (!supabase || !isUuid(userId) || !isUuid(planId)) return null;
-  const plan = await getWorkoutPlanById(userId, planId);
-  if (!plan) throw new Error("Workout plan not found.");
-
-  const insert = await supabase!
-    .from("user_workout_plans")
-    .insert({
-      user_id: userId,
-      name: `${plan.name} copy`,
-      is_active: false,
-      is_default: false,
-      source: plan.source ?? "manual",
-      goal: plan.goal ?? null,
-      description: plan.description ?? null,
-      chatgpt_source: Boolean(plan.chatgpt_source || plan.source === "chatgpt" || plan.source === "imported"),
-      program_duration_weeks: plan.program_duration_weeks ?? null,
-      days_per_week: plan.days_per_week ?? null,
-      session_duration_minutes: plan.session_duration_minutes ?? null
-    })
-    .select("id")
-    .single();
-  if (insert.error) throw insert.error;
-
-  for (const day of plan.days) {
-    const dayInsert = await supabase!
-      .from("user_workout_plan_days")
-      .insert({
-        plan_id: insert.data.id,
-        day_number: day.day_number,
-        day_name: day.day_name,
-        weekday: day.weekday,
-        notes: day.notes
-      })
-      .select("id")
-      .single();
-    if (dayInsert.error) throw dayInsert.error;
-    if (!day.exercises.length) continue;
-    const rows = day.exercises.map((exercise: UserWorkoutPlanExercise, index: number) => exerciseInsertRow(dayInsert.data.id, workoutFromLoadedPlanExercise(exercise), index));
-    const fullInsert = await supabase!.from("user_workout_plan_exercises").insert(rows);
-    if (fullInsert.error && isCompatibilityError(fullInsert.error)) {
-      const compatible = await supabase!.from("user_workout_plan_exercises").insert(rows.map(compatibleExerciseRow));
-      if (compatible.error) throw compatible.error;
-    } else if (fullInsert.error) {
-      throw fullInsert.error;
-    }
-  }
-
-  return insert.data.id as string;
+  const { data, error } = await supabase.rpc("duplicate_workout_plan_atomic", {
+    p_user_id: userId,
+    p_plan_id: planId
+  });
+  if (error) throw error;
+  return data && typeof data === "object" && "id" in data ? String(data.id) : null;
 }
 
 export async function getWorkoutPlanDayById(dayId: string) {
@@ -347,12 +350,25 @@ export async function getWorkoutPlanDayById(dayId: string) {
 }
 
 async function getAllUserWorkoutPlansFromDay(dayId: string): Promise<WorkoutPlanDaySession | null> {
-  const { data: dayRow, error: dayError } = await supabase!
+  const dayResult = await supabase!
     .from("user_workout_plan_days")
-    .select("id,plan_id")
+    .select("id,plan_id,archived_at")
     .eq("id", dayId)
     .limit(1)
     .maybeSingle();
+  let dayRow = dayResult.data as { id: string; plan_id: string; archived_at?: string | null } | null;
+  let dayError = dayResult.error;
+
+  if (dayError && isCompatibilityError(dayError)) {
+    const compatible = await supabase!
+      .from("user_workout_plan_days")
+      .select("id,plan_id")
+      .eq("id", dayId)
+      .limit(1)
+      .maybeSingle();
+    dayRow = compatible.data ? { ...compatible.data, archived_at: null } : null;
+    dayError = compatible.error;
+  }
 
   if (dayError || !dayRow) {
     if (dayError) console.warn("Plaivra could not locate workout day.", dayError.message);
@@ -360,6 +376,7 @@ async function getAllUserWorkoutPlansFromDay(dayId: string): Promise<WorkoutPlan
   }
 
   const dayRecord = dayRow as unknown as RawPlanDay;
+  if (nullableText(dayRecord.archived_at)) return null;
   const planId = text(dayRecord.plan_id);
   if (!planId) return null;
 
@@ -385,6 +402,7 @@ async function getAllUserWorkoutPlansFromDay(dayId: string): Promise<WorkoutPlan
     return null;
   }
 
+  if (plan?.archived_at) return null;
   const day = plan?.days.find((item) => item.id === dayId);
   if (!day || !plan) return null;
   return {
@@ -431,39 +449,33 @@ function exerciseInsertRow(dayId: string, workout: Workout, index: number) {
   };
 }
 
-function compatibleExerciseRow(row: Record<string, unknown>) {
-  const { block_type: _blockType, weight: _weight, tempo: _tempo, order_index: _orderIndex, custom_video_url: _customVideoUrl, exercise_url: _exerciseUrl, ...compatible } = row;
-  return compatible;
-}
-
 export async function updateLoadedWorkoutPlanDay(
   dayId: string,
   day: { dayName: string; weekday: Weekday | null; notes?: string; exercises: Workout[] }
 ) {
   if (!supabase || !isUuid(dayId)) return true;
 
-  const { error: dayError } = await supabase!
-    .from("user_workout_plan_days")
-    .update({
+  if (!day.dayName.trim()) throw new Error("Workout day name is required.");
+  if (!day.exercises.length) throw new Error("Add at least one exercise before saving this workout day.");
+  const userId = await authenticatedUserId();
+  const exercises = day.exercises.map((workout, index) => {
+    const { plan_day_id: _planDayId, workout_id: _workoutId, ...payload } = exerciseInsertRow(dayId, workout, index);
+    return {
+      ...payload,
+      id: workout.plan_exercise_id && isUuid(workout.plan_exercise_id) ? workout.plan_exercise_id : undefined
+    };
+  });
+  const { error } = await supabase.rpc("save_workout_plan_day_atomic", {
+    p_user_id: userId,
+    p_day_id: dayId,
+    p_day: {
       day_name: day.dayName.trim(),
       weekday: day.weekday,
-      notes: day.notes?.trim() || null
-    })
-    .eq("id", dayId);
-
-  if (dayError) throw dayError;
-
-  const deleteResult = await supabase!.from("user_workout_plan_exercises").delete().eq("plan_day_id", dayId);
-  if (deleteResult.error) throw deleteResult.error;
-
-  const rows = day.exercises.map((workout, index) => exerciseInsertRow(dayId, workout, index));
-  if (!rows.length) return true;
-
-  const fullInsert = await supabase!.from("user_workout_plan_exercises").insert(rows);
-  if (!fullInsert.error) return true;
-  if (!isCompatibilityError(fullInsert.error)) throw fullInsert.error;
-
-  const compatible = await supabase!.from("user_workout_plan_exercises").insert(rows.map(compatibleExerciseRow));
-  if (compatible.error) throw compatible.error;
+      notes: day.notes?.trim() || null,
+      exercises
+    },
+    p_expected_updated_at: null
+  });
+  if (error) throw error;
   return true;
 }

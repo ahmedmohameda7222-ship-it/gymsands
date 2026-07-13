@@ -2,9 +2,11 @@
 
 import { ArrowLeft, Check, ExternalLink, Plus, RotateCcw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Disclosure } from "@/components/ui/disclosure";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CardGridSkeleton, ErrorState } from "@/components/ui/state-views";
@@ -93,6 +95,7 @@ function selectedList(value: string) {
 
 export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
   const { user } = useAuth();
+  const router = useRouter();
   const { toast } = useToast();
   const draftKey = useMemo(() => workoutStorageKey(["workout-day-draft", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const filterKey = useMemo(() => workoutStorageKey(["workout-day-add-filter", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
@@ -100,6 +103,7 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
   const [filters, setFilters] = useState<AddFilterState>(emptyFilterState);
   const [filterOptions, setFilterOptions] = useState<WorkoutFilterOptions>(emptyOptions);
   const [results, setResults] = useState<Workout[]>([]);
+  const [selectedWorkouts, setSelectedWorkouts] = useState<Workout[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isLoadingResults, setIsLoadingResults] = useState(false);
   const [isLoadingFilters, setIsLoadingFilters] = useState(true);
@@ -195,16 +199,23 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
     setFilters((current) => ({ ...current, ...patch }));
   }
 
-  function addExercise(workout: Workout) {
+  function toggleExercise(workout: Workout) {
     const nextWorkout = withTrainingDefaults(workout);
     const key = exerciseKey(nextWorkout);
-    setDraft((current) => {
-      if (current.exercises.some((item) => exerciseKey(item) === key)) {
-        toast({ title: "Exercise already added", description: `${nextWorkout.name} is already in this workout day.` });
-        return current;
-      }
-      return { ...current, exercises: [...current.exercises, nextWorkout] };
-    });
+    if (addedKeys.has(key)) return;
+    setSelectedWorkouts((current) => current.some((item) => exerciseKey(item) === key)
+      ? current.filter((item) => exerciseKey(item) !== key)
+      : [...current, nextWorkout]);
+  }
+
+  function addSelectedExercises() {
+    if (!selectedWorkouts.length) return;
+    const nextDraft = { ...draft, exercises: [...draft.exercises, ...selectedWorkouts.filter((workout) => !draft.exercises.some((item) => exerciseKey(item) === exerciseKey(workout)))] };
+    setDraft(nextDraft);
+    storeJson(draftKey, nextDraft);
+    toast({ title: `${selectedWorkouts.length} ${selectedWorkouts.length === 1 ? "exercise" : "exercises"} added`, description: "Return to the day editor to review and save the workout." });
+    setSelectedWorkouts([]);
+    router.push(`/my-workout/day/${day.id}`);
   }
 
   function resetFilters() {
@@ -222,6 +233,7 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
         </Button>
         <div className="flex flex-wrap gap-2">
           <Badge>{draft.exercises.length} exercises in day</Badge>
+          {selectedWorkouts.length ? <Badge>{selectedWorkouts.length} selected</Badge> : null}
           {activeFilterCount ? <Badge variant="outline">{activeFilterCount} filters</Badge> : null}
         </div>
       </div>
@@ -262,16 +274,20 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
             />
           ) : null}
           {isLoadingFilters ? <p className="text-sm text-muted-foreground">Loading filter options...</p> : null}
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <FilterSelect label="Muscle category" value={filters.muscleCategory} values={filterOptions.muscleCategories} onChange={(muscleCategory) => patchFilters({ muscleCategory })} />
+          <div className="grid gap-3 md:grid-cols-3">
             <FilterSelect label="Primary muscle" value={filters.primaryMuscle} values={filterOptions.primaryMuscles} onChange={(primaryMuscle) => patchFilters({ primaryMuscle })} />
-            <FilterSelect label="Secondary muscle" value={filters.secondaryMuscle} values={filterOptions.secondaryMuscles} onChange={(secondaryMuscle) => patchFilters({ secondaryMuscle })} />
-            <FilterSelect label="Force type" value={filters.forceType} values={filterOptions.forceTypes} onChange={(forceType) => patchFilters({ forceType })} />
-            <FilterSelect label="Exercise type" value={filters.exerciseType} values={filterOptions.exerciseTypes} onChange={(exerciseType) => patchFilters({ exerciseType })} />
             <FilterSelect label="Equipment" value={filters.equipment} values={filterOptions.equipmentRequired} onChange={(equipment) => patchFilters({ equipment })} />
-            <FilterSelect label="Mechanics" value={filters.mechanics} values={filterOptions.mechanics} onChange={(mechanics) => patchFilters({ mechanics })} />
             <FilterSelect label="Difficulty / level" value={filters.level} values={filterOptions.experienceLevels} onChange={(level) => patchFilters({ level })} />
           </div>
+          <Disclosure title="Advanced filters" description={activeFilterCount > (filters.query ? 1 : 0) ? `${activeFilterCount - (filters.query ? 1 : 0)} active` : "More muscle, force, type, and mechanics filters"}>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <FilterSelect label="Muscle category" value={filters.muscleCategory} values={filterOptions.muscleCategories} onChange={(muscleCategory) => patchFilters({ muscleCategory })} />
+              <FilterSelect label="Secondary muscle" value={filters.secondaryMuscle} values={filterOptions.secondaryMuscles} onChange={(secondaryMuscle) => patchFilters({ secondaryMuscle })} />
+              <FilterSelect label="Force type" value={filters.forceType} values={filterOptions.forceTypes} onChange={(forceType) => patchFilters({ forceType })} />
+              <FilterSelect label="Exercise type" value={filters.exerciseType} values={filterOptions.exerciseTypes} onChange={(exerciseType) => patchFilters({ exerciseType })} />
+              <FilterSelect label="Mechanics" value={filters.mechanics} values={filterOptions.mechanics} onChange={(mechanics) => patchFilters({ mechanics })} />
+            </div>
+          </Disclosure>
         </CardContent>
       </Card>
 
@@ -295,6 +311,7 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
         {results.map((workout) => {
           const guideUrl = workout.exercise_url || (isLink(workout.notes) ? workout.notes : null);
           const isAdded = addedKeys.has(exerciseKey(workout));
+          const isSelected = selectedWorkouts.some((item) => exerciseKey(item) === exerciseKey(workout));
           return (
             <Card key={workout.id}>
               <CardContent className="pt-5">
@@ -316,12 +333,13 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   <Button
                     type="button"
-                    onClick={() => addExercise(workout)}
+                    onClick={() => toggleExercise(workout)}
                     disabled={isAdded}
-                    className={isAdded ? "min-h-12 bg-success text-success-foreground hover:bg-success disabled:opacity-100" : "min-h-12"}
+                    aria-pressed={isSelected}
+                    className={isAdded || isSelected ? "min-h-12 bg-success text-success-foreground hover:bg-success disabled:opacity-100" : "min-h-12"}
                   >
-                    {isAdded ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                    {isAdded ? "Added" : "Add"}
+                    {isAdded || isSelected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    {isAdded ? "In day" : isSelected ? "Selected" : "Select"}
                   </Button>
                   {guideUrl ? (
                     <Button asChild variant="outline" className="min-h-12">
@@ -330,17 +348,14 @@ export function WorkoutDayAddExercise({ day }: { day: WorkoutPlanDaySession }) {
                         Open Guide
                       </a>
                     </Button>
-                  ) : (
-                    <Button type="button" variant="outline" className="min-h-12" disabled>
-                      No guide
-                    </Button>
-                  )}
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
           );
         })}
       </div>
+      {selectedWorkouts.length ? <div className="sticky bottom-3 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-background/95 p-3 shadow-luxe backdrop-blur"><p className="text-sm font-semibold">{selectedWorkouts.length} selected</p><div className="flex gap-2"><Button variant="outline" onClick={() => setSelectedWorkouts([])}>Clear</Button><Button onClick={addSelectedExercises}><Plus className="h-4 w-4" /> Add {selectedWorkouts.length} {selectedWorkouts.length === 1 ? "exercise" : "exercises"}</Button></div></div> : null}
     </div>
   );
 }
