@@ -17,6 +17,20 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: plaivra_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d plaivra_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-key
@@ -29,6 +43,7 @@ jobs:
       PLAIVRA_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       PLAIVRA_RELEASE_ENVIRONMENT: ci
       PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/plaivra_test
 
     steps:
       - name: Checkout
@@ -42,6 +57,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Install dependencies
         run: npm ci
