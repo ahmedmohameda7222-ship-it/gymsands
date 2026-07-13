@@ -2,16 +2,12 @@
 
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { reportClientError } from "@/lib/observability/client-error";
 
 export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
-    void fetch("/api/observability/client-error", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error_code: "route_error", digest: error.digest, route: window.location.pathname }),
-      keepalive: true
-    }).catch(() => undefined);
-  }, [error.digest]);
+    reportClientError({ error, digest: error.digest, boundarySource: "route" });
+  }, [error]);
 
   return (
     <main className="premium-page-bg flex min-h-[60vh] items-center justify-center p-4">
