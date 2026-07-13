@@ -73,7 +73,7 @@ jobs:
         run: npm run migration:ledger:check
 
       - name: Create release manifest
-        run: npm run release:manifest -- --output /tmp/pr53-release-manifest.json
+        run: npm run release:manifest -- --output /tmp/pr53-release-manifest.json --build-timestamp "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
       - name: Check diff whitespace
         run: git diff --check
