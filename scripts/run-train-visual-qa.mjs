@@ -2,7 +2,7 @@ import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const baseUrl = process.env.QA_BASE_URL || "http://127.0.0.1:3000";
+const baseUrl = process.env.QA_BASE_URL || "http://localhost:3000";
 const evidenceRoot = path.join(process.cwd(), "quality-reports", "train-rendered");
 const languages = {
   en: { continue: "Continue", addExercises: "Add exercises" },
@@ -23,7 +23,7 @@ function fileName(surface, width, height) {
   return `${surface}-${width}x${height}.png`;
 }
 
-async function inspect(page, language, surface, width, height, rootSelector) {
+async function inspect(page, language, surface, width, height, rootSelector, pageErrors, consoleErrors) {
   const result = await page.evaluate(({ rootSelector }) => {
     const roots = [...document.querySelectorAll(rootSelector)];
     const visible = (element) => {
@@ -48,14 +48,26 @@ async function inspect(page, language, surface, width, height, rootSelector) {
       unnamed,
       compact,
       internalSourceVisible: document.body.innerText.includes("plaivra_legacy_workouts"),
-      direction: roots[0] ? getComputedStyle(roots[0]).direction : getComputedStyle(document.documentElement).direction,
-      pageErrors: window.__trainQaPageErrors || [],
-      consoleErrors: window.__trainQaConsoleErrors || []
+      direction: roots[0] ? getComputedStyle(roots[0]).direction : getComputedStyle(document.documentElement).direction
     };
   }, { rootSelector });
-  const observation = { language, surface, viewport: `${width}x${height}`, ...result };
+  const observation = { language, surface, viewport: `${width}x${height}`, ...result, pageErrors: [...pageErrors], consoleErrors: [...consoleErrors] };
   observations.push(observation);
-  if (result.horizontalOverflowPx > 1 || result.unnamed.length || result.compact.length || result.internalSourceVisible || result.pageErrors.length || result.consoleErrors.length || (language === "ar" && result.direction !== "rtl")) failures.push(observation);
+  if (result.horizontalOverflowPx > 1 || result.unnamed.length || result.compact.length || result.internalSourceVisible || pageErrors.length || consoleErrors.length || (language === "ar" && result.direction !== "rtl")) failures.push(observation);
+}
+
+async function clickRouteLink(page, href) {
+  await page.evaluate((targetHref) => {
+    const links = [...document.querySelectorAll("a")].filter((link) => link.getAttribute("href") === targetHref);
+    const visible = links.find((link) => {
+      const style = getComputedStyle(link);
+      const rect = link.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    });
+    const target = visible || links[0];
+    if (!target) throw new Error(`Missing route link: ${targetHref}`);
+    target.click();
+  }, href);
 }
 
 async function selectLanguage(page, language) {
@@ -64,14 +76,14 @@ async function selectLanguage(page, language) {
   await languageSelect.waitFor({ state: "visible" });
   await languageSelect.selectOption(language);
   await page.waitForTimeout(250);
-  await page.locator('a[href="/my-workout/plans"]').first().click();
+  await clickRouteLink(page, "/my-workout/plans");
   await page.waitForURL(/\/my-workout\/plans$/);
   await page.locator("[data-train-today-card]").waitFor({ state: "visible" });
 }
 
 async function goPlans(page) {
   if (!/\/my-workout\/plans$/.test(new URL(page.url()).pathname)) {
-    await page.locator('a[href="/my-workout/plans"]').first().click();
+    await clickRouteLink(page, "/my-workout/plans");
     await page.waitForURL(/\/my-workout\/plans$/);
   }
   await page.locator("[data-train-today-card]").waitFor({ state: "visible" });
@@ -96,10 +108,6 @@ for (const [language, labels] of Object.entries(languages)) {
   page.on("console", (message) => {
     if (message.type() === "error" && !/favicon|Failed to load resource|ERR_CONNECTION_REFUSED/i.test(message.text())) consoleErrors.push(message.text());
   });
-  await page.addInitScript(() => {
-    window.__trainQaPageErrors = [];
-    window.__trainQaConsoleErrors = [];
-  });
 
   await selectLanguage(page, language);
 
@@ -118,14 +126,14 @@ for (const [language, labels] of Object.entries(languages)) {
       return Boolean(today && selected && today !== selected);
     });
     if (!distinct) failures.push({ language, surface: "overview-selected-day", viewport: `${width}x${height}`, reason: "Today and selected day were not distinct." });
-    await inspect(page, language, "overview-selected-day", width, height, "[data-train-today-card], [data-train-week], [data-active-plan-row], [data-compact-plan-row]");
+    await inspect(page, language, "overview-selected-day", width, height, "[data-train-today-card], [data-train-week], [data-active-plan-row], [data-compact-plan-row]", pageErrors, consoleErrors);
   }
 
   for (const [width, height] of builderOneViewports) {
     await page.setViewportSize({ width, height });
     await goBuilder(page);
     await page.screenshot({ path: path.join(languageDir, fileName("builder-step-1", width, height)), fullPage: true });
-    await inspect(page, language, "builder-step-1", width, height, "[data-train-builder]");
+    await inspect(page, language, "builder-step-1", width, height, "[data-train-builder]", pageErrors, consoleErrors);
   }
 
   for (const [width, height] of builderTwoViewports) {
@@ -136,7 +144,7 @@ for (const [language, labels] of Object.entries(languages)) {
     await page.screenshot({ path: path.join(languageDir, fileName("builder-step-2", width, height)), fullPage: true });
     const localValidation = await page.locator('[data-builder-step="days"]').innerText();
     if (!localValidation.includes(language === "en" ? "Add at least one exercise" : language === "de" ? "Füge mindestens eine Übung" : "أضف تمرينًا واحدًا")) failures.push({ language, surface: "builder-step-2", viewport: `${width}x${height}`, reason: "Local incomplete-day validation was missing." });
-    await inspect(page, language, "builder-step-2", width, height, "[data-train-builder]");
+    await inspect(page, language, "builder-step-2", width, height, "[data-train-builder]", pageErrors, consoleErrors);
   }
 
   for (const [width, height] of pickerViewports) {
@@ -163,7 +171,7 @@ for (const [language, labels] of Object.entries(languages)) {
       return { width: pickerRect.width, height: pickerRect.height, footerVisible: footerRect.bottom <= innerHeight + 1 && footerRect.top < innerHeight, columns, resultMinHeight: firstStyle.minHeight };
     });
     if (!pickerMetrics || pickerMetrics.width < width - 2 || pickerMetrics.height < height - 2 || !pickerMetrics.footerVisible || pickerMetrics.columns > 2 || (width <= 430 && pickerMetrics.columns !== 1)) failures.push({ language, surface: "exercise-picker", viewport: `${width}x${height}`, reason: "Picker geometry or column contract failed.", pickerMetrics });
-    await inspect(page, language, "exercise-picker", width, height, "[data-train-exercise-picker]");
+    await inspect(page, language, "exercise-picker", width, height, "[data-train-exercise-picker]", pageErrors, consoleErrors);
     await page.keyboard.press("Escape");
     await picker.waitFor({ state: "hidden" });
     const focusReturned = await addButton.evaluate((element) => document.activeElement === element);
