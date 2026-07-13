@@ -22,17 +22,25 @@ async function loadTargetSources(userId: string) {
   return { baseTarget, profiles, plan };
 }
 
-export async function getEatTargetForDate(userId: string, date: string): Promise<ActiveNutritionTarget> {
+export async function getEatTargetsForDates(userId: string, dates: string[]): Promise<Record<string, ActiveNutritionTarget>> {
+  const uniqueDates = [...new Set(dates)];
+  if (!uniqueDates.length) return {};
   const [sources, overrides] = await Promise.all([
     loadTargetSources(userId),
-    migrateLegacyNutritionTargetOverridesForDates(userId, [date])
+    migrateLegacyNutritionTargetOverridesForDates(userId, uniqueDates)
   ]);
-  const override = overrides.find((row) => row.target_date === date);
-  return resolveEatTargetForDate({
+  const byDate = new Map(overrides.map((override) => [override.target_date, override.target_type]));
+  return Object.fromEntries(uniqueDates.map((date) => [
     date,
-    ...sources,
-    override: override?.target_type ?? "auto"
-  });
+    resolveEatTargetForDate({ date, ...sources, override: byDate.get(date) ?? "auto" })
+  ]));
+}
+
+export async function getEatTargetForDate(userId: string, date: string): Promise<ActiveNutritionTarget> {
+  const targets = await getEatTargetsForDates(userId, [date]);
+  const target = targets[date];
+  if (!target) throw new Error("Nutrition target could not be resolved.");
+  return target;
 }
 
 export async function getEatTargetAssignmentForDate(userId: string, date: string): Promise<NutritionTargetAssignment> {
@@ -43,18 +51,14 @@ export async function getEatTargetAssignmentForDate(userId: string, date: string
 export async function getEatWeekTargets(userId: string, selectedDate: string): Promise<EatWeekTargetDay[]> {
   const weekStart = startOfEatWeek(selectedDate);
   const dates = Array.from({ length: 7 }, (_, index) => addIsoDays(weekStart, index));
-  const [sources, overrides] = await Promise.all([
-    loadTargetSources(userId),
-    migrateLegacyNutritionTargetOverridesForDates(userId, dates)
-  ]);
-  const byDate = new Map(overrides.map((override) => [override.target_date, override.target_type]));
+  const targets = await getEatTargetsForDates(userId, dates);
   return dates.map((date) => {
-    const active = resolveEatTargetForDate({ date, ...sources, override: byDate.get(date) ?? "auto" });
-    const plannedCalories = number(active.values.daily_calories);
+    const active = targets[date];
+    const plannedCalories = number(active?.values.daily_calories);
     return {
       date,
-      planned_calories: active.hasTarget && plannedCalories > 0 ? plannedCalories : 0,
-      has_targets: active.hasTarget && plannedCalories > 0
+      planned_calories: active?.hasTarget && plannedCalories > 0 ? plannedCalories : 0,
+      has_targets: Boolean(active?.hasTarget && plannedCalories > 0)
     };
   });
 }
