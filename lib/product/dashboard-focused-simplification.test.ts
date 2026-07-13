@@ -23,7 +23,7 @@ describe("focused Today dashboard", () => {
       expect(progress).toContain(`key: "${key}"`);
     }
     expect(progress).not.toContain('key: "workout"');
-    expect(progress.match(/key: "(calories|protein|carbs|fat|water)"/g)).toHaveLength(5);
+    expect(progress.match(/\{ key: "(calories|protein|carbs|fat|water)"/g)).toHaveLength(5);
     expect(progress).toContain("overTargetValue");
   });
 
