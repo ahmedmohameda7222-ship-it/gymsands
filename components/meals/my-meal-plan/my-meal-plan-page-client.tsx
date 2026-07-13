@@ -986,7 +986,7 @@ function WeekView({ c, language, weekStart, weekEnd, days, items, targets, selec
   return (
     <div className="space-y-4">
       <Card variant="glass">
-        <CardContent className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 p-3">
+        <CardContent className="grid min-h-[68px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 pb-3 pt-3 sm:px-3 sm:pb-3 sm:pt-3">
           <Button variant="outline" size="icon" className="h-11 w-11" onClick={onPrevious} aria-label={c.previousWeek}>
             <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
           </Button>
