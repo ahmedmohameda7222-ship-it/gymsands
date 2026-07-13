@@ -19,9 +19,7 @@ describe("focused Today dashboard", () => {
 
   it("configures exactly calories, protein, carbs, fat, and water progress metrics", () => {
     const progress = source("components/dashboard/today-progress.tsx");
-    for (const key of ["calories", "protein", "carbs", "fat", "water"]) {
-      expect(progress).toContain(`key: "${key}"`);
-    }
+    for (const key of ["calories", "protein", "carbs", "fat", "water"]) expect(progress).toContain(`key: "${key}"`);
     expect(progress).not.toContain('key: "workout"');
     expect(progress.match(/\{ key: "(calories|protein|carbs|fat|water)"/g)).toHaveLength(5);
     expect(progress).toContain("overTargetValue");
@@ -43,12 +41,15 @@ describe("focused Today dashboard", () => {
     expect(existsSync("components/wellness/daily-checkins.tsx")).toBe(false);
   });
 
-  it("uses independent source states without connection or setup loaders", () => {
+  it("uses independent request-scoped source states without connection or setup loaders", () => {
     const dashboard = source("components/dashboard/today-dashboard.tsx");
-    expect(dashboard).toContain('["workout", "meals", "nutrition", "hydration", "shopping", "wellness"]');
+    const requestModel = source("lib/dashboard/today-request.ts");
+    expect(requestModel).toContain('["workout", "meals", "nutrition", "hydration", "shopping", "wellness"]');
+    expect(dashboard).toContain("dashboardRequestKey");
+    expect(dashboard).toContain("dashboardValueForRequest");
+    expect(dashboard).toContain("requestVersion.current");
     expect(dashboard).not.toContain('"connection"');
     expect(dashboard).not.toContain('"setup"');
-    expect(dashboard).toContain("requestVersion.current");
   });
 
   it("keeps localized English, German, and Arabic focused copy", () => {
