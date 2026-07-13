@@ -70,6 +70,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run temporary Train rendered QA
+        shell: bash
+        run: |
+          set +e
+          mkdir -p quality-reports
+          (
+            set -euo pipefail
+            npx playwright install --with-deps chromium
+            NEXT_PUBLIC_USE_MOCK_AUTH=true npm run build
+            NEXT_PUBLIC_USE_MOCK_AUTH=true npm start > quality-reports/train-rendered-server.log 2>&1 &
+            server_pid=$!
+            trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+            for attempt in $(seq 1 60); do
+              if curl -fsS http://127.0.0.1:3000/my-workout/plans >/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+            curl -fsS http://127.0.0.1:3000/my-workout/plans >/dev/null
+            QA_BASE_URL=http://127.0.0.1:3000 node scripts/run-train-visual-qa.mjs
+          ) 2>&1 | tee quality-reports/train-rendered.log
+          echo "${PIPESTATUS[0]}" > quality-reports/train-rendered.exit
+
       - name: Capture build timestamp
         shell: bash
         run: echo "PLAIVRA_BUILD_TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
@@ -197,7 +220,7 @@ jobs:
         run: |
           set -euo pipefail
           failed=0
-          for check in full-migration-chain integrity lint migration-ledger dependency-audit typecheck unit integration build manifest; do
+          for check in train-rendered full-migration-chain integrity lint migration-ledger dependency-audit typecheck unit integration build manifest; do
             code="$(cat "quality-reports/${check}.exit")"
             echo "${check}: exit ${code}"
             if [ "$code" != "0" ]; then
