@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 /** @type {import('next').NextConfig} */
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -38,22 +40,33 @@ const securityHeaders = [
   }
 ];
 
-// These values are intentionally safe to expose through /api/version. Resolve
-// them while Next.js is building so a deployment can prove which artifact is
-// serving traffic even when the runtime does not retain provider build vars.
+const migrationLedger = JSON.parse(
+  readFileSync(new URL("./supabase/migration-ledger.json", import.meta.url), "utf8")
+);
+const latestAppliedMigration = [...(migrationLedger.entries ?? [])]
+  .filter((entry) => entry.state === "applied" && typeof entry.productionVersion === "string")
+  .sort((left, right) => left.productionVersion.localeCompare(right.productionVersion))
+  .at(-1)?.productionVersion ?? "";
+
+// Values in nextConfig.env are substituted into the built artifact. Runtime code
+// must read these exact names directly rather than dynamically indexing
+// process.env, otherwise provider build variables can disappear at runtime.
 const releaseMetadata = {
   commitSha:
     process.env.PLAIVRA_COMMIT_SHA ||
     process.env.VERCEL_GIT_COMMIT_SHA ||
     process.env.GITHUB_SHA ||
-    "unknown",
+    "",
   buildTimestamp: process.env.PLAIVRA_BUILD_TIMESTAMP || new Date().toISOString(),
   environment:
     process.env.PLAIVRA_RELEASE_ENVIRONMENT ||
     process.env.VERCEL_ENV ||
     process.env.NODE_ENV ||
-    "unknown",
-  schemaCompatibilityVersion: process.env.PLAIVRA_SCHEMA_COMPATIBILITY_VERSION || "2"
+    "",
+  schemaCompatibilityVersion: process.env.PLAIVRA_SCHEMA_COMPATIBILITY_VERSION || "2",
+  expectedDatabaseMigrationVersion: latestAppliedMigration,
+  migrationLedgerReconciliationState: migrationLedger.historyRepair?.state || "unknown",
+  schemaAppliedUntrackedCount: String(migrationLedger.schemaVerifiedUntrackedCount ?? 0)
 };
 
 const nextConfig = {
@@ -62,7 +75,10 @@ const nextConfig = {
     PLAIVRA_COMMIT_SHA: releaseMetadata.commitSha,
     PLAIVRA_BUILD_TIMESTAMP: releaseMetadata.buildTimestamp,
     PLAIVRA_RELEASE_ENVIRONMENT: releaseMetadata.environment,
-    PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: releaseMetadata.schemaCompatibilityVersion
+    PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: releaseMetadata.schemaCompatibilityVersion,
+    PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: releaseMetadata.expectedDatabaseMigrationVersion,
+    PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE: releaseMetadata.migrationLedgerReconciliationState,
+    PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: releaseMetadata.schemaAppliedUntrackedCount
   },
   images: {
     remotePatterns: [
@@ -82,5 +98,5 @@ const nextConfig = {
   }
 };
 
-export { contentSecurityPolicy, securityHeaders };
+export { contentSecurityPolicy, releaseMetadata, securityHeaders };
 export default nextConfig;
