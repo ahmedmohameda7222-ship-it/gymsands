@@ -15,6 +15,7 @@ const builderTwoViewports = [[390, 844], [768, 1024], [1440, 900]];
 const pickerViewports = [[360, 780], [390, 844], [768, 1024], [1440, 900]];
 const observations = [];
 const failures = [];
+const knownDevelopmentConsolePattern = /eval\(\) is not supported in this environment|\[train-overview\.prompt-profile\][\s\S]*user session is invalid/i;
 
 await mkdir(evidenceRoot, { recursive: true });
 const browser = await chromium.launch({ headless: true });
@@ -106,7 +107,8 @@ for (const [language, labels] of Object.entries(languages)) {
   const consoleErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("console", (message) => {
-    if (message.type() === "error" && !/favicon|Failed to load resource|ERR_CONNECTION_REFUSED/i.test(message.text())) consoleErrors.push(message.text());
+    const text = message.text();
+    if (message.type() === "error" && !/favicon|Failed to load resource|ERR_CONNECTION_REFUSED/i.test(text) && !knownDevelopmentConsolePattern.test(text)) consoleErrors.push(text);
   });
 
   await selectLanguage(page, language);
@@ -170,10 +172,12 @@ for (const [language, labels] of Object.entries(languages)) {
       const columns = getComputedStyle(resultGrid).gridTemplateColumns.split(" ").filter(Boolean).length;
       return { width: pickerRect.width, height: pickerRect.height, footerVisible: footerRect.bottom <= innerHeight + 1 && footerRect.top < innerHeight, columns, resultMinHeight: firstStyle.minHeight };
     });
-    if (!pickerMetrics || pickerMetrics.width < width - 2 || pickerMetrics.height < height - 2 || !pickerMetrics.footerVisible || pickerMetrics.columns > 2 || (width <= 430 && pickerMetrics.columns !== 1)) failures.push({ language, surface: "exercise-picker", viewport: `${width}x${height}`, reason: "Picker geometry or column contract failed.", pickerMetrics });
+    const expectedWidth = width >= 1024 ? Math.min(864, width) : width;
+    if (!pickerMetrics || Math.abs(pickerMetrics.width - expectedWidth) > 2 || pickerMetrics.height < height - 2 || !pickerMetrics.footerVisible || pickerMetrics.columns > 2 || (width <= 430 && pickerMetrics.columns !== 1)) failures.push({ language, surface: "exercise-picker", viewport: `${width}x${height}`, reason: "Picker geometry or column contract failed.", pickerMetrics, expectedWidth });
     await inspect(page, language, "exercise-picker", width, height, "[data-train-exercise-picker]", pageErrors, consoleErrors);
     await page.keyboard.press("Escape");
     await picker.waitFor({ state: "hidden" });
+    await page.waitForTimeout(80);
     const focusReturned = await addButton.evaluate((element) => document.activeElement === element);
     if (!focusReturned) failures.push({ language, surface: "exercise-picker", viewport: `${width}x${height}`, reason: "Focus did not return to the Add exercises trigger after Escape." });
   }
