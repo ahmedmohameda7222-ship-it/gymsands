@@ -2,7 +2,9 @@
 
 import { AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { reportClientError } from "@/lib/observability/client-error";
 
 export function RouteError({
   error,
@@ -20,7 +22,10 @@ export function RouteError({
   dashboardLabel?: string;
 }) {
   const router = useRouter();
-  void error;
+
+  useEffect(() => {
+    reportClientError({ error, digest: error.digest, boundarySource: "route" });
+  }, [error]);
 
   return (
     <div className="flex min-h-[50vh] items-center justify-center p-4" role="alert">
