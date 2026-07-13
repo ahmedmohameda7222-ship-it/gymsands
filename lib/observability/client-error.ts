@@ -32,6 +32,7 @@ const BEARER = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const JWT = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
 const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const RECORD_UUID = /\b[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\b/gi;
+const LONG_PATH_ID = /\/[a-f0-9_-]{24,128}(?=\/|$)/gi;
 const COOKIE = /\b(?:cookie|set-cookie)\s*:\s*[^\r\n]+/gi;
 const AUTHORIZATION = /\bauthorization\s*:\s*[^\r\n]+/gi;
 const URL_QUERY = /(https?:\/\/[^\s?#]+)(?:\?[^\s#]*)?(?:#[^\s]*)?/gi;
@@ -65,6 +66,21 @@ export type ClientErrorValidation =
   | { ok: true; value: ClientErrorEnvelope }
   | { ok: false; error: string };
 
+let currentDiagnosticState: ClientErrorDiagnosticState = {};
+
+export function setClientErrorDiagnosticState(state: ClientErrorDiagnosticState) {
+  currentDiagnosticState = {
+    hasTargets: typeof state.hasTargets === "boolean" ? state.hasTargets : undefined,
+    hasFoodLogs: typeof state.hasFoodLogs === "boolean" ? state.hasFoodLogs : undefined,
+    targetLoadState: state.targetLoadState,
+    foodLogLoadState: state.foodLogLoadState
+  };
+}
+
+export function clearClientErrorDiagnosticState() {
+  currentDiagnosticState = {};
+}
+
 export function sanitizeClientErrorText(value: unknown, maximum = MAX_MESSAGE) {
   if (typeof value !== "string") return "";
   return value
@@ -83,7 +99,11 @@ export function sanitizeClientRoute(value: unknown) {
   if (typeof value !== "string") return "/unknown";
   try {
     const parsed = new URL(value, "https://plaivra.invalid");
-    const route = parsed.pathname.replace(/\/+/g, "/").slice(0, MAX_ROUTE);
+    const route = parsed.pathname
+      .replace(RECORD_UUID, "id")
+      .replace(LONG_PATH_ID, "/id")
+      .replace(/\/+/g, "/")
+      .slice(0, MAX_ROUTE);
     return /^\/[a-z0-9/_-]*$/i.test(route) ? route : "/unknown";
   } catch {
     return "/unknown";
@@ -209,6 +229,7 @@ export function buildClientErrorEnvelope({
     commitSha: release.commitSha,
     buildTimestamp: release.buildTimestamp,
     browser: coarseBrowser(typeof navigator !== "undefined" ? navigator.userAgent : undefined),
+    ...currentDiagnosticState,
     ...diagnosticState
   });
   return validation.ok ? validation.value : null;
