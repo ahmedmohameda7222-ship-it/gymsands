@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
 
@@ -88,7 +88,8 @@ export function evaluateReleasePreflight({
     "telemetryTests",
     "environmentValidation",
     "releaseMetadata",
-    "productionBuild"
+    "productionBuild",
+    "renderedBrowserQa"
   ];
   for (const gate of requiredGates) {
     const evidence = manifest?.qualityGates?.[gate];
@@ -148,6 +149,6 @@ async function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main();
 }
