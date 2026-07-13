@@ -53,13 +53,14 @@ function expectRoleFailure(role: "authenticated" | "anon", userId: string | null
 
 beforeAll(() => {
   sql(`
-    drop schema public cascade;
+    drop extension if exists pgcrypto cascade;
+    drop schema if exists public cascade;
     create schema public;
     grant all on schema public to postgres;
     grant usage on schema public to public;
     drop schema if exists auth cascade;
     create schema auth;
-    create extension if not exists pgcrypto;
+    create extension pgcrypto with schema public;
     do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
     do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$;
     do $$ begin create role service_role nologin bypassrls; exception when duplicate_object then null; end $$;
@@ -95,7 +96,14 @@ beforeAll(() => {
 
 afterAll(() => {
   if (disposableDatabaseUrl) {
-    sql("drop schema public cascade; create schema public; grant all on schema public to postgres; grant usage on schema public to public; drop schema if exists auth cascade;");
+    sql(`
+      drop extension if exists pgcrypto cascade;
+      drop schema if exists public cascade;
+      create schema public;
+      grant all on schema public to postgres;
+      grant usage on schema public to public;
+      drop schema if exists auth cascade;
+    `);
   }
 });
 
