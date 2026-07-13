@@ -71,8 +71,11 @@ const copy = {
   }
 } as const;
 
+type FoodPreferencesCopy = { [Key in keyof typeof copy.en]: string };
+
 export function FoodPreferencesForm() {
   const { user } = useAuth();
+  const userId = user?.id;
   const { language, dir } = useTranslation();
   const c = copy[language];
   const { toast } = useToast();
@@ -85,19 +88,19 @@ export function FoodPreferencesForm() {
   const loadPreferences = useCallback(async () => {
     const currentRequest = ++requestId.current;
     dispatch({ type: "load-start" });
-    if (!user?.id) {
+    if (!userId) {
       dispatch({ type: "load-error", message: c.signInError });
       return;
     }
     try {
-      const value = await getNutritionPreferenceProfile(user.id);
+      const value = await getNutritionPreferenceProfile(userId);
       if (requestId.current === currentRequest) dispatch({ type: "load-success", value });
     } catch (error) {
       if (requestId.current === currentRequest) {
         dispatch({ type: "load-error", message: userSafeError(error, c.loadError) });
       }
     }
-  }, [c.loadError, c.signInError, user?.id]);
+  }, [c.loadError, c.signInError, userId]);
 
   useEffect(() => {
     void loadPreferences();
@@ -117,10 +120,10 @@ export function FoodPreferencesForm() {
   }
 
   async function save() {
-    if (!user?.id || !state.form || !foodPreferencesCanSave(state)) return;
+    if (!userId || !state.form || !foodPreferencesCanSave(state)) return;
     dispatch({ type: "save-start" });
     try {
-      const value = await upsertNutritionPreferenceProfile(user.id, foodPreferencesDraftToInput(state.form));
+      const value = await upsertNutritionPreferenceProfile(userId, foodPreferencesDraftToInput(state.form));
       dispatch({ type: "save-success", value });
       toast({ title: c.saved });
     } catch (error) {
@@ -161,7 +164,7 @@ export function FoodPreferencesForm() {
   </div>;
 }
 
-function validationMessage(code: FoodPreferencesValidationErrors[keyof FoodPreferencesValidationErrors], c: typeof copy.en) {
+function validationMessage(code: FoodPreferencesValidationErrors[keyof FoodPreferencesValidationErrors], c: FoodPreferencesCopy) {
   if (code === "non-negative-number") return c.budgetError;
   if (code === "cooking-time") return c.timeError;
   if (code === "meals-per-day") return c.mealsError;
