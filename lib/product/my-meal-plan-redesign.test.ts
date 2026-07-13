@@ -13,24 +13,62 @@ describe("My Meal Plan redesign contracts", () => {
     expect(client).not.toContain("MealPlanCalendar");
   });
 
-  it("uses date-aware targets and latest-request-wins resource state", () => {
+  it("uses date-aware targets, one batched Week path, and latest-request-wins state", () => {
     const client = source("components/meals/my-meal-plan/my-meal-plan-page-client.tsx");
     expect(client).toContain("getEatTargetForDate(user.id, selectedDate)");
+    expect(client).toContain("getEatTargetsForDates(user.id, weekDays)");
+    expect(client).not.toContain("Promise.all(weekDays.map");
     expect(client).toContain("requestIds.current.day");
     expect(client).toContain("requestIds.current.week");
     expect(client).toContain("requestIds.current.target");
     expect(client).not.toContain("window.innerWidth");
   });
 
-  it("routes completion and completed correction through atomic RPCs", () => {
-    const service = source("services/database/meal-plan.ts");
-    expect(service).toContain('.rpc("complete_meal_plan_item"');
-    expect(service).toContain('.rpc("correct_completed_meal_plan_item"');
-    expect(service).toContain('item.status === "skipped"');
-    expect(service).not.toContain("crypto.randomUUID()");
+  it("uses accessible stable disclosures and action menus instead of native details", () => {
+    const client = source("components/meals/my-meal-plan/my-meal-plan-page-client.tsx");
+    const menu = source("components/ui/action-menu.tsx");
+    const disclosure = source("components/ui/disclosure.tsx");
+    expect(client).toContain("<Disclosure");
+    expect(client).toContain("<ActionMenu");
+    expect(client).not.toContain("<details");
+    expect(menu).toContain('event.key !== "Escape"');
+    expect(menu).toContain('role="menu"');
+    expect(menu).toContain('role="menuitem"');
+    expect(menu).toContain("triggerRef.current?.focus()");
+    expect(disclosure).toContain("aria-expanded={open}");
+    expect(disclosure).toContain("aria-controls={panelId}");
   });
 
-  it("locks, owns, and atomically links completed meals in the migration", () => {
+  it("fully localizes corrected meal-plan actions and accessible labels", () => {
+    const client = source("components/meals/my-meal-plan/my-meal-plan-page-client.tsx");
+    const copy = source("lib/meals/meal-plan-copy.ts");
+    const tags = source("components/ui/tag-input.tsx");
+    expect(client).toContain("label={c.date}");
+    expect(client).toContain("aria-label={c.closeNotice}");
+    expect(copy).toContain('replaceDesc: "Ersetze');
+    expect(copy).toContain('replaceDesc: "استبدل');
+    expect(copy).toContain('date: "Datum"');
+    expect(copy).toContain('date: "التاريخ"');
+    expect(tags).toContain("addLabel = \"Add\"");
+    expect(tags).toContain("removeLabel = \"Remove\"");
+  });
+
+  it("routes all live completion and linked correction consumers through atomic RPC services", () => {
+    const planService = source("services/database/meal-plan.ts");
+    const atomicEat = source("services/database/eat-meal-plan-atomic.ts");
+    const eatPage = source("components/meals/eat-page.tsx");
+    const eatLog = source("components/meals/eat-food-log.tsx");
+    expect(planService).toContain('.rpc("complete_meal_plan_item"');
+    expect(planService).toContain('.rpc("correct_completed_meal_plan_item"');
+    expect(atomicEat).toContain('.rpc("complete_meal_plan_item_with_values"');
+    expect(atomicEat).toContain('.rpc("correct_completed_meal_plan_item"');
+    expect(eatPage).toContain("completeMealPlanItemWithDraftAtomic");
+    expect(eatPage).not.toContain("completeMealPlanItemWithDraft,");
+    expect(eatLog).toContain("updateEatFoodLogAtomic");
+    expect(eatLog).not.toContain("updateEatFoodLog,");
+  });
+
+  it("locks, owns, grants, and atomically links completed meals in the migration", () => {
     const migration = source("supabase/migrations/20260713153000_meal_plan_atomic_execution.sql");
     expect(migration).toContain("security definer");
     expect(migration).toContain("set search_path = ''");
@@ -39,18 +77,28 @@ describe("My Meal Plan redesign contracts", () => {
     expect(migration).toContain("user_meal_plan_items_unique_food_log");
     expect(migration).toContain("user_grocery_items_unique_meal_source");
     expect(migration).toContain("user_meal_plan_items_execution_state_check");
+    expect(migration).toContain("complete_meal_plan_item_with_values");
     expect(migration).toContain("grant execute on function public.complete_meal_plan_item(uuid) to authenticated");
     expect(migration).toContain("revoke all on function public.complete_meal_plan_item(uuid) from public, anon");
   });
 
-  it("keeps Food Preferences saved while making the action dirty-state aware", () => {
+  it("protects Food Preferences loading, editable-only payloads, and invalid numeric input", () => {
     const form = source("components/meals/my-meal-plan/food-preferences-form.tsx");
-    expect(form).toContain("JSON.stringify(form) !== JSON.stringify(saved)");
-    expect(form).toContain("disabled={!dirty || saving}");
-    expect(form).toContain("preferred_cuisines");
-    expect(form).toContain("disliked_foods");
-    expect(form).toContain("meal_prep_days");
-    expect(form).toContain("kitchen_equipment");
-    expect(form).toContain("grocery_style_preference");
+    const state = source("lib/meals/food-preferences-state.ts");
+    const service = source("services/database/execution-layer.ts");
+    expect(form).toContain('state.phase === "load-error"');
+    expect(form).toContain("foodPreferencesCanSave(state)");
+    expect(form).toContain("aria-describedby={error ? errorId : undefined}");
+    expect(state).toContain('phase: "loaded-empty"');
+    expect(state).toContain('phase: "load-error"');
+    expect(service).toContain("mapNutritionPreferenceRowToInput");
+    expect(service).not.toContain("return data as UserNutritionPreferenceProfile");
+  });
+
+  it("restores localized route-level unexpected-render protection", () => {
+    const errorRoute = source("app/(private)/my-meal-plan/error.tsx");
+    expect(errorRoute).toContain("<RouteError");
+    expect(errorRoute).toContain("c.unexpectedTitle");
+    expect(errorRoute).toContain("c.unexpectedDesc");
   });
 });
