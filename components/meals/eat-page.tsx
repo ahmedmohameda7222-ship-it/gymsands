@@ -21,7 +21,8 @@ import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { getFavoriteFoodKeysAsync } from "@/services/meals/food-logging-speed";
 import { addWaterLog } from "@/services/database/nutrition";
-import { completeMealPlanItemWithDraft, getEatFoodLogs, getEatMealPlanItems, getEatRecentFoodLogs, getEatWaterLogs, getEatWeek, logRepeatFood, type EatFoodLogPatch } from "@/services/database/eat";
+import { getEatFoodLogs, getEatMealPlanItems, getEatRecentFoodLogs, getEatWaterLogs, getEatWeek, logRepeatFood, type EatFoodLogPatch } from "@/services/database/eat";
+import { completeMealPlanItemWithDraftAtomic } from "@/services/database/eat-meal-plan-atomic";
 import { getEatTargetForDate, getEatWeekTargets } from "@/services/database/eat-targets";
 import { ACTIVE_NUTRITION_TARGET_EVENT } from "@/services/database/nutrition-target-assignments";
 import { getPlannedMealPromptContext } from "@/services/database/planned-meal-prompt-context";
@@ -232,7 +233,7 @@ export function EatPage() {
     const nextPatch: EatFoodLogPatch = patch ?? { foodName: item.food_name, quantity: item.quantity, servingSize: item.serving_size, mealType: item.meal_type, calories: item.calories, proteinG: item.protein_g, carbsG: item.carbs_g, fatG: item.fat_g, notes: item.notes };
     setPlannedPending(item.id); setAdjustError("");
     try {
-      const result = await completeMealPlanItemWithDraft({ item, patch: nextPatch, updateSavedPlan: updatePlan });
+      const result = await completeMealPlanItemWithDraftAtomic({ item, patch: nextPatch, updateSavedPlan: updatePlan });
       if (result.log) mergeLogged([result.log]);
       setPlannedMeals((current) => ({ status: "loaded", data: (current.data ?? []).map((planned) => planned.id === result.item.id ? result.item : planned) }));
       setAdjustingMeal(null); void loadWeek(); void loadWeekTargets();
