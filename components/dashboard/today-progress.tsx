@@ -1,11 +1,13 @@
 "use client";
 
 import { Activity, Droplets, Flame, Soup, Utensils } from "lucide-react";
+import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { formatEnergy, formatLiquid } from "@/lib/dashboard/today-units";
 import { interpolateFocusedTodayCopy, type FocusedTodayCopy } from "@/lib/dashboard/focused-today-copy";
 import { resolveProgressMetricState, type ProgressMetricState, type ProgressSourceState } from "@/lib/dashboard/progress-metric-state";
+import { clearClientErrorDiagnosticState, setClientErrorDiagnosticState } from "@/lib/observability/client-error";
 import { cn } from "@/lib/utils";
 import type { SavedTargets } from "@/services/nutrition/targets";
 
@@ -41,6 +43,16 @@ export function TodayProgress({
   liquidUnit: "ml" | "oz";
   copy: FocusedTodayCopy;
 }) {
+  useEffect(() => {
+    setClientErrorDiagnosticState({
+      hasTargets: Boolean(targets),
+      hasFoodLogs: totals !== null && Object.values(totals).some((value) => Number(value) !== 0),
+      targetLoadState: targetsState,
+      foodLogLoadState: logsState
+    });
+    return clearClientErrorDiagnosticState;
+  }, [logsState, targets, targetsState, totals]);
+
   const macroState = (consumed: number | null, target: number | null) => resolveProgressMetricState({ consumed, target, consumedState: logsState, targetState: targetsState });
   const waterState = resolveProgressMetricState({ consumed: waterTotal, target: targets?.water_ml ?? null, consumedState: hydrationState, targetState: targetsState });
   const grams = (value: number) => `${Math.round(value)} g`;
