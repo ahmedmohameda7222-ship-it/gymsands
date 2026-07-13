@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { knownFoodLogCount, resolveTodayNutritionSources, type TodayNutritionTargetData } from "@/lib/dashboard/today-nutrition";
+import { knownFoodLogCount, resolveTodayNutritionSources, upsertFoodLogById, type TodayNutritionTargetData } from "@/lib/dashboard/today-nutrition";
+import { sumFoodLogs } from "@/services/nutrition/calculations";
 import type { FoodLog } from "@/types";
 
-const log = { id: "log-1" } as FoodLog;
+const log = { id: "log-1", calories: 400, protein_g: 30, carbs_g: 45, fat_g: 10, quantity: 1 } as FoodLog;
 const targets = { targets: null, activeTarget: null } satisfies TodayNutritionTargetData;
 const failed = (reason = new Error("failed")) => ({ status: "rejected", reason } as const);
 
@@ -38,5 +39,29 @@ describe("Today nutrition partial loading", () => {
     expect(knownFoodLogCount(data)).toBeNull();
     expect(data.logsError).toContain("logs");
     expect(data.targetsError).toContain("targets");
+  });
+});
+
+describe("meal completion food-log deduplication", () => {
+  it("adds the first completion log exactly once", () => {
+    expect(upsertFoodLogById([], log)).toEqual([log]);
+  });
+
+  it("keeps one log after repeated and already-done completion responses", () => {
+    const once = upsertFoodLogById([], log);
+    const repeated = upsertFoodLogById(once, log);
+    expect(repeated).toHaveLength(1);
+    expect(repeated[0]).toEqual(log);
+  });
+
+  it("replaces an existing log with the same stable ID", () => {
+    const corrected = { ...log, calories: 425 };
+    expect(upsertFoodLogById([log], corrected)).toEqual([corrected]);
+  });
+
+  it("does not increase displayed calories after a repeated completion response", () => {
+    const once = upsertFoodLogById([], log);
+    const repeated = upsertFoodLogById(once, log);
+    expect(sumFoodLogs(repeated).calories).toBe(sumFoodLogs(once).calories);
   });
 });
