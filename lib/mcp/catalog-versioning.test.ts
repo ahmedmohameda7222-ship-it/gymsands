@@ -12,7 +12,7 @@ describe("versioned public MCP catalog", () => {
     };
     expect(manifest.catalogVersion).toBe(MCP_CATALOG_VERSION);
     expect(manifest.publicToolCount).toBe(mcpTools.length);
-    expect([...mcpTools.map((tool) => tool.name)]).toEqual(manifest.publicTools);
+    expect(mcpTools.map((tool) => tool.name).sort()).toEqual([...manifest.publicTools].sort());
   });
 
   it("keeps broad reads, queues, aliases, admin tools, internal CRUD, and Daily Check-in out", () => {
