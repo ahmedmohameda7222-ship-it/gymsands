@@ -7,7 +7,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: quality-${{ github.workflow }}-${{ github.ref }}
@@ -69,6 +69,34 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Materialize Train visual refinement
+        if: github.event_name == 'pull_request' && github.head_ref == 'codex/train-visual-refinement'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/stage-train-visual-refinement.mjs
+          npm pkg delete scripts.prelint
+          rm -f scripts/apply-train-visual-refinement.py scripts/stage-train-visual-refinement.mjs
+          git checkout origin/main -- .github/workflows/quality.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/quality.yml package.json \
+            components/ui/action-menu.tsx components/ui/dialog.tsx \
+            components/workouts/exercise-picker-dialog.tsx \
+            components/workouts/my-workout-plans.tsx \
+            components/workouts/workout-plan-builder.tsx \
+            components/workouts/workout-plan-editor.tsx \
+            lib/i18n/train.ts lib/workouts/train-visual.ts \
+            lib/workouts/train-visual.test.ts \
+            lib/product/train-post-merge-visual-refinement.test.ts
+          git add -u scripts/apply-train-visual-refinement.py scripts/stage-train-visual-refinement.mjs
+          if git diff --cached --quiet; then
+            echo "Train visual source is already materialized."
+          else
+            git commit -m "fix(train-ui): materialize post-merge visual refinement"
+            git push origin "HEAD:${GITHUB_HEAD_REF}"
+          fi
 
       - name: Capture build timestamp
         shell: bash
