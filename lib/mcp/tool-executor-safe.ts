@@ -216,6 +216,79 @@ async function addSleepRecoveryLog(ctx: McpContext, input: JsonObject) {
   return ok({ ok: true, log: data, guidance: "General fitness tracking only. Do not treat this as medical advice." });
 }
 
+async function getSafeActivePlan(ctx: McpContext) {
+  const { data, error } = await ctx.supabase
+    .from("user_workout_plans")
+    .select("*")
+    .eq("user_id", ctx.userId)
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as DbRow | null) ?? null;
+}
+
+async function getOwnedPlanDay(ctx: McpContext, dayId: string, expectedPlanId?: string) {
+  const dayResult = await ctx.supabase
+    .from("user_workout_plan_days")
+    .select("*")
+    .eq("id", dayId)
+    .limit(1)
+    .maybeSingle();
+  if (dayResult.error) throw new Error(dayResult.error.message);
+  const day = (dayResult.data as DbRow | null) ?? null;
+  if (!day?.plan_id) return null;
+
+  const planId = String(day.plan_id);
+  if (expectedPlanId && planId !== expectedPlanId) return null;
+  const planResult = await ctx.supabase
+    .from("user_workout_plans")
+    .select("id")
+    .eq("id", planId)
+    .eq("user_id", ctx.userId)
+    .limit(1)
+    .maybeSingle();
+  if (planResult.error) throw new Error(planResult.error.message);
+  return planResult.data ? day : null;
+}
+
+async function getSafeTodayWorkout(ctx: McpContext, date: string) {
+  const activePlan = await getSafeActivePlan(ctx);
+  let request = ctx.supabase
+    .from("user_workout_sessions")
+    .select("*")
+    .eq("user_id", ctx.userId)
+    .eq("scheduled_date", date)
+    .order("session_number", { ascending: true })
+    .limit(1);
+  if (activePlan?.id) request = request.eq("user_workout_plan_id", String(activePlan.id));
+  const { data, error } = await request.maybeSingle();
+  if (error) throw new Error(error.message);
+  const workout = (data as DbRow | null) ?? null;
+  let workoutDay: DbRow | null = null;
+  let exercises: unknown[] = [];
+  if (workout?.plan_day_id) {
+    const expectedPlanId = activePlan?.id
+      ? String(activePlan.id)
+      : typeof workout.user_workout_plan_id === "string"
+        ? workout.user_workout_plan_id
+        : undefined;
+    workoutDay = await getOwnedPlanDay(ctx, String(workout.plan_day_id), expectedPlanId);
+    if (workoutDay?.id) {
+      const exerciseResult = await ctx.supabase
+        .from("user_workout_plan_exercises")
+        .select("*")
+        .eq("plan_day_id", String(workoutDay.id))
+        .order("sort_order", { ascending: true });
+      if (exerciseResult.error) throw new Error(exerciseResult.error.message);
+      exercises = exerciseResult.data ?? [];
+    }
+  }
+  return { active_plan: activePlan, workout, workout_day: workoutDay, exercises };
+}
+
 export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput: unknown): Promise<McpToolResult> {
   const input = asObject(rawInput);
   const contextTaskByTool: Partial<Record<string, ContextTask>> = {
@@ -246,6 +319,10 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
   if (toolName === "mark_meal_plan_item_done") return markMealPlanItemDone(ctx, input);
   if (toolName === "create_custom_meal") return createCustomMeal(ctx, input);
   if (toolName === "add_sleep_recovery_log") return addSleepRecoveryLog(ctx, input);
+  if (toolName === "get_today_workout") {
+    const date = cleanDate(input.date ?? "today");
+    return ok({ ok: true, date, ...(await getSafeTodayWorkout(ctx, date)) });
+  }
   return executeOriginalMcpTool(ctx, toolName, rawInput);
 }
 
