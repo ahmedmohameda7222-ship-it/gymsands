@@ -120,10 +120,19 @@ export function foodPreferencesReducer(state: FoodPreferencesState, action: Food
     case "load-start":
       return { phase: "loading", form: null, saved: null, loadError: null, saveError: null };
     case "load-success": {
-      const existing = action.value !== null;
-      const draft = nutritionPreferenceInputToDraft(action.value ?? emptyNutritionPreferenceInput);
+      if (action.value === null) {
+        const draft = nutritionPreferenceInputToDraft(emptyNutritionPreferenceInput);
+        return {
+          phase: "loaded-empty",
+          form: draft,
+          saved: draft,
+          loadError: null,
+          saveError: null
+        };
+      }
+      const draft = nutritionPreferenceInputToDraft(action.value);
       return {
-        phase: existing ? "loaded-existing" : "loaded-empty",
+        phase: "loaded-existing",
         form: draft,
         saved: draft,
         loadError: null,
