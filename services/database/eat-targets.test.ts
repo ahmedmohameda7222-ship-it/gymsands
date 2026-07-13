@@ -86,6 +86,18 @@ describe("Eat target loading from verified assignments", () => {
     expect(result.find((day) => day.date === "2026-07-17")?.planned_calories).toBe(1900);
   });
 
+  it("loads base targets, profiles, plan, and overrides once for all seven dates", async () => {
+    const { getEatTargetsForDates } = await import("@/services/database/eat-targets");
+    const dates = ["2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18", "2026-07-19"];
+    const result = await getEatTargetsForDates(userId, dates);
+    expect(Object.keys(result)).toEqual(dates);
+    expect(getCalorieTargets).toHaveBeenCalledTimes(1);
+    expect(getNutritionTargetProfiles).toHaveBeenCalledTimes(1);
+    expect(getDefaultUserWorkoutPlan).toHaveBeenCalledTimes(1);
+    expect(migrateLegacyNutritionTargetOverridesForDates).toHaveBeenCalledTimes(1);
+    expect(migrateLegacyNutritionTargetOverridesForDates).toHaveBeenCalledWith(userId, dates);
+  });
+
   it("fails the Week target source when valid legacy migration fails", async () => {
     migrateLegacyNutritionTargetOverridesForDates.mockRejectedValue(new Error("migration failed"));
     const { getEatWeekTargets } = await import("@/services/database/eat-targets");

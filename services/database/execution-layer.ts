@@ -89,20 +89,60 @@ export async function upsertFitnessConstraints(userId: string, input: FitnessCon
   return mapFitnessConstraints(data as Record<string, unknown>) ?? emptyFitnessConstraints;
 }
 
-export async function getNutritionPreferenceProfile(userId: string) {
+export type NutritionPreferenceInput = Omit<UserNutritionPreferenceProfile, "id" | "user_id" | "created_at" | "updated_at">;
+
+export function mapNutritionPreferenceRowToInput(row: UserNutritionPreferenceProfile | null): NutritionPreferenceInput | null {
+  if (!row) return null;
+  return {
+    weekly_food_budget: row.weekly_food_budget,
+    budget_currency: cleanText(row.budget_currency),
+    max_cooking_time_minutes: row.max_cooking_time_minutes,
+    meal_prep_days: cleanStringArray(row.meal_prep_days),
+    cooking_skill: cleanText(row.cooking_skill),
+    kitchen_equipment: cleanStringArray(row.kitchen_equipment),
+    preferred_cuisines: cleanStringArray(row.preferred_cuisines),
+    disliked_foods: cleanStringArray(row.disliked_foods),
+    allergies: cleanText(row.allergies),
+    repeat_tolerance: cleanText(row.repeat_tolerance),
+    meals_per_day: row.meals_per_day,
+    ingredient_reuse_preference: cleanText(row.ingredient_reuse_preference),
+    grocery_style_preference: cleanText(row.grocery_style_preference)
+  };
+}
+
+function sanitizeNutritionPreferenceInput(input: NutritionPreferenceInput): NutritionPreferenceInput {
+  return {
+    weekly_food_budget: input.weekly_food_budget,
+    budget_currency: cleanText(input.budget_currency),
+    max_cooking_time_minutes: input.max_cooking_time_minutes,
+    meal_prep_days: cleanStringArray(input.meal_prep_days),
+    cooking_skill: cleanText(input.cooking_skill),
+    kitchen_equipment: cleanStringArray(input.kitchen_equipment),
+    preferred_cuisines: cleanStringArray(input.preferred_cuisines),
+    disliked_foods: cleanStringArray(input.disliked_foods),
+    allergies: cleanText(input.allergies),
+    repeat_tolerance: cleanText(input.repeat_tolerance),
+    meals_per_day: input.meals_per_day,
+    ingredient_reuse_preference: cleanText(input.ingredient_reuse_preference),
+    grocery_style_preference: cleanText(input.grocery_style_preference)
+  };
+}
+
+export async function getNutritionPreferenceProfile(userId: string): Promise<NutritionPreferenceInput | null> {
   requireUser(userId);
   const { data, error } = await supabase!.from("user_nutrition_preference_profiles").select("*").eq("user_id", userId).maybeSingle();
   if (error) throw error;
-  return data as UserNutritionPreferenceProfile | null;
+  return mapNutritionPreferenceRowToInput(data as UserNutritionPreferenceProfile | null);
 }
 
-export type NutritionPreferenceInput = Omit<UserNutritionPreferenceProfile, "id" | "user_id" | "created_at" | "updated_at">;
-
-export async function upsertNutritionPreferenceProfile(userId: string, input: NutritionPreferenceInput) {
+export async function upsertNutritionPreferenceProfile(userId: string, input: NutritionPreferenceInput): Promise<NutritionPreferenceInput> {
   requireUser(userId);
-  const { data, error } = await supabase!.from("user_nutrition_preference_profiles").upsert({ user_id: userId, ...input }, { onConflict: "user_id" }).select("*").single();
+  const payload = sanitizeNutritionPreferenceInput(input);
+  const { data, error } = await supabase!.from("user_nutrition_preference_profiles").upsert({ user_id: userId, ...payload }, { onConflict: "user_id" }).select("*").single();
   if (error) throw error;
-  return data as UserNutritionPreferenceProfile;
+  const saved = mapNutritionPreferenceRowToInput(data as UserNutritionPreferenceProfile);
+  if (!saved) throw new Error("Food preferences could not be normalized after saving.");
+  return saved;
 }
 
 export async function getProgressionTargets(userId: string, planExerciseIds?: string[]) {
