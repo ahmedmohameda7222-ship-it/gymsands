@@ -49,7 +49,7 @@ describe("archived Train plan behavior", () => {
   });
 
   it("keeps the full action set for a non-archived plan", () => {
-    const actions = workoutPlanDetailActions({ id: "active-1", archived_at: null, is_active: true });
+    const actions = workoutPlanDetailActions({ archived_at: null, is_active: true });
     expect(actions).toEqual(expect.arrayContaining(["edit", "start", "resume", "adjust", "duplicate", "archive", "delete", "back"]));
   });
 });
