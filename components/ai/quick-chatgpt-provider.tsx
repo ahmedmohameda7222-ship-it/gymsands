@@ -16,6 +16,7 @@ import {
   RUNTIME_QUICK_PROMPTS,
   rankRuntimePrompts
 } from "@/lib/ai/prompt-runtime";
+import { preserveEquivalentDashboardContext } from "@/lib/ai/dashboard-context";
 import { type PromptCapability, type PromptCategory, type PromptLanguage, type PromptOpenOptions, type PromptSurfaceMode, type PromptSurfaceSource, type QuickPromptContext, type QuickPromptDefinition } from "@/lib/ai/quick-prompts";
 import { evaluatePromptPermission } from "@/lib/ai/prompt-permissions";
 import { getAiPermissionSettingsWithStatus, type AiPermissionConfig, type AiPermissionSettingsStatus } from "@/services/database/ai-permissions";
@@ -40,10 +41,6 @@ const emptyContext: QuickPromptContext = {
   wellness: { state: "loading", habitCount: null, supplementCount: null }, progress: { state: "loading", entryCount: null }, profile: { state: "loading" }
 };
 const permissionLabelKeys: Record<AiPermissionSection, TodayKey> = { workouts: "permissionWorkouts", nutrition: "permissionNutrition", meal_plans: "permissionMealPlans", hydration: "permissionHydration", wellness: "permissionWellness", progress: "permissionProgress", profile: "permissionProfile", settings: "permissionSettings" };
-
-function sameDashboardContext(current: QuickPromptContext, next: QuickPromptContext) {
-  return JSON.stringify(current) === JSON.stringify(next);
-}
 
 export function QuickChatGptProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -84,7 +81,7 @@ export function QuickChatGptProvider({ children }: { children: ReactNode }) {
   const missingSectionLabels = permissionEvaluation.state === "missing" ? permissionEvaluation.sections.map((section) => tt(permissionLabelKeys[section])).join(", ") : "";
 
   const setDashboardContext = useCallback((context: QuickPromptContext) => {
-    setDashboardContextState((current) => sameDashboardContext(current, context) ? current : context);
+    setDashboardContextState((current) => preserveEquivalentDashboardContext(current, context));
   }, []);
   const loadPermissions = useCallback(async () => {
     if (!permissionUserId) { setPermissionConfig(null); setPermissionStatus(null); setPermissionLoading(false); return; }
