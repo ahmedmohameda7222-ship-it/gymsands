@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { McpContext } from "@/lib/mcp/auth";
-import { executeMcpTool } from "@/lib/mcp/tool-executor-safe";
+import { executeMcpTool, mcpTools } from "@/lib/mcp/public-surface";
 import { sanitizeMcpToolResult, validateMcpToolInput, validateMcpToolOutput } from "@/lib/mcp/safety";
-import { mcpTools } from "@/lib/mcp/tools";
 
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const CONNECTION_ID = "22222222-2222-4222-8222-222222222222";
@@ -43,7 +42,6 @@ function initialTables(): Record<string, Row[]> {
     body_measurements: [],
     personal_records: [],
     sleep_recovery_logs: [],
-    user_daily_checkins: [],
     user_nutrition_preference_profiles: [],
     user_nutrition_target_profiles: [],
     user_progression_targets: [],
@@ -64,7 +62,7 @@ function createInMemorySupabase() {
   function from(table: string) {
     let action: "select" | "insert" | "update" | "upsert" | "delete" = "select";
     let payload: Row | Row[] | null = null;
-    let filters: Filter[] = [];
+    const filters: Filter[] = [];
     let rowLimit: number | null = null;
 
     const matches = (row: Row) => filters.every((filter) => {
@@ -186,8 +184,7 @@ function inputFor(name: string): Record<string, unknown> {
     skip_workout: { workout_session_id: SESSION_ID, reason: "Recovery", idempotency_key: key },
     add_weight_entry: { weight_kg: 80, date: "2026-07-11", idempotency_key: key },
     add_body_measurement: { measured_at: "2026-07-11", waist_cm: 90, idempotency_key: key },
-    add_sleep_recovery_log: { date: "2026-07-11", hours_slept: 8, sleep_quality: "good", idempotency_key: key },
-    upsert_daily_checkin: { checkin_date: "2026-07-11", checkin_type: "morning", energy_level: "good", idempotency_key: key }
+    add_sleep_recovery_log: { date: "2026-07-11", hours_slept: 8, sleep_quality: "good", idempotency_key: key }
   };
   return inputs[name] ?? {};
 }
@@ -203,8 +200,8 @@ function context(): McpContext {
 }
 
 describe("public MCP runtime handler contracts", () => {
-  it("executes and validates a success-path result for all 35 public tools", async () => {
-    expect(mcpTools).toHaveLength(35);
+  it("executes and validates a success-path result for all 34 active public tools", async () => {
+    expect(mcpTools).toHaveLength(34);
     for (const tool of mcpTools) {
       const input = inputFor(tool.name);
       const inputValidation = validateMcpToolInput(tool, input);
