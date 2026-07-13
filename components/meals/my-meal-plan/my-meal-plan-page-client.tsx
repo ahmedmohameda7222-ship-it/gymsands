@@ -538,13 +538,26 @@ export function MyMealPlanPageClient() {
                   <p className="font-semibold">{c.validationNeedsReview}</p>
                 </div>
               ) : null}
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 font-semibold"><ShoppingCart className="h-4 w-4" />{c.groceryList}</div>
-                  <p className="mt-1 text-sm text-muted-foreground">{interpolateCopy(c.itemsChecked, groceryStats)}</p>
-                  <Button variant="outline" className="mt-3 min-h-11 w-full" onClick={() => navigate("shopping", selectedDate)}>{c.openList}</Button>
-                </CardContent>
-              </Card>
+           <Card>
+  <CardContent className="flex min-h-[156px] flex-col justify-center gap-3 px-4 pb-4 pt-4 sm:px-4 sm:pb-4 sm:pt-4">
+    <div className="flex items-center gap-2 font-semibold">
+      <ShoppingCart className="h-4 w-4" />
+      {c.groceryList}
+    </div>
+
+    <p className="text-sm text-muted-foreground">
+      {interpolateCopy(c.itemsChecked, groceryStats)}
+    </p>
+
+    <Button
+      variant="outline"
+      className="min-h-11 w-full"
+      onClick={() => navigate("shopping", selectedDate)}
+    >
+      {c.openList}
+    </Button>
+  </CardContent>
+</Card>
             </aside>
           </div>
         </TabsContent>
