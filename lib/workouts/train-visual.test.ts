@@ -1,10 +1,13 @@
-
 import { describe, expect, test } from "vitest";
 import { mergeUserFacingExerciseNote, userFacingExerciseNote } from "@/lib/workouts/train-visual";
 
 describe("Train user-facing exercise notes", () => {
   test("hides the legacy source marker while keeping user notes", () => {
     expect(userFacingExerciseNote("Source: plaivra_legacy_workouts\nKeep two reps in reserve.")).toBe("Keep two reps in reserve.");
+  });
+
+  test("hides bracketed internal source metadata as well", () => {
+    expect(userFacingExerciseNote("[source: plaivra_legacy_workouts]\nControlled tempo.")).toBe("Controlled tempo.");
   });
 
   test("preserves hidden metadata when the visible note is edited", () => {
