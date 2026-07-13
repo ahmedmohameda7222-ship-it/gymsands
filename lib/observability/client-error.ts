@@ -33,10 +33,15 @@ const JWT = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
 const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const RECORD_UUID = /\b[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\b/gi;
 const LONG_PATH_ID = /\/[a-f0-9_-]{24,128}(?=\/|$)/gi;
+const NUMERIC_PATH_ID = /\/\d{4,}(?=\/|$)/g;
 const COOKIE = /\b(?:cookie|set-cookie)\s*:\s*[^\r\n]+/gi;
 const AUTHORIZATION = /\bauthorization\s*:\s*[^\r\n]+/gi;
 const URL_QUERY = /(https?:\/\/[^\s?#]+)(?:\?[^\s#]*)?(?:#[^\s]*)?/gi;
 const QUERY_FRAGMENT = /\?(?:[^\s#]|%[0-9a-f]{2})+/gi;
+const SQL_KEY_VALUE = /\bKey\s*\([^)\r\n]{1,200}\)\s*=\s*\([^)\r\n]{1,500}\)/gi;
+const DOUBLE_QUOTED = /"[^"\r\n]{1,200}"/g;
+const SINGLE_QUOTED = /'[^'\r\n]{1,200}'/g;
+const BACKTICK_QUOTED = /`[^`\r\n]{1,200}`/g;
 const LOAD_STATE = new Set(["loading", "loaded", "failed", "unknown"]);
 
 export type ClientBoundarySource = "route" | "global" | "component";
@@ -92,6 +97,10 @@ export function sanitizeClientErrorText(value: unknown, maximum = MAX_MESSAGE) {
     .replace(URL_QUERY, "$1")
     .replace(QUERY_FRAGMENT, "?[REDACTED]")
     .replace(RECORD_UUID, REDACTED)
+    .replace(SQL_KEY_VALUE, `Key ${REDACTED}`)
+    .replace(DOUBLE_QUOTED, `"${REDACTED}"`)
+    .replace(SINGLE_QUOTED, `'${REDACTED}'`)
+    .replace(BACKTICK_QUOTED, `\`${REDACTED}\``)
     .slice(0, maximum);
 }
 
@@ -102,6 +111,7 @@ export function sanitizeClientRoute(value: unknown) {
     const route = parsed.pathname
       .replace(RECORD_UUID, "id")
       .replace(LONG_PATH_ID, "/id")
+      .replace(NUMERIC_PATH_ID, "/id")
       .replace(/\/+/g, "/")
       .slice(0, MAX_ROUTE);
     return /^\/[a-z0-9/_-]*$/i.test(route) ? route : "/unknown";
