@@ -42,7 +42,7 @@ describe("Train finalization UI contracts", () => {
     expect(overview).toContain("findOpenSessionPlanContext(visiblePlans, visibleOpenSession)");
     expect(overview).toContain("visibleOpenSession ? openPlanContext.plan : activePlan");
     expect(overview).toContain("openSessionId: visibleOpenSession?.id ?? null");
-    expect(overview).toContain('resolution.state === "active" ? tr("resumeWorkout")');
+    expect(overview).toContain('const actionLabel = active ? tr("resumeWorkout")');
     expect(overview).toContain('resolution.state === "completed" ? tr("viewCompletedWorkout")');
     expect(overview).toContain('tr("startWorkout")');
     expect(overview).toContain("grid-flow-col");
