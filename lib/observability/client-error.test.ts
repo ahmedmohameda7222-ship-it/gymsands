@@ -29,7 +29,7 @@ const validPayload = {
 };
 
 describe("client error telemetry", () => {
-  it("redacts bearer tokens, JWTs, emails, UUIDs, cookies, authorization, and query strings", () => {
+  it("redacts tokens, identifiers, quoted values, SQL values, and query strings", () => {
     const unsafe = [
       "Bearer abc.def.ghi",
       "eyJheader.payload.signature",
@@ -37,16 +37,28 @@ describe("client error telemetry", () => {
       "123e4567-e89b-42d3-a456-426614174000",
       "cookie: session=private",
       "authorization: Basic private",
+      "food was 'Owner-authored meal'",
+      "workout was \"Private workout\"",
+      "note was `Private note`",
+      "Key (food_name)=(Private food)",
       "https://app.plaivra.com/dashboard?token=secret#private"
     ].join(" | ");
-    const safe = sanitizeClientErrorText(unsafe, 2000);
-    expect(safe).not.toContain("member@example.com");
-    expect(safe).not.toContain("123e4567-e89b-42d3-a456-426614174000");
-    expect(safe).not.toContain("session=private");
-    expect(safe).not.toContain("Basic private");
-    expect(safe).not.toContain("token=secret");
-    expect(safe).not.toContain("#private");
-    expect(safe.match(/\[REDACTED\]/g)?.length).toBeGreaterThanOrEqual(5);
+    const safe = sanitizeClientErrorText(unsafe, 3000);
+    for (const secret of [
+      "member@example.com",
+      "123e4567-e89b-42d3-a456-426614174000",
+      "session=private",
+      "Basic private",
+      "Owner-authored meal",
+      "Private workout",
+      "Private note",
+      "Private food",
+      "token=secret",
+      "#private"
+    ]) {
+      expect(safe).not.toContain(secret);
+    }
+    expect(safe.match(/\[REDACTED\]/g)?.length).toBeGreaterThanOrEqual(9);
   });
 
   it("truncates long strings and removes route queries and dynamic record identifiers", () => {
@@ -55,6 +67,7 @@ describe("client error telemetry", () => {
     expect(sanitizeClientRoute("/my-workout/plans/123e4567-e89b-42d3-a456-426614174000/edit?token=secret"))
       .toBe("/my-workout/plans/id/edit");
     expect(sanitizeClientRoute("/records/abcdefghijklmnopqrstuvwx/private")).toBe("/records/id/private");
+    expect(sanitizeClientRoute("/records/123456789/private")).toBe("/records/id/private");
     expect(sanitizeClientRoute("javascript:alert(1)")).toBe("/unknown");
   });
 
