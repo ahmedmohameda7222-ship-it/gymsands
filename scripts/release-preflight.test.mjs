@@ -7,7 +7,7 @@ const requiredGates = [
   "repositoryIntegrity", "fullMigrationChain", "databaseLint", "databasePreflight",
   "migrationLedger", "dependencyAudit", "lint", "typecheck", "unitTests",
   "integrationTests", "scriptTests", "telemetryTests", "environmentValidation",
-  "releaseMetadata", "productionBuild"
+  "releaseMetadata", "productionBuild", "renderedBrowserQa"
 ];
 
 function validInput() {
@@ -63,4 +63,14 @@ test("fails without retained same-commit quality evidence", () => {
   input.manifest.qualityGates.productionBuild = { status: "passed", evidence: null };
   const result = evaluateReleasePreflight(input);
   assert.ok(result.failures.includes("quality_gate_productionBuild_missing"));
+
+  const browserInput = validInput();
+  browserInput.manifest.qualityGates.renderedBrowserQa = { status: "missing", evidence: null };
+  expectFailure(browserInput, "quality_gate_renderedBrowserQa_missing");
 });
+
+function expectFailure(input, code) {
+  const result = evaluateReleasePreflight(input);
+  assert.equal(result.ready, false);
+  assert.ok(result.failures.includes(code));
+}
