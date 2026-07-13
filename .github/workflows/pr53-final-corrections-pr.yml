@@ -48,6 +48,9 @@ jobs:
       - name: Apply responsive desktop stacking
         run: python .github/pr53-desktop-corrections.py
 
+      - name: Separate QA selectors
+        run: python .github/pr53-qa-selector-corrections.py
+
       - name: Install dependencies
         run: npm ci
 
@@ -112,6 +115,7 @@ jobs:
           rm -rf qa-artifacts .next
           rm .github/pr53-final-corrections.py
           rm .github/pr53-desktop-corrections.py
+          rm .github/pr53-qa-selector-corrections.py
           rm .github/workflows/pr53-final-corrections-pr.yml
           git add -A
           git diff --cached --check
