@@ -17,6 +17,8 @@ describe("Train final visual correction contracts", () => {
     expect(shell).toContain("lg:pb-[var(--desktop-app-bottom-reserved-space)]");
     expect(controller).toContain("ResizeObserver");
     expect(controller).toContain("data-active-workout-controller");
+    expect(controller).toContain("activeWorkoutControllerState");
+    expect(controller).not.toContain("dataset.activeWorkoutController =");
     expect(mobileNav).toContain("data-mobile-floating-nav");
   });
   test("builder and editor footers consume the shared offset", () => {
