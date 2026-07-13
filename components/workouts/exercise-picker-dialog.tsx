@@ -1,8 +1,7 @@
-
 "use client";
 
 import { Check, Dumbbell, ExternalLink, Plus, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -44,6 +43,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   const [selected, setSelected] = useState<Map<string, Workout>>(new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const existing = useMemo(() => new Set(existingKeys), [existingKeys]);
 
   useEffect(() => {
@@ -117,6 +117,18 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
         closeLabel={tr("closePicker")}
         dir={dir}
         data-train-exercise-picker
+        onOpenAutoFocus={() => {
+          const activeElement = document.activeElement;
+          if (activeElement instanceof HTMLElement && !activeElement.closest("[data-train-exercise-picker]")) {
+            returnFocusRef.current = activeElement;
+          }
+        }}
+        onCloseAutoFocus={(event) => {
+          const returnTarget = returnFocusRef.current;
+          if (!returnTarget) return;
+          event.preventDefault();
+          window.requestAnimationFrame(() => returnTarget.focus());
+        }}
       >
         <DialogHeader className="mb-0 shrink-0 border-b px-5 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] pe-16 text-start lg:pt-4">
           <DialogTitle className="text-xl">{tr("addExercisesTo", { day: dayName })}</DialogTitle>
