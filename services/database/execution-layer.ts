@@ -4,11 +4,9 @@ import { supabase } from "@/lib/supabase/client";
 import { env } from "@/lib/env";
 import { isUuid } from "@/lib/utils";
 import type {
-  DailyCheckinType,
   ExerciseAlternativeReason,
   GroceryStoreSection,
   NutritionTargetProfileType,
-  UserDailyCheckin,
   UserExerciseAlternative,
   UserGroceryItem,
   UserNutritionPreferenceProfile,
@@ -234,20 +232,6 @@ export async function deleteGroceryItem(userId: string, itemId: string) {
   requireUser(userId);
   const { error } = await supabase!.from("user_grocery_items").delete().eq("id", itemId).eq("user_id", userId);
   if (error) throw error;
-}
-
-export async function getDailyCheckins(userId: string, startDate: string, endDate = startDate) {
-  requireUser(userId);
-  const { data, error } = await supabase!.from("user_daily_checkins").select("*").eq("user_id", userId).gte("checkin_date", startDate).lte("checkin_date", endDate).order("checkin_date", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as UserDailyCheckin[];
-}
-
-export async function upsertDailyCheckin(userId: string, input: Partial<Omit<UserDailyCheckin, "id" | "user_id" | "created_at" | "updated_at">> & { checkin_date: string; checkin_type: DailyCheckinType }) {
-  requireUser(userId);
-  const { data, error } = await supabase!.from("user_daily_checkins").upsert({ user_id: userId, ...input }, { onConflict: "user_id,checkin_date,checkin_type" }).select("*").single();
-  if (error) throw error;
-  return data as UserDailyCheckin;
 }
 
 export async function getNutritionTargetProfiles(userId: string) {
