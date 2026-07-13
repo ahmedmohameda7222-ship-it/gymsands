@@ -1,6 +1,8 @@
+import { localDateToIso } from "@/lib/date-utils";
 import type { MealPlanItem, WorkoutSession } from "@/types";
 
 export type TodayWorkoutState = "none" | "scheduled" | "active" | "completed";
+export type DashboardWorkoutSession = WorkoutSession & { scheduled_date?: string | null };
 
 export type TodayWorkoutResolution = {
   state: TodayWorkoutState;
@@ -8,18 +10,29 @@ export type TodayWorkoutResolution = {
   completedSessionId?: string;
 };
 
+export function workoutSessionLocalDate(
+  session: DashboardWorkoutSession,
+  toLocalIso: (timestamp: string) => string = (timestamp) => localDateToIso(new Date(timestamp))
+) {
+  if (session.scheduled_date) return session.scheduled_date;
+  const timestamp = session.completed_at || session.started_at;
+  return timestamp ? toLocalIso(timestamp) : null;
+}
+
 export function resolveTodayWorkout(input: {
   today: string;
   planDayId: string | null;
   openSessionId: string | null;
-  sessions: WorkoutSession[];
+  sessions: DashboardWorkoutSession[];
+  toLocalIso?: (timestamp: string) => string;
 }): TodayWorkoutResolution {
   if (!input.planDayId) return { state: "none" };
   if (input.openSessionId) return { state: "active", activeSessionId: input.openSessionId };
-  const completed = input.sessions.find((session) => {
-    const date = (session.completed_at || session.started_at || "").slice(0, 10);
-    return session.plan_day_id === input.planDayId && session.status === "completed" && date === input.today;
-  });
+  const completed = input.sessions.find((session) => (
+    session.plan_day_id === input.planDayId
+    && session.status === "completed"
+    && workoutSessionLocalDate(session, input.toLocalIso) === input.today
+  ));
   return completed ? { state: "completed", completedSessionId: completed.id } : { state: "scheduled" };
 }
 
@@ -27,7 +40,8 @@ export function resolveTodayWorkoutState(input: {
   today: string;
   planDayId: string | null;
   openSessionId: string | null;
-  sessions: WorkoutSession[];
+  sessions: DashboardWorkoutSession[];
+  toLocalIso?: (timestamp: string) => string;
 }): TodayWorkoutState {
   return resolveTodayWorkout(input).state;
 }
