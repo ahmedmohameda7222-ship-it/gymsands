@@ -70,17 +70,18 @@ export default function WellnessPage() {
 
   useEffect(() => {
     if (!userId) { setIsLoading(false); return; }
+    const authenticatedUserId = userId;
     let active = true;
     async function load() {
       setIsLoading(true);
       setLoadError("");
       const results = await Promise.allSettled([
-        getWaterLogs(userId, today),
-        getCalorieTargets(userId),
-        getFitnessHabits(userId, today),
-        getSupplementLogs(userId, today),
-        getDailyFitTasks(userId, today),
-        getSleepRecoveryHistory(userId, 7)
+        getWaterLogs(authenticatedUserId, today),
+        getCalorieTargets(authenticatedUserId),
+        getFitnessHabits(authenticatedUserId, today),
+        getSupplementLogs(authenticatedUserId, today),
+        getDailyFitTasks(authenticatedUserId, today),
+        getSleepRecoveryHistory(authenticatedUserId, 7)
       ]);
       if (!active) return;
       const [waterLogs, targets, todayHabits, todaySupplements, todayTasks, sleepHistory] = results;
