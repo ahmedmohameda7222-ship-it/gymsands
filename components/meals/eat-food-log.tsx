@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Edit3, Loader2, Plus, Trash2, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,7 +12,8 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { EAT_MEAL_GROUPS, groupFoodLogs, type EatMealGroup } from "@/lib/eat/eat-model";
 import { eatEnergyDisplayValue, eatEnergyInputToKcal, formatEatEnergy } from "@/lib/eat/eat-units";
 import { useEatTranslation } from "@/lib/i18n/eat";
-import { deleteEatFoodLog, getEatFoodLogs, getEatMealPlanItems, isEatLinkedEditConsistencyError, updateEatFoodLog, type EatFoodLogPatch } from "@/services/database/eat";
+import { deleteEatFoodLog, type EatFoodLogPatch } from "@/services/database/eat";
+import { updateEatFoodLogAtomic } from "@/services/database/eat-meal-plan-atomic";
 import type { UserAppSettings } from "@/services/database/user-settings";
 import type { FoodLog, MealPlanItem, MealType } from "@/types";
 
@@ -97,32 +98,15 @@ export function EatFoodLog({
       calories: eatEnergyInputToKcal(form.energy, energyUnit)
     };
     try {
-      const result = await updateEatFoodLog(userId, editing.id, patch);
+      const result = await updateEatFoodLogAtomic(userId, editing.id, patch);
       const nextLogs = logs.map((log) => log.id === result.log.id ? result.log : log);
       onChanged(nextLogs);
+      if (result.linkedMeal) onReloadPlannedMeals();
       setEditing(result.log);
       setForm(editState(result.log, energyUnit));
       setFeedback({ type: "info", message: et("successSaved") });
-    } catch (saveError) {
-      if (isEatLinkedEditConsistencyError(saveError)) {
-        try {
-          const [freshLogs] = await Promise.all([
-            getEatFoodLogs(userId, editing.log_date),
-            getEatMealPlanItems(userId, editing.log_date)
-          ]);
-          onChanged(freshLogs);
-          onReloadPlannedMeals();
-          const freshLog = freshLogs.find((log) => log.id === editing.id) ?? null;
-          if (freshLog) {
-            setEditing(freshLog);
-            setForm(editState(freshLog, energyUnit));
-          }
-        } finally {
-          setFeedback({ type: "error", message: et("criticalConsistencyError") });
-        }
-      } else {
-        setFeedback({ type: "error", message: et("saveFailed") });
-      }
+    } catch {
+      setFeedback({ type: "error", message: et("saveFailed") });
     } finally {
       setPending(null);
     }
@@ -243,7 +227,7 @@ function MealGroup({ group, logs, label, energyUnit, locale, onAdd, onOpen }: { 
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return <div className="space-y-2"><Label>{label}</Label>{children}</div>;
 }
 
