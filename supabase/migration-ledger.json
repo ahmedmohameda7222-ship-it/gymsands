@@ -5,6 +5,11 @@
   "auditedRepositoryCommit": "0be6a306a381a168af5e7fbe534277cda13830bc",
   "productionMigrationCount": 24,
   "schemaVerifiedUntrackedCount": 4,
+  "historyRepair": {
+    "state": "pending",
+    "schemaAppliedUntrackedCount": 4,
+    "note": "Production schema effects are verified. Supabase migration-history reconciliation remains pending and must only use an approved evidence-backed workflow. Do not replay schema-applied migrations."
+  },
   "entries": [
     { "productionVersion": "202606290000", "productionName": "clean_initial_schema", "localFile": "202606290000_clean_initial_schema.sql", "state": "applied" },
     { "productionVersion": "202606290001", "productionName": "security_privacy_mcp_hardening", "localFile": "202606290001_security_privacy_mcp_hardening.sql", "state": "applied" },
