@@ -398,7 +398,7 @@ export function GroceryListPanel({ weekStart, weekEnd, mealItems, refreshKey, on
                 context={{ week_start: weekStart, week_end: weekEnd, grocery_items: items, meal_plan_items: mealItems }}
                 title={copy.askTitle}
                 buttonVariant="outline"
-                className="grid [&_button]:min-h-9"
+                className="grid [&_button]:min-h-11"
               />
             </div>
           </div>
