@@ -29,7 +29,7 @@ export type QuickPromptContext = {
   today?: string;
   localHour?: number;
   units?: { energy?: "kcal" | "kJ"; liquid?: "ml" | "oz"; weight?: "kg" | "lb" };
-  workout?: { hasPlan?: boolean; scheduled?: boolean; active?: boolean; completed?: boolean; title?: string | null; exerciseCount?: number | null; durationMinutes?: number | null; historyCount?: number | null };
+  workout?: { hasPlan?: boolean; scheduled?: boolean; active?: boolean; completed?: boolean; skipped?: boolean; title?: string | null; exerciseCount?: number | null; durationMinutes?: number | null; historyCount?: number | null };
   nutrition?: {
     hasTargets?: boolean;
     targetsState?: PromptSourceState;
