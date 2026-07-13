@@ -22,15 +22,15 @@ async function loadTargetSources(userId: string) {
   return { baseTarget, profiles, plan };
 }
 
-export async function getEatTargetsForDates(userId: string, dates: string[]): Promise<Record<string, ActiveNutritionTarget>> {
-  const uniqueDates = [...new Set(dates)];
-  if (!uniqueDates.length) return {};
+export async function getEatTargetsForDates(userId: string, inputDates: string[]): Promise<Record<string, ActiveNutritionTarget>> {
+  const dates = [...new Set(inputDates)];
+  if (!dates.length) return {};
   const [sources, overrides] = await Promise.all([
     loadTargetSources(userId),
-    migrateLegacyNutritionTargetOverridesForDates(userId, uniqueDates)
+    migrateLegacyNutritionTargetOverridesForDates(userId, dates)
   ]);
   const byDate = new Map(overrides.map((override) => [override.target_date, override.target_type]));
-  return Object.fromEntries(uniqueDates.map((date) => [
+  return Object.fromEntries(dates.map((date) => [
     date,
     resolveEatTargetForDate({ date, ...sources, override: byDate.get(date) ?? "auto" })
   ]));
