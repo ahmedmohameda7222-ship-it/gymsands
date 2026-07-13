@@ -457,15 +457,15 @@ export function MyWorkoutPlans() {
         title={tr("myWorkout")}
         description={tr("overviewDescription")}
         action={visiblePlansState === "loaded" && !availablePlans.length ? undefined : (
-          <>
-            <Button type="button" variant="outline" className="min-h-12" onClick={() => openTrainPrompts()}>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Button type="button" variant="outline" className="min-h-12 w-full sm:w-auto" onClick={() => openTrainPrompts()}>
               <Bot className="h-4 w-4" /> {tr("askChatGpt")}
             </Button>
-            <ActionMenu label={tr("createPlan")} icon={<Plus className="h-4 w-4" />} triggerVariant="default" triggerClassName="min-h-12">
+            <ActionMenu label={tr("createPlan")} visibleLabel={tr("createPlan")} icon={<Plus className="h-4 w-4" />} triggerVariant="default" triggerClassName="min-h-12 w-full sm:w-auto">
               <ActionMenuItem onSelect={() => openTrainPrompts("create-workout-plan")}>{tr("createWithChatGpt")}</ActionMenuItem>
               <ActionMenuItem onSelect={() => router.push("/my-workout/plans/builder")}>{tr("createManually")}</ActionMenuItem>
             </ActionMenu>
-          </>
+          </div>
         )}
       />
 
@@ -546,7 +546,7 @@ export function MyWorkoutPlans() {
       {visiblePlansState === "loaded" && otherPlans.length ? (
         <section aria-labelledby="other-plans-heading" className="space-y-3">
           <SectionHeading id="other-plans-heading" title={tr("otherPlans")} description={tr("otherPlansDescription")} />
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 lg:grid-cols-2">
             {otherPlans.map((plan) => (
               <CompactPlanRow
                 key={plan.id}
@@ -590,6 +590,7 @@ export function MyWorkoutPlans() {
   );
 }
 
+
 function TodayCard({
   plan,
   day,
@@ -630,56 +631,57 @@ function TodayCard({
         ? tr("nextWorkout", { workout: nextDay.dayName, weekday: localizedWeekday(nextDay.weekday, locale) })
         : plan?.name || "";
   const showActiveAction = active && Boolean(actionHref);
+  const showWorkoutAction = showActiveAction || (statusState !== "loading" && !statusError && Boolean(actionHref));
 
   return (
-    <Card className="overflow-hidden border-primary/25 bg-primary/[0.045]">
-      <CardContent className="p-5 sm:p-6">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+    <Card className="overflow-hidden border-primary/25 bg-primary/[0.045]" data-train-today-card>
+      <CardContent className="p-4 sm:p-5">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(190px,240px)] lg:items-stretch">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">{tr("today")}</p>
-              <span className="text-xs text-muted-foreground">{new Date(`${today}T12:00:00`).toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" })}</span>
+              <span className="text-xs font-medium text-muted-foreground">{new Date(`${today}T12:00:00`).toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" })}</span>
               {active ? <Badge>{tr("inProgress")}</Badge> : resolution.state === "completed" ? <Badge variant="secondary">{tr("completed")}</Badge> : resolution.state === "skipped" ? <Badge variant="outline">{tr("skippedToday")}</Badge> : null}
             </div>
             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.025em]">{title}</h2>
-            {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
+            {subtitle ? <p className="mt-1 text-sm font-medium text-muted-foreground">{subtitle}</p> : null}
             {day ? (
-              <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
                 <span className="inline-flex items-center gap-2"><Dumbbell className="h-4 w-4" /> {tr("exercises", { count: day.exercises.length })}</span>
                 {duration ? <span className="inline-flex items-center gap-2"><Clock3 className="h-4 w-4" /> {tr("aboutMinutes", { count: duration })}</span> : null}
               </div>
             ) : null}
+
+            {day && preview.length ? (
+              <ul className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-label={tr("selectedExercises")}>
+                {preview.map((exercise, index) => (
+                  <li key={exercise.plan_exercise_id ?? exercise.id} className="flex min-w-0 items-center gap-3 rounded-xl border border-border/60 bg-background/70 p-2.5">
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">{index + 1}</span>
+                    <span className="min-w-0"><span className="block truncate text-sm font-semibold">{exercise.name}</span><span className="block text-xs text-muted-foreground">{exercise.sets ?? 3} × {exercise.reps ?? "8–12"}{exercise.target_muscle ? ` · ${exercise.target_muscle}` : ""}</span></span>
+                  </li>
+                ))}
+                {remaining ? <li className="flex min-h-12 items-center rounded-xl border border-dashed border-border/70 px-3 text-sm font-medium text-muted-foreground">{tr("moreExercises", { count: remaining })}</li> : null}
+              </ul>
+            ) : null}
           </div>
 
-          <div className="flex min-w-[190px] flex-col gap-2">
-            {statusState === "loading" && !showActiveAction ? <Button disabled className="min-h-12">{tr("checkingStatus")}</Button> : null}
+          <div className="flex min-h-28 flex-col justify-center rounded-2xl border border-border/70 bg-background/80 p-3.5">
+            {statusState === "loading" && !showActiveAction ? <Button disabled className="min-h-12 w-full">{tr("checkingStatus")}</Button> : null}
             {statusState !== "loading" && statusError && !showActiveAction ? (
-              <Button variant="outline" className="min-h-12" onClick={() => void onRetryStatus()}><RefreshCcw className="h-4 w-4" /> {tr("retryStatus")}</Button>
+              <><p className="mb-3 text-sm leading-5 text-muted-foreground">{statusError}</p><Button variant="outline" className="min-h-12 w-full" onClick={() => void onRetryStatus()}><RefreshCcw className="h-4 w-4" /> {tr("retryStatus")}</Button></>
             ) : null}
-            {(showActiveAction || (statusState !== "loading" && !statusError && actionHref)) ? (
-              <Button asChild className="min-h-12"><Link href={actionHref!}>{resolution.state === "completed" ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}{actionLabel}</Link></Button>
+            {showWorkoutAction ? (
+              <Button asChild className="min-h-12 w-full"><Link href={actionHref!}>{resolution.state === "completed" ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}{actionLabel}</Link></Button>
             ) : null}
-            {!active && !day && plan ? <Button asChild variant="outline" className="min-h-12"><Link href={`/my-workout/plans/${plan.id}`}>{tr("viewWeeklyPlan")}</Link></Button> : null}
+            {statusState !== "loading" && !statusError && !actionHref ? <div className="text-center"><Dumbbell className="mx-auto h-5 w-5 text-muted-foreground" /><p className="mt-2 text-sm font-semibold">{tr("restDay")}</p></div> : null}
           </div>
         </div>
-
-        {statusError ? <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-800 dark:text-amber-200">{statusError}</p> : null}
-
-        {day && preview.length ? (
-          <div className="mt-5 grid gap-2 border-t border-border/70 pt-4 sm:grid-cols-3">
-            {preview.map((exercise, index) => (
-              <div key={exercise.plan_exercise_id ?? exercise.id} className="rounded-xl bg-background/70 p-3">
-                <p className="truncate text-sm font-semibold">{index + 1}. {exercise.name}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{exercise.sets ?? 3} × {exercise.reps ?? "8–12"}</p>
-              </div>
-            ))}
-            {remaining ? <p className="self-center text-sm font-medium text-muted-foreground">{tr("moreExercises", { count: remaining })}</p> : null}
-          </div>
-        ) : null}
       </CardContent>
     </Card>
   );
 }
+
+
 
 function ThisWeek({
   days,
@@ -707,13 +709,14 @@ function ThisWeek({
   const selectedDay = days.find((day) => day.weekday === selectedWeekDay?.weekday) ?? null;
 
   return (
-    <section aria-labelledby="this-week-heading" className="space-y-3">
+    <section aria-labelledby="this-week-heading" className="space-y-3" data-train-week>
       <SectionHeading id="this-week-heading" title={tr("thisWeek")} description={tr("thisWeekDescription")} />
-      <div className="grid snap-x grid-flow-col auto-cols-[minmax(88px,1fr)] gap-2 overflow-x-auto pb-2 lg:grid-flow-row lg:grid-cols-7 lg:overflow-visible">
+      <div className="grid snap-x grid-flow-col auto-cols-[minmax(104px,1fr)] gap-2 overflow-x-auto pb-2 lg:grid-flow-row lg:grid-cols-7 lg:overflow-visible" role="tablist" aria-label={tr("thisWeek")}>
         {week.map(({ date, iso, weekday }) => {
           const planDay = days.find((day) => day.weekday === weekday) ?? null;
           const session = planDay ? sessions.find((item) => item.plan_day_id === planDay.id && workoutSessionLocalDate(item) === iso) : null;
           const isToday = iso === today;
+          const isSelected = selectedIso === iso;
           const status = isToday && planDay && planDay.id === todayPlanDayId
             ? todayResolution.state
             : session?.status === "completed"
@@ -723,41 +726,57 @@ function ThisWeek({
                 : planDay
                   ? "scheduled"
                   : "rest";
+          const stateLabel = status === "active" ? tr("inProgress") : status === "completed" ? tr("completed") : status === "scheduled" ? tr("scheduled") : status === "skipped" ? tr("skippedToday") : tr("rest");
           return (
-            <button type="button" key={iso} onClick={() => setSelectedIso(iso)} aria-pressed={selectedIso === iso} className={`min-h-24 snap-start rounded-2xl border p-2.5 text-start ${isToday || selectedIso === iso ? "border-primary bg-primary/5 shadow-soft" : "border-border/70 bg-card"}`}>
+            <button
+              type="button"
+              role="tab"
+              key={iso}
+              onClick={() => setSelectedIso(iso)}
+              aria-selected={isSelected}
+              aria-current={isToday ? "date" : undefined}
+              data-week-state={status}
+              data-week-selected={isSelected || undefined}
+              className={`min-h-24 snap-start rounded-2xl border p-2.5 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isSelected ? "border-primary bg-primary/10 ring-1 ring-primary/25" : isToday ? "border-primary/50 bg-primary/[0.04]" : "border-border/70 bg-card"}`}
+            >
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">{date.toLocaleDateString(locale, { weekday: "short" })}</p>
-                  <p className="mt-0.5 text-sm font-semibold">{date.getDate()}</p>
-                </div>
-                {isToday ? <span className="sr-only">{tr("todayLabel")}</span> : null}
+                <div><p className="text-xs font-semibold uppercase text-muted-foreground">{date.toLocaleDateString(locale, { weekday: "short" })}</p><p className="mt-0.5 text-base font-semibold">{date.getDate()}</p></div>
+                <div className="flex flex-col items-end gap-1">{isToday ? <Badge variant="outline" className="px-1.5 py-0 text-[10px]">{tr("todayLabel")}</Badge> : null}{isSelected && !isToday ? <span className="text-[10px] font-semibold text-primary">{tr("selectedDay")}</span> : null}</div>
               </div>
-              <p className="mt-2 line-clamp-1 text-xs font-medium">{planDay?.dayName ?? tr("rest")}</p>
-              <span className="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground"><span className={`h-2 w-2 rounded-full ${status === "completed" ? "bg-success" : status === "active" ? "bg-primary" : status === "skipped" ? "bg-warning" : "bg-muted-foreground/50"}`} />{status === "active" ? tr("inProgress") : status === "completed" ? tr("completed") : status === "scheduled" ? tr("scheduled") : status === "skipped" ? tr("skippedToday") : tr("rest")}</span>
+              <p className="mt-2 line-clamp-1 text-xs font-semibold">{planDay?.dayName ?? tr("rest")}</p>
+              <span className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">{status === "completed" ? <Check className="h-3.5 w-3.5 text-success" /> : <span className={`h-2 w-2 rounded-full ${status === "active" ? "bg-primary" : status === "skipped" ? "bg-warning" : status === "scheduled" ? "bg-foreground/50" : "bg-muted-foreground/40"}`} />}{stateLabel}</span>
             </button>
           );
         })}
       </div>
-      <div className="border-s-2 border-primary/30 ps-4">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs text-muted-foreground">{selectedWeekDay?.date.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" })}</p><p className="font-semibold">{selectedDay?.dayName ?? tr("restDay")}</p></div>{selectedDay ? <Button asChild variant="ghost" className="min-h-11"><Link href={`/my-workout/plans/${selectedDay.planId}?day=${encodeURIComponent(selectedDay.id)}`}>{tr("viewDay")}</Link></Button> : null}</div>
-        {selectedDay ? <p className="mt-1 text-sm text-muted-foreground">{tr("exercises", { count: selectedDay.exercises.length })}{selectedDay.exercises.length ? ` · ${selectedDay.exercises.slice(0, 3).map((exercise) => exercise.name).join(" · ")}` : ""}{selectedDay.exercises.length > 3 ? ` · ${tr("moreExercises", { count: selectedDay.exercises.length - 3 })}` : ""}</p> : <p className="mt-1 text-sm text-muted-foreground">{tr("restDay")}</p>}
+      <div className="rounded-2xl border border-border/70 bg-card p-4" data-selected-day-preview>
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-muted-foreground">{selectedWeekDay?.date.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" })}</p>
+            <p className="mt-1 font-semibold">{selectedDay?.dayName ?? tr("restDay")}</p>
+            {selectedDay ? <p className="mt-1 text-sm leading-5 text-muted-foreground">{tr("exercises", { count: selectedDay.exercises.length })}{selectedDay.exercises.length ? ` · ${selectedDay.exercises.slice(0, 3).map((exercise) => exercise.name).join(" · ")}` : ""}{selectedDay.exercises.length > 3 ? ` · ${tr("moreExercises", { count: selectedDay.exercises.length - 3 })}` : ""}</p> : <p className="mt-1 text-sm text-muted-foreground">{tr("restDay")}</p>}
+          </div>
+          {selectedDay ? <Button asChild variant="outline" className="min-h-11 w-full sm:w-auto"><Link href={`/my-workout/plans/${selectedDay.planId}?day=${encodeURIComponent(selectedDay.id)}`}>{tr("viewDay")}</Link></Button> : null}
+        </div>
       </div>
     </section>
   );
 }
 
+
+
 function ActivePlanRow({ plan, busy, onDuplicate, onArchive, onDelete }: { plan: UserWorkoutPlan; busy: boolean; onDuplicate: () => void; onArchive: () => void; onDelete: () => void }) {
   const { tr } = useTrainTranslation();
   const durationWeeks = planDurationWeeks(plan);
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
-        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground"><Dumbbell className="h-6 w-6" /></div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-lg font-semibold">{plan.name}</h3><Badge>{tr("active")}</Badge><Badge variant="outline">{sourceLabel(plan, tr("sourceManual"))}</Badge></div>
-          <p className="mt-1 text-sm text-muted-foreground">{tr("trainingDays", { count: plan.days.length })} · {tr("exercises", { count: planExerciseCount(plan) })}{durationWeeks ? ` · ${tr("programWeeks", { count: durationWeeks })}` : ""}</p>
+    <Card data-active-plan-row>
+      <CardContent className="grid gap-4 p-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center lg:grid-cols-[auto_minmax(0,1fr)_auto]">
+        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground"><Dumbbell className="h-5 w-5" /></div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2"><h3 className="min-w-0 truncate text-lg font-semibold">{plan.name}</h3><Badge>{tr("active")}</Badge><Badge variant="outline">{sourceLabel(plan, tr("sourceManual"))}</Badge></div>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">{tr("trainingDays", { count: plan.days.length })} · {tr("exercises", { count: planExerciseCount(plan) })}{durationWeeks ? ` · ${tr("programWeeks", { count: durationWeeks })}` : ""}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-1 lg:justify-end">
           <Button asChild variant="outline" className="min-h-11"><Link href={`/my-workout/plans/${plan.id}`}>{tr("viewPlan")}</Link></Button>
           <Button asChild variant="ghost" className="min-h-11"><Link href={`/my-workout/plans/${plan.id}/edit`}>{tr("editPlan")}</Link></Button>
           <PlanMenu plan={plan} busy={busy} active onDuplicate={onDuplicate} onArchive={onArchive} onDelete={onDelete} />
@@ -767,16 +786,18 @@ function ActivePlanRow({ plan, busy, onDuplicate, onArchive, onDelete }: { plan:
   );
 }
 
+
+
 function CompactPlanRow({ plan, busy, onActivate, onDuplicate, onArchive, onDelete }: { plan: UserWorkoutPlan; busy: boolean; onActivate: () => void; onDuplicate: () => void; onArchive: () => void; onDelete: () => void }) {
   const { tr } = useTrainTranslation();
   const durationWeeks = planDurationWeeks(plan);
   return (
-    <Card>
-      <CardContent className="flex min-h-24 items-center gap-3 p-4">
+    <Card data-compact-plan-row>
+      <CardContent className="grid min-h-24 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 p-4">
         <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-muted"><CalendarDays className="h-5 w-5" /></div>
-        <Link href={`/my-workout/plans/${plan.id}`} className="min-w-0 flex-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <p className="truncate text-sm font-semibold">{plan.name}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{tr("trainingDays", { count: plan.days.length })}{durationWeeks ? ` · ${tr("programWeeks", { count: durationWeeks })}` : ""}</p>
+        <Link href={`/my-workout/plans/${plan.id}`} className="min-w-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <div className="flex min-w-0 flex-wrap items-center gap-2"><p className="min-w-0 truncate text-sm font-semibold">{plan.name}</p><Badge variant="outline" className="shrink-0">{sourceLabel(plan, tr("sourceManual"))}</Badge></div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{tr("trainingDays", { count: plan.days.length })} · {tr("exercises", { count: planExerciseCount(plan) })}{durationWeeks ? ` · ${tr("programWeeks", { count: durationWeeks })}` : ""}</p>
         </Link>
         <PlanMenu plan={plan} busy={busy} active={false} onActivate={onActivate} onDuplicate={onDuplicate} onArchive={onArchive} onDelete={onDelete} />
       </CardContent>
@@ -784,11 +805,12 @@ function CompactPlanRow({ plan, busy, onActivate, onDuplicate, onArchive, onDele
   );
 }
 
+
 function PlanMenu({ plan, busy, active, onActivate, onDuplicate, onArchive, onDelete }: { plan: UserWorkoutPlan; busy: boolean; active: boolean; onActivate?: () => void; onDuplicate: () => void; onArchive: () => void; onDelete: () => void }) {
   const router = useRouter();
   const { tr } = useTrainTranslation();
   return (
-    <ActionMenu label={`${tr("moreActions")}: ${plan.name}`} disabled={busy} triggerClassName="min-h-11 px-3" icon={<MoreHorizontal className="h-4 w-4" />}>
+    <ActionMenu label={`${tr("moreActions")}: ${plan.name}`} visibleLabel={tr("moreActions")} disabled={busy} triggerVariant="ghost" triggerClassName="min-h-11 shrink-0 px-3" icon={<MoreHorizontal className="h-4 w-4" />}>
       <ActionMenuItem onSelect={() => router.push(`/my-workout/plans/${plan.id}/edit`)}>{tr("editPlan")}</ActionMenuItem>
       {!active && onActivate ? <ActionMenuItem onSelect={onActivate}>{tr("setActive")}</ActionMenuItem> : null}
       <ActionMenuItem onSelect={onDuplicate}>{tr("duplicate")}</ActionMenuItem>
@@ -800,9 +822,9 @@ function PlanMenu({ plan, busy, active, onActivate, onDuplicate, onArchive, onDe
 
 function DestinationCard({ href, icon: Icon, title, description }: { href: string; icon: typeof History; title: string; description: string }) {
   return (
-    <Link href={href} className="group rounded-[18px] border border-border/70 bg-card p-4 transition-colors hover:border-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <Link href={href} className="group rounded-[18px] border border-border/70 bg-card p-3.5 transition-colors hover:border-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
       <div className="flex items-center gap-3">
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary"><Icon className="h-5 w-5" /></div>
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><Icon className="h-5 w-5" /></div>
         <div className="min-w-0 flex-1"><p className="font-semibold">{title}</p><p className="mt-1 text-sm text-muted-foreground">{description}</p></div>
         <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-0.5 rtl:rotate-180" />
       </div>
