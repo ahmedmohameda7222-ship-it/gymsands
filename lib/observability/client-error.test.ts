@@ -49,9 +49,12 @@ describe("client error telemetry", () => {
     expect(safe.match(/\[REDACTED\]/g)?.length).toBeGreaterThanOrEqual(5);
   });
 
-  it("truncates long strings and strips route query strings", () => {
+  it("truncates long strings and removes route queries and dynamic record identifiers", () => {
     expect(sanitizeClientErrorText("x".repeat(1000), 100)).toHaveLength(100);
     expect(sanitizeClientRoute("https://app.plaivra.com/dashboard?token=secret#private")).toBe("/dashboard");
+    expect(sanitizeClientRoute("/my-workout/plans/123e4567-e89b-42d3-a456-426614174000/edit?token=secret"))
+      .toBe("/my-workout/plans/id/edit");
+    expect(sanitizeClientRoute("/records/abcdefghijklmnopqrstuvwx/private")).toBe("/records/id/private");
     expect(sanitizeClientRoute("javascript:alert(1)")).toBe("/unknown");
   });
 
