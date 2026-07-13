@@ -2,10 +2,9 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { rateLimit } from "@/lib/integrations/rate-limit";
 import { validateClientErrorPayload } from "@/lib/observability/client-error";
+import { parseClientErrorRequestBody } from "@/lib/observability/client-error-request";
 import { logOperationalEvent } from "@/lib/observability/structured-log";
 import { getReleaseVersion } from "@/lib/release/version";
-
-const MAX_BODY_BYTES = 16 * 1024;
 
 function jsonResponse(status: number) {
   return NextResponse.json(
@@ -18,23 +17,15 @@ export async function POST(request: Request) {
   const limited = rateLimit(request, "client-error", 10, 60_000);
   if (limited) return limited;
 
-  const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-  if (contentType !== "application/json") return jsonResponse(415);
-
-  const declaredLength = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) return jsonResponse(413);
-
   const raw = await request.text().catch(() => "");
-  if (!raw || new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) return jsonResponse(raw ? 413 : 400);
+  const parsedRequest = parseClientErrorRequestBody({
+    contentType: request.headers.get("content-type"),
+    contentLength: request.headers.get("content-length"),
+    raw
+  });
+  if (!parsedRequest.ok) return jsonResponse(parsedRequest.status);
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return jsonResponse(400);
-  }
-
-  const validation = validateClientErrorPayload(parsed);
+  const validation = validateClientErrorPayload(parsedRequest.payload);
   if (!validation.ok) return jsonResponse(400);
 
   const report = validation.value;
