@@ -43,7 +43,6 @@ function initialTables(): Record<string, Row[]> {
     body_measurements: [],
     personal_records: [],
     sleep_recovery_logs: [],
-    user_daily_checkins: [],
     user_nutrition_preference_profiles: [],
     user_nutrition_target_profiles: [],
     user_progression_targets: [],
@@ -83,12 +82,7 @@ function createInMemorySupabase() {
     const materialize = () => {
       const existing = tables[table] ?? (tables[table] = []);
       if (action === "insert" || action === "upsert") {
-        const incoming: Row[] = (Array.isArray(payload) ? payload : [payload ?? {}]).map((row): Row => ({
-          id: typeof row.id === "string" ? row.id : nextId(),
-          created_at: UPDATED_AT,
-          updated_at: UPDATED_AT,
-          ...row
-        }));
+        const incoming: Row[] = (Array.isArray(payload) ? payload : [payload ?? {}]).map((row): Row => ({ id: typeof row.id === "string" ? row.id : nextId(), created_at: UPDATED_AT, updated_at: UPDATED_AT, ...row }));
         if (action === "upsert") {
           for (const row of incoming) {
             const index = existing.findIndex((candidate) => candidate.id === row.id || (row.user_id && candidate.user_id === row.user_id && row.target_type && candidate.target_type === row.target_type));
@@ -131,22 +125,41 @@ function createInMemorySupabase() {
     builder.order = () => builder;
     builder.limit = (value: number) => { rowLimit = value; return builder; };
     builder.range = () => builder;
-    builder.single = async () => {
-      const result = materialize();
-      return { data: (result.data as Row[])[0] ?? null, error: result.error };
-    };
-    builder.maybeSingle = async () => {
-      const result = materialize();
-      return { data: (result.data as Row[])[0] ?? null, error: result.error };
-    };
+    builder.single = async () => { const result = materialize(); return { data: (result.data as Row[])[0] ?? null, error: result.error }; };
+    builder.maybeSingle = async () => { const result = materialize(); return { data: (result.data as Row[])[0] ?? null, error: result.error }; };
     builder.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(materialize()).then(resolve, reject);
     return builder;
   }
 
-  return {
-    from,
-    rpc: async () => ({ data: [], error: null })
-  } as unknown as McpContext["supabase"];
+  async function rpc(name: string, args: Record<string, unknown>) {
+    if (name !== "complete_meal_plan_item") return { data: [], error: null };
+    const item = tables.user_meal_plan_items.find((row) => row.id === args.p_item_id && row.user_id === USER_ID);
+    if (!item) return { data: null, error: { message: "not found" } };
+    if (item.food_log_id) {
+      const existingLog = tables.food_logs.find((row) => row.id === item.food_log_id) ?? null;
+      return { data: { item, log: existingLog, already_done: true }, error: null };
+    }
+    const log: Row = {
+      id: nextId(),
+      user_id: USER_ID,
+      log_date: item.plan_date,
+      meal_type: item.meal_type,
+      food_name: item.food_name,
+      serving_size: item.serving_size,
+      quantity: item.quantity,
+      calories: item.calories,
+      protein_g: item.protein_g,
+      carbs_g: item.carbs_g,
+      fat_g: item.fat_g,
+      created_at: UPDATED_AT,
+      updated_at: UPDATED_AT
+    };
+    tables.food_logs.push(log);
+    Object.assign(item, { status: "done", completed_at: UPDATED_AT, food_log_id: log.id, updated_at: UPDATED_AT });
+    return { data: { item, log, already_done: false }, error: null };
+  }
+
+  return { from, rpc } as unknown as McpContext["supabase"];
 }
 
 function inputFor(name: string): Record<string, unknown> {
@@ -186,8 +199,7 @@ function inputFor(name: string): Record<string, unknown> {
     skip_workout: { workout_session_id: SESSION_ID, reason: "Recovery", idempotency_key: key },
     add_weight_entry: { weight_kg: 80, date: "2026-07-11", idempotency_key: key },
     add_body_measurement: { measured_at: "2026-07-11", waist_cm: 90, idempotency_key: key },
-    add_sleep_recovery_log: { date: "2026-07-11", hours_slept: 8, sleep_quality: "good", idempotency_key: key },
-    upsert_daily_checkin: { checkin_date: "2026-07-11", checkin_type: "morning", energy_level: "good", idempotency_key: key }
+    add_sleep_recovery_log: { date: "2026-07-11", hours_slept: 8, sleep_quality: "good", idempotency_key: key }
   };
   return inputs[name] ?? {};
 }
@@ -203,14 +215,13 @@ function context(): McpContext {
 }
 
 describe("public MCP runtime handler contracts", () => {
-  it("executes and validates a success-path result for all 35 public tools", async () => {
-    expect(mcpTools).toHaveLength(35);
+  it("executes and validates a success-path result for all 34 active public tools", async () => {
+    expect(mcpTools).toHaveLength(34);
     for (const tool of mcpTools) {
       const input = inputFor(tool.name);
       const inputValidation = validateMcpToolInput(tool, input);
       expect(inputValidation, `${tool.name} input`).toMatchObject({ success: true });
       if (!inputValidation.success) continue;
-
       const result = await executeMcpTool(context(), tool.name, inputValidation.value);
       expect(result.isError, `${tool.name}: ${JSON.stringify(result.structuredContent)}`).not.toBe(true);
       const sanitized = sanitizeMcpToolResult(result, tool.outputSchema);

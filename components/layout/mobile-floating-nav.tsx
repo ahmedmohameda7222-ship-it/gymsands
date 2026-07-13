@@ -9,9 +9,19 @@ import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogTr
 import { useQuickChatGpt } from "@/components/ai/quick-chatgpt-provider";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { useTodayTranslation } from "@/lib/i18n/today";
-import { quickLogRoutes } from "@/lib/dashboard/today-model";
 import { isMobileRouteActive } from "@/lib/navigation/mobile-nav";
 import { cn } from "@/lib/utils";
+
+const quickLogRoutes = {
+  water: "/hydration",
+  meal: "/calories?view=day",
+  weight: "/progress",
+  workout: "/my-workout/plans",
+  progress: "/progress",
+  sleep: "/sleep-recovery",
+  supplements: "/supplements",
+  wellness: "/wellness"
+} as const;
 
 const quickLogLabels = { water: "water", meal: "food", weight: "weight", workout: "workout", progress: "progress", sleep: "sleep", supplements: "supplements", wellness: "wellness" } as const;
 

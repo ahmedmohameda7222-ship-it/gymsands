@@ -14,8 +14,8 @@ describe("PR #44 correction contracts", () => {
   it("never converts a failed food-log source into an empty array", () => {
     const dashboard = source("components/dashboard/today-dashboard.tsx");
     const nutrition = source("lib/dashboard/today-nutrition.ts");
-    expect(dashboard).toContain("knownFoodLogCount(nutritionData)");
-    expect(dashboard).toContain('getTodayFoodLogs(user.id, today, { throwOnError: true })');
+    expect(dashboard).toContain("knownFoodLogCount(visibleNutritionData)");
+    expect(dashboard).toContain("getTodayFoodLogs(id, date, { throwOnError: true })");
     expect(nutrition).toContain('logs: logsResult.status === "fulfilled" ? logsResult.value : null');
   });
 
@@ -28,12 +28,13 @@ describe("PR #44 correction contracts", () => {
     expect(dashboard).toContain('onClick={() => void retryFoodLogs()}');
   });
 
-  it("uses execution-only activity values", () => {
+  it("keeps Dashboard context activity values execution-only and source-aware", () => {
+    const dashboard = source("components/dashboard/today-dashboard.tsx");
     const model = source("lib/dashboard/today-model.ts");
-    expect(model).toContain("doneMealCount");
-    expect(model).toContain("completedHabitCount");
-    expect(model).toContain("takenSupplementCount");
-    expect(model).not.toContain("input.mealItems.length");
+    expect(dashboard).toContain('plannedMealCount: visibleStates.meals === "loaded"');
+    expect(dashboard).toContain('habitCount: visibleStates.wellness === "loaded"');
+    expect(dashboard).toContain('supplementCount: visibleStates.wellness === "loaded"');
+    expect(model).not.toContain("buildTodayActions");
     expect(model).not.toContain('input.workoutState !== "none"');
   });
 

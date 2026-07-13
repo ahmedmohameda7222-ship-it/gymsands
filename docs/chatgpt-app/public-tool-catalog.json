@@ -1,6 +1,6 @@
 {
-  "catalogVersion": "2026-07-1",
-  "publicToolCount": 35,
+  "catalogVersion": "2026-07-2",
+  "publicToolCount": 34,
   "publicTools": [
     "get_plaivra_status",
     "get_training_planning_context",
@@ -35,8 +35,7 @@
     "skip_workout",
     "add_weight_entry",
     "add_body_measurement",
-    "add_sleep_recovery_log",
-    "upsert_daily_checkin"
+    "add_sleep_recovery_log"
   ],
   "replacements": {
     "get_user_profile": ["get_training_planning_context", "get_nutrition_planning_context"],
@@ -55,6 +54,8 @@
     "update_safety_profile",
     "generate_workout_plan",
     "save_chatgpt_workout_plan",
-    "replace_meal_plan_item"
+    "replace_meal_plan_item",
+    "get_daily_checkins",
+    "upsert_daily_checkin"
   ]
 }

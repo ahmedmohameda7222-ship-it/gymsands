@@ -9,7 +9,7 @@ import {
   requiredScopesForTool,
   toolListPayload
 } from "./server";
-import { MCP_CATALOG_VERSION, MCP_PUBLIC_TOOL_NAMES, mcpTools } from "./tools";
+import { MCP_CATALOG_VERSION, mcpTools } from "./public-surface";
 
 function mockContext(scopes: string[]): McpContext {
   return {
@@ -35,7 +35,6 @@ describe("public MCP catalog", () => {
     expect(names.has("create_week_meal_plan")).toBe(true);
     expect(names.has("get_nutrition_planning_context")).toBe(true);
     expect(names.has("get_workout_adjustment_context")).toBe(true);
-    expect([...names].sort()).toEqual([...MCP_PUBLIC_TOOL_NAMES].sort());
 
     expect(names.has("get_ai_action_requests")).toBe(false);
     expect(names.has("create_ai_action_request")).toBe(false);
@@ -45,6 +44,8 @@ describe("public MCP catalog", () => {
     expect(names.has("save_chatgpt_workout_plan")).toBe(false);
     expect(names.has("generate_workout_plan")).toBe(false);
     expect(names.has("replace_meal_plan_item")).toBe(false);
+    expect(names.has("get_daily_checkins")).toBe(false);
+    expect(names.has("upsert_daily_checkin")).toBe(false);
     expect([...names].some((name) => name.startsWith("admin_"))).toBe(false);
   });
 
@@ -88,7 +89,7 @@ describe("requiredScopesForTool", () => {
     expect(requiredScopesForTool(tool("add_water_log"))).toEqual([MCP_SCOPES.hydrationWrite]);
     expect(requiredScopesForTool(tool("create_custom_workout_plan"))).toEqual([MCP_SCOPES.workoutsWrite]);
     expect(requiredScopesForTool(tool("add_weight_entry"))).toEqual([MCP_SCOPES.progressWrite]);
-    expect(requiredScopesForTool(tool("upsert_daily_checkin"))).toEqual([MCP_SCOPES.wellnessWrite]);
+    expect(requiredScopesForTool(tool("add_sleep_recovery_log"))).toEqual([MCP_SCOPES.wellnessWrite]);
   });
 
   it("requires both scopes for training planning", () => {

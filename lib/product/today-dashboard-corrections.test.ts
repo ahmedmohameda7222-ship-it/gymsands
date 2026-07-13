@@ -32,16 +32,22 @@ describe("Today dashboard implementation contracts", () => {
     expect(source("services/database/meal-plan.ts")).toContain('status: "skipped"');
   });
 
-  it("keeps Today action copy localized and outside the model", () => {
-    expect(source("components/dashboard/today-dashboard.tsx")).toContain('tt("noActivityToday")');
+  it("keeps focused Today action copy localized and outside the model", () => {
+    const dashboard = source("components/dashboard/today-dashboard.tsx");
+    const copy = source("lib/dashboard/focused-today-copy.ts");
+    expect(dashboard).toContain("copy.noWorkoutScheduled");
+    expect(dashboard).toContain("copy.noMealsPlanned");
+    expect(copy).toContain('noWorkoutScheduled: "No workout scheduled today"');
     expect(source("lib/dashboard/today-model.ts")).not.toContain('title: "Resume active workout"');
   });
 
   it("keeps unknown food totals and completed workouts out of mutating paths", () => {
     const dashboard = source("components/dashboard/today-dashboard.tsx");
-    expect(dashboard).toContain('tt("foodLogsUnavailable")');
-    expect(dashboard).toContain("activitySourcesKnown");
+    const progress = source("components/dashboard/today-progress.tsx");
+    expect(progress).toContain('status === "unavailable"');
+    expect(dashboard).toContain('visibleNutritionData.logsState === "failed"');
     expect(dashboard).toContain("todayWorkoutActionHref");
+    expect(source("lib/dashboard/today-model.ts")).toContain("/workout-history?session=");
   });
 
   it("keeps registration, onboarding and OAuth outside this change", () => {

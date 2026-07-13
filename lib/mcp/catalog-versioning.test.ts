@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { MCP_CATALOG_VERSION, MCP_IDEMPOTENT_WRITE_TOOL_NAMES, MCP_PUBLIC_TOOL_NAMES, mcpTools } from "@/lib/mcp/tools";
+import { MCP_CATALOG_VERSION, MCP_IDEMPOTENT_WRITE_TOOL_NAMES, mcpTools } from "@/lib/mcp/public-surface";
 
 describe("versioned public MCP catalog", () => {
   it("matches the reviewed manifest exactly", async () => {
@@ -12,18 +12,18 @@ describe("versioned public MCP catalog", () => {
     };
     expect(manifest.catalogVersion).toBe(MCP_CATALOG_VERSION);
     expect(manifest.publicToolCount).toBe(mcpTools.length);
-    expect(manifest.publicTools).toEqual([...MCP_PUBLIC_TOOL_NAMES]);
-    expect([...mcpTools.map((tool) => tool.name)].sort()).toEqual([...manifest.publicTools].sort());
+    expect(mcpTools.map((tool) => tool.name).sort()).toEqual([...manifest.publicTools].sort());
   });
 
-  it("keeps broad reads, queues, aliases, admin tools, and internal CRUD out", () => {
+  it("keeps broad reads, queues, aliases, admin tools, internal CRUD, and Daily Check-in out", () => {
     const publicNames = new Set(mcpTools.map((tool) => tool.name));
     for (const hidden of [
       "get_user_profile", "get_today_summary", "get_progress_summary",
       "get_ai_action_requests", "create_ai_action_request", "update_ai_action_request_status",
       "get_safety_profile", "update_safety_profile", "save_chatgpt_workout_plan", "generate_workout_plan",
       "create_kitchen", "update_kitchen", "delete_kitchen", "create_workout_plan_day", "add_exercise_to_plan_day",
-      "get_habits", "create_habit", "add_supplement_log", "get_admin_user_summary"
+      "get_habits", "create_habit", "add_supplement_log", "get_admin_user_summary",
+      "get_daily_checkins", "upsert_daily_checkin"
     ]) expect(publicNames.has(hidden), hidden).toBe(false);
   });
 

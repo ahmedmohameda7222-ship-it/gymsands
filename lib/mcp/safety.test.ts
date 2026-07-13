@@ -3,8 +3,7 @@ import type { McpContext } from "./auth";
 import { MCP_SCOPES } from "./scopes";
 import { minimizeMcpOutput, sanitizeMcpToolResult, validateMcpToolInput, validateMcpToolOutput } from "./safety";
 import { canUseTool, requiredScopesForTool, toolListPayload } from "./server";
-import { executeMcpTool } from "./tool-executor-safe";
-import { mcpTools, type McpToolDefinition } from "./tools";
+import { executeMcpTool, mcpTools, type McpToolDefinition } from "./public-surface";
 
 const validId = "11111111-1111-4111-8111-111111111111";
 
@@ -42,7 +41,7 @@ describe("curated MCP tool inventory and annotations", () => {
     }
   });
 
-  it("contains no obsolete queue, broad safety-profile, admin, or alias tools", () => {
+  it("contains no obsolete queue, broad safety-profile, admin, alias, or Daily Check-in tools", () => {
     const names = new Set(mcpTools.map((item) => item.name));
     for (const removed of [
       "get_ai_action_requests",
@@ -52,7 +51,9 @@ describe("curated MCP tool inventory and annotations", () => {
       "update_safety_profile",
       "save_chatgpt_workout_plan",
       "generate_workout_plan",
-      "replace_meal_plan_item"
+      "replace_meal_plan_item",
+      "get_daily_checkins",
+      "upsert_daily_checkin"
     ]) {
       expect(names.has(removed), removed).toBe(false);
     }
