@@ -61,7 +61,7 @@ describe("Train overview active-session priority", () => {
   it("keeps yesterday's open workout active on a rest day", () => {
     const session = openSession();
     expect(activeResolution(session, null)).toEqual({ state: "active", activeSessionId: "open-1" });
-    expect(todayWorkoutActionHref(activeResolution(session, null), session.plan_day_id, session)).toBe("/workouts/session/day/day-old");
+    expect(todayWorkoutActionHref(activeResolution(session, null), session.plan_day_id ?? null, session)).toBe("/workouts/session/day/day-old");
   });
 
   it("keeps yesterday's open workout ahead of another scheduled workout", () => {
