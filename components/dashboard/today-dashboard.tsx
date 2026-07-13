@@ -63,6 +63,10 @@ import type { MealPlanItem, UserGroceryItem, WaterLog } from "@/types";
 
 const initialWorkout: DashboardWorkoutData = { plan: null, day: null, sessions: [], openSessionId: null };
 const initialWellness: DashboardWellnessData = { habits: [], supplements: [], sleepLogs: [], errors: {} };
+const emptyMealItems: MealPlanItem[] = [];
+const emptyWaterLogs: WaterLog[] = [];
+const emptyGroceryItems: UserGroceryItem[] = [];
+const loadingDashboardStates = dashboardSourceStates("loading");
 type SourceErrors = Partial<Record<DashboardSourceName, string>>;
 type TargetLoadCache = { key: string; promise: Promise<TodayNutritionTargetData> } | null;
 
@@ -109,12 +113,12 @@ export function TodayDashboard() {
   const targetLoadRef = useRef<TargetLoadCache>(null);
 
   const requestIsCurrent = activeRequestKey === currentRequestKey;
-  const visibleStates = requestIsCurrent ? states : dashboardSourceStates("loading");
+  const visibleStates = requestIsCurrent ? states : loadingDashboardStates;
   const visibleWorkoutData = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: workoutData, fallback: initialWorkout });
-  const visibleMealItems = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: mealItems, fallback: [] as MealPlanItem[] });
+  const visibleMealItems = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: mealItems, fallback: emptyMealItems });
   const visibleNutritionData = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: nutritionData, fallback: initialTodayNutritionData });
-  const visibleWaterLogs = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: waterLogs, fallback: [] as WaterLog[] });
-  const visibleGroceryItems = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: groceryItems, fallback: [] as UserGroceryItem[] });
+  const visibleWaterLogs = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: waterLogs, fallback: emptyWaterLogs });
+  const visibleGroceryItems = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: groceryItems, fallback: emptyGroceryItems });
   const visibleWellnessData = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: wellnessData, fallback: initialWellness });
   const visibleProfileContext = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: profileContext, fallback: initialDashboardProfileContext });
   const visibleProgressContext = dashboardValueForRequest({ activeKey: activeRequestKey, currentKey: currentRequestKey, value: progressContext, fallback: initialDashboardProgressContext });
@@ -263,7 +267,9 @@ export function TodayDashboard() {
 
   const totals = useMemo(() => visibleNutritionData.logs ? sumFoodLogs(visibleNutritionData.logs) : null, [visibleNutritionData.logs]);
   const targets = visibleNutritionData.targets;
-  const remaining = targets && totals ? remainingMacros({ calories: targets.daily_calories, protein_g: targets.protein_g, carbs_g: targets.carbs_g, fat_g: targets.fat_g, water_ml: targets.water_ml }, totals) : null;
+  const remaining = useMemo(() => targets && totals
+    ? remainingMacros({ calories: targets.daily_calories, protein_g: targets.protein_g, carbs_g: targets.carbs_g, fat_g: targets.fat_g, water_ml: targets.water_ml }, totals)
+    : null, [targets, totals]);
   const waterTotal = useMemo(() => visibleWaterLogs.reduce((sum, item) => sum + Number(item.amount_ml), 0), [visibleWaterLogs]);
   const workoutResolution = resolveTodayWorkout({ today, planDayId: visibleWorkoutData.day?.id ?? null, openSessionId: visibleWorkoutData.openSessionId, sessions: visibleWorkoutData.sessions });
   const workoutState = workoutResolution.state;
