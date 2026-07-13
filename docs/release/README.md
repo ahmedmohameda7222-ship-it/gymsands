@@ -1,65 +1,104 @@
 # Plaivra release integrity
 
-A public Plaivra release is identified by its reviewed commit, build timestamp, deployment environment, and schema compatibility version. A deployment is not launch-ready merely because a local build succeeds.
+A public Plaivra release is a compatible code, database, configuration, and browser-acceptance package. A successful local build, HTTP 200 health response, successful login, provider `READY` state, or matching schema marker is not sufficient on its own.
 
-## Merge safety versus production release
+## Separate operations
 
-Merging reviewed source into `main` does not authorize a production deployment.
+Do not combine these operations conceptually or operationally:
 
-The repository applies exact-SHA production holds to both connected deployment providers:
+1. **Merge** — reviewed source enters `main`; this does not authorize production.
+2. **Automatic Git-connected deployment** — `vercel.json` enables this only for `main`; every other branch is disabled.
+3. **Explicit on-demand preview** — a temporary preview may be created from an exact approved SHA as a deliberate operator action. It is not an automatic branch deployment and does not authorize production.
+4. **Production promotion** — the exact reviewed commit is built and deployed after every release gate passes.
+5. **Rollback** — a separately approved code/schema-compatible release pair is selected and verified. Rollback never weakens exact-SHA validation.
 
-- Vercel evaluates `scripts/vercel-production-release-gate.mjs` through `vercel.json`;
-- Netlify evaluates `scripts/netlify-production-release-gate.mjs` through `netlify.toml`;
-- preview, deploy-preview, branch, development, and local/CI builds continue normally;
-- production builds stop unless `PLAIVRA_PRODUCTION_RELEASE_SHA` exactly equals the provider's full 40-character commit SHA;
-- missing, malformed, stale, mismatched, or ambiguous production approval fails closed.
+Do not redeploy an old provider artifact as a substitute for deploying the reviewed Git commit. The July 2026 incident persisted because production redeployed an old SHA while `main` had advanced.
 
-Keep `PLAIVRA_PRODUCTION_RELEASE_SHA` empty during ordinary merges. Set it in every active production deployment provider only after the exact reviewed commit has passed database migration rehearsal, the production migration decision, external configuration, real ChatGPT acceptance, populated reviewer-account QA, and legal release gates. Replace or clear it after each release so approval cannot silently carry to a later commit.
+## Provider controls
 
-These holds protect ordinary Git-connected deployments caused by merging. A separately invoked provider build hook is an explicit release operation and remains prohibited until the same release gates pass.
+### Vercel
 
-This makes the pull request merge-safe while the version-2 application remains release-blocked. It does not make the pending migrations or external launch checks optional.
+- `vercel.json` sets `git.deploymentEnabled["*"] = false` and `git.deploymentEnabled.main = true`.
+- `scripts/vercel-production-release-gate.mjs` is the fail-closed ignored-build check.
+- An explicitly invoked preview/development deployment may build, but normal Git-connected branch deployments remain disabled.
+- Production proceeds only when `PLAIVRA_PRODUCTION_RELEASE_SHA` exactly equals `VERCEL_GIT_COMMIT_SHA`, both as 40-character Git SHAs.
 
-## Required release gates
+### Netlify
 
-Every public release must have evidence for all of these gates from the same commit:
+Netlify remains configured as a secondary supported provider. Its production ignore gate also requires an exact approved SHA. Node 24 is pinned in `netlify.toml`. A Netlify preview does not replace Vercel production evidence.
 
-1. repository integrity check;
-2. lint;
-3. TypeScript typecheck;
-4. unit tests;
-5. integration tests;
-6. production build;
-7. successful deployment of the reviewed commit;
-8. post-deploy smoke tests against the public deployment.
+Keep `PLAIVRA_PRODUCTION_RELEASE_SHA` empty during ordinary merges. Set it only after owner and quality-control approval for one exact commit. Clear or rotate it after the release so approval cannot carry to another commit.
 
-The pull-request quality workflow covers gates 1–6 and publishes logs plus a generated release manifest. Gates 7–8 require deployment-provider evidence and the post-deploy workflow. A build-rate-limit failure is still a failed deployment; do not describe it as resolved until a subsequent deployment and smoke run provide evidence.
+## Required same-commit evidence
+
+The release manifest requires retained evidence for:
+
+- repository integrity;
+- full local migration chain;
+- database lint;
+- read-only database preflight;
+- migration-ledger validation;
+- dependency audit;
+- lint;
+- typecheck;
+- unit tests;
+- integration tests;
+- script tests;
+- telemetry/redaction tests;
+- production environment validation;
+- release metadata tests;
+- production build;
+- rendered browser QA;
+- deployment identity;
+- anonymous smoke;
+- authenticated populated synthetic smoke;
+- authenticated empty-state synthetic smoke.
+
+A gate is not `passed` unless its retained log or artifact exists. Browser QA with mock authentication is useful pre-deployment evidence but is not production acceptance.
 
 ## Build metadata
 
-`GET /api/version` returns only:
+Build metadata is bundled into the artifact through `next.config.mjs` using direct compile-time environment reads and the machine-readable migration ledger.
 
-- `commitSha`;
-- `buildTimestamp`;
+Required public fields include:
+
+- exact 40-character `commitSha`;
+- valid ISO-8601 `buildTimestamp` generated for each build;
 - `environment`;
-- `schemaCompatibilityVersion`.
+- `schemaCompatibilityVersion`;
+- `expectedDatabaseMigrationVersion`;
+- `migrationLedgerReconciliationState`;
+- `schemaAppliedUntrackedCount`.
 
-The endpoint is public so release automation can verify an artifact, but it rejects malformed metadata and never reads or reflects arbitrary environment variables. Vercel supplies the commit and environment automatically. CI and other providers should set:
+A human does not type the build timestamp for provider builds. Vercel supplies its commit identity; CI captures a build timestamp before the build. A production artifact with `unknown`, malformed, or abbreviated required metadata is invalid.
 
-```text
-PLAIVRA_COMMIT_SHA=<full reviewed commit SHA>
-PLAIVRA_BUILD_TIMESTAMP=<ISO-8601 timestamp captured before the build>
-PLAIVRA_RELEASE_ENVIRONMENT=production
-PLAIVRA_SCHEMA_COMPATIBILITY_VERSION=2
-```
+## `/api/version` semantics
 
-Increment the schema compatibility version only when application/database compatibility rules change, and document the supported cutover/rollback window with the additive migration.
+`GET /api/version` is a public release assertion. It returns explicit checks:
 
-Compatibility version `2` covers the pending 2026-07 pre-launch additive migration set. Apply and verify those migrations on an isolated database first, then apply them to production before promoting the version-2 application artifact. The prior version-1 application may be restored while the additive objects remain; do not remove or rewrite them as rollback. Once version-2 writers create data, disable the affected writer/feature flag and use an additive forward fix rather than reverting schema history.
+- `artifactIdentityValid`;
+- `schemaMarkerCompatible`;
+- `migrationVersionCompatible`;
+- `migrationLedgerReconciled`;
+- `releaseReady`.
+
+The compatibility field `schemaCompatible` remains only as a backward-compatible alias for the compatibility-marker comparison. It does not prove physical schema equivalence.
+
+The route returns HTTP 200 only when final release readiness is true. It returns HTTP 503 when artifact identity is invalid, the database marker is unavailable/mismatched, expected migration identity differs, or migration-history reconciliation is pending.
+
+`/api/version` does not replace:
+
+- the physical-schema read-only preflight;
+- full migration rehearsal;
+- authenticated browser smoke;
+- provider deployment evidence;
+- production monitoring.
+
+The current repository ledger records six `applied_schema_untracked` migrations and reconciliation state `pending`, so production release preflight must remain blocked until the separately approved history repair is completed and independently verified.
 
 ## Release manifest
 
-The immutable template is `release/release-manifest.template.json`. Generate evidence without editing the template:
+Generate the immutable evidence manifest from the checked-out exact commit:
 
 ```bash
 npm run release:manifest -- \
@@ -71,26 +110,61 @@ npm run release:manifest -- \
   --output quality-reports/release-manifest.json
 ```
 
-Missing reports remain `missing`; deployment and smoke stay `pending` until their external evidence exists. Never change a pending or failed gate to passed without retaining the corresponding log, deployment record, or smoke artifact.
+The generator rejects abbreviated SHAs and a commit that differs from `git rev-parse HEAD`. It records Node, npm, Next.js, platform, lockfile version, and lockfile SHA-256.
 
-## Deployment and smoke
+## Preflight
 
-After all release gates are complete, set `PLAIVRA_PRODUCTION_RELEASE_SHA` to the exact reviewed commit in every provider that can deploy production, then trigger that exact commit's deployment. After the active production provider reports success, run the **Post-deploy release smoke** workflow from the same commit. For production, use `https://app.plaivra.com`, the full expected commit SHA, and expected environment `production`. The workflow verifies the landing page, version endpoint, deployed commit, build timestamp, environment, and schema compatibility marker and uploads the resulting JSON evidence.
-
-The same check can run locally against a preview:
+Run without deploying:
 
 ```bash
-npm run smoke:postdeploy -- \
-  --url "https://preview.example" \
-  --expected-commit "$REVIEWED_COMMIT" \
-  --expected-environment preview \
-  --output quality-reports/post-deploy-smoke.json
+npm run release:preflight -- \
+  --commit "$REVIEWED_COMMIT" \
+  --repository ahmedmohameda7222-ship-it/gymsands \
+  --quality-reports quality-reports \
+  --output quality-reports/release-preflight.json
 ```
 
-Do not run a production deployment, promote a preview, invoke a production build hook, or apply production migrations automatically from this repository workflow. Preserve provider deployment evidence and obtain the required owner review before launch.
+The command verifies checkout/repository identity, Node 24 pins, migration reconciliation, expected migration identity, manifest identity, and retained quality evidence. It performs no provider or Supabase write. It must fail while reconciliation is pending.
 
-Operational cutover, monitoring, backup evidence, incident response, and submission assets are governed by:
+## Production runbook
 
-- `docs/operations/launch-runbook.md`;
-- `docs/operations/incident-response.md`;
-- `docs/operations/submission-checklists.md`.
+1. Select one reviewed exact 40-character SHA from `main`.
+2. Confirm the quality artifact and release manifest were generated from that same SHA.
+3. Complete and independently verify migration-history reconciliation.
+4. Confirm the database compatibility marker and expected migration version agree.
+5. Run the release preflight and retain its passing JSON.
+6. Confirm required Vercel environment variables pass strict production validation.
+7. Set `PLAIVRA_PRODUCTION_RELEASE_SHA` to the exact reviewed SHA.
+8. Deploy that Git commit. Do not redeploy an old deployment object.
+9. Verify provider metadata and `/api/version` identity.
+10. Run anonymous smoke.
+11. Run authenticated populated and empty synthetic browser smoke.
+12. Retain screenshots, route results, console/page/network evidence, request counts, and timings.
+13. Monitor client error-boundary events and server errors.
+14. Clear or rotate the approved SHA after acceptance.
+
+## Authenticated smoke
+
+The `Post-deploy release smoke` workflow requires:
+
+- exact deployment URL;
+- exact 40-character commit SHA;
+- exact expected database migration version;
+- protected populated synthetic credentials;
+- protected empty-state synthetic credentials.
+
+It verifies `/dashboard`, Train, applicable active-workout behavior, Eat, Meal Plan, Progress, Settings, and privacy/data controls. It fails on page errors, console errors, unhandled failures, critical request failures, HTTP 5xx, route-error UI, authentication loss, invalid identity/readiness, missing populated trigger state, or excessive request growth.
+
+Synthetic credentials, cookies, tokens, emails, IDs, query strings, and user-entered content are not written to artifacts.
+
+## Rollback
+
+Rollback is not a provider “redeploy previous” shortcut. Select an identified commit and database marker that are compatible with the current physical schema. Run the same exact-SHA preflight, deploy the identified Git commit, verify `/api/version`, and run authenticated smoke. Additive migrations remain immutable; use a forward fix for incompatible data or schema state.
+
+## Related operational authority
+
+- `docs/operations/launch-runbook.md`
+- `docs/operations/incident-response.md`
+- `docs/operations/submission-checklists.md`
+- `docs/architecture/migration-ledger-reconciliation.md`
+- `plaivra_production_migration_reconciliation_plan.md`
