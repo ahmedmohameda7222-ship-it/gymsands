@@ -1,7 +1,7 @@
 import { localDateToIso } from "@/lib/date-utils";
 import type { MealPlanItem, WorkoutSession } from "@/types";
 
-export type TodayWorkoutState = "none" | "scheduled" | "active" | "completed";
+export type TodayWorkoutState = "none" | "scheduled" | "active" | "completed" | "skipped";
 export type DashboardWorkoutSession = WorkoutSession & { scheduled_date?: string | null };
 
 export type TodayWorkoutResolution = {
@@ -26,8 +26,14 @@ export function resolveTodayWorkout(input: {
   sessions: DashboardWorkoutSession[];
   toLocalIso?: (timestamp: string) => string;
 }): TodayWorkoutResolution {
-  if (!input.planDayId) return { state: "none" };
   if (input.openSessionId) return { state: "active", activeSessionId: input.openSessionId };
+  if (!input.planDayId) return { state: "none" };
+  const skipped = input.sessions.find((session) => (
+    session.plan_day_id === input.planDayId
+    && session.status === "skipped"
+    && workoutSessionLocalDate(session, input.toLocalIso) === input.today
+  ));
+  if (skipped) return { state: "skipped" };
   const completed = input.sessions.find((session) => (
     session.plan_day_id === input.planDayId
     && session.status === "completed"
@@ -46,8 +52,22 @@ export function resolveTodayWorkoutState(input: {
   return resolveTodayWorkout(input).state;
 }
 
-export function todayWorkoutActionHref(resolution: TodayWorkoutResolution, planDayId: string | null) {
-  if ((resolution.state === "scheduled" || resolution.state === "active") && planDayId) {
+export function activeWorkoutSessionHref(session: DashboardWorkoutSession) {
+  if (session.plan_day_id) return `/workouts/session/day/${session.plan_day_id}`;
+  if (session.workout_id) return `/workouts/session/${session.workout_id}`;
+  return `/workout-history?session=${encodeURIComponent(session.id)}`;
+}
+
+export function todayWorkoutActionHref(
+  resolution: TodayWorkoutResolution,
+  planDayId: string | null,
+  openSession?: DashboardWorkoutSession | null
+) {
+  if (resolution.state === "active") {
+    if (openSession) return activeWorkoutSessionHref(openSession);
+    return planDayId ? `/workouts/session/day/${planDayId}` : null;
+  }
+  if (resolution.state === "scheduled" && planDayId) {
     return `/workouts/session/day/${planDayId}`;
   }
   if (resolution.state === "completed") {

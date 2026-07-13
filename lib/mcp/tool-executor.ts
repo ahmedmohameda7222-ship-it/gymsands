@@ -24,12 +24,6 @@ type FoodCandidate = {
   fat_g: number;
 };
 
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
 function normalizeFood(row: Record<string, unknown>, source: "global" | "user"): FoodCandidate {
   return {
     id: String(row.id),
@@ -156,10 +150,10 @@ async function requireWorkoutSession(ctx: McpContext, sessionId: string) {
 
 async function getFullPlan(ctx: McpContext, planId: string) {
   const plan = await requirePlan(ctx, planId);
-  const { data: days, error: daysError } = await ctx.supabase.from("user_workout_plan_days").select("*").eq("plan_id", planId).order("day_number", { ascending: true });
+  const { data: days, error: daysError } = await ctx.supabase.from("user_workout_plan_days").select("*").eq("plan_id", planId).is("archived_at", null).order("day_number", { ascending: true });
   if (daysError) throw new Error(daysError.message);
   const dayIds = (days ?? []).map((day) => String(day.id));
-  const exercises = dayIds.length ? await ctx.supabase.from("user_workout_plan_exercises").select("*").in("plan_day_id", dayIds).order("sort_order", { ascending: true }) : { data: [], error: null };
+  const exercises = dayIds.length ? await ctx.supabase.from("user_workout_plan_exercises").select("*").in("plan_day_id", dayIds).is("archived_at", null).order("sort_order", { ascending: true }) : { data: [], error: null };
   if (exercises.error) throw new Error(exercises.error.message);
   return { plan, days: days ?? [], exercises: exercises.data ?? [] };
 }
@@ -235,85 +229,51 @@ async function saveChatGptPlan(ctx: McpContext, input: JsonObject) {
   if (validationError) return fail("invalid_workout_plan", validationError);
 
   const activate = input.activate !== false;
-  if (activate) await ctx.supabase.from("user_workout_plans").update({ is_active: false, is_default: false }).eq("user_id", ctx.userId);
-
-  const { data: plan, error: planError } = await ctx.supabase
-    .from("user_workout_plans")
-    .insert({
-      user_id: ctx.userId,
-      name: getString(input, "name"),
-      goal: getOptionalString(input, "goal") ?? null,
-      description: getOptionalString(input, "description") ?? null,
-      is_active: activate,
-      is_default: activate,
-      source: "chatgpt",
-      chatgpt_source: true,
-      program_duration_weeks: getOptionalNumber(input, "duration_weeks") ?? getOptionalNumber(input, "desired_duration_weeks") ?? null,
-      days_per_week: getOptionalNumber(input, "days_per_week") ?? days.length,
-      session_duration_minutes: getOptionalNumber(input, "session_duration_minutes") ?? getOptionalNumber(input, "workout_duration_minutes") ?? null
-    })
-    .select("*")
-    .single();
-
-  if (planError || !plan) throw new Error(planError?.message ?? "Could not save workout plan.");
-
-  let savedDaysCount = 0;
+  const scheduleStartDate = cleanDate(input.start_date);
   let savedExercisesCount = 0;
-  const savedDayIds: string[] = [];
-
-  for (const day of days) {
-    const dayNumber = Math.max(1, getNumber(day, "day_number", savedDaysCount + 1));
-    const { data: savedDay, error: dayError } = await ctx.supabase
-      .from("user_workout_plan_days")
-      .insert({
-        plan_id: plan.id,
-        day_number: dayNumber,
-        day_name: getString(day, "day_name", `Day ${dayNumber}`),
-        focus: getOptionalString(day, "focus") ?? null,
-        weekday: getOptionalString(day, "weekday") ?? null,
-        session_duration_minutes: getOptionalNumber(day, "session_duration_minutes") ?? getOptionalNumber(input, "session_duration_minutes") ?? null,
-        notes: getOptionalString(day, "notes") ?? null
-      })
-      .select("*")
-      .single();
-
-    if (dayError || !savedDay) throw new Error(dayError?.message ?? "Could not save plan day.");
-    savedDayIds.push(savedDay.id);
-    savedDaysCount += 1;
-
-    for (const [block, items] of [
+  const rpcDays = days.map((day, dayIndex) => {
+    const exercises = ([
       ["warmup", itemsFrom(day, ["warmup", "warm_up"])],
       ["strength", itemsFrom(day, ["exercises", "strength", "main_workout"])],
       ["cardio", itemsFrom(day, ["cardio", "cardio_finisher"])],
       ["cooldown", itemsFrom(day, ["cooldown", "cool_down", "stretching"])]
-    ] as Array<[string, JsonObject[]]>) {
-      savedExercisesCount += (await insertBlock(ctx, savedDay.id, block, items)).length;
-    }
-  }
-
-  const durationWeeks = Math.max(1, getNumber(input, "duration_weeks", getNumber(input, "desired_duration_weeks", 1)));
-  const start = new Date(`${cleanDate(input.start_date ?? "today")}T00:00:00.000Z`);
-  if (activate) {
-    const rows = savedDayIds.flatMap((dayId, dayIndex) =>
-      Array.from({ length: durationWeeks }, (_, weekIndex) => ({
-        user_id: ctx.userId,
-        user_workout_plan_id: plan.id,
-        plan_day_id: dayId,
-        week_index: weekIndex + 1,
-        day_index: dayIndex + 1,
-        session_number: weekIndex * savedDayIds.length + dayIndex + 1,
-        scheduled_date: addDays(start, weekIndex * 7 + dayIndex).toISOString().slice(0, 10),
-        day_title: getString(days[dayIndex], "day_name", `Day ${dayIndex + 1}`),
-        status: "scheduled"
-      }))
+    ] as Array<[string, JsonObject[]]>).flatMap(([blockType, items]) =>
+      items.map((item, itemIndex) => {
+        savedExercisesCount += 1;
+        const row = exerciseRow("rpc", { ...item, order_index: itemIndex + 1 }, blockType);
+        const { plan_day_id: _planDayId, ...exercise } = row;
+        return exercise;
+      })
     );
-    if (rows.length) {
-      const { error } = await ctx.supabase.from("user_workout_sessions").insert(rows);
-      if (error) throw new Error(error.message);
-    }
-  }
+    return {
+      day_name: getString(day, "day_name", `Day ${dayIndex + 1}`),
+      weekday: getOptionalString(day, "weekday") ?? null,
+      session_duration_minutes: getOptionalNumber(day, "session_duration_minutes") ?? getOptionalNumber(input, "session_duration_minutes") ?? null,
+      notes: getOptionalString(day, "notes") ?? getOptionalString(day, "focus") ?? null,
+      exercises
+    };
+  });
 
-  return ok({ success: true, ok: true, plan_id: plan.id, saved_days_count: savedDaysCount, saved_exercises_count: savedExercisesCount });
+  const { data: plan, error } = await ctx.supabase.rpc("create_workout_plan_atomic", {
+    p_user_id: ctx.userId,
+    p_plan: {
+      name: getString(input, "name"),
+      goal: getOptionalString(input, "goal") ?? null,
+      description: getOptionalString(input, "description") ?? null,
+      source: "chatgpt",
+      chatgpt_source: true,
+      program_duration_weeks: getOptionalNumber(input, "duration_weeks") ?? getOptionalNumber(input, "desired_duration_weeks") ?? null,
+      duration_weeks: getOptionalNumber(input, "duration_weeks") ?? getOptionalNumber(input, "desired_duration_weeks") ?? 1,
+      days_per_week: getOptionalNumber(input, "days_per_week") ?? days.length,
+      session_duration_minutes: getOptionalNumber(input, "session_duration_minutes") ?? getOptionalNumber(input, "workout_duration_minutes") ?? null,
+      days: rpcDays
+    },
+    p_activate: activate,
+    p_schedule_start_date: scheduleStartDate
+  });
+  if (error || !plan) throw new Error(error?.message ?? "Could not save workout plan.");
+  const savedPlan = plan as Record<string, unknown>;
+  return ok({ success: true, ok: true, plan_id: savedPlan.id, saved_days_count: rpcDays.length, saved_exercises_count: savedExercisesCount });
 }
 
 async function upsertTarget(ctx: McpContext, patch: Record<string, unknown>) {
@@ -536,21 +496,31 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
 
       case "activate_workout_plan": {
         const planId = getString(input, "plan_id");
-        const { data, error } = await ctx.supabase.from("user_workout_plans").update({ is_active: true, is_default: true }).eq("id", planId).eq("user_id", ctx.userId).eq("updated_at", getString(input, "expected_updated_at")).select("*").maybeSingle();
-        if (error) throw new Error(error.message);
-        if (!data) return fail("version_conflict", "This workout plan changed after it was read. Fetch it again before activating.");
-        const deactivate = await ctx.supabase.from("user_workout_plans").update({ is_active: false, is_default: false }).eq("user_id", ctx.userId).neq("id", planId);
-        if (deactivate.error) throw new Error(deactivate.error.message);
+        const { data, error } = await ctx.supabase.rpc("activate_workout_plan_atomic", {
+          p_user_id: ctx.userId,
+          p_plan_id: planId,
+          p_schedule_start_date: cleanDate(input.schedule_start_date),
+          p_expected_updated_at: getString(input, "expected_updated_at")
+        });
+        if (error) {
+          if (error.code === "40001") return fail("version_conflict", "This workout plan changed after it was read. Fetch it again before activating.");
+          throw new Error(error.message);
+        }
         return ok({ ok: true, active_plan: data });
       }
 
       case "delete_workout_plan": {
         const confirmation = requireConfirmation(input);
         if (confirmation) return ok(confirmation);
-        await requirePlan(ctx, getString(input, "plan_id"));
-        const { error } = await ctx.supabase.from("user_workout_plans").delete().eq("id", getString(input, "plan_id")).eq("user_id", ctx.userId);
+        const planId = getString(input, "plan_id");
+        const { error } = await ctx.supabase.rpc("delete_workout_plan_atomic", {
+          p_user_id: ctx.userId,
+          p_plan_id: planId,
+          p_confirmed: true,
+          p_schedule_start_date: cleanDate(input.schedule_start_date)
+        });
         if (error) throw new Error(error.message);
-        return ok({ ok: true, deleted_plan_id: getString(input, "plan_id") });
+        return ok({ ok: true, deleted_plan_id: planId });
       }
 
 
@@ -565,25 +535,28 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
       case "start_workout": {
         const scheduledId = getOptionalString(input, "scheduled_session_id");
         if (scheduledId) {
-          const startedAt = new Date().toISOString();
-          const { data: scheduled, error: scheduledError } = await ctx.supabase.from("user_workout_sessions").update({ status: "started", started_at: startedAt }).eq("id", scheduledId).eq("user_id", ctx.userId).select("*").single();
+          const { data: scheduled, error: scheduledError } = await ctx.supabase.from("user_workout_sessions").select("id,plan_day_id").eq("id", scheduledId).eq("user_id", ctx.userId).maybeSingle();
           if (scheduledError || !scheduled) throw new Error(scheduledError?.message ?? "Scheduled workout not found.");
-          const { data, error } = await ctx.supabase.from("workout_sessions").upsert({
-            user_id: ctx.userId,
-            scheduled_session_id: scheduled.id,
-            plan_id: scheduled.user_workout_plan_id,
-            plan_day_id: scheduled.plan_day_id,
-            workout_name: scheduled.day_title ?? "Scheduled workout",
-            workout_day_name: scheduled.day_title ?? null,
-            status: "started",
-            started_at: startedAt,
-            source: "chatgpt"
-          }, { onConflict: "scheduled_session_id" }).select("*").single();
+          if (!scheduled.plan_day_id) throw new Error("Scheduled workout is not linked to a workout plan day.");
+          const { data, error } = await ctx.supabase.rpc("start_or_resume_workout_session_atomic", {
+            p_user_id: ctx.userId,
+            p_plan_day_id: scheduled.plan_day_id,
+            p_scheduled_session_id: scheduled.id
+          });
           if (error) throw new Error(error.message);
-          return ok({ ok: true, session: data });
+          return ok({ ok: true, session: (data as { session?: unknown } | null)?.session ?? data });
         }
         const planDayId = getOptionalString(input, "plan_day_id");
-        if (planDayId) await requireDay(ctx, planDayId);
+        if (planDayId) {
+          await requireDay(ctx, planDayId);
+          const { data, error } = await ctx.supabase.rpc("start_or_resume_workout_session_atomic", {
+            p_user_id: ctx.userId,
+            p_plan_day_id: planDayId,
+            p_scheduled_session_id: null
+          });
+          if (error) throw new Error(error.message);
+          return ok({ ok: true, session: (data as { session?: unknown } | null)?.session ?? data });
+        }
         const { data, error } = await ctx.supabase.from("workout_sessions").insert({ user_id: ctx.userId, plan_day_id: planDayId ?? null, workout_name: "ChatGPT logged workout", status: "started" }).select("*").single();
         if (error) throw new Error(error.message);
         return ok({ ok: true, session: data });
@@ -594,23 +567,37 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         const exerciseName = getString(input, "exercise_name");
         const sets = getArray<JsonObject>(input, "sets");
         await requireWorkoutSession(ctx, sessionId);
-        const rows = sets.map((set) => ({ workout_session_id: sessionId, exercise_name: exerciseName, set_number: getNumber(set, "set_number", 1), weight_kg: getOptionalNumber(set, "weight_kg") ?? null, reps: getOptionalNumber(set, "reps") ?? null, notes: getOptionalString(set, "notes") ?? null, completed_at: new Date().toISOString() }));
-        const { data, error } = await ctx.supabase.from("exercise_logs").insert(rows).select("*");
+        const rows = sets.map((set) => ({
+          plan_exercise_id: getOptionalString(input, "plan_exercise_id") ?? null,
+          exercise_order: getOptionalNumber(input, "exercise_order") ?? null,
+          exercise_name: exerciseName,
+          set_number: getNumber(set, "set_number", 1),
+          weight_kg: getOptionalNumber(set, "weight_kg") ?? null,
+          reps: getOptionalNumber(set, "reps") ?? null,
+          notes: getOptionalString(set, "notes") ?? null,
+          completed_at: new Date().toISOString()
+        }));
+        const { data, error } = await ctx.supabase.rpc("upsert_workout_set_logs_atomic", {
+          p_user_id: ctx.userId,
+          p_session_id: sessionId,
+          p_logs: rows
+        });
         if (error) throw new Error(error.message);
         return ok({ ok: true, logs: data ?? [] });
       }
 
       case "complete_workout": {
         const sessionId = getString(input, "workout_session_id");
-        const update = { status: "completed", completed_at: new Date().toISOString(), duration_minutes: getOptionalNumber(input, "duration_minutes") ?? null, notes: getOptionalString(input, "notes") ?? null };
-        const ownedSession = await requireWorkoutSession(ctx, sessionId);
-        const { data, error } = await ctx.supabase.from("workout_sessions").update(update).eq("id", sessionId).eq("user_id", ctx.userId).select("*").single();
+        await requireWorkoutSession(ctx, sessionId);
+        const { data, error } = await ctx.supabase.rpc("complete_workout_session_atomic", {
+          p_user_id: ctx.userId,
+          p_session_id: sessionId,
+          p_logs: "logs" in input ? getArray<JsonObject>(input, "logs") : null,
+          p_duration_minutes: getOptionalNumber(input, "duration_minutes") ?? 0,
+          p_notes: getOptionalString(input, "notes") ?? null
+        });
         if (error) throw new Error(error.message);
-        if (ownedSession.scheduled_session_id) {
-          const scheduledUpdate = await ctx.supabase.from("user_workout_sessions").update(update).eq("id", ownedSession.scheduled_session_id).eq("user_id", ctx.userId);
-          if (scheduledUpdate.error) throw new Error(scheduledUpdate.error.message);
-        }
-        return ok({ ok: true, session: data });
+        return ok({ ok: true, session: (data as { session?: unknown } | null)?.session ?? data });
       }
 
       case "skip_workout": {

@@ -1,38 +1,76 @@
 "use client";
 
-import { Archive, CalendarDays, Copy, Dumbbell, Edit3, MoreHorizontal, Play, Plus, RefreshCcw, Save, Star, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Archive,
+  BookOpen,
+  Bot,
+  CalendarDays,
+  Check,
+  ChevronRight,
+  Clock3,
+  Copy,
+  Dumbbell,
+  History,
+  MoreHorizontal,
+  Play,
+  Plus,
+  RefreshCcw,
+  Star,
+  Trash2
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useQuickChatGpt } from "@/components/ai/quick-chatgpt-provider";
+import { useAuth } from "@/components/auth/auth-provider";
+import { PageHeading } from "@/components/layout/page-heading";
+import { ActionMenu, ActionMenuItem } from "@/components/ui/action-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CardGridSkeleton, ErrorState } from "@/components/ui/state-views";
-import { useAuth } from "@/components/auth/auth-provider";
-import { useToast } from "@/components/ui/toaster";
-import { userSafeError, logRecoverableError, technicalErrorDetails } from "@/lib/error-formatting";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { setDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
-import { getWorkoutActivity } from "@/services/database/workout-sessions";
-import { archiveWorkoutPlan, deleteWorkoutPlan, duplicateWorkoutPlan, getActiveWorkoutPlan, getAllUserWorkoutPlans, updateWorkoutPlanMetadata, workoutsFromLoadedPlanDay } from "@/services/database/workout-plan-loader";
+import { Card, CardContent } from "@/components/ui/card";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { WorkoutCalendar } from "@/components/workouts/workout-calendar";
-import { Input } from "@/components/ui/input";
-import { ChatGptExecutionCard } from "@/components/shared/chatgpt-execution-card";
+import { Disclosure } from "@/components/ui/disclosure";
+import { CardGridSkeleton, ErrorState } from "@/components/ui/state-views";
+import { useToast } from "@/components/ui/toaster";
+import { activeWorkoutEvent } from "@/lib/active-workout";
+import { localDateToIso, todayIso } from "@/lib/date-utils";
+import { resolveTodayWorkout, todayWorkoutActionHref, workoutSessionLocalDate } from "@/lib/dashboard/today-model";
+import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
+import { useUserSettings } from "@/lib/settings/user-settings-context";
+import { useTrainTranslation } from "@/lib/i18n/train";
+import {
+  buildTrainQuickPromptContext,
+  clearedTrainQuickPromptContext,
+  emptyTrainProfileCapabilities,
+  findOpenSessionPlanContext,
+  isTrainRequestCurrent,
+  trainRequestKey,
+  type TrainProfileCapabilities,
+  type TrainRequestIdentity
+} from "@/lib/workouts/train-overview-runtime";
+import { resolveTrainWeekSelection, startTrainLocalDateRefresh } from "@/lib/workouts/train-local-date";
+import { getDashboardProfileContext } from "@/services/database/dashboard-today-sources";
+import { setDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
+import {
+  archiveWorkoutPlan,
+  deleteWorkoutPlan,
+  duplicateWorkoutPlan,
+  getAllUserWorkoutPlans,
+  workoutsFromLoadedPlanDay
+} from "@/services/database/workout-plan-loader";
+import { getOpenWorkoutSessionWithStatus, getWorkoutActivity } from "@/services/database/workout-sessions";
 import type { UserWorkoutPlan, WorkoutSession } from "@/types";
 
-type PlanMeta = Omit<UserWorkoutPlan, "source"> & {
-  source?: string;
+type PlanMeta = UserWorkoutPlan & {
   chatgpt_source?: boolean;
-  program_duration_weeks?: number | null;
   duration_weeks?: number | null;
-  days_per_week?: number | null;
   session_duration_minutes?: number | null;
 };
 
-function isChatGptPlan(plan: UserWorkoutPlan | null) {
-  const meta = plan as PlanMeta | null;
-  return Boolean(meta && (meta.source === "chatgpt" || meta.chatgpt_source));
-}
+type CalendarDay = ReturnType<typeof calendarDaysFromPlan>[number];
+type LoadState = "idle" | "loading" | "loaded" | "failed";
+
+const englishWeekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 
 function calendarDaysFromPlan(plan: UserWorkoutPlan) {
   return plan.days.map((day) => ({
@@ -45,315 +83,506 @@ function calendarDaysFromPlan(plan: UserWorkoutPlan) {
   }));
 }
 
+function planExerciseCount(plan: UserWorkoutPlan) {
+  return plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
+}
+
+function sourceLabel(plan: UserWorkoutPlan, manual: string) {
+  const meta = plan as PlanMeta;
+  if (plan.source === "chatgpt" || plan.source === "imported" || meta.chatgpt_source) return "ChatGPT";
+  return manual;
+}
+
+function planDurationWeeks(plan: UserWorkoutPlan) {
+  const meta = plan as PlanMeta;
+  return meta.program_duration_weeks ?? meta.duration_weeks ?? null;
+}
+
+function localizedWeekday(weekday: typeof englishWeekdays[number] | null | undefined, locale: string, format: "long" | "short" = "long") {
+  if (!weekday) return "";
+  const index = englishWeekdays.indexOf(weekday);
+  return new Intl.DateTimeFormat(locale, { weekday: format }).format(new Date(2024, 0, 7 + index));
+}
+
+function nextScheduledDay(days: CalendarDay[], today: typeof englishWeekdays[number]) {
+  const todayIndex = englishWeekdays.indexOf(today);
+  return [...days]
+    .filter((day) => day.weekday && day.exercises.length)
+    .sort((left, right) => ((englishWeekdays.indexOf(left.weekday!) - todayIndex + 7) % 7 || 7) - ((englishWeekdays.indexOf(right.weekday!) - todayIndex + 7) % 7 || 7))[0] ?? null;
+}
+
+function buildCurrentWeek(weekStartsOn: "monday" | "sunday", now = new Date()) {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekStartIndex = weekStartsOn === "monday" ? 1 : 0;
+  const offset = (start.getDay() - weekStartIndex + 7) % 7;
+  start.setDate(start.getDate() - offset);
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return {
+      date,
+      iso: localDateToIso(date),
+      weekday: englishWeekdays[date.getDay()]
+    };
+  });
+}
+
 export function MyWorkoutPlans() {
   const router = useRouter();
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const { toast } = useToast();
-  const [plans, setPlans] = useState<UserWorkoutPlan[]>([]);
-  const [activePlan, setActivePlan] = useState<UserWorkoutPlan | null>(null);
-  const [activity, setActivity] = useState<WorkoutSession[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
-  const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
-  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const { settings } = useUserSettings();
   const { dialog, ask } = useConfirm();
-  const [editName, setEditName] = useState("");
-
-  async function loadPlans() {
-    if (!user?.id) {
-      setPlans([]);
-      setActivePlan(null);
-      setActivity([]);
-      setLoadError(null);
-      setLoadErrorDetails(undefined);
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    setLoadError(null);
-    setLoadErrorDetails(undefined);
-    try {
-      const [nextPlans, nextActivePlan, nextActivity] = await Promise.all([
-        getAllUserWorkoutPlans(user.id),
-        getActiveWorkoutPlan(user.id),
-        getWorkoutActivity(user.id)
-      ]);
-      setPlans(nextPlans);
-      setActivePlan(nextActivePlan);
-      setActivity(nextActivity);
-    } catch (error) {
-      logRecoverableError("workout-plans.load", error);
-      const message = userSafeError(error, "Workout plans could not be loaded. Retry without losing any saved plan data.");
-      setLoadError(message);
-      setLoadErrorDetails(technicalErrorDetails(error));
-      toast({ title: "Could not load workout plans", description: message });
-    } finally {
-      setIsLoading(false);
-    }
-  }
+  const { openPrompts, setDashboardContext } = useQuickChatGpt();
+  const { dir, locale, tr } = useTrainTranslation();
+  const [today, setToday] = useState(todayIso);
+  const [plans, setPlans] = useState<UserWorkoutPlan[]>([]);
+  const [plansState, setPlansState] = useState<LoadState>("loading");
+  const [plansError, setPlansError] = useState<string | null>(null);
+  const [plansErrorDetails, setPlansErrorDetails] = useState<string | undefined>();
+  const [plansDataKey, setPlansDataKey] = useState("");
+  const [activity, setActivity] = useState<WorkoutSession[]>([]);
+  const [activityState, setActivityState] = useState<LoadState>("idle");
+  const [activityError, setActivityError] = useState<string | null>(null);
+  const [activityDataKey, setActivityDataKey] = useState("");
+  const [historyAvailable, setHistoryAvailable] = useState(false);
+  const [openSession, setOpenSession] = useState<WorkoutSession | null>(null);
+  const [profileContext, setProfileContext] = useState<TrainProfileCapabilities>(emptyTrainProfileCapabilities);
+  const [profileDataKey, setProfileDataKey] = useState("");
+  const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
+  const identityRef = useRef({ userId, date: today });
+  const planGenerationRef = useRef(0);
+  const activityGenerationRef = useRef(0);
+  const profileGenerationRef = useRef(0);
 
   useEffect(() => {
-    loadPlans();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+    identityRef.current = { userId, date: today };
+  }, [today, userId]);
 
-  async function setDefaultPlan(plan: UserWorkoutPlan) {
-    if (!user?.id || busyPlanId) return;
+  const currentKey = trainRequestKey(userId, today);
+  const visiblePlans = useMemo(() => plansDataKey === currentKey ? plans : [], [currentKey, plans, plansDataKey]);
+  const visibleActivity = useMemo(() => activityDataKey === currentKey ? activity : [], [activity, activityDataKey, currentKey]);
+  const visibleOpenSession = activityDataKey === currentKey ? openSession : null;
+  const visiblePlansState: LoadState = plansDataKey === currentKey ? plansState : "loading";
+  const visibleActivityState: LoadState = activityDataKey === currentKey ? activityState : "loading";
+  const visiblePlansError = plansDataKey === currentKey ? plansError : null;
+  const visiblePlansErrorDetails = plansDataKey === currentKey ? plansErrorDetails : undefined;
+  const visibleActivityError = activityDataKey === currentKey ? activityError : null;
+  const visibleProfile = profileDataKey === currentKey ? profileContext : emptyTrainProfileCapabilities;
+
+  const requestStillCurrent = useCallback((captured: TrainRequestIdentity, currentGeneration: number) => isTrainRequestCurrent(captured, {
+    userId: identityRef.current.userId,
+    date: identityRef.current.date,
+    generation: currentGeneration
+  }), []);
+
+  const loadPlans = useCallback(async () => {
+    const generation = ++planGenerationRef.current;
+    const captured: TrainRequestIdentity = { userId, date: today, generation };
+    const key = trainRequestKey(userId, today);
+    setPlansState("loading");
+    setPlansError(null);
+    setPlansErrorDetails(undefined);
+    setPlans([]);
+    setPlansDataKey("");
+    if (!userId) {
+      if (requestStillCurrent(captured, planGenerationRef.current)) {
+        setPlansState("loaded");
+        setPlansDataKey(key);
+      }
+      return;
+    }
+    try {
+      const nextPlans = await getAllUserWorkoutPlans(userId);
+      if (!requestStillCurrent(captured, planGenerationRef.current)) return;
+      setPlans(nextPlans);
+      setPlansDataKey(key);
+      setPlansState("loaded");
+    } catch (error) {
+      if (!requestStillCurrent(captured, planGenerationRef.current)) return;
+      logRecoverableError("train-overview.plans", error);
+      setPlansError(userSafeError(error, tr("planLoadFailedDescription")));
+      setPlansErrorDetails(technicalErrorDetails(error));
+      setPlansDataKey(key);
+      setPlansState("failed");
+    }
+  }, [requestStillCurrent, today, tr, userId]);
+
+  const loadTodayStatus = useCallback(async () => {
+    const generation = ++activityGenerationRef.current;
+    const captured: TrainRequestIdentity = { userId, date: today, generation };
+    const key = trainRequestKey(userId, today);
+    setActivityState("loading");
+    setActivityError(null);
+    setActivity([]);
+    setOpenSession(null);
+    setHistoryAvailable(false);
+    setActivityDataKey("");
+    if (!userId) {
+      if (requestStillCurrent(captured, activityGenerationRef.current)) {
+        setActivityDataKey(key);
+        setActivityState("loaded");
+      }
+      return;
+    }
+    const [historyResult, openResult] = await Promise.allSettled([
+      getWorkoutActivity(userId, 180, { throwOnError: true }),
+      getOpenWorkoutSessionWithStatus(userId)
+    ]);
+    if (!requestStillCurrent(captured, activityGenerationRef.current)) return;
+    let failed = false;
+    let nextActivity: WorkoutSession[] = [];
+    let nextOpenSession: WorkoutSession | null = null;
+    let nextHistoryAvailable = false;
+    if (historyResult.status === "fulfilled") {
+      nextActivity = historyResult.value;
+      nextHistoryAvailable = true;
+    } else {
+      failed = true;
+      logRecoverableError("train-overview.activity", historyResult.reason);
+    }
+    if (openResult.status === "fulfilled") {
+      nextOpenSession = openResult.value.session;
+      if (openResult.value.error) failed = true;
+    } else {
+      failed = true;
+      logRecoverableError("train-overview.open-session", openResult.reason);
+    }
+    setActivity(nextActivity);
+    setOpenSession(nextOpenSession);
+    setHistoryAvailable(nextHistoryAvailable);
+    setActivityError(failed ? tr("activityUnavailable") : null);
+    setActivityDataKey(key);
+    setActivityState(failed ? "failed" : "loaded");
+  }, [requestStillCurrent, today, tr, userId]);
+
+  const loadProfileContext = useCallback(async () => {
+    const generation = ++profileGenerationRef.current;
+    const captured: TrainRequestIdentity = { userId, date: today, generation };
+    const key = trainRequestKey(userId, today);
+    setProfileContext(emptyTrainProfileCapabilities);
+    setProfileDataKey("");
+    if (!userId) {
+      if (requestStillCurrent(captured, profileGenerationRef.current)) {
+        setProfileContext({ ...emptyTrainProfileCapabilities, state: "loaded" });
+        setProfileDataKey(key);
+      }
+      return;
+    }
+    try {
+      const nextProfile = await getDashboardProfileContext(userId);
+      if (!requestStillCurrent(captured, profileGenerationRef.current)) return;
+      setProfileContext(nextProfile);
+      setProfileDataKey(key);
+    } catch (error) {
+      if (!requestStillCurrent(captured, profileGenerationRef.current)) return;
+      logRecoverableError("train-overview.prompt-profile", error);
+      setProfileContext({ ...emptyTrainProfileCapabilities, state: "failed" });
+      setProfileDataKey(key);
+    }
+  }, [requestStillCurrent, today, userId]);
+
+  useEffect(() => {
+    planGenerationRef.current += 1;
+    activityGenerationRef.current += 1;
+    profileGenerationRef.current += 1;
+    setPlans([]);
+    setPlansDataKey("");
+    setActivity([]);
+    setOpenSession(null);
+    setActivityDataKey("");
+    setHistoryAvailable(false);
+    setProfileContext(emptyTrainProfileCapabilities);
+    setProfileDataKey("");
+    setBusyPlanId(null);
+    void loadPlans();
+    void loadTodayStatus();
+    void loadProfileContext();
+  }, [loadPlans, loadProfileContext, loadTodayStatus]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+    return startTrainLocalDateRefresh({
+      initialDate: today,
+      onDateChange: setToday,
+      onWake: () => { void loadTodayStatus(); },
+      dependencies: {
+        getNow: () => new Date(),
+        setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
+        clearTimer: (timer) => window.clearTimeout(timer),
+        windowTarget: window,
+        documentTarget: document,
+        isDocumentVisible: () => document.visibilityState === "visible"
+      }
+    });
+  }, [loadTodayStatus, today]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const refresh = () => { void loadTodayStatus(); };
+    window.addEventListener(activeWorkoutEvent, refresh);
+    return () => window.removeEventListener(activeWorkoutEvent, refresh);
+  }, [loadTodayStatus]);
+
+  const availablePlans = useMemo(() => visiblePlans.filter((plan) => !plan.archived_at), [visiblePlans]);
+  const archivedPlans = useMemo(() => visiblePlans.filter((plan) => Boolean(plan.archived_at)), [visiblePlans]);
+  const activePlan = useMemo(
+    () => availablePlans.find((plan) => plan.is_active) ?? availablePlans.find((plan) => plan.is_default) ?? null,
+    [availablePlans]
+  );
+  const otherPlans = useMemo(() => availablePlans.filter((plan) => plan.id !== activePlan?.id), [activePlan?.id, availablePlans]);
+  const activeDays = useMemo(() => (activePlan ? calendarDaysFromPlan(activePlan) : []), [activePlan]);
+  const todayWeekday = englishWeekdays[new Date(`${today}T12:00:00`).getDay()];
+  const scheduledPlanDay = useMemo(
+    () => activePlan?.days.find((day) => day.weekday === todayWeekday && day.exercises.length > 0) ?? null,
+    [activePlan, todayWeekday]
+  );
+  const todayDay = useMemo(
+    () => activeDays.find((day) => day.weekday === todayWeekday && day.exercises.length > 0) ?? null,
+    [activeDays, todayWeekday]
+  );
+  const nextDay = useMemo(() => nextScheduledDay(activeDays, todayWeekday), [activeDays, todayWeekday]);
+  const openPlanContext = useMemo(() => findOpenSessionPlanContext(visiblePlans, visibleOpenSession), [visibleOpenSession, visiblePlans]);
+  const displayedTodayPlan = visibleOpenSession ? openPlanContext.plan : activePlan;
+  const displayedTodayDay = visibleOpenSession && openPlanContext.plan && openPlanContext.day
+    ? calendarDaysFromPlan(openPlanContext.plan).find((day) => day.id === openPlanContext.day?.id) ?? null
+    : visibleOpenSession
+      ? null
+      : todayDay;
+  const resolvedPlanDayId = visibleOpenSession?.plan_day_id ?? displayedTodayDay?.id ?? null;
+  const todayResolution = useMemo(() => resolveTodayWorkout({
+    today,
+    planDayId: resolvedPlanDayId,
+    openSessionId: visibleOpenSession?.id ?? null,
+    sessions: visibleActivity
+  }), [resolvedPlanDayId, today, visibleActivity, visibleOpenSession?.id]);
+  const todayActionHref = todayWorkoutActionHref(todayResolution, resolvedPlanDayId, visibleOpenSession);
+  const promptPlan = visibleOpenSession ? openPlanContext.plan : activePlan;
+  const promptDay = visibleOpenSession ? openPlanContext.day : scheduledPlanDay;
+  const trainPromptContext = useMemo(() => buildTrainQuickPromptContext({
+    date: today,
+    plan: promptPlan,
+    day: promptDay,
+    resolution: todayResolution,
+    openSession: visibleOpenSession,
+    historyCount: activityDataKey === currentKey && historyAvailable ? visibleActivity.length : null,
+    profile: visibleProfile
+  }), [activityDataKey, currentKey, historyAvailable, promptDay, promptPlan, today, todayResolution, visibleActivity.length, visibleOpenSession, visibleProfile]);
+
+  useEffect(() => {
+    setDashboardContext(trainPromptContext);
+  }, [setDashboardContext, trainPromptContext]);
+
+  useEffect(() => () => {
+    setDashboardContext(clearedTrainQuickPromptContext());
+  }, [setDashboardContext]);
+
+  function openTrainPrompts(promptId?: string) {
+    setDashboardContext(trainPromptContext);
+    openPrompts(promptId);
+  }
+
+  async function setActive(plan: UserWorkoutPlan) {
+    if (!userId || busyPlanId) return;
     setBusyPlanId(plan.id);
     try {
-      await setDefaultUserWorkoutPlan(user.id, plan.id);
+      await setDefaultUserWorkoutPlan(userId, plan.id);
       await loadPlans();
-      toast({ title: "Default plan updated", description: `${plan.name} is now active.` });
+      toast({ title: tr("activePlanUpdated"), description: tr("activePlanUpdatedDescription", { name: plan.name }) });
     } catch (error) {
-      logRecoverableError("workout-plans.default", error);
-      toast({ title: "Could not set default plan", description: userSafeError(error, "The default plan was not changed. Try again.") });
+      toast({ title: tr("activateFailed"), description: userSafeError(error, tr("activateFailedDescription")), variant: "error" });
     } finally {
       setBusyPlanId(null);
     }
   }
 
-  const activeCalendarDays = useMemo(() => (activePlan ? calendarDaysFromPlan(activePlan) : []), [activePlan]);
-  const availablePlans = plans.filter((plan) => !plan.archived_at);
-  const archivedPlans = plans.filter((plan) => plan.archived_at);
-  const firstAvailablePlan = availablePlans[0] ?? null;
-
-  const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
-  const todayIndex = activeCalendarDays.findIndex((day) => day.weekday === today && day.exercises.length > 0);
-  const todayDay = todayIndex >= 0 ? activeCalendarDays[todayIndex] : null;
-  const activeCalendarDayIndex = todayIndex >= 0 ? todayIndex : 0;
-
-  function startToday() {
-    if (!todayDay) {
-      toast({ title: "No workout for today", description: activePlan ? `${activePlan.name} has no workout assigned today.` : "Choose an active workout plan first." });
-      return;
-    }
-    if (todayDay.id) router.push(`/workouts/session/day/${todayDay.id}`);
-  }
-
-  function openCalendarDay(index: number) {
-    const day = activeCalendarDays[index];
-    if (!day?.id) return;
-    router.push(`/my-workout/day/${day.id}`);
-  }
-
   async function duplicatePlan(plan: UserWorkoutPlan) {
-    if (!user?.id || busyPlanId) return;
+    if (!userId || busyPlanId) return;
     setBusyPlanId(plan.id);
     try {
-      await duplicateWorkoutPlan(user.id, plan.id);
+      await duplicateWorkoutPlan(userId, plan.id);
       await loadPlans();
-      toast({ title: "Plan duplicated", description: `${plan.name} copy was saved as inactive.` });
+      toast({ title: tr("planDuplicated"), description: tr("planDuplicatedDescription", { name: plan.name }) });
     } catch (error) {
-      logRecoverableError("workout-plans.duplicate", error);
-      toast({ title: "Could not duplicate plan", description: userSafeError(error, "The plan was not duplicated. Try again.") });
+      toast({ title: tr("duplicateFailed"), description: userSafeError(error, tr("duplicateFailedDescription")), variant: "error" });
     } finally {
       setBusyPlanId(null);
     }
   }
 
   async function archivePlan(plan: UserWorkoutPlan) {
-    if (!user?.id || busyPlanId) return;
+    if (!userId || busyPlanId) return;
     setBusyPlanId(plan.id);
     try {
-      await archiveWorkoutPlan(user.id, plan.id);
+      await archiveWorkoutPlan(userId, plan.id);
       await loadPlans();
-      toast({ title: "Plan archived", description: `${plan.name} is hidden from active planning. Workout history is kept.` });
+      toast({ title: tr("planArchived"), description: tr("planArchivedDescription") });
     } catch (error) {
-      logRecoverableError("workout-plans.archive", error);
-      toast({ title: "Could not archive plan", description: userSafeError(error, "The plan was not archived. Try again.") });
-    } finally {
-      setBusyPlanId(null);
-    }
-  }
-
-  async function saveMetadata(plan: UserWorkoutPlan) {
-    if (!user?.id || busyPlanId) return;
-    if (!editName.trim()) {
-      toast({ title: "Plan name required", description: "Enter a plan name before saving." });
-      return;
-    }
-    setBusyPlanId(plan.id);
-    try {
-      await updateWorkoutPlanMetadata(user.id, plan.id, { name: editName });
-      setEditingPlanId(null);
-      await loadPlans();
-      toast({ title: "Plan updated", description: "Workout plan metadata was saved." });
-    } catch (error) {
-      logRecoverableError("workout-plans.metadata", error);
-      toast({ title: "Could not update plan", description: userSafeError(error, "Your edited name is still on screen. Try saving again.") });
+      toast({ title: tr("archiveFailed"), description: userSafeError(error, tr("archiveFailedDescription")), variant: "error" });
     } finally {
       setBusyPlanId(null);
     }
   }
 
   async function deletePlan(plan: UserWorkoutPlan) {
-    if (!user?.id || busyPlanId) return;
+    if (!userId || busyPlanId) return;
     setBusyPlanId(plan.id);
     try {
-      await deleteWorkoutPlan(user.id, plan.id);
+      await deleteWorkoutPlan(userId, plan.id);
       await loadPlans();
-      toast({ title: "Plan deleted", description: `${plan.name} and its exercises were removed.` });
+      toast({ title: tr("planDeleted"), description: tr("planDeletedDescription", { name: plan.name }) });
     } catch (error) {
-      logRecoverableError("workout-plans.delete", error);
-      toast({ title: "Could not delete plan", description: userSafeError(error, "The plan was not deleted. Try again.") });
+      toast({ title: tr("deleteFailed"), description: userSafeError(error, tr("deleteFailedDescription")), variant: "error" });
     } finally {
       setBusyPlanId(null);
     }
   }
 
+  function askToDelete(plan: UserWorkoutPlan) {
+    ask({
+      title: tr("deleteTitle"),
+      description: tr("deleteDescription"),
+      confirmLabel: tr("deletePermanently"),
+      variant: "destructive",
+      onConfirm: () => deletePlan(plan)
+    });
+  }
+
+  const showTodayCard = Boolean(visibleOpenSession) || (visiblePlansState === "loaded" && Boolean(activePlan));
+
   return (
-    <div className="space-y-5">
-      {isLoading ? <CardGridSkeleton count={3} rows={4} /> : null}
+    <div className="space-y-6" dir={dir}>
+      <PageHeading
+        title={tr("myWorkout")}
+        description={tr("overviewDescription")}
+        action={visiblePlansState === "loaded" && !availablePlans.length ? undefined : (
+          <>
+            <Button type="button" variant="outline" className="min-h-12" onClick={() => openTrainPrompts()}>
+              <Bot className="h-4 w-4" /> {tr("askChatGpt")}
+            </Button>
+            <ActionMenu label={tr("createPlan")} icon={<Plus className="h-4 w-4" />} triggerVariant="default" triggerClassName="min-h-12">
+              <ActionMenuItem onSelect={() => openTrainPrompts("create-workout-plan")}>{tr("createWithChatGpt")}</ActionMenuItem>
+              <ActionMenuItem onSelect={() => router.push("/my-workout/plans/builder")}>{tr("createManually")}</ActionMenuItem>
+            </ActionMenu>
+          </>
+        )}
+      />
 
-      {!isLoading && loadError ? (
-        <ErrorState title="Workout plans could not load" description={loadError} onRetry={loadPlans} fallbackLabel="Open ChatGPT setup" fallbackHref="/settings" details={loadErrorDetails} />
-      ) : null}
-
-      {!isLoading && !loadError && activePlan ? (
-        <div className="space-y-4">
-          <TodayTrainingHero
-            activePlan={activePlan}
-            todayLabel={today}
-            todayDay={todayDay}
-            onStartToday={startToday}
-          />
-
-          <WorkoutCalendar
-            days={activeCalendarDays}
-            activity={activity}
-            activeDayIndex={activeCalendarDayIndex}
-            onSelectDay={openCalendarDay}
-            onStartToday={startToday}
-          />
-        </div>
-      ) : null}
-
-      {!isLoading && !loadError && !plans.length ? (
-        <PlanSetupHero onCreateManual={() => router.push("/my-workout/plans/builder")} />
-      ) : null}
-
-      {!isLoading && !loadError && plans.length > 0 && !activePlan ? (
-        <ChooseActivePlanHero
-          firstPlan={firstAvailablePlan}
-          busyPlanId={busyPlanId}
-          onSetActive={setDefaultPlan}
-          onCreateManual={() => router.push("/my-workout/plans/builder")}
+      {visiblePlansState === "loading" ? <CardGridSkeleton count={3} rows={3} /> : null}
+      {visiblePlansState === "failed" ? (
+        <ErrorState
+          title={tr("planLoadFailed")}
+          description={visiblePlansError ?? tr("tryAgain")}
+          onRetry={loadPlans}
+          details={visiblePlansErrorDetails}
         />
       ) : null}
 
-      {!isLoading && !loadError && availablePlans.length > 0 ? (
-        <div className="space-y-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Saved plan library</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Default plan controls today&apos;s schedule. Archived plans keep history available.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="ghost" className="min-h-12" onClick={loadPlans} disabled={isLoading}>
-                <RefreshCcw className="h-4 w-4" /> Refresh
-              </Button>
-              <Button variant="outline" className="min-h-12" onClick={() => router.push("/my-workout/plans/builder")}>
-                <Plus className="h-4 w-4" /> Create manually
-              </Button>
-            </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {availablePlans.map((plan) => {
-              const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
-              const isDefault = plan.is_default ?? plan.is_active;
-              const sourceLabel = sourceBadge(plan);
-              const meta = plan as PlanMeta;
-              const isPlanBusy = busyPlanId === plan.id;
-
-              return (
-                <Card key={plan.id} variant="glass" className="overflow-hidden">
-                  <CardContent className="space-y-4 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="mb-2 flex flex-wrap gap-2">
-                          {isDefault ? <Badge>Default</Badge> : <Badge variant="outline">{sourceLabel}</Badge>}
-                        </div>
-                        <h3 className="line-clamp-2 text-base font-semibold leading-6 text-foreground">{plan.name}</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">{plan.days.length} day plan - {exerciseCount} exercises{meta.session_duration_minutes ? ` - ${meta.session_duration_minutes} min` : ""}</p>
-                      </div>
-                      <PlanActions
-                        plan={plan}
-                        isDefault={isDefault}
-                        busyPlanId={busyPlanId}
-                        onDefault={setDefaultPlan}
-                        onDuplicate={duplicatePlan}
-                        onArchive={archivePlan}
-                        onDelete={(p) => ask({ title: "Delete plan?", description: `This will permanently remove ${p.name} and all its days and exercises. Workout history will be kept.`, variant: "destructive", confirmLabel: "Delete", onConfirm: () => deletePlan(p) })}
-                        onEdit={(nextPlan) => { setEditingPlanId(nextPlan.id); setEditName(nextPlan.name); }}
-                      />
-                    </div>
-
-                    {editingPlanId === plan.id ? (
-                      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                        <Input className="h-12" value={editName} onChange={(event) => setEditName(event.target.value)} aria-label="Plan name" />
-                        <Button className="min-h-12" onClick={() => saveMetadata(plan)} disabled={Boolean(busyPlanId)}>
-                          <Save className="h-4 w-4" /> {isPlanBusy ? "Saving..." : "Save"}
-                        </Button>
-                      </div>
-                    ) : null}
-
-                    <div className="grid grid-cols-3 gap-2 text-sm">
-                      <PlanFact label="Days" value={String(plan.days.length)} icon={CalendarDays} />
-                      <PlanFact label="Exercises" value={String(exerciseCount)} icon={Dumbbell} />
-                      <PlanFact label="Duration" value={planDurationLabel(plan)} icon={CalendarDays} />
-                    </div>
-
-                    {!isDefault ? (
-                      <Button type="button" variant="outline" className="min-h-12 w-full" onClick={() => setDefaultPlan(plan)} disabled={Boolean(busyPlanId)}>
-                        <Star className="h-4 w-4" />
-                        {isPlanBusy ? "Updating..." : "Set as active"}
-                      </Button>
-                    ) : null}
-
-                    <Button asChild className="min-h-12 w-full">
-                      <Link href={`/my-workout/plans/${plan.id}`}>Open Plan</Link>
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
+      {showTodayCard ? (
+        <TodayCard
+          plan={displayedTodayPlan}
+          day={displayedTodayDay}
+          nextDay={nextDay}
+          openSession={visibleOpenSession}
+          today={today}
+          resolution={todayResolution}
+          actionHref={todayActionHref}
+          statusState={visibleActivityState}
+          statusError={visibleActivityError}
+          onRetryStatus={loadTodayStatus}
+        />
       ) : null}
 
-      {!isLoading && !loadError && plans.length ? (
-        <Card variant="glassStrong" className="border-primary/20">
-          <CardHeader>
-            <CardTitle>Add a plan</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm leading-6 text-muted-foreground">
-              With scoped access, ChatGPT can create or update a structured plan through Plaivra tools. Successful changes appear here immediately for scheduling, tracking, editing, and correction.
-            </p>
-            <ChatGptExecutionCard mode="workout" />
-            <Button variant="outline" className="min-h-12" onClick={() => router.push("/my-workout/plans/builder")}>
-              <Plus className="h-4 w-4" /> Create manually instead
-            </Button>
+      {visiblePlansState === "loaded" && !availablePlans.length ? (
+        <Card className="border-primary/25 bg-primary/5">
+          <CardContent className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
+            <div>
+              <h2 className="text-xl font-semibold">{tr("createFirstPlan")}</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{tr("createFirstPlanDescription")}</p>
+            </div>
+            <div className="flex flex-wrap gap-2"><Button type="button" className="min-h-12" onClick={() => openTrainPrompts("create-workout-plan")}><Bot className="h-4 w-4" /> {tr("createWithChatGpt")}</Button><Button variant="outline" className="min-h-12" onClick={() => router.push("/my-workout/plans/builder")}><Plus className="h-4 w-4" /> {tr("createManually")}</Button></div>
           </CardContent>
         </Card>
       ) : null}
 
-      {!isLoading && !loadError && archivedPlans.length ? (
-        <Card variant="glassStrong">
-          <CardHeader><CardTitle>Archived plans</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
+      {visiblePlansState === "loaded" && availablePlans.length > 0 && !activePlan ? (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">{tr("chooseActivePlan")}</p>
+              <h2 className="mt-2 text-xl font-semibold">{tr("noActivePlan")}</h2>
+              <p className="mt-2 text-sm text-muted-foreground">{tr("noActivePlanDescription")}</p>
+            </div>
+            <Button className="min-h-12" onClick={() => void setActive(availablePlans[0])} disabled={Boolean(busyPlanId)}><Star className="h-4 w-4" /> {tr("activateNamed", { name: availablePlans[0].name })}</Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {visiblePlansState === "loaded" && activePlan ? (
+        <>
+          <ThisWeek
+            days={activeDays}
+            sessions={visibleActivity}
+            weekStartsOn={settings.weekStartsOn}
+            today={today}
+            todayPlanDayId={resolvedPlanDayId}
+            todayResolution={todayResolution}
+          />
+
+          <section aria-labelledby="active-plan-heading" className="space-y-3">
+            <SectionHeading id="active-plan-heading" title={tr("activePlan")} description={tr("activePlanDescription")} />
+            <ActivePlanRow
+              plan={activePlan}
+              busy={busyPlanId === activePlan.id}
+              onDuplicate={() => void duplicatePlan(activePlan)}
+              onArchive={() => void archivePlan(activePlan)}
+              onDelete={() => askToDelete(activePlan)}
+            />
+          </section>
+        </>
+      ) : null}
+
+      {visiblePlansState === "loaded" && otherPlans.length ? (
+        <section aria-labelledby="other-plans-heading" className="space-y-3">
+          <SectionHeading id="other-plans-heading" title={tr("otherPlans")} description={tr("otherPlansDescription")} />
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {otherPlans.map((plan) => (
+              <CompactPlanRow
+                key={plan.id}
+                plan={plan}
+                busy={busyPlanId === plan.id}
+                onActivate={() => void setActive(plan)}
+                onDuplicate={() => void duplicatePlan(plan)}
+                onArchive={() => void archivePlan(plan)}
+                onDelete={() => askToDelete(plan)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {visiblePlansState === "loaded" && archivedPlans.length ? (
+        <Disclosure title={tr("archivedPlans")} description={tr("archivedPlansDescription", { count: archivedPlans.length })}>
+          <div className="grid gap-2">
             {archivedPlans.map((plan) => (
-              <div key={plan.id} className="solid-row flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
-                <div>
-                  <p className="font-semibold">{plan.name}</p>
-                  <p className="text-muted-foreground">{plan.archived_at ? new Date(plan.archived_at).toLocaleDateString() : "Archived"}</p>
+              <div key={plan.id} className="solid-row flex min-h-14 items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{plan.name}</p>
+                  <p className="text-xs text-muted-foreground">{tr("archived")} {plan.archived_at ? new Date(plan.archived_at).toLocaleDateString(locale) : ""}</p>
                 </div>
-                <Button asChild variant="outline" className="min-h-12"><Link href={`/my-workout/plans/${plan.id}`}>View</Link></Button>
+                <Button asChild variant="ghost" className="min-h-11"><Link href={`/my-workout/plans/${plan.id}`}>{tr("viewPlan")}</Link></Button>
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </Disclosure>
+      ) : null}
+
+      {visiblePlansState === "loaded" ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          <DestinationCard href="/workouts" icon={BookOpen} title={tr("exerciseLibrary")} description={tr("exerciseLibraryDescription")} />
+          <DestinationCard href="/workout-history" icon={History} title={tr("workoutHistory")} description={tr("workoutHistoryDescription")} />
+        </div>
       ) : null}
 
       {dialog}
@@ -361,57 +590,90 @@ export function MyWorkoutPlans() {
   );
 }
 
-function sourceBadge(plan: UserWorkoutPlan) {
-  if (isChatGptPlan(plan) || plan.source === "chatgpt" || plan.source === "imported") return "ChatGPT";
-  if (plan.source === "manual") return "Manual";
-  return "Saved";
-}
-
-function TodayTrainingHero({
-  activePlan,
-  todayLabel,
-  todayDay,
-  onStartToday
+function TodayCard({
+  plan,
+  day,
+  nextDay,
+  openSession,
+  today,
+  resolution,
+  actionHref,
+  statusState,
+  statusError,
+  onRetryStatus
 }: {
-  activePlan: UserWorkoutPlan;
-  todayLabel: string;
-  todayDay: ReturnType<typeof calendarDaysFromPlan>[number] | null;
-  onStartToday: () => void;
+  plan: UserWorkoutPlan | null;
+  day: CalendarDay | null;
+  nextDay: CalendarDay | null;
+  openSession: WorkoutSession | null;
+  today: string;
+  resolution: ReturnType<typeof resolveTodayWorkout>;
+  actionHref: string | null;
+  statusState: LoadState;
+  statusError: string | null;
+  onRetryStatus: () => Promise<void>;
 }) {
+  const { locale, tr } = useTrainTranslation();
+  const preview = day?.exercises.slice(0, 3) ?? [];
+  const remaining = Math.max(0, (day?.exercises.length ?? 0) - preview.length);
+  const duration = plan ? (plan as PlanMeta).session_duration_minutes : null;
+  const active = resolution.state === "active";
+  const actionLabel = active ? tr("resumeWorkout") : resolution.state === "completed" ? tr("viewCompletedWorkout") : resolution.state === "skipped" ? tr("skippedToday") : tr("startWorkout");
+  const title = active
+    ? day?.dayName || openSession?.workout_day_name || openSession?.workout_name || tr("todaysWorkout")
+    : day?.dayName ?? tr("todayRestDay");
+  const subtitle = active
+    ? plan?.name || tr("inProgress")
+    : day
+      ? plan?.name || ""
+      : nextDay
+        ? tr("nextWorkout", { workout: nextDay.dayName, weekday: localizedWeekday(nextDay.weekday, locale) })
+        : plan?.name || "";
+  const showActiveAction = active && Boolean(actionHref);
+
   return (
-    <Card className="border-primary/25 bg-primary/5">
-      <CardContent className="space-y-4 p-4 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Today&apos;s training</p>
-            <h2 className="mt-1 text-xl font-semibold text-foreground">
-              {todayDay ? todayDay.dayName : "Rest day"}
-            </h2>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              {todayDay
-                ? `${activePlan.name} is active for ${todayLabel}. Start here, then use the calendar for the rest of the week.`
-                : `${activePlan.name} is active, and no workout is assigned to ${todayLabel}. That is a normal rest-day state.`}
-            </p>
+    <Card className="overflow-hidden border-primary/25 bg-primary/[0.045]">
+      <CardContent className="p-5 sm:p-6">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">{tr("today")}</p>
+              <span className="text-xs text-muted-foreground">{new Date(`${today}T12:00:00`).toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" })}</span>
+              {active ? <Badge>{tr("inProgress")}</Badge> : resolution.state === "completed" ? <Badge variant="secondary">{tr("completed")}</Badge> : resolution.state === "skipped" ? <Badge variant="outline">{tr("skippedToday")}</Badge> : null}
+            </div>
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.025em]">{title}</h2>
+            {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
+            {day ? (
+              <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
+                <span className="inline-flex items-center gap-2"><Dumbbell className="h-4 w-4" /> {tr("exercises", { count: day.exercises.length })}</span>
+                {duration ? <span className="inline-flex items-center gap-2"><Clock3 className="h-4 w-4" /> {tr("aboutMinutes", { count: duration })}</span> : null}
+              </div>
+            ) : null}
           </div>
-          {todayDay ? (
-            <Button className="min-h-12 sm:min-w-[190px]" onClick={onStartToday}>
-              <Play className="h-5 w-5" />
-              Start workout
-            </Button>
-          ) : (
-            <Button asChild variant="outline" className="min-h-12 sm:min-w-[190px]">
-              <Link href={`/my-workout/plans/${activePlan.id}`}>Review active plan</Link>
-            </Button>
-          )}
+
+          <div className="flex min-w-[190px] flex-col gap-2">
+            {statusState === "loading" && !showActiveAction ? <Button disabled className="min-h-12">{tr("checkingStatus")}</Button> : null}
+            {statusState !== "loading" && statusError && !showActiveAction ? (
+              <Button variant="outline" className="min-h-12" onClick={() => void onRetryStatus()}><RefreshCcw className="h-4 w-4" /> {tr("retryStatus")}</Button>
+            ) : null}
+            {(showActiveAction || (statusState !== "loading" && !statusError && actionHref)) ? (
+              <Button asChild className="min-h-12"><Link href={actionHref!}>{resolution.state === "completed" ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}{actionLabel}</Link></Button>
+            ) : null}
+            {!active && !day && plan ? <Button asChild variant="outline" className="min-h-12"><Link href={`/my-workout/plans/${plan.id}`}>{tr("viewWeeklyPlan")}</Link></Button> : null}
+          </div>
         </div>
-        {todayDay ? (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {todayDay.exercises.slice(0, 6).map((exercise, index) => (
-              <div key={exercise.id} className="solid-row p-3">
-                <p className="text-sm font-semibold">{index + 1}. {exercise.name}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{exercise.sets ?? 3} x {exercise.reps ?? "?"}</p>
+
+        {statusError ? <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-800 dark:text-amber-200">{statusError}</p> : null}
+
+        {day && preview.length ? (
+          <div className="mt-5 grid gap-2 border-t border-border/70 pt-4 sm:grid-cols-3">
+            {preview.map((exercise, index) => (
+              <div key={exercise.plan_exercise_id ?? exercise.id} className="rounded-xl bg-background/70 p-3">
+                <p className="truncate text-sm font-semibold">{index + 1}. {exercise.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{exercise.sets ?? 3} × {exercise.reps ?? "8–12"}</p>
               </div>
             ))}
+            {remaining ? <p className="self-center text-sm font-medium text-muted-foreground">{tr("moreExercises", { count: remaining })}</p> : null}
           </div>
         ) : null}
       </CardContent>
@@ -419,110 +681,135 @@ function TodayTrainingHero({
   );
 }
 
-function PlanSetupHero({ onCreateManual }: { onCreateManual: () => void }) {
-  return (
-    <Card className="border-primary/25 bg-primary/5">
-      <CardContent className="space-y-4 p-4 sm:p-5">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Create your first plan</p>
-          <h2 className="mt-1 text-xl font-semibold text-foreground">Create a plan with ChatGPT, then track it in Plaivra</h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Connect Plaivra, grant workout access, and ask ChatGPT to create the plan through an authorized tool. The saved plan appears here with direct editing and focused workout controls.
-          </p>
-        </div>
-        <ChatGptExecutionCard mode="workout" />
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Button variant="outline" className="min-h-12" onClick={onCreateManual}>
-            <Plus className="h-4 w-4" />
-            Create manually instead
-          </Button>
-          <Button asChild variant="ghost" className="min-h-12">
-            <Link href="/settings/connections">Manage ChatGPT access</Link>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ChooseActivePlanHero({
-  firstPlan,
-  busyPlanId,
-  onSetActive,
-  onCreateManual
+function ThisWeek({
+  days,
+  sessions,
+  weekStartsOn,
+  today,
+  todayPlanDayId,
+  todayResolution
 }: {
-  firstPlan: UserWorkoutPlan | null;
-  busyPlanId: string | null;
-  onSetActive: (plan: UserWorkoutPlan) => void;
-  onCreateManual: () => void;
+  days: CalendarDay[];
+  sessions: WorkoutSession[];
+  weekStartsOn: "monday" | "sunday";
+  today: string;
+  todayPlanDayId: string | null;
+  todayResolution: ReturnType<typeof resolveTodayWorkout>;
 }) {
-  const isBusy = Boolean(firstPlan && busyPlanId === firstPlan.id);
+  const { locale, tr } = useTrainTranslation();
+  const week = useMemo(() => buildCurrentWeek(weekStartsOn, new Date(`${today}T12:00:00`)), [today, weekStartsOn]);
+  const [selectedIso, setSelectedIso] = useState(today);
+  const weekIsos = useMemo(() => week.map((day) => day.iso), [week]);
+  useEffect(() => {
+    setSelectedIso((current) => resolveTrainWeekSelection(current, today, weekIsos));
+  }, [today, weekIsos]);
+  const selectedWeekDay = week.find((day) => day.iso === selectedIso) ?? week[0];
+  const selectedDay = days.find((day) => day.weekday === selectedWeekDay?.weekday) ?? null;
 
   return (
-    <Card className="border-primary/25 bg-primary/5">
-      <CardContent className="space-y-4 p-4 sm:p-5">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Training plan needed</p>
-          <h2 className="mt-1 text-xl font-semibold text-foreground">Choose the plan that controls today&apos;s workout</h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            A default plan controls the Today hero and weekly calendar. Pick a saved plan below, or import/build a new one if your training has changed.
-          </p>
+    <section aria-labelledby="this-week-heading" className="space-y-3">
+      <SectionHeading id="this-week-heading" title={tr("thisWeek")} description={tr("thisWeekDescription")} />
+      <div className="grid snap-x grid-flow-col auto-cols-[minmax(88px,1fr)] gap-2 overflow-x-auto pb-2 lg:grid-flow-row lg:grid-cols-7 lg:overflow-visible">
+        {week.map(({ date, iso, weekday }) => {
+          const planDay = days.find((day) => day.weekday === weekday) ?? null;
+          const session = planDay ? sessions.find((item) => item.plan_day_id === planDay.id && workoutSessionLocalDate(item) === iso) : null;
+          const isToday = iso === today;
+          const status = isToday && planDay && planDay.id === todayPlanDayId
+            ? todayResolution.state
+            : session?.status === "completed"
+              ? "completed"
+              : session?.status === "skipped"
+                ? "skipped"
+                : planDay
+                  ? "scheduled"
+                  : "rest";
+          return (
+            <button type="button" key={iso} onClick={() => setSelectedIso(iso)} aria-pressed={selectedIso === iso} className={`min-h-24 snap-start rounded-2xl border p-2.5 text-start ${isToday || selectedIso === iso ? "border-primary bg-primary/5 shadow-soft" : "border-border/70 bg-card"}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">{date.toLocaleDateString(locale, { weekday: "short" })}</p>
+                  <p className="mt-0.5 text-sm font-semibold">{date.getDate()}</p>
+                </div>
+                {isToday ? <span className="sr-only">{tr("todayLabel")}</span> : null}
+              </div>
+              <p className="mt-2 line-clamp-1 text-xs font-medium">{planDay?.dayName ?? tr("rest")}</p>
+              <span className="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground"><span className={`h-2 w-2 rounded-full ${status === "completed" ? "bg-success" : status === "active" ? "bg-primary" : status === "skipped" ? "bg-warning" : "bg-muted-foreground/50"}`} />{status === "active" ? tr("inProgress") : status === "completed" ? tr("completed") : status === "scheduled" ? tr("scheduled") : status === "skipped" ? tr("skippedToday") : tr("rest")}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="border-s-2 border-primary/30 ps-4">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs text-muted-foreground">{selectedWeekDay?.date.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" })}</p><p className="font-semibold">{selectedDay?.dayName ?? tr("restDay")}</p></div>{selectedDay ? <Button asChild variant="ghost" className="min-h-11"><Link href={`/my-workout/plans/${selectedDay.planId}?day=${encodeURIComponent(selectedDay.id)}`}>{tr("viewDay")}</Link></Button> : null}</div>
+        {selectedDay ? <p className="mt-1 text-sm text-muted-foreground">{tr("exercises", { count: selectedDay.exercises.length })}{selectedDay.exercises.length ? ` · ${selectedDay.exercises.slice(0, 3).map((exercise) => exercise.name).join(" · ")}` : ""}{selectedDay.exercises.length > 3 ? ` · ${tr("moreExercises", { count: selectedDay.exercises.length - 3 })}` : ""}</p> : <p className="mt-1 text-sm text-muted-foreground">{tr("restDay")}</p>}
+      </div>
+    </section>
+  );
+}
+
+function ActivePlanRow({ plan, busy, onDuplicate, onArchive, onDelete }: { plan: UserWorkoutPlan; busy: boolean; onDuplicate: () => void; onArchive: () => void; onDelete: () => void }) {
+  const { tr } = useTrainTranslation();
+  const durationWeeks = planDurationWeeks(plan);
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
+        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground"><Dumbbell className="h-6 w-6" /></div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-lg font-semibold">{plan.name}</h3><Badge>{tr("active")}</Badge><Badge variant="outline">{sourceLabel(plan, tr("sourceManual"))}</Badge></div>
+          <p className="mt-1 text-sm text-muted-foreground">{tr("trainingDays", { count: plan.days.length })} · {tr("exercises", { count: planExerciseCount(plan) })}{durationWeeks ? ` · ${tr("programWeeks", { count: durationWeeks })}` : ""}</p>
         </div>
-        {firstPlan ? (
-          <Button type="button" className="min-h-12" onClick={() => onSetActive(firstPlan)} disabled={Boolean(busyPlanId)}>
-            <Star className="h-4 w-4" />
-            {isBusy ? "Setting active..." : `Set ${firstPlan.name} active`}
-          </Button>
-        ) : (
-          <Button type="button" className="min-h-12" onClick={onCreateManual}>
-            <Plus className="h-4 w-4" />
-            Create a current plan
-          </Button>
-        )}
+        <div className="flex gap-2">
+          <Button asChild variant="outline" className="min-h-11"><Link href={`/my-workout/plans/${plan.id}`}>{tr("viewPlan")}</Link></Button>
+          <Button asChild variant="ghost" className="min-h-11"><Link href={`/my-workout/plans/${plan.id}/edit`}>{tr("editPlan")}</Link></Button>
+          <PlanMenu plan={plan} busy={busy} active onDuplicate={onDuplicate} onArchive={onArchive} onDelete={onDelete} />
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-function planDurationLabel(plan: UserWorkoutPlan) {
-  const meta = plan as PlanMeta;
-  const weeks = meta.program_duration_weeks ?? meta.duration_weeks;
-  if (weeks) return `${weeks}w`;
-  return `${plan.days.length}d`;
-}
-
-function PlanFact({ label, value, icon: Icon }: { label: string; value: string; icon: typeof CalendarDays }) {
-  return <div className="glass-chip p-3"><Icon className="h-4 w-4 text-muted-foreground" /><p className="mt-1 text-lg font-semibold text-foreground">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div>;
-}
-
-function PlanActions({ plan, isDefault, busyPlanId, onDefault, onDuplicate, onArchive, onDelete, onEdit }: { plan: UserWorkoutPlan; isDefault: boolean; busyPlanId: string | null; onDefault: (plan: UserWorkoutPlan) => void; onDuplicate: (plan: UserWorkoutPlan) => void; onArchive: (plan: UserWorkoutPlan) => void; onDelete: (plan: UserWorkoutPlan) => void; onEdit: (plan: UserWorkoutPlan) => void }) {
-  const isPlanBusy = busyPlanId === plan.id;
-  const isAnyPlanBusy = Boolean(busyPlanId);
-
+function CompactPlanRow({ plan, busy, onActivate, onDuplicate, onArchive, onDelete }: { plan: UserWorkoutPlan; busy: boolean; onActivate: () => void; onDuplicate: () => void; onArchive: () => void; onDelete: () => void }) {
+  const { tr } = useTrainTranslation();
+  const durationWeeks = planDurationWeeks(plan);
   return (
-    <details className="relative shrink-0">
-      <summary className="flex h-12 w-12 cursor-pointer list-none items-center justify-center rounded-xl border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" aria-label={`More actions for ${plan.name}`}>
-        <MoreHorizontal className="h-4 w-4" />
-      </summary>
-      <div className="solid-tracking-card absolute right-0 z-20 mt-2 grid w-64 gap-1 p-2">
-        <Button type="button" variant="ghost" className="min-h-12 justify-start" onClick={() => onDefault(plan)} disabled={isDefault || isAnyPlanBusy}>
-          <Star className="h-4 w-4" /> {isDefault ? "Default plan" : isPlanBusy ? "Setting default..." : "Set as default"}
-        </Button>
-        <Button type="button" variant="ghost" className="min-h-12 justify-start" onClick={() => onEdit(plan)} disabled={isAnyPlanBusy}>
-          <Edit3 className="h-4 w-4" /> Rename
-        </Button>
-        <Button type="button" variant="ghost" className="min-h-12 justify-start" onClick={() => onDuplicate(plan)} disabled={isAnyPlanBusy}>
-          <Copy className="h-4 w-4" /> {isPlanBusy ? "Duplicating..." : "Duplicate"}
-        </Button>
-        <div className="mt-1 border-t border-border/70 pt-1">
-          <Button type="button" variant="ghost" className="min-h-12 w-full justify-start text-destructive hover:text-destructive" onClick={() => onArchive(plan)} disabled={isAnyPlanBusy}>
-            <Archive className="h-4 w-4" /> {isPlanBusy ? "Archiving..." : "Archive"}
-          </Button>
-          <Button type="button" variant="ghost" className="min-h-12 w-full justify-start text-destructive hover:text-destructive" onClick={() => onDelete(plan)} disabled={isAnyPlanBusy}>
-            <Trash2 className="h-4 w-4" /> {isPlanBusy ? "Deleting..." : "Delete"}
-          </Button>
-        </div>
-      </div>
-    </details>
+    <Card>
+      <CardContent className="flex min-h-24 items-center gap-3 p-4">
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-muted"><CalendarDays className="h-5 w-5" /></div>
+        <Link href={`/my-workout/plans/${plan.id}`} className="min-w-0 flex-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <p className="truncate text-sm font-semibold">{plan.name}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{tr("trainingDays", { count: plan.days.length })}{durationWeeks ? ` · ${tr("programWeeks", { count: durationWeeks })}` : ""}</p>
+        </Link>
+        <PlanMenu plan={plan} busy={busy} active={false} onActivate={onActivate} onDuplicate={onDuplicate} onArchive={onArchive} onDelete={onDelete} />
+      </CardContent>
+    </Card>
   );
+}
+
+function PlanMenu({ plan, busy, active, onActivate, onDuplicate, onArchive, onDelete }: { plan: UserWorkoutPlan; busy: boolean; active: boolean; onActivate?: () => void; onDuplicate: () => void; onArchive: () => void; onDelete: () => void }) {
+  const router = useRouter();
+  const { tr } = useTrainTranslation();
+  return (
+    <ActionMenu label={`${tr("moreActions")}: ${plan.name}`} disabled={busy} triggerClassName="min-h-11 px-3" icon={<MoreHorizontal className="h-4 w-4" />}>
+      <ActionMenuItem onSelect={() => router.push(`/my-workout/plans/${plan.id}/edit`)}>{tr("editPlan")}</ActionMenuItem>
+      {!active && onActivate ? <ActionMenuItem onSelect={onActivate}>{tr("setActive")}</ActionMenuItem> : null}
+      <ActionMenuItem onSelect={onDuplicate}>{tr("duplicate")}</ActionMenuItem>
+      <ActionMenuItem onSelect={onArchive}>{tr("archive")}</ActionMenuItem>
+      <ActionMenuItem destructive onSelect={onDelete}>{tr("deletePermanently")}</ActionMenuItem>
+    </ActionMenu>
+  );
+}
+
+function DestinationCard({ href, icon: Icon, title, description }: { href: string; icon: typeof History; title: string; description: string }) {
+  return (
+    <Link href={href} className="group rounded-[18px] border border-border/70 bg-card p-4 transition-colors hover:border-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <div className="flex items-center gap-3">
+        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary"><Icon className="h-5 w-5" /></div>
+        <div className="min-w-0 flex-1"><p className="font-semibold">{title}</p><p className="mt-1 text-sm text-muted-foreground">{description}</p></div>
+        <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-0.5 rtl:rotate-180" />
+      </div>
+    </Link>
+  );
+}
+
+function SectionHeading({ id, title, description }: { id: string; title: string; description: string }) {
+  return <div><h2 id={id} className="text-lg font-semibold tracking-[-0.02em]">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{description}</p></div>;
 }

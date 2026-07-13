@@ -675,8 +675,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     try {
       setIsSaving(true);
       const summary = buildSummary(exerciseStates, history, durationMinutes, sessionNotes);
-      await saveWorkoutSetLogs(session.id, buildLogRows());
-      await completeWorkoutSession(session.id, sessionNotes, durationMinutes);
+      await completeWorkoutSession(session.id, sessionNotes, durationMinutes, buildLogRows());
       if (user?.id) clearActiveWorkoutState(user.id);
       clearStoredValue(workoutTimerKey);
       clearStoredValue(restTimerKey);

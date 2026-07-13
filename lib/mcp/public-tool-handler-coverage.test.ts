@@ -132,6 +132,30 @@ function createInMemorySupabase() {
   }
 
   async function rpc(name: string, args: Record<string, unknown>) {
+    if (name === "create_workout_plan_atomic") {
+      const plan = { id: nextId(), user_id: USER_ID, name: String((args.p_plan as Row)?.name ?? "Plan"), is_active: args.p_activate !== false, updated_at: UPDATED_AT };
+      tables.user_workout_plans.push(plan);
+      return { data: plan, error: null };
+    }
+    if (name === "activate_workout_plan_atomic") {
+      const plan = tables.user_workout_plans.find((row) => row.id === args.p_plan_id && row.user_id === USER_ID) ?? null;
+      return { data: plan ? { ...plan, is_active: true, is_default: true } : null, error: plan ? null : { message: "not found" } };
+    }
+    if (name === "delete_workout_plan_atomic") return { data: { deleted: true }, error: null };
+    if (name === "start_or_resume_workout_session_atomic") {
+      const session = tables.workout_sessions.find((row) => row.user_id === USER_ID && row.plan_day_id === args.p_plan_day_id) ?? tables.workout_sessions[0];
+      return { data: { session }, error: null };
+    }
+    if (name === "upsert_workout_set_logs_atomic") {
+      const logs = ((args.p_logs as Row[]) ?? []).map((row) => ({ id: nextId(), workout_session_id: args.p_session_id, ...row }));
+      tables.exercise_logs.push(...logs);
+      return { data: logs, error: null };
+    }
+    if (name === "complete_workout_session_atomic") {
+      const session = tables.workout_sessions.find((row) => row.id === args.p_session_id) ?? tables.workout_sessions[0];
+      Object.assign(session, { status: "completed", completed_at: UPDATED_AT, duration_minutes: args.p_duration_minutes });
+      return { data: { session }, error: null };
+    }
     if (name !== "complete_meal_plan_item") return { data: [], error: null };
     const item = tables.user_meal_plan_items.find((row) => row.id === args.p_item_id && row.user_id === USER_ID);
     if (!item) return { data: null, error: { message: "not found" } };
@@ -189,10 +213,10 @@ function inputFor(name: string): Record<string, unknown> {
     generate_shopping_list: { start_date: "2026-07-11", end_date: "2026-07-17" },
     add_water_log: { amount_ml: 250, date: "2026-07-11", idempotency_key: key },
     get_water_summary: { date: "2026-07-11" },
-    create_custom_workout_plan: { name: "Runtime plan", days: [{ day_name: "Day 1", day_number: 1, exercises: [{ exercise_name: "Squat", sets: 3, reps: "8" }] }], idempotency_key: key },
+    create_custom_workout_plan: { name: "Runtime plan", start_date: "2026-07-13", days: [{ day_name: "Day 1", day_number: 1, exercises: [{ exercise_name: "Squat", sets: 3, reps: "8" }] }], idempotency_key: key },
     get_workout_plan_by_id: { plan_id: PLAN_ID },
-    activate_workout_plan: { plan_id: PLAN_ID, expected_updated_at: UPDATED_AT },
-    delete_workout_plan: { plan_id: PLAN_ID, confirm: true },
+    activate_workout_plan: { plan_id: PLAN_ID, schedule_start_date: "2026-07-13", expected_updated_at: UPDATED_AT },
+    delete_workout_plan: { plan_id: PLAN_ID, schedule_start_date: "2026-07-13", confirm: true },
     start_workout: { scheduled_session_id: SCHEDULED_ID, idempotency_key: key },
     log_exercise_sets: { workout_session_id: SESSION_ID, exercise_name: "Squat", sets: [{ set_number: 1, weight_kg: 80, reps: 8 }], idempotency_key: key },
     complete_workout: { workout_session_id: SESSION_ID, duration_minutes: 45, idempotency_key: key },

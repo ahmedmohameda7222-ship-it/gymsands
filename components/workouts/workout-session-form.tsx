@@ -13,7 +13,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
 import { clearActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
-import { completeWorkoutSession, getOrStartWorkoutSession, getWorkoutHistoryDetailed, saveWorkoutSetLogs } from "@/services/database/workout-sessions";
+import { completeWorkoutSession, getOrStartWorkoutSession, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
 import type { Workout, WorkoutSession, WorkoutSessionSummary } from "@/types";
 import { useConfirm, ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
@@ -182,8 +182,10 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
     }
     try {
       setIsSaving(true);
-      await saveWorkoutSetLogs(
+      await completeWorkoutSession(
         session.id,
+        notes,
+        duration,
         sets.map((set, index) => ({
           exerciseName: workout.name,
           exerciseCategory: workout.category || workout.target_muscle,
@@ -198,7 +200,6 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
           completedAt: new Date().toISOString()
         }))
       );
-      await completeWorkoutSession(session.id, notes, duration);
       clearActiveWorkoutState(user.id);
       clearStoredValue(timerKey);
       clearStoredValue(restTimerKey);

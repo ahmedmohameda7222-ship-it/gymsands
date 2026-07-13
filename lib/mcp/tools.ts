@@ -85,6 +85,21 @@ const dayInput = {
   cooldown: arrayOf(planExerciseInput, ["exercise_name"])
 };
 
+const performedSetInput = {
+  plan_exercise_id: uuid,
+  exercise_order: { type: "number" },
+  exercise_name: { type: "string" },
+  exercise_category: { type: "string" },
+  planned_sets: { type: "number" },
+  planned_reps: { type: "string" },
+  planned_rest_seconds: { type: "number" },
+  set_number: { type: "number" },
+  weight_kg: { type: "number" },
+  reps: { type: "number" },
+  notes: { type: "string" },
+  completed_at: { type: "string" }
+};
+
 const customFoodSchema = {
   food_name: { type: "string" },
   serving_size: { type: "string" },
@@ -128,13 +143,13 @@ const toolDefinitions: McpToolSource[] = [
   { name: "add_water_log", title: "Add water log", description: "Add an explicit hydration amount in milliliters.", inputSchema: objectSchema({ amount_ml: { type: "number" }, date: isoDate }, ["amount_ml"]), risk: "low" },
   { name: "get_water_summary", title: "Get water summary", description: "Return water target, logged amount, and remaining amount.", inputSchema: objectSchema({ date: isoDate }), risk: "read" },
 
-  { name: "create_custom_workout_plan", title: "Create workout plan", description: "Persist an exact user-requested or ChatGPT-created workout plan.", inputSchema: objectSchema({ name: { type: "string" }, goal: { type: "string" }, description: { type: "string" }, duration_weeks: { type: "number" }, days_per_week: { type: "number" }, session_duration_minutes: { type: "number" }, activate: { type: "boolean" }, start_date: isoDate, days: arrayOf(dayInput, ["day_name", "day_number"]) }, ["name", "days"]), risk: "medium" },
+  { name: "create_custom_workout_plan", title: "Create workout plan", description: "Persist an exact user-requested or ChatGPT-created workout plan from an explicit user-local schedule date.", inputSchema: objectSchema({ name: { type: "string" }, goal: { type: "string" }, description: { type: "string" }, duration_weeks: { type: "number" }, days_per_week: { type: "number" }, session_duration_minutes: { type: "number" }, activate: { type: "boolean" }, start_date: isoDate, days: arrayOf(dayInput, ["day_name", "day_number"]) }, ["name", "start_date", "days"]), risk: "medium" },
   { name: "get_workout_plan_by_id", title: "Get workout plan", description: "Return one user-owned plan with days and exercises.", inputSchema: objectSchema({ plan_id: uuid }, ["plan_id"]), risk: "read" },
-  { name: "activate_workout_plan", title: "Activate workout plan", description: "Make one user-owned plan active only if its version timestamp still matches.", inputSchema: objectSchema({ plan_id: uuid, expected_updated_at: { type: "string" } }, ["plan_id", "expected_updated_at"]), risk: "medium" },
-  { name: "delete_workout_plan", title: "Delete workout plan", description: "Permanently delete a user-owned workout plan. Requires confirm:true.", inputSchema: objectSchema({ plan_id: uuid, confirm }, ["plan_id", "confirm"]), risk: "high" },
+  { name: "activate_workout_plan", title: "Activate workout plan", description: "Make one user-owned plan active from an explicit user-local schedule date only if its version timestamp still matches.", inputSchema: objectSchema({ plan_id: uuid, schedule_start_date: isoDate, expected_updated_at: { type: "string" } }, ["plan_id", "schedule_start_date", "expected_updated_at"]), risk: "medium" },
+  { name: "delete_workout_plan", title: "Delete workout plan", description: "Permanently delete a history-free user-owned workout plan from an explicit local schedule boundary. Requires confirm:true.", inputSchema: objectSchema({ plan_id: uuid, schedule_start_date: isoDate, confirm }, ["plan_id", "schedule_start_date", "confirm"]), risk: "high" },
   { name: "start_workout", title: "Start workout", description: "Start a saved scheduled session or workout-plan day.", inputSchema: objectSchema({ scheduled_session_id: uuid, plan_day_id: uuid }), risk: "low" },
-  { name: "log_exercise_sets", title: "Log exercise sets", description: "Log explicit performed sets.", inputSchema: objectSchema({ workout_session_id: uuid, exercise_name: { type: "string" }, sets: arrayOf({ set_number: { type: "number" }, weight_kg: { type: "number" }, reps: { type: "number" }, duration_seconds: { type: "number" }, notes: { type: "string" } }, ["set_number"]) }, ["workout_session_id", "exercise_name", "sets"]), risk: "low" },
-  { name: "complete_workout", title: "Complete workout", description: "Mark a user-owned workout complete.", inputSchema: objectSchema({ workout_session_id: uuid, duration_minutes: { type: "number" }, notes: { type: "string" } }, ["workout_session_id"]), risk: "low" },
+  { name: "log_exercise_sets", title: "Log exercise sets", description: "Idempotently save explicit performed sets using the plan-exercise identity or stable exercise order.", inputSchema: { ...objectSchema({ workout_session_id: uuid, plan_exercise_id: uuid, exercise_order: { type: "number" }, exercise_name: { type: "string" }, sets: arrayOf({ set_number: { type: "number" }, weight_kg: { type: "number" }, reps: { type: "number" }, duration_seconds: { type: "number" }, notes: { type: "string" } }, ["set_number"]) }, ["workout_session_id", "exercise_name", "sets"]), anyOf: [{ required: ["plan_exercise_id"] }, { required: ["exercise_order"] }] }, risk: "low" },
+  { name: "complete_workout", title: "Complete workout", description: "Idempotently save any final sets and complete a user-owned workout in one transaction.", inputSchema: objectSchema({ workout_session_id: uuid, duration_minutes: { type: "number" }, notes: { type: "string" }, logs: arrayOf(performedSetInput, ["exercise_name", "set_number"]) }, ["workout_session_id"]), risk: "low" },
   { name: "skip_workout", title: "Skip workout", description: "Mark a user-owned workout skipped with an optional reason.", inputSchema: { ...objectSchema({ scheduled_session_id: uuid, workout_session_id: uuid, reason: { type: "string" } }), anyOf: ["scheduled_session_id", "workout_session_id"].map((field) => ({ type: "object", required: [field] })) }, risk: "low" },
 
   { name: "add_weight_entry", title: "Add weight entry", description: "Save user-provided body weight for fitness progress tracking.", inputSchema: objectSchema({ weight_kg: { type: "number" }, date: isoDate, notes: { type: "string" } }, ["weight_kg"]), risk: "low" },

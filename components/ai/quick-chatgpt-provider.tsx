@@ -41,6 +41,10 @@ const emptyContext: QuickPromptContext = {
 };
 const permissionLabelKeys: Record<AiPermissionSection, TodayKey> = { workouts: "permissionWorkouts", nutrition: "permissionNutrition", meal_plans: "permissionMealPlans", hydration: "permissionHydration", wellness: "permissionWellness", progress: "permissionProgress", profile: "permissionProfile", settings: "permissionSettings" };
 
+function sameDashboardContext(current: QuickPromptContext, next: QuickPromptContext) {
+  return JSON.stringify(current) === JSON.stringify(next);
+}
+
 export function QuickChatGptProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const permissionUserId = user?.id;
@@ -79,7 +83,9 @@ export function QuickChatGptProvider({ children }: { children: ReactNode }) {
   const permissionEvaluation = evaluatePromptPermission({ userId: permissionUserId, loading: permissionLoading, status: permissionStatus, config: permissionConfig, sections, capability });
   const missingSectionLabels = permissionEvaluation.state === "missing" ? permissionEvaluation.sections.map((section) => tt(permissionLabelKeys[section])).join(", ") : "";
 
-  const setDashboardContext = useCallback((context: QuickPromptContext) => setDashboardContextState(context), []);
+  const setDashboardContext = useCallback((context: QuickPromptContext) => {
+    setDashboardContextState((current) => sameDashboardContext(current, context) ? current : context);
+  }, []);
   const loadPermissions = useCallback(async () => {
     if (!permissionUserId) { setPermissionConfig(null); setPermissionStatus(null); setPermissionLoading(false); return; }
     setPermissionLoading(true); setPermissionStatus(null);

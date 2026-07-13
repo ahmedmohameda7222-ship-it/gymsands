@@ -1307,7 +1307,7 @@ export function PersonalRecordsTracker() {
           <div className="rounded-md border border-border/70 bg-card p-4 text-sm text-muted-foreground">
             <p>No personal records yet. Complete workouts or add your first record manually.</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Button asChild variant="outline" className="h-12"><Link href="/today-workout">Today Workout</Link></Button>
+              <Button asChild variant="outline" className="h-12"><Link href="/my-workout/plans">My Workout</Link></Button>
               <Button asChild variant="outline" className="h-12"><Link href="/workout-history">Workout History</Link></Button>
             </div>
           </div>

@@ -16,7 +16,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     services:
       postgres:
         image: postgres:16
@@ -58,6 +58,12 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
@@ -73,6 +79,16 @@ jobs:
         run: |
           set +e
           mkdir -p quality-reports
+
+          (
+            set -euo pipefail
+            supabase db start
+            supabase db reset --local --no-seed
+            supabase migration list --local
+            supabase db lint --local --schema public --level error --fail-on error
+            PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-section-production-preflight.sql
+          ) 2>&1 | tee quality-reports/full-migration-chain.log
+          echo "${PIPESTATUS[0]}" > quality-reports/full-migration-chain.exit
 
           (
             integrity_status=0
@@ -181,7 +197,7 @@ jobs:
         run: |
           set -euo pipefail
           failed=0
-          for check in integrity lint migration-ledger dependency-audit typecheck unit integration build manifest; do
+          for check in full-migration-chain integrity lint migration-ledger dependency-audit typecheck unit integration build manifest; do
             code="$(cat "quality-reports/${check}.exit")"
             echo "${check}: exit ${code}"
             if [ "$code" != "0" ]; then

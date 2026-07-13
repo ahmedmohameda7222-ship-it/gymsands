@@ -18,8 +18,9 @@ describe("canonical data convergence", () => {
   });
 
   it("writes new MCP execution data only to canonical performed and saved-content models", () => {
-    expect(workoutExecutor).toContain('.from("workout_sessions").upsert');
-    expect(workoutExecutor).toContain('.from("exercise_logs").insert');
+    expect(workoutExecutor).toContain('rpc("start_or_resume_workout_session_atomic"');
+    expect(workoutExecutor).toContain('rpc("upsert_workout_set_logs_atomic"');
+    expect(workoutExecutor).toContain('rpc("complete_workout_session_atomic"');
     expect(safeExecutor).toContain('.from("saved_recipes")');
     expect(safeExecutor).toContain('.from("saved_recipe_ingredients")');
     expect(safeExecutor).not.toContain('.from("custom_meals")');
