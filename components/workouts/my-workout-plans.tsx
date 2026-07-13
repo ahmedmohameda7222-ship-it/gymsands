@@ -155,11 +155,14 @@ export function MyWorkoutPlans() {
   const planGenerationRef = useRef(0);
   const activityGenerationRef = useRef(0);
   const profileGenerationRef = useRef(0);
-  identityRef.current = { userId, date: today };
+
+  useEffect(() => {
+    identityRef.current = { userId, date: today };
+  }, [today, userId]);
 
   const currentKey = trainRequestKey(userId, today);
-  const visiblePlans = plansDataKey === currentKey ? plans : [];
-  const visibleActivity = activityDataKey === currentKey ? activity : [];
+  const visiblePlans = useMemo(() => plansDataKey === currentKey ? plans : [], [currentKey, plans, plansDataKey]);
+  const visibleActivity = useMemo(() => activityDataKey === currentKey ? activity : [], [activity, activityDataKey, currentKey]);
   const visibleOpenSession = activityDataKey === currentKey ? openSession : null;
   const visiblePlansState: LoadState = plansDataKey === currentKey ? plansState : "loading";
   const visibleActivityState: LoadState = activityDataKey === currentKey ? activityState : "loading";
