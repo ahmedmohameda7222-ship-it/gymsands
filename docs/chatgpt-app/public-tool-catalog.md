@@ -1,10 +1,10 @@
 # Plaivra public MCP catalog
 
-**Catalog version:** `2026-07-1`  
-**Public tools:** 35  
+**Catalog version:** `2026-07-2`  
+**Public tools:** 34  
 **Machine-readable manifest:** [`public-tool-catalog.json`](public-tool-catalog.json)
 
-The launch catalog exposes user jobs, not database tables. The server keeps an explicit allowlist, filters it again by the connection’s current scopes, and rejects a hidden tool name as unknown even when an internal executor still exists during staged refactoring.
+The launch catalog exposes user jobs, not database tables. The server keeps an explicit allowlist, filters it again by the connection’s current scopes, and rejects a hidden tool name as unknown even when historical storage remains available for privacy export.
 
 ## Launch jobs
 
@@ -15,9 +15,9 @@ The launch catalog exposes user jobs, not database tables. The server keeps an e
 | Meal planning | create/read a day or week; update/delete/complete a planned item; generate a shopping list |
 | Hydration | add water; read water summary |
 | Training | create/read/activate/delete a plan; start/log/complete/skip a workout |
-| Progress/wellness | add weight; add body measurement; add recovery log; save daily check-in |
+| Progress/wellness | add weight; add body measurement; add sleep and recovery log |
 
-Fine-grained plan-day, exercise, kitchen, grocery, habit, supplement, preference, progression-target, and alternative CRUD functions are internal primitives. They are not in `tools/list` and cannot be invoked through the public dispatcher.
+Fine-grained plan-day, exercise, kitchen, grocery, habit, supplement, preference, progression-target, and alternative CRUD functions are internal primitives. They are not in `tools/list` and cannot be invoked through the public dispatcher. Daily Check-in read/write operations are retired from the active tool surface; historical records remain preserved.
 
 ## Contracts
 
