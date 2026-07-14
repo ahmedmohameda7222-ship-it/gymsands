@@ -35,6 +35,10 @@ function requiredEquipment(activity: TrainingActivity) {
   return names.length ? names.join(", ") : "Varies";
 }
 
+export function resolveWorkoutVideoUrl(workout: Workout, customVideoUrl: string | null | undefined) {
+  return customVideoUrl?.trim() || workout.video_url || null;
+}
+
 export function trainingActivityToWorkout(activity: TrainingActivity, source: ActivityCatalogSource = "external"): Workout {
   const primaryMuscle = activity.muscles.find((muscle) => muscle.role === "primary");
   const secondaryMuscles = unique(
@@ -44,6 +48,7 @@ export function trainingActivityToWorkout(activity: TrainingActivity, source: Ac
   );
   const equipment = requiredEquipment(activity);
   const difficulty = activity.difficulty || "Unspecified";
+  const legacyMedia = source === "legacy" ? activity.legacyMediaCompatibility : undefined;
   return {
     id: activity.id,
     name: activity.name,
@@ -62,8 +67,8 @@ export function trainingActivityToWorkout(activity: TrainingActivity, source: Ac
     sets: compatibilityDefaults.sets,
     reps: compatibilityDefaults.reps,
     rest_seconds: compatibilityDefaults.restSeconds,
-    exercise_url: null,
-    video_url: null,
+    exercise_url: legacyMedia?.exerciseUrl ?? null,
+    video_url: legacyMedia?.videoUrl ?? null,
     custom_video_url: null,
     is_global: true,
     activity_catalog: {
@@ -114,7 +119,11 @@ export function legacyWorkoutToTrainingActivity(workout: Workout): TrainingActiv
     trainingGoals: [],
     translations: {},
     publishedAt: null,
-    updatedAt: null
+    updatedAt: null,
+    legacyMediaCompatibility: {
+      exerciseUrl: workout.exercise_url ?? null,
+      videoUrl: workout.video_url ?? null
+    }
   };
 }
 
