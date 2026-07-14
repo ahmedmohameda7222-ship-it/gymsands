@@ -62,11 +62,6 @@ function uniqueBy<T>(items: T[], key: (item: T) => string) {
   });
 }
 
-function taxonomy(value: string, prefix: string): ActivityCatalogTaxonomyItem {
-  const slug = activityCatalogSlug(value);
-  return { id: `${prefix}:${slug}`, slug, name: value };
-}
-
 function hydrateWorkout(workout: Workout): Workout {
   return {
     ...workout,
@@ -138,7 +133,7 @@ function activeExerciseToWorkout(exercise: ActiveExerciseRow): Workout {
 function localActivities() {
   return uniqueBy(
     [...sampleWorkouts.map(hydrateWorkout), ...sampleExerciseVideos.map(videoToWorkout)].map(legacyWorkoutToTrainingActivity),
-    (activity) => `${normalize(activity.name)}:${normalize(activity.muscles[0]?.name)}:${normalize(activity.equipment[0]?.name)}`
+    (activity) => activity.id
   );
 }
 
@@ -202,11 +197,9 @@ export class LegacyActivityCatalogProvider implements ActivityCatalogProvider {
     const workouts = ((workoutResult.data ?? []) as Workout[]).map(hydrateWorkout);
     const videos = ((videoResult.data ?? []) as ExerciseVideo[]).map(videoToWorkout);
     const active = exerciseResult.error ? [] : ((exerciseResult.data ?? []) as ActiveExerciseRow[]).map(activeExerciseToWorkout);
+    const databaseActivities = [...active, ...workouts, ...videos].map(legacyWorkoutToTrainingActivity);
     return {
-      activities: uniqueBy(
-        [...active, ...local.map((activity) => trainingActivityToLegacyWorkout(activity)), ...workouts, ...videos].map(legacyWorkoutToTrainingActivity),
-        (activity) => `${normalize(activity.name)}:${normalize(activity.muscles[0]?.name)}:${normalize(activity.equipment[0]?.name)}`
-      ),
+      activities: uniqueBy([...databaseActivities, ...local], (activity) => activity.id),
       degraded: Boolean(exerciseResult.error)
     };
   }
@@ -285,38 +278,4 @@ export class LegacyActivityCatalogProvider implements ActivityCatalogProvider {
       .map((item, index) => trainingActivityAlternativeFromActivity(source.id, item, index));
     return { data: matches, meta: legacyMeta(locale, loaded.degraded) };
   }
-}
-
-function trainingActivityToLegacyWorkout(activity: TrainingActivity): Workout {
-  const primary = activity.muscles.find((muscle) => muscle.role === "primary");
-  const requiredEquipment = activity.equipment.filter((item) => item.isRequired).map((item) => item.name).join(", ") || "Varies";
-  return hydrateWorkout({
-    id: activity.id,
-    name: activity.name,
-    category: activity.activityType.name,
-    target_muscle: primary?.name || "General",
-    equipment: requiredEquipment,
-    difficulty: activity.difficulty || "Unspecified",
-    sets: 3,
-    reps: "8-12",
-    rest_seconds: 75,
-    instructions: activity.instructions.map((item) => item.text).join(" ") || defaultExerciseInstructions,
-    notes: activity.shortDescription,
-    muscle_category: primary?.bodyRegion || primary?.name || "General",
-    equipment_required: requiredEquipment,
-    mechanics: activity.movementPattern,
-    force_type: null,
-    experience_level: activity.difficulty || "Unspecified",
-    secondary_muscles: activity.muscles.filter((muscle) => muscle.role !== "primary").map((muscle) => muscle.name),
-    exercise_url: null,
-    video_url: null,
-    is_global: true,
-    activity_catalog: {
-      source: "legacy",
-      activityId: activity.id,
-      slug: activity.slug,
-      version: activity.version,
-      metricSchema: activity.metricSchema
-    }
-  });
 }
