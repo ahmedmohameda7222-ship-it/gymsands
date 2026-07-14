@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { extname, resolve } from "node:path";
 import test from "node:test";
 
 const root = process.cwd();
@@ -9,6 +9,7 @@ const netlifyGate = resolve(root, "scripts/netlify-production-release-gate.mjs")
 const obsoleteVercelGate = resolve(root, "scripts/vercel-production-release-gate.mjs");
 const sha = "60a204d5fc20fc396be1b1b47e748c42ebba6abf";
 const otherSha = "fce4f9dacd16ade098d1bbfc1eb6793d50cb5eb9";
+const textExtensions = new Set([".cjs", ".example", ".js", ".json", ".md", ".mjs", ".toml", ".ts", ".tsx", ".yaml", ".yml"]);
 
 function runNetlify(environment = {}) {
   return spawnSync(process.execPath, [netlifyGate], {
@@ -16,6 +17,16 @@ function runNetlify(environment = {}) {
     env: { PATH: process.env.PATH, ...environment },
     encoding: "utf8"
   });
+}
+
+function trackedFilesContaining(needle) {
+  const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .filter((file) => file === ".env.example" || textExtensions.has(extname(file)));
+  return tracked
+    .filter((file) => readFileSync(resolve(root, file), "utf8").includes(needle))
+    .sort();
 }
 
 test("Vercel requests Git-connected deployments only for main without an ignore command", () => {
@@ -42,6 +53,34 @@ test("active configuration has no Vercel preview or production SHA approval depe
   assert.match(envExample, /^PLAIVRA_PRODUCTION_RELEASE_SHA=$/m);
   assert.match(releaseReadme, /Vercel does not use `ignoreCommand`, `PLAIVRA_PREVIEW_RELEASE_SHA`, or `PLAIVRA_PRODUCTION_RELEASE_SHA`/);
   assert.match(launchRunbook, /Vercel does not use `PLAIVRA_PREVIEW_RELEASE_SHA` or `PLAIVRA_PRODUCTION_RELEASE_SHA`/);
+});
+
+test("tracked references contain no active obsolete Vercel gate dependency", () => {
+  assert.deepEqual(trackedFilesContaining("scripts/vercel-production-release-gate.mjs"), [
+    "lib/release/provider-deployment-policy.test.ts",
+    "release/prelaunch-handoff-manifest.json",
+    "scripts/provider-release-gates.test.mjs"
+  ]);
+
+  assert.deepEqual(trackedFilesContaining("PLAIVRA_PREVIEW_RELEASE_SHA"), [
+    "docs/operations/launch-runbook.md",
+    "docs/release/README.md",
+    "lib/release/provider-deployment-policy.test.ts",
+    "scripts/provider-release-gates.test.mjs"
+  ]);
+
+  assert.deepEqual(trackedFilesContaining("PLAIVRA_PRODUCTION_RELEASE_SHA"), [
+    ".env.example",
+    "docs/operations/launch-runbook.md",
+    "docs/release/README.md",
+    "lib/release/provider-deployment-policy.test.ts",
+    "scripts/netlify-production-release-gate.mjs",
+    "scripts/provider-release-gates.test.mjs",
+    "scripts/release-metadata-bundle.test.mjs"
+  ]);
+
+  const historicalManifest = readFileSync(resolve(root, "release/prelaunch-handoff-manifest.json"), "utf8");
+  assert.match(historicalManifest, /scripts\/vercel-production-release-gate\.mjs/);
 });
 
 test("Netlify keeps its exact-SHA ignore command and local behavior", () => {
