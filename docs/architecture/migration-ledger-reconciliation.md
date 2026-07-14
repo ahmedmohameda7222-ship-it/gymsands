@@ -71,7 +71,7 @@ Read-only production verification for `20260714030000_harden_train_plan_rpc_exec
 - anonymous and PUBLIC execute are denied;
 - every RPC invokes `public.assert_workout_actor(p_user_id)`;
 - `assert_workout_actor(uuid)` contains the service-role-aware `auth.role()` path and owner mismatch denial;
-- no superseded no-date overload remains;
+- no unexpected overload remains outside the six canonical signatures;
 - checked active-plan, orphan, duplicate-schedule, and scheduled-history counts are zero.
 
 Its ledger state is therefore `applied_schema_untracked`, not `pending`. It must not be marked `applied` until a supported production history repair is separately approved and verified.
@@ -84,6 +84,7 @@ Its ledger state is therefore `applied_schema_untracked`, not `pending`. It must
 - `schemaAppliedUntrackedCount`
 - `ledgerDriftReviewCount`
 - `unresolvedCount`
+- `invalidAppliedProductionIdentityCount`
 - `reconciliationState`
 - `latestAppliedMigrationVersion`
 - `releaseReady`
@@ -108,7 +109,7 @@ A physically applied migration incorrectly classified as `pending` cannot produc
 - missing migration objects;
 - function security/search-path mismatch;
 - incomplete seventh-migration Train RPC contract;
-- legacy Train overloads;
+- any Train RPC signature outside the six canonical signatures;
 - Train integrity conflicts;
 - disabled RLS or incorrect policy count;
 - missing required nutrition override CRUD privileges;
@@ -118,22 +119,25 @@ The ACL inspection uses `pg_class.relacl` and `aclexplode`, not only `informatio
 
 ## Required future sequence
 
-Do not use an ambiguous `supabase db push` while the seven earlier migration identities are absent from history.
+Do not run a normal migration push from the canonical repository while the seven historical identities are absent from production history.
 
 A later owner-approved execution must:
 
 1. activate and verify a production deployment release hold;
 2. verify a current backup/PITR recovery point;
-3. revalidate exact repository SHA and SHA-256 migration digests;
-4. apply only `20260715010000_restrict_nutrition_target_override_acl.sql` through an isolated supported tracked operation that cannot replay the seven existing migrations;
-5. verify the exact ACL immediately;
-6. re-run full equivalence checks for all seven historical identities;
-7. use `supabase migration repair <version> --status applied` only for identities proven complete equivalent;
-8. verify migration history and physical state;
-9. update the repository ledger in a separate reviewed commit;
-10. update the compatibility marker only after all earlier verification;
-11. run release preflight;
-12. deploy the exact approved commit.
+3. revalidate exact repository SHA and all eight migration hashes;
+4. create a disposable Supabase execution workdir containing the 24 already tracked migration files plus only `20260715010000_restrict_nutrition_target_override_acl.sql`;
+5. use linked migration-list and database-push dry-run operations and require the sole proposed migration to be version `20260715010000`;
+6. apply and normally record only the new forward ACL correction;
+7. verify exact ACL, RLS, policies, service-role access, row integrity, history identity, and unchanged compatibility marker;
+8. re-run complete equivalence checks for all seven historical identities;
+9. use the supported linked migration-repair operation with status `applied` only for identities proven complete equivalent;
+10. verify migration history and physical state after each repaired identity;
+11. update the repository ledger in a separate reviewed commit;
+12. update the compatibility marker only after all preceding verification;
+13. run release preflight and deploy only the exact approved commit.
+
+Supabase documents that database push applies local migrations absent from remote history, its dry-run prints the proposed set, and migration repair changes tracking without running migration SQL.
 
 ## Preconditions still missing
 
