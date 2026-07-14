@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveWorkoutVideoUrl } from "@/lib/activity-catalog/adapters";
+import type { Workout } from "@/types";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const externalActivityId = "88888888-8888-4888-8888-888888888888";
+const legacyActivityId = "legacy-bench-press";
 
 const { state, supabase } = vi.hoisted(() => {
   const state: {
@@ -42,6 +45,24 @@ vi.mock("@/lib/supabase/client", () => ({ supabase }));
 import { getUserExerciseVideo, resetUserExerciseVideo, upsertUserExerciseVideo } from "@/services/database/exercise-user-data";
 import { setFavoriteExercise } from "@/services/workouts/exercise-library-store";
 
+const baseWorkout: Workout = {
+  id: externalActivityId,
+  name: "Bench Press",
+  category: "Strength Exercise",
+  target_muscle: "Pectoralis Major",
+  equipment: "Barbell",
+  difficulty: "Intermediate",
+  sets: 3,
+  reps: "8-12",
+  rest_seconds: 90,
+  instructions: "Press with control.",
+  notes: null,
+  exercise_url: null,
+  video_url: null,
+  custom_video_url: null,
+  is_global: true
+};
+
 beforeEach(() => {
   state.table = "";
   state.upsert = null;
@@ -67,6 +88,24 @@ describe("external activity user data compatibility", () => {
 
     await expect(resetUserExerciseVideo(userId, externalActivityId)).resolves.toBe(true);
     expect(supabase.from).toHaveBeenLastCalledWith("user_exercise_videos");
+  });
+
+  it("uses the custom video first, then resets to legacy default or no external default", async () => {
+    const legacyWorkout: Workout = {
+      ...baseWorkout,
+      id: legacyActivityId,
+      video_url: "https://legacy.example/default.mp4"
+    };
+    const customUrl = "https://media.example.test/custom.mp4";
+
+    expect(resolveWorkoutVideoUrl(legacyWorkout, customUrl)).toBe(customUrl);
+    expect(resolveWorkoutVideoUrl(baseWorkout, customUrl)).toBe(customUrl);
+
+    await expect(resetUserExerciseVideo(userId, legacyActivityId)).resolves.toBe(true);
+    expect(resolveWorkoutVideoUrl(legacyWorkout, null)).toBe("https://legacy.example/default.mp4");
+
+    await expect(resetUserExerciseVideo(userId, externalActivityId)).resolves.toBe(true);
+    expect(resolveWorkoutVideoUrl(baseWorkout, null)).toBeNull();
   });
 
   it("stores and removes favorites using an external activity UUID", async () => {
