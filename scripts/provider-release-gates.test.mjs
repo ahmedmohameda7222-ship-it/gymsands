@@ -29,10 +29,10 @@ function trackedFilesContaining(needle) {
     .sort();
 }
 
-test("Vercel requests Git-connected deployments only for main without an ignore command", () => {
+test("repository config declares Vercel main-only policy intent without claiming provider enforcement", () => {
   const config = JSON.parse(readFileSync(resolve(root, "vercel.json"), "utf8"));
 
-  assert.deepEqual(config.git?.deploymentEnabled, { "*": false, main: true });
+  assert.deepEqual(config.git?.deploymentEnabled, { "**": false, main: true });
   assert.equal(config.ignoreCommand, undefined);
   assert.deepEqual(config.crons, [
     { path: "/api/internal/maintenance/oauth-cleanup", schedule: "17 3 * * *" },
@@ -40,6 +40,40 @@ test("Vercel requests Git-connected deployments only for main without an ignore 
     { path: "/api/internal/maintenance/billing-events", schedule: "7 4 * * *" }
   ]);
   assert.equal(existsSync(obsoleteVercelGate), false);
+});
+
+test("release documentation distinguishes repository intent from actual provider verification", () => {
+  const releaseReadme = readFileSync(resolve(root, "docs/release/README.md"), "utf8");
+  const launchRunbook = readFileSync(resolve(root, "docs/operations/launch-runbook.md"), "utf8");
+
+  assert.match(releaseReadme, /Repository configuration and tests verify policy intent only\./);
+  assert.match(releaseReadme, /They do not prove actual Vercel provider enforcement\./);
+  assert.match(releaseReadme, /inspect the Vercel deployment list for the exact pushed SHA/);
+  assert.match(launchRunbook, /Repository configuration and green repository tests prove policy intent only/);
+  assert.match(launchRunbook, /actual provider behavior requires post-push Vercel verification/);
+});
+
+test("launch documentation places reconciliation, preflight, and owner approval before merge", () => {
+  const documents = [
+    readFileSync(resolve(root, "docs/release/README.md"), "utf8"),
+    readFileSync(resolve(root, "docs/operations/launch-runbook.md"), "utf8")
+  ];
+
+  for (const document of documents) {
+    const reconciliation = document.indexOf("2. Complete migration-history reconciliation");
+    const preflight = document.indexOf("5. Run `npm run release:preflight`");
+    const approval = document.indexOf("6. Obtain explicit release-owner approval");
+    const merge = document.indexOf("7. Merge the approved exact change to `main`");
+
+    assert.ok(reconciliation >= 0, "migration reconciliation step is missing");
+    assert.ok(preflight > reconciliation, "release preflight must follow migration reconciliation");
+    assert.ok(approval > preflight, "owner approval must follow a passing preflight");
+    assert.ok(merge > approval, "the production-triggering merge must follow approval");
+    assert.match(document, /Any failed or blocked preflight is a no-go before merge/);
+    assert.match(document, /migration ledger must be reconciled before/);
+    assert.match(document, /A provider `READY` state alone is not acceptance/);
+    assert.match(document, /Netlify remains separate/);
+  }
 });
 
 test("active configuration has no Vercel preview or production SHA approval dependency", () => {
@@ -51,7 +85,8 @@ test("active configuration has no Vercel preview or production SHA approval depe
   assert.match(envExample, /# Netlify production deployment release hold/);
   assert.match(envExample, /# Vercel does not use this variable\./);
   assert.match(envExample, /^PLAIVRA_PRODUCTION_RELEASE_SHA=$/m);
-  assert.match(releaseReadme, /Vercel does not use `ignoreCommand`, `PLAIVRA_PREVIEW_RELEASE_SHA`, or `PLAIVRA_PRODUCTION_RELEASE_SHA`/);
+  assert.match(releaseReadme, /Vercel does not use `ignoreCommand`/);
+  assert.match(releaseReadme, /Vercel does not use preview or production exact-SHA approval environment variables/);
   assert.match(launchRunbook, /Vercel does not use `PLAIVRA_PREVIEW_RELEASE_SHA` or `PLAIVRA_PRODUCTION_RELEASE_SHA`/);
 });
 
