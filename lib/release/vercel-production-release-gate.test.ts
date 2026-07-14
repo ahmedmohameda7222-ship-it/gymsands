@@ -34,13 +34,14 @@ describe("production release deployment holds", () => {
     expect(run(netlifyScript).status).toBe(1);
   });
 
-  it("allows preview deployments without production approval", () => {
+  it("allows Vercel previews only with exact preview approval while Netlify retains its preview contract", () => {
     expect(run(vercelScript, {
       VERCEL: "1",
       VERCEL_ENV: "preview",
       VERCEL_GIT_COMMIT_REF: "prelaunch-remediation-2026-07",
       VERCEL_GIT_COMMIT_SHA: SHA,
-      VERCEL_GIT_PULL_REQUEST_ID: "40"
+      VERCEL_GIT_PULL_REQUEST_ID: "40",
+      PLAIVRA_PREVIEW_RELEASE_SHA: SHA
     }).status).toBe(1);
     expect(run(netlifyScript, {
       NETLIFY: "true",

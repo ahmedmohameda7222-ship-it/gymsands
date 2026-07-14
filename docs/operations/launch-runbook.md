@@ -6,10 +6,12 @@ A launch candidate is one exact reviewed commit, one release manifest, one recon
 
 Required retained evidence is repository integrity, full migration chain, database lint/preflight, migration-ledger validation, dependency audit, lint, typecheck, unit/integration/script/telemetry tests, Node 24 production build, environment validation, rendered QA, deployment identity, anonymous smoke, populated synthetic smoke, empty-state synthetic smoke, Supabase advisors, and final owner verdict. Do not paste tokens, credentials, cookies, user IDs, email addresses, query strings, provider payloads, or user fitness content into incidents or tickets.
 
+For a candidate branch push, retain the exact-SHA Vercel deployment state and ignore-gate log. Repository configuration alone does not prove that an automatic preview was skipped; if an unapproved preview reaches `READY`, keep the release blocked.
+
 ## Deployment identity
 
-- Vercel automatic Git-connected deployments are enabled only for `main`.
-- A temporary preview is an explicit operation from an approved SHA, not an automatic branch deployment.
+- `vercel.json` requests automatic Git-connected deployments only for `main`, but the exact-SHA build gate is authoritative because a provider can still create a branch deployment record.
+- A temporary preview builds only when `PLAIVRA_PREVIEW_RELEASE_SHA` exactly equals its 40-character provider commit SHA; keep that approval empty for ordinary pushes and clear or rotate it after use.
 - Production requires `PLAIVRA_PRODUCTION_RELEASE_SHA` to exactly equal the provider’s 40-character commit SHA.
 - Never redeploy an old provider artifact as a substitute for deploying the reviewed Git commit.
 - Clear or rotate the approval SHA after acceptance.
@@ -65,7 +67,7 @@ Public support/security contact: `Ahmed.Mohamed04@outlook.de`. Ask reporters to 
 4. Confirm the compatibility marker and expected migration identity.
 5. Run `npm run release:preflight`; any failure is a no-go.
 6. Review strict provider environment validation without exposing values.
-7. Set `PLAIVRA_PRODUCTION_RELEASE_SHA` to the exact SHA.
+7. Confirm `PLAIVRA_PREVIEW_RELEASE_SHA` is empty, then set `PLAIVRA_PRODUCTION_RELEASE_SHA` to the exact SHA.
 8. Deploy that Git commit, not an old provider deployment.
 9. Verify provider metadata, `/api/version`, and `/api/health`.
 10. Run anonymous smoke.

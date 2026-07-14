@@ -4,6 +4,8 @@
 -- classified as applied_schema_untracked. It never changes schema, data,
 -- migration history, grants, policies, or compatibility markers.
 
+\set ON_ERROR_STOP on
+
 with required_columns(table_name, column_name) as (
   values
     ('onboarding_answers', 'primary_goal'),
@@ -55,12 +57,14 @@ with required_columns(table_name, column_name) as (
     ('public.complete_meal_plan_item(uuid)', true),
     ('public.complete_meal_plan_item_with_values(uuid,text,text,text,numeric,numeric,numeric,numeric,numeric,text,boolean)', true),
     ('public.correct_completed_meal_plan_item(uuid,date,text,text,text,numeric,numeric,numeric,numeric,numeric,text)', true),
-    ('public.activate_workout_plan_atomic(uuid,uuid,date,timestamp with time zone)', true),
-    ('public.archive_workout_plan_atomic(uuid,uuid,text,date)', true),
-    ('public.create_workout_plan_atomic(uuid,jsonb,boolean,date)', true),
-    ('public.delete_workout_plan_atomic(uuid,uuid,boolean,date)', true),
-    ('public.save_workout_plan_atomic(uuid,uuid,jsonb,date,timestamp with time zone)', true),
-    ('public.save_workout_plan_day_atomic(uuid,uuid,jsonb,date,timestamp with time zone,boolean)', true)
+    -- Train writes intentionally remain SECURITY INVOKER. Ownership is enforced
+    -- both by assert_workout_actor() and by RLS on every affected member table.
+    ('public.activate_workout_plan_atomic(uuid,uuid,date,timestamp with time zone)', false),
+    ('public.archive_workout_plan_atomic(uuid,uuid,text,date)', false),
+    ('public.create_workout_plan_atomic(uuid,jsonb,boolean,date)', false),
+    ('public.delete_workout_plan_atomic(uuid,uuid,boolean,date)', false),
+    ('public.save_workout_plan_atomic(uuid,uuid,jsonb,date,timestamp with time zone)', false),
+    ('public.save_workout_plan_day_atomic(uuid,uuid,jsonb,date,timestamp with time zone,boolean)', false)
 ), findings as (
   select
     'missing_column'::text as issue_type,
@@ -132,13 +136,45 @@ with required_columns(table_name, column_name) as (
     'function_security_mismatch',
     expected.signature,
     case
-      when actual.prosecdef is distinct from expected.security_definer_required then 'SECURITY DEFINER mode does not match the repository contract.'
+      when actual.prosecdef is distinct from expected.security_definer_required then 'Function invoker/definer mode does not match the repository contract.'
       else 'Function search_path is not explicitly hardened.'
     end
   from required_functions expected
   join pg_proc actual on actual.oid = to_regprocedure(expected.signature)
   where actual.prosecdef is distinct from expected.security_definer_required
      or coalesce(array_to_string(actual.proconfig, ','), '') not like '%search_path=%'
+
+  union all
+
+  select
+    'train_rpc_grant_mismatch',
+    signature,
+    'Authenticated/service-role execution or anonymous/public denial does not match the repository contract.'
+  from (values
+    ('public.activate_workout_plan_atomic(uuid,uuid,date,timestamp with time zone)'),
+    ('public.archive_workout_plan_atomic(uuid,uuid,text,date)'),
+    ('public.create_workout_plan_atomic(uuid,jsonb,boolean,date)'),
+    ('public.delete_workout_plan_atomic(uuid,uuid,boolean,date)'),
+    ('public.save_workout_plan_atomic(uuid,uuid,jsonb,date,timestamp with time zone)'),
+    ('public.save_workout_plan_day_atomic(uuid,uuid,jsonb,date,timestamp with time zone,boolean)')
+  ) as rpc(signature)
+  where to_regprocedure(signature) is not null
+    and (
+      not has_function_privilege('authenticated', to_regprocedure(signature), 'EXECUTE')
+      or not has_function_privilege('service_role', to_regprocedure(signature), 'EXECUTE')
+      or has_function_privilege('anon', to_regprocedure(signature), 'EXECUTE')
+      or exists (
+        select 1
+        from pg_proc granted_function
+        cross join lateral aclexplode(coalesce(
+          granted_function.proacl,
+          acldefault('f', granted_function.proowner)
+        )) grant_acl
+        where granted_function.oid = to_regprocedure(signature)
+          and grant_acl.grantee = 0
+          and grant_acl.privilege_type = 'EXECUTE'
+      )
+    )
 
   union all
 
@@ -236,3 +272,10 @@ with required_columns(table_name, column_name) as (
 select issue_type, object_identity, details
 from findings
 order by issue_type, object_identity;
+
+\if :ROW_COUNT
+  \echo 'Production release migration preflight failed with' :ROW_COUNT 'blocking finding(s).'
+  \quit 3
+\else
+  \echo 'Production release migration preflight passed: 0 blocking findings.'
+\endif

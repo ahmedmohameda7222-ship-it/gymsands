@@ -1,14 +1,17 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 import { chromium } from "@playwright/test";
 
 const EXACT_SHA = /^[a-f0-9]{40}$/i;
 const MIGRATION_VERSION = /^\d{12,14}$/;
 const RECORD_UUID = /\b[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\b/gi;
-const LONG_PATH_ID = /\/[a-f0-9_-]{24,128}(?=\/|$)/gi;
-const NUMERIC_PATH_ID = /\/\d{4,}(?=\/|$)/g;
-const OPAQUE_ID = /\b(?=[A-Za-z0-9_-]{24,128}\b)(?=[A-Za-z0-9_-]*[A-Za-z])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]+\b/g;
+const UUID_SEGMENT = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+const LONG_NUMERIC_SEGMENT = /^\d{8,}$/;
+const PATH_IN_TEXT = /(?<![:/])(?:\/[A-Za-z0-9._~!$&'()*+,;=:@%-]+)+(?:\?[^\s"'`<>]*)?(?:#[^\s"'`<>]*)?/g;
+const URL_IN_TEXT = /https?:\/\/[^\s"'`<>]+/gi;
+const STANDALONE_OPAQUE_TOKEN = /(?<![A-Za-z0-9_./:-])([A-Za-z0-9_-]{20,128})(?![A-Za-z0-9_./-])/g;
 const runtimeEvidence = { pageErrors: [], consoleErrors: [], failedRequests: [], serverErrors: [], routes: [], screenshots: [], requestMetrics: {} };
 const ROUTES = [
   { id: "dashboard", path: "/dashboard" },
@@ -54,42 +57,93 @@ function baseUrl(value) {
   return url;
 }
 
-function sanitizedText(value, limit = 500) {
-  return String(value ?? "")
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "[REDACTED]")
-    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[REDACTED]")
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[REDACTED]")
-    .replace(RECORD_UUID, "[REDACTED]")
-    .replace(OPAQUE_ID, "[REDACTED]")
-    .replace(/\bKey\s*\([^)\r\n]{1,200}\)\s*=\s*\([^)\r\n]{1,500}\)/gi, "Key [REDACTED]")
-    .replace(/"[^"\r\n]{1,200}"/g, '"[REDACTED]"')
-    .replace(/'[^'\r\n]{1,200}'/g, "'[REDACTED]'")
-    .replace(/`[^`\r\n]{1,200}`/g, "`[REDACTED]`")
-    .replace(/(https?:\/\/[^\s?#]+)(?:\?[^\s#]*)?(?:#[^\s]*)?/gi, "$1")
-    .slice(0, limit);
+function segmentEntropy(value) {
+  const counts = new Map();
+  for (const character of value) counts.set(character, (counts.get(character) ?? 0) + 1);
+  return [...counts.values()].reduce((entropy, count) => {
+    const probability = count / value.length;
+    return entropy - probability * Math.log2(probability);
+  }, 0);
 }
 
-function safePath(value) {
+function isOpaquePathSegment(rawSegment) {
+  if (!rawSegment) return false;
+  let segment;
   try {
-    const url = new URL(value, "https://plaivra.invalid");
-    return url.pathname
-      .replace(RECORD_UUID, "id")
-      .replace(LONG_PATH_ID, "/id")
-      .replace(NUMERIC_PATH_ID, "/id")
-      .replace(/\/+/g, "/")
-      .slice(0, 180);
+    segment = decodeURIComponent(rawSegment);
+  } catch {
+    return true;
+  }
+  if (!/^[A-Za-z0-9._~-]+$/.test(segment)) return true;
+  const candidate = segment.replace(/\.[a-z0-9]{1,8}$/i, "");
+  if (UUID_SEGMENT.test(candidate) || LONG_NUMERIC_SEGMENT.test(candidate)) return true;
+  if (candidate.length < 20) return false;
+  if (/^[a-z]+(?:-[a-z]+)+$/.test(candidate)) return false;
+  if (/^[a-z]{2,16}_[A-Za-z0-9_-]{12,}$/i.test(candidate)) return true;
+  const categories = [/[a-z]/.test(candidate), /[A-Z]/.test(candidate), /\d/.test(candidate), /[_-]/.test(candidate)].filter(Boolean).length;
+  return categories >= 3 || (categories >= 2 && segmentEntropy(candidate) >= 3.25) || segmentEntropy(candidate) >= 3.75;
+}
+
+export function sanitizeEvidencePath(value, limit = 180) {
+  try {
+    const url = new URL(String(value), "https://plaivra.invalid");
+    const segments = url.pathname.split("/").map((segment) => isOpaquePathSegment(segment) ? "id" : segment);
+    return segments.join("/").replace(/\/+/g, "/").slice(0, limit) || "/";
   } catch {
     return "/unknown";
   }
 }
 
-function safeUrl(value) {
+export function sanitizeEvidenceUrl(value) {
   try {
-    const url = new URL(value);
-    return `${url.origin}${safePath(url.pathname)}`;
+    const url = new URL(String(value));
+    return `${url.origin}${sanitizeEvidencePath(url.pathname)}`;
   } catch {
     return "invalid-url";
   }
+}
+
+export function sanitizeEvidenceArtifactPath(value) {
+  const normalized = String(value ?? "").replace(/\\/g, "/").replace(/^\/+/, "");
+  return sanitizeEvidencePath(`/${normalized}`, 240).slice(1);
+}
+
+export function sanitizedText(value, limit = 500) {
+  return String(value ?? "")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "[REDACTED]")
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[REDACTED]")
+    .replace(/\b(authorization|cookie|set-cookie|token)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+    .replace(URL_IN_TEXT, (url) => sanitizeEvidenceUrl(url))
+    .replace(PATH_IN_TEXT, (path) => sanitizeEvidencePath(path))
+    .replace(STANDALONE_OPAQUE_TOKEN, (token) => isOpaquePathSegment(token) ? "[REDACTED]" : token)
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[REDACTED]")
+    .replace(RECORD_UUID, "[REDACTED]")
+    .replace(/\bKey\s*\([^)\r\n]{1,200}\)\s*=\s*\([^)\r\n]{1,500}\)/gi, "Key [REDACTED]")
+    .replace(/"[^"\r\n]{1,200}"/g, '"[REDACTED]"')
+    .replace(/'[^'\r\n]{1,200}'/g, "'[REDACTED]'")
+    .replace(/`[^`\r\n]{1,200}`/g, "`[REDACTED]`")
+    .slice(0, limit);
+}
+
+function safePath(value) {
+  return sanitizeEvidencePath(value);
+}
+
+function safeUrl(value) {
+  return sanitizeEvidenceUrl(value);
+}
+
+export function sanitizeEvidence(value, key = "") {
+  if (Array.isArray(value)) return value.map((item) => sanitizeEvidence(item, key));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [childKey, sanitizeEvidence(childValue, childKey)]));
+  }
+  if (typeof value !== "string") return value;
+  if (/^(?:expectedCommit|commitSha)$/i.test(key) && EXACT_SHA.test(value)) return value.toLowerCase();
+  if (/screenshot/i.test(key)) return sanitizeEvidenceArtifactPath(value);
+  if (/url$/i.test(key)) return /^https?:\/\//i.test(value) ? sanitizeEvidenceUrl(value) : sanitizedText(value, 1000);
+  if (/(?:path|route)$/i.test(key)) return sanitizeEvidencePath(value);
+  return sanitizedText(value, 1000);
 }
 
 function responseCount(data) {
@@ -125,12 +179,12 @@ async function visitRoute(page, origin, route, routeEvidence, screenshotDirector
     const rawFinalPath = new URL(page.url()).pathname;
     const optionalRedirect = Boolean(route.optional && rawFinalPath !== route.path);
     await page.screenshot({ path: resolve(screenshotDirectory, `${route.id}.png`), fullPage: true });
-    routeEvidence.push({ id: route.id, path: route.path, finalPath: safePath(rawFinalPath), status: response?.status() ?? null, applicable: !optionalRedirect, durationMs: Date.now() - startedAt, screenshot: `screenshots/${route.id}.png`, passed: true });
+    routeEvidence.push({ id: route.id, path: safePath(route.path), finalPath: safePath(rawFinalPath), status: response?.status() ?? null, applicable: !optionalRedirect, durationMs: Date.now() - startedAt, screenshot: sanitizeEvidenceArtifactPath(`screenshots/${route.id}.png`), passed: true });
   } catch (error) {
-    const screenshot = `screenshots/failure-${route.id}.png`;
+    const screenshot = sanitizeEvidenceArtifactPath(`screenshots/failure-${route.id}.png`);
     await page.screenshot({ path: resolve(screenshotDirectory, `failure-${route.id}.png`), fullPage: true }).catch(() => {});
     runtimeEvidence.screenshots.push(screenshot);
-    routeEvidence.push({ id: route.id, path: route.path, finalPath: safePath(page.url()), status: response?.status() ?? null, durationMs: Date.now() - startedAt, screenshot, passed: false, error: sanitizedText(error instanceof Error ? error.message : error, 300) });
+    routeEvidence.push({ id: route.id, path: safePath(route.path), finalPath: safePath(page.url()), status: response?.status() ?? null, durationMs: Date.now() - startedAt, screenshot, passed: false, error: sanitizedText(error instanceof Error ? error.message : error, 300) });
     throw error;
   }
 }
@@ -166,7 +220,7 @@ async function main() {
   let dashboardActive = false;
 
   const browser = await chromium.launch({ headless: true });
-  Object.assign(runtimeEvidence, { mode, accountState: account, deploymentUrl: origin.toString(), expectedCommit, expectedMigration, pageErrors, consoleErrors, failedRequests, serverErrors, routes: routeEvidence, requestMetrics, incidentState, outputDirectory });
+  Object.assign(runtimeEvidence, { mode, accountState: account, deploymentUrl: safeUrl(origin.toString()), expectedCommit, expectedMigration, pageErrors, consoleErrors, failedRequests, serverErrors, routes: routeEvidence, requestMetrics, incidentState });
   try {
     const context = await browser.newContext({ locale: "en-GB", timezoneId: "Europe/Berlin" });
     const page = await context.newPage();
@@ -188,7 +242,7 @@ async function main() {
       const url = new URL(response.url());
       const contentLength = Number(response.headers()["content-length"] ?? "0");
       if (Number.isFinite(contentLength) && contentLength > 0) requestMetrics.transferredBytes += contentLength;
-      if (response.status() >= 500) serverErrors.push({ url: `${url.origin}${safePath(url.pathname)}`, status: response.status() });
+      if (response.status() >= 500) serverErrors.push({ url: safeUrl(response.url()), status: response.status() });
       const table = url.pathname.split("/").at(-1);
       if (!new Set(["food_logs", "calorie_targets", "user_nutrition_target_profiles", "user_nutrition_target_date_overrides", "user_workout_plans"]).has(table)) return;
       try {
@@ -262,7 +316,7 @@ async function main() {
       checkedAt: new Date().toISOString(),
       mode,
       accountState: account,
-      deploymentUrl: origin.toString(),
+      deploymentUrl: safeUrl(origin.toString()),
       expectedCommit,
       expectedMigration,
       version: {
@@ -283,16 +337,17 @@ async function main() {
       syntheticDataOnly: true,
       passed: true
     };
-    writeFileSync(resolve(outputDirectory, "summary.json"), `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
-    console.log(resolve(outputDirectory, "summary.json"));
+    writeFileSync(resolve(outputDirectory, "summary.json"), `${JSON.stringify(sanitizeEvidence(evidence), null, 2)}\n`, "utf8");
+    console.log("Authenticated smoke summary written.");
   } finally {
     await browser.close();
   }
 }
 
-try {
-  await main();
-} catch (error) {
+async function run() {
+  try {
+    await main();
+  } catch (error) {
   const argv = process.argv.slice(2);
   const outputIndex = argv.indexOf("--output");
   const accountIndex = argv.indexOf("--account");
@@ -309,7 +364,14 @@ try {
     credentialsLogged: false,
     syntheticDataOnly: true
   };
-  writeFileSync(resolve(outputDirectory, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`, "utf8");
-  console.error(summary.failureCode);
-  process.exitCode = 1;
+    const safeSummary = sanitizeEvidence(summary);
+    writeFileSync(resolve(outputDirectory, "summary.json"), `${JSON.stringify(safeSummary, null, 2)}\n`, "utf8");
+    console.error(safeSummary.failureCode);
+    process.exitCode = 1;
+  }
+}
+
+const isDirectRun = Boolean(process.argv[1]) && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+if (isDirectRun) {
+  await run();
 }

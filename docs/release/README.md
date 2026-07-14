@@ -7,8 +7,8 @@ A public Plaivra release is a compatible code, database, configuration, and brow
 Do not combine these operations conceptually or operationally:
 
 1. **Merge** — reviewed source enters `main`; this does not authorize production.
-2. **Automatic Git-connected deployment** — `vercel.json` enables this only for `main`; every other branch is disabled.
-3. **Explicit on-demand preview** — a temporary preview may be created from an exact approved SHA as a deliberate operator action. It is not an automatic branch deployment and does not authorize production.
+2. **Automatic Git-connected deployment request** — `vercel.json` requests this only for `main`, but the provider can still create a branch deployment record. The build authorization gate is therefore authoritative.
+3. **Explicit on-demand preview** — a temporary preview may build only when `PLAIVRA_PREVIEW_RELEASE_SHA` exactly authorizes its commit. It does not authorize production.
 4. **Production promotion** — the exact reviewed commit is built and deployed after every release gate passes.
 5. **Rollback** — a separately approved code/schema-compatible release pair is selected and verified. Rollback never weakens exact-SHA validation.
 
@@ -18,9 +18,9 @@ Do not redeploy an old provider artifact as a substitute for deploying the revie
 
 ### Vercel
 
-- `vercel.json` sets `git.deploymentEnabled["*"] = false` and `git.deploymentEnabled.main = true`.
-- `scripts/vercel-production-release-gate.mjs` is the fail-closed ignored-build check.
-- An explicitly invoked preview/development deployment may build, but normal Git-connected branch deployments remain disabled.
+- `vercel.json` requests `git.deploymentEnabled["*"] = false` and `git.deploymentEnabled.main = true`; do not treat that configuration alone as evidence that a branch was not deployed.
+- `scripts/vercel-production-release-gate.mjs` is the authoritative fail-closed ignored-build check.
+- Preview, development, pull-request, and other non-main builds proceed only when `PLAIVRA_PREVIEW_RELEASE_SHA` exactly equals `VERCEL_GIT_COMMIT_SHA`, both as 40-character Git SHAs.
 - Production proceeds only when `PLAIVRA_PRODUCTION_RELEASE_SHA` exactly equals `VERCEL_GIT_COMMIT_SHA`, both as 40-character Git SHAs.
 
 ### Netlify
@@ -28,6 +28,8 @@ Do not redeploy an old provider artifact as a substitute for deploying the revie
 Netlify remains configured as a secondary supported provider. Its production ignore gate also requires an exact approved SHA. Node 24 is pinned in `netlify.toml`. A Netlify preview does not replace Vercel production evidence.
 
 Keep `PLAIVRA_PRODUCTION_RELEASE_SHA` empty during ordinary merges. Set it only after owner and quality-control approval for one exact commit. Clear or rotate it after the release so approval cannot carry to another commit.
+
+Keep `PLAIVRA_PREVIEW_RELEASE_SHA` empty during ordinary branch pushes and pull requests. Set it only for one deliberate, exact-SHA preview and clear or rotate it afterward. A preview approval never substitutes for production approval.
 
 ## Required same-commit evidence
 
@@ -128,6 +130,8 @@ npm run release:preflight -- \
 
 The command verifies checkout/repository identity, Node 24 pins, migration reconciliation, expected migration identity, manifest identity, and retained quality evidence. It performs no provider or Supabase write. It must fail while reconciliation is pending.
 
+Release preflight does not prove that an unapproved preview was skipped. After every candidate branch push, inspect the provider record for the exact commit and retain its state plus the build-gate log. Neither `vercel.json` nor a green GitHub workflow is sufficient evidence by itself; an unapproved preview that becomes `READY` remains a release-control failure.
+
 ## Production runbook
 
 1. Select one reviewed exact 40-character SHA from `main`.
@@ -135,7 +139,7 @@ The command verifies checkout/repository identity, Node 24 pins, migration recon
 3. Complete and independently verify migration-history reconciliation.
 4. Confirm the database compatibility marker and expected migration version agree.
 5. Run the release preflight and retain its passing JSON.
-6. Confirm required Vercel environment variables pass strict production validation.
+6. Confirm required Vercel environment variables pass strict production validation and keep `PLAIVRA_PREVIEW_RELEASE_SHA` empty.
 7. Set `PLAIVRA_PRODUCTION_RELEASE_SHA` to the exact reviewed SHA.
 8. Deploy that Git commit. Do not redeploy an old deployment object.
 9. Verify provider metadata and `/api/version` identity.
