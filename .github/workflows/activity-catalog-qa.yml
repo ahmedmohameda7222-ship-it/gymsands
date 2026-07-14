@@ -1,0 +1,84 @@
+name: Activity Catalog QA
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/activity-catalog-qa.yml"
+      - "app/(private)/workouts/**"
+      - "app/api/activity-catalog/**"
+      - "components/workouts/**"
+      - "lib/activity-catalog/**"
+      - "services/activity-catalog/**"
+      - "services/database/exercise-user-data*"
+      - "services/database/workout-library*"
+      - "services/database/workout-sessions*"
+      - "scripts/run-activity-catalog-qa.mjs"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: activity-catalog-qa-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rendered-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+      PLAIVRA_ACTIVITY_CATALOG_MODE: legacy
+
+    steps:
+      - name: Checkout exact pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify exact checkout identity
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run deterministic Activity Catalog rendered QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p quality-reports
+          npm run dev > quality-reports/activity-catalog-qa-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://localhost:3000/ > /dev/null
+          QA_BASE_URL=http://localhost:3000 \
+            QA_ACTIVITY_CATALOG_EVIDENCE_DIR=quality-reports/activity-catalog-qa-evidence \
+            npm run qa:activity-catalog 2>&1 | tee quality-reports/activity-catalog-qa.log
+
+      - name: Upload Activity Catalog QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: activity-catalog-qa-${{ github.run_id }}
+          path: quality-reports/
+          if-no-files-found: error
+          retention-days: 14
