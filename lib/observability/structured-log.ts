@@ -1,5 +1,6 @@
 const REDACTED = "[REDACTED]";
 const SENSITIVE_KEY = /(?:authorization|cookie|token|secret|password|email|address|name|prompt|notes?|diagnos|injur|allerg|weight|calorie|nutrition|body|photo|payload|user_id|record_id)/i;
+const CORRELATION_ID_KEY = /^(?:request_id|client_event_id)$/;
 const BEARER = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const JWT = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
 const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
@@ -39,11 +40,12 @@ export function redactOperationalValue(value: unknown, key = "value", depth = 0)
   if (SENSITIVE_KEY.test(key)) return REDACTED;
   if (depth > 4) return "[MAX_DEPTH]";
   if (typeof value === "string") {
+    const safeCorrelationId = CORRELATION_ID_KEY.test(key);
     return value
       .replace(BEARER, REDACTED)
       .replace(JWT, REDACTED)
       .replace(EMAIL, REDACTED)
-      .replace(UUID, REDACTED)
+      .replace(safeCorrelationId ? /$^/ : UUID, REDACTED)
       .replace(QUERY, "$1")
       .slice(0, 2500);
   }
