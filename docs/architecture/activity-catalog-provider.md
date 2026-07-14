@@ -1,6 +1,6 @@
 # Activity Catalog provider boundary
 
-**Status:** Phase 0B architecture  
+**Status:** Phase 0B architecture
 **Authority:** Subordinate to the Plaivra Product Constitution and canonical domain model
 
 ## Responsibility flow
