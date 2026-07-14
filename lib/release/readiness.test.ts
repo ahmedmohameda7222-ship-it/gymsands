@@ -9,7 +9,9 @@ const release: ReleaseVersion = {
   schemaCompatibilityVersion: "2",
   expectedDatabaseMigrationVersion: "20260711014500",
   migrationLedgerReconciliationState: "reconciled",
-  schemaAppliedUntrackedCount: 0
+  pendingMigrationCount: 0,
+  schemaAppliedUntrackedCount: 0,
+  unresolvedMigrationCount: 0
 };
 
 const database = {
@@ -33,10 +35,25 @@ describe("release readiness", () => {
     const result = evaluateReleaseReadiness({
       ...release,
       migrationLedgerReconciliationState: "pending",
-      schemaAppliedUntrackedCount: 6
+      pendingMigrationCount: 1,
+      schemaAppliedUntrackedCount: 7,
+      unresolvedMigrationCount: 8
     }, database);
     expect(result.migrationLedgerReconciled).toBe(false);
     expect(result.releaseReady).toBe(false);
+  });
+
+  it("fails closed for any pending or unresolved entry even if history says reconciled", () => {
+    expect(evaluateReleaseReadiness({
+      ...release,
+      pendingMigrationCount: 1,
+      unresolvedMigrationCount: 1
+    }, database).releaseReady).toBe(false);
+    expect(evaluateReleaseReadiness({
+      ...release,
+      schemaAppliedUntrackedCount: 1,
+      unresolvedMigrationCount: 1
+    }, database).releaseReady).toBe(false);
   });
 
   it("fails closed on stale or unavailable database migration markers", () => {
