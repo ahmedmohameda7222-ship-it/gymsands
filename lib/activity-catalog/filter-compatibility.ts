@@ -43,6 +43,35 @@ function uniqueSorted(values: Array<string | null | undefined>) {
     .sort((left, right) => left.localeCompare(right));
 }
 
+function selectedValues(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
+}
+
+function equipmentSelections(filters: LegacyWorkoutFilters) {
+  return selectedValues([...(filters.equipmentRequired ?? []), filters.equipment]);
+}
+
+function difficultySelections(filters: LegacyWorkoutFilters) {
+  return selectedValues([...(filters.experienceLevels ?? []), filters.difficulty]);
+}
+
+function activityTypeSelections(filters: LegacyWorkoutFilters) {
+  return selectedValues([...(filters.exerciseTypes ?? []), ...(filters.categories ?? []), filters.category]);
+}
+
+export function legacyFiltersRequireCompatibilityScan(filters: LegacyWorkoutFilters) {
+  return Boolean(
+    filters.muscleCategories?.length ||
+    filters.primaryMuscles?.length ||
+    filters.mechanics?.length ||
+    filters.forceTypes?.length ||
+    filters.secondaryMuscles?.length ||
+    equipmentSelections(filters).length > 1 ||
+    difficultySelections(filters).length > 1 ||
+    activityTypeSelections(filters).length > 1
+  );
+}
+
 export function legacyFiltersToCatalogSearch(
   query: string,
   filters: LegacyWorkoutFilters,
@@ -50,15 +79,15 @@ export function legacyFiltersToCatalogSearch(
   pageSize = 100,
   locale = "en"
 ): ActivityCatalogSearchParams {
-  const difficulty = filters.difficulty || filters.experienceLevels?.[0];
-  const normalizedDifficulty = difficulty?.toLowerCase();
-  const equipment = filters.equipment || filters.equipmentRequired?.[0];
-  const activityType = filters.exerciseTypes?.[0] || filters.category || filters.categories?.[0];
+  const equipment = equipmentSelections(filters);
+  const difficulties = difficultySelections(filters);
+  const activityTypes = activityTypeSelections(filters);
+  const normalizedDifficulty = difficulties.length === 1 ? difficulties[0].toLowerCase() : undefined;
   return {
     ...(query.trim() ? { query: query.trim() } : {}),
-    ...(equipment ? { equipment: [activityCatalogSlug(equipment)] } : {}),
-    ...(activityType ? { activityType: activityCatalogSlug(activityType) } : {}),
-    ...(["beginner", "intermediate", "advanced"].includes(normalizedDifficulty ?? "")
+    ...(equipment.length === 1 ? { equipment: [activityCatalogSlug(equipment[0])] } : {}),
+    ...(activityTypes.length === 1 ? { activityType: activityCatalogSlug(activityTypes[0]) } : {}),
+    ...(difficulties.length === 1 && ["beginner", "intermediate", "advanced"].includes(normalizedDifficulty ?? "")
       ? { difficulty: normalizedDifficulty as ActivityCatalogSearchParams["difficulty"] }
       : {}),
     limit: Math.max(1, Math.min(100, pageSize)),
