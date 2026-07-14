@@ -5,6 +5,18 @@ const productionPreflight = readFileSync(
   "supabase/verification/production-release-migration-preflight.sql",
   "utf8"
 );
+const productionPreflightControl = readFileSync(
+  "supabase/verification/production-release-migration-preflight-control.psql",
+  "utf8"
+);
+const productionPreflightBehavior = readFileSync(
+  "scripts/test-database-preflight-control.mjs",
+  "utf8"
+);
+const productionPreflightFixture = readFileSync(
+  "supabase/verification/production-release-migration-preflight-control-fixture.sql",
+  "utf8"
+);
 const rpcSecurity = readFileSync(
   "supabase/verification/train-atomic-rpc-security.sql",
   "utf8"
@@ -41,13 +53,30 @@ describe("Train release security controls", () => {
     expect(hardeningMigration.match(/security definer set search_path = '';/g)).toHaveLength(6);
   });
 
-  it("fails the psql process after displaying any blocking result rows", () => {
+  it("derives an explicit Boolean and shares its executable fail-closed control", () => {
     expect(productionPreflight).toMatch(
-      /select issue_type, object_identity, details[\s\S]*order by issue_type, object_identity;/
+      /count\(\*\)::integer as blocking_finding_count[\s\S]*\(count\(\*\) > 0\) as has_blocking_findings/
     );
-    expect(productionPreflight).toContain("\\if :ROW_COUNT");
-    expect(productionPreflight).toContain("\\quit 3");
-    expect(productionPreflight).toContain("0 blocking findings");
+    expect(productionPreflight).toContain("\\gset preflight_");
+    expect(productionPreflight).toContain(
+      "\\ir production-release-migration-preflight-control.psql"
+    );
+    expect(productionPreflight).not.toContain("\\if :ROW_COUNT");
+    expect(productionPreflightControl).toContain(
+      "\\if :preflight_has_blocking_findings"
+    );
+    expect(productionPreflightControl).toContain(
+      "select 1 / 0 as blocking_findings_must_fail_closed"
+    );
+    expect(productionPreflightControl).toContain(":preflight_blocking_findings");
+    expect(productionPreflightBehavior).toContain("[0, 1, 2, 6]");
+    expect(productionPreflightFixture).toContain("begin read only;");
+    expect(productionPreflightFixture).toContain("(count(*) > 0) as has_blocking_findings");
+    expect(productionPreflightFixture).toContain("\\gset preflight_");
+    expect(productionPreflightFixture).toContain(
+      "\\ir production-release-migration-preflight-control.psql"
+    );
+    expect(qualityWorkflow).toContain("node scripts/test-database-preflight-control.mjs");
   });
 
   it("runs disposable behavioral security verification in the database preflight gate", () => {

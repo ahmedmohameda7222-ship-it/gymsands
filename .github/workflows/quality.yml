@@ -103,6 +103,7 @@ jobs:
             set -euo pipefail
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-section-production-preflight.sql
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql
+            PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres" node scripts/test-database-preflight-control.mjs
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
           ) 2>&1 | tee quality-reports/database-preflight.log
           echo "${PIPESTATUS[0]}" > quality-reports/database-preflight.exit

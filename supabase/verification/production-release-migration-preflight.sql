@@ -6,6 +6,8 @@
 
 \set ON_ERROR_STOP on
 
+begin read only;
+
 with required_columns(table_name, column_name) as (
   values
     ('onboarding_answers', 'primary_goal'),
@@ -270,13 +272,25 @@ with required_columns(table_name, column_name) as (
     )
     and pg_get_function_identity_arguments(routine.oid) not like '%date%'
 )
-select issue_type, object_identity, details
+select
+  count(*)::integer as blocking_finding_count,
+  (count(*) > 0) as has_blocking_findings,
+  coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'issue_type', issue_type,
+        'object_identity', object_identity,
+        'details', details
+      )
+      order by issue_type, object_identity
+    ),
+    '[]'::jsonb
+  ) as blocking_findings
 from findings
-order by issue_type, object_identity;
+\gset preflight_
 
-\if :ROW_COUNT
-  \echo 'Production release migration preflight failed with' :ROW_COUNT 'blocking finding(s).'
-  \quit 3
-\else
-  \echo 'Production release migration preflight passed: 0 blocking findings.'
-\endif
+-- Client-side reporting and exit control is shared with its executable psql
+-- behavior test. The aggregate above is read-only against persistent objects.
+\ir production-release-migration-preflight-control.psql
+
+rollback;
