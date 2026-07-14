@@ -23,7 +23,7 @@ Any failed or blocked preflight is a no-go before merge. The migration ledger mu
 - Repository configuration and tests verify policy intent only. They do not prove actual Vercel provider enforcement.
 - After every candidate branch push, inspect the Vercel deployment list for the exact pushed SHA. Any new branch or pull-request deployment means the main-only policy remains unresolved.
 - Vercel does not use `ignoreCommand`.
-- Vercel does not use preview or production exact-SHA approval environment variables.
+- Vercel does not use preview or production exact-SHA approval environment variables, including `PLAIVRA_PREVIEW_RELEASE_SHA` or `PLAIVRA_PRODUCTION_RELEASE_SHA`.
 - Required GitHub review and CI checks, migration reconciliation, release preflight, and explicit owner approval protect `main` before merge.
 - A merge to `main` is production-triggering under the current Vercel Git-connected model.
 - After merge, confirm that provider metadata, `/api/version`, and `/api/health` identify the exact resulting 40-character `main` SHA.
