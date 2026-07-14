@@ -1,17 +1,18 @@
 # Plaivra Production Migration-History Reconciliation Plan
 
-**Status:** Owner approval required before execution  
+**Status:** Corrected Phase A evidence only — owner approval required before any production write  
 **Production project:** `bkwezjxvapaeasfvlhvv`  
-**Operation type:** Forward-only migration-history metadata repair  
-**SQL replay:** Prohibited
+**Repository base:** `54e9768d52011e1d1839c4f50f0a2bc578ca27db`  
+**SQL replay:** Prohibited  
+**Current recommendation:** `NO-GO`
 
 ## 1. Purpose
 
-Production contains the recorded schema effects of six repository migrations that are absent from `supabase_migrations.schema_migrations`. This plan establishes the evidence and approval sequence required to reconcile migration history without replaying DDL, modifying user data, rewriting an applied migration, or falsely advancing the release compatibility marker.
+Production contains the physical effects of seven repository migrations that are absent from `supabase_migrations.schema_migrations`. One of the seven, the nutrition target override migration, has a material ACL divergence that requires a new forward-only correction before it can be eligible for history repair.
 
-This document is not authorization to perform the repair.
+This plan does not authorize production execution.
 
-## 2. Migrations in scope
+## 2. Historical identities in scope
 
 1. `20260711213000_adaptive_onboarding_v2.sql`
 2. `20260712173000_persistent_meal_plan_skip_status.sql`
@@ -19,215 +20,148 @@ This document is not authorization to perform the repair.
 4. `20260713153000_meal_plan_atomic_execution.sql`
 5. `20260713160000_train_section_atomic_integrity.sql`
 6. `20260713170000_finalize_train_schedule_delete_integrity.sql`
+7. `20260714030000_harden_train_plan_rpc_execution.sql`
 
-No other migration, schema object, index, grant, policy, trigger, or row repair is included.
+The forward correction is a separate future migration:
 
-## 3. Mandatory evidence package
+8. `20260715010000_restrict_nutrition_target_override_acl.sql`
 
-Capture all evidence read-only and retain it with the exact repository SHA used for comparison:
+The forward correction is not a historical identity to repair. It must be applied and tracked normally through a controlled operation.
 
-- production project reference and capture timestamp;
+## 3. Current blockers
+
+- Nutrition override ACL is over-broad for `authenticated`.
+- Seven physical migration effects are absent from migration history.
+- The forward ACL correction is not applied.
+- Migration history remains pending.
+- Backup/PITR evidence is not directly verified.
+- Production operator, independent verifier, release-hold owner, and rollback owner are unnamed.
+- No verified Vercel release hold is active.
+
+## 4. Mandatory evidence package
+
+Retain:
+
+- exact production project reference and capture timestamp;
 - exact repository commit SHA;
-- SHA-256 digest of each migration file;
-- current rows from `supabase_migrations.schema_migrations`;
-- current `release_schema_compatibility` row;
-- output from `supabase/verification/production-release-migration-preflight.sql`;
-- `pg_get_functiondef` for every function/RPC in scope;
-- table/column definitions from `pg_catalog` and `information_schema`;
-- constraint definitions from `pg_get_constraintdef`;
-- index definitions from `pg_get_indexdef`;
-- trigger definitions from `pg_get_triggerdef`;
-- RLS enabled state and policy definitions;
-- table/function grants and anonymous-denial evidence;
-- row-level integrity findings requested by the migration-specific preflight;
-- proof that no migration is partially applied.
+- SHA-256 for all seven historical files and the forward correction;
+- complete migration history;
+- compatibility marker;
+- exact nutrition override ACL from `pg_class.relacl`/`aclexplode`;
+- complete function definitions and grants;
+- constraints, indexes, triggers, RLS, and policies;
+- zero-count integrity evidence;
+- backup/PITR evidence;
+- named operator and independent verifier;
+- verified release-hold evidence.
 
-Do not include credentials, access tokens, user-authored content, or unnecessary row data in the retained evidence.
+Do not retain secrets or user-authored row content.
 
-## 4. Migration-specific proof
+## 5. Eligibility classifications
 
-### 4.1 Adaptive onboarding v2
+Only `complete equivalent application` is eligible for metadata repair.
 
-Verify:
+- A partial or divergent historical migration requires a reviewed forward correction.
+- The nutrition migration remains divergent until the forward ACL correction is applied and verified.
+- The seventh Train hardening migration must be verified in full, not inferred from a subset.
+- A migration remains `applied_schema_untracked` until repair is actually completed and independently verified.
 
-- all columns added to `onboarding_answers`;
-- all columns added to `user_nutrition_preference_profiles`;
-- all columns added to `user_fitness_constraints`;
-- `onboarding_answers_setup_stage_check` definition;
-- `onboarding_answers_sport_details_object_check` definition;
-- exact `complete_adaptive_onboarding_v2(jsonb,jsonb,jsonb,jsonb)` definition;
-- function language, volatility, security mode, and hardened `search_path`;
-- authenticated/service-role execution only and anonymous denial.
+## 6. Safe production sequence — design only
 
-Abort if any column, constraint, function clause, grant, or ownership rule differs materially from the repository migration.
+### 6.1 Release hold
 
-### 4.2 Persistent meal-plan skip status
+Use a release-owner-approved Vercel hold that prevents new production builds/promotions while preserving the currently serving deployment. Capture the previous provider configuration and verify the hold is active before database work.
 
-Verify:
+### 6.2 Backup and identities
 
-- allowed `user_meal_plan_items.status` values;
-- skipped-state timestamp/integrity constraint;
-- terminal-state transition function and trigger;
-- no rows violate the intended terminal-state constraints.
+1. Verify a current scheduled backup or PITR recovery point.
+2. Record backup type, successful timestamp, recovery window, and evidence timestamp.
+3. Revalidate the exact repository SHA.
+4. Recalculate SHA-256 for all eight migration files.
+5. Re-capture migration history and the compatibility marker.
 
-Abort if production contains incompatible state values or a different terminal-transition contract.
+### 6.3 Apply only the forward ACL correction
 
-### 4.3 Nutrition target date overrides
+An ambiguous `supabase db push` is prohibited because it could attempt to replay the seven history-untracked migrations.
 
-Verify:
+The approved operator must use a supported isolated mechanism that applies only the new forward migration while preserving normal migration tracking. The runbook must show the exact command and dry-run/list evidence proving that no earlier SQL will execute.
 
-- table `user_nutrition_target_date_overrides` and every column/default;
-- unique owner/date constraint and expected index;
-- RLS enabled;
-- four owner policies for select/insert/update/delete;
-- authenticated CRUD, service-role access, and anonymous denial;
-- updated-at trigger;
-- exact `apply_nutrition_target_changes(date,text,text,integer,numeric,numeric,numeric,integer,text)` definition and grants.
+A safe staged design is:
 
-Abort on any policy, grant, function, uniqueness, or ownership mismatch.
+1. after complete equivalence is independently approved, mark each of the seven physical historical identities applied with the supported metadata-only command;
+2. verify all seven history identities exactly once and rerun the read-only preflight;
+3. run `supabase db push --dry-run --linked` and require the output to list only `20260715010000_restrict_nutrition_target_override_acl.sql`;
+4. run `supabase db push --linked` to apply and track only that forward correction;
+5. verify the exact ACL and forward migration identity immediately.
 
-### 4.4 Meal-plan atomic execution
+The nutrition identity may be repaired before the ACL correction only when the reviewed evidence explicitly records the physical migration plus its known drift and the execution remains under one uninterrupted release hold. The forward correction must then be applied before compatibility-marker advancement or release. If the owner does not approve that staged model, do not proceed.
 
-Verify:
+Direct inserts into `supabase_migrations.schema_migrations` are prohibited.
 
-- all three browser-used atomic meal-plan RPC definitions;
-- `auth.uid()` ownership checks for every source and resulting row;
-- hardened `SECURITY DEFINER` search paths;
-- exact role grants and anonymous denial;
-- uniqueness indexes and execution-state constraints;
-- terminal-transition trigger behavior;
-- zero duplicate execution identities;
-- recorded legacy repair outcome without exposing meal names or user identifiers.
+### 6.4 Immediate verification
 
-Abort if cross-user access is possible, any RPC definition differs, or partial duplicate/repair state remains.
+After the forward fix:
 
-### 4.5 Train section atomic integrity
+- authenticated ACL must be exactly `DELETE, INSERT, SELECT, UPDATE`;
+- `TRUNCATE`, `TRIGGER`, `REFERENCES`, and `MAINTAIN` must be absent;
+- RLS, four policies, service-role access, owner administration, and row counts must remain intact;
+- the forward migration identity must be recorded exactly once.
 
-Verify:
+### 6.5 Seven-history repair
 
-- expected Train RPC set and signatures;
-- ownership checks and reference assertions;
-- archived day/exercise columns;
-- active-plan uniqueness/constraint behavior;
-- history/reference-preservation triggers;
-- required indexes;
-- hardened search paths and role grants;
-- zero blocking integrity findings.
+For each fully equivalent historical migration, use the supported metadata-only operation:
 
-Abort if any legacy overload remains when the migration requires its removal, or any blocking integrity finding is non-zero.
+```bash
+supabase migration repair <version> --status applied
+```
 
-### 4.6 Final Train schedule/delete integrity
+This updates migration tracking only and does not execute SQL.
 
-Verify:
+Repair one exact version at a time, verify after each step, and abort on any mismatch.
 
-- explicit-local-date signatures for activate/create/save/archive/delete operations;
-- absence of the superseded overloads;
-- schedule-safe delete/archive behavior;
-- authenticated/service-role grants and anonymous denial;
-- hardened search paths;
-- zero reference, duplication, schedule-history, active-plan, and orphan conflicts.
+### 6.6 Post-repair repository and release sequence
 
-Abort on a signature mismatch, legacy overload, or non-zero blocking finding.
+1. Re-run the complete read-only preflight.
+2. Verify eight relevant identities exactly once: seven repaired historical identities plus the normally applied forward correction.
+3. Update `supabase/migration-ledger.json` in a separate reviewed commit.
+4. Require zero pending and zero unresolved ledger entries.
+5. Rebuild release metadata from the exact reviewed commit.
+6. Update the compatibility marker only through a separately approved forward operation.
+7. Run `npm run release:preflight`.
+8. Deploy the exact approved SHA.
+9. Verify provider commit metadata, `/api/version`, `/api/health`, anonymous smoke, authenticated populated smoke, and authenticated empty smoke.
+10. Remove the release hold only after acceptance.
 
-## 5. Partial-application detection
+## 7. Abort conditions
 
-For each migration, classify the production state as exactly one of:
+Abort immediately if:
 
-- **complete equivalent application** — every required effect matches;
-- **partial application** — some but not all effects exist;
-- **divergent application** — objects exist but definitions differ;
-- **not applied** — required effects are absent.
+- production changes during evidence capture;
+- a required object or identity differs;
+- any extra nutrition ACL privilege remains;
+- any Train actor/security/grant condition differs;
+- any blocking integrity count is non-zero;
+- backup evidence is missing or stale;
+- operator/verifier ownership is unresolved;
+- the release hold is absent;
+- a command could replay existing migration SQL;
+- the compatibility marker would advance before post-repair verification.
 
-Only `complete equivalent application` is eligible for history repair. A partial or divergent state requires a separately reviewed forward-fix migration. Never use migration-history insertion to conceal incomplete schema state.
+## 8. Rollback design
 
-## 6. Owner approval checkpoint
-
-Before any history repair, the owner and independent quality-control reviewer must approve an evidence bundle containing:
-
-- the exact production capture;
-- the exact repository SHA and migration hashes;
-- a migration-by-migration equivalence table;
-- all preflight results;
-- explicit confirmation that no SQL replay will occur;
-- backup/restore evidence for migration metadata;
-- the proposed metadata statements generated by the supported Supabase workflow;
-- abort and rollback procedures.
-
-Approval must name all six versions individually. Blanket approval is insufficient.
-
-## 7. Forward-only history repair procedure
-
-Use only the currently supported Supabase migration-history repair mechanism approved for the project. The operator must:
-
-1. place production in a controlled release hold;
-2. capture a fresh read-only evidence snapshot;
-3. confirm the six migration file hashes have not changed;
-4. confirm the preflight still reports complete equivalent application;
-5. back up the migration-history rows and compatibility marker;
-6. mark each exact migration version as applied through the supported history-repair operation, without executing migration SQL;
-7. verify that each history identity appears exactly once with the intended version/name;
-8. rerun the full read-only preflight;
-9. update `supabase/migration-ledger.json` in a new reviewed repository change from `applied_schema_untracked` to the verified applied identities;
-10. rerun the ledger checker and full migration rehearsal;
-11. only then update the database compatibility marker to the reviewed expected migration version;
-12. deploy no application until the reconciled repository commit passes release preflight.
-
-The exact metadata command/API invocation must be copied from current Supabase documentation at execution time and included in the owner-approved runbook. Do not improvise direct inserts into internal migration tables.
-
-## 8. Abort conditions
-
-Abort immediately when:
-
-- any object definition differs from repository SQL;
-- any required object is missing;
-- any unexpected legacy overload remains;
-- any ownership/grant/policy test fails;
-- any blocking integrity query returns rows;
-- the production project reference is not exact;
-- the repository SHA or migration hash changes after review;
-- a backup cannot be verified;
-- the supported repair mechanism is unavailable or ambiguous;
-- an operator proposes replaying SQL;
-- the compatibility marker would be advanced before post-repair verification.
-
-## 9. Rollback and recovery
-
-History repair changes metadata only. If verification fails before compatibility-marker advancement:
+Before compatibility-marker advancement:
 
 - keep the release hold active;
-- stop further repair operations;
-- restore the migration-history metadata from the captured backup using an independently reviewed procedure;
-- retain all evidence and incident logs;
-- do not change schema objects or user data;
-- prepare a forward-fix plan for any discovered divergence.
+- stop further operations;
+- revert only incorrectly inserted migration identities with `supabase migration repair <version> --status reverted`;
+- verify the history table and compatibility marker;
+- use the verified backup/PITR point only if metadata rollback is insufficient;
+- prepare a new reviewed forward-fix plan for any physical divergence.
 
-After the compatibility marker is advanced, rollback must restore a code/schema-compatible release pair. Do not roll back code to an artifact that expects a different migration identity.
+## 9. Current decision
 
-## 10. Post-repair verification
+```text
+NO-GO
+```
 
-Required checks:
-
-- six history identities present exactly once;
-- no duplicate migration versions/names;
-- repository ledger counts and states match production history;
-- read-only preflight has zero blockers;
-- full local migration chain succeeds from an empty database;
-- database lint at error level passes;
-- `/api/version` reports matching schema and migration markers;
-- `migrationLedgerReconciled=true`;
-- `schemaAppliedUntrackedCount=0`;
-- `releaseReady=true` only after all artifact and browser gates also pass;
-- authenticated populated and empty synthetic smoke passes against the reviewed deployment.
-
-## 11. Compatibility-marker sequence
-
-1. Repair and verify migration history.
-2. Update and merge the machine-readable repository ledger through normal review.
-3. Build release metadata from that exact commit.
-4. Rehearse migrations and preflight.
-5. Update the production compatibility marker through an approved forward-only operation.
-6. Verify `/api/version` against the marker.
-7. Deploy the exact reviewed commit.
-8. Run authenticated release smoke.
-
-The marker must never be used to claim physical-schema proof by itself.
+No production write, migration-history repair, compatibility-marker update, merge, or deployment is authorized by this plan.
