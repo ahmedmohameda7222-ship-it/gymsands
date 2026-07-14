@@ -41,6 +41,8 @@ describe("client error telemetry", () => {
       "workout was \"Private workout\"",
       "note was `Private note`",
       "Key (food_name)=(Private food)",
+      "https://app.plaivra.com/records/abcdefghijklmnopqrstuvwx/private",
+      "https://app.plaivra.com/records/123456789/private",
       "https://app.plaivra.com/dashboard?token=secret#private"
     ].join(" | ");
     const safe = sanitizeClientErrorText(unsafe, 3000);
@@ -53,11 +55,14 @@ describe("client error telemetry", () => {
       "Private workout",
       "Private note",
       "Private food",
+      "abcdefghijklmnopqrstuvwx",
+      "123456789",
       "token=secret",
       "#private"
     ]) {
       expect(safe).not.toContain(secret);
     }
+    expect(safe).toContain("/records/id/private");
     expect(safe.match(/\[REDACTED\]/g)?.length).toBeGreaterThanOrEqual(9);
   });
 
@@ -75,12 +80,12 @@ describe("client error telemetry", () => {
     const result = validateClientErrorPayload({
       ...validPayload,
       message: "Failed for member@example.com and 123e4567-e89b-42d3-a456-426614174000",
-      stack: "at https://app.plaivra.com/dashboard?token=secret"
+      stack: "at https://app.plaivra.com/records/abcdefghijklmnopqrstuvwx/private?token=secret"
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.message).toBe("Failed for [REDACTED] and [REDACTED]");
-    expect(result.value.stack).toBe("at https://app.plaivra.com/dashboard");
+    expect(result.value.stack).toBe("at https://app.plaivra.com/records/id/private");
     expect(result.value.route).toBe("/dashboard");
   });
 
