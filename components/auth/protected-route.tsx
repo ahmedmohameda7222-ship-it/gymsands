@@ -12,6 +12,8 @@ import { getOnboarding } from "@/services/database/profile";
 import { hasRequiredConsents } from "@/services/database/consents";
 import { checkUserLaunchEligibility } from "@/lib/auth/eligibility";
 import { supabase } from "@/lib/supabase/client";
+import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
+import { env } from "@/lib/env";
 
 function isAccountControlPath(pathname: string) {
   return pathname === "/settings/account"
@@ -70,7 +72,7 @@ export function ProtectedRoute({
 
   useEffect(() => {
     let mounted = true;
-    if (isLoading || !user?.id || user.id === "mock-user" || pathname === "/onboarding" || isAccountControlPath(pathname) || adminOnly) {
+    if (isLoading || !user?.id || (env.useMockAuth && isMockAuthUserId(user.id)) || pathname === "/onboarding" || isAccountControlPath(pathname) || adminOnly) {
       setIsCheckingEligibility(false);
       setEligibilityMessage("");
       return;

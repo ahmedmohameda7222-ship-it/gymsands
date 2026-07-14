@@ -72,20 +72,36 @@ describe("client error telemetry", () => {
     expect(sanitizeClientRoute("/my-workout/plans/123e4567-e89b-42d3-a456-426614174000/edit?token=secret"))
       .toBe("/my-workout/plans/id/edit");
     expect(sanitizeClientRoute("/records/abcdefghijklmnopqrstuvwx/private")).toBe("/records/id/private");
+    expect(sanitizeClientRoute("/records/AbC123_-opaqueIdentifier987/private")).toBe("/records/id/private");
     expect(sanitizeClientRoute("/records/123456789/private")).toBe("/records/id/private");
+    expect(sanitizeClientRoute("/settings/chatgpt-connection/private")).toBe("/settings/chatgpt-connection/private");
     expect(sanitizeClientRoute("javascript:alert(1)")).toBe("/unknown");
+  });
+
+  it("preserves safe stack structure after credential removal", () => {
+    const safe = sanitizeClientErrorText([
+      "cookie: session=private",
+      "at https://app.plaivra.com/records/abcdefghijklmnopqrstuvwx/private?token=secret#fragment",
+      "authorization: Basic private",
+      "at /my-workout/plans/123e4567-e89b-42d3-a456-426614174000/edit?debug=private"
+    ].join(" | "), 3000);
+    expect(safe).toContain("cookie: [REDACTED] | at https://app.plaivra.com/records/id/private");
+    expect(safe).toContain("authorization: [REDACTED] | at /my-workout/plans/id/edit");
+    expect(safe).not.toMatch(/session=private|Basic private|token=secret|fragment|debug=private/);
   });
 
   it("accepts only the allowlisted envelope and sanitizes accepted strings again", () => {
     const result = validateClientErrorPayload({
       ...validPayload,
       message: "Failed for member@example.com and 123e4567-e89b-42d3-a456-426614174000",
-      stack: "at https://app.plaivra.com/records/abcdefghijklmnopqrstuvwx/private?token=secret"
+      stack: "at https://app.plaivra.com/records/abcdefghijklmnopqrstuvwx/private?token=secret",
+      componentStack: "at Record (/records/AbC123_-opaqueIdentifier987/private#details)"
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.message).toBe("Failed for [REDACTED] and [REDACTED]");
     expect(result.value.stack).toBe("at https://app.plaivra.com/records/id/private");
+    expect(result.value.componentStack).toBe("at Record (/records/id/private)");
     expect(result.value.route).toBe("/dashboard");
   });
 

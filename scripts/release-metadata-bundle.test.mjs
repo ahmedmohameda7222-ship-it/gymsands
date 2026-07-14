@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
+import { validateBuiltReleaseMetadata } from "./verify-built-release-metadata.mjs";
 
 const root = process.cwd();
 const fullSha = "60a204d5fc20fc396be1b1b47e748c42ebba6abf";
@@ -55,6 +58,57 @@ test("release manifest rejects abbreviated release SHAs", () => {
   ]);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stdout}\n${result.stderr}`, /exact 40-character/i);
+});
+
+test("release manifest records exact installed runtime versions and lockfile identity", () => {
+  const directory = mkdtempSync(resolve(tmpdir(), "plaivra-release-manifest-"));
+  const output = resolve(directory, "release-manifest.json");
+  try {
+    const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    const result = runScript("scripts/create-release-manifest.mjs", [
+      "--commit", commit,
+      "--build-timestamp", "2026-07-14T01:02:03.000Z",
+      "--environment", "test",
+      "--schema-compatibility", "2",
+      "--output", output
+    ]);
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    const manifest = JSON.parse(readFileSync(output, "utf8"));
+    const installedNext = JSON.parse(readFileSync(resolve(root, "node_modules/next/package.json"), "utf8")).version;
+    const packageLock = readFileSync(resolve(root, "package-lock.json"));
+    const npmVersion = process.platform === "win32"
+      ? execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "npm --version"], { cwd: root, encoding: "utf8" }).trim()
+      : execFileSync("npm", ["--version"], { cwd: root, encoding: "utf8" }).trim();
+
+    assert.equal(manifest.runtime.nextVersion, installedNext);
+    assert.doesNotMatch(manifest.runtime.nextVersion, /^[~^<>=]/);
+    assert.equal(manifest.runtime.nodeVersion, process.version);
+    assert.equal(manifest.runtime.npmVersion, npmVersion);
+    assert.equal(manifest.runtime.lockfileSha256, createHash("sha256").update(packageLock).digest("hex"));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("built metadata verification accepts fail-closed readiness only with the exact build identity", () => {
+  const expected = {
+    commitSha: fullSha,
+    buildTimestamp: "2026-07-14T01:02:03.000Z",
+    environment: "ci",
+    expectedDatabaseMigrationVersion: "20260711014500",
+    migrationLedgerReconciliationState: "pending",
+    schemaAppliedUntrackedCount: 6
+  };
+  const body = { ...expected, artifactIdentityValid: true, releaseReady: false };
+  assert.equal(validateBuiltReleaseMetadata({ body, status: 503, expected }), true);
+  assert.throws(
+    () => validateBuiltReleaseMetadata({ body: { ...body, commitSha: "0".repeat(40) }, status: 503, expected }),
+    /commitSha/
+  );
+  assert.throws(
+    () => validateBuiltReleaseMetadata({ body: { ...body, releaseReady: true }, status: 503, expected }),
+    /fail-closed/
+  );
 });
 
 test("production release gates reject nonstandard SHA lengths", () => {

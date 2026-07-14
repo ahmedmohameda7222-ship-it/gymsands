@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { arch, platform } from "node:process";
 import { fileURLToPath } from "node:url";
 import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
+import { installedNextVersion } from "./release-runtime-versions.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templatePath = resolve(root, "release/release-manifest.template.json");
@@ -81,15 +82,30 @@ function sha256(path) {
 }
 
 function commandVersion(command, args = ["--version"]) {
+  if (process.platform === "win32" && command === "npm") {
+    return execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "npm --version"], {
+      cwd: root,
+      encoding: "utf8"
+    }).trim();
+  }
   return execFileSync(command, args, { cwd: root, encoding: "utf8" }).trim();
 }
 
-function evidenceStatus(reportsPath, report) {
+function evidenceStatus(reportsPath, report, provenance = null) {
   const exitPath = resolve(reportsPath, `${report}.exit`);
   const logPath = resolve(reportsPath, `${report}.log`);
   if (!existsSync(exitPath) || !existsSync(logPath)) return { status: "missing", evidence: null };
   const exitCode = readFileSync(exitPath, "utf8").trim();
-  return { status: exitCode === "0" ? "passed" : "failed", evidence: `${report}.log` };
+  const capturedAt = new Date(Math.max(statSync(exitPath).mtimeMs, statSync(logPath).mtimeMs)).toISOString();
+  return {
+    status: exitCode === "0" ? "passed" : "failed",
+    evidence: `${report}.log`,
+    ...(provenance ? {
+      commitSha: provenance.commitSha,
+      capturedAt,
+      stale: Date.parse(capturedAt) < Date.parse(provenance.buildTimestamp)
+    } : {})
+  };
 }
 
 function applyQualityEvidence(manifest, reportsDirectory) {
@@ -113,8 +129,12 @@ function applyQualityEvidence(manifest, reportsDirectory) {
     productionBuild: "build",
     renderedBrowserQa: "rendered-qa"
   };
+  const provenance = {
+    commitSha: manifest.release.commitSha,
+    buildTimestamp: manifest.release.buildTimestamp
+  };
   for (const [gate, report] of Object.entries(reportNames)) {
-    manifest.qualityGates[gate] = evidenceStatus(reportsPath, report);
+    manifest.qualityGates[gate] = evidenceStatus(reportsPath, report, provenance);
   }
   manifest.smoke.anonymous = evidenceStatus(reportsPath, "post-deploy-smoke");
   manifest.smoke.authenticatedPopulated = evidenceStatus(reportsPath, "authenticated-smoke-populated");
@@ -124,7 +144,6 @@ function applyQualityEvidence(manifest, reportsDirectory) {
 
 const options = parseArgs(process.argv.slice(2));
 const manifest = JSON.parse(readFileSync(templatePath, "utf8"));
-const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 const packageLockPath = resolve(root, "package-lock.json");
 const packageLock = JSON.parse(readFileSync(packageLockPath, "utf8"));
 const migrationLedger = JSON.parse(readFileSync(resolve(root, "supabase/migration-ledger.json"), "utf8"));
@@ -159,7 +178,7 @@ manifest.release = {
 manifest.runtime = {
   nodeVersion: process.version,
   npmVersion: commandVersion("npm"),
-  nextVersion: packageJson.dependencies?.next ?? "unknown",
+  nextVersion: installedNextVersion(root),
   lockfileVersion: packageLock.lockfileVersion ?? null,
   lockfileSha256: sha256(packageLockPath),
   platform: platform,

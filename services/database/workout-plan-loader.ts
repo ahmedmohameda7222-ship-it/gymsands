@@ -3,6 +3,7 @@
 import { defaultExerciseInstructions } from "@/data/workouts";
 import { isIsoDate, todayIso } from "@/lib/date-utils";
 import { getMockTrainPlans } from "@/lib/fixtures/train-mock";
+import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import { env } from "@/lib/env";
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
@@ -166,7 +167,7 @@ async function queryPlans(userId: string, select: string) {
 }
 
 export async function getAllUserWorkoutPlans(userId: string) {
-  if (env.useMockAuth && userId === "mock-user") return getMockTrainPlans();
+  if (env.useMockAuth && isMockAuthUserId(userId)) return getMockTrainPlans();
   if (!supabase || !isUuid(userId)) return [];
 
   for (const select of [fullPlanSelect, compatPlanSelect, legacyPlanSelect]) {

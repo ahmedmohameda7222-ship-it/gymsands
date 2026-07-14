@@ -17,6 +17,7 @@ import { useTodayDate } from "@/lib/hooks/use-today-date";
 import { useTranslation } from "@/lib/i18n/use-translation";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { getFocusedTodayCopy, interpolateFocusedTodayCopy } from "@/lib/dashboard/focused-today-copy";
+import { useDashboardContextPublication, useDashboardRemainingMacros } from "@/lib/dashboard/dashboard-context-publication";
 import { resolveTodayWorkout, selectRelevantMeal, todayWorkoutActionHref } from "@/lib/dashboard/today-model";
 import {
   dashboardRequestKey,
@@ -27,7 +28,8 @@ import {
   type DashboardSourceState,
   type DashboardSourceStates
 } from "@/lib/dashboard/today-request";
-import { remainingMacros, sumFoodLogs } from "@/services/nutrition/calculations";
+import { sumFoodLogs } from "@/services/nutrition/calculations";
+import type { QuickPromptContext } from "@/lib/ai/quick-prompts";
 import { startOfWeek } from "@/services/reports/reporting";
 import { getMealPlanItemsForDate, markDirectMealPlanItemDone, markDirectMealPlanItemSkipped, markDirectMealPlanItemsSkipped } from "@/services/database/meal-plan";
 import { getGroceryItems, upsertGroceryItem } from "@/services/database/execution-layer";
@@ -267,9 +269,8 @@ export function TodayDashboard() {
 
   const totals = useMemo(() => visibleNutritionData.logs ? sumFoodLogs(visibleNutritionData.logs) : null, [visibleNutritionData.logs]);
   const targets = visibleNutritionData.targets;
-  const remaining = useMemo(() => targets && totals
-    ? remainingMacros({ calories: targets.daily_calories, protein_g: targets.protein_g, carbs_g: targets.carbs_g, fat_g: targets.fat_g, water_ml: targets.water_ml }, totals)
-    : null, [targets, totals]);
+  const remaining = useDashboardRemainingMacros(targets, totals);
+  const foodLogCount = knownFoodLogCount(visibleNutritionData);
   const waterTotal = useMemo(() => visibleWaterLogs.reduce((sum, item) => sum + Number(item.amount_ml), 0), [visibleWaterLogs]);
   const workoutResolution = resolveTodayWorkout({ today, planDayId: visibleWorkoutData.day?.id ?? null, openSessionId: visibleWorkoutData.openSessionId, sessions: visibleWorkoutData.sessions });
   const workoutState = workoutResolution.state;
@@ -280,10 +281,10 @@ export function TodayDashboard() {
   const bought = visibleGroceryItems.filter((item) => item.checked);
   const alreadyHave = visibleGroceryItems.filter((item) => item.already_have);
 
-  useEffect(() => {
+  const publishedDashboardContext = useMemo<QuickPromptContext>(() => {
     const normalize = (state: DashboardSourceState) => state === "idle" ? "unknown" : state;
     const workoutLoaded = visibleStates.workout === "loaded";
-    setDashboardContext({
+    return {
       route: "/dashboard",
       today,
       localHour: new Date().getHours(),
@@ -308,7 +309,7 @@ export function TodayDashboard() {
         remainingProtein: remaining?.protein_g ?? null,
         remainingCarbs: remaining?.carbs_g ?? null,
         remainingFat: remaining?.fat_g ?? null,
-        foodLogCount: knownFoodLogCount(visibleNutritionData),
+        foodLogCount,
         mealPlanCount: visibleStates.meals === "loaded" ? visibleMealItems.length : null,
         plannedMealCount: visibleStates.meals === "loaded" ? visibleMealItems.filter((item) => item.status === "planned").length : null
       },
@@ -317,8 +318,9 @@ export function TodayDashboard() {
       recovery: { state: normalize(visibleStates.wellness), hasData: Boolean(todaySleep), sleepHours: todaySleep?.hours_slept ?? null, poorRecovery: Boolean(todaySleep && (todaySleep.recovery_level === "low" || todaySleep.fatigue_level === "high")) },
       wellness: { state: normalize(visibleStates.wellness), habitCount: visibleStates.wellness === "loaded" ? visibleWellnessData.habits.length : null, supplementCount: visibleStates.wellness === "loaded" ? visibleWellnessData.supplements.length : null },
       endOfWeek: new Date(`${today}T12:00:00`).getDay() === 0
-    });
-  }, [remaining, setDashboardContext, settings.energyUnit, settings.liquidUnit, settings.weightUnit, targets, today, todaySleep, visibleGroceryItems.length, visibleMealItems, visibleNutritionData, visibleProfileContext, visibleProgressContext, visibleStates, visibleWaterLogs.length, visibleWellnessData.habits.length, visibleWellnessData.supplements.length, visibleWorkoutData, waterTotal, workoutState]);
+    };
+  }, [foodLogCount, remaining, settings.energyUnit, settings.liquidUnit, settings.weightUnit, targets, today, todaySleep, visibleGroceryItems.length, visibleMealItems, visibleNutritionData.logsState, visibleNutritionData.targetsState, visibleProfileContext, visibleProgressContext, visibleStates, visibleWaterLogs.length, visibleWellnessData.habits.length, visibleWellnessData.supplements.length, visibleWorkoutData, waterTotal, workoutState]);
+  useDashboardContextPublication(publishedDashboardContext, setDashboardContext);
 
   async function markMealDone(item: MealPlanItem) {
     if (pendingMealIds.has(item.id) || item.status !== "planned") return;
@@ -402,6 +404,7 @@ export function TodayDashboard() {
       <div className="space-y-4">
         <TodayProgress
           totals={totals}
+          foodLogCount={foodLogCount}
           logsState={visibleNutritionData.logsState}
           targets={targets}
           targetsState={visibleNutritionData.targetsState}
@@ -409,6 +412,7 @@ export function TodayDashboard() {
           hydrationState={progressSourceState(visibleStates.hydration)}
           energyUnit={settings.energyUnit}
           liquidUnit={settings.liquidUnit}
+          remainingCalculated={remaining !== null}
           copy={copy}
         />
         {visibleNutritionData.logsState === "failed" || visibleNutritionData.totalsIncomplete ? (

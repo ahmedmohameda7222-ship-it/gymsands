@@ -95,6 +95,15 @@ const nextConfig = {
         headers: securityHeaders
       }
     ];
+  },
+  async redirects() {
+    return [
+      {
+        source: "/today-workout",
+        destination: "/my-workout/plans",
+        permanent: true
+      }
+    ];
   }
 };
 

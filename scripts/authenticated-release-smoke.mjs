@@ -8,6 +8,8 @@ const MIGRATION_VERSION = /^\d{12,14}$/;
 const RECORD_UUID = /\b[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\b/gi;
 const LONG_PATH_ID = /\/[a-f0-9_-]{24,128}(?=\/|$)/gi;
 const NUMERIC_PATH_ID = /\/\d{4,}(?=\/|$)/g;
+const OPAQUE_ID = /\b(?=[A-Za-z0-9_-]{24,128}\b)(?=[A-Za-z0-9_-]*[A-Za-z])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]+\b/g;
+const runtimeEvidence = { pageErrors: [], consoleErrors: [], failedRequests: [], serverErrors: [], routes: [], screenshots: [], requestMetrics: {} };
 const ROUTES = [
   { id: "dashboard", path: "/dashboard" },
   { id: "train", path: "/my-workout/plans" },
@@ -58,6 +60,7 @@ function sanitizedText(value, limit = 500) {
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[REDACTED]")
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[REDACTED]")
     .replace(RECORD_UUID, "[REDACTED]")
+    .replace(OPAQUE_ID, "[REDACTED]")
     .replace(/\bKey\s*\([^)\r\n]{1,200}\)\s*=\s*\([^)\r\n]{1,500}\)/gi, "Key [REDACTED]")
     .replace(/"[^"\r\n]{1,200}"/g, '"[REDACTED]"')
     .replace(/'[^'\r\n]{1,200}'/g, "'[REDACTED]'")
@@ -111,25 +114,25 @@ async function assertNoBoundary(page) {
 
 async function visitRoute(page, origin, route, routeEvidence, screenshotDirectory) {
   const startedAt = Date.now();
-  const response = await page.goto(new URL(route.path, origin).toString(), { waitUntil: "domcontentloaded", timeout: 30_000 });
-  await page.locator("main#main-content").waitFor({ state: "visible", timeout: 30_000 }).catch(async () => {
-    await page.locator("main").first().waitFor({ state: "visible", timeout: 10_000 });
-  });
-  await assertNoBoundary(page);
-  if (page.url().includes("/login")) throw new Error(`Authentication was lost while opening ${route.path}.`);
-
-  const rawFinalPath = new URL(page.url()).pathname;
-  const optionalRedirect = Boolean(route.optional && rawFinalPath !== route.path);
-  await page.screenshot({ path: resolve(screenshotDirectory, `${route.id}.png`), fullPage: true });
-  routeEvidence.push({
-    id: route.id,
-    path: route.path,
-    finalPath: safePath(rawFinalPath),
-    status: response?.status() ?? null,
-    applicable: !optionalRedirect,
-    durationMs: Date.now() - startedAt,
-    screenshot: `screenshots/${route.id}.png`
-  });
+  let response;
+  try {
+    response = await page.goto(new URL(route.path, origin).toString(), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await page.locator("main#main-content").waitFor({ state: "visible", timeout: 30_000 }).catch(async () => {
+      await page.locator("main").first().waitFor({ state: "visible", timeout: 10_000 });
+    });
+    await assertNoBoundary(page);
+    if (page.url().includes("/login")) throw new Error(`Authentication was lost while opening ${route.path}.`);
+    const rawFinalPath = new URL(page.url()).pathname;
+    const optionalRedirect = Boolean(route.optional && rawFinalPath !== route.path);
+    await page.screenshot({ path: resolve(screenshotDirectory, `${route.id}.png`), fullPage: true });
+    routeEvidence.push({ id: route.id, path: route.path, finalPath: safePath(rawFinalPath), status: response?.status() ?? null, applicable: !optionalRedirect, durationMs: Date.now() - startedAt, screenshot: `screenshots/${route.id}.png`, passed: true });
+  } catch (error) {
+    const screenshot = `screenshots/failure-${route.id}.png`;
+    await page.screenshot({ path: resolve(screenshotDirectory, `failure-${route.id}.png`), fullPage: true }).catch(() => {});
+    runtimeEvidence.screenshots.push(screenshot);
+    routeEvidence.push({ id: route.id, path: route.path, finalPath: safePath(page.url()), status: response?.status() ?? null, durationMs: Date.now() - startedAt, screenshot, passed: false, error: sanitizedText(error instanceof Error ? error.message : error, 300) });
+    throw error;
+  }
 }
 
 async function main() {
@@ -163,6 +166,7 @@ async function main() {
   let dashboardActive = false;
 
   const browser = await chromium.launch({ headless: true });
+  Object.assign(runtimeEvidence, { mode, accountState: account, deploymentUrl: origin.toString(), expectedCommit, expectedMigration, pageErrors, consoleErrors, failedRequests, serverErrors, routes: routeEvidence, requestMetrics, incidentState, outputDirectory });
   try {
     const context = await browser.newContext({ locale: "en-GB", timezoneId: "Europe/Berlin" });
     const page = await context.newPage();
@@ -186,11 +190,12 @@ async function main() {
       if (Number.isFinite(contentLength) && contentLength > 0) requestMetrics.transferredBytes += contentLength;
       if (response.status() >= 500) serverErrors.push({ url: `${url.origin}${safePath(url.pathname)}`, status: response.status() });
       const table = url.pathname.split("/").at(-1);
-      if (!new Set(["food_logs", "calorie_targets", "user_nutrition_target_profiles"]).has(table)) return;
+      if (!new Set(["food_logs", "calorie_targets", "user_nutrition_target_profiles", "user_nutrition_target_date_overrides", "user_workout_plans"]).has(table)) return;
       try {
         const data = await response.json();
         const count = responseCount(data);
         if (table === "food_logs") incidentState.foodLogCount = Math.max(incidentState.foodLogCount ?? 0, count);
+        else if (table === "user_workout_plans") incidentState.workoutPlanRowCount = Math.max(incidentState.workoutPlanRowCount ?? 0, count);
         else incidentState.targetRowCount = Math.max(incidentState.targetRowCount ?? 0, count);
       } catch {
         // The final populated/empty state assertions remain fail-closed.
@@ -199,6 +204,15 @@ async function main() {
 
     const versionResponse = await page.request.get(new URL("/api/version", origin).toString());
     const version = await versionResponse.json();
+    runtimeEvidence.version = {
+      status: versionResponse.status(),
+      commitSha: version.commitSha,
+      buildTimestamp: version.buildTimestamp,
+      environment: version.environment,
+      expectedDatabaseMigrationVersion: version.expectedDatabaseMigrationVersion,
+      artifactIdentityValid: version.artifactIdentityValid,
+      releaseReady: version.releaseReady
+    };
     if (version.commitSha !== expectedCommit) throw new Error(`Deployed SHA ${version.commitSha || "missing"} does not match the reviewed SHA.`);
     if (version.expectedDatabaseMigrationVersion !== expectedMigration) throw new Error("Artifact migration identity does not match the expected migration.");
     if (!version.buildTimestamp || Number.isNaN(Date.parse(version.buildTimestamp))) throw new Error("Deployment build timestamp is invalid.");
@@ -213,14 +227,23 @@ async function main() {
       if (route.id === "dashboard") {
         const progress = page.locator('section[aria-labelledby="today-progress"]');
         await progress.waitFor({ state: "visible" });
-        incidentState.remainingValuesRendered = await progress.locator('[role="progressbar"]').count() >= 4;
+        const state = await progress.evaluate((element) => ({
+          nutritionLoaded: element.getAttribute("data-nutrition-loaded") === "true",
+          foodLogCount: Number(element.getAttribute("data-food-log-count")),
+          activeTarget: element.getAttribute("data-active-target") === "true",
+          remainingCalculated: element.getAttribute("data-remaining-calculated") === "true"
+        }));
+        incidentState.nutritionLoaded = state.nutritionLoaded;
+        incidentState.foodLogCount = Number.isFinite(state.foodLogCount) ? state.foodLogCount : null;
+        incidentState.activeTarget = state.activeTarget;
+        incidentState.remainingValuesRendered = state.remainingCalculated;
       }
       dashboardActive = false;
     }
 
     if (account === "populated") {
       if ((incidentState.foodLogCount ?? 0) < 1) throw new Error("Populated synthetic account did not expose at least one food log for the tested date.");
-      if ((incidentState.targetRowCount ?? 0) < 1) throw new Error("Populated synthetic account did not expose an active nutrition target source.");
+      if (!incidentState.nutritionLoaded || !incidentState.activeTarget) throw new Error("Populated synthetic account did not expose a loaded active nutrition target source.");
       if (!incidentState.remainingValuesRendered) throw new Error("Dashboard did not render calculated remaining values for the populated incident state.");
     } else if ((incidentState.foodLogCount ?? 0) !== 0) {
       throw new Error("Empty synthetic account unexpectedly returned food logs.");
@@ -267,4 +290,26 @@ async function main() {
   }
 }
 
-await main();
+try {
+  await main();
+} catch (error) {
+  const argv = process.argv.slice(2);
+  const outputIndex = argv.indexOf("--output");
+  const accountIndex = argv.indexOf("--account");
+  const account = accountIndex >= 0 ? argv[accountIndex + 1] : "unknown";
+  const outputDirectory = resolve(outputIndex >= 0 ? argv[outputIndex + 1] : `quality-reports/authenticated-smoke-${account}`);
+  mkdirSync(outputDirectory, { recursive: true });
+  const summary = {
+    checkedAt: new Date().toISOString(),
+    ...runtimeEvidence,
+    accountState: runtimeEvidence.accountState || account,
+    passed: false,
+    failureCode: "AUTHENTICATED_SMOKE_FAILED",
+    failure: sanitizedText(error instanceof Error ? error.message : error, 500),
+    credentialsLogged: false,
+    syntheticDataOnly: true
+  };
+  writeFileSync(resolve(outputDirectory, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+  console.error(summary.failureCode);
+  process.exitCode = 1;
+}

@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import {
   sanitizeAdaptiveOnboarding,
   type AdaptiveFitnessConstraints,
@@ -94,7 +95,7 @@ export function buildAdaptiveConstraintPayload(userId: string, input: AdaptiveFi
 export function buildAdaptivePermissionPayload(config: AiPermissionConfig) { return { access_mode: config.accessMode, scopes: configToScopes(config) }; }
 
 export async function getAdaptiveOnboardingDraft(userId: string): Promise<AdaptiveOnboardingRow | null> {
-  if (env.useMockAuth && userId === "mock-user") return null;
+  if (env.useMockAuth && isMockAuthUserId(userId)) return null;
   requireUserData(userId);
   const { data, error } = await supabase!.from("onboarding_answers").select("*").eq("user_id", userId).maybeSingle();
   if (error) throw error;
@@ -102,7 +103,7 @@ export async function getAdaptiveOnboardingDraft(userId: string): Promise<Adapti
 }
 
 export async function getAdaptiveNutritionProfile(userId: string): Promise<AdaptiveNutritionRow | null> {
-  if (env.useMockAuth && userId === "mock-user") return null;
+  if (env.useMockAuth && isMockAuthUserId(userId)) return null;
   requireUserData(userId);
   const { data, error } = await supabase!.from("user_nutrition_preference_profiles").select("*").eq("user_id", userId).maybeSingle();
   if (error) throw error;
@@ -110,7 +111,7 @@ export async function getAdaptiveNutritionProfile(userId: string): Promise<Adapt
 }
 
 export async function getAdaptiveFitnessConstraints(userId: string): Promise<AdaptiveFitnessConstraints | null> {
-  if (env.useMockAuth && userId === "mock-user") return null;
+  if (env.useMockAuth && isMockAuthUserId(userId)) return null;
   requireUserData(userId);
   const { data, error } = await supabase!.from("user_fitness_constraints").select("injury_or_limitation_labels,areas_to_protect,pain_sensitive_areas,movement_restrictions,movements_to_avoid,discomfort_exercises,mobility_limitations,professional_restrictions,legacy_context_notes").eq("user_id", userId).maybeSingle();
   if (error) throw error;
@@ -128,7 +129,7 @@ export async function getAdaptiveFitnessConstraints(userId: string): Promise<Ada
 }
 
 export async function saveAdaptiveOnboardingDraft(userId: string, answers: AdaptiveOnboardingAnswers, setupStage: number, existingCompletedAt: string | null) {
-  if (env.useMockAuth && userId === "mock-user") return buildAdaptiveOnboardingPayload(userId, answers, setupStage, existingCompletedAt);
+  if (env.useMockAuth && isMockAuthUserId(userId)) return buildAdaptiveOnboardingPayload(userId, answers, setupStage, existingCompletedAt);
   requireUserData(userId);
   const payload = buildAdaptiveOnboardingPayload(userId, answers, setupStage, existingCompletedAt);
   const { data, error } = await supabase!.from("onboarding_answers").upsert(payload, { onConflict: "user_id" }).select("*").single();
@@ -137,7 +138,7 @@ export async function saveAdaptiveOnboardingDraft(userId: string, answers: Adapt
 }
 
 export async function saveAdaptiveNutritionDraft(userId: string, answers: AdaptiveOnboardingAnswers) {
-  if (env.useMockAuth && userId === "mock-user") return buildAdaptiveNutritionPayload(userId, answers);
+  if (env.useMockAuth && isMockAuthUserId(userId)) return buildAdaptiveNutritionPayload(userId, answers);
   requireUserData(userId);
   const payload = buildAdaptiveNutritionPayload(userId, answers);
   const { data, error } = await supabase!.from("user_nutrition_preference_profiles").upsert(payload, { onConflict: "user_id" }).select("*").single();
@@ -146,7 +147,7 @@ export async function saveAdaptiveNutritionDraft(userId: string, answers: Adapti
 }
 
 export async function saveAdaptiveConstraintDraft(userId: string, constraints: AdaptiveFitnessConstraints) {
-  if (env.useMockAuth && userId === "mock-user") return buildAdaptiveConstraintPayload(userId, constraints);
+  if (env.useMockAuth && isMockAuthUserId(userId)) return buildAdaptiveConstraintPayload(userId, constraints);
   requireUserData(userId);
   const payload = buildAdaptiveConstraintPayload(userId, constraints);
   const { data, error } = await supabase!.from("user_fitness_constraints").upsert(payload, { onConflict: "user_id" }).select("*").single();
@@ -156,7 +157,7 @@ export async function saveAdaptiveConstraintDraft(userId: string, constraints: A
 
 export async function completeAdaptiveOnboarding(userId: string, rawAnswers: AdaptiveOnboardingAnswers, permissions: AiPermissionConfig) {
   const answers = sanitizeAdaptiveOnboarding(rawAnswers);
-  if (env.useMockAuth && userId === "mock-user") return { completed_at: new Date().toISOString() };
+  if (env.useMockAuth && isMockAuthUserId(userId)) return { completed_at: new Date().toISOString() };
   requireUserData(userId);
   const { data, error } = await supabase!.rpc("complete_adaptive_onboarding_v2", {
     p_onboarding: buildAdaptiveOnboardingPayload(userId, answers, 6, null),

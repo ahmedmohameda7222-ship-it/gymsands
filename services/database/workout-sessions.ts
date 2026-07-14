@@ -5,6 +5,7 @@ import { env } from "@/lib/env";
 import { isUuid } from "@/lib/utils";
 import { todayIso } from "@/lib/date-utils";
 import { getMockTrainActivity } from "@/lib/fixtures/train-mock";
+import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import { autoDetectPersonalRecordsFromExerciseLogs } from "@/services/database/progress";
 import type {
   ExerciseLog,
@@ -571,7 +572,7 @@ export async function getOpenWorkoutSession(userId: string, workoutId?: string |
 }
 
 export async function getOpenWorkoutSessionWithStatus(userId: string, workoutId?: string | null): Promise<{ session: WorkoutSession | null; error?: string }> {
-  if (env.useMockAuth && userId === "mock-user") {
+  if (env.useMockAuth && isMockAuthUserId(userId)) {
     const session = getMockTrainActivity().find((item) => item.status === "started" && (!workoutId || item.workout_id === workoutId)) ?? null;
     return { session };
   }
@@ -718,7 +719,7 @@ export async function getWorkoutHistoryDetailedWithStatus(userId: string, limit 
 }
 
 export async function getWorkoutActivity(userId: string, limit = 180, options?: { throwOnError?: boolean }) {
-  if (env.useMockAuth && userId === "mock-user") return getMockTrainActivity().slice(0, limit);
+  if (env.useMockAuth && isMockAuthUserId(userId)) return getMockTrainActivity().slice(0, limit);
   if (!canUseUserData(userId)) return [];
   let { data, error } = await supabase!
     .from("workout_sessions")

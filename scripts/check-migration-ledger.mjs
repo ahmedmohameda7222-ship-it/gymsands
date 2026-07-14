@@ -14,6 +14,15 @@ const EXACT_SHA = /^[a-f0-9]{40}$/i;
 const MIGRATION_FILE = /^\d{12,14}_[a-z0-9_]+\.sql$/;
 const PRODUCTION_VERSION = /^\d{12,14}$/;
 const PRODUCTION_NAME = /^[a-z0-9_]+$/;
+const UTC_CAPTURE_TIMESTAMP = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?)(?:Z|\+00(?::?00)?)$/;
+
+export function canonicalizeLedgerTimestamp(value) {
+  if (typeof value !== "string") return null;
+  const match = value.trim().match(UTC_CAPTURE_TIMESTAMP);
+  if (!match) return null;
+  const canonical = `${match[1]}Z`;
+  return Number.isNaN(Date.parse(canonical)) ? null : canonical;
+}
 
 export function deriveMigrationLedgerState(ledger) {
   const entries = Array.isArray(ledger.entries) ? ledger.entries : [];
@@ -44,7 +53,7 @@ export function validateMigrationLedger({ ledger, files, documentation = {} }) {
   if (ledger.schemaVersion !== 1) errors.push("Unsupported migration ledger schemaVersion.");
   if (!/^[a-z0-9]{20}$/.test(ledger.projectRef ?? "")) errors.push("Invalid Supabase projectRef.");
   if (!EXACT_SHA.test(ledger.auditedRepositoryCommit ?? "")) errors.push("auditedRepositoryCommit must be an exact 40-character Git SHA.");
-  if (!ledger.capturedAt || Number.isNaN(Date.parse(ledger.capturedAt))) errors.push("capturedAt must be a valid ISO-8601 timestamp.");
+  if (!canonicalizeLedgerTimestamp(ledger.capturedAt)) errors.push("capturedAt must be a valid ISO-8601 timestamp.");
 
   const entries = Array.isArray(ledger.entries) ? ledger.entries : [];
   const classified = new Map();

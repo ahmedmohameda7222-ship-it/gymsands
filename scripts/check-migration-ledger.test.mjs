@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveMigrationLedgerState, validateMigrationLedger } from "./check-migration-ledger.mjs";
+import {
+  canonicalizeLedgerTimestamp,
+  deriveMigrationLedgerState,
+  validateMigrationLedger
+} from "./check-migration-ledger.mjs";
 
 const files = [
   "20260711014500_idempotency_uncertain_completion_guard.sql",
@@ -48,6 +52,36 @@ test("accepts an internally consistent pending reconciliation ledger", () => {
   assert.deepEqual(result.errors, []);
   assert.equal(result.derived.releaseReady, false);
   assert.equal(result.derived.latestAppliedMigrationVersion, "20260711014500");
+});
+
+test("canonicalizes the repository PostgreSQL UTC timestamp without changing its instant", () => {
+  assert.equal(
+    canonicalizeLedgerTimestamp("2026-07-13T17:12:53.584192+00"),
+    "2026-07-13T17:12:53.584192Z"
+  );
+  const ledger = validLedger();
+  ledger.capturedAt = "2026-07-13T17:12:53.584192+00";
+  assert.deepEqual(validateMigrationLedger({ ledger, files, documentation }).errors, []);
+});
+
+test("accepts canonical UTC capture timestamps", () => {
+  assert.equal(
+    canonicalizeLedgerTimestamp("2026-07-13T17:12:53.584192Z"),
+    "2026-07-13T17:12:53.584192Z"
+  );
+  assert.equal(
+    canonicalizeLedgerTimestamp("2026-07-13T17:12:53.584192+00:00"),
+    "2026-07-13T17:12:53.584192Z"
+  );
+});
+
+test("rejects malformed and missing capture timestamps", () => {
+  for (const capturedAt of ["not-a-time", "2026-07-13 17:12:53+00", "", null, undefined]) {
+    const ledger = validLedger();
+    ledger.capturedAt = capturedAt;
+    const result = validateMigrationLedger({ ledger, files, documentation });
+    assert.ok(result.errors.some((error) => error.includes("ISO-8601")));
+  }
 });
 
 test("rejects stale declared counts", () => {

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, CalendarDays, Loader2, RotateCcw, Save, Target } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { env } from "@/lib/env";
+import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import { InlineFeedback } from "@/components/motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -77,9 +79,9 @@ export function NutritionTargetSettings({
     try {
       const [baseTarget, profiles, plan, assignment] = await Promise.all([
         getCalorieTargets(userId, { throwOnError: true }),
-        userId === "mock-user" ? Promise.resolve([]) : getNutritionTargetProfiles(userId),
+        env.useMockAuth && isMockAuthUserId(userId) ? Promise.resolve([]) : getNutritionTargetProfiles(userId),
         getDefaultUserWorkoutPlan(userId),
-        userId === "mock-user" ? Promise.resolve<NutritionTargetAssignment>("auto") : getEatTargetAssignmentForDate(userId, selectedDate)
+        env.useMockAuth && isMockAuthUserId(userId) ? Promise.resolve<NutritionTargetAssignment>("auto") : getEatTargetAssignmentForDate(userId, selectedDate)
       ]);
       const resolvedTargetType = detectNutritionTargetTypeForDate(plan, selectedDate);
       const nextPersisted: PersistedNutritionTargetState = {

@@ -3,6 +3,7 @@ import { env } from "@/lib/env";
 import { isUuid } from "@/lib/utils";
 import { launchAgeSchema } from "@/lib/auth/eligibility";
 import { isOnboardingComplete } from "@/lib/onboarding/adaptive-profile";
+import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import type { OnboardingAnswers, Profile } from "@/types";
 
 type ProfilePatch = {
@@ -169,7 +170,7 @@ export async function saveOnboarding(answers: OnboardingAnswers) {
 }
 
 export async function getOnboarding(userId: string) {
-  if (env.useMockAuth && userId === "mock-user") return mockOnboarding(userId);
+  if (env.useMockAuth && isMockAuthUserId(userId)) return mockOnboarding(userId);
   if (!canUseUserData(userId)) return null;
   const { data, error } = await supabase!
     .from("onboarding_answers")

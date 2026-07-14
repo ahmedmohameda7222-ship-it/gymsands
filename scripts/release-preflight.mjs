@@ -4,6 +4,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
+import { installedNextVersion as readInstalledNextVersion } from "./release-runtime-versions.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const EXACT_SHA = /^[a-f0-9]{40}$/i;
@@ -53,6 +54,7 @@ export function evaluateReleasePreflight({
   nodeVersion,
   nvmVersion,
   nodeFileVersion,
+  installedNextVersion,
   migrationState,
   manifest
 }) {
@@ -67,6 +69,7 @@ export function evaluateReleasePreflight({
     failures.push("migration_ledger_not_reconciled");
   }
   if (!manifest || manifest.release?.commitSha !== expectedCommit) failures.push("release_manifest_commit_mismatch");
+  if (manifest?.runtime?.nextVersion !== installedNextVersion) failures.push("release_manifest_next_version_mismatch");
   if (manifest?.release?.expectedDatabaseMigrationVersion !== migrationState.latestAppliedMigrationVersion) {
     failures.push("release_manifest_migration_mismatch");
   }
@@ -91,9 +94,29 @@ export function evaluateReleasePreflight({
     "productionBuild",
     "renderedBrowserQa"
   ];
+  const manifestBuildTimestamp = Date.parse(manifest?.release?.buildTimestamp ?? "");
   for (const gate of requiredGates) {
     const evidence = manifest?.qualityGates?.[gate];
-    if (evidence?.status !== "passed" || !evidence.evidence) failures.push(`quality_gate_${gate}_missing`);
+    if (!evidence || evidence.status === "missing" || !evidence.evidence) {
+      failures.push(`quality_gate_${gate}_missing`);
+      continue;
+    }
+    if (evidence.status === "failed") {
+      failures.push(`quality_gate_${gate}_failed`);
+      continue;
+    }
+    if (evidence.status !== "passed") {
+      failures.push(`quality_gate_${gate}_missing`);
+      continue;
+    }
+    if (evidence.commitSha !== expectedCommit) {
+      failures.push(`quality_gate_${gate}_commit_mismatch`);
+      continue;
+    }
+    const capturedAt = Date.parse(evidence.capturedAt ?? "");
+    if (evidence.stale === true || Number.isNaN(capturedAt) || Number.isNaN(manifestBuildTimestamp) || capturedAt < manifestBuildTimestamp) {
+      failures.push(`quality_gate_${gate}_stale`);
+    }
   }
   return { ready: failures.length === 0, failures };
 }
@@ -107,6 +130,7 @@ async function main() {
   const packageJson = readJson(resolve(root, "package.json"));
   const ledger = readJson(resolve(root, "supabase/migration-ledger.json"));
   const migrationState = deriveMigrationLedgerState(ledger);
+  const nextVersion = readInstalledNextVersion(root);
   const reportsPath = resolve(root, options["quality-reports"] || "quality-reports");
   const manifestPath = resolve(reportsPath, "release-manifest.json");
   const manifest = existsSync(manifestPath) ? readJson(manifestPath) : null;
@@ -119,6 +143,7 @@ async function main() {
     nodeVersion: process.version,
     nvmVersion: readFileSync(resolve(root, ".nvmrc"), "utf8"),
     nodeFileVersion: readFileSync(resolve(root, ".node-version"), "utf8"),
+    installedNextVersion: nextVersion,
     migrationState,
     manifest
   });
@@ -128,7 +153,7 @@ async function main() {
     expectedCommit,
     checkedOutCommit,
     nodeVersion: process.version,
-    nextVersion: packageJson.dependencies?.next ?? null,
+    nextVersion,
     expectedDatabaseMigrationVersion: migrationState.latestAppliedMigrationVersion,
     migrationLedgerReconciliationState: migrationState.reconciliationState,
     schemaAppliedUntrackedCount: migrationState.schemaAppliedUntrackedCount,

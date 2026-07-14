@@ -198,10 +198,29 @@ jobs:
           echo "${PIPESTATUS[0]}" > quality-reports/environment-validation.exit
 
           npx vitest run --config vitest.unit.config.mjs lib/release/version.test.ts lib/release/readiness.test.ts 2>&1 | tee quality-reports/release-metadata.log
-          echo "${PIPESTATUS[0]}" > quality-reports/release-metadata.exit
+          release_metadata_unit_code="${PIPESTATUS[0]}"
 
           NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build 2>&1 | tee quality-reports/build.log
-          echo "${PIPESTATUS[0]}" > quality-reports/build.exit
+          build_code="${PIPESTATUS[0]}"
+          echo "${build_code}" > quality-reports/build.exit
+
+          if [ "${build_code}" = "0" ]; then
+            expected_migration="$(node -e 'const ledger=require("./supabase/migration-ledger.json"); console.log(ledger.entries.filter((entry) => entry.state === "applied" && entry.productionVersion).map((entry) => entry.productionVersion).sort().at(-1))')"
+            npm run release:verify-built-metadata -- \
+              --commit "${PLAIVRA_COMMIT_SHA}" \
+              --build-timestamp "${PLAIVRA_BUILD_TIMESTAMP}" \
+              --environment ci \
+              --expected-migration "${expected_migration}" 2>&1 | tee -a quality-reports/release-metadata.log
+            release_metadata_built_code="${PIPESTATUS[0]}"
+          else
+            echo "Built metadata verification skipped because the production build failed." | tee -a quality-reports/release-metadata.log
+            release_metadata_built_code=1
+          fi
+          if [ "${release_metadata_unit_code}" = "0" ] && [ "${release_metadata_built_code}" = "0" ]; then
+            echo "0" > quality-reports/release-metadata.exit
+          else
+            echo "1" > quality-reports/release-metadata.exit
+          fi
 
           (
             set -euo pipefail

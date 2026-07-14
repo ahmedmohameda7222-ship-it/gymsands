@@ -2,6 +2,7 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { env } from "@/lib/env";
+import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import { isUuid } from "@/lib/utils";
 import type {
   ExerciseAlternativeReason,
@@ -56,7 +57,7 @@ function mapFitnessConstraints(data: Record<string, unknown> | null): FitnessCon
 }
 
 export async function getFitnessConstraints(userId: string): Promise<FitnessConstraintInput | null> {
-  if (env.useMockAuth && userId === "mock-user") return emptyFitnessConstraints;
+  if (env.useMockAuth && isMockAuthUserId(userId)) return emptyFitnessConstraints;
   requireUser(userId);
   const { data, error } = await supabase!
     .from("user_fitness_constraints")
@@ -68,7 +69,7 @@ export async function getFitnessConstraints(userId: string): Promise<FitnessCons
 }
 
 export async function upsertFitnessConstraints(userId: string, input: FitnessConstraintInput): Promise<FitnessConstraintInput> {
-  if (env.useMockAuth && userId === "mock-user") return mapFitnessConstraints(input as unknown as Record<string, unknown>) ?? emptyFitnessConstraints;
+  if (env.useMockAuth && isMockAuthUserId(userId)) return mapFitnessConstraints(input as unknown as Record<string, unknown>) ?? emptyFitnessConstraints;
   requireUser(userId);
   const payload = {
     user_id: userId,
@@ -185,7 +186,7 @@ export async function createExerciseAlternative(userId: string, input: {
 }
 
 export async function getGroceryItems(userId: string, weekStart: string) {
-  if (env.useMockAuth && userId === "mock-user") return [];
+  if (env.useMockAuth && isMockAuthUserId(userId)) return [];
   requireUser(userId);
   const { data, error } = await supabase!.from("user_grocery_items").select("*").eq("user_id", userId).eq("week_start", weekStart).order("store_section").order("item_name");
   if (error) throw error;

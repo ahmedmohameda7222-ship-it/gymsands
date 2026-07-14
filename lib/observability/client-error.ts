@@ -32,12 +32,12 @@ const BEARER = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const JWT = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
 const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const RECORD_UUID = /\b[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\b/gi;
-const LONG_PATH_ID = /\/[a-f0-9_-]{24,128}(?=\/|$)/gi;
-const NUMERIC_PATH_ID = /\/\d{4,}(?=\/|$)/g;
-const COOKIE = /\b(?:cookie|set-cookie)\s*:\s*[^\r\n]+/gi;
-const AUTHORIZATION = /\bauthorization\s*:\s*[^\r\n]+/gi;
-const URL_QUERY = /(https?:\/\/[^\s?#]+)(?:\?[^\s#]*)?(?:#[^\s]*)?/gi;
-const QUERY_FRAGMENT = /\?(?:[^\s#]|%[0-9a-f]{2})+/gi;
+const OPAQUE_PATH_SEGMENT = /^[a-z0-9_-]{20,128}$/i;
+const NUMERIC_PATH_SEGMENT = /^\d{4,}$/;
+const COOKIE = /\b(?:cookie|set-cookie)\s*:\s*[^\r\n|]*?(?=\s*(?:\||$))/gim;
+const AUTHORIZATION = /\bauthorization\s*:\s*[^\r\n|]*?(?=\s*(?:\||$))/gim;
+const URL_VALUE = /https?:\/\/[^\s"'`<>]+/gi;
+const RELATIVE_PATH_VALUE = /\/(?:[a-z0-9._~-]+\/)*[a-z0-9._~-]+(?:\?[^\s#"'`<>)\]},;]*)?(?:#[^\s"'`<>)\]},;]*)?/gi;
 const SQL_KEY_VALUE = /\bKey\s*\([^)\r\n]{1,200}\)\s*=\s*\([^)\r\n]{1,500}\)/gi;
 const DOUBLE_QUOTED = /"[^"\r\n]{1,200}"/g;
 const SINGLE_QUOTED = /'[^'\r\n]{1,200}'/g;
@@ -73,6 +73,44 @@ export type ClientErrorValidation =
 
 let currentDiagnosticState: ClientErrorDiagnosticState = {};
 
+function isDynamicPathSegment(segment: string) {
+  return UUID.test(segment)
+    || NUMERIC_PATH_SEGMENT.test(segment)
+    || OPAQUE_PATH_SEGMENT.test(segment);
+}
+
+function sanitizePathname(pathname: string) {
+  return pathname
+    .split("/")
+    .map((segment) => isDynamicPathSegment(segment) ? "id" : segment)
+    .join("/")
+    .replace(/\/+/g, "/");
+}
+
+function sanitizeUrlValue(value: string) {
+  const trailing = value.match(/[),.;:]+$/)?.[0] ?? "";
+  const candidate = trailing ? value.slice(0, -trailing.length) : value;
+  try {
+    const parsed = new URL(candidate);
+    return `${parsed.origin}${sanitizePathname(parsed.pathname)}${trailing}`;
+  } catch {
+    return "/unknown";
+  }
+}
+
+function sanitizePathsInText(value: string) {
+  return value
+    .replace(URL_VALUE, (url) => sanitizeUrlValue(url))
+    .replace(RELATIVE_PATH_VALUE, (pathValue) => {
+      try {
+        const parsed = new URL(pathValue, "https://plaivra.invalid");
+        return sanitizePathname(parsed.pathname);
+      } catch {
+        return "/unknown";
+      }
+    });
+}
+
 export function setClientErrorDiagnosticState(state: ClientErrorDiagnosticState) {
   currentDiagnosticState = {
     hasTargets: typeof state.hasTargets === "boolean" ? state.hasTargets : undefined,
@@ -88,17 +126,14 @@ export function clearClientErrorDiagnosticState() {
 
 export function sanitizeClientErrorText(value: unknown, maximum = MAX_MESSAGE) {
   if (typeof value !== "string") return "";
-  return value
+  const credentialsRemoved = value
     .replace(BEARER, REDACTED)
     .replace(JWT, REDACTED)
-    .replace(EMAIL, REDACTED)
     .replace(COOKIE, `cookie: ${REDACTED}`)
-    .replace(AUTHORIZATION, `authorization: ${REDACTED}`)
-    .replace(URL_QUERY, "$1")
-    .replace(QUERY_FRAGMENT, "?[REDACTED]")
+    .replace(AUTHORIZATION, `authorization: ${REDACTED}`);
+  return sanitizePathsInText(credentialsRemoved)
+    .replace(EMAIL, REDACTED)
     .replace(RECORD_UUID, REDACTED)
-    .replace(LONG_PATH_ID, "/id")
-    .replace(NUMERIC_PATH_ID, "/id")
     .replace(SQL_KEY_VALUE, `Key ${REDACTED}`)
     .replace(DOUBLE_QUOTED, `"${REDACTED}"`)
     .replace(SINGLE_QUOTED, `'${REDACTED}'`)
@@ -110,12 +145,8 @@ export function sanitizeClientRoute(value: unknown) {
   if (typeof value !== "string") return "/unknown";
   try {
     const parsed = new URL(value, "https://plaivra.invalid");
-    const route = parsed.pathname
-      .replace(RECORD_UUID, "id")
-      .replace(LONG_PATH_ID, "/id")
-      .replace(NUMERIC_PATH_ID, "/id")
-      .replace(/\/+/g, "/")
-      .slice(0, MAX_ROUTE);
+    if (!new Set(["http:", "https:"]).has(parsed.protocol)) return "/unknown";
+    const route = sanitizePathname(parsed.pathname).slice(0, MAX_ROUTE);
     return /^\/[a-z0-9/_-]*$/i.test(route) ? route : "/unknown";
   } catch {
     return "/unknown";

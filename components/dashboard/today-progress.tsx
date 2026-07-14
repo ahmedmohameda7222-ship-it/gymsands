@@ -24,6 +24,7 @@ type MetricDefinition = {
 
 export function TodayProgress({
   totals,
+  foodLogCount,
   logsState,
   targets,
   targetsState,
@@ -31,9 +32,11 @@ export function TodayProgress({
   hydrationState,
   energyUnit,
   liquidUnit,
+  remainingCalculated,
   copy
 }: {
   totals: MacroTotals | null;
+  foodLogCount: number | null;
   logsState: ProgressSourceState;
   targets: SavedTargets | null;
   targetsState: ProgressSourceState;
@@ -41,17 +44,18 @@ export function TodayProgress({
   hydrationState: ProgressSourceState;
   energyUnit: "kcal" | "kJ";
   liquidUnit: "ml" | "oz";
+  remainingCalculated: boolean;
   copy: FocusedTodayCopy;
 }) {
   useEffect(() => {
     setClientErrorDiagnosticState({
       hasTargets: Boolean(targets),
-      hasFoodLogs: totals !== null && Object.values(totals).some((value) => Number(value) !== 0),
+      hasFoodLogs: foodLogCount !== null && foodLogCount > 0,
       targetLoadState: targetsState,
       foodLogLoadState: logsState
     });
     return clearClientErrorDiagnosticState;
-  }, [logsState, targets, targetsState, totals]);
+  }, [foodLogCount, logsState, targets, targetsState]);
 
   const macroState = (consumed: number | null, target: number | null) => resolveProgressMetricState({ consumed, target, consumedState: logsState, targetState: targetsState });
   const waterState = resolveProgressMetricState({ consumed: waterTotal, target: targets?.water_ml ?? null, consumedState: hydrationState, targetState: targetsState });
@@ -65,7 +69,14 @@ export function TodayProgress({
   ];
 
   return (
-    <section aria-labelledby="today-progress" aria-busy={logsState === "loading" || hydrationState === "loading"}>
+    <section
+      aria-labelledby="today-progress"
+      aria-busy={logsState === "loading" || hydrationState === "loading"}
+      data-nutrition-loaded={logsState === "loaded" && targetsState === "loaded"}
+      data-food-log-count={foodLogCount ?? undefined}
+      data-active-target={Boolean(targets)}
+      data-remaining-calculated={remainingCalculated}
+    >
       <h2 id="today-progress" className="mb-2 text-base font-semibold">{copy.todayProgress}</h2>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         {metrics.map((metric) => <ProgressMetric key={metric.key} metric={metric} copy={copy} />)}

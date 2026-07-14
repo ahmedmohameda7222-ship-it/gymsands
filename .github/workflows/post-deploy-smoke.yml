@@ -112,6 +112,7 @@ jobs:
           set +e
           npm run smoke:postdeploy -- \
             --url "${{ inputs.deployment_url }}" \
+            --mode "${{ inputs.expected_environment }}" \
             --expected-commit "${{ inputs.expected_commit }}" \
             --expected-migration "${{ inputs.expected_migration }}" \
             --expected-environment "${{ inputs.expected_environment }}" \

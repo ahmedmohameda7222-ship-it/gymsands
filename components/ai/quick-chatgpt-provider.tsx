@@ -16,7 +16,7 @@ import {
   RUNTIME_QUICK_PROMPTS,
   rankRuntimePrompts
 } from "@/lib/ai/prompt-runtime";
-import { preserveEquivalentDashboardContext } from "@/lib/ai/dashboard-context";
+import { useStableDashboardContextState } from "@/lib/ai/dashboard-context";
 import { type PromptCapability, type PromptCategory, type PromptLanguage, type PromptOpenOptions, type PromptSurfaceMode, type PromptSurfaceSource, type QuickPromptContext, type QuickPromptDefinition } from "@/lib/ai/quick-prompts";
 import { evaluatePromptPermission } from "@/lib/ai/prompt-permissions";
 import { getAiPermissionSettingsWithStatus, type AiPermissionConfig, type AiPermissionSettingsStatus } from "@/services/database/ai-permissions";
@@ -53,7 +53,7 @@ export function QuickChatGptProvider({ children }: { children: ReactNode }) {
   const [source, setSource] = useState<PromptSurfaceSource>("default");
   const [mode, setMode] = useState<PromptSurfaceMode>("home");
   const [customPrompt, setCustomPrompt] = useState<CustomQuickPrompt | null>(null);
-  const [dashboardContext, setDashboardContextState] = useState<QuickPromptContext>(emptyContext);
+  const [dashboardContext, setDashboardContext, setDashboardContextState] = useStableDashboardContextState(emptyContext);
   const [permissionConfig, setPermissionConfig] = useState<AiPermissionConfig | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<AiPermissionSettingsStatus | null>(null);
   const [permissionLoading, setPermissionLoading] = useState(false);
@@ -80,9 +80,6 @@ export function QuickChatGptProvider({ children }: { children: ReactNode }) {
   const permissionEvaluation = evaluatePromptPermission({ userId: permissionUserId, loading: permissionLoading, status: permissionStatus, config: permissionConfig, sections, capability });
   const missingSectionLabels = permissionEvaluation.state === "missing" ? permissionEvaluation.sections.map((section) => tt(permissionLabelKeys[section])).join(", ") : "";
 
-  const setDashboardContext = useCallback((context: QuickPromptContext) => {
-    setDashboardContextState((current) => preserveEquivalentDashboardContext(current, context));
-  }, []);
   const loadPermissions = useCallback(async () => {
     if (!permissionUserId) { setPermissionConfig(null); setPermissionStatus(null); setPermissionLoading(false); return; }
     setPermissionLoading(true); setPermissionStatus(null);
@@ -114,7 +111,7 @@ export function QuickChatGptProvider({ children }: { children: ReactNode }) {
       setView(options.promptId && RUNTIME_QUICK_PROMPTS.some((prompt) => prompt.id === options.promptId) ? { name: "detail", promptId: options.promptId, backTo: "home" } : { name: "home" });
     }
     setOpen(true);
-  }, []);
+  }, [setDashboardContextState]);
 
   const openCustomPrompt = useCallback((prompt: CustomQuickPrompt) => { setSource("default"); setMode("home"); setCustomPrompt(prompt); setView({ name: "custom-detail" }); setOpen(true); }, []);
   function closeSurface(next: boolean) {
