@@ -1,16 +1,59 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
+import { trainingActivityToWorkout } from "@/lib/activity-catalog/adapters";
+import type { ExerciseVideo, Workout } from "@/types";
 import { createActivityCatalogProvider } from "./factory";
 import { LegacyActivityCatalogProvider } from "./legacy-provider";
 
-function catalogClient() {
+const legacyWorkout: Workout = {
+  id: "legacy-workout-media",
+  name: "Shared Exercise Name",
+  category: "Strength",
+  target_muscle: "Chest",
+  equipment: "Barbell",
+  difficulty: "Intermediate",
+  sets: 3,
+  reps: "8-12",
+  rest_seconds: 90,
+  instructions: "Press with control.",
+  notes: "Legacy workout source.",
+  muscle_category: "Upper body",
+  equipment_required: "Barbell",
+  mechanics: "horizontal_push",
+  force_type: "push",
+  experience_level: "Intermediate",
+  secondary_muscles: ["Triceps"],
+  exercise_url: "https://legacy.example/workout-guide",
+  video_url: "https://legacy.example/workout-video.mp4",
+  is_global: true
+};
+
+const legacyVideo: ExerciseVideo = {
+  id: "legacy-video-media",
+  exercise_name: "Shared Exercise Name",
+  category_type: "Strength",
+  category: "Chest",
+  exercise_url: "https://legacy.example/video-guide",
+  video_url: "https://legacy.example/video-record.mp4",
+  instructions: "Keep the shoulders stable.",
+  source: "legacy-video-table",
+  muscle_category: "Upper body",
+  equipment_required: "Dumbbell",
+  mechanics: "horizontal_push",
+  force_type: "push",
+  experience_level: "Beginner",
+  secondary_muscles: ["Triceps"],
+  is_global: true
+};
+
+function catalogClient(rows: Record<string, unknown[]> = {}) {
   const tables: string[] = [];
   const from = vi.fn((table: string) => {
     tables.push(table);
     const builder = {
       select: vi.fn(() => builder),
       eq: vi.fn(() => builder),
-      limit: vi.fn(async () => ({ data: [], error: null }))
+      limit: vi.fn(async () => ({ data: rows[table] ?? [], error: null }))
     };
     return builder;
   });
@@ -26,6 +69,34 @@ describe("LegacyActivityCatalogProvider", () => {
     expect(response.meta.source).toBe("legacy");
     expect(database.tables).not.toContain("profiles");
     expect(database.tables.every((table) => !table.startsWith("user_"))).toBe(true);
+  });
+
+  it("preserves workout and exercise-video media as separate legacy identities", async () => {
+    const database = catalogClient({
+      workouts: [legacyWorkout],
+      exercise_videos: [legacyVideo],
+      exercises: []
+    });
+    const provider = new LegacyActivityCatalogProvider(database.client);
+
+    const workoutActivity = await provider.getActivity(legacyWorkout.id);
+    const videoActivity = await provider.getActivity(legacyVideo.id);
+    const workoutRoundTrip = trainingActivityToWorkout(workoutActivity.data, "legacy");
+    const videoRoundTrip = trainingActivityToWorkout(videoActivity.data, "legacy");
+
+    expect(workoutRoundTrip).toMatchObject({
+      id: legacyWorkout.id,
+      name: legacyWorkout.name,
+      exercise_url: legacyWorkout.exercise_url,
+      video_url: legacyWorkout.video_url
+    });
+    expect(videoRoundTrip).toMatchObject({
+      id: legacyVideo.id,
+      name: legacyVideo.exercise_name,
+      exercise_url: legacyVideo.exercise_url,
+      video_url: legacyVideo.video_url
+    });
+    expect(workoutRoundTrip.id).not.toBe(videoRoundTrip.id);
   });
 
   it("uses deterministic local compatibility data when the database is unavailable", async () => {
