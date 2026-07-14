@@ -10,6 +10,7 @@ const ALLOWED_STATES = new Set([
   "ledger_drift_review",
   "applied_schema_untracked"
 ]);
+const RESOLVED_STATES = new Set(["applied", "applied_version_alias"]);
 const EXACT_SHA = /^[a-f0-9]{40}$/i;
 const MIGRATION_FILE = /^\d{12,14}_[a-z0-9_]+\.sql$/;
 const PRODUCTION_VERSION = /^\d{12,14}$/;
@@ -24,10 +25,32 @@ export function canonicalizeLedgerTimestamp(value) {
   return Number.isNaN(Date.parse(canonical)) ? null : canonical;
 }
 
+function hasValidProductionIdentity(entry) {
+  if (!entry || !RESOLVED_STATES.has(entry.state)) return false;
+  if (!PRODUCTION_VERSION.test(entry.productionVersion ?? "")) return false;
+  if (!PRODUCTION_NAME.test(entry.productionName ?? "")) return false;
+  if (entry.state === "applied") {
+    return entry.localFile === `${entry.productionVersion}_${entry.productionName}.sql`;
+  }
+  return true;
+}
+
 export function deriveMigrationLedgerState(ledger) {
   const entries = Array.isArray(ledger.entries) ? ledger.entries : [];
   const appliedCount = entries.filter((entry) => entry.state === "applied").length;
-  const schemaAppliedUntrackedCount = entries.filter((entry) => entry.state === "applied_schema_untracked").length;
+  const pendingCount = entries.filter((entry) => entry.state === "pending").length;
+  const schemaAppliedUntrackedCount = entries.filter(
+    (entry) => entry.state === "applied_schema_untracked"
+  ).length;
+  const ledgerDriftReviewCount = entries.filter(
+    (entry) => entry.state === "ledger_drift_review"
+  ).length;
+  const unresolvedCount = entries.filter(
+    (entry) => !RESOLVED_STATES.has(entry.state)
+  ).length;
+  const invalidAppliedProductionIdentityCount = entries.filter(
+    (entry) => RESOLVED_STATES.has(entry.state) && !hasValidProductionIdentity(entry)
+  ).length;
   const reconciliationState = ledger.historyRepair?.state === "reconciled"
     ? "reconciled"
     : ledger.historyRepair?.state === "pending"
@@ -38,10 +61,20 @@ export function deriveMigrationLedgerState(ledger) {
     .map((entry) => entry.productionVersion)
     .sort()
     .at(-1) ?? null;
-  const releaseReady = reconciliationState === "reconciled" && schemaAppliedUntrackedCount === 0;
+  const releaseReady = reconciliationState === "reconciled"
+    && pendingCount === 0
+    && schemaAppliedUntrackedCount === 0
+    && ledgerDriftReviewCount === 0
+    && unresolvedCount === 0
+    && invalidAppliedProductionIdentityCount === 0;
+
   return {
     appliedCount,
+    pendingCount,
     schemaAppliedUntrackedCount,
+    ledgerDriftReviewCount,
+    unresolvedCount,
+    invalidAppliedProductionIdentityCount,
     reconciliationState,
     latestAppliedMigrationVersion,
     releaseReady
@@ -108,8 +141,12 @@ export function validateMigrationLedger({ ledger, files, documentation = {} }) {
         errors.push(`Schema-untracked migration lacks the required verification and replay warning: ${entry.localFile}`);
       }
       if (entry.note.length < 120) errors.push(`Schema-untracked migration evidence note is too short: ${entry.localFile}`);
+    }
+    if (!RESOLVED_STATES.has(entry.state)) {
       for (const [documentName, document] of Object.entries(documentation)) {
-        if (!document.includes(entry.localFile)) errors.push(`${documentName} does not list schema-untracked migration ${entry.localFile}`);
+        if (!document.includes(entry.localFile)) {
+          errors.push(`${documentName} does not list unresolved migration ${entry.localFile}`);
+        }
       }
     }
   }
@@ -129,12 +166,27 @@ export function validateMigrationLedger({ ledger, files, documentation = {} }) {
   if (ledger.schemaVerifiedUntrackedCount !== derived.schemaAppliedUntrackedCount) {
     errors.push(`schemaVerifiedUntrackedCount=${ledger.schemaVerifiedUntrackedCount} does not match untracked entries=${derived.schemaAppliedUntrackedCount}.`);
   }
+  if (ledger.pendingCount !== derived.pendingCount) {
+    errors.push(`pendingCount=${ledger.pendingCount} does not match pending entries=${derived.pendingCount}.`);
+  }
+  if (ledger.unresolvedCount !== derived.unresolvedCount) {
+    errors.push(`unresolvedCount=${ledger.unresolvedCount} does not match unresolved entries=${derived.unresolvedCount}.`);
+  }
   if (ledger.historyRepair?.schemaAppliedUntrackedCount !== derived.schemaAppliedUntrackedCount) {
     errors.push(`historyRepair.schemaAppliedUntrackedCount=${ledger.historyRepair?.schemaAppliedUntrackedCount} does not match untracked entries=${derived.schemaAppliedUntrackedCount}.`);
   }
+  if (ledger.historyRepair?.pendingCount !== derived.pendingCount) {
+    errors.push(`historyRepair.pendingCount=${ledger.historyRepair?.pendingCount} does not match pending entries=${derived.pendingCount}.`);
+  }
+  if (ledger.historyRepair?.unresolvedCount !== derived.unresolvedCount) {
+    errors.push(`historyRepair.unresolvedCount=${ledger.historyRepair?.unresolvedCount} does not match unresolved entries=${derived.unresolvedCount}.`);
+  }
   if (!ledger.historyRepair?.note?.includes("Do not replay")) errors.push("historyRepair note must include the replay prohibition.");
-  if (derived.reconciliationState === "reconciled" && derived.schemaAppliedUntrackedCount !== 0) {
-    errors.push("Reconciled migration history cannot retain schema-applied untracked entries.");
+  if (derived.reconciliationState === "reconciled" && derived.unresolvedCount !== 0) {
+    errors.push("Reconciled migration history cannot retain unresolved migration entries.");
+  }
+  if (derived.reconciliationState === "reconciled" && derived.invalidAppliedProductionIdentityCount !== 0) {
+    errors.push("Reconciled migration history requires valid applied production identities.");
   }
   if (derived.reconciliationState === "pending" && derived.releaseReady) {
     errors.push("Pending migration reconciliation cannot be release-ready.");
@@ -165,7 +217,11 @@ async function main() {
   }
 
   console.log(`Migration ledger valid: ${files.length} repository migrations classified.`);
-  console.log(`applied=${derived.appliedCount} applied_schema_untracked=${derived.schemaAppliedUntrackedCount}`);
+  console.log(
+    `applied=${derived.appliedCount} pending=${derived.pendingCount} `
+    + `applied_schema_untracked=${derived.schemaAppliedUntrackedCount} `
+    + `unresolved=${derived.unresolvedCount}`
+  );
   console.log(`reconciliation=${derived.reconciliationState} release_ready=${derived.releaseReady}`);
   console.log(`expected_database_migration=${derived.latestAppliedMigrationVersion}`);
 }
