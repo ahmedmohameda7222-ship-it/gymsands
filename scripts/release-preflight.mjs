@@ -65,9 +65,7 @@ export function evaluateReleasePreflight({
   if (packageJson.engines?.node !== "24.x") failures.push("package_node_engine_mismatch");
   if (!nodeVersion.startsWith("v24.")) failures.push("runtime_node_major_mismatch");
   if (nvmVersion.trim() !== "24" || nodeFileVersion.trim() !== "24") failures.push("developer_node_pin_mismatch");
-  if (migrationState.reconciliationState !== "reconciled" || migrationState.schemaAppliedUntrackedCount !== 0) {
-    failures.push("migration_ledger_not_reconciled");
-  }
+  if (!migrationState.releaseReady) failures.push("migration_ledger_not_reconciled");
   if (!manifest || manifest.release?.commitSha !== expectedCommit) failures.push("release_manifest_commit_mismatch");
   if (manifest?.runtime?.nextVersion !== installedNextVersion) failures.push("release_manifest_next_version_mismatch");
   if (manifest?.release?.expectedDatabaseMigrationVersion !== migrationState.latestAppliedMigrationVersion) {
@@ -76,23 +74,21 @@ export function evaluateReleasePreflight({
   if (manifest?.release?.migrationLedgerReconciliationState !== migrationState.reconciliationState) {
     failures.push("release_manifest_reconciliation_mismatch");
   }
+  if (manifest?.release?.pendingMigrationCount !== migrationState.pendingCount) {
+    failures.push("release_manifest_pending_count_mismatch");
+  }
+  if (manifest?.release?.schemaAppliedUntrackedCount !== migrationState.schemaAppliedUntrackedCount) {
+    failures.push("release_manifest_untracked_count_mismatch");
+  }
+  if (manifest?.release?.unresolvedMigrationCount !== migrationState.unresolvedCount) {
+    failures.push("release_manifest_unresolved_count_mismatch");
+  }
+
   const requiredGates = [
-    "repositoryIntegrity",
-    "fullMigrationChain",
-    "databaseLint",
-    "databasePreflight",
-    "migrationLedger",
-    "dependencyAudit",
-    "lint",
-    "typecheck",
-    "unitTests",
-    "integrationTests",
-    "scriptTests",
-    "telemetryTests",
-    "environmentValidation",
-    "releaseMetadata",
-    "productionBuild",
-    "renderedBrowserQa"
+    "repositoryIntegrity", "fullMigrationChain", "databaseLint", "databasePreflight",
+    "migrationLedger", "dependencyAudit", "lint", "typecheck", "unitTests",
+    "integrationTests", "scriptTests", "telemetryTests", "environmentValidation",
+    "releaseMetadata", "productionBuild", "renderedBrowserQa"
   ];
   const manifestBuildTimestamp = Date.parse(manifest?.release?.buildTimestamp ?? "");
   for (const gate of requiredGates) {
@@ -156,7 +152,9 @@ async function main() {
     nextVersion,
     expectedDatabaseMigrationVersion: migrationState.latestAppliedMigrationVersion,
     migrationLedgerReconciliationState: migrationState.reconciliationState,
+    pendingMigrationCount: migrationState.pendingCount,
     schemaAppliedUntrackedCount: migrationState.schemaAppliedUntrackedCount,
+    unresolvedMigrationCount: migrationState.unresolvedCount,
     manifestPath: existsSync(manifestPath) ? "quality-reports/release-manifest.json" : null,
     deploymentPerformed: false,
     oldArtifactRedeployAccepted: false,
