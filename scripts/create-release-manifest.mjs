@@ -172,7 +172,9 @@ manifest.release = {
     options["expected-migration"] || migrationState.latestAppliedMigrationVersion
   ),
   migrationLedgerReconciliationState: migrationState.reconciliationState,
-  schemaAppliedUntrackedCount: migrationState.schemaAppliedUntrackedCount
+  pendingMigrationCount: migrationState.pendingCount,
+  schemaAppliedUntrackedCount: migrationState.schemaAppliedUntrackedCount,
+  unresolvedMigrationCount: migrationState.unresolvedCount
 };
 
 manifest.runtime = {
@@ -181,7 +183,7 @@ manifest.runtime = {
   nextVersion: installedNextVersion(root),
   lockfileVersion: packageLock.lockfileVersion ?? null,
   lockfileSha256: sha256(packageLockPath),
-  platform: platform,
+  platform,
   architecture: arch
 };
 
