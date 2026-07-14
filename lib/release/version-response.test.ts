@@ -9,7 +9,9 @@ const release: ReleaseVersion = {
   schemaCompatibilityVersion: "2",
   expectedDatabaseMigrationVersion: "20260713170000",
   migrationLedgerReconciliationState: "reconciled",
-  schemaAppliedUntrackedCount: 0
+  pendingMigrationCount: 0,
+  schemaAppliedUntrackedCount: 0,
+  unresolvedMigrationCount: 0
 };
 
 const database = { available: true, version: "2", migrationVersion: "20260713170000" };
@@ -33,7 +35,9 @@ describe("version response contract", () => {
     const response = buildVersionResponse({
       ...release,
       migrationLedgerReconciliationState: "pending",
-      schemaAppliedUntrackedCount: 6
+      pendingMigrationCount: 1,
+      schemaAppliedUntrackedCount: 7,
+      unresolvedMigrationCount: 8
     }, database);
     expect(response.status).toBe(503);
     expect(response.body.schemaCompatible).toBe(true);
