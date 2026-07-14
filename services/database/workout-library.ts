@@ -3,6 +3,7 @@
 import { trainingActivityToWorkout } from "@/lib/activity-catalog/adapters";
 import {
   catalogFiltersToLegacyOptions,
+  legacyFiltersRequireCompatibilityScan,
   legacyFiltersToCatalogSearch,
   matchesLegacyWorkoutFilters,
   type LegacyWorkoutFilterOptions,
@@ -18,7 +19,8 @@ import {
 import type { Workout } from "@/types";
 
 export const workoutPageSize = 100;
-const compatibilityPageWindow = 3;
+const compatibilityScanPageLimit = 3;
+const canonicalCatalogLocale = "en";
 
 export type WorkoutFilters = LegacyWorkoutFilters;
 export type WorkoutFilterOptions = LegacyWorkoutFilterOptions;
@@ -30,9 +32,17 @@ export type WorkoutLibraryStatus = {
   message?: string;
 };
 
+export type WorkoutLibraryPagination = {
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  bounded: boolean;
+};
+
 export type WorkoutLibraryResult<T> = {
   data: T;
   status: WorkoutLibraryStatus;
+  pagination?: WorkoutLibraryPagination;
 };
 
 function statusFromMetadata(metadata: ActivityCatalogResultMeta[]): WorkoutLibraryStatus {
@@ -46,6 +56,15 @@ function statusFromMetadata(metadata: ActivityCatalogResultMeta[]): WorkoutLibra
   };
 }
 
+function boundedStatus(status: WorkoutLibraryStatus): WorkoutLibraryStatus {
+  const boundedMessage = "Results are limited to the approved bounded compatibility scan; additional matching catalog records may exist.";
+  return {
+    ...status,
+    source: status.source === "live" ? "partial" : status.source,
+    message: [status.message, boundedMessage].filter(Boolean).join(" ")
+  };
+}
+
 function dedupeWorkouts(workouts: Workout[]) {
   const seen = new Set<string>();
   return workouts.filter((workout) => {
@@ -56,23 +75,22 @@ function dedupeWorkouts(workouts: Workout[]) {
   });
 }
 
-function needsCompatibilityWindow(filters: WorkoutFilters) {
-  return Boolean(
-    filters.muscleCategories?.length ||
-    filters.primaryMuscles?.length ||
-    filters.mechanics?.length ||
-    filters.forceTypes?.length ||
-    filters.secondaryMuscles?.length ||
-    (filters.categories?.length ?? 0) > 1 ||
-    (filters.equipmentRequired?.length ?? 0) > 1 ||
-    (filters.experienceLevels?.length ?? 0) > 1
+function mapActivities(
+  activities: Array<{ activity: TrainingActivity; source: ActivityCatalogResultMeta["source"] }>,
+  query: string,
+  filters: WorkoutFilters
+) {
+  return dedupeWorkouts(
+    activities
+      .map(({ activity, source }) => trainingActivityToWorkout(activity, source))
+      .filter((workout) => matchesLegacyWorkoutFilters(workout, query, filters))
   );
 }
 
 export async function getWorkoutFilterOptionsWithStatus(signal?: AbortSignal): Promise<WorkoutLibraryResult<WorkoutFilterOptions>> {
   const [filters, sample] = await Promise.all([
-    getActivityCatalogFilters({ signal }),
-    searchActivityCatalog({ limit: workoutPageSize, offset: 0, locale: "en", signal })
+    getActivityCatalogFilters({ locale: canonicalCatalogLocale, signal }),
+    searchActivityCatalog({ limit: workoutPageSize, offset: 0, locale: canonicalCatalogLocale, signal })
   ]);
   return {
     data: catalogFiltersToLegacyOptions(filters.data, sample.data),
@@ -100,30 +118,83 @@ export async function getWorkoutsWithStatus(
   page = 0,
   signal?: AbortSignal
 ): Promise<WorkoutLibraryResult<Workout[]>> {
-  const windowSize = needsCompatibilityWindow(filters) ? compatibilityPageWindow : 1;
-  const metadata: ActivityCatalogResultMeta[] = [];
-  const activities: Array<{ activity: TrainingActivity; source: ActivityCatalogResultMeta["source"] }> = [];
-  const firstOffset = Math.max(0, page) * workoutPageSize * windowSize;
+  const logicalPage = Math.max(0, page);
+  const directParams = legacyFiltersToCatalogSearch(
+    query,
+    filters,
+    logicalPage,
+    workoutPageSize,
+    canonicalCatalogLocale
+  );
 
-  for (let index = 0; index < windowSize; index += 1) {
-    const params = legacyFiltersToCatalogSearch(query, filters, 0, workoutPageSize, "en");
-    const result = await searchActivityCatalog({
-      ...params,
-      offset: firstOffset + index * workoutPageSize,
-      signal
-    });
-    metadata.push(result.meta);
-    activities.push(...result.data.map((activity) => ({ activity, source: result.meta.source })));
-    if (result.pagination?.nextOffset == null || result.data.length < workoutPageSize) break;
+  if (!legacyFiltersRequireCompatibilityScan(filters)) {
+    const result = await searchActivityCatalog({ ...directParams, signal });
+    const data = mapActivities(
+      result.data.map((activity) => ({ activity, source: result.meta.source })),
+      query,
+      filters
+    );
+    return {
+      data,
+      status: statusFromMetadata([result.meta]),
+      pagination: {
+        page: logicalPage,
+        pageSize: workoutPageSize,
+        hasMore: result.pagination?.nextOffset != null,
+        bounded: false
+      }
+    };
   }
 
-  const workouts = dedupeWorkouts(
-    activities
-      .map(({ activity, source }) => trainingActivityToWorkout(activity, source))
-      .filter((workout) => matchesLegacyWorkoutFilters(workout, query, filters))
-  ).slice(0, workoutPageSize);
+  const logicalStart = logicalPage * workoutPageSize;
+  const logicalEnd = logicalStart + workoutPageSize;
+  const targetMatchCount = logicalEnd + 1;
+  const metadata: ActivityCatalogResultMeta[] = [];
+  const matches: Workout[] = [];
+  const seenIds = new Set<string>();
+  let nextOffset: number | null = 0;
+  let scannedPages = 0;
 
-  return { data: workouts, status: statusFromMetadata(metadata) };
+  while (nextOffset != null && scannedPages < compatibilityScanPageLimit && matches.length < targetMatchCount) {
+    const scanParams = legacyFiltersToCatalogSearch(
+      query,
+      filters,
+      0,
+      workoutPageSize,
+      canonicalCatalogLocale
+    );
+    const result = await searchActivityCatalog({ ...scanParams, offset: nextOffset, signal });
+    metadata.push(result.meta);
+    scannedPages += 1;
+
+    const pageMatches = mapActivities(
+      result.data.map((activity) => ({ activity, source: result.meta.source })),
+      query,
+      filters
+    );
+    for (const workout of pageMatches) {
+      if (seenIds.has(workout.id)) continue;
+      seenIds.add(workout.id);
+      matches.push(workout);
+    }
+    nextOffset = result.pagination?.nextOffset ?? null;
+  }
+
+  const data = matches.slice(logicalStart, logicalEnd);
+  const hasMore = matches.length > logicalEnd;
+  const bounded = !hasMore && nextOffset != null && scannedPages >= compatibilityScanPageLimit;
+  const status = bounded ? boundedStatus(statusFromMetadata(metadata)) : statusFromMetadata(metadata);
+
+  return {
+    data,
+    status,
+    pagination: {
+      page: logicalPage,
+      pageSize: workoutPageSize,
+      hasMore,
+      bounded
+    }
+  };
 }
 
 export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page = 0, signal?: AbortSignal) {
@@ -131,7 +202,7 @@ export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page
 }
 
 export async function getWorkout(identifier: string, signal?: AbortSignal) {
-  const result = await getActivityCatalogActivity(identifier, { signal });
+  const result = await getActivityCatalogActivity(identifier, { locale: canonicalCatalogLocale, signal });
   return trainingActivityToWorkout(result.data, result.meta.source);
 }
 
@@ -141,14 +212,14 @@ export async function getWorkoutAlternatives(
 ): Promise<WorkoutLibraryResult<Workout[]>> {
   const alternatives = await getActivityCatalogAlternatives(identifier, {
     limit: Math.max(1, Math.min(20, options.limit ?? 6)),
-    locale: options.locale,
+    locale: canonicalCatalogLocale,
     signal: options.signal
   });
   if (!alternatives.data.length) return { data: [], status: statusFromMetadata([alternatives.meta]) };
 
   const details = await Promise.allSettled(
     alternatives.data.slice(0, options.limit ?? 6).map((alternative) =>
-      getActivityCatalogActivity(alternative.alternativeActivityId, { locale: options.locale, signal: options.signal })
+      getActivityCatalogActivity(alternative.alternativeActivityId, { locale: canonicalCatalogLocale, signal: options.signal })
     )
   );
   const workouts = details.flatMap((detail) => {
