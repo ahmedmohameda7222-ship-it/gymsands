@@ -6,19 +6,19 @@ A launch candidate is one exact reviewed commit, one release manifest, one recon
 
 Required retained evidence is repository integrity, full migration chain, database lint/preflight, migration-ledger validation, dependency audit, lint, typecheck, unit/integration/script/telemetry tests, Node 24 production build, environment validation, rendered QA, deployment identity, anonymous smoke, populated synthetic smoke, empty-state synthetic smoke, Supabase advisors, and final owner verdict. Do not paste tokens, credentials, cookies, user IDs, email addresses, query strings, provider payloads, or user fitness content into incidents or tickets.
 
-For a candidate branch push, retain the exact-SHA Vercel deployment state and ignore-gate log. Repository configuration alone does not prove that an automatic preview was skipped; if an unapproved preview reaches `READY`, keep the release blocked.
-
-For a candidate branch push, confirm that Vercel did not create an automatic Git-connected deployment. If an unexpected branch deployment exists, retain its metadata and keep the release blocked until the deployment configuration is corrected.
+For a candidate branch push, confirm that Vercel did not create an automatic Git-connected deployment. If an unexpected branch deployment exists, retain its metadata and keep the release blocked until the main-only deployment configuration is corrected.
 
 ## Deployment identity
 
 - `vercel.json` requests automatic Git-connected deployments only for `main`.
-- Vercel does not use an `ignoreCommand` or an exact-SHA environment approval gate.
+- Vercel does not use `ignoreCommand`.
+- Vercel does not use `PLAIVRA_PREVIEW_RELEASE_SHA` or `PLAIVRA_PRODUCTION_RELEASE_SHA`.
 - Required GitHub review and CI checks must pass before changes enter `main`.
 - After merge, confirm that Vercel built the exact resulting 40-character `main` SHA.
 - Verify that provider metadata, `/api/version`, and `/api/health` identify the expected deployed commit.
+- A provider `READY` state alone is not release acceptance.
 - Never redeploy an old provider artifact as a substitute for deploying the reviewed Git commit.
-- Netlify remains a separate secondary provider and retains its exact-SHA production gate.
+- Netlify remains a separate secondary provider and retains its exact-SHA production gate through `PLAIVRA_PRODUCTION_RELEASE_SHA`.
 - Rollback selects a separately identified code/schema-compatible pair and repeats deployment-identity and smoke verification.
 
 ## Monitoring and alerts
@@ -34,13 +34,13 @@ For a candidate branch push, confirm that Vercel did not create an automatic Git
 
 Before any production migration, history repair, compatibility-marker update, or destructive job:
 
-1. verify Supabase automated backup status and most recent completed timestamp;
-2. retain a restore rehearsal on an isolated project using synthetic data;
-3. capture migration ledger, file hashes, catalog definitions, and row/count verification;
-4. keep privacy deletion, retention execution, and paid checkout flags false unless separately approved;
-5. run the read-only production preflight;
-6. apply only approved forward-only operations;
-7. run verification, advisors, cross-user tests, and release preflight.
+1. Verify Supabase automated backup status and most recent completed timestamp.
+2. Retain a restore rehearsal on an isolated project using synthetic data.
+3. Capture migration ledger, file hashes, catalog definitions, and row/count verification.
+4. Keep privacy deletion, retention execution, and paid checkout flags false unless separately approved.
+5. Run the read-only production preflight.
+6. Apply only approved forward-only operations.
+7. Run verification, advisors, cross-user tests, and release preflight.
 
 Do not replay any migration classified as `applied_schema_untracked`. Do not claim backup readiness from configuration alone. Record restore duration, schema compatibility, synthetic row totals, storage verification, operator, and date.
 
@@ -64,6 +64,7 @@ Rollback is not “redeploy previous deployment.” It is a new controlled opera
 Public support/security contact: `Ahmed.Mohamed04@outlook.de`. Ask reporters to minimize sensitive content. Record receipt, severity, affected release, sanitized reproduction, containment, owner, and closure. Never request a password, access token, entire export, medical record, or unredacted provider payload by email.
 
 ## Launch-day sequence
+
 1. Confirm the candidate change passed all required review and quality checks.
 2. Complete migration-history reconciliation and independent verification.
 3. Confirm the compatibility marker and expected migration identity.
@@ -75,8 +76,10 @@ Public support/security contact: `Ahmed.Mohamed04@outlook.de`. Ask reporters to 
 9. Confirm Vercel created the production deployment from that exact `main` SHA. Do not redeploy an old provider deployment.
 10. Verify provider metadata, `/api/version`, and `/api/health`.
 11. Run anonymous smoke.
-12. Run populated and empty authenticated synthetic smoke.12. Review page/console/network results, screenshots, route timings, and request counts.
-13. Confirm alert delivery, support mailbox, backup evidence, and on-call owner.
-14. Clear/rotate the approved SHA and record the final launch verdict.
+12. Run populated and empty authenticated synthetic smoke.
+13. Review page, console, network, screenshot, route-timing, and request-count evidence.
+14. Confirm alert delivery, support mailbox, backup evidence, and on-call owner.
+15. Record the final launch verdict.
+16. For a separately approved Netlify production release, clear or rotate `PLAIVRA_PRODUCTION_RELEASE_SHA` after acceptance.
 
 A manual, external, missing, blocked, or failed item remains a no-go until resolved and evidenced.
