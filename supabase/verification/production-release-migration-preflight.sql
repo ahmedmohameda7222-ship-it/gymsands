@@ -57,14 +57,15 @@ with required_columns(table_name, column_name) as (
     ('public.complete_meal_plan_item(uuid)', true),
     ('public.complete_meal_plan_item_with_values(uuid,text,text,text,numeric,numeric,numeric,numeric,numeric,text,boolean)', true),
     ('public.correct_completed_meal_plan_item(uuid,date,text,text,text,numeric,numeric,numeric,numeric,numeric,text)', true),
-    -- Train writes intentionally remain SECURITY INVOKER. Ownership is enforced
-    -- both by assert_workout_actor() and by RLS on every affected member table.
-    ('public.activate_workout_plan_atomic(uuid,uuid,date,timestamp with time zone)', false),
-    ('public.archive_workout_plan_atomic(uuid,uuid,text,date)', false),
-    ('public.create_workout_plan_atomic(uuid,jsonb,boolean,date)', false),
-    ('public.delete_workout_plan_atomic(uuid,uuid,boolean,date)', false),
-    ('public.save_workout_plan_atomic(uuid,uuid,jsonb,date,timestamp with time zone)', false),
-    ('public.save_workout_plan_day_atomic(uuid,uuid,jsonb,date,timestamp with time zone,boolean)', false)
+    -- Train plan tables are not directly granted to authenticated members. The
+    -- narrow RPC boundary therefore uses SECURITY DEFINER after an explicit
+    -- assert_workout_actor() check, with an empty search_path and narrow grants.
+    ('public.activate_workout_plan_atomic(uuid,uuid,date,timestamp with time zone)', true),
+    ('public.archive_workout_plan_atomic(uuid,uuid,text,date)', true),
+    ('public.create_workout_plan_atomic(uuid,jsonb,boolean,date)', true),
+    ('public.delete_workout_plan_atomic(uuid,uuid,boolean,date)', true),
+    ('public.save_workout_plan_atomic(uuid,uuid,jsonb,date,timestamp with time zone)', true),
+    ('public.save_workout_plan_day_atomic(uuid,uuid,jsonb,date,timestamp with time zone,boolean)', true)
 ), findings as (
   select
     'missing_column'::text as issue_type,

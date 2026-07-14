@@ -9,6 +9,10 @@ const rpcSecurity = readFileSync(
   "supabase/verification/train-atomic-rpc-security.sql",
   "utf8"
 );
+const hardeningMigration = readFileSync(
+  "supabase/migrations/20260714030000_harden_train_plan_rpc_execution.sql",
+  "utf8"
+);
 const qualityWorkflow = readFileSync(".github/workflows/quality.yml", "utf8");
 
 const canonicalRpcs = [
@@ -21,14 +25,20 @@ const canonicalRpcs = [
 ];
 
 describe("Train release security controls", () => {
-  it("expects the canonical plan RPCs to remain SECURITY INVOKER", () => {
+  it("expects the canonical plan RPCs to use the ownership-checked SECURITY DEFINER boundary", () => {
     for (const name of canonicalRpcs) {
       expect(productionPreflight).toMatch(
-        new RegExp(`public\\.${name}\\([^']+\\)', false\\)`)
+        new RegExp(`public\\.${name}\\([^']+\\)', true\\)`)
       );
     }
     expect(productionPreflight).toContain("train_rpc_grant_mismatch");
     expect(productionPreflight).toContain("granted_function.proacl");
+    expect(hardeningMigration).toContain("Refusing to elevate Train RPC without its actor check");
+    expect(hardeningMigration).toContain("coalesce(auth.role(), '') <> 'service_role'");
+    for (const name of canonicalRpcs) {
+      expect(hardeningMigration).toContain(`alter function public.${name}(`);
+    }
+    expect(hardeningMigration.match(/security definer set search_path = '';/g)).toHaveLength(6);
   });
 
   it("fails the psql process after displaying any blocking result rows", () => {
@@ -48,9 +58,10 @@ describe("Train release security controls", () => {
       expect(rpcSecurity).toContain(`public.${name}(`);
       expect(rpcSecurity).toContain(`${name} unexpectedly succeeded`);
     }
-    expect(rpcSecurity).toContain("Train RPC must remain SECURITY INVOKER");
+    expect(rpcSecurity).toContain("Train RPC must use SECURITY DEFINER");
     expect(rpcSecurity).toContain("has_function_privilege('authenticated'");
     expect(rpcSecurity).toContain("has_function_privilege('service_role'");
+    expect(rpcSecurity).toContain("-- Service-role success");
     expect(rpcSecurity).toContain("has_function_privilege('anon'");
     expect(rpcSecurity).toContain("A denied Train RPC mutated member data.");
     expect(rpcSecurity).toContain("-- Cross-user denial");

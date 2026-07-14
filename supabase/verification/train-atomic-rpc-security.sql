@@ -33,8 +33,8 @@ begin
     from pg_proc
     where oid = routine_oid;
 
-    if is_definer then
-      raise exception 'Train RPC must remain SECURITY INVOKER: %', signature;
+    if not is_definer then
+      raise exception 'Train RPC must use SECURITY DEFINER: %', signature;
     end if;
     if coalesce(array_to_string(settings, ','), '') not like '%search_path=%' then
       raise exception 'Train RPC search_path is not hardened: %', signature;
@@ -124,6 +124,9 @@ select (public.create_workout_plan_atomic(
 ))->>'id' as owner_plan_id
 \gset
 
+-- Fixture discovery is a verifier operation, not an application table grant.
+reset role;
+
 select id as owner_day_id
 from public.user_workout_plan_days
 where plan_id = :'owner_plan_id'::uuid
@@ -133,6 +136,10 @@ select id as owner_exercise_id
 from public.user_workout_plan_exercises
 where plan_day_id = :'owner_day_id'::uuid
 \gset
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', :'owner_id', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
 
 -- Owner success: save one day.
 select public.save_workout_plan_day_atomic(
@@ -218,6 +225,26 @@ select public.delete_workout_plan_atomic(
   date '2026-07-14'
 );
 
+reset role;
+
+-- Service-role success: the outer SECURITY DEFINER context changes
+-- current_user, so assert_workout_actor must honor the verified JWT role.
+set local role service_role;
+select set_config('request.jwt.claim.sub', '', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select (public.create_workout_plan_atomic(
+  :'intruder_id'::uuid,
+  '{"name":"Service security plan","source":"manual","days":[{"day_name":"Service day","exercises":[{"exercise_name":"Carry","sets":3,"reps":"30 sec","rest_seconds":60}]}]}'::jsonb,
+  false,
+  date '2026-07-14'
+))->>'id' as service_plan_id
+\gset
+select public.delete_workout_plan_atomic(
+  :'intruder_id'::uuid,
+  :'service_plan_id'::uuid,
+  true,
+  date '2026-07-14'
+);
 reset role;
 
 create temporary table train_rpc_security_snapshot (
@@ -321,4 +348,4 @@ $mutation_check$;
 
 rollback;
 
-\echo 'Train atomic RPC security verification passed: invoker mode, hardened search_path, least-privilege grants, owner success, denied cross-user/anon/impersonation calls, and zero mutation after denial.'
+\echo 'Train atomic RPC security verification passed: definer mode, hardened search_path, least-privilege grants, owner success, denied cross-user/anon/impersonation calls, and zero mutation after denial.'
