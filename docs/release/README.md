@@ -6,23 +6,27 @@ A public Plaivra release is a compatible code, database, configuration, and brow
 
 Do not combine these operations conceptually or operationally:
 
-1. **Review and merge** - reviewed source enters `main` only after the required GitHub checks and approval have passed.
-2. **Automatic Vercel deployment** - `vercel.json` requests Git-connected deployments only for `main`. Vercel does not use `ignoreCommand`, `PLAIVRA_PREVIEW_RELEASE_SHA`, or `PLAIVRA_PRODUCTION_RELEASE_SHA`.
-3. **Production verification** - confirm that Vercel built the exact merged `main` commit and that provider metadata and `/api/version` identify that commit.
-4. **Production acceptance** - complete the required migration, quality, smoke, browser-QA, and release-manifest checks for the deployed commit.
-5. **Rollback** - select and verify a separately approved code/schema-compatible release pair. Do not redeploy an unrelated old deployment object.
+1. **Pre-merge release gate** - complete required code review and CI, migration-history reconciliation, compatibility-marker verification, strict production environment validation, `npm run release:preflight`, and explicit release-owner approval for the exact candidate change.
+2. **Merge** - merge the approved exact change to `main`. Under the current Vercel Git model, this merge is production-triggering.
+3. **Automatic Vercel deployment** - Vercel should create a production deployment only for the resulting `main` commit. Feature branches and pull requests must not create automatic Vercel deployments.
+4. **Production verification** - confirm that Vercel built the exact resulting 40-character `main` SHA and that provider metadata, `/api/version`, and `/api/health` identify that commit.
+5. **Production acceptance** - complete anonymous smoke, populated and empty authenticated synthetic smoke, browser/console/network review, screenshots, route timings, request counts, and the final launch verdict.
+6. **Rollback** - select and verify a separately approved code/schema-compatible release pair. Do not redeploy an unrelated old deployment object.
 
-Do not redeploy an old provider artifact as a substitute for deploying the reviewed Git commit. The July 2026 incident persisted because production redeployed an old SHA while `main` had advanced.
+Any failed or blocked preflight is a no-go before merge. The migration ledger must be reconciled before the production-triggering merge to `main`. Do not redeploy an old provider artifact as a substitute for deploying the reviewed Git commit. The July 2026 incident persisted because production redeployed an old SHA while `main` had advanced.
 
 ## Provider controls
 
 ### Vercel
 
-- `vercel.json` requests automatic Git-connected deployments only for `main`.
+- `vercel.json` declares repository policy intent with minimatch branch rules: `"**": false` disables automatic deployments for slash-delimited and non-main branch names, while `"main": true` preserves automatic production deployment for `main`.
+- Repository configuration and tests verify policy intent only. They do not prove actual Vercel provider enforcement.
+- After every candidate branch push, inspect the Vercel deployment list for the exact pushed SHA. Any new branch or pull-request deployment means the main-only policy remains unresolved.
 - Vercel does not use `ignoreCommand`.
 - Vercel does not use preview or production exact-SHA approval environment variables.
-- Required GitHub review and CI checks protect `main` before merge.
-- After merge, confirm that provider metadata and `/api/version` identify the exact resulting 40-character `main` SHA.
+- Required GitHub review and CI checks, migration reconciliation, release preflight, and explicit owner approval protect `main` before merge.
+- A merge to `main` is production-triggering under the current Vercel Git-connected model.
+- After merge, confirm that provider metadata, `/api/version`, and `/api/health` identify the exact resulting 40-character `main` SHA.
 - Migration reconciliation, release preflight, smoke tests, browser QA, and release manifests remain mandatory.
 - A deployment is not accepted merely because Vercel reports it as `READY`.
 - Do not redeploy an old Vercel deployment object as a substitute for deploying the reviewed Git commit.
@@ -122,7 +126,7 @@ That final manifest binds the same commit to the deployed URL, deployed build ti
 
 ## Preflight
 
-Run without deploying:
+Run without deploying and before any production-triggering merge:
 
 ```bash
 npm run release:preflight -- \
@@ -132,27 +136,30 @@ npm run release:preflight -- \
   --output quality-reports/release-preflight.json
 ```
 
-The command verifies checkout and repository identity, Node 24 pins, migration reconciliation, expected migration identity, manifest identity, and retained quality evidence. It performs no provider or Supabase write. It must fail while reconciliation is pending.
+The command verifies checkout and repository identity, Node 24 pins, migration reconciliation, expected migration identity, manifest identity, and retained quality evidence. It performs no provider or Supabase write. It must fail while reconciliation is pending, and a failed or blocked result is a no-go before merge.
 
-Release preflight does not prove which commit Vercel deployed. After every production deployment, inspect the provider record for the exact commit and retain its deployment identity and state.
+Release preflight does not prove which branches Vercel deploys or which commit Vercel deployed. Repository policy tests do not prove provider enforcement. Verify branch suppression after candidate pushes and verify exact production identity after a production-triggering merge.
 
-Neither `vercel.json` nor a green GitHub workflow is sufficient production evidence by itself. A production deployment whose commit differs from the reviewed merged `main` SHA remains a release-control failure.
+Neither `vercel.json` nor a green GitHub workflow is sufficient provider evidence by itself. An unexpected branch deployment or a production deployment whose commit differs from the reviewed merged `main` SHA remains a release-control failure.
 
 ## Production runbook
 
-1. Select one reviewed exact 40-character SHA from `main`.
-2. Confirm the quality artifact and release manifest were generated from that same SHA; record the quality workflow run ID.
-3. Complete and independently verify migration-history reconciliation.
-4. Confirm the database compatibility marker and expected migration version agree.
-5. Run the release preflight and retain its passing JSON.
-6. Confirm required Vercel production environment variables pass strict validation. No exact-SHA approval variable is used by Vercel.
-7. Merge the reviewed commit to `main` only after all required checks and approvals pass.
-8. Confirm Vercel created the production deployment from that exact merged `main` SHA. Do not redeploy an old deployment object.
-9. Verify provider metadata and `/api/version` match the exact deployed commit.
-10. Dispatch `Post-deploy release smoke` with the exact deployment URL, commit, migration, environment, and same-commit quality workflow run ID.
-11. Run and retain anonymous, populated synthetic, and empty-state synthetic smoke evidence.
-12. Verify `final-release-manifest.json` records all quality, deployment, and smoke gates as passed.
-13. Monitor client error-boundary events and server errors.
+1. Complete code review and all required CI checks for the candidate change.
+2. Complete migration-history reconciliation and independent verification.
+3. Confirm the compatibility marker and expected migration identity.
+4. Run strict production environment validation without exposing secret values.
+5. Run `npm run release:preflight` and retain its passing result.
+6. Obtain explicit release-owner approval for the exact reviewed change.
+7. Merge the approved exact change to `main`.
+8. Record the exact resulting 40-character `main` SHA.
+9. Confirm Vercel production was built from that exact SHA.
+10. Verify provider metadata, `/api/version`, and `/api/health`.
+11. Run anonymous smoke.
+12. Run populated and empty authenticated synthetic smoke.
+13. Review browser, console, network, screenshots, route timings, and request counts.
+14. Record the final launch verdict.
+
+Any failed or blocked preflight is a no-go before merge. A provider `READY` state alone is not acceptance. Netlify remains separate and keeps its exact-SHA production gate.
 
 ## Authenticated smoke
 
