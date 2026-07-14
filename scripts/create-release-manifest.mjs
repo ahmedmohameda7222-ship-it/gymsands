@@ -52,6 +52,30 @@ function requiredTimestamp(value) {
   return timestamp.toISOString();
 }
 
+function deploymentUrl(value) {
+  if (!value) return null;
+  const url = new URL(value);
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (url.protocol !== "https:" && !(local && url.protocol === "http:")) {
+    throw new Error("Deployment URL must use HTTPS except for localhost.");
+  }
+  url.username = "";
+  url.password = "";
+  url.pathname = "/";
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+function safeEvidencePath(value) {
+  if (!value) return null;
+  const normalized = value.replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!/^[a-z0-9][a-z0-9._/-]{0,200}$/i.test(normalized) || normalized.includes("..")) {
+    throw new Error("Evidence path must be a safe repository-relative path.");
+  }
+  return normalized;
+}
+
 function sha256(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
@@ -69,7 +93,7 @@ function evidenceStatus(reportsPath, report) {
 }
 
 function applyQualityEvidence(manifest, reportsDirectory) {
-  if (!reportsDirectory) return;
+  if (!reportsDirectory) return null;
   const reportsPath = isAbsolute(reportsDirectory) ? reportsDirectory : resolve(process.cwd(), reportsDirectory);
   const reportNames = {
     repositoryIntegrity: "integrity",
@@ -95,6 +119,7 @@ function applyQualityEvidence(manifest, reportsDirectory) {
   manifest.smoke.anonymous = evidenceStatus(reportsPath, "post-deploy-smoke");
   manifest.smoke.authenticatedPopulated = evidenceStatus(reportsPath, "authenticated-smoke-populated");
   manifest.smoke.authenticatedEmpty = evidenceStatus(reportsPath, "authenticated-smoke-empty");
+  return reportsPath;
 }
 
 const options = parseArgs(process.argv.slice(2));
@@ -141,7 +166,18 @@ manifest.runtime = {
   architecture: arch
 };
 
-applyQualityEvidence(manifest, options["quality-reports"]);
+const reportsPath = applyQualityEvidence(manifest, options["quality-reports"]);
+const deployedUrl = deploymentUrl(options["deployment-url"]);
+if (deployedUrl) {
+  const deploymentEvidence = safeEvidencePath(options["deployment-evidence"] || "quality-reports/post-deploy-smoke.json");
+  const deploymentStatus = reportsPath ? evidenceStatus(reportsPath, "post-deploy-smoke") : { status: "missing", evidence: null };
+  manifest.deployment = {
+    status: deploymentStatus.status,
+    url: deployedUrl,
+    providerEvidence: deploymentEvidence,
+    deployedCommitSha: commitSha
+  };
+}
 
 const serialized = `${JSON.stringify(manifest, null, 2)}\n`;
 if (options.output) {
