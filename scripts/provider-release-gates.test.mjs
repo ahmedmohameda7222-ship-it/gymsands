@@ -17,10 +17,14 @@ function run(environment) {
   });
 }
 
-test("vercel.json requests automatic Git deployments only for main and always invokes the authorization gate", () => {
+test("vercel.json enables automatic Git deployments only for main without an ignore command", () => {
   const config = JSON.parse(readFileSync(resolve(root, "vercel.json"), "utf8"));
-  assert.deepEqual(config.git?.deploymentEnabled, { "*": false, main: true });
-  assert.equal(config.ignoreCommand, "node scripts/vercel-production-release-gate.mjs");
+
+  assert.deepEqual(config.git?.deploymentEnabled, {
+    "*": false,
+    main: true
+  });
+  assert.equal(config.ignoreCommand, undefined);
 });
 
 test("local builds continue without provider authorization", () => {

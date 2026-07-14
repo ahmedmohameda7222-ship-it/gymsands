@@ -20,14 +20,25 @@ function run(script: string, overrides: EnvironmentOverrides = {}) {
 }
 
 describe("production release deployment holds", () => {
-  it("wires both providers to exact-SHA gates and documents an empty approval", () => {
-    const vercelConfig = JSON.parse(readFileSync(`${repositoryRoot}/vercel.json`, "utf8")) as { ignoreCommand?: string };
+  it("uses main-only automatic Vercel deployments and keeps the Netlify exact-SHA gate", () => {
+    const vercelConfig = JSON.parse(readFileSync(`${repositoryRoot}/vercel.json`, "utf8")) as {
+      ignoreCommand?: string;
+      git?: {
+        deploymentEnabled?: Record<string, boolean>;
+      };
+    };
     const netlifyConfig = readFileSync(`${repositoryRoot}/netlify.toml`, "utf8");
     const envExample = readFileSync(`${repositoryRoot}/.env.example`, "utf8");
-    expect(vercelConfig.ignoreCommand).toBe("node scripts/vercel-production-release-gate.mjs");
+
+    expect(vercelConfig.ignoreCommand).toBeUndefined();
+    expect(vercelConfig.git?.deploymentEnabled).toEqual({
+      "*": false,
+      main: true
+    });
     expect(netlifyConfig).toContain('ignore = "node ./scripts/netlify-production-release-gate.mjs"');
     expect(envExample).toMatch(/^PLAIVRA_PRODUCTION_RELEASE_SHA=$/m);
   });
+
 
   it("allows non-provider local and CI builds", () => {
     expect(run(vercelScript).status).toBe(1);

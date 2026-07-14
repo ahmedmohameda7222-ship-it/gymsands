@@ -8,14 +8,18 @@ Required retained evidence is repository integrity, full migration chain, databa
 
 For a candidate branch push, retain the exact-SHA Vercel deployment state and ignore-gate log. Repository configuration alone does not prove that an automatic preview was skipped; if an unapproved preview reaches `READY`, keep the release blocked.
 
+For a candidate branch push, confirm that Vercel did not create an automatic Git-connected deployment. If an unexpected branch deployment exists, retain its metadata and keep the release blocked until the deployment configuration is corrected.
+
 ## Deployment identity
 
-- `vercel.json` requests automatic Git-connected deployments only for `main`, but the exact-SHA build gate is authoritative because a provider can still create a branch deployment record.
-- A temporary preview builds only when `PLAIVRA_PREVIEW_RELEASE_SHA` exactly equals its 40-character provider commit SHA; keep that approval empty for ordinary pushes and clear or rotate it after use.
-- Production requires `PLAIVRA_PRODUCTION_RELEASE_SHA` to exactly equal the provider’s 40-character commit SHA.
+- `vercel.json` requests automatic Git-connected deployments only for `main`.
+- Vercel does not use an `ignoreCommand` or an exact-SHA environment approval gate.
+- Required GitHub review and CI checks must pass before changes enter `main`.
+- After merge, confirm that Vercel built the exact resulting 40-character `main` SHA.
+- Verify that provider metadata, `/api/version`, and `/api/health` identify the expected deployed commit.
 - Never redeploy an old provider artifact as a substitute for deploying the reviewed Git commit.
-- Clear or rotate the approval SHA after acceptance.
-- Rollback selects a separately identified code/schema-compatible pair and repeats exact-SHA verification and smoke.
+- Netlify remains a separate secondary provider and retains its exact-SHA production gate.
+- Rollback selects a separately identified code/schema-compatible pair and repeats deployment-identity and smoke verification.
 
 ## Monitoring and alerts
 
@@ -60,19 +64,18 @@ Rollback is not “redeploy previous deployment.” It is a new controlled opera
 Public support/security contact: `Ahmed.Mohamed04@outlook.de`. Ask reporters to minimize sensitive content. Record receipt, severity, affected release, sanitized reproduction, containment, owner, and closure. Never request a password, access token, entire export, medical record, or unredacted provider payload by email.
 
 ## Launch-day sequence
-
-1. Freeze one reviewed `main` SHA.
-2. Confirm quality artifacts and release manifest belong to that SHA.
-3. Complete migration-history reconciliation and independent verification.
-4. Confirm the compatibility marker and expected migration identity.
-5. Run `npm run release:preflight`; any failure is a no-go.
-6. Review strict provider environment validation without exposing values.
-7. Confirm `PLAIVRA_PREVIEW_RELEASE_SHA` is empty, then set `PLAIVRA_PRODUCTION_RELEASE_SHA` to the exact SHA.
-8. Deploy that Git commit, not an old provider deployment.
-9. Verify provider metadata, `/api/version`, and `/api/health`.
-10. Run anonymous smoke.
-11. Run populated and empty authenticated synthetic smoke.
-12. Review page/console/network results, screenshots, route timings, and request counts.
+1. Confirm the candidate change passed all required review and quality checks.
+2. Complete migration-history reconciliation and independent verification.
+3. Confirm the compatibility marker and expected migration identity.
+4. Review strict production environment validation without exposing secret values.
+5. Merge the approved change to `main`.
+6. Record the exact resulting 40-character `main` SHA.
+7. Confirm the quality artifact and release manifest belong to that exact SHA.
+8. Run `npm run release:preflight`; any failure is a no-go.
+9. Confirm Vercel created the production deployment from that exact `main` SHA. Do not redeploy an old provider deployment.
+10. Verify provider metadata, `/api/version`, and `/api/health`.
+11. Run anonymous smoke.
+12. Run populated and empty authenticated synthetic smoke.12. Review page/console/network results, screenshots, route timings, and request counts.
 13. Confirm alert delivery, support mailbox, backup evidence, and on-call owner.
 14. Clear/rotate the approved SHA and record the final launch verdict.
 
