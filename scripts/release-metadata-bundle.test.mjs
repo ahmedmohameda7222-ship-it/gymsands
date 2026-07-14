@@ -32,10 +32,12 @@ test("next.config bundles deterministic release and migration metadata", async (
   assert.equal(releaseMetadata.buildTimestamp, "2026-07-14T01:02:03.000Z");
   assert.equal(releaseMetadata.environment, "production");
   assert.equal(releaseMetadata.migrationLedgerReconciliationState, ledger.historyRepair.state);
+  assert.equal(releaseMetadata.pendingMigrationCount, String(ledger.pendingCount));
   assert.equal(releaseMetadata.schemaAppliedUntrackedCount, String(ledger.schemaVerifiedUntrackedCount));
+  assert.equal(releaseMetadata.unresolvedMigrationCount, String(ledger.unresolvedCount));
   assert.match(releaseMetadata.expectedDatabaseMigrationVersion, /^\d{12,14}$/);
-  assert.deepEqual(config.env.PLAIVRA_COMMIT_SHA, fullSha);
-  assert.deepEqual(config.env.PLAIVRA_BUILD_TIMESTAMP, "2026-07-14T01:02:03.000Z");
+  assert.equal(config.env.PLAIVRA_COMMIT_SHA, fullSha);
+  assert.equal(config.env.PLAIVRA_BUILD_TIMESTAMP, "2026-07-14T01:02:03.000Z");
   assert.equal(config.env.PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION, releaseMetadata.expectedDatabaseMigrationVersion);
 });
 
@@ -74,6 +76,7 @@ test("release manifest records exact installed runtime versions and lockfile ide
     ]);
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     const manifest = JSON.parse(readFileSync(output, "utf8"));
+    const ledger = JSON.parse(readFileSync(resolve(root, "supabase/migration-ledger.json"), "utf8"));
     const installedNext = JSON.parse(readFileSync(resolve(root, "node_modules/next/package.json"), "utf8")).version;
     const packageLock = readFileSync(resolve(root, "package-lock.json"));
     const npmVersion = process.platform === "win32"
@@ -85,6 +88,9 @@ test("release manifest records exact installed runtime versions and lockfile ide
     assert.equal(manifest.runtime.nodeVersion, process.version);
     assert.equal(manifest.runtime.npmVersion, npmVersion);
     assert.equal(manifest.runtime.lockfileSha256, createHash("sha256").update(packageLock).digest("hex"));
+    assert.equal(manifest.release.pendingMigrationCount, ledger.pendingCount);
+    assert.equal(manifest.release.schemaAppliedUntrackedCount, ledger.schemaVerifiedUntrackedCount);
+    assert.equal(manifest.release.unresolvedMigrationCount, ledger.unresolvedCount);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -97,7 +103,9 @@ test("built metadata verification accepts fail-closed readiness only with the ex
     environment: "ci",
     expectedDatabaseMigrationVersion: "20260711014500",
     migrationLedgerReconciliationState: "pending",
-    schemaAppliedUntrackedCount: 6
+    pendingMigrationCount: 1,
+    schemaAppliedUntrackedCount: 7,
+    unresolvedMigrationCount: 8
   };
   const body = { ...expected, artifactIdentityValid: true, releaseReady: false };
   assert.equal(validateBuiltReleaseMetadata({ body, status: 503, expected }), true);
