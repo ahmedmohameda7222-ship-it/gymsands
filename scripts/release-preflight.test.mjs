@@ -25,15 +25,21 @@ function validInput() {
     installedNextVersion: "16.2.10",
     migrationState: {
       reconciliationState: "reconciled",
+      pendingCount: 0,
       schemaAppliedUntrackedCount: 0,
-      latestAppliedMigrationVersion: "20260713170000"
+      unresolvedCount: 0,
+      latestAppliedMigrationVersion: "20260713170000",
+      releaseReady: true
     },
     manifest: {
       release: {
         commitSha: sha,
         buildTimestamp,
         expectedDatabaseMigrationVersion: "20260713170000",
-        migrationLedgerReconciliationState: "reconciled"
+        migrationLedgerReconciliationState: "reconciled",
+        pendingMigrationCount: 0,
+        schemaAppliedUntrackedCount: 0,
+        unresolvedMigrationCount: 0
       },
       runtime: { nextVersion: "16.2.10" },
       qualityGates: Object.fromEntries(requiredGates.map((gate) => [gate, {
@@ -59,13 +65,38 @@ test("rejects an old deployment artifact as a substitute for the reviewed SHA", 
   assert.ok(result.failures.includes("checkout_commit_mismatch"));
 });
 
-test("fails while schema-applied migration history remains untracked", () => {
+test("fails while any migration entry remains unresolved", () => {
   const input = validInput();
-  input.migrationState.reconciliationState = "pending";
-  input.migrationState.schemaAppliedUntrackedCount = 6;
-  input.manifest.release.migrationLedgerReconciliationState = "pending";
+  input.migrationState = {
+    ...input.migrationState,
+    reconciliationState: "pending",
+    pendingCount: 1,
+    schemaAppliedUntrackedCount: 7,
+    unresolvedCount: 8,
+    releaseReady: false
+  };
+  input.manifest.release = {
+    ...input.manifest.release,
+    migrationLedgerReconciliationState: "pending",
+    pendingMigrationCount: 1,
+    schemaAppliedUntrackedCount: 7,
+    unresolvedMigrationCount: 8
+  };
   const result = evaluateReleasePreflight(input);
   assert.deepEqual(result, { ready: false, failures: ["migration_ledger_not_reconciled"] });
+});
+
+test("rejects manifest count drift", () => {
+  for (const [field, code] of [
+    ["pendingMigrationCount", "release_manifest_pending_count_mismatch"],
+    ["schemaAppliedUntrackedCount", "release_manifest_untracked_count_mismatch"],
+    ["unresolvedMigrationCount", "release_manifest_unresolved_count_mismatch"]
+  ]) {
+    const input = validInput();
+    input.manifest.release[field] = 1;
+    const result = evaluateReleasePreflight(input);
+    assert.ok(result.failures.includes(code));
+  }
 });
 
 test("distinguishes missing and failed quality evidence", () => {
