@@ -4,24 +4,48 @@ import { HttpActivityCatalogProvider } from "./http-provider";
 
 const activity = {
   id: "11111111-1111-4111-8111-111111111111",
-  slug: "bodyweight_squat",
-  name: "Bodyweight Squat",
-  shortDescription: null,
-  instructions: [{ order: 1, text: "Squat with control." }],
-  difficulty: "beginner",
+  slug: "barbell_back_squat",
+  name: "Barbell Back Squat",
+  shortDescription: "A controlled bilateral squat performed with a barbell.",
+  instructions: [
+    { order: 1, text: "Set the bar securely across the upper back." },
+    { order: 2, text: "Brace, descend with control, then stand tall." }
+  ],
+  difficulty: "intermediate",
   movementPattern: "squat",
-  version: 1,
-  activityType: { id: "22222222-2222-4222-8222-222222222222", slug: "strength", name: "Strength" },
-  metricSchema: null,
-  sports: [],
-  sessionTypes: [],
-  sessionPhases: [],
-  equipment: [],
-  muscles: [],
-  trainingGoals: [],
-  translations: {},
+  version: 3,
+  activityType: { id: "22222222-2222-4222-8222-222222222222", slug: "strength_exercise", name: "Strength Exercise" },
+  metricSchema: {
+    slug: "strength_repetitions",
+    name: "Strength repetitions",
+    fields: [
+      { key: "sets", label: "Sets", type: "integer", unit: "set", required: false },
+      { key: "reps", label: "Repetitions", type: "integer", unit: "rep", required: false },
+      { key: "weight", label: "Weight", type: "number", unit: "kg", required: false }
+    ]
+  },
+  sports: [{ id: "33333333-3333-4333-8333-333333333333", slug: "strength_training", name: "Strength Training", isPrimary: true }],
+  sessionTypes: [{ id: "44444444-4444-4444-8444-444444444444", slug: "strength_session", name: "Strength Session", sportId: "33333333-3333-4333-8333-333333333333" }],
+  sessionPhases: [{ id: "55555555-5555-4555-8555-555555555555", slug: "main", name: "Main", sportId: "33333333-3333-4333-8333-333333333333", isOptional: false }],
+  equipment: [
+    { id: "66666666-6666-4666-8666-666666666666", slug: "barbell", name: "Barbell", isRequired: true },
+    { id: "77777777-7777-4777-8777-777777777777", slug: "squat_rack", name: "Squat Rack", isRequired: false }
+  ],
+  muscles: [
+    { id: "88888888-8888-4888-8888-888888888888", slug: "quadriceps", name: "Quadriceps", bodyRegion: "Lower body", role: "primary" },
+    { id: "99999999-9999-4999-8999-999999999999", slug: "gluteus_maximus", name: "Gluteus Maximus", bodyRegion: "Lower body", role: "secondary" },
+    { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", slug: "erector_spinae", name: "Erector Spinae", bodyRegion: "Back", role: "stabilizer" }
+  ],
+  trainingGoals: [
+    { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", slug: "strength", name: "Strength", relevanceWeight: 0.9 },
+    { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", slug: "hypertrophy", name: "Hypertrophy", relevanceWeight: 0.85 }
+  ],
+  translations: {
+    de: { name: "Langhantel-Kniebeuge", shortDescription: "Eine kontrollierte Kniebeuge mit Langhantel." },
+    ar: { name: "قرفصاء بالبار", shortDescription: "قرفصاء محكومة باستخدام البار." }
+  },
   publishedAt: null,
-  updatedAt: "2026-07-02T00:00:00.000Z"
+  updatedAt: "2026-07-10T08:00:00.000Z"
 };
 
 const meta = { apiVersion: "v1", locale: "en", requestId: "request-1" };
@@ -42,14 +66,20 @@ describe("HttpActivityCatalogProvider", () => {
       apiKey: "server-only-test-key",
       fetch: fetchMock as typeof fetch
     });
-    const response = await provider.searchActivities({ query: "squat", difficulty: "beginner", limit: 30, offset: 0 });
+    const response = await provider.searchActivities({ query: "squat", difficulty: "intermediate", limit: 30, offset: 0 });
     expect(response.meta).toMatchObject({ source: "external", degraded: false, requestId: "request-1" });
-    expect(response.data).toHaveLength(1);
+    expect(response.data[0]).toMatchObject({
+      trainingGoals: [
+        expect.objectContaining({ relevanceWeight: 0.9 }),
+        expect.objectContaining({ relevanceWeight: 0.85 })
+      ],
+      translations: activity.translations
+    });
     const [input, init] = fetchMock.mock.calls[0];
     const url = input as URL;
     expect(url.origin).toBe("https://catalog.example.test");
     expect(url.pathname).toBe("/v1/activities");
-    expect(Object.fromEntries(url.searchParams)).toEqual({ query: "squat", difficulty: "beginner", limit: "30", offset: "0", locale: "en" });
+    expect(Object.fromEntries(url.searchParams)).toEqual({ query: "squat", difficulty: "intermediate", limit: "30", offset: "0", locale: "en" });
     expect(init).toMatchObject({ method: "GET", cache: "no-store" });
     expect(init?.headers).toEqual({ Accept: "application/json", Authorization: "Bearer server-only-test-key" });
     expect(JSON.stringify(init)).not.toContain("user_id");
@@ -81,13 +111,24 @@ describe("HttpActivityCatalogProvider", () => {
     expect((caught as Error).message).not.toContain("raw upstream detail");
   });
 
-  it("maps malformed successful JSON to invalid_response", async () => {
-    const provider = new HttpActivityCatalogProvider({
+  it("maps malformed successful JSON and invalid decimal weights to invalid_response", async () => {
+    const malformedIdProvider = new HttpActivityCatalogProvider({
       baseUrl: "https://catalog.example.test",
       apiKey: "key",
       fetch: vi.fn(async () => jsonResponse({ data: [{ ...activity, id: "bad" }], pagination: { limit: 1, offset: 0, returned: 1, nextOffset: null }, meta })) as typeof fetch
     });
-    await expect(provider.searchActivities({ limit: 1 })).rejects.toMatchObject({ code: "invalid_response" });
+    await expect(malformedIdProvider.searchActivities({ limit: 1 })).rejects.toMatchObject({ code: "invalid_response" });
+
+    const malformedWeightProvider = new HttpActivityCatalogProvider({
+      baseUrl: "https://catalog.example.test",
+      apiKey: "key",
+      fetch: vi.fn(async () => jsonResponse({
+        data: [{ ...activity, trainingGoals: [{ ...activity.trainingGoals[0], relevanceWeight: 1.2 }] }],
+        pagination: { limit: 1, offset: 0, returned: 1, nextOffset: null },
+        meta
+      })) as typeof fetch
+    });
+    await expect(malformedWeightProvider.searchActivities({ limit: 1 })).rejects.toMatchObject({ code: "invalid_response" });
   });
 
   it("accepts contract-valid omitted optional activity and alternative fields", async () => {
@@ -107,9 +148,9 @@ describe("HttpActivityCatalogProvider", () => {
       fetch: vi.fn(async () => jsonResponse({
         data: [{
           sourceActivityId: activity.id,
-          alternativeActivityId: "33333333-3333-4333-8333-333333333333",
+          alternativeActivityId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
           alternativeSlug: "front_squat",
-          alternativeName: "Front squat",
+          alternativeName: "Front Squat",
           reasonCode: "similar_pattern",
           prescriptionTransfer: "partial",
           compatibilityScore: 0.8,
