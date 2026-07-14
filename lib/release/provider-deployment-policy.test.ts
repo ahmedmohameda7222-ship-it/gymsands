@@ -21,15 +21,17 @@ function runNetlify(overrides: EnvironmentOverrides = {}) {
 }
 
 describe("provider deployment policy", () => {
-  it("requests Vercel Git deployments only for main without a runtime gate", () => {
+  it("declares repository Vercel policy intent for main only without claiming provider enforcement", () => {
     const vercelConfig = JSON.parse(readFileSync(`${repositoryRoot}/vercel.json`, "utf8")) as {
       ignoreCommand?: string;
       git?: { deploymentEnabled?: Record<string, boolean> };
       crons?: Array<{ path: string; schedule: string }>;
     };
     const envExample = readFileSync(`${repositoryRoot}/.env.example`, "utf8");
+    const releaseReadme = readFileSync(`${repositoryRoot}/docs/release/README.md`, "utf8");
+    const launchRunbook = readFileSync(`${repositoryRoot}/docs/operations/launch-runbook.md`, "utf8");
 
-    expect(vercelConfig.git?.deploymentEnabled).toEqual({ "*": false, main: true });
+    expect(vercelConfig.git?.deploymentEnabled).toEqual({ "**": false, main: true });
     expect(vercelConfig.ignoreCommand).toBeUndefined();
     expect(vercelConfig.crons).toEqual([
       { path: "/api/internal/maintenance/oauth-cleanup", schedule: "17 3 * * *" },
@@ -41,6 +43,31 @@ describe("provider deployment policy", () => {
     expect(envExample).toContain("# Netlify production deployment release hold");
     expect(envExample).toContain("# Vercel does not use this variable.");
     expect(envExample).toMatch(/^PLAIVRA_PRODUCTION_RELEASE_SHA=$/m);
+    expect(releaseReadme).toContain("Repository configuration and tests verify policy intent only.");
+    expect(releaseReadme).toContain("They do not prove actual Vercel provider enforcement.");
+    expect(launchRunbook).toContain("Repository configuration and green repository tests prove policy intent only");
+    expect(launchRunbook).toContain("actual provider behavior requires post-push Vercel verification");
+  });
+
+  it("places migration reconciliation, preflight, and owner approval before the production-triggering merge", () => {
+    const releaseReadme = readFileSync(`${repositoryRoot}/docs/release/README.md`, "utf8");
+    const launchRunbook = readFileSync(`${repositoryRoot}/docs/operations/launch-runbook.md`, "utf8");
+
+    for (const document of [releaseReadme, launchRunbook]) {
+      const reconciliation = document.indexOf("2. Complete migration-history reconciliation");
+      const preflight = document.indexOf("5. Run `npm run release:preflight`");
+      const approval = document.indexOf("6. Obtain explicit release-owner approval");
+      const merge = document.indexOf("7. Merge the approved exact change to `main`");
+
+      expect(reconciliation).toBeGreaterThanOrEqual(0);
+      expect(preflight).toBeGreaterThan(reconciliation);
+      expect(approval).toBeGreaterThan(preflight);
+      expect(merge).toBeGreaterThan(approval);
+      expect(document).toContain("Any failed or blocked preflight is a no-go before merge");
+      expect(document).toContain("migration ledger must be reconciled before");
+      expect(document).toContain("A provider `READY` state alone is not acceptance");
+      expect(document).toContain("Netlify remains separate");
+    }
   });
 
   it("keeps the Netlify ignore command and local build behavior", () => {
