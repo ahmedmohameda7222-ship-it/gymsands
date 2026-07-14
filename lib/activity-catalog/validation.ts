@@ -44,10 +44,15 @@ function stringValue(value: unknown, label: string, options: { nullable?: boolea
   return value;
 }
 
-function numberValue(value: unknown, label: string, options: { integer?: boolean; minimum?: number } = {}) {
+function numberValue(
+  value: unknown,
+  label: string,
+  options: { integer?: boolean; minimum?: number; maximum?: number } = {}
+) {
   if (typeof value !== "number" || !Number.isFinite(value)) invalidResponse(`${label} must be a finite number.`);
   if (options.integer && !Number.isInteger(value)) invalidResponse(`${label} must be an integer.`);
   if (options.minimum !== undefined && value < options.minimum) invalidResponse(`${label} is below its minimum.`);
+  if (options.maximum !== undefined && value > options.maximum) invalidResponse(`${label} is above its maximum.`);
   return value;
 }
 
@@ -191,7 +196,14 @@ export function parseTrainingActivity(value: unknown): TrainingActivity {
   });
   const trainingGoals = arrayValue(item.trainingGoals, "activity.trainingGoals").map((entry, index) => {
     const value = objectValue(entry, `activity.trainingGoals[${index}]`);
-    return { ...parseTaxonomy(value, `activity.trainingGoals[${index}]`), relevanceWeight: numberValue(value.relevanceWeight, `activity.trainingGoals[${index}].relevanceWeight`, { integer: true, minimum: 0 }) };
+    return {
+      ...parseTaxonomy(value, `activity.trainingGoals[${index}]`),
+      relevanceWeight: numberValue(
+        value.relevanceWeight,
+        `activity.trainingGoals[${index}].relevanceWeight`,
+        { minimum: 0, maximum: 1 }
+      )
+    };
   });
   return {
     id: uuidValue(item.id, "activity.id"),
