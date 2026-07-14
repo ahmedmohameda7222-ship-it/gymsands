@@ -51,7 +51,8 @@ describe("Train release security controls", () => {
     expect(productionPreflight).toContain("public.assert_workout_actor(uuid)");
     expect(productionPreflight).toContain("search_path=\"\"");
     expect(productionPreflight).toContain("granted_function.proacl");
-    expect(productionPreflight).toContain("legacy_train_rpc_overload");
+    expect(productionPreflight).toContain("unexpected_train_rpc_overload");
+    expect(productionPreflight).toContain("Only the six canonical Train RPC signatures are allowed.");
     expect(productionPreflight).toContain("scheduled_session_contains_history");
     expect(productionPreflight).toContain("duplicate_schedule_occurrence");
     expect(hardeningMigration).toContain("Refusing to elevate Train RPC without its actor check");
