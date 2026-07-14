@@ -4,6 +4,7 @@ import type { Workout } from "@/types";
 const userId = "11111111-1111-4111-8111-111111111111";
 const planId = "22222222-2222-4222-8222-222222222222";
 const externalActivityId = "88888888-8888-4888-8888-888888888888";
+const localizedNames = { de: "Langhantel-Bankdrücken", ar: "ضغط صدر بالبار" };
 
 const { rpc, supabase } = vi.hoisted(() => {
   const rpc = vi.fn(async () => ({ data: { id: planId }, error: null }));
@@ -16,9 +17,9 @@ import { createUserWorkoutPlan } from "@/services/database/workout-plans";
 
 const externalWorkout: Workout = {
   id: externalActivityId,
-  name: "External bench press",
-  category: "Strength",
-  target_muscle: "Chest",
+  name: "Barbell Bench Press",
+  category: "Strength Exercise",
+  target_muscle: "Pectoralis Major",
   muscle_category: "Upper body",
   equipment: "Barbell",
   equipment_required: "Barbell",
@@ -26,7 +27,7 @@ const externalWorkout: Workout = {
   experience_level: "intermediate",
   mechanics: "horizontal_push",
   force_type: null,
-  secondary_muscles: ["Triceps"],
+  secondary_muscles: ["Triceps", "Serratus Anterior"],
   sets: 3,
   reps: "8-12",
   rest_seconds: 90,
@@ -39,12 +40,12 @@ const externalWorkout: Workout = {
   activity_catalog: {
     source: "external",
     activityId: externalActivityId,
-    slug: "external_bench_press",
+    slug: "barbell_bench_press",
     version: 4,
     metricSchema: {
       slug: "strength_repetitions",
       name: "Strength repetitions",
-      fields: [{ key: "reps", label: "Repetitions", type: "integer", required: false }]
+      fields: [{ key: "reps", label: "Repetitions", type: "integer", unit: "rep", required: false }]
     }
   }
 };
@@ -52,7 +53,10 @@ const externalWorkout: Workout = {
 beforeEach(() => vi.clearAllMocks());
 
 describe("external activity workout-plan compatibility", () => {
-  it("preserves the external UUID and the complete exercise snapshot in the existing plan RPC", async () => {
+  it("preserves the external UUID, canonical English name, and complete snapshot in the existing plan RPC", async () => {
+    expect(externalWorkout.name).not.toBe(localizedNames.de);
+    expect(externalWorkout.name).not.toBe(localizedNames.ar);
+
     await expect(createUserWorkoutPlan({
       userId,
       planName: "External catalog plan",
@@ -66,7 +70,7 @@ describe("external activity workout-plan compatibility", () => {
         days: [expect.objectContaining({
           exercises: [expect.objectContaining({
             source_workout_id: externalActivityId,
-            exercise_name: externalWorkout.name,
+            exercise_name: "Barbell Bench Press",
             category: externalWorkout.category,
             target_muscle: externalWorkout.muscle_category,
             equipment: externalWorkout.equipment_required,
