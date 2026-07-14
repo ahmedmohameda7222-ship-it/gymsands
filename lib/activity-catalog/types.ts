@@ -80,6 +80,11 @@ export type LocalizedTrainingActivityContent = {
   instructions?: TrainingActivityInstruction[];
 };
 
+export type LegacyActivityMediaCompatibility = {
+  exerciseUrl: string | null;
+  videoUrl: string | null;
+};
+
 export type TrainingActivity = {
   id: string;
   slug: string;
@@ -100,6 +105,8 @@ export type TrainingActivity = {
   translations: Record<string, LocalizedTrainingActivityContent>;
   publishedAt: string | null;
   updatedAt: string | null;
+  /** Internal-only legacy compatibility data. The external parser never accepts this field. */
+  legacyMediaCompatibility?: LegacyActivityMediaCompatibility;
 };
 
 export type ActivityCatalogAlternative = {
