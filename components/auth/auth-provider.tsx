@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { env } from "@/lib/env";
+import { MOCK_AUTH_USER_ID } from "@/lib/fixtures/mock-auth";
 import type { Profile } from "@/types";
 
 type AuthContextValue = {
@@ -22,7 +23,7 @@ const isProduction = process.env.NODE_ENV === "production";
 const mockAuthEnabled = env.useMockAuth && !isProduction;
 
 const mockUser = {
-  id: "mock-user",
+  id: MOCK_AUTH_USER_ID,
   email: "member@plaivra.test"
 } as User;
 
@@ -39,7 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadProfile = useCallback(async (userId: string, email?: string | null) => {
     if (mockAuthEnabled) {
       setProfile({
-        id: "mock-user",
+        id: MOCK_AUTH_USER_ID,
         email: "member@plaivra.test",
         full_name: "Plaivra Member",
         role: "admin",
@@ -101,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         if (mockAuthEnabled) {
           setSession({ user: mockUser } as Session);
-          await loadProfile("mock-user");
+          await loadProfile(MOCK_AUTH_USER_ID);
           return;
         }
 

@@ -53,6 +53,10 @@ export function knownFoodLogCount(data: Pick<TodayNutritionData, "logs" | "logsS
   return data.logsState === "loaded" && data.logs ? data.logs.length : null;
 }
 
+export function hasFoodLogsFromCount(foodLogCount: number | null) {
+  return foodLogCount !== null && foodLogCount > 0;
+}
+
 export function upsertFoodLogById(logs: FoodLog[], incoming: FoodLog) {
   return [incoming, ...logs.filter((item) => item.id !== incoming.id)];
 }

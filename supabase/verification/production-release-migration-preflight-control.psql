@@ -1,0 +1,23 @@
+-- Shared client-side control for production-release-migration-preflight.sql.
+-- Required variables are populated by the read-only aggregate query via \gset.
+
+\set ON_ERROR_STOP on
+
+\if :{?preflight_has_blocking_findings}
+\else
+  \echo 'Production release migration preflight failed closed: Boolean finding state is missing.'
+  -- psql has no custom-status form of \quit. A script error with
+  -- ON_ERROR_STOP is the documented fail-closed path and exits with status 3.
+  select 1 / 0 as missing_preflight_boolean_must_fail_closed;
+\endif
+
+\if :preflight_has_blocking_findings
+  \echo 'Production release migration preflight failed with' :preflight_blocking_finding_count 'blocking finding(s).'
+  \echo 'Blocking finding evidence (deterministic JSON with issue_type, object_identity, and details):'
+  \echo :preflight_blocking_findings
+  -- Deliberately fail after evidence is printed. ON_ERROR_STOP makes psql exit
+  -- with its documented script-error status 3; no persistent object is changed.
+  select 1 / 0 as blocking_findings_must_fail_closed;
+\else
+  \echo 'Production release migration preflight passed: 0 blocking findings.'
+\endif

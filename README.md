@@ -46,6 +46,7 @@ Audit reports, completed prompts, progress trackers, and old status files are no
 - Supabase Auth, PostgreSQL, RLS, and Storage
 - MCP server and OAuth account connection
 - Vitest and project checks from `package.json`
+- Node.js 24.x and npm with the committed lockfile
 
 ## Repository areas
 
@@ -97,7 +98,7 @@ Web, iOS, and Android share product rules, domain contracts, permissions, analyt
 
 ## Environment
 
-Copy `.env.example` and configure only used providers.
+Copy `.env.example` and configure only used providers. Production/provider builds are validated before `next build`; missing or malformed critical values fail without printing secret values.
 
 Browser-safe variables:
 
@@ -123,28 +124,37 @@ Never commit real secrets or production tokens.
 
 ## Supabase migrations
 
-The current reconciliation authority is [`supabase/migration-ledger.json`](supabase/migration-ledger.json) and [`docs/architecture/migration-ledger-reconciliation.md`](docs/architecture/migration-ledger-reconciliation.md).
+The machine-readable authority is [`supabase/migration-ledger.json`](supabase/migration-ledger.json). The human reconciliation record is [`docs/architecture/migration-ledger-reconciliation.md`](docs/architecture/migration-ledger-reconciliation.md).
 
 Verified on 2026-07-13:
 
-- Supabase migration history contains 24 applied migrations through `20260711014500_idempotency_uncertain_completion_guard`.
+- Supabase migration history contains 24 normally applied migrations through `20260711014500_idempotency_uncertain_completion_guard`.
 - No repository migration is classified as pending.
-- Three later migrations are absent from Supabase migration history but their complete schema effects were verified in production:
+- Six later migrations are absent from Supabase migration history while their schema effects are recorded as verified:
   - `20260711213000_adaptive_onboarding_v2.sql`
   - `20260712173000_persistent_meal_plan_skip_status.sql`
   - `20260712195000_nutrition_target_date_overrides.sql`
+  - `20260713153000_meal_plan_atomic_execution.sql`
+  - `20260713160000_train_section_atomic_integrity.sql`
+  - `20260713170000_finalize_train_schedule_delete_integrity.sql`
+- Migration-history reconciliation remains **pending**. Repository release readiness must remain false while any `applied_schema_untracked` entry exists.
 
-Do not replay schema-untracked migrations. Repair migration-history metadata only through an approved, evidence-backed Supabase workflow. Run `npm run migration:ledger:check` to validate repository classification.
+Do not replay schema-untracked migrations. Repair migration-history metadata only through an approved, evidence-backed, forward-only Supabase workflow. Run `npm run migration:ledger:check` to validate repository classification and documentation consistency.
 
 Do not run pre-clean-rebuild migrations against the current project.
 
 ## Local development
 
+Use Node.js 24.x as declared by `package.json`, `.nvmrc`, and `.node-version`.
+
 ```bash
-npm install
+npm ci
 npm run lint
+npm run migration:ledger:check
+npm run test:scripts
 npm run typecheck
-npm test
+npm run test:unit
+npm run test:integration
 npm run build
 ```
 
@@ -152,7 +162,7 @@ Run the exact scripts available in `package.json`; do not invent missing command
 
 ## Release integrity
 
-Public launches require the reviewed commit to match the deployed commit, all repository quality gates to pass, a successful provider deployment, and post-deploy smoke evidence. See [`docs/release/README.md`](docs/release/README.md) for the version endpoint, release manifest, required gates, and release procedure.
+Public launches require the reviewed exact 40-character commit to match the deployed commit, all repository quality gates to pass, migration history to be reconciled, a successful provider deployment, and both anonymous and authenticated browser smoke evidence. See [`docs/release/README.md`](docs/release/README.md) for the version endpoint, release manifest, required gates, and release procedure.
 
 ## Safety and privacy
 

@@ -3,8 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "description": "Plaivra private workout, meal, and progress tracking app.",
+  "engines": {
+    "node": "24.x",
+    "npm": ">=10"
+  },
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/validate-production-env.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -12,9 +17,15 @@
     "test": "vitest run",
     "test:unit": "vitest run --config vitest.unit.config.mjs",
     "test:integration": "vitest run --config vitest.integration.config.mjs",
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "test:telemetry": "vitest run --config vitest.unit.config.mjs lib/observability/client-error.test.ts lib/observability/client-error-route.test.ts",
+    "validate:env": "node scripts/validate-production-env.mjs",
     "migration:ledger:check": "node scripts/check-migration-ledger.mjs",
     "release:manifest": "node scripts/create-release-manifest.mjs",
+    "release:preflight": "node scripts/release-preflight.mjs",
+    "release:verify-built-metadata": "node scripts/verify-built-release-metadata.mjs",
     "smoke:postdeploy": "node scripts/post-deploy-smoke.mjs",
+    "smoke:authenticated": "node scripts/authenticated-release-smoke.mjs",
     "synthetic:uptime": "node scripts/uptime-synthetic.mjs",
     "qa:rendered": "node scripts/run-rendered-qa.mjs"
   },
@@ -55,6 +66,7 @@
     "autoprefixer": "^10.4.22",
     "eslint": "^9.39.1",
     "eslint-config-next": "^16.0.3",
+    "jsdom": "^29.1.1",
     "postcss": "8.5.10",
     "tailwindcss": "^3.4.18",
     "typescript": "^5.9.3",

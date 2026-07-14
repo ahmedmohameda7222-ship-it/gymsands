@@ -7,14 +7,15 @@ describe("Train finalization UI contracts", () => {
   it("redirects every obsolete workout editor to the one canonical plan editor", () => {
     const day = source("app/(private)/my-workout/day/[dayId]/page.tsx");
     const picker = source("app/(private)/my-workout/day/[dayId]/add-exercise/page.tsx");
-    const today = source("app/(private)/today-workout/page.tsx");
+    const nextConfig = source("next.config.mjs");
 
     for (const route of [day, picker]) {
       expect(route).toContain("getUserWorkoutPlanDay");
       expect(route).toContain("router.replace(`/my-workout/plans/${day.plan_id}/edit?day=${encodeURIComponent(day.id)}");
     }
     expect(picker).toContain("&picker=exercise");
-    expect(today).toContain('redirect("/my-workout/plans")');
+    expect(nextConfig).toContain('source: "/today-workout"');
+    expect(nextConfig).toContain('destination: "/my-workout/plans"');
   });
 
   it("uses authorized route-scoped Plaivra ChatGPT surfaces and contains no external ChatGPT homepage link", () => {
@@ -160,7 +161,7 @@ describe("Train finalization UI contracts", () => {
   it("keeps populated Train fixtures behind the explicit mock-auth development gate", () => {
     const loader = source("services/database/workout-plan-loader.ts");
     const fixture = source("lib/fixtures/train-mock.ts");
-    expect(loader).toContain('env.useMockAuth && userId === "mock-user"');
+    expect(loader).toContain("env.useMockAuth && isMockAuthUserId(userId)");
     expect(loader).toContain("getMockTrainPlans");
     expect(fixture).toContain('active: "10000000-0000-4000-8000-000000000001"');
     expect(fixture).toContain('inactive: "10000000-0000-4000-8000-000000000002"');

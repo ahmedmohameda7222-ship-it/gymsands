@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { knownFoodLogCount, resolveTodayNutritionSources, upsertFoodLogById, type TodayNutritionTargetData } from "@/lib/dashboard/today-nutrition";
+import { hasFoodLogsFromCount, knownFoodLogCount, resolveTodayNutritionSources, upsertFoodLogById, type TodayNutritionTargetData } from "@/lib/dashboard/today-nutrition";
 import { sumFoodLogs } from "@/services/nutrition/calculations";
 import type { FoodLog } from "@/types";
 
 const log = { id: "log-1", calories: 400, protein_g: 30, carbs_g: 45, fat_g: 10, quantity: 1 } as FoodLog;
+const zeroNutritionLog = { id: "log-zero", calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, quantity: 1 } as FoodLog;
 const targets = { targets: null, activeTarget: null } satisfies TodayNutritionTargetData;
 const failed = (reason = new Error("failed")) => ({ status: "rejected", reason } as const);
 
@@ -30,6 +31,22 @@ describe("Today nutrition partial loading", () => {
     expect(knownFoodLogCount(data)).toBe(0);
     expect(data.logsState).toBe("loaded");
     expect(data.targetsState).toBe("loaded");
+  });
+
+  it("reports a real zero-nutrition log as present", () => {
+    const data = resolveTodayNutritionSources({ status: "fulfilled", value: [zeroNutritionLog] }, { status: "fulfilled", value: targets });
+    const count = knownFoodLogCount(data);
+    expect(count).toBe(1);
+    expect(hasFoodLogsFromCount(count)).toBe(true);
+  });
+
+  it("keeps loaded-empty and failed log presence distinct", () => {
+    const empty = resolveTodayNutritionSources({ status: "fulfilled", value: [] }, { status: "fulfilled", value: targets });
+    const unavailable = resolveTodayNutritionSources(failed(new Error("logs")), { status: "fulfilled", value: targets });
+    expect(hasFoodLogsFromCount(knownFoodLogCount(empty))).toBe(false);
+    expect(knownFoodLogCount(unavailable)).toBeNull();
+    expect(hasFoodLogsFromCount(knownFoodLogCount(unavailable))).toBe(false);
+    expect(unavailable.logsState).toBe("failed");
   });
 
   it("keeps both failed sources unavailable instead of synthesizing zeros", () => {

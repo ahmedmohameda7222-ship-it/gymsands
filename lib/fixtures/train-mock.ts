@@ -1,4 +1,5 @@
 import { addDays, todayIso } from "@/lib/date-utils";
+import { MOCK_AUTH_USER_ID } from "@/lib/fixtures/mock-auth";
 import type { UserWorkoutPlan, UserWorkoutPlanDay, UserWorkoutPlanExercise, Weekday, WorkoutSession } from "@/types";
 
 const weekdays: Weekday[] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -66,9 +67,9 @@ export function getMockTrainPlans(): UserWorkoutPlan[] {
   const archivedDays = [day(planIds.archived, "31", 1, weekdays[(todayIndex + 3) % 7], "Foundation", [["Goblet Squat", "Legs", "Dumbbell"]])];
 
   return [
-    { id: planIds.active, user_id: "mock-user", name: "Strength Foundation", is_active: true, is_default: true, source: "chatgpt", goal: "Strength", description: "A balanced three-day strength plan.", chatgpt_source: true, session_duration_minutes: 55, archived_at: null, program_duration_weeks: 8, days_per_week: 3, created_at: createdAt, updated_at: updatedAt, days: activeDays },
-    { id: planIds.inactive, user_id: "mock-user", name: "Conditioning Option", is_active: false, is_default: false, source: "manual", goal: "Conditioning", description: "A compact alternative plan.", session_duration_minutes: 35, archived_at: null, program_duration_weeks: 4, days_per_week: 1, created_at: createdAt, updated_at: updatedAt, days: inactiveDays },
-    { id: planIds.archived, user_id: "mock-user", name: "Archived Foundation", is_active: false, is_default: false, source: "manual", goal: "Technique", description: "Preserved historical plan.", session_duration_minutes: 40, archived_at: `${addDays(todayIso(), -14)}T09:00:00.000Z`, program_duration_weeks: 6, days_per_week: 1, created_at: createdAt, updated_at: updatedAt, days: archivedDays }
+    { id: planIds.active, user_id: MOCK_AUTH_USER_ID, name: "Strength Foundation", is_active: true, is_default: true, source: "chatgpt", goal: "Strength", description: "A balanced three-day strength plan.", chatgpt_source: true, session_duration_minutes: 55, archived_at: null, program_duration_weeks: 8, days_per_week: 3, created_at: createdAt, updated_at: updatedAt, days: activeDays },
+    { id: planIds.inactive, user_id: MOCK_AUTH_USER_ID, name: "Conditioning Option", is_active: false, is_default: false, source: "manual", goal: "Conditioning", description: "A compact alternative plan.", session_duration_minutes: 35, archived_at: null, program_duration_weeks: 4, days_per_week: 1, created_at: createdAt, updated_at: updatedAt, days: inactiveDays },
+    { id: planIds.archived, user_id: MOCK_AUTH_USER_ID, name: "Archived Foundation", is_active: false, is_default: false, source: "manual", goal: "Technique", description: "Preserved historical plan.", session_duration_minutes: 40, archived_at: `${addDays(todayIso(), -14)}T09:00:00.000Z`, program_duration_weeks: 6, days_per_week: 1, created_at: createdAt, updated_at: updatedAt, days: archivedDays }
   ];
 }
 
@@ -77,12 +78,12 @@ export function getMockTrainActivity(): WorkoutSession[] {
   const plans = getMockTrainPlans();
   const todayDay = plans[0].days[0];
   const history: WorkoutSession[] = [
-    { id: "20000000-0000-4000-8000-000000000002", user_id: "mock-user", workout_id: null, plan_id: planIds.active, plan_day_id: plans[0].days[1].id, workout_day_name: plans[0].days[1].day_name, workout_category: "strength", workout_name: plans[0].days[1].day_name, started_at: `${addDays(todayIso(), -5)}T08:00:00.000Z`, completed_at: `${addDays(todayIso(), -5)}T08:52:00.000Z`, skipped_at: null, duration_minutes: 52, notes: "Completed fixture session", status: "completed" },
-    { id: "20000000-0000-4000-8000-000000000003", user_id: "mock-user", workout_id: null, plan_id: planIds.active, plan_day_id: plans[0].days[2].id, workout_day_name: plans[0].days[2].day_name, workout_category: "strength", workout_name: plans[0].days[2].day_name, started_at: `${addDays(todayIso(), -3)}T08:00:00.000Z`, completed_at: null, skipped_at: `${addDays(todayIso(), -3)}T08:05:00.000Z`, duration_minutes: null, notes: "[skipped] Fixture", status: "skipped" }
+    { id: "20000000-0000-4000-8000-000000000002", user_id: MOCK_AUTH_USER_ID, workout_id: null, plan_id: planIds.active, plan_day_id: plans[0].days[1].id, workout_day_name: plans[0].days[1].day_name, workout_category: "strength", workout_name: plans[0].days[1].day_name, started_at: `${addDays(todayIso(), -5)}T08:00:00.000Z`, completed_at: `${addDays(todayIso(), -5)}T08:52:00.000Z`, skipped_at: null, duration_minutes: 52, notes: "Completed fixture session", status: "completed" },
+    { id: "20000000-0000-4000-8000-000000000003", user_id: MOCK_AUTH_USER_ID, workout_id: null, plan_id: planIds.active, plan_day_id: plans[0].days[2].id, workout_day_name: plans[0].days[2].day_name, workout_category: "strength", workout_name: plans[0].days[2].day_name, started_at: `${addDays(todayIso(), -3)}T08:00:00.000Z`, completed_at: null, skipped_at: `${addDays(todayIso(), -3)}T08:05:00.000Z`, duration_minutes: null, notes: "[skipped] Fixture", status: "skipped" }
   ];
   if (scenario !== "active") return history;
   return [
-    { id: "20000000-0000-4000-8000-000000000001", user_id: "mock-user", workout_id: null, plan_id: planIds.active, plan_day_id: todayDay.id, workout_day_name: todayDay.day_name, workout_category: "strength", workout_name: todayDay.day_name, started_at: `${todayIso()}T08:00:00.000Z`, completed_at: null, skipped_at: null, duration_minutes: null, notes: null, status: "started" },
+    { id: "20000000-0000-4000-8000-000000000001", user_id: MOCK_AUTH_USER_ID, workout_id: null, plan_id: planIds.active, plan_day_id: todayDay.id, workout_day_name: todayDay.day_name, workout_category: "strength", workout_name: todayDay.day_name, started_at: `${todayIso()}T08:00:00.000Z`, completed_at: null, skipped_at: null, duration_minutes: null, notes: null, status: "started" },
     ...history
   ];
 }

@@ -16,7 +16,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 55
     services:
       postgres:
         image: postgres:16
@@ -33,13 +33,14 @@ jobs:
           --health-retries 10
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-key
-      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       NEXT_PUBLIC_USE_MOCK_AUTH: "true"
       PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
       PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
       PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
       PLAIVRA_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       PLAIVRA_RELEASE_ENVIRONMENT: ci
       PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
@@ -49,13 +50,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref || github.ref_name }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+
+      - name: Verify exact checkout identity
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Set up Supabase CLI
@@ -69,6 +74,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Capture build timestamp
         shell: bash
@@ -85,10 +93,20 @@ jobs:
             supabase db start
             supabase db reset --local --no-seed
             supabase migration list --local
-            supabase db lint --local --schema public --level error --fail-on error
-            PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-section-production-preflight.sql
           ) 2>&1 | tee quality-reports/full-migration-chain.log
           echo "${PIPESTATUS[0]}" > quality-reports/full-migration-chain.exit
+
+          supabase db lint --local --schema public --level error --fail-on error 2>&1 | tee quality-reports/database-lint.log
+          echo "${PIPESTATUS[0]}" > quality-reports/database-lint.exit
+
+          (
+            set -euo pipefail
+            PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-section-production-preflight.sql
+            PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql
+            PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres" node scripts/test-database-preflight-control.mjs
+            PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
+          ) 2>&1 | tee quality-reports/database-preflight.log
+          echo "${PIPESTATUS[0]}" > quality-reports/database-preflight.exit
 
           (
             integrity_status=0
@@ -102,6 +120,9 @@ jobs:
               docs/chatgpt-app/README.md
               docs/chatgpt-app/cimd-authentication-architecture.md
               docs/architecture/canonical-domain-model.md
+              docs/release/README.md
+              docs/architecture/migration-ledger-reconciliation.md
+              plaivra_production_migration_reconciliation_plan.md
             )
             for document in "${required_docs[@]}"; do
               if [ ! -f "$document" ]; then
@@ -109,18 +130,15 @@ jobs:
                 integrity_status=1
               fi
             done
-
             temporary_workflow="$(find .github/workflows -maxdepth 1 -type f -name 'temporary-*' -print -quit)"
             if [ -n "$temporary_workflow" ]; then
               echo "Temporary workflow remains: $temporary_workflow"
               integrity_status=1
             fi
-
             if [ -e scripts/apply-clean-recheck-remediation.py ]; then
               echo "One-shot remediation script remains in the repository."
               integrity_status=1
             fi
-
             runtime_files=(
               lib/mcp/tools.ts
               lib/mcp/server.ts
@@ -135,20 +153,17 @@ jobs:
               echo "Retired Plaivra runtime names remain."
               integrity_status=1
             fi
-
             legacy_brand_pattern='FitLife|S&S Gym'
             if grep -R -n -E "$legacy_brand_pattern" app components lib services types --include='*.ts' --include='*.tsx'; then
               echo "Legacy product branding remains in active application source."
               integrity_status=1
             fi
-
             archive_files="$(find supabase/migrations_archive -type f -print 2>/dev/null)"
             if [ -n "$archive_files" ]; then
               echo "Legacy migration archive still contains files:"
               printf '%s\n' "$archive_files"
               integrity_status=1
             fi
-
             exit "$integrity_status"
           ) > quality-reports/integrity.log 2>&1
           echo "$?" > quality-reports/integrity.exit
@@ -156,30 +171,95 @@ jobs:
 
           npm run lint 2>&1 | tee quality-reports/lint.log
           echo "${PIPESTATUS[0]}" > quality-reports/lint.exit
-
           npm run migration:ledger:check 2>&1 | tee quality-reports/migration-ledger.log
           echo "${PIPESTATUS[0]}" > quality-reports/migration-ledger.exit
-
+          npm run test:scripts 2>&1 | tee quality-reports/script-tests.log
+          echo "${PIPESTATUS[0]}" > quality-reports/script-tests.exit
           npm audit --omit=dev --audit-level=moderate 2>&1 | tee quality-reports/dependency-audit.log
           echo "${PIPESTATUS[0]}" > quality-reports/dependency-audit.exit
-
           npm run typecheck 2>&1 | tee quality-reports/typecheck.log
           echo "${PIPESTATUS[0]}" > quality-reports/typecheck.exit
-
           npm run test:unit 2>&1 | tee quality-reports/unit.log
           echo "${PIPESTATUS[0]}" > quality-reports/unit.exit
-
           npm run test:integration 2>&1 | tee quality-reports/integration.log
           echo "${PIPESTATUS[0]}" > quality-reports/integration.exit
+          npm run test:telemetry 2>&1 | tee quality-reports/telemetry-tests.log
+          echo "${PIPESTATUS[0]}" > quality-reports/telemetry-tests.exit
+
+          (
+            export PLAIVRA_VALIDATE_PRODUCTION_ENV=true
+            export PLAIVRA_RELEASE_ENVIRONMENT=production
+            export NEXT_PUBLIC_APP_URL=https://app.plaivra.com
+            export NEXT_PUBLIC_USE_MOCK_AUTH=false
+            export PLAIVRA_MCP_BASE_URL=https://app.plaivra.com/api/mcp
+            export PLAIVRA_OAUTH_ISSUER=https://app.plaivra.com
+            export PLAIVRA_CIMD_ALLOWED_ORIGINS=https://chatgpt.com
+            export CRON_SECRET=ci-placeholder-cron-secret-that-is-long-enough
+            npm run validate:env
+          ) 2>&1 | tee quality-reports/environment-validation.log
+          echo "${PIPESTATUS[0]}" > quality-reports/environment-validation.exit
+
+          npx vitest run --config vitest.unit.config.mjs lib/release/version.test.ts lib/release/readiness.test.ts 2>&1 | tee quality-reports/release-metadata.log
+          release_metadata_unit_code="${PIPESTATUS[0]}"
 
           NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build 2>&1 | tee quality-reports/build.log
-          echo "${PIPESTATUS[0]}" > quality-reports/build.exit
+          build_code="${PIPESTATUS[0]}"
+          echo "${build_code}" > quality-reports/build.exit
+
+          if [ "${build_code}" = "0" ]; then
+            expected_migration="$(node -e 'const ledger=require("./supabase/migration-ledger.json"); console.log(ledger.entries.filter((entry) => entry.state === "applied" && entry.productionVersion).map((entry) => entry.productionVersion).sort().at(-1))')"
+            npm run release:verify-built-metadata -- \
+              --commit "${PLAIVRA_COMMIT_SHA}" \
+              --build-timestamp "${PLAIVRA_BUILD_TIMESTAMP}" \
+              --environment ci \
+              --expected-migration "${expected_migration}" 2>&1 | tee -a quality-reports/release-metadata.log
+            release_metadata_built_code="${PIPESTATUS[0]}"
+          else
+            echo "Built metadata verification skipped because the production build failed." | tee -a quality-reports/release-metadata.log
+            release_metadata_built_code=1
+          fi
+          if [ "${release_metadata_unit_code}" = "0" ] && [ "${release_metadata_built_code}" = "0" ]; then
+            echo "0" > quality-reports/release-metadata.exit
+          else
+            echo "1" > quality-reports/release-metadata.exit
+          fi
+
+          (
+            set -euo pipefail
+            NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/rendered-qa-server.log 2>&1 &
+            server_pid=$!
+            trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
+              sleep 1
+            done
+            curl --fail --silent http://localhost:3000/ > /dev/null
+            QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/rendered-qa-evidence npm run qa:rendered
+          ) 2>&1 | tee quality-reports/rendered-qa.log
+          echo "${PIPESTATUS[0]}" > quality-reports/rendered-qa.exit
 
           npm run release:manifest -- \
+            --commit "${PLAIVRA_COMMIT_SHA}" \
+            --build-timestamp "${PLAIVRA_BUILD_TIMESTAMP}" \
+            --environment ci \
+            --schema-compatibility 2 \
             --output quality-reports/release-manifest.json \
             --quality-reports quality-reports 2>&1 | tee quality-reports/manifest.log
           echo "${PIPESTATUS[0]}" > quality-reports/manifest.exit
 
+          set +e
+          npm run release:preflight -- \
+            --commit "${PLAIVRA_COMMIT_SHA}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --quality-reports quality-reports \
+            --output quality-reports/release-preflight.json 2>&1 | tee quality-reports/release-preflight.log
+          preflight_code="${PIPESTATUS[0]}"
+          set -e
+          if [ "$preflight_code" = "0" ]; then
+            echo "Release preflight unexpectedly passed while migration reconciliation is pending."
+            exit 1
+          fi
+          grep -q 'migration_ledger_not_reconciled' quality-reports/release-preflight.json
           exit 0
 
       - name: Upload quality reports
@@ -189,7 +269,7 @@ jobs:
           name: quality-reports-${{ github.run_id }}
           path: quality-reports/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
 
       - name: Enforce quality result
         if: always()
@@ -197,7 +277,7 @@ jobs:
         run: |
           set -euo pipefail
           failed=0
-          for check in full-migration-chain integrity lint migration-ledger dependency-audit typecheck unit integration build manifest; do
+          for check in full-migration-chain database-lint database-preflight integrity lint migration-ledger script-tests dependency-audit typecheck unit integration telemetry-tests environment-validation release-metadata build rendered-qa manifest; do
             code="$(cat "quality-reports/${check}.exit")"
             echo "${check}: exit ${code}"
             if [ "$code" != "0" ]; then

@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { getWelcomeSettings } from "@/services/database/settings";
 import { useAuth } from "@/components/auth/auth-provider";
+import { env } from "@/lib/env";
+import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 
 const DEFAULT_MESSAGE = "Welcome back to Plaivra. Ready for today?";
 const NEW_PROFILE_MESSAGE = "Start with the setup checklist, then import your first workout or meal plan when you are ready.";
@@ -30,7 +32,7 @@ export function WelcomePopup() {
 
   useEffect(() => {
     async function load() {
-      if (!user?.id || user.id === "mock-user") return;
+      if (!user?.id || (env.useMockAuth && isMockAuthUserId(user.id))) return;
       try {
         const settings = await getWelcomeSettings(user.id);
         const hasCustomMessage = Boolean(settings.is_custom_message);

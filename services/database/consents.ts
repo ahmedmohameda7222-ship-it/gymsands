@@ -1,9 +1,10 @@
 import { supabase } from "@/lib/supabase/client";
 import { env } from "@/lib/env";
+import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import { REQUIRED_CONSENTS } from "@/lib/legal/versions";
 
 export async function hasRequiredConsents(userId: string): Promise<boolean> {
-  if (env.useMockAuth && userId === "mock-user") return true;
+  if (env.useMockAuth && isMockAuthUserId(userId)) return true;
   if (!supabase) return false;
 
   const { data, error } = await supabase
