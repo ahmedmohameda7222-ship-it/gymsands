@@ -18,7 +18,7 @@ For every candidate branch push, inspect Vercel provider metadata for the exact 
 - Under the current Vercel Git model, a merge to `main` is production-triggering.
 - After merge, confirm that Vercel built the exact resulting 40-character `main` SHA.
 - Verify that provider metadata, `/api/version`, and `/api/health` identify the expected deployed commit.
-- A provider `READY` state alone is not release acceptance.
+- A provider `READY` state alone is not acceptance.
 - Never redeploy an old provider artifact as a substitute for deploying the reviewed Git commit.
 - Netlify remains a separate secondary provider and retains its exact-SHA production gate through `PLAIVRA_PRODUCTION_RELEASE_SHA`.
 - Rollback selects a separately identified code/schema-compatible pair and repeats deployment-identity and smoke verification.
@@ -82,4 +82,4 @@ Public support/security contact: `Ahmed.Mohamed04@outlook.de`. Ask reporters to 
 13. Review browser, console, network, screenshots, route timings, and request counts.
 14. Record the final launch verdict.
 
-Any failed or blocked preflight is a no-go before merge. The migration ledger must be reconciled before a production-triggering merge to `main`. A Vercel `READY` state alone is not acceptance. Netlify remains separate and keeps its exact-SHA production gate. A manual, external, missing, blocked, or failed item remains a no-go until resolved and evidenced.
+Any failed or blocked preflight is a no-go before merge. The migration ledger must be reconciled before a production-triggering merge to `main`. A provider `READY` state alone is not acceptance. Netlify remains separate and keeps its exact-SHA production gate. A manual, external, missing, blocked, or failed item remains a no-go until resolved and evidenced.
