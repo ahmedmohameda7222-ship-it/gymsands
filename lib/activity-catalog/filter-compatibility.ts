@@ -102,16 +102,15 @@ export function matchesLegacyWorkoutFilters(workout: Workout, query = "", filter
     workout.name, workout.target_muscle, workout.muscle_category, workout.equipment, workout.equipment_required,
     workout.category, workout.mechanics, workout.force_type, workout.difficulty, workout.experience_level, ...secondary
   ].some((value) => normalize(value).includes(normalize(query)));
-  const categories = filters.categories ?? (filters.category ? [filters.category] : []);
-  const equipment = filters.equipmentRequired ?? (filters.equipment ? [filters.equipment] : []);
-  const experience = filters.experienceLevels ?? (filters.difficulty ? [filters.difficulty] : []);
+  const equipment = equipmentSelections(filters);
+  const experience = difficultySelections(filters);
+  const activityTypes = activityTypeSelections(filters);
   return matchesQuery
-    && selectedMatch([workout.category, workout.target_muscle, workout.muscle_category, workout.equipment], categories)
     && selectedMatch([workout.muscle_category], filters.muscleCategories)
     && selectedMatch([workout.target_muscle, workout.muscle_category], filters.primaryMuscles)
     && selectedMatch([workout.equipment_required, workout.equipment], equipment)
     && selectedMatch([workout.mechanics, workout.category], filters.mechanics)
-    && selectedMatch([workout.category, workout.mechanics], filters.exerciseTypes)
+    && selectedMatch([workout.category, workout.mechanics], activityTypes)
     && selectedMatch([workout.force_type], filters.forceTypes)
     && selectedMatch([workout.experience_level, workout.difficulty], experience)
     && selectedMatch(secondary, filters.secondaryMuscles);
