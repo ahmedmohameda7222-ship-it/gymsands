@@ -1,235 +1,126 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 
 const root = process.cwd();
-const gate = resolve(root, "scripts/vercel-production-release-gate.mjs");
+const netlifyGate = resolve(root, "scripts/netlify-production-release-gate.mjs");
+const obsoleteVercelGate = resolve(root, "scripts/vercel-production-release-gate.mjs");
 const sha = "60a204d5fc20fc396be1b1b47e748c42ebba6abf";
 const otherSha = "fce4f9dacd16ade098d1bbfc1eb6793d50cb5eb9";
 
-function run(environment) {
-  return spawnSync(process.execPath, [gate], {
+function runNetlify(environment = {}) {
+  return spawnSync(process.execPath, [netlifyGate], {
     cwd: root,
     env: { PATH: process.env.PATH, ...environment },
     encoding: "utf8"
   });
 }
 
-test("vercel.json enables automatic Git deployments only for main without an ignore command", () => {
+test("Vercel requests Git-connected deployments only for main without an ignore command", () => {
   const config = JSON.parse(readFileSync(resolve(root, "vercel.json"), "utf8"));
 
-  assert.deepEqual(config.git?.deploymentEnabled, {
-    "*": false,
-    main: true
-  });
+  assert.deepEqual(config.git?.deploymentEnabled, { "*": false, main: true });
   assert.equal(config.ignoreCommand, undefined);
+  assert.deepEqual(config.crons, [
+    { path: "/api/internal/maintenance/oauth-cleanup", schedule: "17 3 * * *" },
+    { path: "/api/internal/maintenance/privacy-lifecycle", schedule: "47 3 * * *" },
+    { path: "/api/internal/maintenance/billing-events", schedule: "7 4 * * *" }
+  ]);
+  assert.equal(existsSync(obsoleteVercelGate), false);
 });
 
-test("local builds continue without provider authorization", () => {
-  const result = run({ VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_SHA: sha });
-  assert.equal(result.status, 1);
-  assert.match(result.stdout, /Not running on Vercel/);
+test("active configuration has no Vercel preview or production SHA approval dependency", () => {
+  const envExample = readFileSync(resolve(root, ".env.example"), "utf8");
+  const releaseReadme = readFileSync(resolve(root, "docs/release/README.md"), "utf8");
+  const launchRunbook = readFileSync(resolve(root, "docs/operations/launch-runbook.md"), "utf8");
+
+  assert.doesNotMatch(envExample, /PLAIVRA_PREVIEW_RELEASE_SHA/);
+  assert.match(envExample, /# Netlify production deployment release hold/);
+  assert.match(envExample, /# Vercel does not use this variable\./);
+  assert.match(envExample, /^PLAIVRA_PRODUCTION_RELEASE_SHA=$/m);
+  assert.match(releaseReadme, /Vercel does not use `ignoreCommand`, `PLAIVRA_PREVIEW_RELEASE_SHA`, or `PLAIVRA_PRODUCTION_RELEASE_SHA`/);
+  assert.match(launchRunbook, /Vercel does not use `PLAIVRA_PREVIEW_RELEASE_SHA` or `PLAIVRA_PRODUCTION_RELEASE_SHA`/);
 });
 
-test("an exact approved preview proceeds", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "preview",
-    VERCEL_GIT_COMMIT_REF: "feature/approved-preview",
-    VERCEL_GIT_COMMIT_SHA: sha,
-    PLAIVRA_PREVIEW_RELEASE_SHA: sha
+test("Netlify keeps its exact-SHA ignore command and local behavior", () => {
+  const netlifyConfig = readFileSync(resolve(root, "netlify.toml"), "utf8");
+  assert.match(netlifyConfig, /ignore = "node \.\/scripts\/netlify-production-release-gate\.mjs"/);
+
+  const local = runNetlify();
+  assert.equal(local.status, 1);
+  assert.match(local.stdout, /Not running on Netlify/);
+});
+
+for (const context of ["deploy-preview", "branch-deploy", "dev"]) {
+  test(`Netlify ${context} behavior remains unchanged`, () => {
+    const result = runNetlify({
+      NETLIFY: "true",
+      CONTEXT: context,
+      BRANCH: "feature/provider-policy",
+      COMMIT_REF: sha
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /preview\/branch deployment allowed/i);
   });
-  assert.equal(result.status, 1);
-  assert.match(result.stdout, /Preview deployment approved for exact commit/);
-});
+}
 
-test("a preview without approval is skipped", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "preview",
-    VERCEL_GIT_COMMIT_REF: "feature/unapproved-preview",
-    VERCEL_GIT_COMMIT_SHA: sha
-  });
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /Preview deployment held/);
-});
-
-test("a pull-request preview without approval is skipped", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "preview",
-    VERCEL_GIT_COMMIT_REF: "feature/pr-preview",
-    VERCEL_GIT_PULL_REQUEST_ID: "54",
-    VERCEL_GIT_COMMIT_SHA: sha
-  });
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /Preview deployment held/);
-});
-
-test("a preview with a mismatched approval is skipped", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "preview",
-    VERCEL_GIT_COMMIT_REF: "feature/wrong-preview",
-    VERCEL_GIT_COMMIT_SHA: sha,
-    PLAIVRA_PREVIEW_RELEASE_SHA: otherSha
-  });
-  assert.equal(result.status, 0);
-});
-
-test("preview approval for another commit does not authorize the current commit", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "preview",
-    VERCEL_GIT_COMMIT_REF: "feature/different-current-commit",
-    VERCEL_GIT_COMMIT_SHA: otherSha,
-    PLAIVRA_PREVIEW_RELEASE_SHA: sha
+test("Netlify production is held without exact approval", () => {
+  const result = runNetlify({
+    NETLIFY: "true",
+    CONTEXT: "production",
+    BRANCH: "main",
+    COMMIT_REF: sha
   });
   assert.equal(result.status, 0);
+  assert.match(result.stdout, /production deployment held/i);
 });
 
-test("a preview with an abbreviated commit and approval is skipped", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "preview",
-    VERCEL_GIT_COMMIT_REF: "feature/short-preview",
-    VERCEL_GIT_COMMIT_SHA: "60a204d",
-    PLAIVRA_PREVIEW_RELEASE_SHA: "60a204d"
-  });
-  assert.equal(result.status, 0);
-});
-
-test("a preview with a malformed approval is skipped", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "preview",
-    VERCEL_GIT_COMMIT_REF: "feature/malformed-preview",
-    VERCEL_GIT_COMMIT_SHA: sha,
-    PLAIVRA_PREVIEW_RELEASE_SHA: `${sha}00`
-  });
-  assert.equal(result.status, 0);
-});
-
-test("an approved non-main build without an explicit target environment proceeds as preview", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_GIT_COMMIT_REF: "feature/non-main",
-    VERCEL_GIT_COMMIT_SHA: sha,
-    PLAIVRA_PREVIEW_RELEASE_SHA: sha
-  });
-  assert.equal(result.status, 1);
-});
-
-test("an approved pull-request build proceeds as preview", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "preview",
-    VERCEL_GIT_COMMIT_REF: "main",
-    VERCEL_GIT_PULL_REQUEST_ID: "54",
-    VERCEL_GIT_COMMIT_SHA: sha,
-    PLAIVRA_PREVIEW_RELEASE_SHA: sha
-  });
-  assert.equal(result.status, 1);
-});
-
-test("production main proceeds for its exact production approval", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "production",
-    VERCEL_GIT_COMMIT_REF: "main",
-    VERCEL_GIT_COMMIT_SHA: sha,
-    PLAIVRA_PRODUCTION_RELEASE_SHA: sha
-  });
-  assert.equal(result.status, 1);
-  assert.match(result.stdout, /Production deployment approved for exact commit/);
-});
-
-test("production main without approval is skipped", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "production",
-    VERCEL_GIT_COMMIT_REF: "main",
-    VERCEL_GIT_COMMIT_SHA: sha
-  });
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /Production deployment held/);
-});
-
-test("production main with preview approval only is skipped", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "production",
-    VERCEL_GIT_COMMIT_REF: "main",
-    VERCEL_GIT_COMMIT_SHA: sha,
-    PLAIVRA_PREVIEW_RELEASE_SHA: sha
-  });
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /Production deployment held/);
-});
-
-test("production main with a mismatched approval is skipped", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "production",
-    VERCEL_GIT_COMMIT_REF: "main",
-    VERCEL_GIT_COMMIT_SHA: sha,
+test("Netlify production is held for a mismatched approval", () => {
+  const result = runNetlify({
+    NETLIFY: "true",
+    CONTEXT: "production",
+    BRANCH: "main",
+    COMMIT_REF: sha,
     PLAIVRA_PRODUCTION_RELEASE_SHA: otherSha
   });
   assert.equal(result.status, 0);
+  assert.match(result.stdout, /production deployment held/i);
 });
 
-test("production main with abbreviated identities is skipped", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "production",
-    VERCEL_GIT_COMMIT_REF: "main",
-    VERCEL_GIT_COMMIT_SHA: "60a204d",
-    PLAIVRA_PRODUCTION_RELEASE_SHA: "60a204d"
-  });
-  assert.equal(result.status, 0);
+test("Netlify production is held for abbreviated or malformed identities", () => {
+  for (const [commit, approval] of [
+    ["60a204d", "60a204d"],
+    [`${sha}00`, `${sha}00`],
+    [sha, `${sha}00`]
+  ]) {
+    const result = runNetlify({
+      NETLIFY: "true",
+      CONTEXT: "production",
+      BRANCH: "main",
+      COMMIT_REF: commit,
+      PLAIVRA_PRODUCTION_RELEASE_SHA: approval
+    });
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /production deployment held/i);
+  }
 });
 
-test("a production target on a non-main branch is ambiguous and skipped even with preview approval", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "production",
-    VERCEL_GIT_COMMIT_REF: "feature/contradictory",
-    VERCEL_GIT_COMMIT_SHA: sha,
-    PLAIVRA_PREVIEW_RELEASE_SHA: sha
-  });
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /Ambiguous/);
-});
-
-test("a production target attached to a pull request is ambiguous and skipped", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_ENV: "production",
-    VERCEL_GIT_COMMIT_REF: "main",
-    VERCEL_GIT_PULL_REQUEST_ID: "54",
-    VERCEL_GIT_COMMIT_SHA: sha,
-    PLAIVRA_PREVIEW_RELEASE_SHA: sha,
+test("Netlify production proceeds only for the exact valid 40-character SHA", () => {
+  const result = runNetlify({
+    NETLIFY: "true",
+    CONTEXT: "production",
+    BRANCH: "main",
+    COMMIT_REF: sha.toUpperCase(),
     PLAIVRA_PRODUCTION_RELEASE_SHA: sha
   });
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /Ambiguous/);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /approved for exact commit/i);
 });
 
-test("an unidentified Vercel target is skipped fail-closed", () => {
-  const result = run({ VERCEL: "1" });
+test("Netlify ambiguous provider targets fail closed", () => {
+  const result = runNetlify({ NETLIFY: "true", COMMIT_REF: sha });
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /fail-closed/);
-});
-
-test("a main-branch target without an environment is skipped fail-closed", () => {
-  const result = run({
-    VERCEL: "1",
-    VERCEL_GIT_COMMIT_REF: "main",
-    VERCEL_GIT_COMMIT_SHA: sha,
-    PLAIVRA_PRODUCTION_RELEASE_SHA: sha
-  });
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /fail-closed/);
+  assert.match(result.stdout, /Ambiguous Netlify deployment target held fail-closed/);
 });
