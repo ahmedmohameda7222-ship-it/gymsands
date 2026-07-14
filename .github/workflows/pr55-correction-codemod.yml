@@ -1,0 +1,81 @@
+name: PR55 Correction Codemod
+
+on:
+  push:
+    branches:
+      - codex/activity-catalog-provider-integration
+    paths:
+      - .github/workflows/pr55-correction-codemod.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-callers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout correction branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/activity-catalog-provider-integration
+          fetch-depth: 0
+
+      - name: Apply exact caller and QA corrections
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path_value: str, old: str, new: str, expected: int = 1) -> None:
+              path = Path(path_value)
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f"{path}: expected {expected} occurrences, found {count}")
+              path.write_text(text.replace(old, new), encoding="utf-8")
+
+          replace_exact(
+              "components/workouts/workout-browser.tsx",
+              'import { getWorkoutFilterOptionsWithStatus, getWorkoutsWithStatus, workoutPageSize, type WorkoutFilterOptions, type WorkoutFilters, type WorkoutLibraryStatus } from "@/services/database/workout-library";',
+              'import { getWorkoutFilterOptionsWithStatus, getWorkoutsWithStatus, type WorkoutFilterOptions, type WorkoutFilters, type WorkoutLibraryStatus } from "@/services/database/workout-library";'
+          )
+          replace_exact(
+              "components/workouts/workout-browser.tsx",
+              "setHasMore(result.data.length >= workoutPageSize);",
+              "setHasMore(result.pagination?.hasMore ?? false);",
+              expected=2
+          )
+
+          replace_exact(
+              "app/(private)/workouts/[id]/page.tsx",
+              'import { userSafeError } from "@/lib/error-formatting";',
+              'import { userSafeError } from "@/lib/error-formatting";\nimport { resolveWorkoutVideoUrl } from "@/lib/activity-catalog/adapters";'
+          )
+          replace_exact(
+              "app/(private)/workouts/[id]/page.tsx",
+              "const videoUrl = customVideoUrl || workout.video_url || null;",
+              "const videoUrl = resolveWorkoutVideoUrl(workout, customVideoUrl);"
+          )
+
+          replace_exact(
+              "scripts/run-activity-catalog-qa.mjs",
+              "relevanceWeight: 100",
+              "relevanceWeight: 0.9"
+          )
+          replace_exact(
+              "scripts/run-activity-catalog-qa.mjs",
+              'fixtureContract: "activity-catalog-phase-0b-v1",\n  productionAcceptanceEvidence: false,\n  containsSecrets: false,\n  viewports,\n  languages: ["en", "de", "ar"],',
+              'fixtureContract: "activity-catalog-phase-0b-v2",\n  productionAcceptanceEvidence: false,\n  liveLocalizedCatalogContentVerified: false,\n  catalogContentLocale: "en",\n  uiShellLanguages: ["en", "de", "ar"],\n  localizationBoundary: "English, German, and Arabic Plaivra interface shells and Arabic RTL are exercised with deterministic fixtures. Live localized catalog-content delivery is not claimed; Phase 0B catalog reads and persisted activity snapshots remain canonical English.",\n  containsSecrets: false,\n  viewports,'
+          )
+          PY
+
+      - name: Commit focused corrections
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/workouts/workout-browser.tsx app/'(private)'/workouts/'[id]'/page.tsx scripts/run-activity-catalog-qa.mjs
+          git diff --cached --check
+          git commit -m "fix(catalog): wire pagination media and honest QA claims"
+          git push origin HEAD:codex/activity-catalog-provider-integration
