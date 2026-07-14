@@ -245,6 +245,29 @@ with required_columns(table_name, column_name) as (
   union all
 
   select
+    'unexpected_train_rpc_overload',
+    format('public.%I(%s)', routine.proname, pg_get_function_identity_arguments(routine.oid)),
+    'Only the six canonical Train RPC signatures are allowed.'
+  from pg_proc routine
+  join pg_namespace namespace on namespace.oid = routine.pronamespace
+  where namespace.nspname = 'public'
+    and routine.proname in (
+      'activate_workout_plan_atomic',
+      'archive_workout_plan_atomic',
+      'create_workout_plan_atomic',
+      'delete_workout_plan_atomic',
+      'save_workout_plan_atomic',
+      'save_workout_plan_day_atomic'
+    )
+    and routine.oid not in (
+      select to_regprocedure(signature)
+      from canonical_train_rpcs
+      where to_regprocedure(signature) is not null
+    )
+
+  union all
+
+  select
     'missing_override_table',
     'public.user_nutrition_target_date_overrides',
     'Nutrition target override table is absent.'
@@ -341,25 +364,6 @@ with required_columns(table_name, column_name) as (
     having count(*) > 1
   ) duplicates
   having count(*) > 0
-
-  union all
-
-  select
-    'legacy_train_rpc_overload',
-    routine.proname,
-    'A superseded Train RPC overload without explicit local-date input remains.'
-  from pg_proc routine
-  join pg_namespace namespace on namespace.oid = routine.pronamespace
-  where namespace.nspname = 'public'
-    and routine.proname in (
-      'activate_workout_plan_atomic',
-      'archive_workout_plan_atomic',
-      'create_workout_plan_atomic',
-      'delete_workout_plan_atomic',
-      'save_workout_plan_atomic',
-      'save_workout_plan_day_atomic'
-    )
-    and pg_get_function_identity_arguments(routine.oid) not like '%date%'
 
   union all
 
