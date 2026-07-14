@@ -111,13 +111,14 @@ test("built metadata verification accepts fail-closed readiness only with the ex
   );
 });
 
-test("production release gates reject nonstandard SHA lengths", () => {
-  const result = runScript("scripts/vercel-production-release-gate.mjs", [], {
-    VERCEL: "1",
-    VERCEL_ENV: "production",
-    VERCEL_GIT_COMMIT_REF: "main",
-    VERCEL_GIT_COMMIT_SHA: `${fullSha}00`,
-    PLAIVRA_PRODUCTION_RELEASE_SHA: `${fullSha}00`
+test("Netlify production release gate rejects nonstandard SHA lengths", () => {
+  const invalidSha = `${fullSha}00`;
+  const result = runScript("scripts/netlify-production-release-gate.mjs", [], {
+    NETLIFY: "true",
+    CONTEXT: "production",
+    BRANCH: "main",
+    COMMIT_REF: invalidSha,
+    PLAIVRA_PRODUCTION_RELEASE_SHA: invalidSha
   });
   assert.equal(result.status, 0);
   assert.match(result.stdout, /held/i);
