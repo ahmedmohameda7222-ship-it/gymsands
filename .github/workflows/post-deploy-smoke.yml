@@ -15,6 +15,10 @@ on:
         description: Exact reviewed production migration version
         required: true
         type: string
+      quality_run_id:
+        description: GitHub Actions run ID containing quality-reports-<run id> for the same commit
+        required: true
+        type: string
       expected_environment:
         description: Environment reported by /api/version
         required: true
@@ -25,6 +29,7 @@ on:
           - preview
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -34,7 +39,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     environment: ${{ inputs.expected_environment }}
     env:
       PLAIVRA_DEPLOYMENT_URL: ${{ inputs.deployment_url }}
@@ -52,6 +57,7 @@ jobs:
           set -euo pipefail
           [[ "${{ inputs.expected_commit }}" =~ ^[0-9a-fA-F]{40}$ ]]
           [[ "${{ inputs.expected_migration }}" =~ ^[0-9]{12,14}$ ]]
+          [[ "${{ inputs.quality_run_id }}" =~ ^[0-9]+$ ]]
 
       - name: Checkout selected release commit
         uses: actions/checkout@v4
@@ -78,36 +84,91 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Verify anonymous release readiness
-        run: >-
-          npm run smoke:postdeploy --
-          --url "${{ inputs.deployment_url }}"
-          --expected-commit "${{ inputs.expected_commit }}"
-          --expected-migration "${{ inputs.expected_migration }}"
-          --expected-environment "${{ inputs.expected_environment }}"
-          --output quality-reports/post-deploy-smoke.json
+      - name: Download exact same-commit quality evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: quality-reports-${{ inputs.quality_run_id }}
+          path: quality-reports
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.quality_run_id }}
 
-      - name: Verify populated synthetic account
-        run: >-
-          npm run smoke:authenticated --
-          --url "${{ inputs.deployment_url }}"
-          --mode "${{ inputs.expected_environment }}"
-          --account populated
-          --expected-commit "${{ inputs.expected_commit }}"
-          --expected-migration "${{ inputs.expected_migration }}"
-          --output quality-reports/authenticated-smoke-populated
+      - name: Verify downloaded quality identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("node:fs");
+            const manifest = JSON.parse(fs.readFileSync("quality-reports/release-manifest.json", "utf8"));
+            const expected = process.argv[1].toLowerCase();
+            if (manifest.release?.commitSha !== expected) throw new Error("Downloaded quality manifest commit mismatch.");
+            for (const [gate, evidence] of Object.entries(manifest.qualityGates ?? {})) {
+              if (evidence.status !== "passed" || !evidence.evidence) throw new Error(`Quality gate ${gate} lacks retained passing evidence.`);
+            }
+          ' "${{ inputs.expected_commit }}"
 
-      - name: Verify empty-state synthetic account
-        run: >-
-          npm run smoke:authenticated --
-          --url "${{ inputs.deployment_url }}"
-          --mode "${{ inputs.expected_environment }}"
-          --account empty
-          --expected-commit "${{ inputs.expected_commit }}"
-          --expected-migration "${{ inputs.expected_migration }}"
-          --output quality-reports/authenticated-smoke-empty
+      - name: Run anonymous and authenticated smoke layers
+        shell: bash
+        run: |
+          set +e
+          npm run smoke:postdeploy -- \
+            --url "${{ inputs.deployment_url }}" \
+            --expected-commit "${{ inputs.expected_commit }}" \
+            --expected-migration "${{ inputs.expected_migration }}" \
+            --expected-environment "${{ inputs.expected_environment }}" \
+            --output quality-reports/post-deploy-smoke.json 2>&1 | tee quality-reports/post-deploy-smoke.log
+          echo "${PIPESTATUS[0]}" > quality-reports/post-deploy-smoke.exit
 
-      - name: Upload immutable smoke evidence
+          npm run smoke:authenticated -- \
+            --url "${{ inputs.deployment_url }}" \
+            --mode "${{ inputs.expected_environment }}" \
+            --account populated \
+            --expected-commit "${{ inputs.expected_commit }}" \
+            --expected-migration "${{ inputs.expected_migration }}" \
+            --output quality-reports/authenticated-smoke-populated 2>&1 | tee quality-reports/authenticated-smoke-populated.log
+          echo "${PIPESTATUS[0]}" > quality-reports/authenticated-smoke-populated.exit
+
+          npm run smoke:authenticated -- \
+            --url "${{ inputs.deployment_url }}" \
+            --mode "${{ inputs.expected_environment }}" \
+            --account empty \
+            --expected-commit "${{ inputs.expected_commit }}" \
+            --expected-migration "${{ inputs.expected_migration }}" \
+            --output quality-reports/authenticated-smoke-empty 2>&1 | tee quality-reports/authenticated-smoke-empty.log
+          echo "${PIPESTATUS[0]}" > quality-reports/authenticated-smoke-empty.exit
+          exit 0
+
+      - name: Capture deployed build identity
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("node:fs");
+            const evidence = JSON.parse(fs.readFileSync("quality-reports/post-deploy-smoke.json", "utf8"));
+            const timestamp = evidence.version?.buildTimestamp;
+            if (!timestamp || Number.isNaN(Date.parse(timestamp))) throw new Error("Anonymous smoke did not retain a valid deployed build timestamp.");
+            fs.appendFileSync(process.env.GITHUB_ENV, `DEPLOYED_BUILD_TIMESTAMP=${new Date(timestamp).toISOString()}\n`);
+          '
+
+      - name: Generate final deployed-release manifest
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          npm run release:manifest -- \
+            --commit "${{ inputs.expected_commit }}" \
+            --build-timestamp "${DEPLOYED_BUILD_TIMESTAMP:-}" \
+            --environment "${{ inputs.expected_environment }}" \
+            --schema-compatibility 2 \
+            --expected-migration "${{ inputs.expected_migration }}" \
+            --quality-reports quality-reports \
+            --deployment-url "${{ inputs.deployment_url }}" \
+            --deployment-evidence quality-reports/post-deploy-smoke.json \
+            --output quality-reports/final-release-manifest.json 2>&1 | tee quality-reports/final-release-manifest.log
+          echo "${PIPESTATUS[0]}" > quality-reports/final-release-manifest.exit
+          exit 0
+
+      - name: Upload immutable smoke and final release evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -115,3 +176,21 @@ jobs:
           path: quality-reports/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Enforce all smoke and manifest results
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for check in post-deploy-smoke authenticated-smoke-populated authenticated-smoke-empty final-release-manifest; do
+            if [ ! -f "quality-reports/${check}.exit" ]; then
+              echo "${check}: missing exit evidence"
+              failed=1
+              continue
+            fi
+            code="$(cat "quality-reports/${check}.exit")"
+            echo "${check}: exit ${code}"
+            if [ "$code" != "0" ]; then failed=1; fi
+          done
+          exit "$failed"
