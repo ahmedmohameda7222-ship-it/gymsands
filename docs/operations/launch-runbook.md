@@ -6,14 +6,16 @@ A launch candidate is one exact reviewed commit, one release manifest, one recon
 
 Required retained evidence is repository integrity, full migration chain, database lint/preflight, migration-ledger validation, dependency audit, lint, typecheck, unit/integration/script/telemetry tests, Node 24 production build, environment validation, rendered QA, deployment identity, anonymous smoke, populated synthetic smoke, empty-state synthetic smoke, Supabase advisors, and final owner verdict. Do not paste tokens, credentials, cookies, user IDs, email addresses, query strings, provider payloads, or user fitness content into incidents or tickets.
 
-For a candidate branch push, confirm that Vercel did not create an automatic Git-connected deployment. If an unexpected branch deployment exists, retain its metadata and keep the release blocked until the main-only deployment configuration is corrected.
+For every candidate branch push, inspect Vercel provider metadata for the exact pushed SHA. Repository configuration and green repository tests prove policy intent only; they do not prove actual provider enforcement. If Vercel creates an unexpected branch or pull-request deployment, retain its metadata and keep the release blocked until the main-only deployment behavior is corrected and reverified with a later push.
 
 ## Deployment identity
 
-- `vercel.json` requests automatic Git-connected deployments only for `main`.
+- `vercel.json` declares repository policy intent through minimatch rules: `"**": false` covers slash-delimited branch names and `"main": true` preserves automatic deployment for `main`.
 - Vercel does not use `ignoreCommand`.
 - Vercel does not use `PLAIVRA_PREVIEW_RELEASE_SHA` or `PLAIVRA_PRODUCTION_RELEASE_SHA`.
-- Required GitHub review and CI checks must pass before changes enter `main`.
+- Repository tests verify configuration intent, preserved cron schedules, and removal of obsolete gate dependencies; actual provider behavior requires post-push Vercel verification.
+- Required GitHub review and CI checks, migration reconciliation, release preflight, and explicit release-owner approval must complete before changes enter `main`.
+- Under the current Vercel Git model, a merge to `main` is production-triggering.
 - After merge, confirm that Vercel built the exact resulting 40-character `main` SHA.
 - Verify that provider metadata, `/api/version`, and `/api/health` identify the expected deployed commit.
 - A provider `READY` state alone is not release acceptance.
@@ -65,21 +67,19 @@ Public support/security contact: `Ahmed.Mohamed04@outlook.de`. Ask reporters to 
 
 ## Launch-day sequence
 
-1. Confirm the candidate change passed all required review and quality checks.
+1. Complete code review and all required CI checks for the candidate change.
 2. Complete migration-history reconciliation and independent verification.
 3. Confirm the compatibility marker and expected migration identity.
-4. Review strict production environment validation without exposing secret values.
-5. Merge the approved change to `main`.
-6. Record the exact resulting 40-character `main` SHA.
-7. Confirm the quality artifact and release manifest belong to that exact SHA.
-8. Run `npm run release:preflight`; any failure is a no-go.
-9. Confirm Vercel created the production deployment from that exact `main` SHA. Do not redeploy an old provider deployment.
+4. Run strict production environment validation without exposing secret values.
+5. Run `npm run release:preflight` and retain its result.
+6. Obtain explicit release-owner approval for the exact reviewed change.
+7. Merge the approved exact change to `main`.
+8. Record the exact resulting 40-character `main` SHA.
+9. Confirm Vercel production was built from that exact SHA.
 10. Verify provider metadata, `/api/version`, and `/api/health`.
 11. Run anonymous smoke.
 12. Run populated and empty authenticated synthetic smoke.
-13. Review page, console, network, screenshot, route-timing, and request-count evidence.
-14. Confirm alert delivery, support mailbox, backup evidence, and on-call owner.
-15. Record the final launch verdict.
-16. For a separately approved Netlify production release, clear or rotate `PLAIVRA_PRODUCTION_RELEASE_SHA` after acceptance.
+13. Review browser, console, network, screenshots, route timings, and request counts.
+14. Record the final launch verdict.
 
-A manual, external, missing, blocked, or failed item remains a no-go until resolved and evidenced.
+Any failed or blocked preflight is a no-go before merge. The migration ledger must be reconciled before a production-triggering merge to `main`. A Vercel `READY` state alone is not acceptance. Netlify remains separate and keeps its exact-SHA production gate. A manual, external, missing, blocked, or failed item remains a no-go until resolved and evidenced.
