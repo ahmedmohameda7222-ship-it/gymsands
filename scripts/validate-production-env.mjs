@@ -1,10 +1,12 @@
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 import nextEnv from "@next/env";
 
 const { loadEnvConfig } = nextEnv;
 const EXACT_SHA = /^[a-f0-9]{40}$/i;
 const SAFE_IDENTIFIER = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 const BASE64_32_BYTES = /^[A-Za-z0-9+/]{43}=$/;
+const ACTIVITY_CATALOG_MODES = new Set(["legacy", "external", "external_with_legacy_fallback"]);
 
 function enabled(value) {
   return value === "true";
@@ -90,6 +92,25 @@ export function validateProductionEnvironment(environment = process.env) {
   requireValue("CRON_SECRET", nonEmpty(environment.CRON_SECRET, 32), "must be configured because Vercel cron routes are enabled");
   requireValue("NEXT_PUBLIC_USE_MOCK_AUTH", environment.NEXT_PUBLIC_USE_MOCK_AUTH !== "true", "must be false in production");
 
+  const activityCatalogMode = environment.PLAIVRA_ACTIVITY_CATALOG_MODE || "legacy";
+  requireValue(
+    "PLAIVRA_ACTIVITY_CATALOG_MODE",
+    ACTIVITY_CATALOG_MODES.has(activityCatalogMode),
+    "must be legacy, external, or external_with_legacy_fallback"
+  );
+  if (activityCatalogMode === "external" || activityCatalogMode === "external_with_legacy_fallback") {
+    requireValue(
+      "PLAIVRA_ACTIVITY_CATALOG_BASE_URL",
+      validHttpsUrl(environment.PLAIVRA_ACTIVITY_CATALOG_BASE_URL),
+      "must be an HTTPS URL without credentials, query, or fragment when the external catalog is enabled"
+    );
+    requireValue(
+      "PLAIVRA_ACTIVITY_CATALOG_API_KEY",
+      nonEmpty(environment.PLAIVRA_ACTIVITY_CATALOG_API_KEY),
+      "must be configured as a server-only secret when the external catalog is enabled"
+    );
+  }
+
   const mcpEnabled = enabled(environment.PLAIVRA_MCP_ENABLED)
     || Boolean(environment.NEXT_PUBLIC_CHATGPT_CONNECT_URL)
     || Boolean(environment.NEXT_PUBLIC_PLAIVRA_MCP_SERVER_URL)
@@ -156,6 +177,6 @@ async function main() {
   console.log("Production environment validation passed. Secret values were not printed.");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main();
 }

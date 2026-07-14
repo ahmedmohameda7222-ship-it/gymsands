@@ -8,7 +8,8 @@ import { CardSkeleton, ErrorState } from "@/components/ui/state-views";
 import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
 import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
-import { getUserExerciseVideo, getWorkout } from "@/services/database/workout-library";
+import { getWorkout } from "@/services/database/workout-library";
+import { getUserExerciseVideo } from "@/services/database/exercise-user-data";
 import { getCustomExercise } from "@/services/workouts/exercise-library-store";
 import type { Workout } from "@/types";
 

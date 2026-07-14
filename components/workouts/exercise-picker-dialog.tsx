@@ -49,17 +49,19 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   useEffect(() => {
     if (!open) return;
     let current = true;
-    void getWorkoutFilterOptions().then((options) => {
+    const controller = new AbortController();
+    void getWorkoutFilterOptions(controller.signal).then((options) => {
       if (current) setFilterOptions(options);
     }).catch(() => {
       // Result-derived options remain available if filter metadata fails.
     });
-    return () => { current = false; };
+    return () => { current = false; controller.abort(); };
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
     let current = true;
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError("");
@@ -72,12 +74,12 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
         forceTypes: forceType ? [forceType] : [],
         exerciseTypes: exerciseType ? [exerciseType] : [],
         mechanics: mechanics ? [mechanics] : []
-      }, 0)
+      }, 0, controller.signal)
         .then((items) => { if (current) setResults(items.slice(0, 60)); })
         .catch((loadError) => { if (current) { setResults([]); setError(userSafeError(loadError, tr("libraryLoadFailed"))); } })
         .finally(() => { if (current) setLoading(false); });
     }, 180);
-    return () => { current = false; window.clearTimeout(timer); };
+    return () => { current = false; controller.abort(); window.clearTimeout(timer); };
   }, [difficulty, equipment, exerciseType, forceType, mechanics, muscle, muscleCategory, open, query, secondaryMuscle, tr]);
 
   useEffect(() => {

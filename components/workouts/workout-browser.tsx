@@ -11,15 +11,13 @@ import { Label } from "@/components/ui/label";
 import { CardGridSkeleton, EmptyState, ErrorState } from "@/components/ui/state-views";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import Link from "next/link";
-import { getWorkoutFilterOptionsWithStatus, getWorkoutsWithStatus, type WorkoutFilterOptions, type WorkoutFilters, type WorkoutLibraryStatus } from "@/services/database/workout-library";
+import { getWorkoutFilterOptionsWithStatus, getWorkoutsWithStatus, workoutPageSize, type WorkoutFilterOptions, type WorkoutFilters, type WorkoutLibraryStatus } from "@/services/database/workout-library";
 import { getCustomExercisesWithStatus, getFavoriteExerciseIdsWithStatus, saveCustomExercise, setFavoriteExercise, type CustomExerciseInput } from "@/services/workouts/exercise-library-store";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { userSafeError } from "@/lib/error-formatting";
 import type { Workout } from "@/types";
-
-const pageSize = 500;
 
 type FilterKey =
   | "muscleCategories"
@@ -226,13 +224,14 @@ export function WorkoutBrowser() {
     void loadPersonalLibrary();
   }, [loadPersonalLibrary]);
 
-  const loadFilterOptions = useCallback(async () => {
+  const loadFilterOptions = useCallback(async (signal?: AbortSignal) => {
     setFilterError("");
     try {
-      const result = await getWorkoutFilterOptionsWithStatus();
+      const result = await getWorkoutFilterOptionsWithStatus(signal);
       setFilterOptions(result.data);
       setFilterStatus(result.status);
     } catch (error) {
+      if (signal?.aborted) return;
       const message = userSafeError(error, "Exercise filters could not load. Your search text is still available.");
       setFilterOptions(emptyOptions);
       setFilterStatus(null);
@@ -242,7 +241,9 @@ export function WorkoutBrowser() {
   }, [toast]);
 
   useEffect(() => {
-    void loadFilterOptions();
+    const controller = new AbortController();
+    void loadFilterOptions(controller.signal);
+    return () => controller.abort();
   }, [loadFilterOptions]);
 
   const activeFilterCount = useMemo(() => Object.values(filters).reduce((sum, values) => sum + values.length, 0), [filters]);
@@ -266,16 +267,17 @@ export function WorkoutBrowser() {
       return;
     }
     let active = true;
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setIsLoading(true);
       setPage(0);
       setResultError("");
-      getWorkoutsWithStatus(query.trim(), requestFilters, 0)
+      getWorkoutsWithStatus(query.trim(), requestFilters, 0, controller.signal)
         .then((result) => {
           if (!active) return;
           setWorkouts(result.data);
           setResultStatus(result.status);
-          setHasMore(result.data.length >= pageSize);
+          setHasMore(result.data.length >= workoutPageSize);
         })
         .catch((error) => {
           if (!active) return;
@@ -290,6 +292,7 @@ export function WorkoutBrowser() {
 
     return () => {
       active = false;
+      controller.abort();
       window.clearTimeout(timer);
     };
   }, [filters, hasActiveLibraryRequest, isHydrated, query, reloadResultsNonce, requestFilters, toast]);
@@ -310,7 +313,7 @@ export function WorkoutBrowser() {
       setWorkouts((current) => [...current, ...result.data]);
       setResultStatus(result.status);
       setPage(nextPage);
-      setHasMore(result.data.length >= pageSize);
+      setHasMore(result.data.length >= workoutPageSize);
     } catch (error) {
       const message = userSafeError(error, "More exercises could not load. Your current results were kept.");
       setResultError(message);

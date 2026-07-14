@@ -393,7 +393,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         </CardContent>
       </Card>
 
-      <MobileStickyActions>
+      <MobileStickyActions allowOnSession>
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1 text-sm">
             <p className="font-semibold text-foreground">{formatTime(elapsedSeconds)}</p>
@@ -405,7 +405,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
           </Button>
         </div>
       </MobileStickyActions>
-      <MobileStickyActionsSpacer />
+      <MobileStickyActionsSpacer allowOnSession />
     </div>
   );
 }

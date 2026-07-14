@@ -38,15 +38,16 @@ export {
 export type { CustomMealInput, UserFoodInput } from "./nutrition";
 
 export {
-  getExerciseVideos,
-  getUserExerciseVideo,
   getWorkout,
   getWorkoutCategories,
   getWorkoutFilterOptions,
-  getWorkouts,
+  getWorkouts
+} from "./workout-library";
+export {
+  getUserExerciseVideo,
   resetUserExerciseVideo,
   upsertUserExerciseVideo
-} from "./workout-library";
+} from "./exercise-user-data";
 export type { WorkoutFilters, WorkoutFilterOptions } from "./workout-library";
 
 export {

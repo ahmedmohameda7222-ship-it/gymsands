@@ -14,13 +14,13 @@ import { ExerciseVideoPlayer } from "@/components/workouts/video-player";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import Link from "next/link";
-import { getExerciseVideos, getUserExerciseVideo, getWorkout, getWorkoutsWithStatus, resetUserExerciseVideo, upsertUserExerciseVideo } from "@/services/database/workout-library";
+import { getWorkout, getWorkoutAlternatives, type WorkoutLibraryStatus } from "@/services/database/workout-library";
+import { getUserExerciseVideo, resetUserExerciseVideo, upsertUserExerciseVideo } from "@/services/database/exercise-user-data";
 import { getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
 import { getCustomExercisesWithStatus, getFavoriteExerciseIdsWithStatus, setFavoriteExercise } from "@/services/workouts/exercise-library-store";
-import { findExerciseVideo } from "@/services/workouts/video-matching";
 import { userSafeError } from "@/lib/error-formatting";
 import { cn } from "@/lib/utils";
-import type { ExerciseLog, ExerciseVideo, Workout, WorkoutSessionSummary } from "@/types";
+import type { ExerciseLog, Workout, WorkoutSessionSummary } from "@/types";
 
 function normalizeExerciseName(value: string) {
   return value.toLowerCase().replace(/^[a-z]\d\s*[:.)-]\s*/i, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -90,7 +90,6 @@ export default function WorkoutDetailsPage() {
   const userId = user?.id;
   const { toast } = useToast();
   const [workout, setWorkout] = useState<Workout | null>(null);
-  const [video, setVideo] = useState<ExerciseVideo | null>(null);
   const [customVideoUrl, setCustomVideoUrl] = useState("");
   const [customVideoDraft, setCustomVideoDraft] = useState("");
   const [isSavingVideo, setIsSavingVideo] = useState(false);
@@ -115,18 +114,14 @@ export default function WorkoutDetailsPage() {
       if (customResult.status.source === "degraded" && customResult.status.message) warnings.push(customResult.status.message);
       const customExercise = customResult.data.find((exercise) => exercise.id === params.id) ?? null;
       const nextWorkout = customExercise ?? await getWorkout(params.id);
-      const [videosResult, customVideoResult, historyResult, alternativesResult, favoritesResult] = await Promise.allSettled([
-        getExerciseVideos(nextWorkout.name),
+      const [customVideoResult, historyResult, alternativesResult, favoritesResult] = await Promise.allSettled([
         userId && !customExercise ? getUserExerciseVideo(userId, nextWorkout.id) : Promise.resolve(null),
         userId ? getWorkoutHistoryDetailed(userId, 150) : Promise.resolve([]),
-        getWorkoutsWithStatus("", {
-          primaryMuscles: nextWorkout.target_muscle ? [nextWorkout.target_muscle] : [],
-          equipmentRequired: nextWorkout.equipment_required || nextWorkout.equipment ? [nextWorkout.equipment_required || nextWorkout.equipment] : []
-        }, 0),
+        customExercise
+          ? Promise.resolve({ data: [] as Workout[], status: { source: "live" } as WorkoutLibraryStatus })
+          : getWorkoutAlternatives(nextWorkout.id, { limit: 6 }),
         getFavoriteExerciseIdsWithStatus(userId)
       ]);
-      const videos = videosResult.status === "fulfilled" ? videosResult.value : [];
-      if (videosResult.status === "rejected") warnings.push("Exercise video data could not load. Saved instructions remain visible.");
       const customVideo = customVideoResult.status === "fulfilled" ? customVideoResult.value : null;
       if (customVideoResult.status === "rejected") warnings.push("Your custom video override could not load.");
       const workoutHistory = historyResult.status === "fulfilled" ? historyResult.value : [];
@@ -141,14 +136,12 @@ export default function WorkoutDetailsPage() {
         warnings.push("Favorite state could not load.");
         setFavoriteIds([]);
       }
-      const localCustomAlternatives = customResult.data.filter((item) => item.id !== nextWorkout.id);
-      const combinedAlternatives = [...localCustomAlternatives, ...libraryAlternatives]
+      const combinedAlternatives = (customExercise ? customResult.data : libraryAlternatives)
         .filter((item) => item.id !== nextWorkout.id)
-        .filter((item) => sameText(item.target_muscle, nextWorkout.target_muscle) || sameText(item.equipment, nextWorkout.equipment) || sameText(item.mechanics, nextWorkout.mechanics))
+        .filter((item) => !customExercise || sameText(item.target_muscle, nextWorkout.target_muscle) || sameText(item.equipment, nextWorkout.equipment) || sameText(item.mechanics, nextWorkout.mechanics))
         .filter((item, index, all) => all.findIndex((match) => match.id === item.id) === index)
         .slice(0, 6);
       setWorkout(nextWorkout);
-      setVideo(findExerciseVideo(nextWorkout, videos));
       setCustomVideoUrl(customExercise?.custom_video_url ?? customVideo?.custom_video_url ?? "");
       setCustomVideoDraft(customExercise?.custom_video_url ?? customVideo?.custom_video_url ?? "");
       setHistory(workoutHistory);
@@ -194,14 +187,12 @@ export default function WorkoutDetailsPage() {
     );
   }
 
-  const guideUrl = workout.exercise_url || (workout.notes?.startsWith("http") ? workout.notes : video?.exercise_url);
-  const videoUrl = customVideoUrl || null;
-  const displayVideo = video
-    ? { ...video, exercise_url: guideUrl ?? video.exercise_url, video_url: customVideoUrl || video.video_url }
-    : videoUrl
-      ? { id: workout.id, exercise_name: workout.name, category_type: workout.category, category: workout.target_muscle, exercise_url: guideUrl ?? "", video_url: customVideoUrl, instructions: workout.instructions, source: "user_custom", is_global: true }
+  const guideUrl = workout.exercise_url || null;
+  const videoUrl = customVideoUrl || workout.video_url || null;
+  const displayVideo = videoUrl
+      ? { id: workout.id, exercise_name: workout.name, category_type: workout.category, category: workout.target_muscle, exercise_url: guideUrl ?? "", video_url: videoUrl, instructions: workout.instructions, source: customVideoUrl ? "user_custom" : workout.activity_catalog?.source ?? "legacy", is_global: true }
       : null;
-  const secondaryMuscles = workout.secondary_muscles ?? video?.secondary_muscles ?? [];
+  const secondaryMuscles = workout.secondary_muscles ?? [];
   const favorite = favoriteIds.includes(workout.id);
   const mistakes = workout.notes && !workout.notes.startsWith("http") && /mistake|avoid|form/i.test(workout.notes) ? workout.notes : "No specific mistakes saved for this exercise yet.";
   const customVideoInvalid = hasInvalidUrl(customVideoDraft);
@@ -330,7 +321,7 @@ export default function WorkoutDetailsPage() {
                 <Detail label="Experience level" value={workout.experience_level || workout.difficulty} />
               </div>
 
-              <TextPanel title="Instructions" text={video?.instructions || workout.instructions} />
+              <TextPanel title="Instructions" text={workout.instructions} />
               <TextPanel title="Mistakes to avoid" text={mistakes} />
 
               <div className="grid gap-2 sm:grid-cols-2">

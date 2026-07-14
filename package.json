@@ -27,7 +27,8 @@
     "smoke:postdeploy": "node scripts/post-deploy-smoke.mjs",
     "smoke:authenticated": "node scripts/authenticated-release-smoke.mjs",
     "synthetic:uptime": "node scripts/uptime-synthetic.mjs",
-    "qa:rendered": "node scripts/run-rendered-qa.mjs"
+    "qa:rendered": "node scripts/run-rendered-qa.mjs",
+    "qa:activity-catalog": "node scripts/run-activity-catalog-qa.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

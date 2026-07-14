@@ -212,9 +212,10 @@ function sortExerciseLogsByWorkoutOrder(logs: ExerciseLog[]) {
 }
 
 export async function startWorkoutSession(userId: string, workout: Workout) {
+  const legacyWorkoutId = workout.activity_catalog?.source === "legacy" && isUuid(workout.id) ? workout.id : null;
   const payload = {
     user_id: userId,
-    workout_id: isUuid(workout.id) ? workout.id : null,
+    workout_id: legacyWorkoutId,
     workout_category: workout.category || workout.target_muscle || "Workout",
     workout_name: workout.name,
     started_at: new Date().toISOString(),
@@ -555,7 +556,7 @@ export async function skipWorkoutDay(userId: string, day: SkipWorkoutDayInput, n
   return normalizeWorkoutSession(data as WorkoutSession);
 }
 
-export async function getOpenWorkoutSession(userId: string, workoutId?: string | null) {
+export async function getOpenWorkoutSession(userId: string, workoutId?: string | null, workoutName?: string | null) {
   if (!canUseUserData(userId)) return null;
   let query = supabase!
     .from("workout_sessions")
@@ -563,6 +564,7 @@ export async function getOpenWorkoutSession(userId: string, workoutId?: string |
     .eq("user_id", userId)
     .eq("status", "started");
   if (workoutId && isUuid(workoutId)) query = query.eq("workout_id", workoutId);
+  else if (workoutName?.trim()) query = query.eq("workout_name", workoutName.trim());
   const { data, error } = await query.order("started_at", { ascending: false }).limit(1).maybeSingle();
   if (error) {
     console.warn("Plaivra could not load the active workout session.", error.message);
@@ -592,7 +594,8 @@ export async function getOpenWorkoutSessionWithStatus(userId: string, workoutId?
 }
 
 export async function getOrStartWorkoutSession(userId: string, workout: Workout) {
-  const open = await getOpenWorkoutSession(userId, workout.id);
+  const legacyWorkoutId = workout.activity_catalog?.source === "legacy" ? workout.id : null;
+  const open = await getOpenWorkoutSession(userId, legacyWorkoutId, workout.name);
   return open ?? startWorkoutSession(userId, workout);
 }
 

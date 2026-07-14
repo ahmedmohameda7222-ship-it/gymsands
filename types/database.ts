@@ -1,3 +1,5 @@
+import type { ActivityCatalogWorkoutMetadata } from "@/lib/activity-catalog/types";
+
 export type UserRole = "member" | "admin";
 
 export type Profile = {
@@ -227,6 +229,7 @@ export type Workout = {
   video_url?: string | null;
   custom_video_url?: string | null;
   is_global: boolean;
+  activity_catalog?: ActivityCatalogWorkoutMetadata | null;
 };
 
 export type ExerciseVideo = {

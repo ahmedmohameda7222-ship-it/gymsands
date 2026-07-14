@@ -14,7 +14,8 @@ const { state, supabase, autoDetectPersonalRecordsFromExerciseLogs } = vi.hoiste
     rpcError: Record<string, { message: string } | undefined>;
     singleData: unknown;
     orderData: unknown[];
-  } = { rpcData: {}, rpcError: {}, singleData: null, orderData: [] };
+    lastInsert: unknown;
+  } = { rpcData: {}, rpcError: {}, singleData: null, orderData: [], lastInsert: null };
 
   function from() {
     let insertedPayload: unknown;
@@ -25,7 +26,7 @@ const { state, supabase, autoDetectPersonalRecordsFromExerciseLogs } = vi.hoiste
       maybeSingle: vi.fn(async () => ({ data: state.singleData, error: null })),
       single: vi.fn(async () => ({ data: state.singleData ?? insertedPayload, error: null })),
       order: vi.fn(async () => ({ data: state.orderData, error: null })),
-      insert: vi.fn((payload: unknown) => { insertedPayload = payload; return builder; }),
+      insert: vi.fn((payload: unknown) => { insertedPayload = payload; state.lastInsert = payload; return builder; }),
       update: vi.fn(() => builder),
       delete: vi.fn(() => builder),
       in: vi.fn(() => builder),
@@ -65,7 +66,14 @@ const workout: Workout = {
   rest_seconds: 90,
   instructions: "Use controlled form.",
   notes: null,
-  is_global: true
+  is_global: true,
+  activity_catalog: {
+    source: "legacy",
+    activityId: "66666666-6666-4666-8666-666666666666",
+    slug: "bench_press",
+    version: 1,
+    metricSchema: null
+  }
 };
 
 const plan: UserWorkoutPlan = {
@@ -106,6 +114,7 @@ beforeEach(() => {
   state.rpcError = {};
   state.singleData = null;
   state.orderData = [];
+  state.lastInsert = null;
   vi.clearAllMocks();
 });
 
@@ -269,5 +278,63 @@ describe("atomic plan-day workout sessions", () => {
     await startWorkoutSession(userId, workout);
     expect(supabase.from).toHaveBeenCalledWith("workout_sessions");
     expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(state.lastInsert).toEqual(expect.objectContaining({ workout_id: workout.id }));
+  });
+
+  it("preserves an external activity UUID and exercise snapshot when creating a plan", async () => {
+    const externalWorkout: Workout = {
+      ...workout,
+      id: "88888888-8888-4888-8888-888888888888",
+      name: "External bench press",
+      instructions: "Keep the external coaching snapshot.",
+      activity_catalog: {
+        source: "external",
+        activityId: "88888888-8888-4888-8888-888888888888",
+        slug: "external_bench_press",
+        version: 7,
+        metricSchema: null
+      }
+    };
+    state.rpcData.create_workout_plan_atomic = { id: planId };
+    const { createUserWorkoutPlan } = await import("@/services/database/workout-plans");
+
+    await createUserWorkoutPlan({
+      userId,
+      planName: "External activity plan",
+      startDate: "2026-07-13",
+      days: [{ dayName: "Push", weekday: "Monday", exercises: [externalWorkout] }]
+    });
+
+    expect(supabase.rpc).toHaveBeenCalledWith("create_workout_plan_atomic", expect.objectContaining({
+      p_plan: expect.objectContaining({
+        days: [expect.objectContaining({
+          exercises: [expect.objectContaining({
+            source_workout_id: externalWorkout.id,
+            exercise_name: externalWorkout.name,
+            instructions: externalWorkout.instructions,
+            target_muscle: externalWorkout.target_muscle,
+            equipment: externalWorkout.equipment
+          })]
+        })]
+      })
+    }));
+  });
+
+  it("does not write an external catalog UUID into the legacy workouts foreign key", async () => {
+    const externalWorkout: Workout = {
+      ...workout,
+      id: "88888888-8888-4888-8888-888888888888",
+      activity_catalog: {
+        source: "external",
+        activityId: "88888888-8888-4888-8888-888888888888",
+        slug: "external_bench_press",
+        version: 1,
+        metricSchema: null
+      }
+    };
+    state.singleData = { ...session, plan_id: null, plan_day_id: null, workout_id: null, workout_name: externalWorkout.name };
+    const { startWorkoutSession } = await import("@/services/database/workout-sessions");
+    await startWorkoutSession(userId, externalWorkout);
+    expect(state.lastInsert).toEqual(expect.objectContaining({ workout_id: null, workout_name: externalWorkout.name }));
   });
 });

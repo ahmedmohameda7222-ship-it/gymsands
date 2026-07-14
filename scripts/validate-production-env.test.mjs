@@ -22,6 +22,45 @@ test("accepts complete core production configuration", () => {
   assert.deepEqual(validateProductionEnvironment(valid), { strict: true, errors: [] });
 });
 
+test("keeps legacy activity catalog production builds independent of external secrets", () => {
+  assert.deepEqual(
+    validateProductionEnvironment({ ...valid, PLAIVRA_ACTIVITY_CATALOG_MODE: "legacy" }),
+    { strict: true, errors: [] }
+  );
+});
+
+test("requires safe server-only activity catalog configuration in external modes", () => {
+  for (const mode of ["external", "external_with_legacy_fallback"]) {
+    const missing = validateProductionEnvironment({ ...valid, PLAIVRA_ACTIVITY_CATALOG_MODE: mode });
+    assert.ok(missing.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_BASE_URL:")));
+    assert.ok(missing.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_API_KEY:")));
+
+    const configured = validateProductionEnvironment({
+      ...valid,
+      PLAIVRA_ACTIVITY_CATALOG_MODE: mode,
+      PLAIVRA_ACTIVITY_CATALOG_BASE_URL: "https://plaivra-activity-catalog-api.vercel.app",
+      PLAIVRA_ACTIVITY_CATALOG_API_KEY: "catalog-test-key"
+    });
+    assert.deepEqual(configured.errors, []);
+  }
+});
+
+test("rejects invalid activity catalog modes and unsafe production URLs without printing values", () => {
+  const invalidMode = validateProductionEnvironment({ ...valid, PLAIVRA_ACTIVITY_CATALOG_MODE: "automatic" });
+  assert.ok(invalidMode.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_MODE:")));
+
+  const unsafe = validateProductionEnvironment({
+    ...valid,
+    PLAIVRA_ACTIVITY_CATALOG_MODE: "external",
+    PLAIVRA_ACTIVITY_CATALOG_BASE_URL: "http://localhost:3000/catalog?token=do-not-print",
+    PLAIVRA_ACTIVITY_CATALOG_API_KEY: "do-not-print-secret"
+  });
+  assert.ok(unsafe.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_BASE_URL:")));
+  const formatted = formatEnvironmentValidationFailure(unsafe.errors);
+  assert.doesNotMatch(formatted, /do-not-print/);
+  assert.doesNotMatch(formatted, /localhost:3000/);
+});
+
 test("rejects missing and malformed core production configuration without values", () => {
   const result = validateProductionEnvironment({
     PLAIVRA_VALIDATE_PRODUCTION_ENV: "true",

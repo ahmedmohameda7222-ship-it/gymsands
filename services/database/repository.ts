@@ -1,4 +1,5 @@
 export * from "./admin";
+export * from "./exercise-user-data";
 export * from "./nutrition";
 export * from "./profile";
 export * from "./progress";
