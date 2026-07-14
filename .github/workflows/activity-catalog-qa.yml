@@ -57,13 +57,31 @@ jobs:
         run: npm ci
 
       - name: Run required full test command
-        run: npm test
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p quality-reports
+          set +e
+          npm test 2>&1 | tee quality-reports/npm-test.log
+          code="${PIPESTATUS[0]}"
+          set -e
+          echo "$code" > quality-reports/npm-test.exit
+          exit 0
 
       - name: Verify clean patch whitespace
         shell: bash
         run: |
-          git diff --check
-          git diff --check "${{ github.event.pull_request.base.sha || 'main' }}...HEAD"
+          set -uo pipefail
+          mkdir -p quality-reports
+          set +e
+          (
+            git diff --check
+            git diff --check "${{ github.event.pull_request.base.sha || 'main' }}...HEAD"
+          ) 2>&1 | tee quality-reports/diff-check.log
+          code="${PIPESTATUS[0]}"
+          set -e
+          echo "$code" > quality-reports/diff-check.exit
+          exit 0
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
@@ -71,19 +89,27 @@ jobs:
       - name: Run deterministic Activity Catalog rendered QA
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           mkdir -p quality-reports
-          npm run dev > quality-reports/activity-catalog-qa-server.log 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
-            sleep 1
-          done
-          curl --fail --silent http://localhost:3000/ > /dev/null
-          QA_BASE_URL=http://localhost:3000 \
-            QA_ACTIVITY_CATALOG_EVIDENCE_DIR=quality-reports/activity-catalog-qa-evidence \
-            npm run qa:activity-catalog 2>&1 | tee quality-reports/activity-catalog-qa.log
+          set +e
+          (
+            set -euo pipefail
+            npm run dev > quality-reports/activity-catalog-qa-server.log 2>&1 &
+            server_pid=$!
+            trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
+              sleep 1
+            done
+            curl --fail --silent http://localhost:3000/ > /dev/null
+            QA_BASE_URL=http://localhost:3000 \
+              QA_ACTIVITY_CATALOG_EVIDENCE_DIR=quality-reports/activity-catalog-qa-evidence \
+              npm run qa:activity-catalog
+          ) 2>&1 | tee quality-reports/activity-catalog-qa.log
+          code="${PIPESTATUS[0]}"
+          set -e
+          echo "$code" > quality-reports/activity-catalog-qa.exit
+          exit 0
 
       - name: Upload Activity Catalog QA evidence
         if: always()
@@ -93,3 +119,16 @@ jobs:
           path: quality-reports/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Enforce Activity Catalog QA result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for check in npm-test diff-check activity-catalog-qa; do
+            code="$(cat "quality-reports/${check}.exit")"
+            echo "${check}: exit ${code}"
+            if [ "$code" != "0" ]; then failed=1; fi
+          done
+          exit "$failed"
