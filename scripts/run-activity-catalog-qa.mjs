@@ -69,7 +69,7 @@ const externalActivity = {
     { ...taxonomy.quadriceps, role: "primary" },
     { ...taxonomy.glutes, role: "secondary" }
   ],
-  trainingGoals: [{ ...taxonomy.squat, relevanceWeight: 100 }],
+  trainingGoals: [{ ...taxonomy.squat, relevanceWeight: 0.9 }],
   translations: {
     de: { name: "Langhantel-Kniebeuge", shortDescription: "Eine kontrollierte Kniebeuge mit Langhantel." },
     ar: { name: "قرفصاء بالبار", shortDescription: "قرفصاء ثنائية محكومة باستخدام البار." }
@@ -506,11 +506,14 @@ const failures = observations.filter((observation) => observation.failed);
 const report = {
   generatedAt: new Date().toISOString(),
   baseUrl,
-  fixtureContract: "activity-catalog-phase-0b-v1",
+  fixtureContract: "activity-catalog-phase-0b-v2",
   productionAcceptanceEvidence: false,
+  liveLocalizedCatalogContentVerified: false,
+  catalogContentLocale: "en",
+  uiShellLanguages: ["en", "de", "ar"],
+  localizationBoundary: "English, German, and Arabic Plaivra interface shells and Arabic RTL are exercised with deterministic fixtures. Live localized catalog-content delivery is not claimed; Phase 0B catalog reads and persisted activity snapshots remain canonical English.",
   containsSecrets: false,
   viewports,
-  languages: ["en", "de", "ar"],
   states: ["loading", "success", "empty", "fallback", "error"],
   surfaces: ["/workouts", "builder picker", "editor picker", "external detail", "legacy detail", "direct session"],
   checks: {

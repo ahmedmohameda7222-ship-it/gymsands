@@ -19,6 +19,7 @@ import { getUserExerciseVideo, resetUserExerciseVideo, upsertUserExerciseVideo }
 import { getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
 import { getCustomExercisesWithStatus, getFavoriteExerciseIdsWithStatus, setFavoriteExercise } from "@/services/workouts/exercise-library-store";
 import { userSafeError } from "@/lib/error-formatting";
+import { resolveWorkoutVideoUrl } from "@/lib/activity-catalog/adapters";
 import { cn } from "@/lib/utils";
 import type { ExerciseLog, Workout, WorkoutSessionSummary } from "@/types";
 
@@ -188,7 +189,7 @@ export default function WorkoutDetailsPage() {
   }
 
   const guideUrl = workout.exercise_url || null;
-  const videoUrl = customVideoUrl || workout.video_url || null;
+  const videoUrl = resolveWorkoutVideoUrl(workout, customVideoUrl);
   const displayVideo = videoUrl
       ? { id: workout.id, exercise_name: workout.name, category_type: workout.category, category: workout.target_muscle, exercise_url: guideUrl ?? "", video_url: videoUrl, instructions: workout.instructions, source: customVideoUrl ? "user_custom" : workout.activity_catalog?.source ?? "legacy", is_global: true }
       : null;

@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { CardGridSkeleton, EmptyState, ErrorState } from "@/components/ui/state-views";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import Link from "next/link";
-import { getWorkoutFilterOptionsWithStatus, getWorkoutsWithStatus, workoutPageSize, type WorkoutFilterOptions, type WorkoutFilters, type WorkoutLibraryStatus } from "@/services/database/workout-library";
+import { getWorkoutFilterOptionsWithStatus, getWorkoutsWithStatus, type WorkoutFilterOptions, type WorkoutFilters, type WorkoutLibraryStatus } from "@/services/database/workout-library";
 import { getCustomExercisesWithStatus, getFavoriteExerciseIdsWithStatus, saveCustomExercise, setFavoriteExercise, type CustomExerciseInput } from "@/services/workouts/exercise-library-store";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
@@ -277,7 +277,7 @@ export function WorkoutBrowser() {
           if (!active) return;
           setWorkouts(result.data);
           setResultStatus(result.status);
-          setHasMore(result.data.length >= workoutPageSize);
+          setHasMore(result.pagination?.hasMore ?? false);
         })
         .catch((error) => {
           if (!active) return;
@@ -313,7 +313,7 @@ export function WorkoutBrowser() {
       setWorkouts((current) => [...current, ...result.data]);
       setResultStatus(result.status);
       setPage(nextPage);
-      setHasMore(result.data.length >= workoutPageSize);
+      setHasMore(result.pagination?.hasMore ?? false);
     } catch (error) {
       const message = userSafeError(error, "More exercises could not load. Your current results were kept.");
       setResultError(message);
