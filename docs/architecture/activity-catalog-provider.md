@@ -1,6 +1,6 @@
 # Activity Catalog provider boundary
 
-**Status:** Phase 0B architecture
+**Status:** Phase 0B architecture  
 **Authority:** Subordinate to the Plaivra Product Constitution and canonical domain model
 
 ## Responsibility flow
@@ -37,6 +37,40 @@ PLAIVRA_ACTIVITY_CATALOG_MODE=external_with_legacy_fallback
 PLAIVRA_ACTIVITY_CATALOG_BASE_URL=https://plaivra-activity-catalog-api.vercel.app
 PLAIVRA_ACTIVITY_CATALOG_API_KEY=<existing server-only catalog key>
 ```
+
+## Compatibility filtering and pagination
+
+A compatibility filter is sent upstream only when the selected legacy group has exactly one representable value. Multi-select groups retain OR semantics by omitting the lossy upstream filter and applying the complete group locally.
+
+Compatibility-filtered logical pages are calculated from a deterministic scan beginning at upstream offset zero. The scan is bounded to three upstream pages of at most 100 records each. Discovered matches are deduplicated by activity ID, sliced into stable logical pages, and returned with explicit `hasMore` and `bounded` state. The Exercise Library consumes that state directly rather than inferring continuation from result length. If the bound is reached while the upstream catalog can continue, Plaivra reports a partial bounded result and does not claim completeness.
+
+Requests that do not need compatibility scanning continue to use normal external offsets and pagination.
+
+## Legacy media compatibility
+
+Legacy exercise guide and video URLs are preserved through a typed internal-only `legacyMediaCompatibility` field. The field is populated only by the legacy provider and is rejected by the external runtime parser.
+
+```text
+external activity
+-> external catalog content
+-> optional Plaivra user custom video only
+```
+
+```text
+legacy activity
+-> preserved legacy guide/video
+-> optional Plaivra user custom-video override
+```
+
+Legacy records are deduplicated by stable legacy identity, not by name similarity. A legacy guide or video is therefore never attached to an external activity because names happen to match. External activities receive no invented default media.
+
+## Canonical English and localization boundary
+
+Phase 0B requests canonical English catalog content for stable current persistence. The canonical English activity name is stored in current Workout and plan snapshots; a localized display name is not used as changing identity.
+
+The complete catalog `translations` map survives runtime parsing for future presentation work. The Phase 0B rendered matrix exercises English, German, and Arabic Plaivra interface shells and Arabic RTL with deterministic catalog fixtures. It verifies catalog transport and response shape, but it does **not** claim live German or Arabic catalog-content delivery.
+
+No catalog translation population or database migration is part of Phase 0B.
 
 ## Compatibility period
 
