@@ -9,7 +9,9 @@ export type ReleaseVersion = {
   schemaCompatibilityVersion: string;
   expectedDatabaseMigrationVersion: string;
   migrationLedgerReconciliationState: MigrationLedgerReconciliationState;
+  pendingMigrationCount: number;
   schemaAppliedUntrackedCount: number;
+  unresolvedMigrationCount: number;
 };
 
 export type ReleaseEnvironment = {
@@ -23,14 +25,14 @@ export type ReleaseEnvironment = {
   PLAIVRA_SCHEMA_COMPATIBILITY_VERSION?: string;
   PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION?: string;
   PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE?: string;
+  PLAIVRA_PENDING_MIGRATION_COUNT?: string;
   PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT?: string;
+  PLAIVRA_UNRESOLVED_MIGRATION_COUNT?: string;
 };
 
 const SAFE_IDENTIFIER = /^[a-z0-9][a-z0-9._-]*$/i;
 export const EXACT_GIT_COMMIT_SHA = /^[a-f0-9]{40}$/i;
 
-// These direct property reads are intentionally bundled by Next.js from
-// nextConfig.env. Do not replace them with dynamic process.env indexing.
 const bundledReleaseEnvironment: ReleaseEnvironment = {
   PLAIVRA_COMMIT_SHA: process.env.PLAIVRA_COMMIT_SHA,
   PLAIVRA_BUILD_TIMESTAMP: process.env.PLAIVRA_BUILD_TIMESTAMP,
@@ -38,7 +40,9 @@ const bundledReleaseEnvironment: ReleaseEnvironment = {
   PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: process.env.PLAIVRA_SCHEMA_COMPATIBILITY_VERSION,
   PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: process.env.PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION,
   PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE: process.env.PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE,
-  PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: process.env.PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT
+  PLAIVRA_PENDING_MIGRATION_COUNT: process.env.PLAIVRA_PENDING_MIGRATION_COUNT,
+  PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: process.env.PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT,
+  PLAIVRA_UNRESOLVED_MIGRATION_COUNT: process.env.PLAIVRA_UNRESOLVED_MIGRATION_COUNT
 };
 
 function safeIdentifier(value: string | undefined, fallback: string) {
@@ -90,7 +94,9 @@ export function getReleaseVersion(environment: ReleaseEnvironment = bundledRelea
     migrationLedgerReconciliationState: safeReconciliationState(
       environment.PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE
     ),
-    schemaAppliedUntrackedCount: safeCount(environment.PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT)
+    pendingMigrationCount: safeCount(environment.PLAIVRA_PENDING_MIGRATION_COUNT),
+    schemaAppliedUntrackedCount: safeCount(environment.PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT),
+    unresolvedMigrationCount: safeCount(environment.PLAIVRA_UNRESOLVED_MIGRATION_COUNT)
   };
 }
 
@@ -100,5 +106,7 @@ export function isReleaseArtifactIdentityValid(release: ReleaseVersion) {
     && !Number.isNaN(Date.parse(release.buildTimestamp))
     && release.environment !== "unknown"
     && release.expectedDatabaseMigrationVersion !== "unknown"
-    && release.schemaAppliedUntrackedCount >= 0;
+    && release.pendingMigrationCount >= 0
+    && release.schemaAppliedUntrackedCount >= 0
+    && release.unresolvedMigrationCount >= 0;
 }
