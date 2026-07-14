@@ -97,6 +97,8 @@ export function sanitizeClientErrorText(value: unknown, maximum = MAX_MESSAGE) {
     .replace(URL_QUERY, "$1")
     .replace(QUERY_FRAGMENT, "?[REDACTED]")
     .replace(RECORD_UUID, REDACTED)
+    .replace(LONG_PATH_ID, "/id")
+    .replace(NUMERIC_PATH_ID, "/id")
     .replace(SQL_KEY_VALUE, `Key ${REDACTED}`)
     .replace(DOUBLE_QUOTED, `"${REDACTED}"`)
     .replace(SINGLE_QUOTED, `'${REDACTED}'`)
