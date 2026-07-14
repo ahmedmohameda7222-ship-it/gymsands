@@ -98,7 +98,7 @@ The current repository ledger records six `applied_schema_untracked` migrations 
 
 ## Release manifest
 
-Generate the immutable evidence manifest from the checked-out exact commit:
+Generate the pre-deployment evidence manifest from the checked-out exact commit:
 
 ```bash
 npm run release:manifest -- \
@@ -111,6 +111,8 @@ npm run release:manifest -- \
 ```
 
 The generator rejects abbreviated SHAs and a commit that differs from `git rev-parse HEAD`. It records Node, npm, Next.js, platform, lockfile version, and lockfile SHA-256.
+
+After deployment, the post-deploy workflow downloads the exact quality artifact by GitHub Actions run ID, verifies that its manifest belongs to the reviewed commit, runs all three smoke layers, and generates `quality-reports/final-release-manifest.json`. That final manifest binds the same commit to the deployed URL, deployed build timestamp, provider evidence, anonymous smoke, populated synthetic smoke, and empty-state synthetic smoke. A deployment without this final same-commit manifest is not accepted.
 
 ## Preflight
 
@@ -129,7 +131,7 @@ The command verifies checkout/repository identity, Node 24 pins, migration recon
 ## Production runbook
 
 1. Select one reviewed exact 40-character SHA from `main`.
-2. Confirm the quality artifact and release manifest were generated from that same SHA.
+2. Confirm the quality artifact and release manifest were generated from that same SHA; record the quality workflow run ID.
 3. Complete and independently verify migration-history reconciliation.
 4. Confirm the database compatibility marker and expected migration version agree.
 5. Run the release preflight and retain its passing JSON.
@@ -137,9 +139,9 @@ The command verifies checkout/repository identity, Node 24 pins, migration recon
 7. Set `PLAIVRA_PRODUCTION_RELEASE_SHA` to the exact reviewed SHA.
 8. Deploy that Git commit. Do not redeploy an old deployment object.
 9. Verify provider metadata and `/api/version` identity.
-10. Run anonymous smoke.
-11. Run authenticated populated and empty synthetic browser smoke.
-12. Retain screenshots, route results, console/page/network evidence, request counts, and timings.
+10. Dispatch `Post-deploy release smoke` with the exact deployment URL, commit, migration, environment, and same-commit quality workflow run ID.
+11. Run and retain anonymous, populated synthetic, and empty-state synthetic smoke evidence.
+12. Verify `final-release-manifest.json` records all quality, deployment, and smoke gates as passed.
 13. Monitor client error-boundary events and server errors.
 14. Clear or rotate the approved SHA after acceptance.
 
@@ -150,10 +152,11 @@ The `Post-deploy release smoke` workflow requires:
 - exact deployment URL;
 - exact 40-character commit SHA;
 - exact expected database migration version;
+- exact GitHub Actions quality run ID for that commit;
 - protected populated synthetic credentials;
 - protected empty-state synthetic credentials.
 
-It verifies `/dashboard`, Train, applicable active-workout behavior, Eat, Meal Plan, Progress, Settings, and privacy/data controls. It fails on page errors, console errors, unhandled failures, critical request failures, HTTP 5xx, route-error UI, authentication loss, invalid identity/readiness, missing populated trigger state, or excessive request growth.
+It rejects a downloaded quality manifest from any other commit or with missing gate evidence. It verifies `/dashboard`, Train, applicable active-workout behavior, Eat, Meal Plan, Progress, Settings, and privacy/data controls. It fails on page errors, console errors, unhandled failures, critical request failures, HTTP 5xx, route-error UI, authentication loss, invalid identity/readiness, missing populated trigger state, excessive request growth, or failure to generate the final deployed-release manifest.
 
 Synthetic credentials, cookies, tokens, emails, IDs, query strings, and user-entered content are not written to artifacts.
 
