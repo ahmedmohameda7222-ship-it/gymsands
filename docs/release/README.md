@@ -7,9 +7,9 @@ A public Plaivra release is a compatible code, database, configuration, and brow
 Do not combine these operations conceptually or operationally:
 
 1. **Review and merge** - reviewed source enters `main` only after the required GitHub checks and approval have passed.
-2. **Automatic Vercel deployment** - `vercel.json` requests Git-connected deployments only for `main`. Vercel does not use an `ignoreCommand` or an exact-SHA environment approval.
-3. **Production verification** - confirm that Vercel built the exact merged `main` commit and that the deployed `/api/version` identity matches it.
-4. **Production acceptance** - complete the required migration, quality, smoke, and browser-acceptance checks for that deployed commit.
+2. **Automatic Vercel deployment** - `vercel.json` requests Git-connected deployments only for `main`. Vercel does not use `ignoreCommand`, `PLAIVRA_PREVIEW_RELEASE_SHA`, or `PLAIVRA_PRODUCTION_RELEASE_SHA`.
+3. **Production verification** - confirm that Vercel built the exact merged `main` commit and that provider metadata and `/api/version` identify that commit.
+4. **Production acceptance** - complete the required migration, quality, smoke, browser-QA, and release-manifest checks for the deployed commit.
 5. **Rollback** - select and verify a separately approved code/schema-compatible release pair. Do not redeploy an unrelated old deployment object.
 
 Do not redeploy an old provider artifact as a substitute for deploying the reviewed Git commit. The July 2026 incident persisted because production redeployed an old SHA while `main` had advanced.
@@ -19,16 +19,19 @@ Do not redeploy an old provider artifact as a substitute for deploying the revie
 ### Vercel
 
 - `vercel.json` requests automatic Git-connected deployments only for `main`.
-- Vercel does not use an `ignoreCommand` or the exact-SHA environment approval gate.
-- Release safety depends on required review and CI checks before merge, followed by deployed-commit identity, migration, smoke, and browser-acceptance verification.
-- Confirm that the deployed provider metadata and `/api/version` identity match the exact merged `main` commit.
+- Vercel does not use `ignoreCommand`.
+- Vercel does not use preview or production exact-SHA approval environment variables.
+- Required GitHub review and CI checks protect `main` before merge.
+- After merge, confirm that provider metadata and `/api/version` identify the exact resulting 40-character `main` SHA.
+- Migration reconciliation, release preflight, smoke tests, browser QA, and release manifests remain mandatory.
 - A deployment is not accepted merely because Vercel reports it as `READY`.
+- Do not redeploy an old Vercel deployment object as a substitute for deploying the reviewed Git commit.
 
 ### Netlify
 
-Netlify remains configured as a secondary supported provider. Its production ignore gate continues to require an exact approved SHA. Node 24 is pinned in `netlify.toml`. A Netlify preview does not replace Vercel production evidence.
+Netlify remains configured as a separate secondary provider. Its production ignore gate continues to require an exact approved SHA through `scripts/netlify-production-release-gate.mjs`. Node 24 remains pinned in `netlify.toml`. Netlify preview and branch deployments retain their existing behavior and do not replace Vercel production evidence.
 
-For a Netlify production release, keep `PLAIVRA_PRODUCTION_RELEASE_SHA` empty during ordinary merges. Set it only after owner and quality-control approval for one exact commit, then clear or rotate it after acceptance.
+For a Netlify production release, keep `PLAIVRA_PRODUCTION_RELEASE_SHA` empty during ordinary merges. Set it only after owner and quality-control approval for one exact commit, then clear or rotate it after acceptance. Vercel does not use this variable.
 
 ## Required same-commit evidence
 
@@ -142,7 +145,7 @@ Neither `vercel.json` nor a green GitHub workflow is sufficient production evide
 3. Complete and independently verify migration-history reconciliation.
 4. Confirm the database compatibility marker and expected migration version agree.
 5. Run the release preflight and retain its passing JSON.
-6. Confirm required Vercel production environment variables pass strict validation.
+6. Confirm required Vercel production environment variables pass strict validation. No exact-SHA approval variable is used by Vercel.
 7. Merge the reviewed commit to `main` only after all required checks and approvals pass.
 8. Confirm Vercel created the production deployment from that exact merged `main` SHA. Do not redeploy an old deployment object.
 9. Verify provider metadata and `/api/version` match the exact deployed commit.
