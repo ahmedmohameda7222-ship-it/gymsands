@@ -15,18 +15,9 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const securityHeaders = [
-  {
-    key: "X-Content-Type-Options",
-    value: "nosniff"
-  },
-  {
-    key: "X-Frame-Options",
-    value: "DENY"
-  },
-  {
-    key: "Referrer-Policy",
-    value: "strict-origin-when-cross-origin"
-  },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()"
@@ -34,19 +25,24 @@ const securityHeaders = [
   ...(process.env.NODE_ENV === "production"
     ? [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" }]
     : []),
-  {
-    key: "Content-Security-Policy",
-    value: contentSecurityPolicy
-  }
+  { key: "Content-Security-Policy", value: contentSecurityPolicy }
 ];
 
 const migrationLedger = JSON.parse(
   readFileSync(new URL("./supabase/migration-ledger.json", import.meta.url), "utf8")
 );
-const latestAppliedMigration = [...(migrationLedger.entries ?? [])]
+const migrationEntries = migrationLedger.entries ?? [];
+const latestAppliedMigration = [...migrationEntries]
   .filter((entry) => entry.state === "applied" && typeof entry.productionVersion === "string")
   .sort((left, right) => left.productionVersion.localeCompare(right.productionVersion))
   .at(-1)?.productionVersion ?? "";
+const pendingMigrationCount = migrationEntries.filter((entry) => entry.state === "pending").length;
+const schemaAppliedUntrackedCount = migrationEntries.filter(
+  (entry) => entry.state === "applied_schema_untracked"
+).length;
+const unresolvedMigrationCount = migrationEntries.filter(
+  (entry) => !["applied", "applied_version_alias"].includes(entry.state)
+).length;
 
 // Values in nextConfig.env are substituted into the built artifact. Runtime code
 // must read these exact names directly rather than dynamically indexing
@@ -66,7 +62,9 @@ const releaseMetadata = {
   schemaCompatibilityVersion: process.env.PLAIVRA_SCHEMA_COMPATIBILITY_VERSION || "2",
   expectedDatabaseMigrationVersion: latestAppliedMigration,
   migrationLedgerReconciliationState: migrationLedger.historyRepair?.state || "unknown",
-  schemaAppliedUntrackedCount: String(migrationLedger.schemaVerifiedUntrackedCount ?? 0)
+  pendingMigrationCount: String(pendingMigrationCount),
+  schemaAppliedUntrackedCount: String(schemaAppliedUntrackedCount),
+  unresolvedMigrationCount: String(unresolvedMigrationCount)
 };
 
 const nextConfig = {
@@ -78,32 +76,18 @@ const nextConfig = {
     PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: releaseMetadata.schemaCompatibilityVersion,
     PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: releaseMetadata.expectedDatabaseMigrationVersion,
     PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE: releaseMetadata.migrationLedgerReconciliationState,
-    PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: releaseMetadata.schemaAppliedUntrackedCount
+    PLAIVRA_PENDING_MIGRATION_COUNT: releaseMetadata.pendingMigrationCount,
+    PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: releaseMetadata.schemaAppliedUntrackedCount,
+    PLAIVRA_UNRESOLVED_MIGRATION_COUNT: releaseMetadata.unresolvedMigrationCount
   },
   images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "*.supabase.co"
-      }
-    ]
+    remotePatterns: [{ protocol: "https", hostname: "*.supabase.co" }]
   },
   async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: securityHeaders
-      }
-    ];
+    return [{ source: "/:path*", headers: securityHeaders }];
   },
   async redirects() {
-    return [
-      {
-        source: "/today-workout",
-        destination: "/my-workout/plans",
-        permanent: true
-      }
-    ];
+    return [{ source: "/today-workout", destination: "/my-workout/plans", permanent: true }];
   }
 };
 
