@@ -5,6 +5,9 @@ import { chromium } from "@playwright/test";
 
 const EXACT_SHA = /^[a-f0-9]{40}$/i;
 const MIGRATION_VERSION = /^\d{12,14}$/;
+const RECORD_UUID = /\b[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\b/gi;
+const LONG_PATH_ID = /\/[a-f0-9_-]{24,128}(?=\/|$)/gi;
+const NUMERIC_PATH_ID = /\/\d{4,}(?=\/|$)/g;
 const ROUTES = [
   { id: "dashboard", path: "/dashboard" },
   { id: "train", path: "/my-workout/plans" },
@@ -52,16 +55,35 @@ function baseUrl(value) {
 function sanitizedText(value, limit = 500) {
   return String(value ?? "")
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "[REDACTED]")
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[REDACTED]")
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[REDACTED]")
-    .replace(/\b[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\b/gi, "[REDACTED]")
+    .replace(RECORD_UUID, "[REDACTED]")
+    .replace(/\bKey\s*\([^)\r\n]{1,200}\)\s*=\s*\([^)\r\n]{1,500}\)/gi, "Key [REDACTED]")
+    .replace(/"[^"\r\n]{1,200}"/g, '"[REDACTED]"')
+    .replace(/'[^'\r\n]{1,200}'/g, "'[REDACTED]'")
+    .replace(/`[^`\r\n]{1,200}`/g, "`[REDACTED]`")
     .replace(/(https?:\/\/[^\s?#]+)(?:\?[^\s#]*)?(?:#[^\s]*)?/gi, "$1")
     .slice(0, limit);
+}
+
+function safePath(value) {
+  try {
+    const url = new URL(value, "https://plaivra.invalid");
+    return url.pathname
+      .replace(RECORD_UUID, "id")
+      .replace(LONG_PATH_ID, "/id")
+      .replace(NUMERIC_PATH_ID, "/id")
+      .replace(/\/+/g, "/")
+      .slice(0, 180);
+  } catch {
+    return "/unknown";
+  }
 }
 
 function safeUrl(value) {
   try {
     const url = new URL(value);
-    return `${url.origin}${url.pathname}`;
+    return `${url.origin}${safePath(url.pathname)}`;
   } catch {
     return "invalid-url";
   }
@@ -96,13 +118,13 @@ async function visitRoute(page, origin, route, routeEvidence, screenshotDirector
   await assertNoBoundary(page);
   if (page.url().includes("/login")) throw new Error(`Authentication was lost while opening ${route.path}.`);
 
-  const finalPath = new URL(page.url()).pathname;
-  const optionalRedirect = Boolean(route.optional && finalPath !== route.path);
+  const rawFinalPath = new URL(page.url()).pathname;
+  const optionalRedirect = Boolean(route.optional && rawFinalPath !== route.path);
   await page.screenshot({ path: resolve(screenshotDirectory, `${route.id}.png`), fullPage: true });
   routeEvidence.push({
     id: route.id,
     path: route.path,
-    finalPath,
+    finalPath: safePath(rawFinalPath),
     status: response?.status() ?? null,
     applicable: !optionalRedirect,
     durationMs: Date.now() - startedAt,
@@ -162,8 +184,7 @@ async function main() {
       const url = new URL(response.url());
       const contentLength = Number(response.headers()["content-length"] ?? "0");
       if (Number.isFinite(contentLength) && contentLength > 0) requestMetrics.transferredBytes += contentLength;
-      if (response.status() >= 500) serverErrors.push({ url: `${url.origin}${url.pathname}`, status: response.status() });
-      if (account !== "populated" && account !== "empty") return;
+      if (response.status() >= 500) serverErrors.push({ url: `${url.origin}${safePath(url.pathname)}`, status: response.status() });
       const table = url.pathname.split("/").at(-1);
       if (!new Set(["food_logs", "calorie_targets", "user_nutrition_target_profiles"]).has(table)) return;
       try {
@@ -172,7 +193,7 @@ async function main() {
         if (table === "food_logs") incidentState.foodLogCount = Math.max(incidentState.foodLogCount ?? 0, count);
         else incidentState.targetRowCount = Math.max(incidentState.targetRowCount ?? 0, count);
       } catch {
-        // Count verification is handled after dashboard rendering.
+        // The final populated/empty state assertions remain fail-closed.
       }
     });
 
@@ -192,8 +213,7 @@ async function main() {
       if (route.id === "dashboard") {
         const progress = page.locator('section[aria-labelledby="today-progress"]');
         await progress.waitFor({ state: "visible" });
-        const progressText = await progress.innerText();
-        incidentState.remainingValuesRendered = !/Loading|Unavailable|No target/i.test(progressText);
+        incidentState.remainingValuesRendered = await progress.locator('[role="progressbar"]').count() >= 4;
       }
       dashboardActive = false;
     }
