@@ -83,6 +83,16 @@ test("tracked references contain no active obsolete Vercel gate dependency", () 
   assert.match(historicalManifest, /scripts\/vercel-production-release-gate\.mjs/);
 });
 
+test("git diff checks pass for the working tree and branch range", () => {
+  const workingTree = spawnSync("git", ["diff", "--check"], { cwd: root, encoding: "utf8" });
+  assert.equal(workingTree.status, 0, `${workingTree.stdout}\n${workingTree.stderr}`);
+
+  const remoteMain = spawnSync("git", ["rev-parse", "--verify", "origin/main"], { cwd: root, encoding: "utf8" });
+  const base = remoteMain.status === 0 ? "origin/main" : "main";
+  const branchRange = spawnSync("git", ["diff", "--check", `${base}...HEAD`], { cwd: root, encoding: "utf8" });
+  assert.equal(branchRange.status, 0, `${branchRange.stdout}\n${branchRange.stderr}`);
+});
+
 test("Netlify keeps its exact-SHA ignore command and local behavior", () => {
   const netlifyConfig = readFileSync(resolve(root, "netlify.toml"), "utf8");
   assert.match(netlifyConfig, /ignore = "node \.\/scripts\/netlify-production-release-gate\.mjs"/);
