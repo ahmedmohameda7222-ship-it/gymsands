@@ -3,7 +3,7 @@
 **Project:** `bkwezjxvapaeasfvlhvv`
 **Verified production state:** 2026-07-15
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
-**Reconciliation status:** **Reconciled / release still NO-GO**
+**Reconciliation status:** **Pending / release NO-GO**
 
 This document records the verified production state supplied after the controlled reconciliation sequence. It is not authorization to replay migration SQL, change the compatibility marker, deploy, promote, or merge. Applied migration files and production identities must never be renamed, rewritten, deleted, or replayed.
 
@@ -11,12 +11,13 @@ This document records the verified production state supplied after the controlle
 
 - Supabase migration history contains 32 applied migrations.
 - All eight reconciliation-scope identities are present in production migration history exactly once.
-- `pendingCount = 0`
+- `pendingCount = 1`
 - `schemaAppliedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
-- The migration-ledger reconciliation gate is satisfied.
-- The database compatibility marker and repository release metadata are aligned at `20260715010000`. All remaining required release gates must still pass before production release.
+- `unresolvedCount = 1`
+- `historyRepair.state = pending`
+- `20260715190000_train_phase2a_program_architecture.sql` is present in the repository and intentionally not applied to production.
+- The migration-ledger reconciliation gate is therefore not satisfied for the current Draft PR.
+- The latest verified production migration remains `20260715010000`; production release must stay fail-closed until the pending migration is separately applied and verified.
 
 The verified production identities are:
 
@@ -93,7 +94,7 @@ The ledger-level `releaseReady` value requires all of the following:
 - `unresolvedCount === 0`
 - all resolved production identities are valid
 
-The production ledger now satisfies those migration-specific conditions. The application-level release readiness calculation remains independently fail-closed on artifact identity, schema compatibility, database migration-marker compatibility, and the remaining release evidence.
+The previously applied production ledger satisfied those migration-specific conditions before the Phase 2A branch added `20260715190000_train_phase2a_program_architecture.sql`. The current repository ledger correctly returns to `pending` and is not release-ready until that migration receives a verified production identity. The application-level release readiness calculation remains independently fail-closed on artifact identity, schema compatibility, database migration-marker compatibility, and the remaining release evidence.
 
 ## Read-only preflight
 

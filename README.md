@@ -131,9 +131,10 @@ Verified production state on 2026-07-15:
 - Supabase migration history contains 32 applied migrations through `20260715010000_restrict_nutrition_target_override_acl`.
 - These eight reconciliation-scope versions are present exactly once: `20260711213000`, `20260712173000`, `20260712195000`, `20260713153000`, `20260713160000`, `20260713170000`, `20260714030000`, and `20260715010000`.
 - The authenticated nutrition override ACL is exactly `SELECT`, `INSERT`, `UPDATE`, and `DELETE`; `TRUNCATE`, `TRIGGER`, `REFERENCES`, and `MAINTAIN` are absent.
-- Current counts are `pendingCount=0`, `schemaAppliedUntrackedCount=0`, and `unresolvedCount=0`.
-- Migration-history reconciliation is **reconciled**.
-- The production compatibility marker is aligned at `20260715010000`. Application release readiness now depends on the remaining required release gates.
+- Current repository counts are `pendingCount=1`, `schemaAppliedUntrackedCount=0`, and `unresolvedCount=1`.
+- `20260715190000_train_phase2a_program_architecture.sql` is intentionally **pending** and has not been applied to production.
+- Migration-history reconciliation is **pending** until that exact migration is applied and verified in a separately approved production operation.
+- The latest verified production migration remains `20260715010000`. Application release readiness must remain fail-closed while the Phase 2A migration is pending.
 
 Do not replay any applied migration. Run `npm run migration:ledger:check` to validate repository classification, production identities, counts, and documentation consistency.
 

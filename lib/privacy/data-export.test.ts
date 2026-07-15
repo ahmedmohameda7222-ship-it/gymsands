@@ -43,6 +43,11 @@ function exportSupabaseMock() {
       if (table === "user_workout_plans") return { data: [{ id: "plan-a", user_id: userA }], error: null };
       if (table === "user_workout_plan_days") return { data: [{ id: "day-a", plan_id: "plan-a" }], error: null };
       if (table === "user_workout_plan_exercises") return { data: [{ id: "exercise-a", plan_day_id: "day-a" }], error: null };
+      if (table === "user_workout_plan_week_templates") return { data: [{ id: "template-a", plan_id: "plan-a" }], error: null };
+      if (table === "user_workout_plan_weeks") return { data: [{ id: "week-a", plan_id: "plan-a", week_template_id: "template-a" }], error: null };
+      if (table === "user_workout_plan_sessions") return { data: [{ id: "plan-session-a", week_template_id: "template-a" }], error: null };
+      if (table === "user_workout_plan_phases") return { data: [{ id: "phase-a", plan_session_id: "plan-session-a" }], error: null };
+      if (table === "user_workout_plan_activities") return { data: [{ id: "activity-a", plan_phase_id: "phase-a" }], error: null };
       if (table === "workout_sessions") return { data: [{ id: "session-a", user_id: userA }], error: null };
       if (table === "user_workout_sessions") return { data: [{ id: "scheduled-a", user_id: userA }], error: null };
       if (table === "meals") return { data: [{ id: "meal-a", user_id: userA }], error: null };
@@ -87,6 +92,18 @@ describe("current-user privacy export", () => {
     expect(calls.find((call) => call.table === "chatgpt_connections")?.filters).toContainEqual(["user_id", userA]);
     expect(calls.find((call) => call.table === "user_workout_plan_days")?.inFilters).toContainEqual(["plan_id", ["plan-a"]]);
     expect(calls.find((call) => call.table === "user_workout_plan_exercises")?.inFilters).toContainEqual(["plan_day_id", ["day-a"]]);
+    expect(calls.find((call) => call.table === "user_workout_plan_week_templates")?.inFilters).toContainEqual(["plan_id", ["plan-a"]]);
+    expect(calls.find((call) => call.table === "user_workout_plan_weeks")?.inFilters).toContainEqual(["plan_id", ["plan-a"]]);
+    expect(calls.find((call) => call.table === "user_workout_plan_sessions")?.inFilters).toContainEqual(["week_template_id", ["template-a"]]);
+    expect(calls.find((call) => call.table === "user_workout_plan_phases")?.inFilters).toContainEqual(["plan_session_id", ["plan-session-a"]]);
+    expect(calls.find((call) => call.table === "user_workout_plan_activities")?.inFilters).toContainEqual(["plan_phase_id", ["phase-a"]]);
+    expect(payload.data.workouts).toMatchObject({
+      program_week_templates: [{ id: "template-a", plan_id: "plan-a" }],
+      program_weeks: [{ id: "week-a", plan_id: "plan-a", week_template_id: "template-a" }],
+      program_sessions: [{ id: "plan-session-a", week_template_id: "template-a" }],
+      program_phases: [{ id: "phase-a", plan_session_id: "plan-session-a" }],
+      planned_activities: [{ id: "activity-a", plan_phase_id: "phase-a" }]
+    });
     expect(calls.find((call) => call.table === "mcp_audit_logs")?.filters).toContainEqual(["user_id", userA]);
     expect(calls.find((call) => call.table === "user_fitness_constraints")?.filters).toContainEqual(["user_id", userA]);
     expect(calls.find((call) => call.table === "user_nutrition_preference_profiles")?.filters).toContainEqual(["user_id", userA]);

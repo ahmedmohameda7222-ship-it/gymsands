@@ -5,14 +5,14 @@
   "auditedRepositoryCommit": "10d49bd8f41fccb605b6015f92f8d0402a836128",
   "productionMigrationCount": 32,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 0,
-  "unresolvedCount": 0,
+  "pendingCount": 1,
+  "unresolvedCount": 1,
   "historyRepair": {
-    "state": "reconciled",
+    "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 0,
-    "unresolvedCount": 0,
-    "note": "Production migration history contains all 32 repository identities, including the normally applied ACL correction and the seven repaired historical identities. The authenticated nutrition override ACL was verified as CRUD-only. Do not replay applied migrations. The compatibility marker remains 20260711014500 and is outside this reconciliation record."
+    "pendingCount": 1,
+    "unresolvedCount": 1,
+    "note": "Production migration history contains all 32 previously applied repository identities. The new Train Phase 2A migration is intentionally pending and has not been applied to production. Do not replay applied migrations. Do not classify the pending migration as applied until its exact production identity and physical result are verified."
   },
   "entries": [
     { "productionVersion": "202606290000", "productionName": "clean_initial_schema", "localFile": "202606290000_clean_initial_schema.sql", "state": "applied" },
@@ -46,6 +46,7 @@
     { "productionVersion": "20260713160000", "productionName": "train_section_atomic_integrity", "localFile": "20260713160000_train_section_atomic_integrity.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified on 2026-07-15. Do not replay." },
     { "productionVersion": "20260713170000", "productionName": "finalize_train_schedule_delete_integrity", "localFile": "20260713170000_finalize_train_schedule_delete_integrity.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified on 2026-07-15. Do not replay." },
     { "productionVersion": "20260714030000", "productionName": "harden_train_plan_rpc_execution", "localFile": "20260714030000_harden_train_plan_rpc_execution.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified on 2026-07-15. Do not replay." },
-    { "productionVersion": "20260715010000", "productionName": "restrict_nutrition_target_override_acl", "localFile": "20260715010000_restrict_nutrition_target_override_acl.sql", "state": "applied", "note": "Normally applied production identity verified with authenticated privileges exactly DELETE, INSERT, SELECT, and UPDATE on 2026-07-15. Do not replay." }
+    { "productionVersion": "20260715010000", "productionName": "restrict_nutrition_target_override_acl", "localFile": "20260715010000_restrict_nutrition_target_override_acl.sql", "state": "applied", "note": "Normally applied production identity verified with authenticated privileges exactly DELETE, INSERT, SELECT, and UPDATE on 2026-07-15. Do not replay." },
+    { "localFile": "20260715190000_train_phase2a_program_architecture.sql", "state": "pending", "note": "Approved forward-only Train Phase 2A architecture migration. It is included in the Draft PR but was not applied to production in this implementation session." }
   ]
 }

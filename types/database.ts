@@ -279,6 +279,8 @@ export type WorkoutSession = {
   workout_id: string | null;
   plan_id?: string | null;
   plan_day_id?: string | null;
+  plan_week_id?: string | null;
+  plan_session_id?: string | null;
   workout_day_name?: string | null;
   workout_category?: string | null;
   workout_name: string;
@@ -296,6 +298,7 @@ export type ExerciseLog = {
   id: string;
   workout_session_id: string;
   plan_exercise_id: string | null;
+  plan_activity_id?: string | null;
   source_workout_id?: string | null;
   exercise_order?: number | null;
   exercise_name: string;
@@ -321,6 +324,7 @@ export type UserExerciseLog = {
   id: string;
   user_workout_session_id: string;
   plan_exercise_id: string | null;
+  plan_activity_id?: string | null;
   exercise_order: number;
   exercise_name: string;
   planned_sets: string | null;
@@ -339,6 +343,8 @@ export type UserWorkoutSession = {
   user_id: string;
   user_workout_plan_id: string;
   plan_day_id: string | null;
+  plan_week_id?: string | null;
+  plan_session_id?: string | null;
   week_index: number;
   day_index: number;
   session_number: number;
