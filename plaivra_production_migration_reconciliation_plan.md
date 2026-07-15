@@ -1,9 +1,9 @@
 # Plaivra Production Migration-History Reconciliation Plan
 
-**Status:** Corrected Phase A evidence only — owner approval required before any production write  
-**Production project:** `bkwezjxvapaeasfvlhvv`  
-**Repository base:** `54e9768d52011e1d1839c4f50f0a2bc578ca27db`  
-**SQL replay:** Prohibited  
+**Status:** Corrected Phase A evidence only — owner approval required before any production write
+**Production project:** `bkwezjxvapaeasfvlhvv`
+**Repository base:** `54e9768d52011e1d1839c4f50f0a2bc578ca27db`
+**SQL replay:** Prohibited
 **Current recommendation:** `NO-GO`
 
 ## Purpose
