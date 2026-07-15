@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: write
-  issues: write
-  pull-requests: write
 
 concurrency:
   group: phase-a-diff-${{ github.workflow }}-${{ github.ref }}
@@ -39,28 +37,28 @@ jobs:
       - name: Apply focused PR59 corrections once
         if: github.event.pull_request.number == 59
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          if [ -f PR59_PAYLOAD_ERROR.txt ]; then
+            echo "A retained PR59 payload diagnostic is present; stopping before another bootstrap attempt."
+            exit 1
+          fi
           if [ ! -f scripts/pr59-corrections.mjs.gz.b64 ]; then
             echo "PR59 correction payload is absent; continuing with normal diff validation."
             exit 0
           fi
           base64 --decode scripts/pr59-corrections.mjs.gz.b64 | gzip --decompress > "$RUNNER_TEMP/apply-pr59-corrections.mjs"
           set +e
-          node "$RUNNER_TEMP/apply-pr59-corrections.mjs" 2>&1 | tee "$RUNNER_TEMP/pr59-payload.log"
-          payload_code="${PIPESTATUS[0]}"
+          node "$RUNNER_TEMP/apply-pr59-corrections.mjs" > "$RUNNER_TEMP/pr59-payload.log" 2>&1
+          payload_code="$?"
           set -e
           if [ "$payload_code" != "0" ]; then
-            {
-              echo "PR #59 correction payload failed before commit on staging SHA \`${{ github.event.pull_request.head.sha }}\`."
-              echo
-              echo '```text'
-              tail -n 80 "$RUNNER_TEMP/pr59-payload.log"
-              echo '```'
-            } > "$RUNNER_TEMP/pr59-payload-comment.md"
-            gh pr comment 59 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/pr59-payload-comment.md"
+            cp "$RUNNER_TEMP/pr59-payload.log" PR59_PAYLOAD_ERROR.txt
+            git config user.name "Plaivra PR59 Diagnostic"
+            git config user.email "actions@users.noreply.github.com"
+            git add PR59_PAYLOAD_ERROR.txt
+            git commit -m "chore(pr59): retain payload diagnostic"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
             exit "$payload_code"
           fi
           rm -f scripts/pr59-corrections.mjs.gz.b64
