@@ -9,6 +9,8 @@ on:
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: pr59-correction-runner
@@ -16,7 +18,7 @@ concurrency:
 
 jobs:
   correct-and-validate:
-    if: contains(github.event.head_commit.message, 'bootstrap correction runner')
+    if: contains(github.event.head_commit.message, 'correction runner')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -54,7 +56,6 @@ jobs:
           node "$RUNNER_TEMP/apply-pr59-corrections.mjs"
           rm -f scripts/pr59-corrections.mjs.gz.b64
           git diff --check
-          git diff --check origin/main...HEAD
 
       - name: Commit exact correction tree
         shell: bash
@@ -65,6 +66,7 @@ jobs:
           git add -A
           git diff --cached --check
           git commit -m "fix(train): apply PR59 required corrections"
+          git diff --check origin/main...HEAD
           final_sha="$(git rev-parse HEAD)"
           echo "FINAL_SHA=$final_sha" >> "$GITHUB_ENV"
           mkdir -p "$REPORT_DIR"
@@ -113,7 +115,6 @@ jobs:
           run_qa() {
             local name="$1"
             local command="$2"
-            local evidence_dir="$3"
             set +e
             NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > "$REPORT_DIR/${name}-server.log" 2>&1 &
             local server_pid=$!
@@ -127,7 +128,7 @@ jobs:
               echo "Development server did not become ready." | tee "$REPORT_DIR/${name}.log"
               code=1
             else
-              QA_BASE_URL=http://localhost:3000 "$evidence_dir" bash -lc "$command" 2>&1 | tee "$REPORT_DIR/${name}.log"
+              QA_BASE_URL=http://localhost:3000 bash -lc "$command" 2>&1 | tee "$REPORT_DIR/${name}.log"
               code="${PIPESTATUS[0]}"
             fi
             kill "$server_pid" 2>/dev/null || true
@@ -150,8 +151,8 @@ jobs:
           run_check migration-ledger npm run migration:ledger:check
           run_shell environment-validation 'export PLAIVRA_VALIDATE_PRODUCTION_ENV=true PLAIVRA_RELEASE_ENVIRONMENT=production NEXT_PUBLIC_APP_URL=https://app.plaivra.com NEXT_PUBLIC_USE_MOCK_AUTH=false PLAIVRA_MCP_BASE_URL=https://app.plaivra.com/api/mcp PLAIVRA_OAUTH_ISSUER=https://app.plaivra.com PLAIVRA_CIMD_ALLOWED_ORIGINS=https://chatgpt.com CRON_SECRET=ci-placeholder-cron-secret-that-is-long-enough; npm run validate:env'
           run_shell production-build 'NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build'
-          run_qa rendered-qa 'QA_EVIDENCE_DIR="$REPORT_DIR/rendered-qa-evidence" npm run qa:rendered' "env"
-          run_qa train-qa 'QA_TRAIN_EVIDENCE_DIR="$REPORT_DIR/train-qa-evidence" npm run qa:train' "env"
+          run_qa rendered-qa 'QA_EVIDENCE_DIR="$REPORT_DIR/rendered-qa-evidence" npm run qa:rendered'
+          run_qa train-qa 'QA_TRAIN_EVIDENCE_DIR="$REPORT_DIR/train-qa-evidence" npm run qa:train'
 
           git status --short > "$REPORT_DIR/git-status-after-validation.txt"
           printf '%s\n' "$failed" > "$REPORT_DIR/overall.exit"
@@ -172,8 +173,19 @@ jobs:
         with:
           name: pr59-correction-validation-${{ github.run_id }}
           path: ${{ runner.temp }}/pr59-correction-reports/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
+
+      - name: Publish runner conclusion
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          overall="missing"
+          if [ -f "$REPORT_DIR/overall.exit" ]; then overall="$(cat "$REPORT_DIR/overall.exit")"; fi
+          final_sha="${FINAL_SHA:-not-created}"
+          gh pr comment 59 --repo "$GITHUB_REPOSITORY" --body "PR #59 correction runner completed. Run ID: \`$GITHUB_RUN_ID\`. Candidate correction SHA: \`$final_sha\`. Aggregate local validation exit: \`$overall\`. Retained artifact: \`pr59-correction-validation-$GITHUB_RUN_ID\`. This is runner evidence only; PR remains Draft and unmerged."
 
       - name: Enforce correction result
         if: always()
