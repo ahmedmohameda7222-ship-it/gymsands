@@ -1,4 +1,4 @@
-name: PR59 Correction Runner Final
+name: PR59 Correction Runner Final v2
 
 on:
   push:
@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   correct-and-validate:
-    if: contains(github.event.head_commit.message, 'correction runner') || contains(github.event.head_commit.message, 'release preflight')
+    if: contains(github.event.head_commit.message, 'correction runner') || contains(github.event.head_commit.message, 'release preflight') || contains(github.event.head_commit.message, 'compatibility-corrected runner')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
