@@ -4,7 +4,7 @@ const getDatabaseSchemaCompatibility = vi.fn();
 vi.mock("@/lib/release/database-compatibility", () => ({ getDatabaseSchemaCompatibility }));
 
 const fullSha = "60a204d5fc20fc396be1b1b47e748c42ebba6abf";
-const expectedMigration = "20260711014500";
+const expectedMigration = "20260715010000";
 const compatibleDatabase = { available: true, version: "2", migrationVersion: expectedMigration };
 
 describe("GET /api/version", () => {
@@ -72,9 +72,9 @@ describe("GET /api/version", () => {
       expected: { migrationLedgerReconciled: false }
     },
     {
-      name: "database migration mismatch",
+      name: "unchanged database compatibility marker",
       environment: {},
-      database: { ...compatibleDatabase, migrationVersion: "20260711013000" },
+      database: { ...compatibleDatabase, migrationVersion: "20260711014500" },
       expected: { migrationVersionCompatible: false }
     },
     {
