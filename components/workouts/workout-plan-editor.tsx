@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, Dumbbell, Plus, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, Dumbbell, GripVertical, Plus, Save, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ExercisePickerDialog, exerciseKey } from "@/components/workouts/exercise-picker-dialog";
+import { TrainPageContainer, TrainStickyFooter } from "@/components/workouts/train-ui";
 import { PageHeading } from "@/components/layout/page-heading";
+import { ActionMenu, ActionMenuItem } from "@/components/ui/action-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -106,6 +108,7 @@ export function WorkoutPlanEditor() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [validationAttempted, setValidationAttempted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(searchParams.get("picker") === "exercise");
   const draftKey = useMemo(() => workoutStorageKey(["workout-plan-draft", user?.id ?? "anonymous", params.planId]), [params.planId, user?.id]);
@@ -216,7 +219,12 @@ export function WorkoutPlanEditor() {
   }
 
   async function save(options: { navigate?: boolean } = {}): Promise<boolean> {
-    if (!draft || !basePlan || !draftBaseUpdatedAt || !user?.id || validationError || saveState === "saving") return false;
+    if (!draft || !basePlan || !draftBaseUpdatedAt || !user?.id || saveState === "saving") return false;
+    if (validationError) {
+      setValidationAttempted(true);
+      return false;
+    }
+    setValidationAttempted(false);
     setSaveState("saving"); setSaveError(null);
     try {
       await saveWorkoutPlan(user.id, draft.id, toSavePlan(draft), draftBaseUpdatedAt);
@@ -259,26 +267,26 @@ export function WorkoutPlanEditor() {
 
 
   return (
-    <div className="space-y-6" dir={dir} data-train-editor>
+    <TrainPageContainer className="space-y-6" dir={dir} data-train-editor>
       <PageHeading title={`${tr("editPlanTitle")} · ${draft.name}`} description={tr("editorDescription")} action={<div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"><Button asChild variant="ghost" className="min-h-11"><Link href={`/my-workout/plans/${draft.id}`}><ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {tr("back")}</Link></Button><Button variant="outline" className="min-h-11" onClick={cancel}>{tr("cancel")}</Button></div>} />
 
       {saveState === "restored" ? <div className="flex gap-3 rounded-2xl border border-warning/40 bg-warning/10 p-4 text-sm"><AlertTriangle className="h-5 w-5 shrink-0" /><div><p className="font-semibold">{tr("draftRestored")}</p><p className="text-muted-foreground">{tr("draftRestoredDescription")}</p></div></div> : null}
 
-      <Card><CardContent className="grid gap-4 p-5 md:grid-cols-3">
-        <div className="space-y-2 md:col-span-3"><Label htmlFor="plan-name">{tr("planName")}</Label><Input id="plan-name" value={draft.name} onChange={(event) => patchPlan({ name: event.target.value })} /></div>
-        <div className="space-y-2 md:col-span-2"><Label htmlFor="plan-goal">{tr("goal")}</Label><Input id="plan-goal" value={draft.goal ?? ""} onChange={(event) => patchPlan({ goal: event.target.value || null })} placeholder={tr("goalPlaceholder")} /></div>
+      <Card><CardContent className="grid gap-4 p-5 md:grid-cols-2">
+        <div className="space-y-2"><Label htmlFor="plan-name">{tr("planName")}</Label><Input id="plan-name" className="min-h-12" value={draft.name} onChange={(event) => patchPlan({ name: event.target.value })} /></div>
+        <div className="space-y-2"><Label htmlFor="plan-goal">{tr("goal")}</Label><Input id="plan-goal" className="min-h-12" value={draft.goal ?? ""} onChange={(event) => patchPlan({ goal: event.target.value || null })} placeholder={tr("goalPlaceholder")} /></div>
         <div className="space-y-2"><Label htmlFor="plan-weeks">{tr("programDuration")}</Label><Input id="plan-weeks" type="number" min={1} max={104} value={draft.program_duration_weeks ?? ""} onChange={(event) => patchPlan({ program_duration_weeks: event.target.value ? Number(event.target.value) : null })} /><p className="text-xs text-muted-foreground">{tr("weeks")}</p></div>
-        <div className="space-y-2 md:col-span-3"><Label htmlFor="plan-description">{tr("description")}</Label><textarea id="plan-description" className="min-h-20 w-full resize-y rounded-[14px] border bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={draft.description ?? ""} onChange={(event) => patchPlan({ description: event.target.value || null })} /></div>
+        <div className="space-y-2 md:col-span-2"><Label htmlFor="plan-description">{tr("description")}</Label><textarea id="plan-description" className="min-h-28 w-full resize-y rounded-[14px] border bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={draft.description ?? ""} onChange={(event) => patchPlan({ description: event.target.value || null })} /></div>
       </CardContent></Card>
 
-      <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
+      <div className="grid gap-5 lg:grid-cols-[248px_minmax(0,1fr)] lg:items-start">
         <section className="space-y-3 lg:sticky lg:top-6" aria-labelledby="editor-days-heading">
           <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 id="editor-days-heading" className="text-xl font-semibold">{tr("trainingDaysHeading")}</h2><p className="text-sm text-muted-foreground">{tr("selectDayToEdit")}</p></div><Button variant="outline" className="min-h-11" onClick={addDay} disabled={draft.days.length >= 7}><Plus className="h-4 w-4" /> {tr("addDay")}</Button></div>
-          <div className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible" role="tablist" aria-label={tr("workoutDays")} data-editor-day-tabs>
+          <div className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible" aria-label={tr("workoutDays")} data-editor-day-tabs>
             {draft.days.map((day, index) => {
               const selected = day.clientKey === selectedDay?.clientKey;
               const incomplete = !day.exercises.length;
-              return <div key={day.clientKey} className={`flex min-w-48 items-center gap-1 rounded-2xl border p-1 lg:min-w-0 ${selected ? "border-primary bg-primary/10 ring-1 ring-primary/20" : incomplete ? "border-warning/50 bg-warning/5" : "border-border/70 bg-card"}`}><button type="button" role="tab" aria-selected={selected} className="min-h-14 min-w-0 flex-1 rounded-xl px-3 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setSelectedDayKey(day.clientKey)}><span className="block truncate font-semibold">{day.day_name}</span><span className={`mt-1 block text-xs font-medium ${incomplete ? "text-warning-foreground" : "text-muted-foreground"}`}>{incomplete ? tr("noExercisesAdded") : tr("exercises", { count: day.exercises.length })}</span></button><Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={tr("moveUp", { name: day.day_name })} title={tr("moveUp", { name: day.day_name })} onClick={() => moveDay(index, -1)} disabled={index === 0}><ArrowUp className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={tr("moveDown", { name: day.day_name })} title={tr("moveDown", { name: day.day_name })} onClick={() => moveDay(index, 1)} disabled={index === draft.days.length - 1}><ArrowDown className="h-4 w-4" /></Button></div>;
+              return <div key={day.clientKey} className={`flex min-w-[220px] items-center gap-1 rounded-2xl border p-1 lg:min-w-0 ${selected ? "border-primary bg-primary/10 ring-1 ring-primary/20" : validationAttempted && incomplete ? "border-warning/50 bg-warning/5" : "border-border/70 bg-card"}`}><GripVertical className="ms-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /><button type="button" aria-pressed={selected} className="min-h-[68px] min-w-0 flex-1 rounded-xl px-2 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setSelectedDayKey(day.clientKey)}><span className="block truncate font-semibold">{day.day_name}</span><span className={`mt-1 block text-xs font-medium ${validationAttempted && incomplete ? "text-warning-foreground" : "text-muted-foreground"}`}>{incomplete ? tr("noExercisesAdded") : tr("exercises", { count: day.exercises.length })}</span></button><ActionMenu label={tr("moreActions")} triggerVariant="ghost" triggerClassName="min-h-11 min-w-11 px-2" visibleLabel=""><ActionMenuItem disabled={index === 0} onSelect={() => moveDay(index, -1)}><ArrowUp className="me-2 inline h-4 w-4" />{tr("moveUp", { name: day.day_name })}</ActionMenuItem><ActionMenuItem disabled={index === draft.days.length - 1} onSelect={() => moveDay(index, 1)}><ArrowDown className="me-2 inline h-4 w-4" />{tr("moveDown", { name: day.day_name })}</ActionMenuItem><ActionMenuItem destructive disabled={draft.days.length <= 1} onSelect={() => removeDay(index)}><Trash2 className="me-2 inline h-4 w-4" />{tr("removeDay")}</ActionMenuItem></ActionMenu></div>;
             })}
           </div>
         </section>
@@ -289,25 +297,23 @@ export function WorkoutPlanEditor() {
             <div className="space-y-2"><Label htmlFor="day-weekday">{tr("weekday")}</Label><Select id="day-weekday" value={selectedDay.weekday ?? ""} onChange={(value) => patchDay(selectedDayIndex, { weekday: (value || null) as Weekday | null })} placeholder={tr("unscheduled")} options={weekdayOptions} /></div>
             <Button variant="ghost" className="min-h-11 text-destructive" onClick={() => removeDay(selectedDayIndex)} disabled={draft.days.length <= 1}><Trash2 className="h-4 w-4" /> {tr("removeDay")}</Button>
             <div className="space-y-2 lg:col-span-3"><Label htmlFor="day-notes">{tr("dayNotes")}</Label><Input id="day-notes" value={selectedDay.notes ?? ""} onChange={(event) => patchDay(selectedDayIndex, { notes: event.target.value || null })} placeholder={tr("dayNotesPlaceholder")} /></div>
-            {!selectedDay.exercises.length ? <p className="text-sm font-medium text-destructive lg:col-span-3">{selectedDay.day_name}: {tr("addExercisesToContinue")}</p> : null}
+             {validationAttempted && !selectedDay.exercises.length ? <p className="text-sm font-medium text-destructive lg:col-span-3">{selectedDay.day_name}: {tr("addExercisesToContinue")}</p> : null}
           </div>
 
           <section className="space-y-3" aria-labelledby="editor-selected-exercises"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 id="editor-selected-exercises" className="text-lg font-semibold">{tr("selectedExercises")}</h3><p className="text-sm text-muted-foreground">{tr("chooseThenEdit")}</p></div><div className="flex items-center gap-2"><Badge variant="outline">{selectedDay.exercises.length}</Badge><Button variant="outline" className="min-h-11" onClick={() => setPickerOpen(true)}><Plus className="h-4 w-4" /> {tr("addExercises")}</Button></div></div>
             <div className="space-y-3">
               {selectedDay.exercises.map((exercise, exerciseIndex) => (
                 <article key={exercise.clientKey} className="rounded-2xl border border-border/70 bg-card p-4" data-exercise-prescription>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <div className="space-y-2 sm:col-span-2 lg:col-span-1"><Label htmlFor={`exercise-name-${exercise.clientKey}`}>{tr("exerciseNumber", { count: exerciseIndex + 1 })}</Label><Input id={`exercise-name-${exercise.clientKey}`} value={exercise.exercise_name} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { exercise_name: event.target.value })} placeholder={tr("exerciseName")} /></div>
-                    <div className="space-y-2"><Label htmlFor={`muscle-${exercise.clientKey}`}>{tr("target")}</Label><Input id={`muscle-${exercise.clientKey}`} value={exercise.target_muscle ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { target_muscle: event.target.value || null })} placeholder={tr("targetPlaceholder")} /></div>
-                    <div className="space-y-2"><Label htmlFor={`equipment-${exercise.clientKey}`}>{tr("equipment")}</Label><Input id={`equipment-${exercise.clientKey}`} value={exercise.equipment ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { equipment: event.target.value || null })} /></div>
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    <div className="space-y-2"><Label htmlFor={`exercise-name-${exercise.clientKey}`}>{tr("exerciseNumber", { count: exerciseIndex + 1 })}</Label><Input id={`exercise-name-${exercise.clientKey}`} value={exercise.exercise_name} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { exercise_name: event.target.value })} placeholder={tr("exerciseName")} /><p className="truncate text-xs text-muted-foreground">{exercise.target_muscle || tr("general")} · {exercise.equipment || tr("noEquipment")}</p></div>
+                    <ActionMenu label={`${tr("moreActions")}: ${exercise.exercise_name || tr("thisExercise")}`} visibleLabel={tr("moreActions")} triggerVariant="ghost"><ActionMenuItem disabled={exerciseIndex === 0} onSelect={() => moveExercise(selectedDayIndex, exerciseIndex, -1)}><ArrowUp className="me-2 inline h-4 w-4" />{tr("moveUp", { name: exercise.exercise_name || tr("thisExercise") })}</ActionMenuItem><ActionMenuItem disabled={exerciseIndex === selectedDay.exercises.length - 1} onSelect={() => moveExercise(selectedDayIndex, exerciseIndex, 1)}><ArrowDown className="me-2 inline h-4 w-4" />{tr("moveDown", { name: exercise.exercise_name || tr("thisExercise") })}</ActionMenuItem><ActionMenuItem destructive onSelect={() => removeExercise(selectedDayIndex, exerciseIndex)}><Trash2 className="me-2 inline h-4 w-4" />{tr("removeItem", { name: exercise.exercise_name || tr("thisExercise") })}</ActionMenuItem></ActionMenu>
                   </div>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-3 xl:grid-cols-[90px_120px_120px_minmax(180px,1fr)_auto] xl:items-end">
+                  <div className="mt-3 grid grid-cols-3 gap-3 xl:max-w-md">
                     <div className="space-y-2"><Label htmlFor={`sets-${exercise.clientKey}`}>{tr("sets")}</Label><Input id={`sets-${exercise.clientKey}`} type="number" min={1} value={exercise.sets ?? 3} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { sets: Number(event.target.value) || 0 })} /></div>
                     <div className="space-y-2"><Label htmlFor={`reps-${exercise.clientKey}`}>{tr("reps")}</Label><Input id={`reps-${exercise.clientKey}`} value={exercise.reps ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { reps: event.target.value || null })} /></div>
                     <div className="space-y-2"><Label htmlFor={`rest-${exercise.clientKey}`}>{tr("restSeconds")}</Label><Input id={`rest-${exercise.clientKey}`} type="number" min={0} value={exercise.rest_seconds ?? 75} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { rest_seconds: Number(event.target.value) || 0 })} /></div>
-                    <div className="space-y-2 sm:col-span-3 xl:col-span-1"><Label htmlFor={`notes-${exercise.clientKey}`}>{tr("notes")}</Label><Input id={`notes-${exercise.clientKey}`} value={userFacingExerciseNote(exercise.notes)} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { notes: mergeUserFacingExerciseNote(exercise.notes, event.target.value) })} /></div>
-                    <div className="flex gap-1 sm:col-span-3 xl:col-span-1 xl:justify-end"><Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={tr("moveUp", { name: exercise.exercise_name || tr("thisExercise") })} title={tr("moveUp", { name: exercise.exercise_name || tr("thisExercise") })} onClick={() => moveExercise(selectedDayIndex, exerciseIndex, -1)} disabled={exerciseIndex === 0}><ArrowUp className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={tr("moveDown", { name: exercise.exercise_name || tr("thisExercise") })} title={tr("moveDown", { name: exercise.exercise_name || tr("thisExercise") })} onClick={() => moveExercise(selectedDayIndex, exerciseIndex, 1)} disabled={exerciseIndex === selectedDay.exercises.length - 1}><ArrowDown className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="min-h-11 min-w-11 text-destructive" aria-label={tr("removeItem", { name: exercise.exercise_name || tr("thisExercise") })} title={tr("removeItem", { name: exercise.exercise_name || tr("thisExercise") })} onClick={() => removeExercise(selectedDayIndex, exerciseIndex)}><Trash2 className="h-4 w-4" /></Button></div>
                   </div>
+                  <details className="mt-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-2"><summary className="min-h-11 cursor-pointer content-center font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{tr("advancedDetails")}</summary><div className="mt-3 grid gap-3 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor={`muscle-${exercise.clientKey}`}>{tr("target")}</Label><Input id={`muscle-${exercise.clientKey}`} value={exercise.target_muscle ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { target_muscle: event.target.value || null })} placeholder={tr("targetPlaceholder")} /></div><div className="space-y-2"><Label htmlFor={`equipment-${exercise.clientKey}`}>{tr("equipment")}</Label><Input id={`equipment-${exercise.clientKey}`} value={exercise.equipment ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { equipment: event.target.value || null })} /></div><div className="space-y-2 sm:col-span-2"><Label htmlFor={`notes-${exercise.clientKey}`}>{tr("notes")}</Label><Input id={`notes-${exercise.clientKey}`} value={userFacingExerciseNote(exercise.notes)} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { notes: mergeUserFacingExerciseNote(exercise.notes, event.target.value) })} /></div></div></details>
                 </article>
               ))}
             </div>
@@ -316,15 +322,16 @@ export function WorkoutPlanEditor() {
         </CardContent></Card> : null}
       </div>
 
-      <div className="sticky bottom-[var(--train-sticky-footer-bottom)] z-30 border-t bg-background/95 px-3 py-3 backdrop-blur sm:rounded-2xl sm:border lg:bottom-[var(--desktop-train-sticky-footer-bottom)]" data-train-sticky-footer>
+      {(validationAttempted && validationError) || saveError ? <div role="alert" tabIndex={-1} className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm font-medium text-destructive">{validationError || saveError}</div> : null}
+      <TrainStickyFooter>
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
-          <div className="text-sm"><p className="font-semibold">{saveState === "saving" ? tr("saving") : saveState === "saved" ? tr("saved") : isDirty ? tr("unsavedChanges") : tr("noUnsavedChanges")}</p>{validationError ? <p className="text-destructive">{validationError}</p> : saveError ? <p className="text-destructive">{saveError}</p> : <p className="text-muted-foreground">{tr("atomicSaveNotice")}</p>}</div>
-          <div className="flex gap-2"><Button variant="outline" className="min-h-11" onClick={cancel}>{tr("cancel")}</Button><Button className="min-h-11" onClick={() => void save()} disabled={!isDirty || Boolean(validationError) || saveState === "saving"}>{saveState === "saved" ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}{saveState === "saving" ? tr("saving") : tr("saveChanges")}</Button></div>
+          <div className="text-sm"><p className="font-semibold">{validationAttempted && validationError ? tr("validationIssue") : saveState === "saving" ? tr("saving") : saveState === "saved" ? tr("saved") : isDirty ? tr("unsavedChanges") : tr("noUnsavedChanges")}</p><p className="text-muted-foreground">{tr("atomicSaveNotice")}</p></div>
+          <Button className="min-h-[52px] w-full sm:w-auto" onClick={() => void save()} disabled={!isDirty || saveState === "saving"}>{saveState === "saved" ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}{saveState === "saving" ? tr("saving") : tr("saveChanges")}</Button>
         </div>
-      </div>
-      {selectedDay && selectedDayIndex >= 0 ? <ExercisePickerDialog open={pickerOpen} onOpenChange={setPickerOpen} dayName={selectedDay.day_name} existingKeys={selectedDay.exercises.map((exercise) => `${exercise.source_workout_id || exercise.workout_id || exercise.id}-${exercise.exercise_name}-${exercise.target_muscle || ""}`)} onAdd={(workouts) => addLibraryExercises(selectedDayIndex, workouts)} /> : null}
+      </TrainStickyFooter>
+      {selectedDay && selectedDayIndex >= 0 ? <ExercisePickerDialog open={pickerOpen} onOpenChange={setPickerOpen} dayName={selectedDay.day_name} existingKeys={selectedDay.exercises.map((exercise) => exerciseKey({ id: exercise.source_workout_id || exercise.workout_id || "", name: exercise.exercise_name, target_muscle: exercise.target_muscle || "", catalog_slug: null }))} onAdd={(workouts) => addLibraryExercises(selectedDayIndex, workouts)} /> : null}
       {dialog}
       {unsavedDialog}
-    </div>
+    </TrainPageContainer>
   );
 }

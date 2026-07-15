@@ -444,7 +444,9 @@ function exerciseInsertRow(dayId: string, workout: Workout, index: number) {
     exercise_name: workout.name,
     category: workout.category || blockType,
     block_type: blockType,
-    target_muscle: workout.muscle_category || workout.target_muscle || null,
+    // Canonical catalog muscle_category is a body region; preserve the actual
+    // primary muscle when writing the immutable plan snapshot.
+    target_muscle: workout.target_muscle || workout.muscle_category || null,
     equipment: workout.equipment_required || workout.equipment || null,
     sets: workout.sets ?? null,
     reps: workout.reps ?? null,

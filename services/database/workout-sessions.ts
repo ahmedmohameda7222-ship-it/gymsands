@@ -122,6 +122,37 @@ function normalizeWorkoutSession(session: WorkoutSession): WorkoutSession {
   return session;
 }
 
+async function attachLegacyCatalogIdentity(sessions: WorkoutSessionSummary[]) {
+  const planExerciseIds = Array.from(new Set(sessions.flatMap((session) => session.exercise_logs ?? []).map((log) => log.plan_exercise_id).filter((id): id is string => Boolean(id))));
+  if (!planExerciseIds.length) return sessions;
+
+  let { data, error } = await supabase!
+    .from("user_workout_plan_exercises")
+    .select("id,source_workout_id,workout_id")
+    .in("id", planExerciseIds);
+  if (error && isMissingTemplateSchemaError(error)) {
+    const compatible = await supabase!
+      .from("user_workout_plan_exercises")
+      .select("id,workout_id")
+      .in("id", planExerciseIds);
+    data = compatible.data as typeof data;
+    error = compatible.error;
+  }
+  if (error) {
+    console.warn("Plaivra could not attach stable exercise identities to workout history.", error.message);
+    return sessions;
+  }
+
+  const sourceByPlanExercise = new Map((data ?? []).map((row) => [row.id, row.source_workout_id ?? row.workout_id ?? null]));
+  return sessions.map((session) => ({
+    ...session,
+    exercise_logs: (session.exercise_logs ?? []).map((log) => ({
+      ...log,
+      source_workout_id: log.plan_exercise_id ? sourceByPlanExercise.get(log.plan_exercise_id) ?? null : null
+    }))
+  }));
+}
+
 function scheduledSessionDate(session: UserWorkoutSession) {
   return session.completed_at || session.skipped_at || session.started_at || `${session.scheduled_date}T00:00:00.000Z`;
 }
@@ -211,10 +242,27 @@ function sortExerciseLogsByWorkoutOrder(logs: ExerciseLog[]) {
   });
 }
 
-export async function startWorkoutSession(userId: string, workout: Workout) {
+async function persistedLegacyWorkoutId(workoutId: string) {
+  if (!isUuid(workoutId)) return null;
+  const { data, error } = await supabase!
+    .from("workouts")
+    .select("id")
+    .eq("id", workoutId)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.warn("Plaivra could not verify the local workout catalog identity.", error.message);
+    return null;
+  }
+  return data?.id ?? null;
+}
+
+export async function startWorkoutSession(userId: string, workout: Workout, resolvedWorkoutId?: string | null) {
+  requireWorkoutPersistence(userId, "Workout session");
+  const workoutId = resolvedWorkoutId === undefined ? await persistedLegacyWorkoutId(workout.id) : resolvedWorkoutId;
   const payload = {
     user_id: userId,
-    workout_id: isUuid(workout.id) ? workout.id : null,
+    workout_id: workoutId,
     workout_category: workout.category || workout.target_muscle || "Workout",
     workout_name: workout.name,
     started_at: new Date().toISOString(),
@@ -223,7 +271,6 @@ export async function startWorkoutSession(userId: string, workout: Workout) {
     notes: null,
     status: "started"
   };
-  requireWorkoutPersistence(userId, "Workout session");
   let { data, error } = await supabase!.from("workout_sessions").insert(payload).select("*").single();
   if (error && isSchemaCompatibilityError(error)) {
     const { workout_category: _category, ...compatiblePayload } = payload;
@@ -571,12 +618,26 @@ export async function getOpenWorkoutSession(userId: string, workoutId?: string |
   return data ? normalizeWorkoutSession(data as WorkoutSession) : null;
 }
 
-export async function getOpenWorkoutSessionWithStatus(userId: string, workoutId?: string | null): Promise<{ session: WorkoutSession | null; error?: string }> {
+export async function getOpenWorkoutSessionWithStatus(userId: string, workoutId?: string | null, candidateSessionId?: string | null): Promise<{ session: WorkoutSession | null; error?: string }> {
   if (env.useMockAuth && isMockAuthUserId(userId)) {
     const session = getMockTrainActivity().find((item) => item.status === "started" && (!workoutId || item.workout_id === workoutId)) ?? null;
     return { session };
   }
   if (!canUseUserData(userId)) return { session: null, error: "Active workout could not load because the user session is invalid." };
+  if (candidateSessionId && isUuid(candidateSessionId)) {
+    const candidate = await supabase!
+      .from("workout_sessions")
+      .select("*")
+      .eq("id", candidateSessionId)
+      .eq("user_id", userId)
+      .eq("status", "started")
+      .maybeSingle();
+    if (candidate.error) {
+      console.warn("Plaivra could not validate the active workout session.", candidate.error.message);
+      return { session: null, error: "Active workout could not load. Your current route was left unchanged." };
+    }
+    if (candidate.data) return { session: normalizeWorkoutSession(candidate.data as WorkoutSession) };
+  }
   let query = supabase!
     .from("workout_sessions")
     .select("*")
@@ -591,9 +652,31 @@ export async function getOpenWorkoutSessionWithStatus(userId: string, workoutId?
   return { session: data ? normalizeWorkoutSession(data as WorkoutSession) : null };
 }
 
-export async function getOrStartWorkoutSession(userId: string, workout: Workout) {
-  const open = await getOpenWorkoutSession(userId, workout.id);
-  return open ?? startWorkoutSession(userId, workout);
+export async function getOrStartWorkoutSession(userId: string, workout: Workout, candidateSessionId?: string | null) {
+  requireWorkoutPersistence(userId, "Workout session");
+  if (candidateSessionId && isUuid(candidateSessionId)) {
+    const candidate = await supabase!
+      .from("workout_sessions")
+      .select("*")
+      .eq("id", candidateSessionId)
+      .eq("user_id", userId)
+      .eq("status", "started")
+      .maybeSingle();
+    if (candidate.error) throw candidate.error;
+    if (candidate.data) return normalizeWorkoutSession(candidate.data as WorkoutSession);
+  }
+  const workoutId = await persistedLegacyWorkoutId(workout.id);
+  let query = supabase!
+    .from("workout_sessions")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "started");
+  query = workoutId
+    ? query.eq("workout_id", workoutId)
+    : query.is("workout_id", null).eq("workout_name", workout.name);
+  const { data, error } = await query.order("started_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) throw error;
+  return data ? normalizeWorkoutSession(data as WorkoutSession) : startWorkoutSession(userId, workout, workoutId);
 }
 
 export async function cancelWorkoutSession(sessionId: string) {
@@ -668,12 +751,13 @@ export async function getWorkoutHistoryDetailed(userId: string, limit = 100) {
     console.warn("Plaivra could not load workout history details.", error.message);
     return [];
   }
-  return ((data ?? []) as WorkoutSessionSummary[])
+  const normalized = ((data ?? []) as WorkoutSessionSummary[])
     .map((session) => ({
       ...normalizeWorkoutSession(session),
       exercise_logs: sortExerciseLogsByWorkoutOrder(session.exercise_logs ?? [])
     }))
     .filter((session) => session.status === "completed");
+  return attachLegacyCatalogIdentity(normalized);
 }
 
 export async function getWorkoutHistoryDetailedWithStatus(userId: string, limit = 100): Promise<WorkoutHistorySourceResult<WorkoutSessionSummary[]>> {
@@ -688,13 +772,24 @@ export async function getWorkoutHistoryDetailedWithStatus(userId: string, limit 
     };
   }
 
-  const { data, error } = await supabase!
+  let { data, error } = await supabase!
     .from("workout_sessions")
     .select("*, exercise_logs(*)")
     .eq("user_id", userId)
-    .eq("status", "completed")
+    .in("status", ["completed", "skipped"])
     .order("started_at", { ascending: false })
     .limit(limit);
+  if (error && isSchemaCompatibilityError(error)) {
+    const compatible = await supabase!
+      .from("workout_sessions")
+      .select("*, exercise_logs(*)")
+      .eq("user_id", userId)
+      .eq("status", "completed")
+      .order("started_at", { ascending: false })
+      .limit(limit);
+    data = compatible.data;
+    error = compatible.error;
+  }
   if (error) {
     console.warn("Plaivra could not load workout history details.", error.message);
     return {
@@ -707,13 +802,14 @@ export async function getWorkoutHistoryDetailedWithStatus(userId: string, limit 
     };
   }
 
-  return {
-    data: ((data ?? []) as WorkoutSessionSummary[])
+  const normalized = ((data ?? []) as WorkoutSessionSummary[])
       .map((session) => ({
         ...normalizeWorkoutSession(session),
         exercise_logs: sortExerciseLogsByWorkoutOrder(session.exercise_logs ?? [])
       }))
-      .filter((session) => session.status === "completed"),
+      .filter((session) => session.status === "completed" || session.status === "skipped");
+  return {
+    data: await attachLegacyCatalogIdentity(normalized),
     status: { source: "legacy", state: "loaded" }
   };
 }
@@ -761,8 +857,8 @@ export async function getScheduledWorkoutHistory(userId: string, limit = 100) {
       "id,user_id,user_workout_plan_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes,user_exercise_logs(id,user_workout_session_id,plan_exercise_id,exercise_order,exercise_name,planned_sets,planned_reps,weight_kg,reps,notes,completed,completed_at,created_at,updated_at)"
     )
     .eq("user_id", userId)
-    .eq("status", "completed")
-    .order("completed_at", { ascending: false })
+    .in("status", ["completed", "skipped"])
+    .order("scheduled_date", { ascending: false })
     .limit(limit);
 
   if (error) {
@@ -791,8 +887,8 @@ export async function getScheduledWorkoutHistoryWithStatus(userId: string, limit
       "id,user_id,user_workout_plan_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,started_at,completed_at,skipped_at,duration_minutes,notes,user_exercise_logs(id,user_workout_session_id,plan_exercise_id,exercise_order,exercise_name,planned_sets,planned_reps,weight_kg,reps,notes,completed,completed_at,created_at,updated_at)"
     )
     .eq("user_id", userId)
-    .eq("status", "completed")
-    .order("completed_at", { ascending: false })
+    .in("status", ["completed", "skipped"])
+    .order("scheduled_date", { ascending: false })
     .limit(limit);
 
   if (error) {

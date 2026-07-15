@@ -226,6 +226,18 @@ export type Workout = {
   exercise_url?: string | null;
   video_url?: string | null;
   custom_video_url?: string | null;
+  catalog_slug?: string | null;
+  catalog_version?: string | null;
+  catalog_source?: "external" | "legacy" | "custom" | null;
+  catalog_degraded?: boolean;
+  short_description?: string | null;
+  movement_pattern?: string | null;
+  instruction_steps?: Array<{ order: number; text: string }>;
+  metric_schema?: {
+    slug?: string;
+    name?: string;
+    fields?: Array<Record<string, unknown>>;
+  } | null;
   is_global: boolean;
 };
 
@@ -284,6 +296,7 @@ export type ExerciseLog = {
   id: string;
   workout_session_id: string;
   plan_exercise_id: string | null;
+  source_workout_id?: string | null;
   exercise_order?: number | null;
   exercise_name: string;
   exercise_category?: string | null;

@@ -53,6 +53,33 @@ test("validates Stripe configuration only when checkout is enabled", () => {
   assert.ok(result.errors.some((error) => error.startsWith("STRIPE_WEBHOOK_SECRET:")));
 });
 
+test("validates Activity Catalog configuration only for external modes", () => {
+  assert.deepEqual(validateProductionEnvironment({ ...valid, PLAIVRA_ACTIVITY_CATALOG_MODE: "legacy" }).errors, []);
+  const missing = validateProductionEnvironment({ ...valid, PLAIVRA_ACTIVITY_CATALOG_MODE: "external" });
+  assert.ok(missing.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_BASE_URL:")));
+  assert.ok(missing.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_API_KEY:")));
+  assert.deepEqual(validateProductionEnvironment({
+    ...valid,
+    PLAIVRA_ACTIVITY_CATALOG_MODE: "external_with_legacy_fallback",
+    PLAIVRA_ACTIVITY_CATALOG_BASE_URL: "https://catalog-api.plaivra.com",
+    PLAIVRA_ACTIVITY_CATALOG_API_KEY: "server-only-catalog-key-with-enough-length"
+  }).errors, []);
+  const unsafe = validateProductionEnvironment({
+    ...valid,
+    PLAIVRA_ACTIVITY_CATALOG_MODE: "external",
+    PLAIVRA_ACTIVITY_CATALOG_BASE_URL: "http://localhost:3000",
+    PLAIVRA_ACTIVITY_CATALOG_API_KEY: "server-only-catalog-key-with-enough-length"
+  });
+  assert.ok(unsafe.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_BASE_URL:")));
+  const nonCanonical = validateProductionEnvironment({
+    ...valid,
+    PLAIVRA_ACTIVITY_CATALOG_MODE: "external",
+    PLAIVRA_ACTIVITY_CATALOG_BASE_URL: "https://catalog-preview.example.com",
+    PLAIVRA_ACTIVITY_CATALOG_API_KEY: "server-only-catalog-key-with-enough-length"
+  });
+  assert.ok(nonCanonical.errors.some((error) => error.startsWith("PLAIVRA_ACTIVITY_CATALOG_BASE_URL:")));
+});
+
 test("validates privacy execution key and retention periods conditionally", () => {
   const invalid = validateProductionEnvironment({ ...valid, PRIVACY_RETENTION_EXECUTION_ENABLED: "true" });
   assert.ok(invalid.errors.some((error) => error.startsWith("PRIVACY_NOTIFICATION_ENCRYPTION_KEY:")));

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, Dumbbell, Filter, History, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { CardSkeleton, EmptyState, ErrorState, SkeletonLine } from "@/components
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError } from "@/lib/error-formatting";
+import { useTrainTranslation } from "@/lib/i18n/train";
 import { getScheduledWorkoutHistoryWithStatus, getWorkoutHistoryDetailedWithStatus } from "@/services/database/workout-sessions";
 import { cn } from "@/lib/utils";
 import type { ExerciseLog, UserWorkoutSession, WorkoutSessionSummary } from "@/types";
@@ -35,6 +37,9 @@ type HistoryItem = {
   durationMinutes: number;
   notes: string | null;
   exercises: HistoryExercise[];
+  status: "completed" | "skipped";
+  planId: string | null;
+  planDayId: string | null;
 };
 
 function groupLogs(logs: ExerciseLog[]) {
@@ -86,6 +91,9 @@ function normalizeLegacyHistory(session: WorkoutSessionSummary): HistoryItem {
     date: session.completed_at || session.started_at,
     durationMinutes: session.duration_minutes ?? 0,
     notes: session.notes,
+    status: session.status === "skipped" ? "skipped" : "completed",
+    planId: session.plan_id ?? null,
+    planDayId: session.plan_day_id ?? null,
     exercises: groups.map((logsForExercise, index) => {
       const first = logsForExercise[0];
       return {
@@ -105,9 +113,12 @@ function normalizeScheduledHistory(session: UserWorkoutSession): HistoryItem {
     id: session.id,
     title: session.day_title,
     category: `Week ${session.week_index}`,
-    date: session.completed_at || session.started_at || `${session.scheduled_date}T00:00:00`,
+    date: session.completed_at || session.skipped_at || session.started_at || `${session.scheduled_date}T00:00:00`,
     durationMinutes: session.duration_minutes ?? 0,
     notes: session.notes,
+    status: session.status === "skipped" ? "skipped" : "completed",
+    planId: session.user_workout_plan_id,
+    planDayId: session.plan_day_id,
     exercises: session.logs.map((log) => {
       const setCount = parseSetCount(log.planned_sets);
       const setDetails = Array.from({ length: setCount }, (_, index) =>
@@ -148,6 +159,7 @@ export function WorkoutHistory() {
   const { user } = useAuth();
   const userId = user?.id;
   const { toast } = useToast();
+  const { dir, locale, tr } = useTrainTranslation();
   const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
   const [scheduledHistory, setScheduledHistory] = useState<UserWorkoutSession[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -179,15 +191,15 @@ export function WorkoutHistory() {
         setLoadError("Workout history could not load. Retry before treating this as an empty history.");
       }
     } catch (error) {
-      const message = userSafeError(error, "Workout history could not load. Please retry.");
+      const message = userSafeError(error, tr("planLoadFailedDescription"));
       setHistory([]);
       setScheduledHistory([]);
       setLoadError(message);
-      toast({ title: "Could not load workout history", description: message });
+      toast({ title: tr("workoutHistory"), description: message });
     } finally {
       setIsLoading(false);
     }
-  }, [toast, userId]);
+  }, [toast, tr, userId]);
 
   useEffect(() => {
     void loadHistory();
@@ -208,14 +220,14 @@ export function WorkoutHistory() {
   const totalHistoryCount = history.length + scheduledHistory.length;
   const stats = useMemo(() => computeStats([...history.map(normalizeLegacyHistory), ...scheduledHistory.map(normalizeScheduledHistory)]), [history, scheduledHistory]);
   const isFiltered = filterMode !== "all";
-  const activeFilterLabel = filterMode === "week" ? `Week ${weekFilter}` : filterMode === "month" ? monthFilter : "All completed";
+  const activeFilterLabel = filterMode === "week" ? `${tr("week")} ${weekFilter}` : filterMode === "month" ? monthFilter : tr("all");
 
   function resetDateFilter() {
     setFilterMode("all");
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" dir={dir}>
       {isLoading ? (
         <div className="grid grid-cols-2 gap-3">
           <StatSkeleton />
@@ -223,13 +235,13 @@ export function WorkoutHistory() {
         </div>
       ) : stats ? (
         <div className="grid grid-cols-2 gap-3">
-          <div className="glass-card p-3 shadow-soft">
-            <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">This week</p>
-            <p className="mt-1 text-xl font-bold">{stats.thisWeek} <span className="text-sm font-normal text-muted-foreground">workouts</span></p>
+          <div className="rounded-2xl border border-border/70 bg-card p-3">
+            <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{tr("thisWeek")}</p>
+            <p className="mt-1 text-xl font-bold">{stats.thisWeek} <span className="text-sm font-normal text-muted-foreground">{tr("workouts")}</span></p>
           </div>
-          <div className="glass-card p-3 shadow-soft">
-            <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">This month</p>
-            <p className="mt-1 text-xl font-bold">{stats.thisMonth} <span className="text-sm font-normal text-muted-foreground">workouts</span></p>
+          <div className="rounded-2xl border border-border/70 bg-card p-3">
+            <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{tr("thisMonth")}</p>
+            <p className="mt-1 text-xl font-bold">{stats.thisMonth} <span className="text-sm font-normal text-muted-foreground">{tr("workouts")}</span></p>
           </div>
         </div>
       ) : null}
@@ -252,8 +264,8 @@ export function WorkoutHistory() {
 
       <StatusNotice
         tone={loadError ? "warning" : "default"}
-        title={loadError ? "History load failed" : isLoading ? "Loading completed workouts" : `${filteredHistory.length} completed workouts shown`}
-        description={`Showing completed workouts only. Skipped workouts are tracked in activity, but this history view focuses on completed sessions. Active filter: ${activeFilterLabel}.`}
+        title={loadError ? "History load failed" : isLoading ? tr("loadingLabel") : `${filteredHistory.length} ${tr("workouts")}`}
+        description={`${tr("completed")} / ${tr("skippedToday")} · ${activeFilterLabel}`}
         badges={[isFiltered ? "Filtered" : "All", loadError ? "Failed" : sourceWarnings.length ? "Partial" : "Loaded"]}
       />
 
@@ -262,9 +274,9 @@ export function WorkoutHistory() {
           <div>
             <CardTitle className="flex items-center gap-2">
               <History className="h-5 w-5 text-primary" />
-              Workout history
+              {tr("workoutHistory")}
             </CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">Completed workouts with date, category, sets, weight, reps, and notes.</p>
+            <p className="mt-1 text-sm text-muted-foreground">{tr("workoutHistoryDescription")}</p>
           </div>
 
           <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[auto_180px_180px_1fr]">
@@ -277,25 +289,25 @@ export function WorkoutHistory() {
                   onClick={() => setFilterMode(mode)}
                   className="min-h-12 capitalize"
                 >
-                  {mode}
+                  {mode === "all" ? tr("all") : mode === "week" ? tr("week") : tr("month")}
                 </Button>
               ))}
               <Button variant="outline" className="min-h-12 lg:hidden" onClick={() => setShowFilterDialog(true)}>
-                <Filter className="h-4 w-4" /> Date
+                <Filter className="h-4 w-4" /> {tr("date")}
               </Button>
             </div>
             <div className="hidden lg:block">
-              <Input className="h-12" type="week" value={weekFilter} onChange={(event) => { setWeekFilter(event.target.value); setFilterMode("week"); }} aria-label="Filter workout history by week" />
+              <Input className="h-12" type="week" value={weekFilter} onChange={(event) => { setWeekFilter(event.target.value); setFilterMode("week"); }} aria-label={tr("filterWorkoutHistoryWeek")} />
             </div>
             <div className="hidden lg:block">
-              <Input className="h-12" type="month" value={monthFilter} onChange={(event) => { setMonthFilter(event.target.value); setFilterMode("month"); }} aria-label="Filter workout history by month" />
+              <Input className="h-12" type="month" value={monthFilter} onChange={(event) => { setMonthFilter(event.target.value); setFilterMode("month"); }} aria-label={tr("filterWorkoutHistoryMonth")} />
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <CalendarDays className="h-4 w-4" />
               {filteredHistory.length} of {totalHistoryCount} workouts
               {isFiltered ? (
                 <Button type="button" variant="ghost" className="min-h-12" onClick={resetDateFilter}>
-                  <RotateCcw className="h-4 w-4" /> Reset date filter
+                  <RotateCcw className="h-4 w-4" /> {tr("resetDateFilter")}
                 </Button>
               ) : null}
             </div>
@@ -305,9 +317,9 @@ export function WorkoutHistory() {
           {isLoading ? <CardSkeleton rows={3} /> : null}
           {!isLoading && !loadError && !totalHistoryCount ? (
             <EmptyState
-              title="No completed workouts yet"
-              description="Start a workout session and log your sets to see your history here."
-              actionLabel="Start a workout"
+              title={tr("noCompletedWorkouts")}
+              description={tr("noCompletedWorkoutsDescription")}
+              actionLabel={tr("startAWorkout")}
               actionHref="/my-workout/plans"
             />
           ) : null}
@@ -329,13 +341,14 @@ export function WorkoutHistory() {
                   <div className="min-w-0">
                     <p className="font-semibold text-foreground">{session.title}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {sessionDate.toLocaleDateString()} at {sessionDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {sessionDate.toLocaleDateString(locale)} · {sessionDate.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Badge>{session.category}</Badge>
                     <Badge variant="outline">{session.durationMinutes} min</Badge>
-                    <Badge variant="success">Completed</Badge>
+                    <Badge variant={session.status === "skipped" ? "warning" : "success"}>{session.status === "skipped" ? tr("skippedToday") : tr("completed")}</Badge>
+                    {session.planId ? <Button asChild variant="ghost" className="min-h-11 px-2"><Link href={`/my-workout/plans/${session.planId}${session.planDayId ? `?day=${encodeURIComponent(session.planDayId)}` : ""}`}>{tr("viewPlan")}</Link></Button> : null}
                   </div>
                 </div>
 
@@ -344,7 +357,7 @@ export function WorkoutHistory() {
                     <span className="flex min-w-0 flex-col gap-1 py-2 text-muted-foreground sm:flex-row sm:items-center sm:gap-2">
                       <span className="flex items-center gap-2">
                         <Dumbbell className="h-4 w-4" />
-                        Session details
+                        {tr("sessionDetails")}
                       </span>
                       <span>
                         {session.exercises.length} exercises - {totalSets} sets - {session.durationMinutes} min
@@ -371,14 +384,14 @@ export function WorkoutHistory() {
                             </div>
                             <div className="text-sm leading-6">
                               <p className="font-medium text-foreground">{exercise.sets}</p>
-                              {exercise.notes ? <p className="mt-1 text-muted-foreground">Notes: {exercise.notes}</p> : <p className="mt-1 text-muted-foreground">No set notes.</p>}
+                              {exercise.notes ? <p className="mt-1 text-muted-foreground">{tr("notes")}: {exercise.notes}</p> : <p className="mt-1 text-muted-foreground">{tr("noneSaved")}</p>}
                             </div>
                           </div>
                         );
                       })}
                     </div>
                   ) : (
-                    <p className="solid-row mt-2 p-3 text-sm text-muted-foreground">No set details were logged for this workout.</p>
+                    <p className="solid-row mt-2 p-3 text-sm text-muted-foreground">{tr("noSetData")}</p>
                   )}
                   {session.notes ? <p className="mt-2 text-sm leading-6 text-muted-foreground">Session notes: {session.notes}</p> : null}
                 </details>
@@ -391,22 +404,22 @@ export function WorkoutHistory() {
       <Dialog open={showFilterDialog} onOpenChange={setShowFilterDialog}>
         <DialogContent className="max-h-[85dvh] overflow-y-auto pb-0">
           <DialogHeader>
-            <DialogTitle>Filter by date</DialogTitle>
-            <DialogDescription>Choose a week or month to narrow your history.</DialogDescription>
+            <DialogTitle>{tr("filterByDate")}</DialogTitle>
+            <DialogDescription>{tr("filterDateDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="mb-2 block text-sm font-medium">Week</Label>
-              <Input className="h-12" type="week" value={weekFilter} onChange={(event) => { setWeekFilter(event.target.value); setFilterMode("week"); }} aria-label="Filter workout history by week" />
+              <Label className="mb-2 block text-sm font-medium">{tr("week")}</Label>
+              <Input className="h-12" type="week" value={weekFilter} onChange={(event) => { setWeekFilter(event.target.value); setFilterMode("week"); }} aria-label={tr("filterWorkoutHistoryWeek")} />
             </div>
             <div>
-              <Label className="mb-2 block text-sm font-medium">Month</Label>
-              <Input className="h-12" type="month" value={monthFilter} onChange={(event) => { setMonthFilter(event.target.value); setFilterMode("month"); }} aria-label="Filter workout history by month" />
+              <Label className="mb-2 block text-sm font-medium">{tr("month")}</Label>
+              <Input className="h-12" type="month" value={monthFilter} onChange={(event) => { setMonthFilter(event.target.value); setFilterMode("month"); }} aria-label={tr("filterWorkoutHistoryMonth")} />
             </div>
             <div className="sticky bottom-0 -mx-4 flex gap-2 border-t bg-card/95 p-4 backdrop-blur sm:-mx-6 sm:px-6">
-              <Button onClick={() => setShowFilterDialog(false)} className="min-h-12 flex-1">Apply</Button>
+              <Button onClick={() => setShowFilterDialog(false)} className="min-h-12 flex-1">{tr("apply")}</Button>
               <Button variant="outline" className="min-h-12" onClick={() => { resetDateFilter(); setShowFilterDialog(false); }}>
-                <RotateCcw className="h-4 w-4" /> Reset
+                <RotateCcw className="h-4 w-4" /> {tr("reset")}
               </Button>
             </div>
           </div>

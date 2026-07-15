@@ -9,10 +9,12 @@ import { useToast } from "@/components/ui/toaster";
 import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
 import { getUserWorkoutPlanDay } from "@/services/database/workout-plans";
 import type { WorkoutPlanDaySession } from "@/types";
+import { useTrainTranslation } from "@/lib/i18n/train";
 
 export default function WorkoutDaySessionPage() {
   const params = useParams<{ dayId: string }>();
   const { toast } = useToast();
+  const { tr } = useTrainTranslation();
   const [day, setDay] = useState<WorkoutPlanDaySession | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorDetails, setLoadErrorDetails] = useState<string | undefined>(undefined);
@@ -27,10 +29,10 @@ export default function WorkoutDaySessionPage() {
       setDay(nextDay);
     } catch (error) {
       logRecoverableError("workout-day-session.load", error);
-      const message = userSafeError(error, "This workout day could not be loaded. Retry before logging set data.");
+      const message = userSafeError(error, tr("workoutDayOpenFailed"));
       setLoadError(message);
       setLoadErrorDetails(technicalErrorDetails(error));
-      toast({ title: "Could not start workout day", description: message });
+      toast({ title: tr("workoutDayUnavailable"), description: message });
     } finally {
       setIsLoading(false);
     }
@@ -45,10 +47,10 @@ export default function WorkoutDaySessionPage() {
   if (loadError) {
     return (
       <ErrorState
-        title="Workout day could not load"
+        title={tr("workoutDayUnavailable")}
         description={loadError}
         onRetry={loadDay}
-        fallbackLabel="Back to workout plans"
+        fallbackLabel={tr("backToTrain")}
         fallbackHref="/my-workout/plans"
         details={loadErrorDetails}
       />
@@ -57,9 +59,9 @@ export default function WorkoutDaySessionPage() {
   if (!day) {
     return (
       <EmptyState
-        title="Workout day not found"
-        description="This workout day was not found. Save your plan again, then start it from the workout calendar."
-        actionLabel="Back to workout plans"
+        title={tr("workoutDayNotFound")}
+        description={tr("workoutDayNotFound")}
+        actionLabel={tr("backToTrain")}
         actionHref="/my-workout/plans"
       />
     );

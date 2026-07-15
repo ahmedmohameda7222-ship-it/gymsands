@@ -12,11 +12,12 @@ import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
 import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
-import { clearActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
+import { clearActiveWorkoutState, isValidActiveWorkoutRoute, readActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
 import { completeWorkoutSession, getOrStartWorkoutSession, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
 import type { Workout, WorkoutSession, WorkoutSessionSummary } from "@/types";
 import { useConfirm, ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
+import { useTrainTranslation } from "@/lib/i18n/train";
 
 type SetLog = {
   reps: number;
@@ -40,6 +41,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const { celebrate } = useSuccessFeedback();
   const { dialog: confirmDialog, ask: confirmAsk } = useConfirm();
   const router = useRouter();
+  const { dir, tr } = useTrainTranslation();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [duration, setDuration] = useState(45);
   const [notes, setNotes] = useState("");
@@ -89,7 +91,14 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
 
   useEffect(() => {
     if (!user?.id) return;
-    getOrStartWorkoutSession(user.id, workout)
+    const sessionRoute = `/workouts/session/${workout.id}`;
+    const storedActiveWorkout = readActiveWorkoutState(user.id);
+    const candidateSessionId = storedActiveWorkout
+      && storedActiveWorkout.route === sessionRoute
+      && isValidActiveWorkoutRoute(storedActiveWorkout.route)
+      ? storedActiveWorkout.sessionId
+      : null;
+    getOrStartWorkoutSession(user.id, workout, candidateSessionId)
       .then((nextSession) => {
         setSession(nextSession);
         setSessionError(null);
@@ -100,7 +109,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         storeTimestamp(timerKey, nextStartedAt);
         writeActiveWorkoutState(user.id, {
           sessionId: nextSession.id,
-          route: `/workouts/session/${workout.id}`,
+          route: sessionRoute,
           label: workout.name,
           startedAtMs: nextStartedAt,
           elapsedSeconds: Math.max(0, Number(nextSession.duration_minutes ?? 0) * 60),
@@ -109,14 +118,14 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
       })
       .catch((error) => {
         logRecoverableError("workout-session.start", error);
-        const message = userSafeError(error, "This workout could not connect to your account. Please refresh and try again.");
+        const message = userSafeError(error, tr("sessionConnectFailed"));
         setSessionError(message);
         toast({
-          title: "Workout was not connected",
+          title: tr("sessionConnectFailed"),
           description: message
         });
       });
-  }, [timerKey, toast, user?.id, workout]);
+  }, [timerKey, toast, tr, user?.id, workout]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -144,13 +153,13 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         setTimerEndsAtMs(null);
         setIsTimerRunning(false);
         clearStoredValue(restTimerKey);
-        toast({ title: "Rest finished", description: "Next set ready." });
+        toast({ title: tr("restFinished"), description: tr("nextSetReady") });
       }
     };
     tick();
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
-  }, [restTimerKey, timerEndsAtMs, toast]);
+  }, [restTimerKey, timerEndsAtMs, toast, tr]);
 
   function startRestTimer(seconds: number) {
     const safeSeconds = Math.max(0, seconds);
@@ -173,11 +182,11 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   async function complete() {
     if (isSaving) return;
     if (!user?.id) {
-      toast({ title: "Sign in required", description: "Please sign in before saving workouts." });
+      toast({ title: tr("signInRequired"), description: tr("signInBeforeSaving") });
       return;
     }
     if (!session?.id) {
-      toast({ title: "Workout is not ready to save", description: sessionError ?? "Please refresh this workout and try again." });
+      toast({ title: tr("workoutNotReady"), description: sessionError ?? tr("refreshTryAgain") });
       return;
     }
     try {
@@ -203,14 +212,14 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
       clearActiveWorkoutState(user.id);
       clearStoredValue(timerKey);
       clearStoredValue(restTimerKey);
-      toast({ title: "Workout completed", description: `${workout.name} was saved to your Plaivra history.` });
+      toast({ title: tr("workoutCompleted"), description: tr("workoutSavedHistory", { name: workout.name }) });
       celebrate("Workout complete");
       router.push("/workout-history");
     } catch (error) {
       logRecoverableError("workout-session.complete", error);
       toast({
-        title: "Could not save workout",
-        description: userSafeError(error, "Your set entries are still on screen. Please try saving again.")
+        title: tr("couldNotSaveWorkout"),
+        description: userSafeError(error, tr("setEntriesPreserved"))
       });
     } finally {
       setIsSaving(false);
@@ -219,10 +228,10 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
 
   function askComplete() {
     confirmAsk({
-      title: "Finish workout?",
-      description: "This will save your workout to history.",
-      confirmLabel: "Finish",
-      cancelLabel: "Keep Training",
+      title: tr("finishWorkoutQuestion"),
+      description: tr("finishWorkoutDescription"),
+      confirmLabel: tr("finish"),
+      cancelLabel: tr("keepTraining"),
       onConfirm: () => complete()
     });
   }
@@ -236,7 +245,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   }
 
   return (
-    <div className="space-y-4 pb-24 lg:pb-0">
+    <div className="space-y-4 pb-24 lg:pb-0" dir={dir}>
       {confirmDialog}
       <Card>
         <CardHeader>
@@ -244,30 +253,30 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-md bg-muted/40 p-3 text-sm leading-6 text-muted-foreground">
-            <p>{workout.instructions || "Use controlled form and stop if the movement feels painful."}</p>
+            <p>{workout.instructions || tr("controlledForm")}</p>
             <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap">
               {guideUrl ? (
                 <Button asChild variant="outline" size="sm">
                   <a href={guideUrl} target="_blank" rel="noreferrer">
                     <ExternalLink className="h-4 w-4" />
-                    Open Exercise Guide
+                    {tr("openExerciseGuide")}
                   </a>
                 </Button>
               ) : (
                 <Button type="button" variant="outline" size="sm" disabled>
-                  No guide added
+                  {tr("noGuide")}
                 </Button>
               )}
               {customVideoUrl ? (
                 <Button asChild variant="outline" size="sm">
                   <a href={customVideoUrl} target="_blank" rel="noreferrer">
                     <ExternalLink className="h-4 w-4" />
-                    Open Custom Video
+                    {tr("openCustomVideo")}
                   </a>
                 </Button>
               ) : (
                 <Button type="button" variant="outline" size="sm" disabled>
-                  No custom video
+                  {tr("noCustomVideo")}
                 </Button>
               )}
             </div>
@@ -280,7 +289,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/40 p-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <Clock className="h-4 w-4 text-primary" />
-              Time: {formatTime(elapsedSeconds)}
+              {tr("time")}: {formatTime(elapsedSeconds)}
             </div>
             <div className="flex items-center gap-2">
               {isTimerRunning ? (
@@ -291,14 +300,14 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
               ) : null}
               <Button type="button" variant="outline" size="sm" onClick={resetWorkoutTimer}>
                 <TimerReset className="h-4 w-4" />
-                Reset
+                {tr("reset")}
               </Button>
             </div>
           </div>
 
           {previousSet ? (
             <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
-              <p className="font-semibold text-foreground">Previous set</p>
+              <p className="font-semibold text-foreground">{tr("previousSet")}</p>
               <p className="text-muted-foreground">{previousSet.weightKg ?? 0} kg × {previousSet.reps ?? 0}{previousSet.performedAt ? ` on ${previousSet.performedAt.slice(0, 10)}` : ""}</p>
             </div>
           ) : null}
@@ -312,10 +321,10 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
 
           {sets.map((set, index) => (
             <div key={index} className="rounded-xl border bg-card p-4">
-              <p className="mb-3 text-base font-semibold">Set {index + 1}</p>
+              <p className="mb-3 text-base font-semibold">{tr("setNumber", { count: index + 1 })}</p>
               <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-2">
-                  <Label htmlFor={`reps-${index}`}>Reps</Label>
+                  <Label htmlFor={`reps-${index}`}>{tr("reps")}</Label>
                   <Input
                     id={`reps-${index}`}
                     className="h-14 text-2xl font-semibold"
@@ -330,7 +339,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor={`weight-${index}`}>Weight kg</Label>
+                  <Label htmlFor={`weight-${index}`}>{tr("weightKg")}</Label>
                   <Input
                     id={`weight-${index}`}
                     className="h-14 text-2xl font-semibold"
@@ -346,7 +355,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
                   />
                 </div>
                 <div className="space-y-2 col-span-2 lg:col-span-1">
-                  <Label htmlFor={`set-note-${index}`}>Set note</Label>
+                  <Label htmlFor={`set-note-${index}`}>{tr("setNote")}</Label>
                   <Input
                     id={`set-note-${index}`}
                     className="h-12"
@@ -354,7 +363,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
                     onChange={(event) =>
                       setSets((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, notes: event.target.value } : item)))
                     }
-                    placeholder="Optional"
+                    placeholder={tr("optional")}
                   />
                 </div>
               </div>
@@ -362,50 +371,50 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
           ))}
           <Button className="w-full sm:w-auto" variant="outline" onClick={() => setSets((current) => [...current, { reps: 10, weight: 0, notes: "" }])}>
             <Plus className="h-4 w-4" />
-            Add set
+            {tr("addSet")}
           </Button>
           <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
             <div className="space-y-2">
-              <Label htmlFor="duration">Duration minutes</Label>
+              <Label htmlFor="duration">{tr("durationMinutes")}</Label>
               <Input
                 id="duration"
                 type="number"
                 min="1"
                 value={duration}
                 onChange={(event) => setDuration(Number(event.target.value))}
-                placeholder="Workout duration, e.g. 45"
+                placeholder={tr("durationPlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="workout-notes">Workout notes</Label>
+              <Label htmlFor="workout-notes">{tr("workoutNotes")}</Label>
               <Input
                 id="workout-notes"
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
-                placeholder="Workout note, e.g. felt strong today"
+                placeholder={tr("workoutNotesPlaceholder")}
               />
             </div>
           </div>
           <Button className="hidden w-full lg:inline-flex" onClick={askComplete} disabled={isSaving || Boolean(sessionError) || !session}>
             <CheckCircle2 className="h-4 w-4" />
-            {isSaving ? "Saving workout..." : "Mark workout completed"}
+            {isSaving ? tr("saving") : tr("markWorkoutCompleted")}
           </Button>
         </CardContent>
       </Card>
 
-      <MobileStickyActions>
+      <MobileStickyActions allowOnSession>
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1 text-sm">
             <p className="font-semibold text-foreground">{formatTime(elapsedSeconds)}</p>
-            <p className="truncate text-xs text-muted-foreground">{sets.length} set{sets.length === 1 ? "" : "s"} ready to save</p>
+            <p className="truncate text-xs text-muted-foreground">{tr("setsReady", { count: sets.length })}</p>
           </div>
-          <Button className="min-h-12 flex-1 text-base" onClick={askComplete} disabled={isSaving || Boolean(sessionError) || !session}>
+          <Button className="min-h-[52px] flex-1 text-base" onClick={askComplete} disabled={isSaving || Boolean(sessionError) || !session}>
             <CheckCircle2 className="h-5 w-5" />
-            {isSaving ? "Saving..." : "Finish"}
+            {isSaving ? tr("saving") : tr("finish")}
           </Button>
         </div>
       </MobileStickyActions>
-      <MobileStickyActionsSpacer />
+      <MobileStickyActionsSpacer allowOnSession />
     </div>
   );
 }

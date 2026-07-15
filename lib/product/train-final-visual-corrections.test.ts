@@ -22,10 +22,12 @@ describe("Train final visual correction contracts", () => {
     expect(mobileNav).toContain("data-mobile-floating-nav");
   });
   test("builder and editor footers consume the shared offset", () => {
+    const footer = source("components/workouts/train-ui.tsx");
+    expect(footer).toContain("bottom-[var(--train-sticky-footer-bottom)]");
+    expect(footer).toContain("data-train-sticky-footer");
     for (const file of ["components/workouts/workout-plan-builder.tsx", "components/workouts/workout-plan-editor.tsx"]) {
       const content = source(file);
-      expect(content).toContain("bottom-[var(--train-sticky-footer-bottom)]");
-      expect(content).toContain("data-train-sticky-footer");
+      expect(content).toContain("<TrainStickyFooter");
       expect(content).not.toContain("sticky bottom-0");
       expect(content).not.toContain("fixed inset-x-0 bottom-0");
     }

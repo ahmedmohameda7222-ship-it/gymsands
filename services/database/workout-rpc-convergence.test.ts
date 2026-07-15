@@ -114,7 +114,7 @@ describe("atomic workout plan browser persistence", () => {
     state.rpcData.create_workout_plan_atomic = { id: planId };
     const { createUserWorkoutPlan, setDefaultUserWorkoutPlan } = await import("@/services/database/workout-plans");
 
-    await expect(createUserWorkoutPlan({ userId, planName: " Strength plan ", startDate: "2026-07-13", days: [{ dayName: "Push", weekday: "Monday", exercises: [workout] }] }))
+    await expect(createUserWorkoutPlan({ userId, planName: " Strength plan ", startDate: "2026-07-13", days: [{ dayName: "Push", weekday: "Monday", exercises: [{ ...workout, muscle_category: "Upper Body" }] }] }))
       .resolves.toEqual({ id: planId });
     await setDefaultUserWorkoutPlan(userId, planId, "2026-07-13");
 
@@ -124,7 +124,7 @@ describe("atomic workout plan browser persistence", () => {
       p_schedule_start_date: "2026-07-13",
       p_plan: expect.objectContaining({
         name: "Strength plan",
-        days: [expect.objectContaining({ exercises: [expect.objectContaining({ exercise_name: "Bench press" })] })]
+        days: [expect.objectContaining({ exercises: [expect.objectContaining({ exercise_name: "Bench press", target_muscle: "Chest" })] })]
       })
     }));
     expect(supabase.rpc).toHaveBeenCalledWith("activate_workout_plan_atomic", {
@@ -137,19 +137,39 @@ describe("atomic workout plan browser persistence", () => {
 
   it("saves a day with stable exercise identity through one RPC", async () => {
     const { updateUserWorkoutPlanDay } = await import("@/services/database/workout-plans");
-    await updateUserWorkoutPlanDay(dayId, { dayName: " Push ", weekday: "Monday", notes: "Focus", exercises: [workout] }, "2026-07-13");
+    await updateUserWorkoutPlanDay(dayId, { dayName: " Push ", weekday: "Monday", notes: "Focus", exercises: [{ ...workout, muscle_category: "Upper Body" }] }, "2026-07-13");
     expect(supabase.rpc).toHaveBeenCalledOnce();
     expect(supabase.rpc).toHaveBeenCalledWith("save_workout_plan_day_atomic", {
       p_user_id: userId,
       p_day_id: dayId,
       p_day: expect.objectContaining({
         day_name: "Push",
-        exercises: [expect.objectContaining({ id: exerciseId, exercise_name: "Bench press" })]
+        exercises: [expect.objectContaining({ id: exerciseId, exercise_name: "Bench press", target_muscle: "Chest" })]
       }),
       p_schedule_start_date: "2026-07-13",
       p_expected_updated_at: null,
       p_rebuild_schedule: true
     });
+  });
+
+  it("preserves a catalog primary muscle instead of replacing it with the body region", async () => {
+    const { updateLoadedWorkoutPlanDay } = await import("@/services/database/workout-plan-loader");
+    await updateLoadedWorkoutPlanDay(dayId, {
+      dayName: "Push",
+      weekday: "Monday",
+      exercises: [{
+        ...workout,
+        plan_exercise_id: undefined,
+        target_muscle: "Pectoralis Major",
+        muscle_category: "Upper Body"
+      }]
+    }, "2026-07-13");
+
+    expect(supabase.rpc).toHaveBeenCalledWith("save_workout_plan_day_atomic", expect.objectContaining({
+      p_day: expect.objectContaining({
+        exercises: [expect.objectContaining({ target_muscle: "Pectoralis Major" })]
+      })
+    }));
   });
 
   it("routes full save, duplicate, archive, and delete through atomic RPCs", async () => {

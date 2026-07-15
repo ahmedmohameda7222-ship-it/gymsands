@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Dumbbell, ExternalLink, Plus, Search } from "lucide-react";
+import { Check, Dumbbell, ExternalLink, Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,15 +10,28 @@ import { Select } from "@/components/ui/select-field";
 import { CardGridSkeleton } from "@/components/ui/state-views";
 import { userSafeError } from "@/lib/error-formatting";
 import { useTrainTranslation } from "@/lib/i18n/train";
-import { getWorkoutFilterOptions, getWorkouts, type WorkoutFilterOptions } from "@/services/database/workout-library";
+import {
+  emptyCanonicalWorkoutFilterOptions,
+  getCanonicalWorkoutFilterOptionsWithStatus,
+  getWorkoutsWithStatus,
+  mergeCanonicalWorkoutFilterOptions,
+  type CanonicalWorkoutFilterOptions,
+  type WorkoutFilterOption
+} from "@/services/database/workout-library";
 import type { Workout } from "@/types";
 
-function exerciseKey(exercise: Pick<Workout, "id" | "name" | "target_muscle">) {
-  return `${exercise.id}-${exercise.name}-${exercise.target_muscle}`;
+function normalizeIdentityPart(value: string | null | undefined) {
+  return value?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") ?? "";
 }
 
-function stringOptions(values: Array<string | null | undefined>) {
-  return Array.from(new Set(values.filter((value): value is string => Boolean(value)))).sort();
+function exerciseKey(exercise: Pick<Workout, "id" | "name" | "target_muscle" | "catalog_slug">) {
+  if (exercise.catalog_slug) return `catalog:${exercise.catalog_slug}`;
+  if (exercise.id) return `id:${exercise.id}`;
+  return `legacy:${normalizeIdentityPart(exercise.name)}:${normalizeIdentityPart(exercise.target_muscle)}`;
+}
+
+function optionLabel(options: WorkoutFilterOption[], value: string) {
+  return options.find((option) => option.value === value)?.label ?? value;
 }
 
 export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys, onAdd }: {
@@ -28,7 +41,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   existingKeys: string[];
   onAdd: (exercises: Workout[]) => void;
 }) {
-  const { dir, tr } = useTrainTranslation();
+  const { dir, locale, tr } = useTrainTranslation();
   const [query, setQuery] = useState("");
   const [muscle, setMuscle] = useState("");
   const [equipment, setEquipment] = useState("");
@@ -39,7 +52,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   const [exerciseType, setExerciseType] = useState("");
   const [mechanics, setMechanics] = useState("");
   const [results, setResults] = useState<Workout[]>([]);
-  const [filterOptions, setFilterOptions] = useState<WorkoutFilterOptions | null>(null);
+  const [filterOptions, setFilterOptions] = useState<CanonicalWorkoutFilterOptions>(() => emptyCanonicalWorkoutFilterOptions());
   const [selected, setSelected] = useState<Map<string, Workout>>(new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -49,13 +62,13 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   useEffect(() => {
     if (!open) return;
     let current = true;
-    void getWorkoutFilterOptions().then((options) => {
-      if (current) setFilterOptions(options);
+    void getCanonicalWorkoutFilterOptionsWithStatus(locale).then((result) => {
+      if (current) setFilterOptions(result.data);
     }).catch(() => {
       // Result-derived options remain available if filter metadata fails.
     });
     return () => { current = false; };
-  }, [open]);
+  }, [locale, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -63,7 +76,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError("");
-      getWorkouts(query.trim(), {
+      getWorkoutsWithStatus(query.trim(), {
         primaryMuscles: muscle ? [muscle] : [],
         equipmentRequired: equipment ? [equipment] : [],
         difficulty: difficulty || undefined,
@@ -72,26 +85,31 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
         forceTypes: forceType ? [forceType] : [],
         exerciseTypes: exerciseType ? [exerciseType] : [],
         mechanics: mechanics ? [mechanics] : []
-      }, 0)
-        .then((items) => { if (current) setResults(items.slice(0, 60)); })
+      }, 0, locale)
+        .then((result) => {
+          if (!current) return;
+          setResults(result.data.slice(0, 60));
+          if (result.filterOptions) setFilterOptions((options) => mergeCanonicalWorkoutFilterOptions(options, result.filterOptions!));
+        })
         .catch((loadError) => { if (current) { setResults([]); setError(userSafeError(loadError, tr("libraryLoadFailed"))); } })
         .finally(() => { if (current) setLoading(false); });
     }, 180);
     return () => { current = false; window.clearTimeout(timer); };
-  }, [difficulty, equipment, exerciseType, forceType, mechanics, muscle, muscleCategory, open, query, secondaryMuscle, tr]);
+  }, [difficulty, equipment, exerciseType, forceType, locale, mechanics, muscle, muscleCategory, open, query, secondaryMuscle, tr]);
 
   useEffect(() => {
     if (!open) setSelected(new Map());
   }, [open]);
 
-  const muscleOptions = useMemo(() => filterOptions?.primaryMuscles ?? stringOptions(results.map((item) => item.target_muscle)), [filterOptions, results]);
-  const equipmentOptions = useMemo(() => filterOptions?.equipmentRequired ?? stringOptions(results.map((item) => item.equipment)), [filterOptions, results]);
-  const difficultyOptions = useMemo(() => filterOptions?.experienceLevels ?? stringOptions(results.map((item) => item.difficulty)), [filterOptions, results]);
-  const muscleCategoryOptions = useMemo(() => filterOptions?.muscleCategories ?? stringOptions(results.map((item) => item.muscle_category)), [filterOptions, results]);
-  const secondaryMuscleOptions = useMemo(() => filterOptions?.secondaryMuscles ?? Array.from(new Set(results.flatMap((item) => item.secondary_muscles ?? []))).sort(), [filterOptions, results]);
-  const forceTypeOptions = useMemo(() => filterOptions?.forceTypes ?? stringOptions(results.map((item) => item.force_type)), [filterOptions, results]);
-  const exerciseTypeOptions = useMemo(() => filterOptions?.exerciseTypes ?? stringOptions(results.map((item) => item.category)), [filterOptions, results]);
-  const mechanicsOptions = useMemo(() => filterOptions?.mechanics ?? stringOptions(results.map((item) => item.mechanics)), [filterOptions, results]);
+  const muscleOptions = filterOptions.primaryMuscles;
+  const equipmentOptions = filterOptions.equipmentRequired;
+  const difficultyOptions = filterOptions.experienceLevels;
+  const muscleCategoryOptions = filterOptions.muscleCategories;
+  const secondaryMuscleOptions = filterOptions.secondaryMuscles;
+  const forceTypeOptions = filterOptions.forceTypes;
+  const exerciseTypeOptions = filterOptions.exerciseTypes;
+  const mechanicsOptions = filterOptions.mechanics;
+  const hasAdvancedOptions = Boolean(muscleCategoryOptions.length || secondaryMuscleOptions.length || forceTypeOptions.length || exerciseTypeOptions.length || mechanicsOptions.length);
 
   function toggle(exercise: Workout) {
     const key = exerciseKey(exercise);
@@ -108,6 +126,23 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
     onAdd(Array.from(selected.values()));
     onOpenChange(false);
   }
+
+  function clearFilters() {
+    setQuery(""); setMuscle(""); setEquipment(""); setDifficulty(""); setMuscleCategory("");
+    setSecondaryMuscle(""); setForceType(""); setExerciseType(""); setMechanics("");
+  }
+
+  const hasFilters = Boolean(query || muscle || equipment || difficulty || muscleCategory || secondaryMuscle || forceType || exerciseType || mechanics);
+  const activeFilterChips = [
+    muscle ? { id: "muscle", label: optionLabel(muscleOptions, muscle), clear: () => setMuscle("") } : null,
+    equipment ? { id: "equipment", label: optionLabel(equipmentOptions, equipment), clear: () => setEquipment("") } : null,
+    difficulty ? { id: "difficulty", label: optionLabel(difficultyOptions, difficulty), clear: () => setDifficulty("") } : null,
+    muscleCategory ? { id: "muscle-category", label: optionLabel(muscleCategoryOptions, muscleCategory), clear: () => setMuscleCategory("") } : null,
+    secondaryMuscle ? { id: "secondary-muscle", label: optionLabel(secondaryMuscleOptions, secondaryMuscle), clear: () => setSecondaryMuscle("") } : null,
+    forceType ? { id: "force-type", label: optionLabel(forceTypeOptions, forceType), clear: () => setForceType("") } : null,
+    exerciseType ? { id: "exercise-type", label: optionLabel(exerciseTypeOptions, exerciseType), clear: () => setExerciseType("") } : null,
+    mechanics ? { id: "mechanics", label: optionLabel(mechanicsOptions, mechanics), clear: () => setMechanics("") } : null
+  ].filter((chip): chip is { id: string; label: string; clear: () => void } => Boolean(chip));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -132,31 +167,33 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
       >
         <DialogHeader className="mb-0 shrink-0 border-b px-5 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] pe-16 text-start lg:pt-4">
           <DialogTitle className="text-xl">{tr("addExercisesTo", { day: dayName })}</DialogTitle>
-          <DialogDescription className="font-medium text-foreground/70">{tr("selectedCount", { count: selected.size })}</DialogDescription>
+          <DialogDescription className="font-medium text-foreground/70">{tr("selectionPreserved", { count: selected.size })}</DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-32 sm:px-5" data-picker-scroll-region>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-picker-filters>
-            <label className="relative sm:col-span-2 lg:col-span-1">
+          <div className="sticky -top-4 z-20 -mx-4 flex gap-2 overflow-x-auto border-b bg-background/95 px-4 py-3 backdrop-blur sm:-mx-5 sm:px-5 lg:grid lg:grid-cols-4 lg:gap-3 lg:overflow-visible" data-picker-filters>
+            <label className="relative min-w-[240px] shrink-0 lg:min-w-0">
               <span className="sr-only">{tr("searchExercises")}</span>
               <Search className="pointer-events-none absolute start-3 top-3.5 h-4 w-4 text-muted-foreground" />
               <Input value={query} onChange={(event) => setQuery(event.target.value)} className="min-h-12 ps-10" placeholder={tr("searchExercises")} />
             </label>
-            <Select aria-label={tr("primaryMuscle")} value={muscle} onChange={setMuscle} placeholder={tr("primaryMuscle")} options={muscleOptions} />
-            <Select aria-label={tr("equipment")} value={equipment} onChange={setEquipment} placeholder={tr("equipment")} options={equipmentOptions} />
-            <Select aria-label={tr("difficulty")} value={difficulty} onChange={setDifficulty} placeholder={tr("difficulty")} options={difficultyOptions} />
+            <div className="min-w-[180px] shrink-0 lg:min-w-0"><Select className="h-12 w-full rounded-full border border-input bg-card px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={tr("primaryMuscle")} value={muscle} onChange={setMuscle} placeholder={tr("primaryMuscle")} options={muscleOptions} /></div>
+            <div className="min-w-[180px] shrink-0 lg:min-w-0"><Select className="h-12 w-full rounded-full border border-input bg-card px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={tr("equipment")} value={equipment} onChange={setEquipment} placeholder={tr("equipment")} options={equipmentOptions} /></div>
+            <div className="min-w-[180px] shrink-0 lg:min-w-0"><Select className="h-12 w-full rounded-full border border-input bg-card px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={tr("difficulty")} value={difficulty} onChange={setDifficulty} placeholder={tr("difficulty")} options={difficultyOptions} /></div>
+            {hasFilters ? <Button type="button" variant="ghost" className="min-h-11 justify-self-start px-2 sm:col-span-2 lg:col-span-4" onClick={clearFilters}>{tr("clear")}</Button> : null}
           </div>
+          {activeFilterChips.length ? <div className="mt-3 flex gap-2 overflow-x-auto" aria-label={tr("filters")}>{activeFilterChips.map((chip) => <button key={chip.id} type="button" className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 text-sm font-medium" onClick={chip.clear}>{chip.label}<X className="h-4 w-4" aria-hidden="true" /></button>)}</div> : null}
 
-          <details className="mt-3 rounded-2xl border border-border/70 bg-muted/20 px-3 py-2">
+          {hasAdvancedOptions ? <details className="mt-3 rounded-2xl border border-border/70 bg-muted/20 px-3 py-2">
             <summary className="min-h-11 cursor-pointer select-none content-center font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{tr("moreFilters")}</summary>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <Select aria-label={tr("muscleCategory")} value={muscleCategory} onChange={setMuscleCategory} placeholder={tr("muscleCategory")} options={muscleCategoryOptions} />
-              <Select aria-label={tr("secondaryMuscle")} value={secondaryMuscle} onChange={setSecondaryMuscle} placeholder={tr("secondaryMuscle")} options={secondaryMuscleOptions} />
-              <Select aria-label={tr("forceType")} value={forceType} onChange={setForceType} placeholder={tr("forceType")} options={forceTypeOptions} />
-              <Select aria-label={tr("exerciseType")} value={exerciseType} onChange={setExerciseType} placeholder={tr("exerciseType")} options={exerciseTypeOptions} />
-              <Select aria-label={tr("mechanics")} value={mechanics} onChange={setMechanics} placeholder={tr("mechanics")} options={mechanicsOptions} />
+              {muscleCategoryOptions.length ? <Select aria-label={tr("muscleCategory")} value={muscleCategory} onChange={setMuscleCategory} placeholder={tr("muscleCategory")} options={muscleCategoryOptions} /> : null}
+              {secondaryMuscleOptions.length ? <Select aria-label={tr("secondaryMuscle")} value={secondaryMuscle} onChange={setSecondaryMuscle} placeholder={tr("secondaryMuscle")} options={secondaryMuscleOptions} /> : null}
+              {forceTypeOptions.length ? <Select aria-label={tr("forceType")} value={forceType} onChange={setForceType} placeholder={tr("forceType")} options={forceTypeOptions} /> : null}
+              {exerciseTypeOptions.length ? <Select aria-label={tr("exerciseType")} value={exerciseType} onChange={setExerciseType} placeholder={tr("exerciseType")} options={exerciseTypeOptions} /> : null}
+              {mechanicsOptions.length ? <Select aria-label={tr("mechanics")} value={mechanics} onChange={setMechanics} placeholder={tr("mechanics")} options={mechanicsOptions} /> : null}
             </div>
-          </details>
+          </details> : null}
 
           {loading ? <div className="mt-4"><CardGridSkeleton count={4} rows={3} /></div> : null}
           {error ? <div role="alert" className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm">{error}</div> : null}
@@ -169,21 +206,25 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
                 const isSelected = selected.has(key);
                 const guideUrl = exercise.custom_video_url || exercise.video_url || exercise.exercise_url;
                 return (
-                  <article key={key} className={`flex min-h-56 flex-col rounded-2xl border p-4 ${duplicate ? "border-border/60 bg-muted/30" : isSelected ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "bg-card"}`}>
-                    <div className="flex min-w-0 items-start justify-between gap-3">
+                  <article
+                    key={key}
+                    className={`relative flex min-h-[152px] flex-col rounded-2xl border p-4 ${duplicate ? "border-border/60 bg-muted/30" : isSelected ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "bg-card"}`}
+                  >
+                    <button type="button" className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" disabled={duplicate} aria-pressed={isSelected} onClick={() => toggle(exercise)}><span className="sr-only">{isSelected ? tr("deselect") : tr("select")}: {exercise.name}</span></button>
+                    <div className="pointer-events-none relative z-10 flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h3 className="break-words text-base font-semibold leading-6">{exercise.name}</h3>
                         <p className="mt-1 break-words text-sm text-muted-foreground">{exercise.target_muscle} · {exercise.equipment}</p>
                       </div>
                       {exercise.difficulty ? <Badge variant="outline" className="shrink-0">{exercise.difficulty}</Badge> : null}
                     </div>
-                    <p className="mt-3 line-clamp-2 text-sm leading-5 text-muted-foreground">{exercise.instructions}</p>
-                    <div className={`mt-auto grid gap-2 pt-4 ${guideUrl ? "sm:grid-cols-2" : "grid-cols-1"}`}>
+                    <p className="pointer-events-none relative z-10 mt-3 line-clamp-2 text-sm leading-5 text-muted-foreground">{exercise.instructions}</p>
+                    <div className={`relative z-10 mt-auto grid gap-2 pt-4 ${guideUrl ? "sm:grid-cols-2" : "grid-cols-1"}`}>
                       <Button type="button" variant={isSelected ? "default" : "outline"} className="min-h-11 w-full" disabled={duplicate} aria-pressed={isSelected} onClick={() => toggle(exercise)}>
                         {duplicate || isSelected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                         {duplicate ? tr("alreadyAdded") : isSelected ? tr("deselect") : tr("select")}
                       </Button>
-                      {guideUrl ? <Button asChild type="button" variant="ghost" className="min-h-11"><a href={guideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" />{tr("viewGuide")}</a></Button> : null}
+                      {guideUrl ? <Button asChild type="button" variant="ghost" className="min-h-11"><a href={guideUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}><ExternalLink className="h-4 w-4" />{tr("viewGuide")}</a></Button> : null}
                     </div>
                   </article>
                 );
@@ -195,12 +236,12 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
         </div>
 
         <div className="absolute inset-x-0 bottom-0 border-t bg-background/95 px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur sm:px-5" data-picker-footer>
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-h-11 items-center gap-2">
               <span className="text-sm font-semibold">{tr("selectedCount", { count: selected.size })}</span>
               <Button type="button" variant="ghost" className="min-h-11" onClick={() => setSelected(new Map())} disabled={!selected.size}>{tr("clear")}</Button>
             </div>
-            <Button type="button" className="min-h-12 min-w-44" onClick={addSelected} disabled={!selected.size}>{tr("addNExercises", { count: selected.size })}</Button>
+            <Button type="button" className="min-h-[52px] w-full sm:w-auto sm:min-w-44" onClick={addSelected} disabled={!selected.size}>{tr("addNExercises", { count: selected.size })}</Button>
           </div>
         </div>
       </DialogContent>

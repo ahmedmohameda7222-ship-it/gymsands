@@ -6,10 +6,12 @@ import { motion, useReducedMotion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useTrainTranslation } from "@/lib/i18n/train";
 
 export function WorkoutSessionScreen({ children, confirmExit = false }: { children: React.ReactNode; confirmExit?: boolean }) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
+  const { dir, tr } = useTrainTranslation();
   const [isClosing, setIsClosing] = useState(false);
   const [exitDialogOpen, setExitDialogOpen] = useState(false);
 
@@ -37,14 +39,15 @@ export function WorkoutSessionScreen({ children, confirmExit = false }: { childr
       onAnimationComplete={() => {
         if (isClosing) router.back();
       }}
+      dir={dir}
     >
       <Button
         type="button"
         variant="outline"
         size="icon"
         onClick={handleClose}
-        className="absolute right-3 top-3 z-[40] h-12 w-12 rounded-full bg-card/95 shadow-lg backdrop-blur"
-        aria-label="Close workout session"
+        className="absolute end-3 top-3 z-[40] h-12 w-12 rounded-full bg-card/95 shadow-lg backdrop-blur"
+        aria-label={tr("closeWorkoutSession")}
       >
         <ChevronDown className="h-5 w-5" />
       </Button>
@@ -54,17 +57,15 @@ export function WorkoutSessionScreen({ children, confirmExit = false }: { childr
       <Dialog open={exitDialogOpen} onOpenChange={setExitDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Exit workout session?</DialogTitle>
-            <DialogDescription>
-              Set edits are saved when you finish a set. Any values still being edited on the current set will stay unsaved if you leave now.
-            </DialogDescription>
+            <DialogTitle>{tr("exitWorkoutSession")}</DialogTitle>
+            <DialogDescription>{tr("exitWorkoutDescription")}</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" className="min-h-12" onClick={() => setExitDialogOpen(false)}>
-              Keep training
+              {tr("keepTraining")}
             </Button>
             <Button type="button" className="min-h-12" onClick={closeSession}>
-              Exit session
+              {tr("exitSession")}
             </Button>
           </div>
         </DialogContent>

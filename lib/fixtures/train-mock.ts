@@ -10,11 +10,19 @@ const planIds = {
 };
 
 export type MockTrainScenario = "active" | "scheduled" | "rest";
+export type MockTrainVariant = "default" | "one-day-one-exercise" | "seven-day-many-exercises" | "long-names";
 
 export function getMockTrainScenario(): MockTrainScenario {
   if (typeof window === "undefined") return "active";
   const value = window.localStorage.getItem("plaivra.qa.train-scenario");
   return value === "scheduled" || value === "rest" ? value : "active";
+}
+
+export function getMockTrainVariant(): MockTrainVariant {
+  if (typeof window === "undefined") return "default";
+  const value = window.localStorage.getItem("plaivra.qa.train-variant");
+  if (value === "one-day-one-exercise" || value === "seven-day-many-exercises" || value === "long-names") return value;
+  return "default";
 }
 
 function exercise(dayId: string, index: number, name: string, target: string, equipment: string): UserWorkoutPlanExercise {
@@ -54,20 +62,46 @@ function day(planId: string, suffix: string, dayNumber: number, weekday: Weekday
 
 export function getMockTrainPlans(): UserWorkoutPlan[] {
   const scenario = getMockTrainScenario();
+  const variant = getMockTrainVariant();
   const todayIndex = new Date().getDay();
   const activeOffsets = scenario === "rest" ? [1, 3, 5] : [0, 2, 4];
   const createdAt = `${addDays(todayIso(), -30)}T08:00:00.000Z`;
   const updatedAt = `${todayIso()}T08:00:00.000Z`;
-  const activeDays = [
+  let activeDays = [
     day(planIds.active, "11", 1, weekdays[(todayIndex + activeOffsets[0]) % 7], "Strength A", [["Back Squat", "Legs", "Barbell"], ["Bench Press", "Chest", "Barbell"], ["Row", "Back", "Cable"], ["Plank", "Core", "Bodyweight"]]),
     day(planIds.active, "12", 2, weekdays[(todayIndex + activeOffsets[1]) % 7], "Strength B", [["Deadlift", "Back", "Barbell"], ["Overhead Press", "Shoulders", "Dumbbells"], ["Pulldown", "Back", "Cable"]]),
     day(planIds.active, "13", 3, weekdays[(todayIndex + activeOffsets[2]) % 7], "Strength C", [["Split Squat", "Legs", "Dumbbells"], ["Incline Press", "Chest", "Dumbbells"], ["Face Pull", "Shoulders", "Cable"]])
   ];
+  if (variant === "one-day-one-exercise") {
+    activeDays = [{ ...activeDays[0], exercises: activeDays[0].exercises.slice(0, 1) }];
+  } else if (variant === "seven-day-many-exercises") {
+    activeDays = Array.from({ length: 7 }, (_, index) => day(
+      planIds.active,
+      String(41 + index).padStart(2, "0"),
+      index + 1,
+      weekdays[(todayIndex + index) % 7],
+      `Training Day ${index + 1}`,
+      Array.from({ length: 10 }, (__, exerciseIndex): [string, string, string] => [
+        `Exercise ${index + 1}.${exerciseIndex + 1}`,
+        exerciseIndex % 2 ? "Upper body" : "Lower body",
+        exerciseIndex % 3 ? "Dumbbells" : "Barbell"
+      ])
+    ));
+  } else if (variant === "long-names") {
+    activeDays = activeDays.map((item, dayIndex) => ({
+      ...item,
+      day_name: `${item.day_name} with a deliberately long translated-style day name ${dayIndex + 1}`,
+      exercises: item.exercises.map((entry, exerciseIndex) => ({
+        ...entry,
+        exercise_name: `${entry.exercise_name} with a deliberately long catalog activity name ${exerciseIndex + 1}`
+      }))
+    }));
+  }
   const inactiveDays = [day(planIds.inactive, "21", 1, weekdays[(todayIndex + 1) % 7], "Conditioning", [["Kettlebell Swing", "Full body", "Kettlebell"]])];
   const archivedDays = [day(planIds.archived, "31", 1, weekdays[(todayIndex + 3) % 7], "Foundation", [["Goblet Squat", "Legs", "Dumbbell"]])];
 
   return [
-    { id: planIds.active, user_id: MOCK_AUTH_USER_ID, name: "Strength Foundation", is_active: true, is_default: true, source: "chatgpt", goal: "Strength", description: "A balanced three-day strength plan.", chatgpt_source: true, session_duration_minutes: 55, archived_at: null, program_duration_weeks: 8, days_per_week: 3, created_at: createdAt, updated_at: updatedAt, days: activeDays },
+    { id: planIds.active, user_id: MOCK_AUTH_USER_ID, name: variant === "long-names" ? "Strength Foundation with a deliberately long plan name that must wrap without horizontal overflow" : "Strength Foundation", is_active: true, is_default: true, source: "chatgpt", goal: "Strength", description: "A balanced strength plan.", chatgpt_source: true, session_duration_minutes: 55, archived_at: null, program_duration_weeks: 8, days_per_week: activeDays.length, created_at: createdAt, updated_at: updatedAt, days: activeDays },
     { id: planIds.inactive, user_id: MOCK_AUTH_USER_ID, name: "Conditioning Option", is_active: false, is_default: false, source: "manual", goal: "Conditioning", description: "A compact alternative plan.", session_duration_minutes: 35, archived_at: null, program_duration_weeks: 4, days_per_week: 1, created_at: createdAt, updated_at: updatedAt, days: inactiveDays },
     { id: planIds.archived, user_id: MOCK_AUTH_USER_ID, name: "Archived Foundation", is_active: false, is_default: false, source: "manual", goal: "Technique", description: "Preserved historical plan.", session_duration_minutes: 40, archived_at: `${addDays(todayIso(), -14)}T09:00:00.000Z`, program_duration_weeks: 6, days_per_week: 1, created_at: createdAt, updated_at: updatedAt, days: archivedDays }
   ];
