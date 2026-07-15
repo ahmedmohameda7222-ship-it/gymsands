@@ -255,12 +255,7 @@ jobs:
             --output quality-reports/release-preflight.json 2>&1 | tee quality-reports/release-preflight.log
           preflight_code="${PIPESTATUS[0]}"
           set -e
-          if [ "$preflight_code" = "0" ]; then
-            echo "Release preflight unexpectedly passed while migration reconciliation is pending."
-            exit 1
-          fi
-          grep -q 'migration_ledger_not_reconciled' quality-reports/release-preflight.json
-          exit 0
+          echo "${preflight_code}" > quality-reports/release-preflight.exit
 
       - name: Upload quality reports
         if: always()
@@ -277,7 +272,7 @@ jobs:
         run: |
           set -euo pipefail
           failed=0
-          for check in full-migration-chain database-lint database-preflight integrity lint migration-ledger script-tests dependency-audit typecheck unit integration telemetry-tests environment-validation release-metadata build rendered-qa manifest; do
+          for check in full-migration-chain database-lint database-preflight integrity lint migration-ledger script-tests dependency-audit typecheck unit integration telemetry-tests environment-validation release-metadata build rendered-qa manifest release-preflight; do
             code="$(cat "quality-reports/${check}.exit")"
             echo "${check}: exit ${code}"
             if [ "$code" != "0" ]; then
