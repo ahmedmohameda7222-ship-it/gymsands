@@ -1,24 +1,24 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Read-only verification:** 2026-07-14 23:24 UTC
+**Verified production state:** 2026-07-15
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
-**Reconciliation status:** **Pending / NO-GO**
+**Reconciliation status:** **Reconciled / release still NO-GO**
 
-This document records evidence. It is not authorization to edit production migration history, apply the forward correction, update the compatibility marker, merge, or deploy. Applied migration files and production identities must never be renamed, rewritten, deleted, or replayed.
+This document records the verified production state supplied after the controlled reconciliation sequence. It is not authorization to replay migration SQL, change the compatibility marker, deploy, promote, or merge. Applied migration files and production identities must never be renamed, rewritten, deleted, or replayed.
 
 ## Current state
 
-- Supabase migration history contains 24 normally applied migrations through `20260711014500_idempotency_uncertain_completion_guard`.
-- Seven later repository migrations are physically present in production but absent from `supabase_migrations.schema_migrations`.
-- One new forward-only ACL correction migration is intentionally `pending` and has not been applied to production.
-- `pendingCount = 1`
-- `schemaAppliedUntrackedCount = 7`
-- `unresolvedCount = 8`
-- `historyRepair.state = pending`
-- `releaseReady = false`
+- Supabase migration history contains 32 applied migrations.
+- All eight reconciliation-scope identities are present in production migration history exactly once.
+- `pendingCount = 0`
+- `schemaAppliedUntrackedCount = 0`
+- `unresolvedCount = 0`
+- `historyRepair.state = reconciled`
+- The migration-ledger reconciliation gate is satisfied.
+- Overall application release readiness remains false because the database compatibility marker is still `20260711014500`, while repository release metadata now expects `20260715010000`, and all other required release gates must still pass.
 
-The seven physically applied, history-untracked files are:
+The verified production identities are:
 
 1. `20260711213000_adaptive_onboarding_v2.sql`
 2. `20260712173000_persistent_meal_plan_skip_status.sql`
@@ -27,42 +27,35 @@ The seven physically applied, history-untracked files are:
 5. `20260713160000_train_section_atomic_integrity.sql`
 6. `20260713170000_finalize_train_schedule_delete_integrity.sql`
 7. `20260714030000_harden_train_plan_rpc_execution.sql`
-
-The pending forward correction is:
-
 8. `20260715010000_restrict_nutrition_target_override_acl.sql`
 
-## Material divergence requiring the forward correction
+The first seven identities were repaired in production migration history only after complete physical-equivalence verification. The eighth identity was applied and recorded normally as the forward-only ACL correction. None of these files may be replayed.
 
-Production grants `authenticated` the following privileges on `public.user_nutrition_target_date_overrides`:
+## Final nutrition override ACL
+
+The authenticated role now has exactly:
 
 ```text
 DELETE
 INSERT
+SELECT
+UPDATE
+```
+
+The following privileges are absent:
+
+```text
 MAINTAIN
 REFERENCES
-SELECT
 TRIGGER
 TRUNCATE
-UPDATE
 ```
 
-The intended contract is exactly:
+RLS, the four owner policies, service-role access, owner administration, and application data remain outside the scope of this repository-only completion and were preserved by the verified production operation.
 
-```text
-DELETE
-INSERT
-SELECT
-UPDATE
-```
+## Final Train reconciliation evidence
 
-`20260715010000_restrict_nutrition_target_override_acl.sql` is a forward PostgreSQL 17 security correction. It revokes only `TRUNCATE`, `TRIGGER`, `REFERENCES`, and `MAINTAIN`, reasserts CRUD, changes no data, and does not replay `20260712195000_nutrition_target_date_overrides.sql`.
-
-The original nutrition migration is not eligible for history repair until this forward correction is applied through a separately approved tracked mechanism and the exact ACL is verified.
-
-## Seventh migration evidence
-
-Read-only production verification for `20260714030000_harden_train_plan_rpc_execution.sql` confirmed:
+Production verification for `20260714030000_harden_train_plan_rpc_execution.sql` confirmed:
 
 - all six canonical Train RPC signatures exist;
 - all six are `SECURITY DEFINER`;
@@ -74,7 +67,7 @@ Read-only production verification for `20260714030000_harden_train_plan_rpc_exec
 - no unexpected overload remains outside the six canonical signatures;
 - checked active-plan, orphan, duplicate-schedule, and scheduled-history counts are zero.
 
-Its ledger state is therefore `applied_schema_untracked`, not `pending`. It must not be marked `applied` until a supported production history repair is separately approved and verified.
+Its exact production migration identity is now present and classified as `applied`.
 
 ## Fail-closed ledger semantics
 
@@ -91,7 +84,7 @@ Its ledger state is therefore `applied_schema_untracked`, not `pending`. It must
 
 Resolved states are `applied` and `applied_version_alias`. Every other state is unresolved.
 
-`releaseReady` requires all of the following:
+The ledger-level `releaseReady` value requires all of the following:
 
 - `historyRepair.state === "reconciled"`
 - `pendingCount === 0`
@@ -100,57 +93,36 @@ Resolved states are `applied` and `applied_version_alias`. Every other state is 
 - `unresolvedCount === 0`
 - all resolved production identities are valid
 
-A physically applied migration incorrectly classified as `pending` cannot produce a ready state.
+The production ledger now satisfies those migration-specific conditions. The application-level release readiness calculation remains independently fail-closed on artifact identity, schema compatibility, database migration-marker compatibility, and the remaining release evidence.
 
 ## Read-only preflight
 
-`supabase/verification/production-release-migration-preflight.sql` now blocks on:
+`supabase/verification/production-release-migration-preflight.sql` continues to block on:
 
 - missing migration objects;
 - function security/search-path mismatch;
-- incomplete seventh-migration Train RPC contract;
+- incomplete Train RPC contract;
 - any Train RPC signature outside the six canonical signatures;
 - Train integrity conflicts;
 - disabled RLS or incorrect policy count;
 - missing required nutrition override CRUD privileges;
 - any extra authenticated nutrition override privilege, including PostgreSQL 17 `MAINTAIN`.
 
-The ACL inspection uses `pg_class.relacl` and `aclexplode`, not only `information_schema`, so PostgreSQL 17 privileges are visible.
+The ACL inspection uses `pg_class.relacl` and `aclexplode`, not only `information_schema`, so PostgreSQL 17 privileges remain visible.
 
-## Required future sequence
+## Remaining release work
 
-Do not run a normal migration push from the canonical repository while the seven historical identities are absent from production history.
+Migration-history reconciliation is complete. A separate approved release workflow must still:
 
-A later owner-approved execution must:
+1. keep the compatibility marker unchanged until its own reviewed forward operation is authorized;
+2. update that marker only after the required release evidence is complete;
+3. run the complete release preflight and all repository quality gates;
+4. resolve the separate Vercel release-policy test mismatch in PR #56;
+5. deploy only the exact approved commit;
+6. verify provider commit metadata, `/api/version`, health checks, and required browser smoke evidence;
+7. merge only after independent quality-control approval.
 
-1. activate and verify a production deployment release hold;
-2. verify a current backup/PITR recovery point;
-3. revalidate exact repository SHA and all eight migration hashes;
-4. create a disposable Supabase execution workdir containing the 24 already tracked migration files plus only `20260715010000_restrict_nutrition_target_override_acl.sql`;
-5. use linked migration-list and database-push dry-run operations and require the sole proposed migration to be version `20260715010000`;
-6. apply and normally record only the new forward ACL correction;
-7. verify exact ACL, RLS, policies, service-role access, row integrity, history identity, and unchanged compatibility marker;
-8. re-run complete equivalence checks for all seven historical identities;
-9. use the supported linked migration-repair operation with status `applied` only for identities proven complete equivalent;
-10. verify migration history and physical state after each repaired identity;
-11. update the repository ledger in a separate reviewed commit;
-12. update the compatibility marker only after all preceding verification;
-13. run release preflight and deploy only the exact approved commit.
-
-Supabase documents that database push applies local migrations absent from remote history, its dry-run prints the proposed set, and migration repair changes tracking without running migration SQL.
-
-## Preconditions still missing
-
-The recommendation remains `NO-GO` until direct evidence supplies:
-
-- latest successful backup/PITR timestamp;
-- backup type and recovery window;
-- evidence capture timestamp;
-- named production operator;
-- named independent verifier;
-- named release-hold owner;
-- exact verified Vercel hold mechanism;
-- named rollback owner.
+This PR does not perform any Supabase write, migration repair, migration replay, compatibility-marker update, deployment, promotion, or merge.
 
 ## Advisor status
 
