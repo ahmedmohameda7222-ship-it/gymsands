@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: phase-a-diff-${{ github.workflow }}-${{ github.ref }}
@@ -37,6 +39,8 @@ jobs:
       - name: Apply focused PR59 corrections once
         if: github.event.pull_request.number == 59
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [ ! -f scripts/pr59-corrections.mjs.gz.b64 ]; then
@@ -44,7 +48,21 @@ jobs:
             exit 0
           fi
           base64 --decode scripts/pr59-corrections.mjs.gz.b64 | gzip --decompress > "$RUNNER_TEMP/apply-pr59-corrections.mjs"
+          set +e
           node "$RUNNER_TEMP/apply-pr59-corrections.mjs" 2>&1 | tee "$RUNNER_TEMP/pr59-payload.log"
+          payload_code="${PIPESTATUS[0]}"
+          set -e
+          if [ "$payload_code" != "0" ]; then
+            {
+              echo "PR #59 correction payload failed before commit on staging SHA \`${{ github.event.pull_request.head.sha }}\`."
+              echo
+              echo '```text'
+              tail -n 80 "$RUNNER_TEMP/pr59-payload.log"
+              echo '```'
+            } > "$RUNNER_TEMP/pr59-payload-comment.md"
+            gh pr comment 59 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/pr59-payload-comment.md"
+            exit "$payload_code"
+          fi
           rm -f scripts/pr59-corrections.mjs.gz.b64
           rm -f .github/workflows/pr59-correction-runner.yml
           rm -f .github/workflows/pr59-quality-bootstrap.yml
@@ -57,15 +75,6 @@ jobs:
           git commit -m "fix(train): apply PR59 required corrections"
           git diff --check origin/main...HEAD
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
-
-      - name: Upload PR59 payload diagnostics
-        if: failure() && github.event.pull_request.number == 59
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr59-payload-diagnostics-${{ github.run_id }}
-          path: ${{ runner.temp }}/pr59-payload.log
-          if-no-files-found: warn
-          retention-days: 7
 
       - name: Check working tree diff formatting
         run: git diff --check
