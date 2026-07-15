@@ -16,7 +16,7 @@ This document records the verified production state supplied after the controlle
 - `unresolvedCount = 0`
 - `historyRepair.state = reconciled`
 - The migration-ledger reconciliation gate is satisfied.
-- Overall application release readiness remains false because the database compatibility marker is still `20260711014500`, while repository release metadata now expects `20260715010000`, and all other required release gates must still pass.
+- The database compatibility marker and repository release metadata are aligned at `20260715010000`. All remaining required release gates must still pass before production release.
 
 The verified production identities are:
 

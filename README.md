@@ -133,7 +133,7 @@ Verified production state on 2026-07-15:
 - The authenticated nutrition override ACL is exactly `SELECT`, `INSERT`, `UPDATE`, and `DELETE`; `TRUNCATE`, `TRIGGER`, `REFERENCES`, and `MAINTAIN` are absent.
 - Current counts are `pendingCount=0`, `schemaAppliedUntrackedCount=0`, and `unresolvedCount=0`.
 - Migration-history reconciliation is **reconciled**.
-- The compatibility marker remains `20260711014500`. Overall application release readiness therefore remains false until the marker and every other required release gate are separately satisfied.
+- The production compatibility marker is aligned at `20260715010000`. Application release readiness now depends on the remaining required release gates.
 
 Do not replay any applied migration. Run `npm run migration:ledger:check` to validate repository classification, production identities, counts, and documentation consistency.
 

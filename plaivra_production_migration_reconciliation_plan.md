@@ -21,7 +21,7 @@ Verified production state:
 - schema-applied-untracked migrations: `0`;
 - unresolved migrations: `0`;
 - `historyRepair.state = reconciled`;
-- compatibility marker unchanged at `20260711014500`;
+- compatibility marker advanced and verified at `20260715010000`;
 - authenticated nutrition override privileges exactly `DELETE`, `INSERT`, `SELECT`, and `UPDATE`;
 - `TRUNCATE`, `TRIGGER`, `REFERENCES`, and `MAINTAIN` absent.
 
@@ -47,7 +47,7 @@ None of these migrations may be replayed.
 
 The migration-history reconciliation blockers are closed. Release readiness remains fail-closed because:
 
-- the compatibility marker remains `20260711014500`, while repository metadata expects `20260715010000`;
+- the compatibility marker and repository metadata are aligned at `20260715010000`;
 - all required quality, environment, deployment, and smoke gates must still pass for the exact reviewed commit;
 - the Vercel main-only deployment policy is integrated into PR #57 and validated by the current Quality workflow;
 - independent quality-control approval and merge authorization remain outstanding.
