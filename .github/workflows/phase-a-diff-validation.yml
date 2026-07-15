@@ -45,11 +45,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate corrected source
-        shell: bash
+      - name: TypeScript validation
+        run: npm run typecheck
+
+      - name: Focused correction tests
         run: |
-          set -euo pipefail
-          npm run typecheck
           npx vitest run --config vitest.unit.config.mjs \
             services/database/workout-session-resume.test.ts \
             lib/workouts/workout-session-history.test.ts \
@@ -58,8 +58,12 @@ jobs:
             services/activity-catalog/server/activity-catalog-routes.test.ts \
             lib/i18n/train-workout-library.test.ts \
             lib/product/train-phase1-approved-ui.test.ts
-          npm run test:scripts
-          git diff --check
+
+      - name: Repository script tests
+        run: npm run test:scripts
+
+      - name: Corrected diff formatting
+        run: git diff --check
 
       - name: Commit validated corrections
         shell: bash
