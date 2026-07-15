@@ -126,23 +126,16 @@ Never commit real secrets or production tokens.
 
 The machine-readable authority is [`supabase/migration-ledger.json`](supabase/migration-ledger.json). The human reconciliation record is [`docs/architecture/migration-ledger-reconciliation.md`](docs/architecture/migration-ledger-reconciliation.md).
 
-Verified read-only on 2026-07-14:
+Verified production state on 2026-07-15:
 
-- Supabase migration history contains 24 normally applied migrations through `20260711014500_idempotency_uncertain_completion_guard`.
-- Seven later migrations are physically present but absent from Supabase migration history:
-  - `20260711213000_adaptive_onboarding_v2.sql`
-  - `20260712173000_persistent_meal_plan_skip_status.sql`
-  - `20260712195000_nutrition_target_date_overrides.sql`
-  - `20260713153000_meal_plan_atomic_execution.sql`
-  - `20260713160000_train_section_atomic_integrity.sql`
-  - `20260713170000_finalize_train_schedule_delete_integrity.sql`
-  - `20260714030000_harden_train_plan_rpc_execution.sql`
-- The nutrition override table currently has excess authenticated privileges in production.
-- `20260715010000_restrict_nutrition_target_override_acl.sql` is a pending forward-only correction and has not been applied.
-- Current counts are `pendingCount=1`, `schemaAppliedUntrackedCount=7`, and `unresolvedCount=8`.
-- Migration-history reconciliation remains **pending** and release readiness remains false.
+- Supabase migration history contains 32 applied migrations through `20260715010000_restrict_nutrition_target_override_acl`.
+- These eight reconciliation-scope versions are present exactly once: `20260711213000`, `20260712173000`, `20260712195000`, `20260713153000`, `20260713160000`, `20260713170000`, `20260714030000`, and `20260715010000`.
+- The authenticated nutrition override ACL is exactly `SELECT`, `INSERT`, `UPDATE`, and `DELETE`; `TRUNCATE`, `TRIGGER`, `REFERENCES`, and `MAINTAIN` are absent.
+- Current counts are `pendingCount=0`, `schemaAppliedUntrackedCount=0`, and `unresolvedCount=0`.
+- Migration-history reconciliation is **reconciled**.
+- The compatibility marker remains `20260711014500`. Overall application release readiness therefore remains false until the marker and every other required release gate are separately satisfied.
 
-Do not replay schema-untracked migrations. Do not use an ambiguous remote migration push while the seven identities are absent from history. Apply the forward correction and repair history only through separately approved, evidence-backed, supported Supabase operations. Run `npm run migration:ledger:check` to validate repository classification, counts, and documentation consistency.
+Do not replay any applied migration. Run `npm run migration:ledger:check` to validate repository classification, production identities, counts, and documentation consistency.
 
 Do not run pre-clean-rebuild migrations against the current project.
 
