@@ -47,10 +47,11 @@ function string(value: unknown, options: { nullable?: boolean; nonempty?: boolea
   return value;
 }
 
-function number(value: unknown, options: { integer?: boolean; min?: number } = {}) {
+function number(value: unknown, options: { integer?: boolean; min?: number; max?: number } = {}) {
   if (typeof value !== "number" || !Number.isFinite(value)) invalid();
   if (options.integer && !Number.isInteger(value)) invalid();
   if (options.min !== undefined && value < options.min) invalid();
+  if (options.max !== undefined && value > options.max) invalid();
   return value;
 }
 
@@ -159,7 +160,7 @@ function parseMuscle(value: unknown): ActivityMuscle {
 
 function parseGoal(value: unknown): ActivityGoal {
   const item = parseTaxonomy(value, ["relevanceWeight"]);
-  return { id: item.id, slug: item.slug, name: item.name, relevanceWeight: number(item.relevanceWeight, { integer: true, min: 0 }) };
+  return { id: item.id, slug: item.slug, name: item.name, relevanceWeight: number(item.relevanceWeight, { min: 0, max: 1 }) };
 }
 
 function parseLocalizedContent(value: unknown): LocalizedActivityContent {

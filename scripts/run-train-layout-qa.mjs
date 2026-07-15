@@ -242,8 +242,8 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
       controllerLastMainAction: intersects(metrics.controller, metrics.lastMainAction),
       footerNav: intersects(metrics.footer, metrics.nav)
     },
-    pageErrors
-    ,keyboard,
+    pageErrors,
+    keyboard,
     mobileKeyboardState
   };
   const safeRoute = route.replaceAll("/", "-").replace(/^-/, "") || "root";

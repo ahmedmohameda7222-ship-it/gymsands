@@ -652,31 +652,80 @@ export async function getOpenWorkoutSessionWithStatus(userId: string, workoutId?
   return { session: data ? normalizeWorkoutSession(data as WorkoutSession) : null };
 }
 
+const directSessionStartPromises = new Map<string, Promise<WorkoutSession>>();
+
 export async function getOrStartWorkoutSession(userId: string, workout: Workout, candidateSessionId?: string | null) {
   requireWorkoutPersistence(userId, "Workout session");
+  const workoutId = await persistedLegacyWorkoutId(workout.id);
+
   if (candidateSessionId && isUuid(candidateSessionId)) {
-    const candidate = await supabase!
+    let candidateQuery = supabase!
       .from("workout_sessions")
       .select("*")
       .eq("id", candidateSessionId)
       .eq("user_id", userId)
       .eq("status", "started")
-      .maybeSingle();
+      .is("plan_day_id", null);
+    candidateQuery = workoutId
+      ? candidateQuery.eq("workout_id", workoutId)
+      : candidateQuery.is("workout_id", null);
+    const candidate = await candidateQuery.maybeSingle();
     if (candidate.error) throw candidate.error;
     if (candidate.data) return normalizeWorkoutSession(candidate.data as WorkoutSession);
   }
-  const workoutId = await persistedLegacyWorkoutId(workout.id);
-  let query = supabase!
+
+  if (workoutId) {
+    const { data, error } = await supabase!
+      .from("workout_sessions")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "started")
+      .is("plan_day_id", null)
+      .eq("workout_id", workoutId)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? normalizeWorkoutSession(data as WorkoutSession) : startWorkoutSession(userId, workout, workoutId);
+  }
+
+  if (workout.catalog_source === "custom") {
+    const { data, error } = await supabase!
+      .from("workout_sessions")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "started")
+      .is("plan_day_id", null)
+      .is("workout_id", null)
+      .eq("workout_name", workout.name)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? normalizeWorkoutSession(data as WorkoutSession) : startWorkoutSession(userId, workout, null);
+  }
+
+  const { data: unresolved, error: unresolvedError } = await supabase!
     .from("workout_sessions")
     .select("*")
     .eq("user_id", userId)
-    .eq("status", "started");
-  query = workoutId
-    ? query.eq("workout_id", workoutId)
-    : query.is("workout_id", null).eq("workout_name", workout.name);
-  const { data, error } = await query.order("started_at", { ascending: false }).limit(1).maybeSingle();
-  if (error) throw error;
-  return data ? normalizeWorkoutSession(data as WorkoutSession) : startWorkoutSession(userId, workout, workoutId);
+    .eq("status", "started")
+    .is("plan_day_id", null)
+    .is("workout_id", null)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (unresolvedError) throw unresolvedError;
+  if (unresolved) {
+    throw new Error("An open direct workout session already exists. Resume or finish it before starting another external activity.");
+  }
+
+  const key = userId + ":" + workout.id;
+  const pending = directSessionStartPromises.get(key);
+  if (pending) return pending;
+  const start = startWorkoutSession(userId, workout, null).finally(() => directSessionStartPromises.delete(key));
+  directSessionStartPromises.set(key, start);
+  return start;
 }
 
 export async function cancelWorkoutSession(sessionId: string) {

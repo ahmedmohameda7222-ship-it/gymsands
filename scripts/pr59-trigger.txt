@@ -1,1 +1,0 @@
-First failing repository script test: scripts/provider-release-gates.test.mjs

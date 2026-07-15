@@ -18,6 +18,7 @@ import type { Workout, WorkoutSession, WorkoutSessionSummary } from "@/types";
 import { useConfirm, ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 import { useTrainTranslation } from "@/lib/i18n/train";
+import { findPreviousWorkoutSet } from "@/lib/workouts/workout-session-history";
 
 type SetLog = {
   reps: number;
@@ -63,24 +64,8 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const [previousSet, setPreviousSet] = useState<{ reps: number | null; weightKg: number | null; performedAt: string | null } | null>(null);
 
   useEffect(() => {
-    if (!history.length) {
-      setPreviousSet(null);
-      return;
-    }
-    const normalizedName = workout.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    for (const session of history) {
-      const logs = (session.exercise_logs ?? [])
-        .filter((log) => log.exercise_name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === normalizedName)
-        .filter((log) => Number(log.reps ?? 0) > 0 || Number(log.weight_kg ?? 0) > 0)
-        .sort((a, b) => new Date(b.completed_at || b.created_at).getTime() - new Date(a.completed_at || a.created_at).getTime());
-      if (logs.length) {
-        const latest = logs[0];
-        setPreviousSet({ reps: latest.reps, weightKg: latest.weight_kg, performedAt: session.completed_at || session.started_at });
-        return;
-      }
-    }
-    setPreviousSet(null);
-  }, [history, workout.name]);
+    setPreviousSet(findPreviousWorkoutSet(history, workout));
+  }, [history, workout]);
 
   useEffect(() => {
     if (!user?.id) return;

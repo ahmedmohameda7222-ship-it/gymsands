@@ -20,4 +20,3 @@ export interface ActivityCatalogProvider {
   getActivity(identifier: string, options?: CatalogRequestOptions): Promise<CatalogResult<TrainingActivity>>;
   getActivityAlternatives(identifier: string, options?: CatalogRequestOptions & { limit?: number }): Promise<CatalogResult<ActivityAlternative[]>>;
 }
-
