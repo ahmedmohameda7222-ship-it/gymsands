@@ -15,7 +15,7 @@ concurrency:
 jobs:
   verify-diff:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: Checkout exact pull request head
         uses: actions/checkout@v4
@@ -32,28 +32,43 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
 
-      - name: Retain final deterministic patch exception
+      - name: Apply deterministic PR59 corrections
         shell: bash
         run: |
           set -euo pipefail
-          set +e
-          node scripts/pr59-final-corrections.mjs > "$RUNNER_TEMP/pr59-final.log" 2>&1
-          code="$?"
-          set -e
-          if [ "$code" = "0" ]; then
-            exit 1
-          fi
-          git restore .
-          cp "$RUNNER_TEMP/pr59-final.log" scripts/pr59-trigger.txt
-          git config user.name "Plaivra PR59 Diagnostic"
+          node scripts/pr59-final-corrections.mjs
+          node scripts/pr59-safety-followup.mjs
+          git diff --check
+          git diff --check origin/main...HEAD
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate corrected source
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npx vitest run --config vitest.unit.config.mjs \
+            services/database/workout-session-resume.test.ts \
+            lib/workouts/workout-session-history.test.ts \
+            lib/activity-catalog/validation.test.ts \
+            services/activity-catalog/server/activity-catalog-boundaries.test.ts \
+            services/activity-catalog/server/activity-catalog-routes.test.ts \
+            lib/i18n/train-workout-library.test.ts \
+            lib/product/train-phase1-approved-ui.test.ts
+          npm run test:scripts
+          git diff --check
+
+      - name: Commit validated corrections
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Plaivra PR59 Correction"
           git config user.email "actions@users.noreply.github.com"
-          git add scripts/pr59-trigger.txt
-          git commit -m "chore(pr59): retain final patch diagnostic"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(train): apply PR59 required corrections"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
-
-      - name: Check working tree diff formatting
-        run: git diff --check
-
-      - name: Check branch diff formatting against main
-        run: git diff --check origin/main...HEAD
