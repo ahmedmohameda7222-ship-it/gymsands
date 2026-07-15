@@ -22,7 +22,7 @@ function activity() {
     sessionPhases: [{ ...taxonomy, sportId: id, isOptional: false }],
     equipment: [{ ...taxonomy, isRequired: true }],
     muscles: [{ ...taxonomy, role: "primary" }],
-    trainingGoals: [{ ...taxonomy, relevanceWeight: 0.85 }],
+    trainingGoals: [{ ...taxonomy, relevanceWeight: 1 }],
     translations: { de: {} },
     updatedAt: "2026-07-15T00:00:00.000Z"
   };
