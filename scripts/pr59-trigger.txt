@@ -1,2 +1,2 @@
-PR #59 correction tree validation trigger.
-Activation: 2026-07-15T15:58:00Z
+PR #59 clean correction bootstrap trigger.
+Activation: 2026-07-15T16:02:00Z
