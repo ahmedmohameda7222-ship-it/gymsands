@@ -821,7 +821,7 @@ select
   exercise.notes,
   exercise.archived_at,
   exercise.created_at,
-  coalesce(exercise.updated_at, exercise.created_at)
+  exercise.created_at
 from public.user_workout_plan_exercises exercise
 join public.user_workout_plan_sessions session
   on session.source_legacy_plan_day_id = exercise.plan_day_id

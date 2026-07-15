@@ -195,8 +195,7 @@ beforeAll(() => {
       sort_order integer not null default 1,
       notes text,
       archived_at timestamptz,
-      created_at timestamptz not null default now(),
-      updated_at timestamptz not null default now()
+      created_at timestamptz not null default now()
     );
 
     create table public.user_workout_sessions (
@@ -312,14 +311,14 @@ databaseDescribe("Train Phase 2A migration and detach RPC", () => {
     expectSqlFailure(`begin; insert into user_workout_plan_weeks(plan_id,week_template_id,week_number) values ('50000000-0000-4000-8000-000000000001','${otherTemplate}',50); set constraints user_workout_plan_weeks_template_same_plan_fk immediate; commit;`, /foreign key/i);
 
     const ownerSession = sql("select id from user_workout_plan_sessions where source_legacy_plan_day_id='51000000-0000-4000-8000-000000000001'");
-    expect(sql(`update public.user_workout_plan_sessions set week_template_id=week_template_id where id='${ownerSession}' returning id`)).toBe(ownerSession);
+    expect(sql(`with updated as (update public.user_workout_plan_sessions set week_template_id=week_template_id where id='${ownerSession}' returning id) select id from updated`)).toBe(ownerSession);
     expectSqlFailure(`update public.user_workout_plan_sessions set week_template_id='${otherTemplate}' where id='${ownerSession}'`, /session legacy source must belong to the same workout plan/i);
     expectSqlFailure(`update user_workout_sessions set plan_session_id='${ownerSession}' where user_id='${userB}'`, /row workout plan|owner/i);
 
     const ownerPhase = sql(`select phase.id from user_workout_plan_phases phase join user_workout_plan_sessions session on session.id=phase.plan_session_id where session.week_template_id='${ownerTemplate}' limit 1`);
     const otherPhase = sql(`select phase.id from user_workout_plan_phases phase join user_workout_plan_sessions session on session.id=phase.plan_session_id where session.week_template_id='${otherTemplate}' limit 1`);
     const ownerActivity = sql("select id from public.user_workout_plan_activities where source_legacy_plan_exercise_id='52000000-0000-4000-8000-000000000002'");
-    expect(sql(`update public.user_workout_plan_activities set plan_phase_id=plan_phase_id where id='${ownerActivity}' returning id`)).toBe(ownerActivity);
+    expect(sql(`with updated as (update public.user_workout_plan_activities set plan_phase_id=plan_phase_id where id='${ownerActivity}' returning id) select id from updated`)).toBe(ownerActivity);
     expectSqlFailure(`update public.user_workout_plan_activities set plan_phase_id='${otherPhase}' where id='${ownerActivity}'`, /activity legacy source must belong to the same workout plan/i);
     expectSqlFailure(`insert into user_workout_plan_activities(plan_phase_id,catalog_source,activity_name_snapshot,planned_prescription,sort_order) values ('${ownerPhase}','manual','Bad JSON','[]'::jsonb,99)`, /prescription_shape|check constraint/i);
   });
