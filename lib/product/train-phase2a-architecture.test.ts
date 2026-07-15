@@ -8,6 +8,10 @@ const verification = readFileSync(verificationPath, "utf8").toLowerCase();
 const adr = readFileSync("docs/architecture/decisions/0004-train-multi-week-multi-sport-program-model.md", "utf8");
 const canonical = readFileSync("docs/architecture/canonical-domain-model.md", "utf8");
 const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
+const migrationLedger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
+  historyRepair: { state: string };
+  entries: Array<{ localFile: string; state: string }>;
+};
 
 const requiredTables = [
   "user_workout_plan_week_templates",
@@ -70,8 +74,13 @@ describe("Train Phase 2A architecture contract", () => {
   });
 
   it("enforces privacy, ownership, JSON shape, and verification in the authoritative quality gate", () => {
-    expect(migration).toContain("assert_train_phase2a_structure_integrity");
+    expect(migration).toContain("assert_train_phase2a_session_structure_integrity");
+    expect(migration).toContain("assert_train_phase2a_activity_structure_integrity");
+    expect(migration).not.toContain("assert_train_phase2a_structure_integrity");
     expect(migration).toContain("assert_train_phase2a_bridge_integrity");
+    expect(migration).toContain("(select private.is_admin())");
+    expect(migration).toContain("(select auth.uid())");
+    expect(migration).not.toContain("public.is_admin()");
     expect(migration).toContain("jsonb_typeof(planned_prescription) = 'object'");
     expect(migration).toContain("revoke all on public.user_workout_plan_week_templates from public, anon");
     expect(verification).toContain("rls exposed another member");
@@ -80,6 +89,11 @@ describe("Train Phase 2A architecture contract", () => {
     expect(verification).toContain("failed detach left a partial cloned template");
     expect(verification).toContain("account deletion did not remove train phase 2a user data");
     expect(workflow).toContain("-f supabase/verification/train-phase2a-program-architecture.sql");
+  });
+
+  it("keeps the unapplied Phase 2A migration classified in the Train domain", () => {
+    expect(migrationLedger.entries.find((entry) => entry.localFile === "20260715190000_train_phase2a_program_architecture.sql")?.state).toBe("pending");
+    expect(migrationLedger.historyRepair.state).toBe("pending");
   });
 
   it("documents the target model without claiming runtime cutover", () => {
