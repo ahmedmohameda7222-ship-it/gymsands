@@ -9,26 +9,26 @@ function validEnvironment() {
     PLAIVRA_BUILD_TIMESTAMP: "2026-07-10T12:30:00.000Z",
     PLAIVRA_RELEASE_ENVIRONMENT: "production",
     PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2",
-    PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: "20260711014500",
-    PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE: "pending",
-    PLAIVRA_PENDING_MIGRATION_COUNT: "1",
-    PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: "7",
-    PLAIVRA_UNRESOLVED_MIGRATION_COUNT: "8"
+    PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: "20260715010000",
+    PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE: "reconciled",
+    PLAIVRA_PENDING_MIGRATION_COUNT: "0",
+    PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: "0",
+    PLAIVRA_UNRESOLVED_MIGRATION_COUNT: "0"
   };
 }
 
 describe("release version metadata", () => {
-  it("returns normalized public build identifiers and fail-closed migration counts", () => {
+  it("returns normalized public build identifiers and reconciled migration counts", () => {
     expect(getReleaseVersion(validEnvironment())).toEqual({
       commitSha: fullSha,
       buildTimestamp: "2026-07-10T12:30:00.000Z",
       environment: "production",
       schemaCompatibilityVersion: "2",
-      expectedDatabaseMigrationVersion: "20260711014500",
-      migrationLedgerReconciliationState: "pending",
-      pendingMigrationCount: 1,
-      schemaAppliedUntrackedCount: 7,
-      unresolvedMigrationCount: 8
+      expectedDatabaseMigrationVersion: "20260715010000",
+      migrationLedgerReconciliationState: "reconciled",
+      pendingMigrationCount: 0,
+      schemaAppliedUntrackedCount: 0,
+      unresolvedMigrationCount: 0
     });
   });
 
