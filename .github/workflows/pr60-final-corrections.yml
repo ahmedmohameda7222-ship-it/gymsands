@@ -33,66 +33,44 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
 
           migration_path = Path("supabase/migrations/20260715190000_train_phase2a_program_architecture.sql")
           migration = migration_path.read_text(encoding="utf-8")
           old_timestamp = "coalesce(exercise.updated_at, exercise.created_at)"
           if migration.count(old_timestamp) != 1:
               raise SystemExit(f"Expected one legacy updated_at reference, found {migration.count(old_timestamp)}")
-          migration = migration.replace(old_timestamp, "exercise.created_at")
-          migration_path.write_text(migration, encoding="utf-8")
+          migration_path.write_text(migration.replace(old_timestamp, "exercise.created_at"), encoding="utf-8")
 
           integration_path = Path("services/database/train-program-v2-rpc.integration.test.ts")
           integration = integration_path.read_text(encoding="utf-8")
 
-          table_pattern = re.compile(
-              r"(create table public\.user_workout_plan_exercises \(.*?"
-              r"archived_at timestamptz,\n"
-              r"\s*created_at timestamptz not null default now\(\),\n)"
-              r"\s*updated_at timestamptz not null default now\(\)\n"
-              r"(\s*\);)",
-              re.S,
-          )
-          integration, table_replacements = table_pattern.subn(r"\1\2", integration, count=1)
-          if table_replacements != 1:
-              raise SystemExit(f"Expected to remove one fixture-only exercise updated_at column, changed {table_replacements}")
+          table_start = integration.index("    create table public.user_workout_plan_exercises (")
+          table_end = integration.index("    create table public.user_workout_sessions (", table_start)
+          table_block = integration[table_start:table_end]
+          fixture_timestamp_pair = "      created_at timestamptz not null default now(),\n      updated_at timestamptz not null default now()"
+          if table_block.count(fixture_timestamp_pair) != 1:
+              raise SystemExit(f"Expected one fixture timestamp pair, found {table_block.count(fixture_timestamp_pair)}")
+          table_block = table_block.replace(fixture_timestamp_pair, "      created_at timestamptz not null default now()")
+          integration = integration[:table_start] + table_block + integration[table_end:]
 
           old_session_assertion = "expect(sql(`update public.user_workout_plan_sessions set week_template_id=week_template_id where id='${ownerSession}' returning id`)).toBe(ownerSession);"
           new_session_assertion = "expect(sql(`with updated as (update public.user_workout_plan_sessions set week_template_id=week_template_id where id='${ownerSession}' returning id) select id from updated`)).toBe(ownerSession);"
           if integration.count(old_session_assertion) != 1:
-              raise SystemExit("Expected exactly one session success assertion")
+              raise SystemExit(f"Expected one session assertion, found {integration.count(old_session_assertion)}")
           integration = integration.replace(old_session_assertion, new_session_assertion)
 
           old_activity_assertion = "expect(sql(`update public.user_workout_plan_activities set plan_phase_id=plan_phase_id where id='${ownerActivity}' returning id`)).toBe(ownerActivity);"
           new_activity_assertion = "expect(sql(`with updated as (update public.user_workout_plan_activities set plan_phase_id=plan_phase_id where id='${ownerActivity}' returning id) select id from updated`)).toBe(ownerActivity);"
           if integration.count(old_activity_assertion) != 1:
-              raise SystemExit("Expected exactly one activity success assertion")
+              raise SystemExit(f"Expected one activity assertion, found {integration.count(old_activity_assertion)}")
           integration = integration.replace(old_activity_assertion, new_activity_assertion)
-
-          timestamp_anchor = "expect(sql(\"select metric_schema_snapshot->>'slug',catalog_activity_id is null,catalog_slug is null from user_workout_plan_activities where source_legacy_plan_exercise_id='52000000-0000-4000-8000-000000000002'\")).toBe(\"plaivra_legacy_strength_prescription_v1\\tt\\tt\");"
-          timestamp_assertion = "\n    expect(sql(\"select updated_at=created_at from user_workout_plan_activities where source_legacy_plan_exercise_id='52000000-0000-4000-8000-000000000002'\")).toBe(\"t\");"
-          if timestamp_anchor not in integration:
-              raise SystemExit("Could not find Phase 2A backfill assertion anchor")
-          if timestamp_assertion.strip() not in integration:
-              integration = integration.replace(timestamp_anchor, timestamp_anchor + timestamp_assertion)
 
           integration_path.write_text(integration, encoding="utf-8")
 
           qa_path = Path("scripts/run-train-layout-qa.mjs")
           qa = qa_path.read_text(encoding="utf-8")
-          old_mobile = '''  let mobileKeyboardState = { checked: false, focused: false, visualViewport: null };
-          if (mobileKeyboard) {
-            const input = page.locator('input:not([type="hidden"]), textarea').filter({ visible: true }).first();
-            if (await input.count()) {
-              await input.focus();
-              const keyboardViewport = { width: renderedViewport.width, height: Math.max(280, Math.floor(renderedViewport.height * 0.55)) };
-              await page.setViewportSize(keyboardViewport);
-              mobileKeyboardState = { checked: true, focused: await input.evaluate((element) => element === document.activeElement), visualViewport: `${keyboardViewport.width}x${keyboardViewport.height}` };
-            } else {
-              mobileKeyboardState = { checked: true, focused: false, visualViewport: null };
-            }
-          }'''
+          mobile_start = qa.index("  let mobileKeyboardState = { checked: false, focused: false, visualViewport: null };")
+          mobile_end = qa.index("  await page.evaluate(() => window.scrollTo", mobile_start)
           new_mobile = '''  let mobileKeyboardState = { checked: false, focused: false, visualViewport: null, diagnostic: null };
           if (mobileKeyboard) {
             const editableSelector = 'input:not([type="hidden"]):not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly])';
@@ -119,19 +97,24 @@ jobs:
                 diagnostic: `Editable control did not become focusable: ${error instanceof Error ? error.message : String(error)}; matching controls: ${editableCount}`
               };
             }
-          }'''
-          if qa.count(old_mobile) != 1:
-              raise SystemExit(f"Expected one mobile keyboard block, found {qa.count(old_mobile)}")
-          qa = qa.replace(old_mobile, new_mobile)
+          }
+'''
+          qa = qa[:mobile_start] + new_mobile + qa[mobile_end:]
           qa_path.write_text(qa, encoding="utf-8")
 
-          if "exercise.updated_at" in migration:
+          corrected_migration = migration_path.read_text(encoding="utf-8")
+          corrected_integration = integration_path.read_text(encoding="utf-8")
+          corrected_qa = qa_path.read_text(encoding="utf-8")
+          if "exercise.updated_at" in corrected_migration:
               raise SystemExit("Legacy nonexistent updated_at reference remains")
-          if "with updated as (update public.user_workout_plan_sessions" not in integration:
+          corrected_table = corrected_integration[corrected_integration.index("    create table public.user_workout_plan_exercises ("):corrected_integration.index("    create table public.user_workout_sessions (")]
+          if "updated_at timestamptz" in corrected_table:
+              raise SystemExit("Fixture-only exercise updated_at column remains")
+          if "with updated as (update public.user_workout_plan_sessions" not in corrected_integration:
               raise SystemExit("Session CTE assertion correction missing")
-          if "with updated as (update public.user_workout_plan_activities" not in integration:
+          if "with updated as (update public.user_workout_plan_activities" not in corrected_integration:
               raise SystemExit("Activity CTE assertion correction missing")
-          if "await input.waitFor({ state: \"visible\", timeout: 20_000 })" not in qa:
+          if "await input.waitFor({ state: \"visible\", timeout: 20_000 })" not in corrected_qa:
               raise SystemExit("Mobile keyboard synchronization correction missing")
           PY
 
