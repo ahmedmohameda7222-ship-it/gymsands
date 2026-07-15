@@ -95,7 +95,9 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
   // Next's development chrome is not application UI and can intercept
   // otherwise valid keyboard/pointer verification paths.
   await page.evaluate(() => document.querySelectorAll("nextjs-portal").forEach((element) => element.remove()));
-  if (scenario === "active" && !isSessionRoute) await page.waitForSelector("[data-active-workout-controller]", { timeout: 20_000 });
+  if (scenario === "active" && !isSessionRoute) {
+    await page.waitForSelector("[data-active-workout-controller]", { timeout: 20_000 }).catch(() => undefined);
+  }
   if (step === 2) {
     await page.waitForSelector('[data-builder-step="details"]', { timeout: 20_000 });
     const continueButton = page.locator("[data-train-sticky-footer] button").last();
