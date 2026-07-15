@@ -45,7 +45,7 @@ test("post-deploy smoke rejects abbreviated release SHAs before network access",
   const result = runScript("scripts/post-deploy-smoke.mjs", [
     "--url", "https://example.invalid",
     "--expected-commit", "60a204d",
-    "--expected-migration", "20260711014500"
+    "--expected-migration", "20260715010000"
   ]);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stdout}\n${result.stderr}`, /exact 40-character/i);
@@ -96,16 +96,16 @@ test("release manifest records exact installed runtime versions and lockfile ide
   }
 });
 
-test("built metadata verification accepts fail-closed readiness only with the exact build identity", () => {
+test("built metadata verification accepts reconciled ledger metadata while runtime readiness remains fail-closed", () => {
   const expected = {
     commitSha: fullSha,
     buildTimestamp: "2026-07-14T01:02:03.000Z",
     environment: "ci",
-    expectedDatabaseMigrationVersion: "20260711014500",
-    migrationLedgerReconciliationState: "pending",
-    pendingMigrationCount: 1,
-    schemaAppliedUntrackedCount: 7,
-    unresolvedMigrationCount: 8
+    expectedDatabaseMigrationVersion: "20260715010000",
+    migrationLedgerReconciliationState: "reconciled",
+    pendingMigrationCount: 0,
+    schemaAppliedUntrackedCount: 0,
+    unresolvedMigrationCount: 0
   };
   const body = { ...expected, artifactIdentityValid: true, releaseReady: false };
   assert.equal(validateBuiltReleaseMetadata({ body, status: 503, expected }), true);
