@@ -89,6 +89,8 @@ beforeAll(() => {
     grant usage on schema public to public;
     drop schema if exists auth cascade;
     create schema auth;
+    drop schema if exists private cascade;
+    create schema private;
     create extension if not exists pgcrypto;
 
     do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
@@ -96,6 +98,8 @@ beforeAll(() => {
     do $$ begin create role service_role nologin bypassrls; exception when duplicate_object then null; end $$;
     alter role service_role bypassrls;
     grant usage on schema public, auth to anon, authenticated, service_role;
+    revoke all on schema private from public, anon;
+    grant usage on schema private to authenticated, service_role;
 
     create function auth.uid() returns uuid language sql stable
       as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
@@ -110,14 +114,30 @@ beforeAll(() => {
       id uuid primary key references auth.users(id) on delete cascade,
       role text not null default 'member'
     );
-    insert into public.profiles(id) values ('${userA}'), ('${userB}'), ('${userC}');
+    insert into public.profiles(id, role) values
+      ('${userA}', 'member'),
+      ('${userB}', 'member'),
+      ('${userC}', 'admin');
 
     create function public.set_updated_at() returns trigger language plpgsql as $$
     begin new.updated_at = now(); return new; end $$;
 
-    create function public.is_admin() returns boolean language sql stable security definer set search_path='' as $$
-      select exists(select 1 from public.profiles profile where profile.id = auth.uid() and profile.role = 'admin')
+    create function private.is_admin()
+    returns boolean
+    language sql
+    stable
+    security definer
+    set search_path = pg_catalog, public
+    as $$
+      select exists(
+        select 1
+        from public.profiles profile
+        where profile.id = (select auth.uid())
+          and profile.role = 'admin'
+      )
     $$;
+    revoke all on function private.is_admin() from public, anon;
+    grant execute on function private.is_admin() to authenticated, service_role;
 
     create function public.assert_workout_actor(p_user_id uuid) returns void language plpgsql set search_path='' as $$
     begin
@@ -256,7 +276,7 @@ beforeAll(() => {
 
 afterAll(() => {
   if (disposableDatabaseUrl) {
-    sql("drop schema public cascade; create schema public; grant all on schema public to postgres; grant usage on schema public to public; drop schema if exists auth cascade;");
+    sql("drop schema public cascade; create schema public; grant all on schema public to postgres; grant usage on schema public to public; drop schema if exists auth cascade; drop schema if exists private cascade;");
   }
 });
 
@@ -278,18 +298,30 @@ databaseDescribe("Train Phase 2A migration and detach RPC", () => {
     expect(sql("select plan_activity_id is not null from exercise_logs where id='56000000-0000-4000-8000-000000000001'")).toBe("t");
   });
 
-  it("enforces RLS, same-plan references, bridge ownership, and JSON shape", () => {
+  it("enforces canonical admin RLS, table-specific legacy integrity, bridge ownership, and JSON shape", () => {
     const ownerTemplate = sql("select id from user_workout_plan_week_templates where plan_id='50000000-0000-4000-8000-000000000001'");
-    expect(authQuery(userB, `select count(*) from public.user_workout_plan_week_templates where id='${ownerTemplate}'`)).toBe("0");
-
     const otherTemplate = sql("select id from user_workout_plan_week_templates where plan_id='50000000-0000-4000-8000-000000000002'");
+
+    expect(sql("select to_regprocedure('public.is_admin()') is null, to_regprocedure('private.is_admin()') is not null")).toBe("t\tt");
+    expect(authQuery(userA, `select count(*) from public.user_workout_plan_week_templates where id='${ownerTemplate}'`)).toBe("1");
+    expect(authQuery(userB, `select count(*) from public.user_workout_plan_week_templates where id='${ownerTemplate}'`)).toBe("0");
+    expect(authQuery(userC, `select count(*) from public.user_workout_plan_week_templates where id='${ownerTemplate}'`)).toBe("1");
+    expectSqlFailure(`begin; set local role anon; select count(*) from public.user_workout_plan_week_templates; commit;`, /permission denied|row-level security/i);
+    expectSqlFailure(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userB}',true); select set_config('request.jwt.claim.role','authenticated',true); insert into public.user_workout_plan_sessions(week_template_id,source,title,day_offset,sport_slug,sport_name_snapshot,sort_order) values ('${ownerTemplate}','manual','Forbidden session',0,'strength','Strength',99); commit;`, /row-level security|policy/i);
+
     expectSqlFailure(`begin; insert into user_workout_plan_weeks(plan_id,week_template_id,week_number) values ('50000000-0000-4000-8000-000000000001','${otherTemplate}',50); set constraints user_workout_plan_weeks_template_same_plan_fk immediate; commit;`, /foreign key/i);
 
     const ownerSession = sql("select id from user_workout_plan_sessions where source_legacy_plan_day_id='51000000-0000-4000-8000-000000000001'");
+    expect(sql(`update public.user_workout_plan_sessions set week_template_id=week_template_id where id='${ownerSession}' returning id`)).toBe(ownerSession);
+    expectSqlFailure(`update public.user_workout_plan_sessions set week_template_id='${otherTemplate}' where id='${ownerSession}'`, /session legacy source must belong to the same workout plan/i);
     expectSqlFailure(`update user_workout_sessions set plan_session_id='${ownerSession}' where user_id='${userB}'`, /row workout plan|owner/i);
 
-    const phase = sql(`select phase.id from user_workout_plan_phases phase join user_workout_plan_sessions session on session.id=phase.plan_session_id where session.week_template_id='${ownerTemplate}' limit 1`);
-    expectSqlFailure(`insert into user_workout_plan_activities(plan_phase_id,catalog_source,activity_name_snapshot,planned_prescription,sort_order) values ('${phase}','manual','Bad JSON','[]'::jsonb,99)`, /prescription_shape|check constraint/i);
+    const ownerPhase = sql(`select phase.id from user_workout_plan_phases phase join user_workout_plan_sessions session on session.id=phase.plan_session_id where session.week_template_id='${ownerTemplate}' limit 1`);
+    const otherPhase = sql(`select phase.id from user_workout_plan_phases phase join user_workout_plan_sessions session on session.id=phase.plan_session_id where session.week_template_id='${otherTemplate}' limit 1`);
+    const ownerActivity = sql("select id from public.user_workout_plan_activities where source_legacy_plan_exercise_id='52000000-0000-4000-8000-000000000002'");
+    expect(sql(`update public.user_workout_plan_activities set plan_phase_id=plan_phase_id where id='${ownerActivity}' returning id`)).toBe(ownerActivity);
+    expectSqlFailure(`update public.user_workout_plan_activities set plan_phase_id='${otherPhase}' where id='${ownerActivity}'`, /activity legacy source must belong to the same workout plan/i);
+    expectSqlFailure(`insert into user_workout_plan_activities(plan_phase_id,catalog_source,activity_name_snapshot,planned_prescription,sort_order) values ('${ownerPhase}','manual','Bad JSON','[]'::jsonb,99)`, /prescription_shape|check constraint/i);
   });
 
   it("detaches one shared week atomically and idempotently while preserving immutable snapshots", () => {

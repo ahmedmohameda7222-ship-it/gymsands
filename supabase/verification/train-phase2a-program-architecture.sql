@@ -62,6 +62,42 @@ begin
     end if;
   end loop;
 
+  if exists (
+    select 1
+    from pg_policies policy
+    where policy.schemaname = 'public'
+      and policy.tablename = any(array[
+        'user_workout_plan_week_templates',
+        'user_workout_plan_weeks',
+        'user_workout_plan_sessions',
+        'user_workout_plan_phases',
+        'user_workout_plan_activities'
+      ])
+      and (coalesce(policy.qual, '') || ' ' || coalesce(policy.with_check, '')) like '%public.is_admin()%'
+  ) then
+    raise exception 'A Train Phase 2A policy still references public.is_admin().';
+  end if;
+
+  if exists (
+    select required_table.table_name
+    from unnest(array[
+      'user_workout_plan_week_templates',
+      'user_workout_plan_weeks',
+      'user_workout_plan_sessions',
+      'user_workout_plan_phases',
+      'user_workout_plan_activities'
+    ]) required_table(table_name)
+    where not exists (
+      select 1
+      from pg_policies policy
+      where policy.schemaname = 'public'
+        and policy.tablename = required_table.table_name
+        and (coalesce(policy.qual, '') || ' ' || coalesce(policy.with_check, '')) like '%private.is_admin()%'
+    )
+  ) then
+    raise exception 'A Train Phase 2A policy does not use private.is_admin().';
+  end if;
+
   for required_column in
     select *
     from (values
@@ -93,6 +129,40 @@ begin
       raise exception 'Missing Train Phase 2A column: %.%', required_column.table_name, required_column.column_name;
     end if;
   end loop;
+
+  if to_regprocedure('public.assert_train_phase2a_session_structure_integrity()') is null then
+    raise exception 'Missing table-specific Phase 2A session integrity trigger function.';
+  end if;
+  if to_regprocedure('public.assert_train_phase2a_activity_structure_integrity()') is null then
+    raise exception 'Missing table-specific Phase 2A activity integrity trigger function.';
+  end if;
+  if to_regprocedure('public.assert_train_phase2a_structure_integrity()') is not null then
+    raise exception 'Obsolete shared Phase 2A structure trigger function is still present.';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_trigger trigger_definition
+    join pg_proc routine on routine.oid = trigger_definition.tgfoid
+    where trigger_definition.tgrelid = 'public.user_workout_plan_sessions'::regclass
+      and trigger_definition.tgname = 'user_workout_plan_sessions_structure_integrity'
+      and not trigger_definition.tgisinternal
+      and routine.proname = 'assert_train_phase2a_session_structure_integrity'
+  ) then
+    raise exception 'Phase 2A session integrity trigger is not attached to its table-specific function.';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_trigger trigger_definition
+    join pg_proc routine on routine.oid = trigger_definition.tgfoid
+    where trigger_definition.tgrelid = 'public.user_workout_plan_activities'::regclass
+      and trigger_definition.tgname = 'user_workout_plan_activities_structure_integrity'
+      and not trigger_definition.tgisinternal
+      and routine.proname = 'assert_train_phase2a_activity_structure_integrity'
+  ) then
+    raise exception 'Phase 2A activity integrity trigger is not attached to its table-specific function.';
+  end if;
 
   routine_oid := to_regprocedure('public.detach_workout_plan_week_atomic(uuid,uuid)');
   if routine_oid is null then
@@ -311,6 +381,52 @@ begin
     return;
   end;
   raise exception 'Cross-plan assigned week unexpectedly succeeded.';
+end
+$assert$;
+
+create function pg_temp.assert_cross_plan_legacy_session_denied(
+  p_template_id uuid,
+  p_legacy_day_id uuid
+)
+returns void
+language plpgsql
+as $assert$
+begin
+  begin
+    insert into public.user_workout_plan_sessions(
+      week_template_id, source_legacy_plan_day_id, source, title, day_offset,
+      sport_slug, sport_name_snapshot, sort_order
+    ) values (
+      p_template_id, p_legacy_day_id, 'legacy_backfill',
+      'Forbidden legacy session mapping', 0, null, 'Legacy training', 99
+    );
+  exception when sqlstate '23514' then
+    return;
+  end;
+  raise exception 'Cross-plan legacy session mapping unexpectedly succeeded.';
+end
+$assert$;
+
+create function pg_temp.assert_cross_plan_legacy_activity_denied(
+  p_phase_id uuid,
+  p_legacy_exercise_id uuid
+)
+returns void
+language plpgsql
+as $assert$
+begin
+  begin
+    insert into public.user_workout_plan_activities(
+      plan_phase_id, source_legacy_plan_exercise_id, catalog_source,
+      activity_name_snapshot, planned_prescription, sort_order
+    ) values (
+      p_phase_id, p_legacy_exercise_id, 'legacy',
+      'Forbidden legacy activity mapping', '{}'::jsonb, 99
+    );
+  exception when sqlstate '23514' then
+    return;
+  end;
+  raise exception 'Cross-plan legacy activity mapping unexpectedly succeeded.';
 end
 $assert$;
 
@@ -582,8 +698,68 @@ values (:'other_plan_id'::uuid, 'Other template', 1, 'manual')
 returning id as other_template_id
 \gset
 
+select day.id as owner_legacy_day_id, exercise.id as owner_legacy_exercise_id
+from public.user_workout_plan_days day
+join public.user_workout_plan_exercises exercise on exercise.plan_day_id = day.id
+where day.plan_id = :'owner_plan_id'::uuid
+order by day.day_number, exercise.sort_order
+limit 1
+\gset
+
+insert into public.user_workout_plan_week_templates(plan_id, name, sort_order, source)
+values (:'owner_plan_id'::uuid, 'Legacy integrity template', 2, 'manual')
+returning id as integrity_template_id
+\gset
+
+insert into public.user_workout_plan_sessions(
+  week_template_id, source_legacy_plan_day_id, source, title, day_offset,
+  sport_slug, sport_name_snapshot, sort_order
+) values (
+  :'integrity_template_id'::uuid, :'owner_legacy_day_id'::uuid, 'legacy_backfill',
+  'Valid legacy session mapping', 0, null, 'Legacy training', 1
+) returning id as integrity_session_id
+\gset
+
+insert into public.user_workout_plan_phases(
+  plan_session_id, phase_slug, phase_name_snapshot, sort_order
+) values (
+  :'integrity_session_id'::uuid, 'main_work', 'Main work', 1
+) returning id as integrity_phase_id
+\gset
+
+insert into public.user_workout_plan_activities(
+  plan_phase_id, source_legacy_plan_exercise_id, catalog_source,
+  activity_name_snapshot, planned_prescription, sort_order
+) values (
+  :'integrity_phase_id'::uuid, :'owner_legacy_exercise_id'::uuid, 'legacy',
+  'Valid legacy activity mapping', '{}'::jsonb, 1
+);
+
+insert into public.user_workout_plan_sessions(
+  week_template_id, source, title, day_offset, sport_slug, sport_name_snapshot, sort_order
+) values (
+  :'other_template_id'::uuid, 'manual', 'Other plan integrity session',
+  0, 'strength', 'Strength', 1
+) returning id as other_integrity_session_id
+\gset
+
+insert into public.user_workout_plan_phases(
+  plan_session_id, phase_slug, phase_name_snapshot, sort_order
+) values (
+  :'other_integrity_session_id'::uuid, 'main_work', 'Main work', 1
+) returning id as other_integrity_phase_id
+\gset
+
 reset role;
 select pg_temp.assert_same_plan_denied(:'owner_plan_id'::uuid, :'other_template_id'::uuid);
+select pg_temp.assert_cross_plan_legacy_session_denied(
+  :'other_template_id'::uuid,
+  :'owner_legacy_day_id'::uuid
+);
+select pg_temp.assert_cross_plan_legacy_activity_denied(
+  :'other_integrity_phase_id'::uuid,
+  :'owner_legacy_exercise_id'::uuid
+);
 
 -- Another member cannot read, mutate, or detach the owner graph.
 set local role authenticated;

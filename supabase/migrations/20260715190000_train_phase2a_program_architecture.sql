@@ -259,7 +259,7 @@ create trigger user_workout_plan_activities_updated_at
 before update on public.user_workout_plan_activities
 for each row execute function public.set_updated_at();
 
-create or replace function public.assert_train_phase2a_structure_integrity()
+create or replace function public.assert_train_phase2a_session_structure_integrity()
 returns trigger
 language plpgsql
 security definer
@@ -269,54 +269,78 @@ declare
   target_plan_id uuid;
   source_plan_id uuid;
 begin
-  if tg_table_name = 'user_workout_plan_sessions' and new.source_legacy_plan_day_id is not null then
-    select template.plan_id
-      into target_plan_id
-    from public.user_workout_plan_week_templates template
-    where template.id = new.week_template_id;
+  if new.source_legacy_plan_day_id is null then
+    return new;
+  end if;
 
-    select day.plan_id
-      into source_plan_id
-    from public.user_workout_plan_days day
-    where day.id = new.source_legacy_plan_day_id;
+  select template.plan_id
+    into target_plan_id
+  from public.user_workout_plan_week_templates template
+  where template.id = new.week_template_id;
 
-    if target_plan_id is null or source_plan_id is null or target_plan_id <> source_plan_id then
-      raise exception 'Phase 2 session legacy source must belong to the same workout plan.' using errcode = '23514';
-    end if;
-  elsif tg_table_name = 'user_workout_plan_activities' and new.source_legacy_plan_exercise_id is not null then
-    select template.plan_id
-      into target_plan_id
-    from public.user_workout_plan_phases phase
-    join public.user_workout_plan_sessions session on session.id = phase.plan_session_id
-    join public.user_workout_plan_week_templates template on template.id = session.week_template_id
-    where phase.id = new.plan_phase_id;
+  select day.plan_id
+    into source_plan_id
+  from public.user_workout_plan_days day
+  where day.id = new.source_legacy_plan_day_id;
 
-    select day.plan_id
-      into source_plan_id
-    from public.user_workout_plan_exercises exercise
-    join public.user_workout_plan_days day on day.id = exercise.plan_day_id
-    where exercise.id = new.source_legacy_plan_exercise_id;
-
-    if target_plan_id is null or source_plan_id is null or target_plan_id <> source_plan_id then
-      raise exception 'Phase 2 activity legacy source must belong to the same workout plan.' using errcode = '23514';
-    end if;
+  if target_plan_id is null or source_plan_id is null or target_plan_id <> source_plan_id then
+    raise exception 'Phase 2 session legacy source must belong to the same workout plan.' using errcode = '23514';
   end if;
 
   return new;
 end
 $function$;
 
-revoke all on function public.assert_train_phase2a_structure_integrity() from public, anon, authenticated;
+revoke all on function public.assert_train_phase2a_session_structure_integrity()
+from public, anon, authenticated, service_role;
+
+create or replace function public.assert_train_phase2a_activity_structure_integrity()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $function$
+declare
+  target_plan_id uuid;
+  source_plan_id uuid;
+begin
+  if new.source_legacy_plan_exercise_id is null then
+    return new;
+  end if;
+
+  select template.plan_id
+    into target_plan_id
+  from public.user_workout_plan_phases phase
+  join public.user_workout_plan_sessions session on session.id = phase.plan_session_id
+  join public.user_workout_plan_week_templates template on template.id = session.week_template_id
+  where phase.id = new.plan_phase_id;
+
+  select day.plan_id
+    into source_plan_id
+  from public.user_workout_plan_exercises exercise
+  join public.user_workout_plan_days day on day.id = exercise.plan_day_id
+  where exercise.id = new.source_legacy_plan_exercise_id;
+
+  if target_plan_id is null or source_plan_id is null or target_plan_id <> source_plan_id then
+    raise exception 'Phase 2 activity legacy source must belong to the same workout plan.' using errcode = '23514';
+  end if;
+
+  return new;
+end
+$function$;
+
+revoke all on function public.assert_train_phase2a_activity_structure_integrity()
+from public, anon, authenticated, service_role;
 
 create trigger user_workout_plan_sessions_structure_integrity
 before insert or update of week_template_id, source_legacy_plan_day_id
 on public.user_workout_plan_sessions
-for each row execute function public.assert_train_phase2a_structure_integrity();
+for each row execute function public.assert_train_phase2a_session_structure_integrity();
 
 create trigger user_workout_plan_activities_structure_integrity
 before insert or update of plan_phase_id, source_legacy_plan_exercise_id
 on public.user_workout_plan_activities
-for each row execute function public.assert_train_phase2a_structure_integrity();
+for each row execute function public.assert_train_phase2a_activity_structure_integrity();
 
 create or replace function public.assert_train_phase2a_bridge_integrity()
 returns trigger
@@ -447,13 +471,13 @@ for all to authenticated
 using (
   exists (
     select 1 from public.user_workout_plans plan
-    where plan.id = public.user_workout_plan_week_templates.plan_id and (plan.user_id = auth.uid() or public.is_admin())
+    where plan.id = public.user_workout_plan_week_templates.plan_id and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
   )
 )
 with check (
   exists (
     select 1 from public.user_workout_plans plan
-    where plan.id = public.user_workout_plan_week_templates.plan_id and (plan.user_id = auth.uid() or public.is_admin())
+    where plan.id = public.user_workout_plan_week_templates.plan_id and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
   )
 );
 
@@ -463,13 +487,13 @@ for all to authenticated
 using (
   exists (
     select 1 from public.user_workout_plans plan
-    where plan.id = public.user_workout_plan_weeks.plan_id and (plan.user_id = auth.uid() or public.is_admin())
+    where plan.id = public.user_workout_plan_weeks.plan_id and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
   )
 )
 with check (
   exists (
     select 1 from public.user_workout_plans plan
-    where plan.id = public.user_workout_plan_weeks.plan_id and (plan.user_id = auth.uid() or public.is_admin())
+    where plan.id = public.user_workout_plan_weeks.plan_id and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
   )
 );
 
@@ -482,7 +506,7 @@ using (
     from public.user_workout_plan_week_templates template
     join public.user_workout_plans plan on plan.id = template.plan_id
     where template.id = public.user_workout_plan_sessions.week_template_id
-      and (plan.user_id = auth.uid() or public.is_admin())
+      and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
   )
 )
 with check (
@@ -491,7 +515,7 @@ with check (
     from public.user_workout_plan_week_templates template
     join public.user_workout_plans plan on plan.id = template.plan_id
     where template.id = public.user_workout_plan_sessions.week_template_id
-      and (plan.user_id = auth.uid() or public.is_admin())
+      and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
   )
 );
 
@@ -505,7 +529,7 @@ using (
     join public.user_workout_plan_week_templates template on template.id = session.week_template_id
     join public.user_workout_plans plan on plan.id = template.plan_id
     where session.id = public.user_workout_plan_phases.plan_session_id
-      and (plan.user_id = auth.uid() or public.is_admin())
+      and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
   )
 )
 with check (
@@ -515,7 +539,7 @@ with check (
     join public.user_workout_plan_week_templates template on template.id = session.week_template_id
     join public.user_workout_plans plan on plan.id = template.plan_id
     where session.id = public.user_workout_plan_phases.plan_session_id
-      and (plan.user_id = auth.uid() or public.is_admin())
+      and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
   )
 );
 
@@ -530,7 +554,7 @@ using (
     join public.user_workout_plan_week_templates template on template.id = session.week_template_id
     join public.user_workout_plans plan on plan.id = template.plan_id
     where phase.id = public.user_workout_plan_activities.plan_phase_id
-      and (plan.user_id = auth.uid() or public.is_admin())
+      and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
   )
 )
 with check (
@@ -541,7 +565,7 @@ with check (
     join public.user_workout_plan_week_templates template on template.id = session.week_template_id
     join public.user_workout_plans plan on plan.id = template.plan_id
     where phase.id = public.user_workout_plan_activities.plan_phase_id
-      and (plan.user_id = auth.uid() or public.is_admin())
+      and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
   )
 );
 
