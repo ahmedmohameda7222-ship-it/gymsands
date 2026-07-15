@@ -37,7 +37,6 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/pr59-picker-followup.mjs
-          git show origin/main:.github/workflows/phase-a-diff-validation.yml > .github/workflows/phase-a-diff-validation.yml
           git diff --check
           git config user.name "Plaivra PR59 Follow-up"
           git config user.email "actions@users.noreply.github.com"
