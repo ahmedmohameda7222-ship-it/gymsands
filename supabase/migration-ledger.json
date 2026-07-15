@@ -1,14 +1,18 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-13T17:12:53.584192+00",
-  "auditedRepositoryCommit": "778f4dc896147f81a7e404802af13d7af3dd2fba",
-  "productionMigrationCount": 24,
-  "schemaVerifiedUntrackedCount": 6,
+  "capturedAt": "2026-07-15T00:51:50Z",
+  "auditedRepositoryCommit": "10d49bd8f41fccb605b6015f92f8d0402a836128",
+  "productionMigrationCount": 32,
+  "schemaVerifiedUntrackedCount": 0,
+  "pendingCount": 0,
+  "unresolvedCount": 0,
   "historyRepair": {
-    "state": "pending",
-    "schemaAppliedUntrackedCount": 6,
-    "note": "Production schema effects are verified. Supabase migration-history reconciliation remains pending and must only use an approved evidence-backed workflow. Do not replay schema-applied migrations."
+    "state": "reconciled",
+    "schemaAppliedUntrackedCount": 0,
+    "pendingCount": 0,
+    "unresolvedCount": 0,
+    "note": "Production migration history contains all 32 repository identities, including the normally applied ACL correction and the seven repaired historical identities. The authenticated nutrition override ACL was verified as CRUD-only. Do not replay applied migrations. The compatibility marker remains 20260711014500 and is outside this reconciliation record."
   },
   "entries": [
     { "productionVersion": "202606290000", "productionName": "clean_initial_schema", "localFile": "202606290000_clean_initial_schema.sql", "state": "applied" },
@@ -35,12 +39,13 @@
     { "productionVersion": "20260711004551", "productionName": "subscription_entitlement_foundation", "localFile": "20260711004551_subscription_entitlement_foundation.sql", "state": "applied" },
     { "productionVersion": "20260711013000", "productionName": "prelaunch_runtime_safety_corrections", "localFile": "20260711013000_prelaunch_runtime_safety_corrections.sql", "state": "applied" },
     { "productionVersion": "20260711014500", "productionName": "idempotency_uncertain_completion_guard", "localFile": "20260711014500_idempotency_uncertain_completion_guard.sql", "state": "applied" },
-    { "productionVersion": null, "productionName": null, "localFile": "20260711213000_adaptive_onboarding_v2.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but all migration columns, constraints, the authenticated RPC, and grants were verified in production on 2026-07-13. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
-    { "productionVersion": null, "productionName": null, "localFile": "20260712173000_persistent_meal_plan_skip_status.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but the planned/done/skipped constraint, skipped-state constraint, terminal-state trigger, and trigger function were verified in production on 2026-07-13. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
-    { "productionVersion": null, "productionName": null, "localFile": "20260712195000_nutrition_target_date_overrides.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but the override table, unique/index structure, RLS, four ownership policies, updated-at trigger, authenticated CRUD grants, and atomic Apply RPC were verified in production on 2026-07-13. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
-    { "productionVersion": null, "productionName": null, "localFile": "20260713153000_meal_plan_atomic_execution.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but all three ownership-checked atomic RPCs, hardened SECURITY DEFINER search paths and grants, both uniqueness indexes, the validated execution-state constraint, the terminal transition trigger, zero duplicate groups, and repair of all four incomplete legacy done rows were verified in production at 2026-07-13T00:42:16.742617+00 against audited code commit 0634ed9eb92b32ec17190de7d05b66f58c6f3836. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
-    { "productionVersion": null, "productionName": null, "localFile": "20260713160000_train_section_atomic_integrity.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but the Train atomic RPCs, ownership assertions, reference-integrity and history-preservation triggers, archived day/exercise columns, active-plan constraint, six required indexes, hardened empty search paths and grants, and zero production integrity conflicts were verified at 2026-07-13T17:12:53.584192+00 against audited code commit 778f4dc896147f81a7e404802af13d7af3dd2fba. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
-    { "productionVersion": null, "productionName": null, "localFile": "20260713170000_finalize_train_schedule_delete_integrity.sql", "state": "applied_schema_untracked", "note": "Absent from Supabase migration history, but the explicit-local-date activate/create/save/archive/delete RPC signatures, removal of legacy overloads, schedule-safe behavior, authenticated/service-role grants, anon denial, empty search paths, and zero checked production reference, duplication, schedule-history, active-plan, or orphan conflicts were verified at 2026-07-13T17:12:53.584192+00 against audited code commit 778f4dc896147f81a7e404802af13d7af3dd2fba. Do not replay. Repair migration history only through an approved evidence-backed workflow." },
-    { "productionVersion": null, "productionName": null, "localFile": "20260714030000_harden_train_plan_rpc_execution.sql", "state": "pending", "note": "Forward-only correction required because authenticated has no direct grants on the canonical Train plan tables. Apply only through a separately approved controlled release after review; do not treat this repository migration as production-applied." }
+    { "productionVersion": "20260711213000", "productionName": "adaptive_onboarding_v2", "localFile": "20260711213000_adaptive_onboarding_v2.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified on 2026-07-15. Do not replay." },
+    { "productionVersion": "20260712173000", "productionName": "persistent_meal_plan_skip_status", "localFile": "20260712173000_persistent_meal_plan_skip_status.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified on 2026-07-15. Do not replay." },
+    { "productionVersion": "20260712195000", "productionName": "nutrition_target_date_overrides", "localFile": "20260712195000_nutrition_target_date_overrides.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified after the forward ACL correction on 2026-07-15. Do not replay." },
+    { "productionVersion": "20260713153000", "productionName": "meal_plan_atomic_execution", "localFile": "20260713153000_meal_plan_atomic_execution.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified on 2026-07-15. Do not replay." },
+    { "productionVersion": "20260713160000", "productionName": "train_section_atomic_integrity", "localFile": "20260713160000_train_section_atomic_integrity.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified on 2026-07-15. Do not replay." },
+    { "productionVersion": "20260713170000", "productionName": "finalize_train_schedule_delete_integrity", "localFile": "20260713170000_finalize_train_schedule_delete_integrity.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified on 2026-07-15. Do not replay." },
+    { "productionVersion": "20260714030000", "productionName": "harden_train_plan_rpc_execution", "localFile": "20260714030000_harden_train_plan_rpc_execution.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified on 2026-07-15. Do not replay." },
+    { "productionVersion": "20260715010000", "productionName": "restrict_nutrition_target_override_acl", "localFile": "20260715010000_restrict_nutrition_target_override_acl.sql", "state": "applied", "note": "Normally applied production identity verified with authenticated privileges exactly DELETE, INSERT, SELECT, and UPDATE on 2026-07-15. Do not replay." }
   ]
 }

@@ -126,20 +126,16 @@ Never commit real secrets or production tokens.
 
 The machine-readable authority is [`supabase/migration-ledger.json`](supabase/migration-ledger.json). The human reconciliation record is [`docs/architecture/migration-ledger-reconciliation.md`](docs/architecture/migration-ledger-reconciliation.md).
 
-Verified on 2026-07-13:
+Verified production state on 2026-07-15:
 
-- Supabase migration history contains 24 normally applied migrations through `20260711014500_idempotency_uncertain_completion_guard`.
-- No repository migration is classified as pending.
-- Six later migrations are absent from Supabase migration history while their schema effects are recorded as verified:
-  - `20260711213000_adaptive_onboarding_v2.sql`
-  - `20260712173000_persistent_meal_plan_skip_status.sql`
-  - `20260712195000_nutrition_target_date_overrides.sql`
-  - `20260713153000_meal_plan_atomic_execution.sql`
-  - `20260713160000_train_section_atomic_integrity.sql`
-  - `20260713170000_finalize_train_schedule_delete_integrity.sql`
-- Migration-history reconciliation remains **pending**. Repository release readiness must remain false while any `applied_schema_untracked` entry exists.
+- Supabase migration history contains 32 applied migrations through `20260715010000_restrict_nutrition_target_override_acl`.
+- These eight reconciliation-scope versions are present exactly once: `20260711213000`, `20260712173000`, `20260712195000`, `20260713153000`, `20260713160000`, `20260713170000`, `20260714030000`, and `20260715010000`.
+- The authenticated nutrition override ACL is exactly `SELECT`, `INSERT`, `UPDATE`, and `DELETE`; `TRUNCATE`, `TRIGGER`, `REFERENCES`, and `MAINTAIN` are absent.
+- Current counts are `pendingCount=0`, `schemaAppliedUntrackedCount=0`, and `unresolvedCount=0`.
+- Migration-history reconciliation is **reconciled**.
+- The production compatibility marker is aligned at `20260715010000`. Application release readiness now depends on the remaining required release gates.
 
-Do not replay schema-untracked migrations. Repair migration-history metadata only through an approved, evidence-backed, forward-only Supabase workflow. Run `npm run migration:ledger:check` to validate repository classification and documentation consistency.
+Do not replay any applied migration. Run `npm run migration:ledger:check` to validate repository classification, production identities, counts, and documentation consistency.
 
 Do not run pre-clean-rebuild migrations against the current project.
 

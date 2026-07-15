@@ -1,8 +1,9 @@
 -- Plaivra production release migration preflight (read-only)
 --
--- Reports only blocking schema mismatches for the six migrations currently
--- classified as applied_schema_untracked. It never changes schema, data,
--- migration history, grants, policies, or compatibility markers.
+-- Reports blocking schema mismatches for the seven migrations physically
+-- present but absent from production history, plus the expected forward ACL
+-- correction state. It never changes schema, data, migration history, grants,
+-- policies, or compatibility markers.
 
 \set ON_ERROR_STOP on
 
@@ -41,33 +42,67 @@ with required_columns(table_name, column_name) as (
     ('onboarding_answers_sport_details_object_check'),
     ('user_meal_plan_items_status_check'),
     ('user_meal_plan_items_skipped_state_check'),
-    ('user_meal_plan_items_execution_state_check')
+    ('user_meal_plan_items_execution_state_check'),
+    ('user_workout_plans_active_default_archive_check')
 ), required_indexes(index_name) as (
   values
     ('idx_user_nutrition_target_date_overrides_user_date'),
     ('user_grocery_items_unique_meal_source'),
-    ('user_meal_plan_items_unique_food_log')
+    ('user_meal_plan_items_unique_food_log'),
+    ('user_workout_plans_one_active_uidx'),
+    ('user_workout_plan_days_active_idx'),
+    ('user_workout_plan_exercises_active_idx'),
+    ('workout_sessions_one_open_plan_day_uidx'),
+    ('exercise_logs_plan_set_uidx'),
+    ('exercise_logs_order_set_uidx')
 ), required_triggers(table_name, trigger_name) as (
   values
     ('user_meal_plan_items', 'enforce_user_meal_plan_item_status_transition'),
-    ('user_nutrition_target_date_overrides', 'user_nutrition_target_date_overrides_updated_at')
-), required_functions(signature, security_definer_required) as (
+    ('user_nutrition_target_date_overrides', 'user_nutrition_target_date_overrides_updated_at'),
+    ('user_workout_sessions', 'user_workout_sessions_reference_integrity'),
+    ('workout_sessions', 'workout_sessions_reference_integrity'),
+    ('exercise_logs', 'exercise_logs_reference_integrity'),
+    ('user_exercise_logs', 'user_exercise_logs_reference_integrity'),
+    ('user_workout_plans', 'user_workout_plans_preserve_history'),
+    ('user_workout_plan_days', 'user_workout_plan_days_preserve_history'),
+    ('user_workout_plan_exercises', 'user_workout_plan_exercises_preserve_history')
+), required_functions(signature, security_definer_required, empty_search_path_required) as (
   values
-    ('public.complete_adaptive_onboarding_v2(jsonb,jsonb,jsonb,jsonb)', false),
-    ('public.enforce_user_meal_plan_item_status_transition()', false),
-    ('public.apply_nutrition_target_changes(date,text,text,integer,numeric,numeric,numeric,integer,text)', false),
-    ('public.complete_meal_plan_item(uuid)', true),
-    ('public.complete_meal_plan_item_with_values(uuid,text,text,text,numeric,numeric,numeric,numeric,numeric,text,boolean)', true),
-    ('public.correct_completed_meal_plan_item(uuid,date,text,text,text,numeric,numeric,numeric,numeric,numeric,text)', true),
-    -- Train plan tables are not directly granted to authenticated members. The
-    -- narrow RPC boundary therefore uses SECURITY DEFINER after an explicit
-    -- assert_workout_actor() check, with an empty search_path and narrow grants.
-    ('public.activate_workout_plan_atomic(uuid,uuid,date,timestamp with time zone)', true),
-    ('public.archive_workout_plan_atomic(uuid,uuid,text,date)', true),
-    ('public.create_workout_plan_atomic(uuid,jsonb,boolean,date)', true),
-    ('public.delete_workout_plan_atomic(uuid,uuid,boolean,date)', true),
-    ('public.save_workout_plan_atomic(uuid,uuid,jsonb,date,timestamp with time zone)', true),
-    ('public.save_workout_plan_day_atomic(uuid,uuid,jsonb,date,timestamp with time zone,boolean)', true)
+    ('public.complete_adaptive_onboarding_v2(jsonb,jsonb,jsonb,jsonb)', false, false),
+    ('public.enforce_user_meal_plan_item_status_transition()', false, true),
+    ('public.apply_nutrition_target_changes(date,text,text,integer,numeric,numeric,numeric,integer,text)', false, false),
+    ('public.complete_meal_plan_item(uuid)', true, true),
+    ('public.complete_meal_plan_item_with_values(uuid,text,text,text,numeric,numeric,numeric,numeric,numeric,text,boolean)', true, true),
+    ('public.correct_completed_meal_plan_item(uuid,date,text,text,text,numeric,numeric,numeric,numeric,numeric,text)', true, true),
+    ('public.assert_workout_actor(uuid)', false, true),
+    ('public.activate_workout_plan_atomic(uuid,uuid,date,timestamp with time zone)', true, true),
+    ('public.archive_workout_plan_atomic(uuid,uuid,text,date)', true, true),
+    ('public.create_workout_plan_atomic(uuid,jsonb,boolean,date)', true, true),
+    ('public.delete_workout_plan_atomic(uuid,uuid,boolean,date)', true, true),
+    ('public.save_workout_plan_atomic(uuid,uuid,jsonb,date,timestamp with time zone)', true, true),
+    ('public.save_workout_plan_day_atomic(uuid,uuid,jsonb,date,timestamp with time zone,boolean)', true, true)
+), canonical_train_rpcs(signature) as (
+  values
+    ('public.activate_workout_plan_atomic(uuid,uuid,date,timestamp with time zone)'),
+    ('public.archive_workout_plan_atomic(uuid,uuid,text,date)'),
+    ('public.create_workout_plan_atomic(uuid,jsonb,boolean,date)'),
+    ('public.delete_workout_plan_atomic(uuid,uuid,boolean,date)'),
+    ('public.save_workout_plan_atomic(uuid,uuid,jsonb,date,timestamp with time zone)'),
+    ('public.save_workout_plan_day_atomic(uuid,uuid,jsonb,date,timestamp with time zone,boolean)')
+), expected_override_privileges(privilege_type) as (
+  values ('DELETE'), ('INSERT'), ('SELECT'), ('UPDATE')
+), actual_override_privileges(privilege_type) as (
+  select distinct acl.privilege_type
+  from pg_class relation
+  join pg_namespace namespace on namespace.oid = relation.relnamespace
+  cross join lateral aclexplode(coalesce(
+    relation.relacl,
+    acldefault('r', relation.relowner)
+  )) acl
+  join pg_roles grantee on grantee.oid = acl.grantee
+  where namespace.nspname = 'public'
+    and relation.relname = 'user_nutrition_target_date_overrides'
+    and grantee.rolname = 'authenticated'
 ), findings as (
   select
     'missing_column'::text as issue_type,
@@ -139,28 +174,31 @@ with required_columns(table_name, column_name) as (
     'function_security_mismatch',
     expected.signature,
     case
-      when actual.prosecdef is distinct from expected.security_definer_required then 'Function invoker/definer mode does not match the repository contract.'
+      when actual.prosecdef is distinct from expected.security_definer_required
+        then 'Function invoker/definer mode does not match the repository contract.'
+      when expected.empty_search_path_required
+        then 'Function search_path must be explicitly empty.'
       else 'Function search_path is not explicitly hardened.'
     end
   from required_functions expected
   join pg_proc actual on actual.oid = to_regprocedure(expected.signature)
   where actual.prosecdef is distinct from expected.security_definer_required
-     or coalesce(array_to_string(actual.proconfig, ','), '') not like '%search_path=%'
+     or (
+       expected.empty_search_path_required
+       and coalesce(array_to_string(actual.proconfig, ','), '') <> 'search_path=""'
+     )
+     or (
+       not expected.empty_search_path_required
+       and coalesce(array_to_string(actual.proconfig, ','), '') not like '%search_path=%'
+     )
 
   union all
 
   select
     'train_rpc_grant_mismatch',
     signature,
-    'Authenticated/service-role execution or anonymous/public denial does not match the repository contract.'
-  from (values
-    ('public.activate_workout_plan_atomic(uuid,uuid,date,timestamp with time zone)'),
-    ('public.archive_workout_plan_atomic(uuid,uuid,text,date)'),
-    ('public.create_workout_plan_atomic(uuid,jsonb,boolean,date)'),
-    ('public.delete_workout_plan_atomic(uuid,uuid,boolean,date)'),
-    ('public.save_workout_plan_atomic(uuid,uuid,jsonb,date,timestamp with time zone)'),
-    ('public.save_workout_plan_day_atomic(uuid,uuid,jsonb,date,timestamp with time zone,boolean)')
-  ) as rpc(signature)
+    'Authenticated/service-role execution or anonymous/PUBLIC denial does not match the repository contract.'
+  from canonical_train_rpcs rpc
   where to_regprocedure(signature) is not null
     and (
       not has_function_privilege('authenticated', to_regprocedure(signature), 'EXECUTE')
@@ -177,6 +215,54 @@ with required_columns(table_name, column_name) as (
           and grant_acl.grantee = 0
           and grant_acl.privilege_type = 'EXECUTE'
       )
+    )
+
+  union all
+
+  select
+    'train_rpc_actor_check_missing',
+    signature,
+    'Canonical Train RPC does not invoke public.assert_workout_actor(p_user_id).'
+  from canonical_train_rpcs rpc
+  where to_regprocedure(signature) is not null
+    and lower(pg_get_functiondef(to_regprocedure(signature)))
+      !~ 'perform\s+public\.assert_workout_actor\s*\(\s*p_user_id\s*\)'
+
+  union all
+
+  select
+    'train_actor_contract_mismatch',
+    'public.assert_workout_actor(uuid)',
+    'Actor function must enforce auth.uid ownership and preserve the verified service-role auth.role path.'
+  where to_regprocedure('public.assert_workout_actor(uuid)') is not null
+    and (
+      lower(pg_get_functiondef(to_regprocedure('public.assert_workout_actor(uuid)')))
+        not like '%coalesce(auth.role(), '''') <> ''service_role''%'
+      or lower(pg_get_functiondef(to_regprocedure('public.assert_workout_actor(uuid)')))
+        not like '%auth.uid() <> p_user_id%'
+    )
+
+  union all
+
+  select
+    'unexpected_train_rpc_overload',
+    format('public.%I(%s)', routine.proname, pg_get_function_identity_arguments(routine.oid)),
+    'Only the six canonical Train RPC signatures are allowed.'
+  from pg_proc routine
+  join pg_namespace namespace on namespace.oid = routine.pronamespace
+  where namespace.nspname = 'public'
+    and routine.proname in (
+      'activate_workout_plan_atomic',
+      'archive_workout_plan_atomic',
+      'create_workout_plan_atomic',
+      'delete_workout_plan_atomic',
+      'save_workout_plan_atomic',
+      'save_workout_plan_day_atomic'
+    )
+    and routine.oid not in (
+      select to_regprocedure(signature)
+      from canonical_train_rpcs
+      where to_regprocedure(signature) is not null
     )
 
   union all
@@ -209,6 +295,32 @@ with required_columns(table_name, column_name) as (
   where schemaname = 'public'
     and tablename = 'user_nutrition_target_date_overrides'
   having count(*) <> 4
+
+  union all
+
+  select
+    'override_acl_missing_required',
+    format('public.user_nutrition_target_date_overrides:%s', expected.privilege_type),
+    'Authenticated is missing a required CRUD privilege.'
+  from expected_override_privileges expected
+  where not exists (
+    select 1
+    from actual_override_privileges actual
+    where actual.privilege_type = expected.privilege_type
+  )
+
+  union all
+
+  select
+    'override_acl_extra_privilege',
+    format('public.user_nutrition_target_date_overrides:%s', actual.privilege_type),
+    'Authenticated has a privilege outside the exact CRUD contract.'
+  from actual_override_privileges actual
+  where not exists (
+    select 1
+    from expected_override_privileges expected
+    where expected.privilege_type = actual.privilege_type
+  )
 
   union all
 
@@ -256,21 +368,79 @@ with required_columns(table_name, column_name) as (
   union all
 
   select
-    'legacy_train_rpc_overload',
-    routine.proname,
-    'A superseded Train RPC overload without explicit local-date input remains.'
-  from pg_proc routine
-  join pg_namespace namespace on namespace.oid = routine.pronamespace
-  where namespace.nspname = 'public'
-    and routine.proname in (
-      'activate_workout_plan_atomic',
-      'archive_workout_plan_atomic',
-      'create_workout_plan_atomic',
-      'delete_workout_plan_atomic',
-      'save_workout_plan_atomic',
-      'save_workout_plan_day_atomic'
+    'multiple_active_workout_plans',
+    'public.user_workout_plans',
+    format('Found %s users with multiple active plans.', count(*))
+  from (
+    select user_id
+    from public.user_workout_plans
+    where is_active = true and archived_at is null
+    group by user_id
+    having count(*) > 1
+  ) conflicts
+  having count(*) > 0
+
+  union all
+
+  select
+    'orphan_workout_plan_day',
+    'public.user_workout_plan_days',
+    format('Found %s plan days without an owning plan.', count(*))
+  from public.user_workout_plan_days day
+  left join public.user_workout_plans plan on plan.id = day.plan_id
+  where plan.id is null
+  having count(*) > 0
+
+  union all
+
+  select
+    'orphan_workout_plan_exercise',
+    'public.user_workout_plan_exercises',
+    format('Found %s plan exercises without an owning day.', count(*))
+  from public.user_workout_plan_exercises exercise
+  left join public.user_workout_plan_days day on day.id = exercise.plan_day_id
+  where day.id is null
+  having count(*) > 0
+
+  union all
+
+  select
+    'duplicate_schedule_occurrence',
+    'public.user_workout_sessions',
+    format('Found %s duplicate owner/day/date schedule groups.', count(*))
+  from (
+    select user_id, plan_day_id, scheduled_date
+    from public.user_workout_sessions
+    where plan_day_id is not null
+    group by user_id, plan_day_id, scheduled_date
+    having count(*) > 1
+  ) duplicates
+  having count(*) > 0
+
+  union all
+
+  select
+    'scheduled_session_contains_history',
+    'public.user_workout_sessions',
+    format('Found %s scheduled rows that already contain workout history.', count(*))
+  from public.user_workout_sessions session
+  where session.status = 'scheduled'
+    and (
+      session.started_at is not null
+      or session.completed_at is not null
+      or session.skipped_at is not null
+      or exists (
+        select 1
+        from public.workout_sessions performed
+        where performed.scheduled_session_id = session.id
+      )
+      or exists (
+        select 1
+        from public.user_exercise_logs exercise_log
+        where exercise_log.user_workout_session_id = session.id
+      )
     )
-    and pg_get_function_identity_arguments(routine.oid) not like '%date%'
+  having count(*) > 0
 )
 select
   count(*)::integer as blocking_finding_count,

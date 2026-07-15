@@ -7,7 +7,9 @@
     "schemaCompatibilityVersion": "",
     "expectedDatabaseMigrationVersion": "",
     "migrationLedgerReconciliationState": "",
-    "schemaAppliedUntrackedCount": null
+    "pendingMigrationCount": null,
+    "schemaAppliedUntrackedCount": null,
+    "unresolvedMigrationCount": null
   },
   "runtime": {
     "nodeVersion": "",

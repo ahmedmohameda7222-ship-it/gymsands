@@ -32,10 +32,12 @@ test("next.config bundles deterministic release and migration metadata", async (
   assert.equal(releaseMetadata.buildTimestamp, "2026-07-14T01:02:03.000Z");
   assert.equal(releaseMetadata.environment, "production");
   assert.equal(releaseMetadata.migrationLedgerReconciliationState, ledger.historyRepair.state);
+  assert.equal(releaseMetadata.pendingMigrationCount, String(ledger.pendingCount));
   assert.equal(releaseMetadata.schemaAppliedUntrackedCount, String(ledger.schemaVerifiedUntrackedCount));
+  assert.equal(releaseMetadata.unresolvedMigrationCount, String(ledger.unresolvedCount));
   assert.match(releaseMetadata.expectedDatabaseMigrationVersion, /^\d{12,14}$/);
-  assert.deepEqual(config.env.PLAIVRA_COMMIT_SHA, fullSha);
-  assert.deepEqual(config.env.PLAIVRA_BUILD_TIMESTAMP, "2026-07-14T01:02:03.000Z");
+  assert.equal(config.env.PLAIVRA_COMMIT_SHA, fullSha);
+  assert.equal(config.env.PLAIVRA_BUILD_TIMESTAMP, "2026-07-14T01:02:03.000Z");
   assert.equal(config.env.PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION, releaseMetadata.expectedDatabaseMigrationVersion);
 });
 
@@ -43,7 +45,7 @@ test("post-deploy smoke rejects abbreviated release SHAs before network access",
   const result = runScript("scripts/post-deploy-smoke.mjs", [
     "--url", "https://example.invalid",
     "--expected-commit", "60a204d",
-    "--expected-migration", "20260711014500"
+    "--expected-migration", "20260715010000"
   ]);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stdout}\n${result.stderr}`, /exact 40-character/i);
@@ -74,6 +76,7 @@ test("release manifest records exact installed runtime versions and lockfile ide
     ]);
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     const manifest = JSON.parse(readFileSync(output, "utf8"));
+    const ledger = JSON.parse(readFileSync(resolve(root, "supabase/migration-ledger.json"), "utf8"));
     const installedNext = JSON.parse(readFileSync(resolve(root, "node_modules/next/package.json"), "utf8")).version;
     const packageLock = readFileSync(resolve(root, "package-lock.json"));
     const npmVersion = process.platform === "win32"
@@ -85,19 +88,24 @@ test("release manifest records exact installed runtime versions and lockfile ide
     assert.equal(manifest.runtime.nodeVersion, process.version);
     assert.equal(manifest.runtime.npmVersion, npmVersion);
     assert.equal(manifest.runtime.lockfileSha256, createHash("sha256").update(packageLock).digest("hex"));
+    assert.equal(manifest.release.pendingMigrationCount, ledger.pendingCount);
+    assert.equal(manifest.release.schemaAppliedUntrackedCount, ledger.schemaVerifiedUntrackedCount);
+    assert.equal(manifest.release.unresolvedMigrationCount, ledger.unresolvedCount);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
-test("built metadata verification accepts fail-closed readiness only with the exact build identity", () => {
+test("built metadata verification accepts reconciled ledger metadata while runtime readiness remains fail-closed", () => {
   const expected = {
     commitSha: fullSha,
     buildTimestamp: "2026-07-14T01:02:03.000Z",
     environment: "ci",
-    expectedDatabaseMigrationVersion: "20260711014500",
-    migrationLedgerReconciliationState: "pending",
-    schemaAppliedUntrackedCount: 6
+    expectedDatabaseMigrationVersion: "20260715010000",
+    migrationLedgerReconciliationState: "reconciled",
+    pendingMigrationCount: 0,
+    schemaAppliedUntrackedCount: 0,
+    unresolvedMigrationCount: 0
   };
   const body = { ...expected, artifactIdentityValid: true, releaseReady: false };
   assert.equal(validateBuiltReleaseMetadata({ body, status: 503, expected }), true);
@@ -111,13 +119,14 @@ test("built metadata verification accepts fail-closed readiness only with the ex
   );
 });
 
-test("production release gates reject nonstandard SHA lengths", () => {
-  const result = runScript("scripts/vercel-production-release-gate.mjs", [], {
-    VERCEL: "1",
-    VERCEL_ENV: "production",
-    VERCEL_GIT_COMMIT_REF: "main",
-    VERCEL_GIT_COMMIT_SHA: `${fullSha}00`,
-    PLAIVRA_PRODUCTION_RELEASE_SHA: `${fullSha}00`
+test("Netlify production release gate rejects nonstandard SHA lengths", () => {
+  const invalidSha = `${fullSha}00`;
+  const result = runScript("scripts/netlify-production-release-gate.mjs", [], {
+    NETLIFY: "true",
+    CONTEXT: "production",
+    BRANCH: "main",
+    COMMIT_REF: invalidSha,
+    PLAIVRA_PRODUCTION_RELEASE_SHA: invalidSha
   });
   assert.equal(result.status, 0);
   assert.match(result.stdout, /held/i);

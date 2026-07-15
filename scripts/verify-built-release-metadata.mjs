@@ -47,7 +47,9 @@ export function validateBuiltReleaseMetadata({ body, status, expected }) {
     environment: expected.environment,
     expectedDatabaseMigrationVersion: expected.expectedDatabaseMigrationVersion,
     migrationLedgerReconciliationState: expected.migrationLedgerReconciliationState,
-    schemaAppliedUntrackedCount: expected.schemaAppliedUntrackedCount
+    pendingMigrationCount: expected.pendingMigrationCount,
+    schemaAppliedUntrackedCount: expected.schemaAppliedUntrackedCount,
+    unresolvedMigrationCount: expected.unresolvedMigrationCount
   };
   for (const [field, value] of Object.entries(exactFields)) {
     if (body?.[field] !== value) throw new Error(`Built /api/version field ${field} did not match the build identity.`);
@@ -96,7 +98,9 @@ async function main() {
     environment: safeIdentifier(options.environment, "Expected environment"),
     expectedDatabaseMigrationVersion: expectedMigration,
     migrationLedgerReconciliationState: ledger.historyRepair?.state ?? "unknown",
-    schemaAppliedUntrackedCount: ledger.schemaVerifiedUntrackedCount
+    pendingMigrationCount: ledger.pendingCount,
+    schemaAppliedUntrackedCount: ledger.schemaVerifiedUntrackedCount,
+    unresolvedMigrationCount: ledger.unresolvedCount
   };
   const port = Number(options.port || "3210");
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Verification port is invalid.");
@@ -113,7 +117,9 @@ async function main() {
       PLAIVRA_RELEASE_ENVIRONMENT: "runtime-poison",
       PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: "00000000000000",
       PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE: "reconciled",
-      PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: "0"
+      PLAIVRA_PENDING_MIGRATION_COUNT: "0",
+      PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: "0",
+      PLAIVRA_UNRESOLVED_MIGRATION_COUNT: "0"
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -134,7 +140,9 @@ async function main() {
       environment: result.body.environment,
       expectedDatabaseMigrationVersion: result.body.expectedDatabaseMigrationVersion,
       migrationLedgerReconciliationState: result.body.migrationLedgerReconciliationState,
+      pendingMigrationCount: result.body.pendingMigrationCount,
       schemaAppliedUntrackedCount: result.body.schemaAppliedUntrackedCount,
+      unresolvedMigrationCount: result.body.unresolvedMigrationCount,
       releaseReady: result.body.releaseReady
     }));
   } finally {

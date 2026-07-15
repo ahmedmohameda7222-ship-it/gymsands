@@ -25,7 +25,9 @@ export function evaluateReleaseReadiness(
     && database.migrationVersion !== null
     && database.migrationVersion === release.expectedDatabaseMigrationVersion;
   const migrationLedgerReconciled = release.migrationLedgerReconciliationState === "reconciled"
-    && release.schemaAppliedUntrackedCount === 0;
+    && release.pendingMigrationCount === 0
+    && release.schemaAppliedUntrackedCount === 0
+    && release.unresolvedMigrationCount === 0;
   const releaseReady = artifactIdentityValid
     && schemaMarkerCompatible
     && migrationVersionCompatible

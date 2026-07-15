@@ -7,12 +7,14 @@ const release: ReleaseVersion = {
   buildTimestamp: "2026-07-14T01:00:00.000Z",
   environment: "production",
   schemaCompatibilityVersion: "2",
-  expectedDatabaseMigrationVersion: "20260713170000",
+  expectedDatabaseMigrationVersion: "20260715010000",
   migrationLedgerReconciliationState: "reconciled",
-  schemaAppliedUntrackedCount: 0
+  pendingMigrationCount: 0,
+  schemaAppliedUntrackedCount: 0,
+  unresolvedMigrationCount: 0
 };
 
-const database = { available: true, version: "2", migrationVersion: "20260713170000" };
+const database = { available: true, version: "2", migrationVersion: "20260715010000" };
 
 describe("version response contract", () => {
   it("returns 200 only for a fully release-ready identity", () => {
@@ -25,7 +27,7 @@ describe("version response contract", () => {
       migrationLedgerReconciled: true,
       releaseReady: true,
       schemaCompatible: true,
-      databaseMigrationVersion: "20260713170000"
+      databaseMigrationVersion: "20260715010000"
     });
   });
 
@@ -33,7 +35,9 @@ describe("version response contract", () => {
     const response = buildVersionResponse({
       ...release,
       migrationLedgerReconciliationState: "pending",
-      schemaAppliedUntrackedCount: 6
+      pendingMigrationCount: 1,
+      schemaAppliedUntrackedCount: 7,
+      unresolvedMigrationCount: 8
     }, database);
     expect(response.status).toBe(503);
     expect(response.body.schemaCompatible).toBe(true);
@@ -41,7 +45,7 @@ describe("version response contract", () => {
     expect(response.body.releaseReady).toBe(false);
   });
 
-  it("returns 503 when expected and database migration versions differ", () => {
+  it("returns 503 while the production compatibility marker remains unchanged", () => {
     const response = buildVersionResponse(release, { ...database, migrationVersion: "20260711014500" });
     expect(response.status).toBe(503);
     expect(response.body.migrationVersionCompatible).toBe(false);

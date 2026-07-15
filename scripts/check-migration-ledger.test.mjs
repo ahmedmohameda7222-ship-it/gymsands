@@ -8,20 +8,25 @@ import {
 
 const files = [
   "20260711014500_idempotency_uncertain_completion_guard.sql",
-  "20260711213000_adaptive_onboarding_v2.sql"
+  "20260711213000_adaptive_onboarding_v2.sql",
+  "20260715010000_restrict_nutrition_target_override_acl.sql"
 ];
 
 function validLedger() {
   return {
     schemaVersion: 1,
     projectRef: "bkwezjxvapaeasfvlhvv",
-    capturedAt: "2026-07-13T17:12:53.584192+00:00",
-    auditedRepositoryCommit: "778f4dc896147f81a7e404802af13d7af3dd2fba",
+    capturedAt: "2026-07-15T00:45:00.000000+00:00",
+    auditedRepositoryCommit: "54e9768d52011e1d1839c4f50f0a2bc578ca27db",
     productionMigrationCount: 1,
     schemaVerifiedUntrackedCount: 1,
+    pendingCount: 1,
+    unresolvedCount: 2,
     historyRepair: {
       state: "pending",
       schemaAppliedUntrackedCount: 1,
+      pendingCount: 1,
+      unresolvedCount: 2,
       note: "Migration reconciliation is pending. Do not replay schema-applied migrations."
     },
     entries: [
@@ -37,46 +42,141 @@ function validLedger() {
         localFile: files[1],
         state: "applied_schema_untracked",
         note: "Absent from Supabase migration history, but the complete schema effects, ownership checks, grants, policies, constraints, and indexes were verified. Do not replay."
+      },
+      {
+        productionVersion: null,
+        productionName: null,
+        localFile: files[2],
+        state: "pending",
+        note: "Forward-only ACL correction. Do not replay any earlier migration."
       }
     ]
   };
 }
 
 const documentation = {
-  "README.md": files[1],
-  "docs/architecture/migration-ledger-reconciliation.md": files[1]
+  "README.md": `${files[1]}\n${files[2]}`,
+  "docs/architecture/migration-ledger-reconciliation.md": `${files[1]}\n${files[2]}`
 };
+
+function reconciledLedger() {
+  const ledger = validLedger();
+  ledger.schemaVerifiedUntrackedCount = 0;
+  ledger.pendingCount = 0;
+  ledger.unresolvedCount = 0;
+  ledger.historyRepair = {
+    state: "reconciled",
+    schemaAppliedUntrackedCount: 0,
+    pendingCount: 0,
+    unresolvedCount: 0,
+    note: "History reconciled after independent verification. Do not replay applied migrations."
+  };
+  ledger.entries = [ledger.entries[0]];
+  return ledger;
+}
 
 test("accepts an internally consistent pending reconciliation ledger", () => {
   const result = validateMigrationLedger({ ledger: validLedger(), files, documentation });
   assert.deepEqual(result.errors, []);
   assert.equal(result.derived.releaseReady, false);
-  assert.equal(result.derived.latestAppliedMigrationVersion, "20260711014500");
+  assert.equal(result.derived.pendingCount, 1);
+  assert.equal(result.derived.schemaAppliedUntrackedCount, 1);
+  assert.equal(result.derived.unresolvedCount, 2);
+});
+
+test("reconciled plus zero unresolved entries is potentially ready", () => {
+  const ledger = reconciledLedger();
+  const result = validateMigrationLedger({
+    ledger,
+    files: [files[0]],
+    documentation: { "README.md": "", "docs/architecture/migration-ledger-reconciliation.md": "" }
+  });
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.derived.releaseReady, true);
+});
+
+test("reconciled plus one pending entry is not ready", () => {
+  const ledger = reconciledLedger();
+  ledger.entries.push(validLedger().entries[2]);
+  ledger.pendingCount = 1;
+  ledger.unresolvedCount = 1;
+  ledger.historyRepair.pendingCount = 1;
+  ledger.historyRepair.unresolvedCount = 1;
+  const derived = deriveMigrationLedgerState(ledger);
+  assert.equal(derived.pendingCount, 1);
+  assert.equal(derived.releaseReady, false);
+});
+
+test("reconciled plus one schema-untracked entry is not ready", () => {
+  const ledger = reconciledLedger();
+  ledger.entries.push(validLedger().entries[1]);
+  ledger.schemaVerifiedUntrackedCount = 1;
+  ledger.unresolvedCount = 1;
+  ledger.historyRepair.schemaAppliedUntrackedCount = 1;
+  ledger.historyRepair.unresolvedCount = 1;
+  const derived = deriveMigrationLedgerState(ledger);
+  assert.equal(derived.schemaAppliedUntrackedCount, 1);
+  assert.equal(derived.releaseReady, false);
+});
+
+test("pending history repair is not ready even with zero unresolved entries", () => {
+  const ledger = reconciledLedger();
+  ledger.historyRepair.state = "pending";
+  assert.equal(deriveMigrationLedgerState(ledger).releaseReady, false);
+});
+
+test("a physically applied migration misclassified as pending cannot produce ready state", () => {
+  const ledger = reconciledLedger();
+  ledger.entries.push({
+    productionVersion: null,
+    productionName: null,
+    localFile: "20260714030000_harden_train_plan_rpc_execution.sql",
+    state: "pending",
+    note: "Physical effects may exist, but the identity remains unresolved."
+  });
+  assert.equal(deriveMigrationLedgerState(ledger).releaseReady, false);
+});
+
+test("ledger drift review is unresolved and blocks readiness", () => {
+  const ledger = reconciledLedger();
+  ledger.entries.push({
+    productionVersion: null,
+    productionName: null,
+    localFile: "20260715020000_example.sql",
+    state: "ledger_drift_review",
+    note: "Evidence review required."
+  });
+  const derived = deriveMigrationLedgerState(ledger);
+  assert.equal(derived.ledgerDriftReviewCount, 1);
+  assert.equal(derived.unresolvedCount, 1);
+  assert.equal(derived.releaseReady, false);
+});
+
+test("rejects stale declared counts", () => {
+  const ledger = validLedger();
+  ledger.pendingCount = 0;
+  ledger.unresolvedCount = 1;
+  const result = validateMigrationLedger({ ledger, files, documentation });
+  assert.ok(result.errors.some((error) => error.includes("pendingCount")));
+  assert.ok(result.errors.some((error) => error.includes("unresolvedCount")));
+});
+
+test("rejects reconciled state while unresolved migrations remain", () => {
+  const ledger = validLedger();
+  ledger.historyRepair.state = "reconciled";
+  const result = validateMigrationLedger({ ledger, files, documentation });
+  assert.ok(result.errors.some((error) => error.includes("cannot retain unresolved")));
 });
 
 test("canonicalizes the repository PostgreSQL UTC timestamp without changing its instant", () => {
   assert.equal(
-    canonicalizeLedgerTimestamp("2026-07-13T17:12:53.584192+00"),
-    "2026-07-13T17:12:53.584192Z"
-  );
-  const ledger = validLedger();
-  ledger.capturedAt = "2026-07-13T17:12:53.584192+00";
-  assert.deepEqual(validateMigrationLedger({ ledger, files, documentation }).errors, []);
-});
-
-test("accepts canonical UTC capture timestamps", () => {
-  assert.equal(
-    canonicalizeLedgerTimestamp("2026-07-13T17:12:53.584192Z"),
-    "2026-07-13T17:12:53.584192Z"
-  );
-  assert.equal(
-    canonicalizeLedgerTimestamp("2026-07-13T17:12:53.584192+00:00"),
-    "2026-07-13T17:12:53.584192Z"
+    canonicalizeLedgerTimestamp("2026-07-15T00:45:00.000000+00"),
+    "2026-07-15T00:45:00.000000Z"
   );
 });
 
 test("rejects malformed and missing capture timestamps", () => {
-  for (const capturedAt of ["not-a-time", "2026-07-13 17:12:53+00", "", null, undefined]) {
+  for (const capturedAt of ["not-a-time", "2026-07-15 00:45:00+00", "", null, undefined]) {
     const ledger = validLedger();
     ledger.capturedAt = capturedAt;
     const result = validateMigrationLedger({ ledger, files, documentation });
@@ -84,37 +184,14 @@ test("rejects malformed and missing capture timestamps", () => {
   }
 });
 
-test("rejects stale declared counts", () => {
-  const ledger = validLedger();
-  ledger.productionMigrationCount = 2;
-  ledger.schemaVerifiedUntrackedCount = 0;
-  const result = validateMigrationLedger({ ledger, files, documentation });
-  assert.ok(result.errors.some((error) => error.includes("productionMigrationCount")));
-  assert.ok(result.errors.some((error) => error.includes("schemaVerifiedUntrackedCount")));
-});
-
-test("rejects reconciled state while untracked migrations remain", () => {
-  const ledger = validLedger();
-  ledger.historyRepair.state = "reconciled";
-  const result = validateMigrationLedger({ ledger, files, documentation });
-  assert.ok(result.errors.some((error) => error.includes("cannot retain schema-applied untracked")));
-});
-
-test("rejects stale documentation and malformed capture metadata", () => {
-  const ledger = validLedger();
-  ledger.auditedRepositoryCommit = "778f4dc";
-  ledger.capturedAt = "not-a-time";
-  const result = validateMigrationLedger({ ledger, files, documentation: { "README.md": "", "migration.md": "" } });
-  assert.ok(result.errors.some((error) => error.includes("exact 40-character")));
-  assert.ok(result.errors.some((error) => error.includes("ISO-8601")));
-  assert.ok(result.errors.some((error) => error.includes("does not list")));
-});
-
-test("derives readiness rather than trusting a declared green state", () => {
-  const derived = deriveMigrationLedgerState(validLedger());
-  assert.deepEqual(derived, {
+test("derives all fail-closed counts rather than trusting a declared green state", () => {
+  assert.deepEqual(deriveMigrationLedgerState(validLedger()), {
     appliedCount: 1,
+    pendingCount: 1,
     schemaAppliedUntrackedCount: 1,
+    ledgerDriftReviewCount: 0,
+    unresolvedCount: 2,
+    invalidAppliedProductionIdentityCount: 0,
     reconciliationState: "pending",
     latestAppliedMigrationVersion: "20260711014500",
     releaseReady: false

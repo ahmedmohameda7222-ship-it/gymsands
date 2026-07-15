@@ -7,15 +7,17 @@ const release: ReleaseVersion = {
   buildTimestamp: "2026-07-10T12:30:00.000Z",
   environment: "production",
   schemaCompatibilityVersion: "2",
-  expectedDatabaseMigrationVersion: "20260711014500",
+  expectedDatabaseMigrationVersion: "20260715010000",
   migrationLedgerReconciliationState: "reconciled",
-  schemaAppliedUntrackedCount: 0
+  pendingMigrationCount: 0,
+  schemaAppliedUntrackedCount: 0,
+  unresolvedMigrationCount: 0
 };
 
 const database = {
   available: true,
   version: "2",
-  migrationVersion: "20260711014500"
+  migrationVersion: "20260715010000"
 };
 
 describe("release readiness", () => {
@@ -33,14 +35,29 @@ describe("release readiness", () => {
     const result = evaluateReleaseReadiness({
       ...release,
       migrationLedgerReconciliationState: "pending",
-      schemaAppliedUntrackedCount: 6
+      pendingMigrationCount: 1,
+      schemaAppliedUntrackedCount: 7,
+      unresolvedMigrationCount: 8
     }, database);
     expect(result.migrationLedgerReconciled).toBe(false);
     expect(result.releaseReady).toBe(false);
   });
 
-  it("fails closed on stale or unavailable database migration markers", () => {
-    expect(evaluateReleaseReadiness(release, { ...database, migrationVersion: "20260711013000" }).releaseReady).toBe(false);
+  it("fails closed for any pending or unresolved entry even if history says reconciled", () => {
+    expect(evaluateReleaseReadiness({
+      ...release,
+      pendingMigrationCount: 1,
+      unresolvedMigrationCount: 1
+    }, database).releaseReady).toBe(false);
+    expect(evaluateReleaseReadiness({
+      ...release,
+      schemaAppliedUntrackedCount: 1,
+      unresolvedMigrationCount: 1
+    }, database).releaseReady).toBe(false);
+  });
+
+  it("fails closed on the unchanged compatibility marker or an unavailable database marker", () => {
+    expect(evaluateReleaseReadiness(release, { ...database, migrationVersion: "20260711014500" }).releaseReady).toBe(false);
     expect(evaluateReleaseReadiness(release, { available: false, version: "unavailable", migrationVersion: null }).releaseReady).toBe(false);
   });
 

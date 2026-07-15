@@ -4,12 +4,8 @@ const getDatabaseSchemaCompatibility = vi.fn();
 vi.mock("@/lib/release/database-compatibility", () => ({ getDatabaseSchemaCompatibility }));
 
 const fullSha = "60a204d5fc20fc396be1b1b47e748c42ebba6abf";
-const expectedMigration = "20260711014500";
-const compatibleDatabase = {
-  available: true,
-  version: "2",
-  migrationVersion: expectedMigration
-};
+const expectedMigration = "20260715010000";
+const compatibleDatabase = { available: true, version: "2", migrationVersion: expectedMigration };
 
 describe("GET /api/version", () => {
   beforeEach(() => {
@@ -21,7 +17,9 @@ describe("GET /api/version", () => {
     vi.stubEnv("PLAIVRA_SCHEMA_COMPATIBILITY_VERSION", "2");
     vi.stubEnv("PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION", expectedMigration);
     vi.stubEnv("PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE", "reconciled");
+    vi.stubEnv("PLAIVRA_PENDING_MIGRATION_COUNT", "0");
     vi.stubEnv("PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT", "0");
+    vi.stubEnv("PLAIVRA_UNRESOLVED_MIGRATION_COUNT", "0");
   });
 
   afterEach(() => vi.unstubAllEnvs());
@@ -43,7 +41,9 @@ describe("GET /api/version", () => {
       databaseSchemaCompatibilityVersion: "2",
       databaseMigrationVersion: expectedMigration,
       migrationLedgerReconciliationState: "reconciled",
+      pendingMigrationCount: 0,
       schemaAppliedUntrackedCount: 0,
+      unresolvedMigrationCount: 0,
       artifactIdentityValid: true,
       schemaMarkerCompatible: true,
       migrationVersionCompatible: true,
@@ -60,15 +60,21 @@ describe("GET /api/version", () => {
       expected: { migrationLedgerReconciled: false }
     },
     {
-      name: "nonzero schema-applied untracked migrations",
-      environment: { PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: "6" },
+      name: "nonzero pending migrations",
+      environment: { PLAIVRA_PENDING_MIGRATION_COUNT: "1", PLAIVRA_UNRESOLVED_MIGRATION_COUNT: "1" },
       database: compatibleDatabase,
       expected: { migrationLedgerReconciled: false }
     },
     {
-      name: "database migration mismatch",
+      name: "nonzero schema-applied untracked migrations",
+      environment: { PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: "7", PLAIVRA_UNRESOLVED_MIGRATION_COUNT: "7" },
+      database: compatibleDatabase,
+      expected: { migrationLedgerReconciled: false }
+    },
+    {
+      name: "unchanged database compatibility marker",
       environment: {},
-      database: { ...compatibleDatabase, migrationVersion: "20260711013000" },
+      database: { ...compatibleDatabase, migrationVersion: "20260711014500" },
       expected: { migrationVersionCompatible: false }
     },
     {

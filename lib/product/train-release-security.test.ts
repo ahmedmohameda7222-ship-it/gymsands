@@ -25,6 +25,10 @@ const hardeningMigration = readFileSync(
   "supabase/migrations/20260714030000_harden_train_plan_rpc_execution.sql",
   "utf8"
 );
+const aclCorrectionMigration = readFileSync(
+  "supabase/migrations/20260715010000_restrict_nutrition_target_override_acl.sql",
+  "utf8"
+);
 const qualityWorkflow = readFileSync(".github/workflows/quality.yml", "utf8");
 
 const canonicalRpcs = [
@@ -37,20 +41,42 @@ const canonicalRpcs = [
 ];
 
 describe("Train release security controls", () => {
-  it("expects the canonical plan RPCs to use the ownership-checked SECURITY DEFINER boundary", () => {
+  it("verifies the complete seventh-migration Train RPC contract", () => {
     for (const name of canonicalRpcs) {
-      expect(productionPreflight).toMatch(
-        new RegExp(`public\\.${name}\\([^']+\\)', true\\)`)
-      );
+      expect(productionPreflight).toContain(`public.${name}(`);
     }
     expect(productionPreflight).toContain("train_rpc_grant_mismatch");
+    expect(productionPreflight).toContain("train_rpc_actor_check_missing");
+    expect(productionPreflight).toContain("train_actor_contract_mismatch");
+    expect(productionPreflight).toContain("public.assert_workout_actor(uuid)");
+    expect(productionPreflight).toContain("search_path=\"\"");
     expect(productionPreflight).toContain("granted_function.proacl");
+    expect(productionPreflight).toContain("unexpected_train_rpc_overload");
+    expect(productionPreflight).toContain("Only the six canonical Train RPC signatures are allowed.");
+    expect(productionPreflight).toContain("scheduled_session_contains_history");
+    expect(productionPreflight).toContain("duplicate_schedule_occurrence");
     expect(hardeningMigration).toContain("Refusing to elevate Train RPC without its actor check");
     expect(hardeningMigration).toContain("coalesce(auth.role(), '') <> 'service_role'");
     for (const name of canonicalRpcs) {
       expect(hardeningMigration).toContain(`alter function public.${name}(`);
     }
     expect(hardeningMigration.match(/security definer set search_path = '';/g)).toHaveLength(6);
+  });
+
+  it("verifies the exact PostgreSQL 17 nutrition override ACL contract", () => {
+    expect(productionPreflight).toContain("actual_override_privileges");
+    expect(productionPreflight).toContain("aclexplode");
+    expect(productionPreflight).toContain("override_acl_missing_required");
+    expect(productionPreflight).toContain("override_acl_extra_privilege");
+    for (const privilege of ["DELETE", "INSERT", "SELECT", "UPDATE"]) {
+      expect(productionPreflight).toContain(`('${privilege}')`);
+    }
+    for (const privilege of ["truncate", "trigger", "references", "maintain"]) {
+      expect(aclCorrectionMigration.toLowerCase()).toContain(privilege);
+    }
+    expect(aclCorrectionMigration).toContain("20260712195000_nutrition_target_date_overrides.sql");
+    expect(aclCorrectionMigration).toContain("expected_privileges");
+    expect(aclCorrectionMigration).not.toMatch(/\b(update|insert|delete)\s+public\./i);
   });
 
   it("derives an explicit Boolean and shares its executable fail-closed control", () => {

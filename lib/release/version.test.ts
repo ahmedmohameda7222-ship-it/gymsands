@@ -9,22 +9,26 @@ function validEnvironment() {
     PLAIVRA_BUILD_TIMESTAMP: "2026-07-10T12:30:00.000Z",
     PLAIVRA_RELEASE_ENVIRONMENT: "production",
     PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2",
-    PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: "20260711014500",
-    PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE: "pending",
-    PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: "6"
+    PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: "20260715010000",
+    PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE: "reconciled",
+    PLAIVRA_PENDING_MIGRATION_COUNT: "0",
+    PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: "0",
+    PLAIVRA_UNRESOLVED_MIGRATION_COUNT: "0"
   };
 }
 
 describe("release version metadata", () => {
-  it("returns normalized public build identifiers", () => {
+  it("returns normalized public build identifiers and reconciled migration counts", () => {
     expect(getReleaseVersion(validEnvironment())).toEqual({
       commitSha: fullSha,
       buildTimestamp: "2026-07-10T12:30:00.000Z",
       environment: "production",
       schemaCompatibilityVersion: "2",
-      expectedDatabaseMigrationVersion: "20260711014500",
-      migrationLedgerReconciliationState: "pending",
-      schemaAppliedUntrackedCount: 6
+      expectedDatabaseMigrationVersion: "20260715010000",
+      migrationLedgerReconciliationState: "reconciled",
+      pendingMigrationCount: 0,
+      schemaAppliedUntrackedCount: 0,
+      unresolvedMigrationCount: 0
     });
   });
 
@@ -42,7 +46,9 @@ describe("release version metadata", () => {
         PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2 secret",
         PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: "bad value",
         PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE: "complete",
-        PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: "six"
+        PLAIVRA_PENDING_MIGRATION_COUNT: "one",
+        PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: "seven",
+        PLAIVRA_UNRESOLVED_MIGRATION_COUNT: "eight"
       })
     ).toEqual({
       commitSha: "unknown",
@@ -51,7 +57,9 @@ describe("release version metadata", () => {
       schemaCompatibilityVersion: "2",
       expectedDatabaseMigrationVersion: "unknown",
       migrationLedgerReconciliationState: "unknown",
-      schemaAppliedUntrackedCount: -1
+      pendingMigrationCount: -1,
+      schemaAppliedUntrackedCount: -1,
+      unresolvedMigrationCount: -1
     });
   });
 
@@ -67,9 +75,10 @@ describe("release version metadata", () => {
     expect(release.environment).toBe("preview");
   });
 
-  it("fails artifact identity when required build metadata is absent", () => {
+  it("fails artifact identity when required build metadata or counts are absent", () => {
     expect(isReleaseArtifactIdentityValid(getReleaseVersion(validEnvironment()))).toBe(true);
     expect(isReleaseArtifactIdentityValid(getReleaseVersion({ ...validEnvironment(), PLAIVRA_BUILD_TIMESTAMP: "" }))).toBe(false);
     expect(isReleaseArtifactIdentityValid(getReleaseVersion({ ...validEnvironment(), PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: "" }))).toBe(false);
+    expect(isReleaseArtifactIdentityValid(getReleaseVersion({ ...validEnvironment(), PLAIVRA_UNRESOLVED_MIGRATION_COUNT: "" }))).toBe(false);
   });
 });
