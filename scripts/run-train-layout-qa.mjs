@@ -317,7 +317,7 @@ observations.push(await openScenario({ viewport: viewports[2], scenario: "schedu
 for (const variant of ["one-day-one-exercise", "seven-day-many-exercises", "long-names"]) {
   for (const viewport of [viewports[2], viewports[7]]) {
     for (const route of ["/my-workout/plans", `/my-workout/plans/${activePlanId}`, `/my-workout/plans/${activePlanId}/edit`]) {
-      observations.push(await openScenario({ viewport, scenario: "active", route, variant }));
+      observations.push(await openScenario({ viewport, scenario: "scheduled", route, variant }));
     }
   }
 }
