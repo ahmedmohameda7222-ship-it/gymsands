@@ -15,7 +15,7 @@ concurrency:
 jobs:
   verify-diff:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - name: Checkout exact pull request head
         uses: actions/checkout@v4
@@ -34,7 +34,7 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Apply deterministic PR59 corrections
+      - name: Create exact local correction commit
         shell: bash
         run: |
           set -euo pipefail
@@ -42,31 +42,43 @@ jobs:
           node scripts/pr59-safety-followup.mjs
           node scripts/pr59-test-followup.mjs
           git diff --check
+          git config user.name "Plaivra PR59 Correction"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(train): apply PR59 required corrections"
+          echo "CORRECTION_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Validate corrected branch range
+        run: git diff --check origin/main...HEAD
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Identify first failing repository script test
+      - name: TypeScript validation
+        run: npm run typecheck
+
+      - name: Focused correction tests
+        run: |
+          npx vitest run --config vitest.unit.config.mjs \
+            services/database/workout-session-resume.test.ts \
+            lib/workouts/workout-session-history.test.ts \
+            lib/activity-catalog/validation.test.ts \
+            services/activity-catalog/server/activity-catalog-boundaries.test.ts \
+            services/activity-catalog/server/activity-catalog-routes.test.ts \
+            lib/i18n/train-workout-library.test.ts \
+            lib/product/train-phase1-approved-ui.test.ts
+
+      - name: Repository script tests
+        run: npm run test:scripts
+
+      - name: Verify exact correction commit is clean
         shell: bash
         run: |
-          set -uo pipefail
-          failed=""
-          for test_file in scripts/*.test.mjs; do
-            echo "Running $test_file"
-            if ! node --test "$test_file"; then
-              failed="$test_file"
-              break
-            fi
-          done
-          if [ -z "$failed" ]; then
-            echo "All repository script tests passed unexpectedly during isolation."
-            exit 1
-          fi
-          git restore .
-          printf 'First failing repository script test: %s\n' "$failed" > scripts/pr59-trigger.txt
-          git config user.name "Plaivra PR59 Diagnostic"
-          git config user.email "actions@users.noreply.github.com"
-          git add scripts/pr59-trigger.txt
-          git commit -m "chore(pr59): record failing repository script test"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
-          exit 1
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CORRECTION_SHA"
+          test -z "$(git status --short)"
+          git diff --check origin/main...HEAD
+
+      - name: Push validated correction commit
+        run: git push origin HEAD:${{ github.event.pull_request.head.ref }}
