@@ -45,23 +45,49 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate corrected source
+      - name: Retain focused validation failure
         shell: bash
         run: |
-          set -euo pipefail
-          npm run typecheck
-          npx vitest run --config vitest.unit.config.mjs \
-            services/database/workout-session-resume.test.ts \
-            lib/workouts/workout-session-history.test.ts \
-            lib/activity-catalog/validation.test.ts \
-            services/activity-catalog/server/activity-catalog-boundaries.test.ts \
-            services/activity-catalog/server/activity-catalog-routes.test.ts \
-            lib/i18n/train-workout-library.test.ts \
-            lib/product/train-phase1-approved-ui.test.ts
-          npm run test:scripts
-          git diff --check
+          set -uo pipefail
+          set +e
+          {
+            npm run typecheck
+            typecheck_code="$?"
+            npx vitest run --config vitest.unit.config.mjs \
+              services/database/workout-session-resume.test.ts \
+              lib/workouts/workout-session-history.test.ts \
+              lib/activity-catalog/validation.test.ts \
+              services/activity-catalog/server/activity-catalog-boundaries.test.ts \
+              services/activity-catalog/server/activity-catalog-routes.test.ts \
+              lib/i18n/train-workout-library.test.ts \
+              lib/product/train-phase1-approved-ui.test.ts
+            tests_code="$?"
+            npm run test:scripts
+            scripts_code="$?"
+            git diff --check
+            diff_code="$?"
+            printf '\nexit-codes: typecheck=%s focused-tests=%s script-tests=%s diff=%s\n' "$typecheck_code" "$tests_code" "$scripts_code" "$diff_code"
+            if [ "$typecheck_code" = "0" ] && [ "$tests_code" = "0" ] && [ "$scripts_code" = "0" ] && [ "$diff_code" = "0" ]; then
+              exit 0
+            fi
+            exit 1
+          } > "$RUNNER_TEMP/pr59-validation.log" 2>&1
+          code="$?"
+          set -e
+          if [ "$code" = "0" ]; then
+            exit 1
+          fi
+          git restore .
+          cp "$RUNNER_TEMP/pr59-validation.log" scripts/pr59-trigger.txt
+          git config user.name "Plaivra PR59 Diagnostic"
+          git config user.email "actions@users.noreply.github.com"
+          git add scripts/pr59-trigger.txt
+          git commit -m "chore(pr59): retain focused validation diagnostic"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          exit 1
 
       - name: Commit validated corrections
+        if: success()
         shell: bash
         run: |
           set -euo pipefail
