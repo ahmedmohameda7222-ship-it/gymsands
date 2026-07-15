@@ -79,6 +79,9 @@ describe("Train Phase 2A architecture contract", () => {
     expect(migration).not.toContain("assert_train_phase2a_structure_integrity");
     expect(migration).toContain("assert_train_phase2a_bridge_integrity");
     expect(migration).toContain("(select private.is_admin())");
+    expect(migration).toContain("create or replace function private.can_access_workout_plan");
+    expect(migration).toContain("private.can_access_workout_plan");
+    expect(verification).toContain("private.can_access_workout_plan");
     expect(migration).toContain("(select auth.uid())");
     expect(migration).not.toContain("public.is_admin()");
     expect(migration).toContain("jsonb_typeof(planned_prescription) = 'object'");

@@ -78,6 +78,36 @@ begin
     raise exception 'A Train Phase 2A policy still references public.is_admin().';
   end if;
 
+  routine_oid := to_regprocedure('private.can_access_workout_plan(uuid)');
+  if routine_oid is null then
+    raise exception 'Missing private.can_access_workout_plan(uuid).';
+  end if;
+  if not (select prosecdef from pg_proc where oid = routine_oid) then
+    raise exception 'Workout-plan access helper must be SECURITY DEFINER.';
+  end if;
+  if (select provolatile from pg_proc where oid = routine_oid) <> 's' then
+    raise exception 'Workout-plan access helper must be STABLE.';
+  end if;
+  select proconfig into routine_settings from pg_proc where oid = routine_oid;
+  if coalesce(array_to_string(routine_settings, ','), '') not like '%search_path=%' then
+    raise exception 'Workout-plan access helper search_path is not hardened.';
+  end if;
+  if not has_function_privilege('authenticated', routine_oid, 'EXECUTE')
+     or not has_function_privilege('service_role', routine_oid, 'EXECUTE')
+     or has_function_privilege('anon', routine_oid, 'EXECUTE') then
+    raise exception 'Workout-plan access helper grants are incorrect.';
+  end if;
+  if exists (
+    select 1
+    from pg_proc routine
+    cross join lateral aclexplode(coalesce(routine.proacl, acldefault('f', routine.proowner))) grant_acl
+    where routine.oid = routine_oid
+      and grant_acl.grantee = 0
+      and grant_acl.privilege_type = 'EXECUTE'
+  ) then
+    raise exception 'PUBLIC can execute the workout-plan access helper.';
+  end if;
+
   if exists (
     select required_table.table_name
     from unnest(array[
@@ -92,10 +122,28 @@ begin
       from pg_policies policy
       where policy.schemaname = 'public'
         and policy.tablename = required_table.table_name
-        and (coalesce(policy.qual, '') || ' ' || coalesce(policy.with_check, '')) like '%private.is_admin()%'
+        and (coalesce(policy.qual, '') || ' ' || coalesce(policy.with_check, ''))
+          like '%private.can_access_workout_plan%'
     )
   ) then
-    raise exception 'A Train Phase 2A policy does not use private.is_admin().';
+    raise exception 'A Train Phase 2A policy does not use private.can_access_workout_plan().';
+  end if;
+
+  if exists (
+    select 1
+    from pg_policies policy
+    where policy.schemaname = 'public'
+      and policy.tablename = any(array[
+        'user_workout_plan_week_templates',
+        'user_workout_plan_weeks',
+        'user_workout_plan_sessions',
+        'user_workout_plan_phases',
+        'user_workout_plan_activities'
+      ])
+      and (coalesce(policy.qual, '') || ' ' || coalesce(policy.with_check, ''))
+        like '%user_workout_plans%'
+  ) then
+    raise exception 'A Train Phase 2A policy reads user_workout_plans directly instead of using the private helper.';
   end if;
 
   for required_column in

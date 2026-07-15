@@ -459,6 +459,27 @@ before insert or update of workout_session_id, plan_activity_id
 on public.exercise_logs
 for each row execute function public.assert_train_phase2a_bridge_integrity();
 
+create or replace function private.can_access_workout_plan(p_plan_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private
+as $function$
+  select exists (
+    select 1
+    from public.user_workout_plans plan
+    where plan.id = p_plan_id
+      and (
+        plan.user_id = (select auth.uid())
+        or (select private.is_admin())
+      )
+  )
+$function$;
+
+revoke all on function private.can_access_workout_plan(uuid) from public, anon;
+grant execute on function private.can_access_workout_plan(uuid) to authenticated, service_role;
+
 alter table public.user_workout_plan_week_templates enable row level security;
 alter table public.user_workout_plan_weeks enable row level security;
 alter table public.user_workout_plan_sessions enable row level security;
@@ -468,34 +489,14 @@ alter table public.user_workout_plan_activities enable row level security;
 create policy user_workout_plan_week_templates_own_all
 on public.user_workout_plan_week_templates
 for all to authenticated
-using (
-  exists (
-    select 1 from public.user_workout_plans plan
-    where plan.id = public.user_workout_plan_week_templates.plan_id and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
-  )
-)
-with check (
-  exists (
-    select 1 from public.user_workout_plans plan
-    where plan.id = public.user_workout_plan_week_templates.plan_id and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
-  )
-);
+using (private.can_access_workout_plan(plan_id))
+with check (private.can_access_workout_plan(plan_id));
 
 create policy user_workout_plan_weeks_own_all
 on public.user_workout_plan_weeks
 for all to authenticated
-using (
-  exists (
-    select 1 from public.user_workout_plans plan
-    where plan.id = public.user_workout_plan_weeks.plan_id and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
-  )
-)
-with check (
-  exists (
-    select 1 from public.user_workout_plans plan
-    where plan.id = public.user_workout_plan_weeks.plan_id and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
-  )
-);
+using (private.can_access_workout_plan(plan_id))
+with check (private.can_access_workout_plan(plan_id));
 
 create policy user_workout_plan_sessions_own_all
 on public.user_workout_plan_sessions
@@ -504,18 +505,16 @@ using (
   exists (
     select 1
     from public.user_workout_plan_week_templates template
-    join public.user_workout_plans plan on plan.id = template.plan_id
     where template.id = public.user_workout_plan_sessions.week_template_id
-      and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
+      and private.can_access_workout_plan(template.plan_id)
   )
 )
 with check (
   exists (
     select 1
     from public.user_workout_plan_week_templates template
-    join public.user_workout_plans plan on plan.id = template.plan_id
     where template.id = public.user_workout_plan_sessions.week_template_id
-      and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
+      and private.can_access_workout_plan(template.plan_id)
   )
 );
 
@@ -527,9 +526,8 @@ using (
     select 1
     from public.user_workout_plan_sessions session
     join public.user_workout_plan_week_templates template on template.id = session.week_template_id
-    join public.user_workout_plans plan on plan.id = template.plan_id
     where session.id = public.user_workout_plan_phases.plan_session_id
-      and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
+      and private.can_access_workout_plan(template.plan_id)
   )
 )
 with check (
@@ -537,9 +535,8 @@ with check (
     select 1
     from public.user_workout_plan_sessions session
     join public.user_workout_plan_week_templates template on template.id = session.week_template_id
-    join public.user_workout_plans plan on plan.id = template.plan_id
     where session.id = public.user_workout_plan_phases.plan_session_id
-      and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
+      and private.can_access_workout_plan(template.plan_id)
   )
 );
 
@@ -552,9 +549,8 @@ using (
     from public.user_workout_plan_phases phase
     join public.user_workout_plan_sessions session on session.id = phase.plan_session_id
     join public.user_workout_plan_week_templates template on template.id = session.week_template_id
-    join public.user_workout_plans plan on plan.id = template.plan_id
     where phase.id = public.user_workout_plan_activities.plan_phase_id
-      and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
+      and private.can_access_workout_plan(template.plan_id)
   )
 )
 with check (
@@ -563,9 +559,8 @@ with check (
     from public.user_workout_plan_phases phase
     join public.user_workout_plan_sessions session on session.id = phase.plan_session_id
     join public.user_workout_plan_week_templates template on template.id = session.week_template_id
-    join public.user_workout_plans plan on plan.id = template.plan_id
     where phase.id = public.user_workout_plan_activities.plan_phase_id
-      and (plan.user_id = (select auth.uid()) or (select private.is_admin()))
+      and private.can_access_workout_plan(template.plan_id)
   )
 );
 

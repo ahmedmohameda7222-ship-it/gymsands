@@ -231,6 +231,7 @@ beforeAll(() => {
     );
 
     grant select, insert, update, delete on all tables in schema public to authenticated, service_role;
+    revoke all on public.user_workout_plans, public.user_workout_plan_days, public.user_workout_plan_exercises from authenticated;
 
     insert into public.user_workout_plans(id,user_id,name,description,program_duration_weeks,session_duration_minutes)
     values
@@ -301,7 +302,7 @@ databaseDescribe("Train Phase 2A migration and detach RPC", () => {
     const ownerTemplate = sql("select id from user_workout_plan_week_templates where plan_id='50000000-0000-4000-8000-000000000001'");
     const otherTemplate = sql("select id from user_workout_plan_week_templates where plan_id='50000000-0000-4000-8000-000000000002'");
 
-    expect(sql("select to_regprocedure('public.is_admin()') is null, to_regprocedure('private.is_admin()') is not null")).toBe("t\tt");
+    expect(sql("select to_regprocedure('public.is_admin()') is null, to_regprocedure('private.is_admin()') is not null, to_regprocedure('private.can_access_workout_plan(uuid)') is not null")).toBe("t\tt\tt");
     expect(authQuery(userA, `select count(*) from public.user_workout_plan_week_templates where id='${ownerTemplate}'`)).toBe("1");
     expect(authQuery(userB, `select count(*) from public.user_workout_plan_week_templates where id='${ownerTemplate}'`)).toBe("0");
     expect(authQuery(userC, `select count(*) from public.user_workout_plan_week_templates where id='${ownerTemplate}'`)).toBe("1");
