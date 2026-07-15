@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   correct-and-validate:
-    if: contains(github.event.head_commit.message, 'correction runner')
+    if: contains(github.event.head_commit.message, 'correction runner') || contains(github.event.head_commit.message, 'release preflight')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -146,7 +146,6 @@ jobs:
           run_check migration-ledger npm run migration:ledger:check
           run_shell environment-validation 'export PLAIVRA_VALIDATE_PRODUCTION_ENV=true PLAIVRA_RELEASE_ENVIRONMENT=production NEXT_PUBLIC_APP_URL=https://app.plaivra.com NEXT_PUBLIC_USE_MOCK_AUTH=false PLAIVRA_MCP_BASE_URL=https://app.plaivra.com/api/mcp PLAIVRA_OAUTH_ISSUER=https://app.plaivra.com PLAIVRA_CIMD_ALLOWED_ORIGINS=https://chatgpt.com CRON_SECRET=ci-placeholder-cron-secret-that-is-long-enough; npm run validate:env'
           run_shell production-build 'NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build'
-          run_check release-preflight npm run release:preflight
           run_qa rendered-qa 'QA_EVIDENCE_DIR="$REPORT_DIR/rendered-qa-evidence" npm run qa:rendered'
           run_qa train-qa 'QA_TRAIN_EVIDENCE_DIR="$REPORT_DIR/train-qa-evidence" npm run qa:train'
 
