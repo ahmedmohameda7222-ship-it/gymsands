@@ -1,4 +1,4 @@
-name: PR59 Correction Runner Final v2
+name: PR59 Correction Runner Final v3
 
 on:
   push:
@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   correct-and-validate:
-    if: contains(github.event.head_commit.message, 'correction runner') || contains(github.event.head_commit.message, 'release preflight') || contains(github.event.head_commit.message, 'compatibility-corrected runner')
+    if: contains(github.event.head_commit.message, 'correction runner') || contains(github.event.head_commit.message, 'release preflight') || contains(github.event.head_commit.message, 'compatibility-corrected runner') || contains(github.event.head_commit.message, 'runner ID')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -36,6 +36,13 @@ jobs:
       REPORT_DIR: ${{ runner.temp }}/pr59-correction-reports
 
     steps:
+      - name: Publish exact runner ID
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment 59 --repo "$GITHUB_REPOSITORY" --body "PR #59 correction runner started. Run ID: \`$GITHUB_RUN_ID\`. Staging SHA: \`$GITHUB_SHA\`. The runner will push only after every local gate passes."
+
       - name: Checkout correction branch
         uses: actions/checkout@v4
         with:
