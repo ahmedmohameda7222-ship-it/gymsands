@@ -7,7 +7,7 @@ const release: ReleaseVersion = {
   buildTimestamp: "2026-07-10T12:30:00.000Z",
   environment: "production",
   schemaCompatibilityVersion: "2",
-  expectedDatabaseMigrationVersion: "20260711014500",
+  expectedDatabaseMigrationVersion: "20260715010000",
   migrationLedgerReconciliationState: "reconciled",
   pendingMigrationCount: 0,
   schemaAppliedUntrackedCount: 0,
@@ -17,7 +17,7 @@ const release: ReleaseVersion = {
 const database = {
   available: true,
   version: "2",
-  migrationVersion: "20260711014500"
+  migrationVersion: "20260715010000"
 };
 
 describe("release readiness", () => {
@@ -56,8 +56,8 @@ describe("release readiness", () => {
     }, database).releaseReady).toBe(false);
   });
 
-  it("fails closed on stale or unavailable database migration markers", () => {
-    expect(evaluateReleaseReadiness(release, { ...database, migrationVersion: "20260711013000" }).releaseReady).toBe(false);
+  it("fails closed on the unchanged compatibility marker or an unavailable database marker", () => {
+    expect(evaluateReleaseReadiness(release, { ...database, migrationVersion: "20260711014500" }).releaseReady).toBe(false);
     expect(evaluateReleaseReadiness(release, { available: false, version: "unavailable", migrationVersion: null }).releaseReady).toBe(false);
   });
 
