@@ -75,6 +75,7 @@ describe("approved Train Phase 1 semantic contracts", () => {
     expect(picker).toContain("disabled={duplicate}");
     expect(picker).toContain('tr("alreadyAdded")');
     expect(picker).toContain("env(safe-area-inset-bottom)");
+    expect(picker).toContain('className="absolute inset-x-0 bottom-0 z-30');
     expect(picker).toContain("data-picker-footer");
   });
 
@@ -111,32 +112,41 @@ describe("approved Train Phase 1 semantic contracts", () => {
     expect(detail).toContain("normalizeExerciseName(log.exercise_name) === target");
   });
 
-  it("starts local workouts by FK and resumes external workouts by an owner-scoped snapshot", () => {
+  it("starts local workouts by FK and keeps external direct starts fail-closed", () => {
     const sessions = source("services/database/workout-sessions.ts");
+    const directStart = sessions.slice(sessions.indexOf("export async function getOrStartWorkoutSession"), sessions.indexOf("export async function cancelWorkoutSession"));
     expect(sessions).toContain('from("workouts")');
     expect(sessions).toContain("const workoutId = resolvedWorkoutId === undefined ? await persistedLegacyWorkoutId(workout.id) : resolvedWorkoutId");
     expect(sessions).toContain("workout_id: workoutId");
-    expect(sessions).toContain('.eq("user_id", userId)');
-    expect(sessions).toContain('.eq("status", "started")');
-    expect(sessions).toContain('query.is("workout_id", null).eq("workout_name", workout.name)');
-    expect(sessions).toContain("startWorkoutSession(userId, workout, workoutId)");
+    expect(directStart).toContain('.eq("user_id", userId)');
+    expect(directStart).toContain('.eq("status", "started")');
+    expect(directStart).toContain('.eq("workout_id", workoutId)');
+    expect(directStart).toContain('if (workout.catalog_source === "custom")');
+    expect(directStart).toContain("An open direct workout session already exists");
+    expect(directStart).toContain("directSessionStartPromises");
   });
 
-  it("resumes null-FK sessions by owner-scoped session ID across locales without same-name collisions", () => {
+  it("resumes null-FK external sessions only by owner-scoped direct session ID", () => {
     const sessions = source("services/database/workout-sessions.ts");
     const form = source("components/workouts/workout-session-form.tsx");
     const active = source("components/workouts/active-workout-indicator.tsx");
-    const candidateStart = sessions.indexOf("if (candidateSessionId && isUuid(candidateSessionId))", sessions.indexOf("export async function getOrStartWorkoutSession"));
-    const identityFallback = sessions.indexOf("const workoutId = await persistedLegacyWorkoutId(workout.id)", candidateStart);
-    const nameFallback = sessions.indexOf('.eq("workout_name", workout.name)', candidateStart);
-    expect(candidateStart).toBeGreaterThan(-1);
-    expect(identityFallback).toBeGreaterThan(candidateStart);
-    expect(nameFallback).toBeGreaterThan(identityFallback);
-    const candidateBlock = sessions.slice(candidateStart, identityFallback);
+    const functionStart = sessions.indexOf("export async function getOrStartWorkoutSession");
+    const candidateStart = sessions.indexOf("if (candidateSessionId && isUuid(candidateSessionId))", functionStart);
+    const localBranch = sessions.indexOf("if (workoutId)", candidateStart);
+    const customBranch = sessions.indexOf('if (workout.catalog_source === "custom")', localBranch);
+    const unresolvedBranch = sessions.indexOf("const { data: unresolved", customBranch);
+    expect(candidateStart).toBeGreaterThan(functionStart);
+    expect(localBranch).toBeGreaterThan(candidateStart);
+    expect(customBranch).toBeGreaterThan(localBranch);
+    expect(unresolvedBranch).toBeGreaterThan(customBranch);
+    const candidateBlock = sessions.slice(candidateStart, localBranch);
     expect(candidateBlock).toContain('.eq("id", candidateSessionId)');
     expect(candidateBlock).toContain('.eq("user_id", userId)');
     expect(candidateBlock).toContain('.eq("status", "started")');
+    expect(candidateBlock).toContain('.is("plan_day_id", null)');
     expect(candidateBlock).not.toContain("workout.name");
+    const customBlock = sessions.slice(customBranch, unresolvedBranch);
+    expect(customBlock).toContain('.eq("workout_name", workout.name)');
     expect(form).toContain("storedActiveWorkout.route === sessionRoute");
     expect(form).toContain("getOrStartWorkoutSession(user.id, workout, candidateSessionId)");
     expect(active).toContain("getOpenWorkoutSessionWithStatus(userId, null, candidateSessionId)");
