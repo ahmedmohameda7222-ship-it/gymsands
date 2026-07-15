@@ -46,43 +46,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: TypeScript validation
-        run: npm run typecheck
-
-      - name: Direct session resume tests
-        run: npx vitest run --config vitest.unit.config.mjs services/database/workout-session-resume.test.ts
-
-      - name: Previous set identity tests
-        run: npx vitest run --config vitest.unit.config.mjs lib/workouts/workout-session-history.test.ts
-
-      - name: Activity Catalog validation tests
-        run: npx vitest run --config vitest.unit.config.mjs lib/activity-catalog/validation.test.ts
-
-      - name: Activity Catalog boundary tests
-        run: npx vitest run --config vitest.unit.config.mjs services/activity-catalog/server/activity-catalog-boundaries.test.ts
-
-      - name: Activity Catalog route tests
-        run: npx vitest run --config vitest.unit.config.mjs services/activity-catalog/server/activity-catalog-routes.test.ts
-
-      - name: Train localization tests
-        run: npx vitest run --config vitest.unit.config.mjs lib/i18n/train-workout-library.test.ts
-
-      - name: Train Phase 1 UI tests
-        run: npx vitest run --config vitest.unit.config.mjs lib/product/train-phase1-approved-ui.test.ts
-
-      - name: Repository script tests
-        run: npm run test:scripts
-
-      - name: Corrected diff formatting
-        run: git diff --check
-
-      - name: Commit validated corrections
+      - name: Identify first failing repository script test
         shell: bash
         run: |
-          set -euo pipefail
-          git config user.name "Plaivra PR59 Correction"
+          set -uo pipefail
+          failed=""
+          for test_file in scripts/*.test.mjs; do
+            echo "Running $test_file"
+            if ! node --test "$test_file"; then
+              failed="$test_file"
+              break
+            fi
+          done
+          if [ -z "$failed" ]; then
+            echo "All repository script tests passed unexpectedly during isolation."
+            exit 1
+          fi
+          git restore .
+          printf 'First failing repository script test: %s\n' "$failed" > scripts/pr59-trigger.txt
+          git config user.name "Plaivra PR59 Diagnostic"
           git config user.email "actions@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          git commit -m "fix(train): apply PR59 required corrections"
+          git add scripts/pr59-trigger.txt
+          git commit -m "chore(pr59): record failing repository script test"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          exit 1
