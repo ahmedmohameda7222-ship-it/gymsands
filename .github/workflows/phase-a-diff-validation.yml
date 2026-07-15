@@ -45,10 +45,10 @@ jobs:
             exit 1
           fi
           git restore .
-          cp "$RUNNER_TEMP/pr59-final.log" PR59_FINAL_ERROR.txt
+          cp "$RUNNER_TEMP/pr59-final.log" scripts/pr59-trigger.txt
           git config user.name "Plaivra PR59 Diagnostic"
           git config user.email "actions@users.noreply.github.com"
-          git add PR59_FINAL_ERROR.txt
+          git add scripts/pr59-trigger.txt
           git commit -m "chore(pr59): retain final patch diagnostic"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
 
