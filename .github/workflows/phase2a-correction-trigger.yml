@@ -27,26 +27,20 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          import base64
-          import gzip
-          import re
 
-          payload = Path('.github/workflows/phase2a-correction-apply.yml')
-          lines = payload.read_text(encoding='utf-8').splitlines()
-          restored = []
-          for index, line in enumerate(lines):
-              match = re.search(r"cat <<'PAYLOAD' \| base64 -d \| gzip -d > (.+)$", line.strip())
-              if not match:
-                  continue
-              target = Path(match.group(1).strip())
-              target.parent.mkdir(parents=True, exist_ok=True)
-              target.write_bytes(gzip.decompress(base64.b64decode(lines[index + 1].strip())))
-              restored.append(str(target))
-
-          if len(restored) != 3:
-              raise SystemExit(f'Expected 3 restored files, got {len(restored)}: {restored}')
-          print('\n'.join(restored))
+          payload = Path('.github/workflows/phase2a-correction-apply.yml').read_text(encoding='utf-8')
+          start = payload.index("          cat <<'PAYLOAD'")
+          end = payload.index('          git config user.name')
+          block = payload[start:end]
+          script_lines = []
+          for line in block.splitlines():
+              script_lines.append(line[10:] if line.startswith('          ') else line)
+          Path('/tmp/apply-phase2a-correction.sh').write_text('\n'.join(script_lines) + '\n', encoding='utf-8')
           PY
+          bash /tmp/apply-phase2a-correction.sh
+          echo "9751f91b095f5de3d323162192c31d7f0d40d770f23897725ab1c8e9f060663a  services/database/train-program-v2-rpc.integration.test.ts" | sha256sum -c -
+          echo "6d9121741099f2ba1a8e8536072e4411d64c7a42c1667799a29d1dc00881d9f7  supabase/migrations/20260715190000_train_phase2a_program_architecture.sql" | sha256sum -c -
+          echo "b5b3dda968f37e0141a8b05d135404516c4263f1303fc58ff13fe026552a8c0e  supabase/verification/train-phase2a-program-architecture.sql" | sha256sum -c -
           rm .github/workflows/phase2a-correction-apply.yml
           rm .github/workflows/phase2a-correction-trigger.yml
           git config user.name github-actions[bot]
