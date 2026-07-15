@@ -1,15 +1,13 @@
 name: PR60 Final Corrections V2
 
 on:
-  push:
-    branches:
-      - chatgpt/train-phase2a-architecture-foundation
   pull_request:
     branches:
-      - main
+      - chatgpt/train-phase2a-architecture-foundation
     types:
+      - opened
       - synchronize
-      - edited
+      - reopened
 
 permissions:
   contents: write
@@ -20,10 +18,10 @@ concurrency:
 
 jobs:
   apply:
-    if: github.event_name == 'push' || github.head_ref == 'chatgpt/train-phase2a-architecture-foundation'
+    if: github.head_ref == 'chatgpt/pr60-correction-runner'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout correction branch
+      - name: Checkout Phase 2A branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -102,7 +100,8 @@ jobs:
         run: |
           ! grep -n "exercise.updated_at" supabase/migrations/20260715190000_train_phase2a_program_architecture.sql
           grep -n "with updated as (update public.user_workout_plan_sessions" services/database/train-program-v2-rpc.integration.test.ts
-          grep -n "with updated as (update public.user_workout_plan_activities" services/database/train-program-v2-rpc.integration.test.ts
+          grep -n "with updated as (update public.user_workout_plan_plan_activities" services/database/train-program-v2-rpc.integration.test.ts || \
+            grep -n "with updated as (update public.user_workout_plan_activities" services/database/train-program-v2-rpc.integration.test.ts
           grep -n "await input.waitFor({ state: \"visible\", timeout: 20_000 })" scripts/run-train-layout-qa.mjs
           git diff --check
           git diff --stat
@@ -111,7 +110,6 @@ jobs:
         shell: bash
         run: |
           rm -f \
-            .github/workflows/pr60-final-corrections.yml \
             .github/workflows/pr60-final-corrections-v2.yml \
             .pr60-final-correction-trigger
           git config user.name "github-actions[bot]"
