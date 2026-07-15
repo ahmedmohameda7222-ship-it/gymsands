@@ -40,6 +40,7 @@ jobs:
           set -euo pipefail
           node scripts/pr59-final-corrections.mjs
           node scripts/pr59-safety-followup.mjs
+          node scripts/pr59-test-followup.mjs
           git diff --check
 
       - name: Install dependencies
