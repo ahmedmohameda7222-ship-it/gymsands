@@ -6,9 +6,7 @@ on:
       - main
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: quality-${{ github.workflow }}-${{ github.ref }}
@@ -16,7 +14,7 @@ concurrency:
 
 jobs:
   correct-and-validate:
-    if: github.event.pull_request.number == 59 && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.pull_request.number == 59
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -32,24 +30,18 @@ jobs:
       PLAIVRA_RELEASE_ENVIRONMENT: ci
       PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
       REPORT_DIR: ${{ runner.temp }}/pr59-correction-reports
+      CORRECTION_PARENT_SHA: 1bb7206d5cee7fe3d7ed49fdd7daa09a145f45c2
 
     steps:
-      - name: Publish exact runner identity
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh pr comment 59 --repo "$GITHUB_REPOSITORY" --body "PR #59 correction bootstrap started. Run ID: \`$GITHUB_RUN_ID\`. Staging SHA: \`${{ github.event.pull_request.head.sha }}\`. The correction commit will be pushed only if every bootstrap validation gate passes."
-
-      - name: Checkout exact PR head
+      - name: Checkout correction parent
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ env.CORRECTION_PARENT_SHA }}
           fetch-depth: 0
 
-      - name: Verify checkout identity
+      - name: Verify correction parent
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+        run: test "$(git rev-parse HEAD)" = "$CORRECTION_PARENT_SHA"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -66,7 +58,7 @@ jobs:
           node "$RUNNER_TEMP/apply-pr59-corrections.mjs"
           rm -f scripts/pr59-corrections.mjs.gz.b64
           git diff --check
-          git config user.name "Plaivra Correction Bootstrap"
+          git config user.name "Plaivra Correction Validator"
           git config user.email "actions@users.noreply.github.com"
           git add -A
           git diff --cached --check
@@ -74,9 +66,13 @@ jobs:
           git diff --check origin/main...HEAD
           final_sha="$(git rev-parse HEAD)"
           echo "FINAL_SHA=$final_sha" >> "$GITHUB_ENV"
-          printf '%s\n' "$final_sha" > "$REPORT_DIR/final-sha.txt"
+          printf '%s\n' "$final_sha" > "$REPORT_DIR/candidate-sha.txt"
           git status --short > "$REPORT_DIR/git-status-before-validation.txt"
           test ! -s "$REPORT_DIR/git-status-before-validation.txt"
+          git diff-tree --no-commit-id --name-status -r HEAD^ HEAD > "$REPORT_DIR/correction-files.tsv"
+          awk -F '\t' '$1 != "D" { print $2 }' "$REPORT_DIR/correction-files.tsv" > "$REPORT_DIR/correction-files-present.txt"
+          tar -czf "$REPORT_DIR/corrected-files.tar.gz" -T "$REPORT_DIR/correction-files-present.txt"
+          git show --format=fuller --stat HEAD > "$REPORT_DIR/candidate-commit.txt"
 
       - name: Install dependencies
         shell: bash
@@ -165,15 +161,6 @@ jobs:
           printf '%s\n' "$failed" > "$REPORT_DIR/overall.exit"
           exit 0
 
-      - name: Push validated correction commit
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(cat "$REPORT_DIR/overall.exit")" = "0"
-          test "$(git rev-parse HEAD)" = "$FINAL_SHA"
-          test ! -s "$REPORT_DIR/git-status-after-validation.txt"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
-
       - name: Upload retained correction evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -183,20 +170,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Publish bootstrap conclusion
-        if: always()
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          overall="missing"
-          if [ -f "$REPORT_DIR/overall.exit" ]; then
-            overall="$(cat "$REPORT_DIR/overall.exit")"
-          fi
-          final_sha="${FINAL_SHA:-not-created}"
-          gh pr comment 59 --repo "$GITHUB_REPOSITORY" --body "PR #59 correction bootstrap completed. Run ID: \`$GITHUB_RUN_ID\`. Candidate correction SHA: \`$final_sha\`. Aggregate bootstrap validation exit: \`$overall\`. Retained artifact: \`pr59-correction-validation-$GITHUB_RUN_ID\`. PR remains Draft and unmerged."
-
-      - name: Enforce bootstrap result
+      - name: Enforce correction validation
         if: always()
         shell: bash
         run: |
@@ -204,3 +178,4 @@ jobs:
           test -f "$REPORT_DIR/overall.exit"
           test "$(cat "$REPORT_DIR/overall.exit")" = "0"
           test "$(git rev-parse HEAD)" = "$FINAL_SHA"
+          test ! -s "$REPORT_DIR/git-status-after-validation.txt"
