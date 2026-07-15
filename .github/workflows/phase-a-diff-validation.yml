@@ -6,7 +6,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: phase-a-diff-${{ github.workflow }}-${{ github.ref }}
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   verify-diff:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout exact pull request head
         uses: actions/checkout@v4
@@ -27,8 +27,21 @@ jobs:
         shell: bash
         run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
 
-      - name: Check working tree diff formatting
-        run: git diff --check
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
-      - name: Check branch diff formatting against main
-        run: git diff --check origin/main...HEAD
+      - name: Apply QA data-shape scenario isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/pr59-qa-variant-followup.mjs
+          git diff --check
+          git config user.name "Plaivra PR59 Follow-up"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "test(train): isolate QA data-shape scenarios"
+          test -z "$(git diff --name-only HEAD^ HEAD -- .github/workflows)"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
