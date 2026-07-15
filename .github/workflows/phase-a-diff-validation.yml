@@ -39,7 +39,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/pr59-direct-corrections.mjs
+          set +e
+          node scripts/pr59-direct-corrections.mjs > "$RUNNER_TEMP/pr59-direct.log" 2>&1
+          code="$?"
+          set -e
+          if [ "$code" != "0" ]; then
+            cp "$RUNNER_TEMP/pr59-direct.log" PR59_DIRECT_ERROR.txt
+            git config user.name "Plaivra PR59 Diagnostic"
+            git config user.email "actions@users.noreply.github.com"
+            git add PR59_DIRECT_ERROR.txt
+            git commit -m "chore(pr59): retain direct correction diagnostic"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+            exit "$code"
+          fi
           rm -f scripts/pr59-direct-corrections.mjs
           git diff --check
           git config user.name "Plaivra PR59 Correction"
