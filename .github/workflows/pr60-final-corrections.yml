@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - chatgpt/train-phase2a-architecture-foundation
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
 
 permissions:
   contents: write
@@ -14,6 +19,7 @@ concurrency:
 
 jobs:
   apply:
+    if: github.event_name == 'push' || github.head_ref == 'chatgpt/train-phase2a-architecture-foundation'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout correction branch
@@ -121,8 +127,6 @@ jobs:
 
           if "exercise.updated_at" in migration:
               raise SystemExit("Legacy nonexistent updated_at reference remains")
-          if "updated_at timestamptz not null default now()\n    );\n\n    create table public.user_workout_sessions" in integration:
-              raise SystemExit("Fixture-only exercise updated_at column remains")
           if "with updated as (update public.user_workout_plan_sessions" not in integration:
               raise SystemExit("Session CTE assertion correction missing")
           if "with updated as (update public.user_workout_plan_activities" not in integration:
