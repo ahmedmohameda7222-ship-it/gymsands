@@ -2,6 +2,8 @@
 
 import { defaultExerciseInstructions } from "@/data/workouts";
 import { isIsoDate, todayIso } from "@/lib/date-utils";
+import { env } from "@/lib/env";
+import { getMockTrainPlans } from "@/lib/fixtures/train-mock";
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
 import type { UserWorkoutPlan, Weekday, Workout, WorkoutPlanDaySession } from "@/types";
@@ -15,7 +17,30 @@ export function getCurrentWeekday(date = new Date()): Weekday {
 function canUseUserData(userId: string | null | undefined) {
   return Boolean(supabase && isUuid(userId));
 }
+function getMockUserWorkoutPlanDay(
+  dayId: string
+): WorkoutPlanDaySession | null {
+  const plan = getMockTrainPlans().find((candidate) =>
+    candidate.days.some((day) => day.id === dayId)
+  );
 
+  const day = plan?.days.find((candidate) => candidate.id === dayId);
+
+  if (!plan || !day || plan.archived_at) {
+    return null;
+  }
+
+  return {
+    ...day,
+    plan: {
+      id: plan.id,
+      user_id: plan.user_id,
+      name: plan.name,
+      is_active: plan.is_active,
+      is_default: plan.is_default ?? plan.is_active
+    }
+  };
+}
 function looksLikeUrl(value: string | null | undefined) {
   return Boolean(value && /^https?:\/\//i.test(value));
 }
@@ -348,9 +373,19 @@ export async function getWorkoutPlanDurationOptions() {
 }
 
 export async function getUserWorkoutPlanDay(dayId: string) {
-  if (!supabase) throw new Error("Database not connected");
+  if (!isUuid(dayId)) {
+    return null;
+  }
 
-  const result = await supabase!
+  if (env.useMockAuth && process.env.NODE_ENV !== "production") {
+    return getMockUserWorkoutPlanDay(dayId);
+  }
+
+  if (!supabase) {
+    throw new Error("Database not connected");
+  }
+
+  const result = await supabase
     .from("user_workout_plan_days")
     .select(
       "id,plan_id,day_number,day_name,weekday,notes,archived_at,user_workout_plan_exercises(id,plan_day_id,workout_id,source_workout_id,exercise_name,category,target_muscle,equipment,sets,reps,rest_seconds,instructions,exercise_url,video_url,custom_video_url,sort_order,notes,archived_at),user_workout_plans(id,user_id,name,is_active,archived_at)"
