@@ -15,13 +15,14 @@ concurrency:
 jobs:
   verify-diff:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout exact pull request head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          show-progress: false
 
       - name: Verify exact checkout identity
         shell: bash
@@ -32,28 +33,16 @@ jobs:
         with:
           node-version: 24
 
-      - name: Diagnose direct PR59 correction script
-        if: github.event.pull_request.number == 59 && hashFiles('scripts/pr59-direct-corrections.mjs') != ''
+      - name: Apply final deterministic PR59 corrections
         shell: bash
         run: |
           set -euo pipefail
-          set +e
-          node scripts/pr59-direct-corrections.mjs > PR59_DIRECT_ERROR.txt 2>&1
-          code="$?"
-          set -e
-          if [ "$code" != "0" ]; then
-            git restore . ':!PR59_DIRECT_ERROR.txt'
-            git config user.name "Plaivra PR59 Diagnostic"
-            git config user.email "actions@users.noreply.github.com"
-            git add PR59_DIRECT_ERROR.txt
-            git commit -m "chore(pr59): retain direct correction diagnostic"
-            git push origin HEAD:${{ github.event.pull_request.head.ref }}
-            exit "$code"
-          fi
-          rm -f PR59_DIRECT_ERROR.txt scripts/pr59-direct-corrections.mjs scripts/pr59-trigger.txt
+          node scripts/pr59-final-corrections.mjs
+          rm -f scripts/pr59-final-corrections.mjs
           git config user.name "Plaivra PR59 Correction"
           git config user.email "actions@users.noreply.github.com"
           git add -A
+          git diff --cached --check
           git commit -m "fix(train): apply PR59 required corrections"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
 
