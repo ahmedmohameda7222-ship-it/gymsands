@@ -102,7 +102,7 @@ The route returns HTTP 200 only when final release readiness is true. It returns
 - provider deployment evidence;
 - production monitoring.
 
-The current repository ledger records six `applied_schema_untracked` migrations and reconciliation state `pending`, so production release preflight must remain blocked until the separately approved history repair is completed and independently verified.
+The current repository ledger records 32 applied migrations, zero pending migrations, zero schema-applied-untracked migrations, zero unresolved migrations, and reconciliation state `reconciled`. Repository metadata expects migration `20260715010000`, while the production compatibility marker remains `20260711014500`; application release readiness therefore remains blocked until the marker is separately advanced and all remaining release gates pass.
 
 ## Release manifest
 
@@ -136,7 +136,7 @@ npm run release:preflight -- \
   --output quality-reports/release-preflight.json
 ```
 
-The command verifies checkout and repository identity, Node 24 pins, migration reconciliation, expected migration identity, manifest identity, and retained quality evidence. It performs no provider or Supabase write. It must fail while reconciliation is pending, and a failed or blocked result is a no-go before merge.
+The command verifies checkout and repository identity, Node 24 pins, migration reconciliation, expected migration identity, manifest identity, and retained quality evidence. It performs no provider or Supabase write. With reconciliation complete, it must pass for the exact reviewed commit before merge; production compatibility-marker verification remains a separate mandatory pre-merge gate.
 
 Release preflight does not prove which branches Vercel deploys or which commit Vercel deployed. Repository policy tests do not prove provider enforcement. Verify branch suppression after candidate pushes and verify exact production identity after a production-triggering merge.
 
