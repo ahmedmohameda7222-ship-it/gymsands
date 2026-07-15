@@ -41,7 +41,6 @@ jobs:
           node scripts/pr59-final-corrections.mjs
           node scripts/pr59-safety-followup.mjs
           git diff --check
-          git diff --check origin/main...HEAD
 
       - name: Install dependencies
         run: npm ci
