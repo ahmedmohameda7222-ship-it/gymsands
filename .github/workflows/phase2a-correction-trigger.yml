@@ -21,7 +21,7 @@ jobs:
         with:
           ref: chatgpt/train-phase2a-architecture-foundation
           fetch-depth: 0
-      - name: Restore locally validated files
+      - name: Restore and verify correction payload
         shell: bash
         run: |
           set -euo pipefail
@@ -41,14 +41,15 @@ jobs:
           echo "9751f91b095f5de3d323162192c31d7f0d40d770f23897725ab1c8e9f060663a  services/database/train-program-v2-rpc.integration.test.ts" | sha256sum -c -
           echo "6d9121741099f2ba1a8e8536072e4411d64c7a42c1667799a29d1dc00881d9f7  supabase/migrations/20260715190000_train_phase2a_program_architecture.sql" | sha256sum -c -
           echo "b5b3dda968f37e0141a8b05d135404516c4263f1303fc58ff13fe026552a8c0e  supabase/verification/train-phase2a-program-architecture.sql" | sha256sum -c -
+      - name: Commit and push correction
+        shell: bash
+        run: |
+          set -euo pipefail
           rm .github/workflows/phase2a-correction-apply.yml
           rm .github/workflows/phase2a-correction-trigger.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
-          if git diff --cached --quiet; then
-            echo 'No correction changes to commit.'
-            exit 0
-          fi
+          git diff --cached --check
           git commit -m "fix(train): correct Phase 2A migration security and integrity"
           git push origin HEAD:chatgpt/train-phase2a-architecture-foundation
