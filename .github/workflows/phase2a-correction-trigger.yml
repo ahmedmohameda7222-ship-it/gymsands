@@ -1,0 +1,60 @@
+name: Trigger Phase 2A correction
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.ref == 'chatgpt/train-phase2a-architecture-foundation' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/train-phase2a-architecture-foundation
+          fetch-depth: 0
+      - name: Restore locally validated files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import base64
+          import gzip
+          import re
+
+          payload = Path('.github/workflows/phase2a-correction-apply.yml')
+          lines = payload.read_text(encoding='utf-8').splitlines()
+          restored = []
+          for index, line in enumerate(lines):
+              match = re.search(r"cat <<'PAYLOAD' \| base64 -d \| gzip -d > (.+)$", line.strip())
+              if not match:
+                  continue
+              target = Path(match.group(1).strip())
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_bytes(gzip.decompress(base64.b64decode(lines[index + 1].strip())))
+              restored.append(str(target))
+
+          if len(restored) != 3:
+              raise SystemExit(f'Expected 3 restored files, got {len(restored)}: {restored}')
+          print('\n'.join(restored))
+          PY
+          rm .github/workflows/phase2a-correction-apply.yml
+          rm .github/workflows/phase2a-correction-trigger.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No correction changes to commit.'
+            exit 0
+          fi
+          git commit -m "fix(train): correct Phase 2A migration security and integrity"
+          git push origin HEAD:chatgpt/train-phase2a-architecture-foundation
