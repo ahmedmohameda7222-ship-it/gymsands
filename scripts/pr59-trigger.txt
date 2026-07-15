@@ -1,2 +1,2 @@
-PR #59 clean payload diagnostic trigger.
-Activation: 2026-07-15T16:04:00Z
+PR #59 direct correction source diagnostic trigger.
+Activation: 2026-07-15T16:08:00Z
