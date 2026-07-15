@@ -28,14 +28,14 @@ function validInput() {
       pendingCount: 0,
       schemaAppliedUntrackedCount: 0,
       unresolvedCount: 0,
-      latestAppliedMigrationVersion: "20260713170000",
+      latestAppliedMigrationVersion: "20260715010000",
       releaseReady: true
     },
     manifest: {
       release: {
         commitSha: sha,
         buildTimestamp,
-        expectedDatabaseMigrationVersion: "20260713170000",
+        expectedDatabaseMigrationVersion: "20260715010000",
         migrationLedgerReconciliationState: "reconciled",
         pendingMigrationCount: 0,
         schemaAppliedUntrackedCount: 0,
