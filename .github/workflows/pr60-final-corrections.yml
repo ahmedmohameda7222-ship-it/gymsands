@@ -9,6 +9,7 @@ on:
       - main
     types:
       - synchronize
+      - edited
 
 permissions:
   contents: write
