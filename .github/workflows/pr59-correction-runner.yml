@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: pr59-correction-runner
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   correct-and-validate:
@@ -48,7 +48,7 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Apply focused correction payload
+      - name: Apply and commit focused corrections
         shell: bash
         run: |
           set -euo pipefail
@@ -56,11 +56,6 @@ jobs:
           node "$RUNNER_TEMP/apply-pr59-corrections.mjs"
           rm -f scripts/pr59-corrections.mjs.gz.b64
           git diff --check
-
-      - name: Commit exact correction tree
-        shell: bash
-        run: |
-          set -euo pipefail
           git config user.name "Plaivra Correction Runner"
           git config user.email "actions@users.noreply.github.com"
           git add -A
@@ -74,20 +69,20 @@ jobs:
           git status --short > "$REPORT_DIR/git-status-before-validation.txt"
           test ! -s "$REPORT_DIR/git-status-before-validation.txt"
 
-      - name: Install dependencies and browser
+      - name: Install dependencies and Chromium
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$REPORT_DIR"
           set +e
           npm ci 2>&1 | tee "$REPORT_DIR/npm-ci.log"
-          npm_code="${PIPESTATUS[0]}"
+          code="${PIPESTATUS[0]}"
           set -e
-          printf '%s\n' "$npm_code" > "$REPORT_DIR/npm-ci.exit"
-          test "$npm_code" = "0"
+          printf '%s\n' "$code" > "$REPORT_DIR/npm-ci.exit"
+          test "$code" = "0"
           npx playwright install --with-deps chromium 2>&1 | tee "$REPORT_DIR/playwright-install.log"
 
-      - name: Run complete local correction validation
+      - name: Run complete correction validation
         shell: bash
         run: |
           set -uo pipefail
@@ -151,6 +146,7 @@ jobs:
           run_check migration-ledger npm run migration:ledger:check
           run_shell environment-validation 'export PLAIVRA_VALIDATE_PRODUCTION_ENV=true PLAIVRA_RELEASE_ENVIRONMENT=production NEXT_PUBLIC_APP_URL=https://app.plaivra.com NEXT_PUBLIC_USE_MOCK_AUTH=false PLAIVRA_MCP_BASE_URL=https://app.plaivra.com/api/mcp PLAIVRA_OAUTH_ISSUER=https://app.plaivra.com PLAIVRA_CIMD_ALLOWED_ORIGINS=https://chatgpt.com CRON_SECRET=ci-placeholder-cron-secret-that-is-long-enough; npm run validate:env'
           run_shell production-build 'NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build'
+          run_check release-preflight npm run release:preflight
           run_qa rendered-qa 'QA_EVIDENCE_DIR="$REPORT_DIR/rendered-qa-evidence" npm run qa:rendered'
           run_qa train-qa 'QA_TRAIN_EVIDENCE_DIR="$REPORT_DIR/train-qa-evidence" npm run qa:train'
 
