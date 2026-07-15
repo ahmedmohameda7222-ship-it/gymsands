@@ -47,10 +47,13 @@ jobs:
             echo "PR59 correction payload is absent; continuing with normal diff validation."
             exit 0
           fi
-          base64 --decode scripts/pr59-corrections.mjs.gz.b64 | gzip --decompress > "$RUNNER_TEMP/apply-pr59-corrections.mjs"
           set +e
-          node "$RUNNER_TEMP/apply-pr59-corrections.mjs" > "$RUNNER_TEMP/pr59-payload.log" 2>&1
+          node -e 'const fs=require("node:fs"),zlib=require("node:zlib");const input=fs.readFileSync("scripts/pr59-corrections.mjs.gz.b64","utf8").replace(/\s+/g,"");fs.writeFileSync(process.env.RUNNER_TEMP+"/apply-pr59-corrections.mjs",zlib.gunzipSync(Buffer.from(input,"base64")));' > "$RUNNER_TEMP/pr59-payload.log" 2>&1
           payload_code="$?"
+          if [ "$payload_code" = "0" ]; then
+            node "$RUNNER_TEMP/apply-pr59-corrections.mjs" >> "$RUNNER_TEMP/pr59-payload.log" 2>&1
+            payload_code="$?"
+          fi
           set -e
           if [ "$payload_code" != "0" ]; then
             cp "$RUNNER_TEMP/pr59-payload.log" PR59_PAYLOAD_ERROR.txt
