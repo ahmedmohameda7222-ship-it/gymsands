@@ -22,7 +22,7 @@ function activity() {
     sessionPhases: [{ ...taxonomy, sportId: id, isOptional: false }],
     equipment: [{ ...taxonomy, isRequired: true }],
     muscles: [{ ...taxonomy, role: "primary" }],
-    trainingGoals: [{ ...taxonomy, relevanceWeight: 1 }],
+    trainingGoals: [{ ...taxonomy, relevanceWeight: 0.85 }],
     translations: { de: {} },
     updatedAt: "2026-07-15T00:00:00.000Z"
   };
@@ -66,4 +66,3 @@ describe("Activity Catalog OpenAPI runtime validation", () => {
     expect(parsed.data[0].differenceSummary).toBeUndefined();
   });
 });
-
