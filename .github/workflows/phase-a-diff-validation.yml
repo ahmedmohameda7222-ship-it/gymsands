@@ -17,47 +17,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout clean correction parent
-        if: github.event.pull_request.number == 59
+      - name: Checkout exact pull request head
         uses: actions/checkout@v4
         with:
-          ref: 1bb7206d5cee7fe3d7ed49fdd7daa09a145f45c2
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           show-progress: false
 
+      - name: Verify exact checkout identity
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+
       - name: Set up Node.js
-        if: github.event.pull_request.number == 59
+        if: github.event.pull_request.number == 59 && hashFiles('scripts/pr59-direct-corrections.mjs') != ''
         uses: actions/setup-node@v4
         with:
           node-version: 24
 
-      - name: Create clean PR59 correction commit
-        if: github.event.pull_request.number == 59
+      - name: Apply direct PR59 corrections once
+        if: github.event.pull_request.number == 59 && hashFiles('scripts/pr59-direct-corrections.mjs') != ''
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "1bb7206d5cee7fe3d7ed49fdd7daa09a145f45c2"
-          node -e 'const fs=require("node:fs"),zlib=require("node:zlib");const input=fs.readFileSync("scripts/pr59-corrections.mjs.gz.b64","utf8").replace(/\s+/g,"");fs.writeFileSync(process.env.RUNNER_TEMP+"/apply-pr59-corrections.mjs",zlib.gunzipSync(Buffer.from(input,"base64")));'
-          node "$RUNNER_TEMP/apply-pr59-corrections.mjs"
-          rm -f scripts/pr59-corrections.mjs.gz.b64
-          rm -f scripts/pr59-trigger.txt
-          rm -f scripts/pr59-direct-corrections.mjs
-          rm -f PR59_PAYLOAD_ERROR.txt PR59_DIRECT_ERROR.txt
-          rm -f .github/workflows/pr59-correction-runner.yml
-          rm -f .github/workflows/pr59-quality-bootstrap.yml
-          git diff --check
+          node scripts/pr59-direct-corrections.mjs
+          rm -f scripts/pr59-direct-corrections.mjs scripts/pr59-trigger.txt PR59_DIRECT_ERROR.txt PR59_PAYLOAD_ERROR.txt
           git config user.name "Plaivra PR59 Correction"
           git config user.email "actions@users.noreply.github.com"
           git add -A
-          git diff --cached --check
           git commit -m "fix(train): apply PR59 required corrections"
-          git diff --check origin/main...HEAD
-          git push --force-with-lease=refs/heads/${{ github.event.pull_request.head.ref }}:${{ github.event.pull_request.head.sha }} origin HEAD:${{ github.event.pull_request.head.ref }}
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
 
       - name: Check working tree diff formatting
-        if: github.event.pull_request.number != 59
         run: git diff --check
 
       - name: Check branch diff formatting against main
-        if: github.event.pull_request.number != 59
         run: git diff --check origin/main...HEAD
