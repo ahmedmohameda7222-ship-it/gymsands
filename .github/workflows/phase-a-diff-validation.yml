@@ -33,17 +33,23 @@ jobs:
         with:
           node-version: 24
 
-      - name: Apply final deterministic PR59 corrections
+      - name: Retain final deterministic patch exception
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/pr59-final-corrections.mjs
-          rm -f scripts/pr59-final-corrections.mjs
-          git config user.name "Plaivra PR59 Correction"
+          set +e
+          node scripts/pr59-final-corrections.mjs > "$RUNNER_TEMP/pr59-final.log" 2>&1
+          code="$?"
+          set -e
+          if [ "$code" = "0" ]; then
+            exit 1
+          fi
+          git restore .
+          cp "$RUNNER_TEMP/pr59-final.log" PR59_FINAL_ERROR.txt
+          git config user.name "Plaivra PR59 Diagnostic"
           git config user.email "actions@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          git commit -m "fix(train): apply PR59 required corrections"
+          git add PR59_FINAL_ERROR.txt
+          git commit -m "chore(pr59): retain final patch diagnostic"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
 
       - name: Check working tree diff formatting
