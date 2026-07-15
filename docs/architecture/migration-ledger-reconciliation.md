@@ -117,7 +117,7 @@ Migration-history reconciliation is complete. A separate approved release workfl
 1. keep the compatibility marker unchanged until its own reviewed forward operation is authorized;
 2. update that marker only after the required release evidence is complete;
 3. run the complete release preflight and all repository quality gates;
-4. resolve the separate Vercel release-policy test mismatch in PR #56;
+4. confirm the Vercel main-only deployment policy integrated into PR #57 remains validated by the current Quality workflow;
 5. deploy only the exact approved commit;
 6. verify provider commit metadata, `/api/version`, health checks, and required browser smoke evidence;
 7. merge only after independent quality-control approval.

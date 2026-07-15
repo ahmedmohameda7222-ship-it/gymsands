@@ -49,7 +49,7 @@ The migration-history reconciliation blockers are closed. Release readiness rema
 
 - the compatibility marker remains `20260711014500`, while repository metadata expects `20260715010000`;
 - all required quality, environment, deployment, and smoke gates must still pass for the exact reviewed commit;
-- the separate Vercel release-policy test mismatch belongs to PR #56 and is not modified here;
+- the Vercel main-only deployment policy is integrated into PR #57 and validated by the current Quality workflow;
 - independent quality-control approval and merge authorization remain outstanding.
 
 ## Eligibility rule used
@@ -126,7 +126,7 @@ This PR performs only the repository reconciliation update. A separate approved 
 
 1. preserve the compatibility marker until its own authorized forward operation;
 2. run release preflight and all required quality gates;
-3. resolve the PR #56 Vercel policy mismatch separately;
+3. confirm the Vercel main-only deployment policy integrated into PR #57 remains validated by the current Quality workflow;
 4. deploy only the exact approved SHA;
 5. verify provider commit metadata, version/health endpoints, and smoke evidence;
 6. merge only after independent approval.
