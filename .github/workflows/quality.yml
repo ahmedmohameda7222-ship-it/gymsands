@@ -20,6 +20,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          show-progress: false
 
       - name: Verify exact checkout identity
         shell: bash
@@ -29,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/pr60-final-rls-correction.py
+          python scripts/pr60-run-final-rls-correction.py
           grep -n "create or replace function private.can_access_workout_plan" supabase/migrations/20260715190000_train_phase2a_program_architecture.sql
           grep -n "private.can_access_workout_plan" supabase/verification/train-phase2a-program-architecture.sql
           grep -n "revoke all on public.user_workout_plans" services/database/train-program-v2-rpc.integration.test.ts
