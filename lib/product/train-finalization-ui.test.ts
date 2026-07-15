@@ -38,6 +38,8 @@ describe("Train finalization UI contracts", () => {
 
   it("keeps Today contextual, prioritizes an open session, and renders a compact selectable seven-day week", () => {
     const overview = source("components/workouts/my-workout-plans.tsx");
+    const week = source("components/workouts/train-week-selector.tsx");
+    const weekModel = source("lib/workouts/train-week.ts");
     expect(overview).toContain('activePlan?.days.find((day) => day.weekday === todayWeekday');
     expect(overview).not.toContain("activeDays[0]");
     expect(overview).toContain("findOpenSessionPlanContext(visiblePlans, visibleOpenSession)");
@@ -46,17 +48,20 @@ describe("Train finalization UI contracts", () => {
     expect(overview).toContain('const actionLabel = active ? tr("resumeWorkout")');
     expect(overview).toContain('resolution.state === "completed" ? tr("viewCompletedWorkout")');
     expect(overview).toContain('tr("startWorkout")');
-    expect(overview).toContain("grid-flow-col");
-    expect(overview).toContain("overflow-x-auto");
-    expect(overview).toContain("lg:grid-cols-7");
-    expect(overview).toContain("buildCurrentWeek(weekStartsOn, new Date(`${today}T12:00:00`))");
+    expect(week).toContain("grid-flow-col");
+    expect(week).toContain("overflow-x-auto");
+    expect(week).toContain("lg:grid-cols-7");
+    expect(weekModel).toContain("buildTrainWeek");
     expect(overview).toContain("resolveTrainWeekSelection");
   });
 
   it("shows a full seven-day read-only plan and restricts archived plans through the action policy", () => {
     const detail = source("components/workouts/workout-plan-detail.tsx");
+    const weekModel = source("lib/workouts/train-week.ts");
     const editorRoute = source("app/(private)/my-workout/plans/[planId]/edit/page.tsx");
-    expect(detail).toContain("weekdays.map((weekday, index)");
+    expect(detail).toContain("<TrainWeekSelector");
+    expect(weekModel).toContain("Array.from({ length: 7 }");
+    expect(weekModel).toContain("trainWeekdays[date.getDay()]");
     expect(detail).toContain("weekdays[new Date().getDay()]");
     expect(detail).toContain('day?.day_name ?? tr("restDay")');
     expect(detail).toContain("workoutPlanDetailActions(plan)");
@@ -102,7 +107,7 @@ describe("Train finalization UI contracts", () => {
     expect(editor).toContain('tr("noExercisesYet")');
     expect(editor).toContain('tr("equipment")');
     expect(editor).toContain('tr("notes")');
-    expect(editor).toContain("lg:grid-cols-[280px_minmax(0,1fr)]");
+    expect(editor).toContain("lg:grid-cols-[248px_minmax(0,1fr)]");
     expect(editor).toContain("overflow-x-auto pb-2 lg:flex-col lg:overflow-visible");
     expect(editor).not.toMatch(/exercises:\s*\[\s*\{\s*exercise_name:\s*["']{2}/);
   });
@@ -145,7 +150,7 @@ describe("Train finalization UI contracts", () => {
     expect(picker).toContain("pb-[calc(env(safe-area-inset-bottom)+1rem)]");
     expect(picker).toContain("onAdd(Array.from(selected.values()))");
     expect(picker).toContain('tr("moreFilters")');
-    expect(picker).toContain("getWorkoutFilterOptions");
+    expect(picker).toContain("getCanonicalWorkoutFilterOptionsWithStatus");
     expect(picker).toContain("secondaryMuscles:");
     expect(picker).toContain("forceTypes:");
     expect(picker).toContain("exerciseTypes:");

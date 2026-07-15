@@ -7,6 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
 import { useAuth } from "@/components/auth/auth-provider";
 import { PageHeading } from "@/components/layout/page-heading";
+import { TrainPageContainer } from "@/components/workouts/train-ui";
+import { TrainWeekSelector, type TrainWeekItem } from "@/components/workouts/train-week-selector";
 import { ActionMenu, ActionMenuItem } from "@/components/ui/action-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,10 +17,12 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ErrorState } from "@/components/ui/state-views";
 import { useToast } from "@/components/ui/toaster";
 import { todayIso } from "@/lib/date-utils";
-import { resolveTodayWorkout, todayWorkoutActionHref } from "@/lib/dashboard/today-model";
+import { resolveTodayWorkout, todayWorkoutActionHref, workoutSessionLocalDate } from "@/lib/dashboard/today-model";
 import { userSafeError } from "@/lib/error-formatting";
 import { useTrainTranslation } from "@/lib/i18n/train";
 import { workoutPlanDetailActions } from "@/lib/workouts/train-overview-runtime";
+import { buildTrainWeek } from "@/lib/workouts/train-week";
+import { useUserSettings } from "@/lib/settings/user-settings-context";
 import {
   archiveWorkoutPlan,
   deleteWorkoutPlan,
@@ -40,6 +44,7 @@ export function WorkoutPlanDetail() {
   const { toast } = useToast();
   const { dialog, ask } = useConfirm();
   const { dir, locale, tr } = useTrainTranslation();
+  const { settings } = useUserSettings();
   const [plan, setPlan] = useState<UserWorkoutPlan | null>(null);
   const [activity, setActivity] = useState<WorkoutSession[]>([]);
   const [openSession, setOpenSession] = useState<WorkoutSession | null>(null);
@@ -107,6 +112,17 @@ export function WorkoutPlanDetail() {
   const actionLabel = resolution.state === "completed" ? tr("viewCompletedWorkout") : resolution.state === "active" ? tr("resumeWorkout") : tr("startWorkout");
   const archived = Boolean(plan?.archived_at);
   const allowedActions = plan ? workoutPlanDetailActions(plan) : [];
+  const today = todayIso();
+  const week = useMemo(() => buildTrainWeek(settings.weekStartsOn, new Date(`${today}T12:00:00`)), [settings.weekStartsOn, today]);
+  const selectedIso = week.find((item) => item.weekday === selectedWeekday)?.iso ?? today;
+  const weekItems = useMemo<TrainWeekItem[]>(() => week.map((item) => {
+    const day = plan?.days.find((candidate) => candidate.weekday === item.weekday) ?? null;
+    const session = day ? activity.find((candidate) => candidate.plan_day_id === day.id && workoutSessionLocalDate(candidate) === item.iso) : null;
+    const itemStatus: TrainWeekItem["status"] = item.iso === today && day?.id === resolvedPlanDayId
+      ? resolution.state === "active" ? "active" : resolution.state === "completed" ? "completed" : resolution.state === "skipped" ? "skipped" : day ? "scheduled" : "rest"
+      : session?.status === "completed" ? "completed" : session?.status === "skipped" ? "skipped" : day ? "scheduled" : "rest";
+    return { ...item, title: day?.day_name ?? tr("restDay"), status: itemStatus, isToday: item.iso === today, stateLabel: itemStatus === "active" ? tr("inProgress") : itemStatus === "completed" ? tr("completed") : itemStatus === "skipped" ? tr("skippedToday") : itemStatus === "scheduled" ? tr("scheduled") : tr("rest") };
+  }), [activity, plan?.days, resolution.state, resolvedPlanDayId, today, tr, week]);
   const nextTrainingDay = useMemo(() => {
     if (!plan) return null;
     const selectedIndex = weekdays.indexOf(selectedWeekday);
@@ -151,14 +167,16 @@ export function WorkoutPlanDetail() {
   const exerciseCount = plan.days.reduce((sum, day) => sum + day.exercises.length, 0);
 
   return (
-    <div className="space-y-6" dir={dir}>
+    <TrainPageContainer className="space-y-8" dir={dir}>
+      <Button asChild variant="ghost" className="min-h-11 px-2"><Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {tr("backToTrain")}</Link></Button>
       <PageHeading
         title={plan.name}
         description={plan.description || tr("planDetailsDescription")}
         action={
           <div className="flex flex-wrap gap-2">
-            {allowedActions.includes("edit") ? <Button asChild><Link href={`/my-workout/plans/${plan.id}/edit`}><Pencil className="h-4 w-4" /> {tr("editPlan")}</Link></Button> : null}
-            <ActionMenu label={`${tr("moreActions")}: ${plan.name}`} disabled={busy}>
+            {allowedActions.includes("edit") ? <Button asChild><Link href={`/my-workout/plans/${plan.id}/edit`}><Pencil className="h-4 w-4" /> {tr("editManually")}</Link></Button> : null}
+            {allowedActions.includes("adjust") ? <WorkoutAiActionPanel compact sourceType="workout_plan" sourceId={plan.id} context={{ workout_plan: plan, selected_day: selectedDay }} actions={[{ type: "rebalance_week", label: tr("adjustWithChatGpt"), description: tr("adjustPlanDescription") }]} /> : null}
+            <ActionMenu label={`${tr("moreActions")}: ${plan.name}`} visibleLabel={tr("moreActions")} disabled={busy}>
               {allowedActions.includes("activate") && !plan.is_active ? <ActionMenuItem onSelect={() => void runAction(() => setDefaultUserWorkoutPlan(user!.id, plan.id), tr("activePlanUpdated"))}><Star className="me-2 inline h-4 w-4" /> {archived ? tr("restoreActivate") : tr("setActive")}</ActionMenuItem> : null}
               {allowedActions.includes("duplicate") ? <ActionMenuItem onSelect={() => void runAction(() => duplicateWorkoutPlan(user!.id, plan.id), tr("planDuplicated"))}><Copy className="me-2 inline h-4 w-4" /> {tr("duplicate")}</ActionMenuItem> : null}
               {allowedActions.includes("archive") ? <ActionMenuItem onSelect={() => ask({ title: tr("archive"), description: tr("planArchivedDescription"), confirmLabel: tr("archive"), onConfirm: () => void runAction(() => archiveWorkoutPlan(user!.id, plan.id), tr("planArchived"), true) })}><Archive className="me-2 inline h-4 w-4" /> {tr("archive")}</ActionMenuItem> : null}
@@ -181,35 +199,34 @@ export function WorkoutPlanDetail() {
 
       <section aria-labelledby="plan-week-heading" className="space-y-3">
         <div><h2 id="plan-week-heading" className="text-xl font-semibold">{tr("planWeek")}</h2><p className="text-sm text-muted-foreground">{tr("planWeekDescription")}</p></div>
-        <div className="grid grid-flow-col auto-cols-[minmax(108px,1fr)] gap-2 overflow-x-auto pb-2 lg:grid-flow-row lg:grid-cols-7 lg:overflow-visible">
-          {weekdays.map((weekday, index) => {
-            const day = plan.days.find((item) => item.weekday === weekday) ?? null;
-            const active = weekday === selectedWeekday;
-            const weekdayLabel = new Intl.DateTimeFormat(locale, { weekday: "long" }).format(new Date(2024, 0, 7 + index));
-            return <button key={weekday} type="button" onClick={() => setSelectedWeekday(weekday)} aria-pressed={active} className={`min-h-24 rounded-2xl border p-3 text-start transition ${active ? "border-primary bg-primary/10 ring-2 ring-primary/20" : "bg-card hover:border-primary/40"}`}><span className="block text-xs text-muted-foreground">{weekdayLabel}</span><span className="mt-1 block font-semibold">{day?.day_name ?? tr("restDay")}</span><span className="mt-1 block text-xs text-muted-foreground">{day ? tr("exercises", { count: day.exercises.length }) : tr("rest")}</span></button>;
-          })}
-        </div>
+        <TrainWeekSelector items={weekItems} selectedIso={selectedIso} onSelect={(iso) => { const selected = week.find((item) => item.iso === iso); if (selected) setSelectedWeekday(selected.weekday); }} label={tr("planWeek")} locale={locale} todayLabel={tr("todayLabel")} selectedLabel={tr("selectedDay")} idBase="train-plan-week" panelId="train-plan-week-panel" />
       </section>
 
-      <Card className="overflow-hidden">
+      <Card id="train-plan-week-panel" role="tabpanel" aria-labelledby={`train-plan-week-tab-${selectedIso}`} className="overflow-hidden" data-plan-selected-day>
         <CardContent className="p-0">
-          <div className="flex flex-col gap-4 border-b bg-muted/30 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 border-b bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
             <div><p className="text-sm text-muted-foreground">{new Intl.DateTimeFormat(locale, { weekday: "long" }).format(new Date(2024, 0, 7 + weekdays.indexOf(selectedWeekday)))}</p><h2 className="text-2xl font-semibold">{selectedDay?.day_name || tr("restDay")}</h2>{selectedDay && plan.session_duration_minutes ? <p className="mt-1 text-sm text-muted-foreground">{tr("aboutMinutes", { count: plan.session_duration_minutes })}</p> : null}{selectedDay?.notes ? <p className="mt-1 text-sm text-muted-foreground">{selectedDay.notes}</p> : !selectedDay && nextTrainingDay ? <p className="mt-1 text-sm text-muted-foreground">{tr("nextWorkout", { workout: nextTrainingDay.day_name, weekday: new Intl.DateTimeFormat(locale, { weekday: "long" }).format(new Date(2024, 0, 7 + weekdays.indexOf(nextTrainingDay.weekday!))) })}</p> : null}</div>
             {allowedActions.includes("start") && plan.is_active && selectedIsToday && statusLoading ? <Badge variant="outline">{tr("checkingStatus")}</Badge> : allowedActions.includes("start") && plan.is_active && selectedIsToday && statusUnavailable && resolution.state !== "active" ? <Badge variant="outline">{tr("statusUnavailable")}</Badge> : allowedActions.includes("start") && plan.is_active && selectedIsToday && resolution.state === "skipped" ? <Badge variant="outline">{tr("skippedToday")}</Badge> : allowedActions.includes(resolution.state === "active" ? "resume" : "start") && plan.is_active && selectedIsToday && actionHref && (exercises.length || resolution.state === "active") ? <Button asChild size="lg"><Link href={actionHref}>{resolution.state === "completed" ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}{actionLabel}</Link></Button> : <Badge variant="outline">{archived ? tr("archived") : tr("reviewOnly")}</Badge>}
           </div>
           <ol className="divide-y">
-            {exercises.map((exercise, index) => <li key={exercise.id || `${exercise.name}-${index}`} className="flex min-h-20 items-center gap-4 p-4 sm:p-5"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate font-semibold">{exercise.name}</p><p className="text-sm text-muted-foreground">{exercise.target_muscle || tr("general")} · {exercise.equipment || tr("noEquipment")}</p></div><div className="text-end text-sm"><p className="font-medium">{tr("setsReps", { sets: exercise.sets ?? 3, reps: exercise.reps || "8–12" })}</p>{exercise.rest_seconds !== null && exercise.rest_seconds !== undefined ? <p className="text-muted-foreground">{tr("secondsRest", { count: exercise.rest_seconds })}</p> : null}</div></li>)}
-            {!exercises.length ? <li className="grid min-h-40 place-items-center p-6 text-center"><div><Dumbbell className="mx-auto mb-2 h-6 w-6 text-muted-foreground" /><p className="font-medium">{tr("restDay")}</p>{selectedDay ? <p className="text-sm text-muted-foreground">{tr("noExercisesDayDescription")}</p> : nextTrainingDay ? <p className="text-sm text-muted-foreground">{tr("nextWorkout", { workout: nextTrainingDay.day_name, weekday: new Intl.DateTimeFormat(locale, { weekday: "long" }).format(new Date(2024, 0, 7 + weekdays.indexOf(nextTrainingDay.weekday!))) })}</p> : null}</div></li> : null}
+            {exercises.map((exercise, index) => (
+              <li key={exercise.id || `${exercise.name}-${index}`} className="grid min-h-16 grid-cols-[36px_minmax(0,1fr)] items-center gap-x-3 gap-y-2 p-4 sm:grid-cols-[36px_minmax(0,1fr)_auto_auto] sm:gap-x-4">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{index + 1}</span>
+                <div className="min-w-0"><p className="truncate font-semibold">{exercise.name}</p><p className="truncate text-sm text-muted-foreground">{exercise.target_muscle || tr("general")} · {exercise.equipment || tr("noEquipment")}</p></div>
+                <div className="col-start-2 text-sm sm:col-start-auto sm:text-end"><p className="font-medium">{tr("setsReps", { sets: exercise.sets ?? 3, reps: exercise.reps || "8–12" })}</p>{exercise.rest_seconds !== null && exercise.rest_seconds !== undefined ? <p className="text-muted-foreground">{tr("secondsRest", { count: exercise.rest_seconds })}</p> : null}</div>
+                <Button asChild variant="ghost" className="col-start-2 min-h-11 justify-self-start px-2 sm:col-start-auto sm:justify-self-end"><Link href={`/my-workout/exercises/${exercise.plan_exercise_id ?? exercise.id}`}>{tr("details")}</Link></Button>
+              </li>
+            ))}
+            {!exercises.length ? (
+              <li className="grid min-h-32 place-items-center p-5 text-center">
+                <div className="max-w-md"><Dumbbell className="mx-auto mb-2 h-6 w-6 text-muted-foreground" /><p className="font-medium">{tr("restDay")}</p>{selectedDay ? <p className="text-sm text-muted-foreground">{tr("noExercisesDayDescription")}</p> : nextTrainingDay ? <><p className="text-sm text-muted-foreground">{tr("nextWorkout", { workout: nextTrainingDay.day_name, weekday: new Intl.DateTimeFormat(locale, { weekday: "long" }).format(new Date(2024, 0, 7 + weekdays.indexOf(nextTrainingDay.weekday!))) })}</p><Button asChild variant="ghost" className="mt-2 min-h-11"><Link href={`/my-workout/plans/${plan.id}?day=${nextTrainingDay.id}`}>{tr("viewNextWorkout")}</Link></Button></> : null}</div>
+              </li>
+            ) : null}
           </ol>
         </CardContent>
       </Card>
 
-      {allowedActions.includes("adjust") ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
-        <div><p className="font-semibold">{tr("adjustPlanTitle")}</p><p className="text-sm text-muted-foreground">{tr("adjustPlanDescription")}</p></div>
-        <WorkoutAiActionPanel compact sourceType="workout_plan" sourceId={plan.id} context={{ workout_plan: plan, selected_day: selectedDay }} actions={[{ type: "rebalance_week", label: tr("adjustPlan"), description: tr("adjustPlanDescription") }]} />
-      </div> : null}
-      <Button asChild variant="ghost"><Link href="/my-workout/plans"><ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {tr("backToTrain")}</Link></Button>
       {dialog}
-    </div>
+    </TrainPageContainer>
   );
 }

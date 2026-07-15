@@ -204,9 +204,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Plaivra</p>
             <h1 className="text-base font-semibold text-foreground">{t("nav.tagline")}</h1>
           </div>
-          <Button variant="outline" onClick={signOut} className="hidden min-h-12 lg:inline-flex">
-            <LogOut className="h-4 w-4" />{t("nav.logout")}
-          </Button>
         </div>
       </header>
       <main id="main-content" className="pb-[var(--app-bottom-reserved-space)] lg:ml-72 lg:pb-[var(--desktop-app-bottom-reserved-space)]">

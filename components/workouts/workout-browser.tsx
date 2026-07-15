@@ -11,15 +11,26 @@ import { Label } from "@/components/ui/label";
 import { CardGridSkeleton, EmptyState, ErrorState } from "@/components/ui/state-views";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import Link from "next/link";
-import { getWorkoutFilterOptionsWithStatus, getWorkoutsWithStatus, type WorkoutFilterOptions, type WorkoutFilters, type WorkoutLibraryStatus } from "@/services/database/workout-library";
+import {
+  emptyCanonicalWorkoutFilterOptions,
+  getCanonicalWorkoutFilterOptionsWithStatus,
+  getWorkoutsWithStatus,
+  matchesWorkoutRecord,
+  mergeCanonicalWorkoutFilterOptions,
+  normalizeWorkoutFilterText,
+  resolveCanonicalWorkoutFilterValues,
+  type CanonicalWorkoutFilterOptions,
+  type WorkoutFilterOption,
+  type WorkoutFilters,
+  type WorkoutLibraryStatus
+} from "@/services/database/workout-library";
 import { getCustomExercisesWithStatus, getFavoriteExerciseIdsWithStatus, saveCustomExercise, setFavoriteExercise, type CustomExerciseInput } from "@/services/workouts/exercise-library-store";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { userSafeError } from "@/lib/error-formatting";
+import { useTrainTranslation } from "@/lib/i18n/train";
 import type { Workout } from "@/types";
-
-const pageSize = 500;
 
 type FilterKey =
   | "muscleCategories"
@@ -42,16 +53,7 @@ const emptyFilters: Record<FilterKey, string[]> = {
   secondaryMuscles: []
 };
 
-const emptyOptions: WorkoutFilterOptions = {
-  muscleCategories: [],
-  primaryMuscles: [],
-  equipmentRequired: [],
-  mechanics: [],
-  exerciseTypes: [],
-  forceTypes: [],
-  experienceLevels: [],
-  secondaryMuscles: []
-};
+const emptyOptions = emptyCanonicalWorkoutFilterOptions();
 
 const filterStorageKey = "plaivra-workout-browser-filters";
 const filterParamKeys: Record<FilterKey, string> = {
@@ -76,38 +78,6 @@ function hasInvalidUrl(value: string | null | undefined) {
 
 function splitParam(value: string | null) {
   return value ? value.split("|").map((item) => item.trim()).filter(Boolean) : [];
-}
-
-function normalizeText(value: string | null | undefined) {
-  return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function matchesCustomExercise(workout: Workout, query: string, filters: Record<FilterKey, string[]>) {
-  const normalized = normalizeText(query);
-  const values = [
-    workout.name,
-    workout.target_muscle,
-    workout.muscle_category,
-    workout.equipment,
-    workout.equipment_required,
-    workout.difficulty,
-    workout.experience_level,
-    workout.mechanics,
-    workout.force_type,
-    ...(workout.secondary_muscles ?? [])
-  ];
-  const matchesQuery = !normalized || values.some((value) => normalizeText(value).includes(normalized));
-  const inList = (value: string | null | undefined, selected: string[]) => !selected.length || selected.includes(value ?? "");
-  return (
-    matchesQuery &&
-    inList(workout.muscle_category ?? workout.target_muscle, filters.muscleCategories) &&
-    inList(workout.target_muscle ?? workout.muscle_category, filters.primaryMuscles) &&
-    inList(workout.equipment_required ?? workout.equipment, filters.equipmentRequired) &&
-    inList(workout.mechanics ?? workout.category, filters.mechanics) &&
-    inList(workout.category ?? workout.mechanics, filters.exerciseTypes) &&
-    inList(workout.force_type, filters.forceTypes) &&
-    inList(workout.experience_level ?? workout.difficulty, filters.experienceLevels)
-  );
 }
 
 function readPersistedFilterState() {
@@ -164,9 +134,10 @@ export function WorkoutBrowser() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const { dialog, ask } = useConfirm();
+  const { dir, locale, tr } = useTrainTranslation();
   const userId = user?.id;
   const [query, setQuery] = useState("");
-  const [filterOptions, setFilterOptions] = useState<WorkoutFilterOptions>(emptyOptions);
+  const [filterOptions, setFilterOptions] = useState<CanonicalWorkoutFilterOptions>(emptyOptions);
   const [filters, setFilters] = useState<Record<FilterKey, string[]>>(emptyFilters);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [customExercises, setCustomExercises] = useState<Workout[]>([]);
@@ -175,7 +146,7 @@ export function WorkoutBrowser() {
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customDraft, setCustomDraft] = useState<CustomExerciseInput>(emptyCustomExercise);
-  const [page, setPage] = useState(0);
+  const [nextProviderOffset, setNextProviderOffset] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -229,17 +200,18 @@ export function WorkoutBrowser() {
   const loadFilterOptions = useCallback(async () => {
     setFilterError("");
     try {
-      const result = await getWorkoutFilterOptionsWithStatus();
+      const result = await getCanonicalWorkoutFilterOptionsWithStatus(locale);
       setFilterOptions(result.data);
+      setFilters((current) => resolveCanonicalWorkoutFilterValues(current, result.data) as Record<FilterKey, string[]>);
       setFilterStatus(result.status);
     } catch (error) {
-      const message = userSafeError(error, "Exercise filters could not load. Your search text is still available.");
+      const message = userSafeError(error, tr("exerciseFiltersLoadFallback"));
       setFilterOptions(emptyOptions);
       setFilterStatus(null);
       setFilterError(message);
-      toast({ title: "Could not load workout filters", description: message });
+      toast({ title: tr("workoutFiltersLoadFailed"), description: message });
     }
-  }, [toast]);
+  }, [locale, toast, tr]);
 
   useEffect(() => {
     void loadFilterOptions();
@@ -258,7 +230,7 @@ export function WorkoutBrowser() {
     if (!isHydrated) return;
     if (!hasActiveLibraryRequest) {
       setWorkouts([]);
-      setPage(0);
+      setNextProviderOffset(null);
       setHasMore(false);
       setIsLoading(false);
       setResultError("");
@@ -268,20 +240,22 @@ export function WorkoutBrowser() {
     let active = true;
     const timer = window.setTimeout(() => {
       setIsLoading(true);
-      setPage(0);
+      setNextProviderOffset(null);
       setResultError("");
-      getWorkoutsWithStatus(query.trim(), requestFilters, 0)
+      getWorkoutsWithStatus(query.trim(), requestFilters, 0, locale)
         .then((result) => {
           if (!active) return;
           setWorkouts(result.data);
+          if (result.filterOptions) setFilterOptions((current) => mergeCanonicalWorkoutFilterOptions(current, result.filterOptions!));
           setResultStatus(result.status);
-          setHasMore(result.data.length >= pageSize);
+          setNextProviderOffset(result.pagination?.nextOffset ?? null);
+          setHasMore(Boolean(result.pagination?.hasMore));
         })
         .catch((error) => {
           if (!active) return;
-          const message = userSafeError(error, "Search failed. Your filters were kept.");
+          const message = userSafeError(error, tr("searchFailedFiltersKept"));
           setResultError(message);
-          toast({ title: "Could not load workouts", description: message });
+          toast({ title: tr("workoutsLoadFailed"), description: message });
         })
         .finally(() => {
           if (active) setIsLoading(false);
@@ -292,29 +266,31 @@ export function WorkoutBrowser() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [filters, hasActiveLibraryRequest, isHydrated, query, reloadResultsNonce, requestFilters, toast]);
+  }, [filters, hasActiveLibraryRequest, isHydrated, locale, query, reloadResultsNonce, requestFilters, toast, tr]);
 
-  const visibleCustomExercises = hasActiveLibraryRequest ? customExercises.filter((workout) => matchesCustomExercise(workout, query.trim(), filters)) : [];
-  const allVisibleWorkouts = [...visibleCustomExercises, ...workouts].filter((workout, index, all) => all.findIndex((item) => item.id === workout.id) === index);
+  const visibleCustomExercises = hasActiveLibraryRequest ? customExercises.filter((workout) => matchesWorkoutRecord(workout, query.trim(), filters, filterOptions)) : [];
+  const visibleGlobalExercises = hasActiveLibraryRequest ? workouts.filter((workout) => matchesWorkoutRecord(workout, query.trim(), filters, filterOptions)) : [];
+  const allVisibleWorkouts = [...visibleCustomExercises, ...visibleGlobalExercises].filter((workout, index, all) => all.findIndex((item) => item.id === workout.id) === index);
   const filteredWorkouts = favoritesOnly ? allVisibleWorkouts.filter((workout) => favoriteIds.includes(workout.id)) : allVisibleWorkouts;
   const duplicateExerciseNames = useMemo(() => duplicateWorkoutNames(filteredWorkouts), [filteredWorkouts]);
   const qualityCounts = useMemo(() => summarizeExerciseQuality(filteredWorkouts, duplicateExerciseNames), [duplicateExerciseNames, filteredWorkouts]);
 
   async function loadMore() {
     if (!hasActiveLibraryRequest) return;
-    const nextPage = page + 1;
+    if (nextProviderOffset === null) return;
     setIsLoading(true);
     setResultError("");
     try {
-      const result = await getWorkoutsWithStatus(query.trim(), requestFilters, nextPage);
+      const result = await getWorkoutsWithStatus(query.trim(), requestFilters, nextProviderOffset, locale);
       setWorkouts((current) => [...current, ...result.data]);
+      if (result.filterOptions) setFilterOptions((current) => mergeCanonicalWorkoutFilterOptions(current, result.filterOptions!));
       setResultStatus(result.status);
-      setPage(nextPage);
-      setHasMore(result.data.length >= pageSize);
+      setNextProviderOffset(result.pagination?.nextOffset ?? null);
+      setHasMore(Boolean(result.pagination?.hasMore));
     } catch (error) {
-      const message = userSafeError(error, "More exercises could not load. Your current results were kept.");
+      const message = userSafeError(error, tr("moreExercisesLoadFallback"));
       setResultError(message);
-      toast({ title: "Could not load more workouts", description: message });
+      toast({ title: tr("moreWorkoutsLoadFailed"), description: message });
     } finally {
       setIsLoading(false);
     }
@@ -358,12 +334,15 @@ export function WorkoutBrowser() {
     try {
       const nextIds = await setFavoriteExercise(userId, workout.id, nextFavorite);
       setFavoriteIds(nextIds);
-      toast({ title: nextFavorite ? "Exercise favorited" : "Exercise unfavorited", description: `${workout.name} is ${nextFavorite ? "saved to" : "removed from"} your favorites.` });
+      toast({
+        title: nextFavorite ? tr("exerciseFavorited") : tr("exerciseUnfavorited"),
+        description: tr(nextFavorite ? "favoriteSavedDescription" : "favoriteRemovedDescription", { name: workout.name })
+      });
     } catch (error) {
-      const message = userSafeError(error, "Favorite change failed. Your previous favorite state was restored.");
+      const message = userSafeError(error, tr("favoriteChangeFailed"));
       setFavoriteIds(previousIds);
       setFavoriteErrors((current) => ({ ...current, [workout.id]: message }));
-      toast({ title: "Favorite was not saved", description: message });
+      toast({ title: tr("favoriteNotSaved"), description: message });
     } finally {
       setPendingFavoriteIds((current) => current.filter((id) => id !== workout.id));
     }
@@ -372,12 +351,12 @@ export function WorkoutBrowser() {
   async function createCustomExercise() {
     if (isSavingCustom) return;
     if (!customDraft.name.trim()) {
-      setCustomFormError("Exercise name is required.");
+      setCustomFormError(tr("exerciseNameRequired"));
       setCustomSaveStatus("failed");
       return;
     }
     if (customVideoInvalid) {
-      setCustomFormError("Custom video URL must start with http:// or https://.");
+      setCustomFormError(tr("invalidCustomVideoUrl"));
       setCustomSaveStatus("failed");
       return;
     }
@@ -390,12 +369,12 @@ export function WorkoutBrowser() {
       setCustomDraft(emptyCustomExercise);
       setShowCustomForm(false);
       setCustomSaveStatus("saved");
-      toast({ title: "Custom exercise created", description: `${saved.name} is now available in your exercise library.` });
+      toast({ title: tr("customExerciseCreated"), description: tr("customExerciseCreatedDescription", { name: saved.name }) });
     } catch (error) {
-      const message = userSafeError(error, "Create custom exercise failed. Your typed fields are still here.");
+      const message = userSafeError(error, tr("customCreateFallback"));
       setCustomFormError(message);
       setCustomSaveStatus("failed");
-      toast({ title: "Could not create exercise", description: message });
+      toast({ title: tr("customCreateFailed"), description: message });
     } finally {
       setIsSavingCustom(false);
     }
@@ -409,10 +388,10 @@ export function WorkoutBrowser() {
       return;
     }
     ask({
-      title: "Discard custom exercise draft?",
-      description: "The custom exercise has not been saved. Discard the typed fields and close the form?",
-      confirmLabel: "Discard draft",
-      cancelLabel: "Keep editing",
+      title: tr("discardCustomDraftTitle"),
+      description: tr("discardCustomDraftDescription"),
+      confirmLabel: tr("discardDraft"),
+      cancelLabel: tr("keepEditing"),
       variant: "destructive",
       onConfirm: () => {
         setCustomDraft(emptyCustomExercise);
@@ -439,50 +418,50 @@ export function WorkoutBrowser() {
   ].filter(Boolean) as string[]));
   const hasDegradedLibraryState = Boolean(resultMessages.length || filterError || resultError);
   const resultStatusTitle = resultError
-    ? "Search failed"
+    ? tr("searchFailed")
     : isLoading
-      ? "Updating exercise results"
+      ? tr("updatingExerciseResults")
       : hasActiveLibraryRequest
-        ? `${filteredWorkouts.length} exercises shown`
-        : "Ready to browse";
+        ? tr("exercisesShown", { count: filteredWorkouts.length })
+        : tr("readyToBrowse");
   const resultStatusDescription = resultError
-    ? "Search failed. Your filters were kept and any previous results remain visible."
+    ? tr("searchFailureVisible")
     : hasActiveLibraryRequest
-      ? "Start opens a standalone exercise session. To add exercises to a plan, use the workout day editor."
-      : "Search by exercise, muscle, or equipment, or use Show all workouts to browse the full library.";
+      ? tr("sessionStartLibraryDescription")
+      : tr("libraryBrowseDescription");
 
   const filterPanelContent = (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/40 p-3">
         <div>
-          <p className="text-sm font-semibold text-foreground">Show all workouts</p>
-          <p className="text-sm text-muted-foreground">Keep this off to show exercises only after a search or filter.</p>
+          <p className="text-sm font-semibold text-foreground">{tr("showAllWorkouts")}</p>
+          <p className="text-sm text-muted-foreground">{tr("showAllHint")}</p>
         </div>
         <Button type="button" variant={showAllWorkouts ? "default" : "outline"} className="min-h-12" onClick={() => setShowAllWorkouts((current) => !current)}>
-          {showAllWorkouts ? "All on" : "Show all"}
+          {showAllWorkouts ? tr("all") : tr("showAll")}
         </Button>
       </div>
       {filterError ? (
         <ErrorState
-          title="Filter options could not load"
+          title={tr("filterOptionsLoadFailed")}
           description={filterError}
           onRetry={loadFilterOptions}
         />
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <FilterGroup title="Muscle Category" values={filterOptions.muscleCategories} selected={filters.muscleCategories} open={openFilters.includes("muscleCategories")} onOpenChange={() => toggleFilterGroup("muscleCategories")} onToggle={(value) => toggleFilter("muscleCategories", value)} />
-        <FilterGroup title="Primary Muscle" values={filterOptions.primaryMuscles} selected={filters.primaryMuscles} open={openFilters.includes("primaryMuscles")} onOpenChange={() => toggleFilterGroup("primaryMuscles")} onToggle={(value) => toggleFilter("primaryMuscles", value)} />
-        <FilterGroup title="Equipment" values={filterOptions.equipmentRequired} selected={filters.equipmentRequired} open={openFilters.includes("equipmentRequired")} onOpenChange={() => toggleFilterGroup("equipmentRequired")} onToggle={(value) => toggleFilter("equipmentRequired", value)} />
-        <FilterGroup title="Mechanics" values={filterOptions.mechanics} selected={filters.mechanics} open={openFilters.includes("mechanics")} onOpenChange={() => toggleFilterGroup("mechanics")} onToggle={(value) => toggleFilter("mechanics", value)} />
-        <FilterGroup title="Exercise Type" values={filterOptions.exerciseTypes} selected={filters.exerciseTypes} open={openFilters.includes("exerciseTypes")} onOpenChange={() => toggleFilterGroup("exerciseTypes")} onToggle={(value) => toggleFilter("exerciseTypes", value)} />
-        <FilterGroup title="Force Type" values={filterOptions.forceTypes} selected={filters.forceTypes} open={openFilters.includes("forceTypes")} onOpenChange={() => toggleFilterGroup("forceTypes")} onToggle={(value) => toggleFilter("forceTypes", value)} />
-        <FilterGroup title="Experience Level" values={filterOptions.experienceLevels} selected={filters.experienceLevels} open={openFilters.includes("experienceLevels")} onOpenChange={() => toggleFilterGroup("experienceLevels")} onToggle={(value) => toggleFilter("experienceLevels", value)} />
-        <FilterGroup title="Secondary Muscles" values={filterOptions.secondaryMuscles} selected={filters.secondaryMuscles} open={openFilters.includes("secondaryMuscles")} onOpenChange={() => toggleFilterGroup("secondaryMuscles")} onToggle={(value) => toggleFilter("secondaryMuscles", value)} />
+        <FilterGroup title={tr("muscleCategory")} values={filterOptions.muscleCategories} selected={filters.muscleCategories} open={openFilters.includes("muscleCategories")} onOpenChange={() => toggleFilterGroup("muscleCategories")} onToggle={(value) => toggleFilter("muscleCategories", value)} />
+        <FilterGroup title={tr("primaryMuscle")} values={filterOptions.primaryMuscles} selected={filters.primaryMuscles} open={openFilters.includes("primaryMuscles")} onOpenChange={() => toggleFilterGroup("primaryMuscles")} onToggle={(value) => toggleFilter("primaryMuscles", value)} />
+        <FilterGroup title={tr("equipment")} values={filterOptions.equipmentRequired} selected={filters.equipmentRequired} open={openFilters.includes("equipmentRequired")} onOpenChange={() => toggleFilterGroup("equipmentRequired")} onToggle={(value) => toggleFilter("equipmentRequired", value)} />
+        <FilterGroup title={tr("mechanics")} values={filterOptions.mechanics} selected={filters.mechanics} open={openFilters.includes("mechanics")} onOpenChange={() => toggleFilterGroup("mechanics")} onToggle={(value) => toggleFilter("mechanics", value)} />
+        <FilterGroup title={tr("exerciseType")} values={filterOptions.exerciseTypes} selected={filters.exerciseTypes} open={openFilters.includes("exerciseTypes")} onOpenChange={() => toggleFilterGroup("exerciseTypes")} onToggle={(value) => toggleFilter("exerciseTypes", value)} />
+        <FilterGroup title={tr("forceType")} values={filterOptions.forceTypes} selected={filters.forceTypes} open={openFilters.includes("forceTypes")} onOpenChange={() => toggleFilterGroup("forceTypes")} onToggle={(value) => toggleFilter("forceTypes", value)} />
+        <FilterGroup title={tr("difficulty")} values={filterOptions.experienceLevels} selected={filters.experienceLevels} open={openFilters.includes("experienceLevels")} onOpenChange={() => toggleFilterGroup("experienceLevels")} onToggle={(value) => toggleFilter("experienceLevels", value)} />
+        <FilterGroup title={tr("secondaryMuscles")} values={filterOptions.secondaryMuscles} selected={filters.secondaryMuscles} open={openFilters.includes("secondaryMuscles")} onOpenChange={() => toggleFilterGroup("secondaryMuscles")} onToggle={(value) => toggleFilter("secondaryMuscles", value)} />
       </div>
       <div className="flex flex-wrap gap-2">
         {activeFilterCount > 0 ? (
           <Button variant="outline" className="min-h-12" onClick={resetFilters}>
-            <RotateCcw className="h-4 w-4" /> Clear all
+            <RotateCcw className="h-4 w-4" /> {tr("clearFilters")}
           </Button>
         ) : null}
       </div>
@@ -490,29 +469,29 @@ export function WorkoutBrowser() {
   );
 
   return (
-    <div className="space-y-5">
-      <div className="glass-card flex flex-col gap-3 p-4 sm:p-5">
+    <div className="space-y-5" dir={dir}>
+      <div className="rounded-2xl border border-border/70 bg-card flex flex-col gap-3 p-4 sm:p-5">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute start-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search exercises by name, muscle, or equipment"
-            className="h-12 pl-10"
+            placeholder={tr("searchExercisesLong")}
+            className="h-12 ps-10"
           />
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant={favoritesOnly ? "default" : "outline"} onClick={() => setFavoritesOnly((current) => !current)} className="min-h-12">
-            <Heart className={cn("h-4 w-4", favoritesOnly && "fill-current")} /> Favorites
+            <Heart className={cn("h-4 w-4", favoritesOnly && "fill-current")} /> {tr("favorites")}
           </Button>
           <Button variant="outline" onClick={toggleCustomForm} className="min-h-12">
-            <Plus className="h-4 w-4" /> {showCustomForm ? "Close custom" : "Custom"}
+            <Plus className="h-4 w-4" /> {showCustomForm ? tr("closeCustom") : tr("custom")}
           </Button>
           <Button variant="outline" onClick={() => setShowFiltersDialog(true)} className="min-h-12 lg:hidden">
-            <SlidersHorizontal className="h-4 w-4" /> Filters {activeFilterCount ? `(${activeFilterCount})` : ""}
+            <SlidersHorizontal className="h-4 w-4" /> {tr("filters")} {activeFilterCount ? `(${activeFilterCount})` : ""}
           </Button>
           <Button variant="outline" onClick={resetFilters} disabled={!query && activeFilterCount === 0 && !favoritesOnly} className="min-h-12">
-            <RotateCcw className="h-4 w-4" /> Reset
+            <RotateCcw className="h-4 w-4" /> {tr("reset")}
           </Button>
         </div>
       </div>
@@ -520,59 +499,59 @@ export function WorkoutBrowser() {
       {customSaveStatus === "saved" ? (
         <StatusBanner
           tone="success"
-          title="Custom exercise saved"
-          description="Custom exercises are private to you and available in this exercise library."
+          title={tr("customExerciseSaved")}
+          description={tr("customExercisePrivateAvailable")}
         />
       ) : null}
 
       {showCustomForm ? (
         <Card>
           <CardHeader>
-            <CardTitle>Create custom exercise</CardTitle>
-            <p className="text-sm leading-6 text-muted-foreground">Custom exercises are private to you. They support manual corrections and plan building without changing the public exercise library.</p>
+            <CardTitle>{tr("createCustomExercise")}</CardTitle>
+            <p className="text-sm leading-6 text-muted-foreground">{tr("customExerciseHelp")}</p>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
             {customFormError ? (
               <div className="md:col-span-2">
-                <StatusBanner tone="error" title="Custom exercise was not saved" description={customFormError} />
+                <StatusBanner tone="error" title={tr("customExerciseNotSaved")} description={customFormError} />
               </div>
             ) : null}
-            <Field label="Name" value={customDraft.name} onChange={(value) => setCustomDraft((current) => ({ ...current, name: value }))} placeholder="Example: Cable lateral raise" required />
-            <Field label="Target muscle" value={customDraft.targetMuscle} onChange={(value) => setCustomDraft((current) => ({ ...current, targetMuscle: value }))} placeholder="Shoulders" />
-            <Field label="Secondary muscles" value={customDraft.secondaryMuscles} onChange={(value) => setCustomDraft((current) => ({ ...current, secondaryMuscles: value }))} placeholder="Traps, core" />
-            <Field label="Equipment" value={customDraft.equipment} onChange={(value) => setCustomDraft((current) => ({ ...current, equipment: value }))} placeholder="Cable machine" />
-            <Field label="Difficulty" value={customDraft.difficulty} onChange={(value) => setCustomDraft((current) => ({ ...current, difficulty: value }))} placeholder="Intermediate" />
+            <Field label={tr("name")} value={customDraft.name} onChange={(value) => setCustomDraft((current) => ({ ...current, name: value }))} placeholder={tr("customNamePlaceholder")} required />
+            <Field label={tr("targetMuscle")} value={customDraft.targetMuscle} onChange={(value) => setCustomDraft((current) => ({ ...current, targetMuscle: value }))} placeholder={tr("shouldersPlaceholder")} />
+            <Field label={tr("secondaryMuscles")} value={customDraft.secondaryMuscles} onChange={(value) => setCustomDraft((current) => ({ ...current, secondaryMuscles: value }))} placeholder={tr("secondaryMusclesPlaceholder")} />
+            <Field label={tr("equipment")} value={customDraft.equipment} onChange={(value) => setCustomDraft((current) => ({ ...current, equipment: value }))} placeholder={tr("equipmentPlaceholder")} />
+            <Field label={tr("difficulty")} value={customDraft.difficulty} onChange={(value) => setCustomDraft((current) => ({ ...current, difficulty: value }))} placeholder={tr("difficultyPlaceholder")} />
             <Field
-              label="Video URL"
+              label={tr("videoUrl")}
               value={customDraft.videoUrl}
               onChange={(value) => setCustomDraft((current) => ({ ...current, videoUrl: value }))}
               placeholder="https://..."
-              error={customVideoInvalid ? "Custom video URL must start with http:// or https://." : undefined}
+              error={customVideoInvalid ? tr("invalidCustomVideoUrl") : undefined}
             />
             <div className="space-y-1 md:col-span-2">
-              <Label>Instructions</Label>
-              <textarea value={customDraft.instructions} onChange={(event) => setCustomDraft((current) => ({ ...current, instructions: event.target.value }))} className="min-h-24 w-full rounded-[14px] border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder="Setup, execution, tempo, and safety notes." />
+              <Label>{tr("instructions")}</Label>
+              <textarea value={customDraft.instructions} onChange={(event) => setCustomDraft((current) => ({ ...current, instructions: event.target.value }))} className="min-h-24 w-full rounded-[14px] border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder={tr("instructionsPlaceholder")} />
             </div>
             <div className="flex flex-col gap-2 md:col-span-2 sm:flex-row">
               <Button className="min-h-12" onClick={createCustomExercise} disabled={isSavingCustom || customVideoInvalid}>
-                {isSavingCustom ? "Saving..." : "Save custom exercise"}
+                {isSavingCustom ? tr("savingPlan") : tr("saveCustomExercise")}
               </Button>
-              <Button className="min-h-12" variant="outline" onClick={closeCustomForm} disabled={isSavingCustom}>Cancel</Button>
+              <Button className="min-h-12" variant="outline" onClick={closeCustomForm} disabled={isSavingCustom}>{tr("cancel")}</Button>
             </div>
           </CardContent>
         </Card>
       ) : null}
 
-      <div className="glass-card hidden p-4 lg:block">
+      <div className="hidden rounded-2xl border border-border/70 bg-card p-4 lg:block">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="h-5 w-5 text-primary" />
-            <p className="font-semibold text-foreground">Exercise filters</p>
-            {activeFilterCount ? <Badge>{activeFilterCount} selected</Badge> : null}
-            {favoritesOnly ? <Badge variant="success">Favorites only</Badge> : null}
-            {showAllWorkouts ? <Badge variant="success">Showing all</Badge> : null}
+            <p className="font-semibold text-foreground">{tr("filters")}</p>
+            {activeFilterCount ? <Badge>{tr("selectedCount", { count: activeFilterCount })}</Badge> : null}
+            {favoritesOnly ? <Badge variant="success">{tr("favoritesOnly")}</Badge> : null}
+            {showAllWorkouts ? <Badge variant="success">{tr("showingAll")}</Badge> : null}
           </div>
-          <p className="text-sm text-muted-foreground">{filteredWorkouts.length} exercises shown</p>
+          <p className="text-sm text-muted-foreground">{tr("exercisesShown", { count: filteredWorkouts.length })}</p>
         </div>
         {filterPanelContent}
       </div>
@@ -580,13 +559,13 @@ export function WorkoutBrowser() {
       <Dialog open={showFiltersDialog} onOpenChange={setShowFiltersDialog}>
         <DialogContent variant="glass" className="max-h-[85dvh] overflow-y-auto pb-0">
           <DialogHeader>
-            <DialogTitle>Filters</DialogTitle>
-            <DialogDescription>{filteredWorkouts.length} exercises match your selection</DialogDescription>
+            <DialogTitle>{tr("filters")}</DialogTitle>
+            <DialogDescription>{tr("exerciseMatches", { count: filteredWorkouts.length })}</DialogDescription>
           </DialogHeader>
           {filterPanelContent}
           <div className="sticky bottom-0 -mx-4 mt-4 flex gap-2 border-t bg-card/95 p-4 backdrop-blur sm:-mx-6 sm:px-6">
-            <Button onClick={() => setShowFiltersDialog(false)} className="min-h-12 flex-1">Apply</Button>
-            <Button variant="outline" className="min-h-12" onClick={() => { resetFilters(); setShowFiltersDialog(false); }}>Clear all</Button>
+            <Button onClick={() => setShowFiltersDialog(false)} className="min-h-12 flex-1">{tr("apply")}</Button>
+            <Button variant="outline" className="min-h-12" onClick={() => { resetFilters(); setShowFiltersDialog(false); }}>{tr("clearFilters")}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -596,22 +575,22 @@ export function WorkoutBrowser() {
         title={resultStatusTitle}
         description={resultStatusDescription}
         badges={[
-          resultStatus?.source === "fallback" ? "Fallback data" : null,
-          resultStatus?.source === "partial" || filterStatus?.source === "partial" ? "Partial source" : null,
-          activeFilterCount ? `${activeFilterCount} filters` : null,
-          favoritesOnly ? "Favorites only" : null,
-          showAllWorkouts ? "Showing all" : null,
-          isLoadingPersonalLibrary ? "Loading saved items" : null
+          resultStatus?.source === "fallback" ? tr("fallbackData") : null,
+          resultStatus?.source === "partial" || filterStatus?.source === "partial" ? tr("partialSource") : null,
+          activeFilterCount ? tr("activeFilters", { count: activeFilterCount }) : null,
+          favoritesOnly ? tr("favoritesOnly") : null,
+          showAllWorkouts ? tr("showingAll") : null,
+          isLoadingPersonalLibrary ? tr("loadingSavedItems") : null
         ].filter(Boolean) as string[]}
       />
 
-      {resultMessages.map((message) => (
-        <StatusBanner key={message} tone="warning" title="Library source notice" description={message} />
+      {resultMessages.map((message, index) => (
+        <StatusBanner key={`${index}-${message}`} tone="warning" title={tr("librarySourceNotice")} description={tr("librarySourceNoticeDescription")} />
       ))}
 
       {resultError ? (
         <ErrorState
-          title="Exercise search failed"
+          title={tr("exerciseSearchFailed")}
           description={resultError}
           onRetry={() => setReloadResultsNonce((current) => current + 1)}
         />
@@ -620,14 +599,14 @@ export function WorkoutBrowser() {
       {profile?.role === "admin" ? (
         <Card variant="glassStrong">
           <CardHeader>
-            <CardTitle className="text-base">Exercise library quality</CardTitle>
-            <p className="text-sm text-muted-foreground">Quality checks flag missing guidance and duplicates for review. Nothing is deleted automatically.</p>
+            <CardTitle className="text-base">{tr("exerciseLibraryQuality")}</CardTitle>
+            <p className="text-sm text-muted-foreground">{tr("exerciseLibraryQualityDescription")}</p>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <QualityMetric label="Missing video" value={qualityCounts.missingVideo} detail="No video or guide link found" />
-            <QualityMetric label="Missing instructions" value={qualityCounts.missingInstructions} detail="Instruction text needs review" />
-            <QualityMetric label="Missing muscle/equipment" value={qualityCounts.missingLabels} detail="Filter quality may be weaker" />
-            <QualityMetric label="Duplicate names" value={qualityCounts.duplicates} detail="Same visible exercise name appears more than once" />
+            <QualityMetric label={tr("missingVideo")} value={qualityCounts.missingVideo} detail={tr("noVideoGuideFound")} />
+            <QualityMetric label={tr("missingInstructions")} value={qualityCounts.missingInstructions} detail={tr("instructionReviewNeeded")} />
+            <QualityMetric label={tr("missingMuscleEquipment")} value={qualityCounts.missingLabels} detail={tr("filterQualityWeaker")} />
+            <QualityMetric label={tr("duplicateNames")} value={qualityCounts.duplicates} detail={tr("duplicateNamesDescription")} />
           </CardContent>
         </Card>
       ) : null}
@@ -637,16 +616,16 @@ export function WorkoutBrowser() {
         {!isLoading && !hasActiveLibraryRequest ? (
           <div className="md:col-span-2 xl:col-span-3">
             <EmptyState
-              title="Start browsing"
-              description="Search by name, muscle, or equipment. You can also turn on 'Show all workouts' or filter by favorites."
-              actionLabel="Show all workouts"
+              title={tr("startBrowsing")}
+              description={tr("startBrowsingDescription")}
+              actionLabel={tr("showAllWorkouts")}
               onAction={() => setShowAllWorkouts(true)}
             />
           </div>
         ) : null}
         {!isLoading && hasActiveLibraryRequest && !resultError && !filteredWorkouts.length ? (
           <div className="md:col-span-2 xl:col-span-3">
-            <EmptyState title="No exercises found" description="Try adjusting your search or filters." actionLabel="Clear filters" onAction={resetFilters} />
+            <EmptyState title={tr("noExercisesFound")} description={tr("broaderSearch")} actionLabel={tr("clearFilters")} onAction={resetFilters} />
           </div>
         ) : null}
         {filteredWorkouts.map((workout) => {
@@ -654,7 +633,7 @@ export function WorkoutBrowser() {
           const favorite = favoriteIds.includes(workout.id);
           const favoritePending = pendingFavoriteSet.has(workout.id);
           const favoriteError = favoriteErrors[workout.id];
-          const quality = exerciseQuality(workout, duplicateExerciseNames.has(normalizeText(workout.name)));
+          const quality = exerciseQuality(workout, duplicateExerciseNames.has(normalizeWorkoutFilterText(workout.name)));
           return (
             <Card key={workout.id} variant="glass" className="shadow-luxe">
               <CardContent className="p-4">
@@ -665,35 +644,35 @@ export function WorkoutBrowser() {
                   </div>
                   <div className="flex flex-col items-end gap-1.5">
                     <Badge>{workout.experience_level || workout.difficulty}</Badge>
-                    {!workout.is_global ? <Badge variant="success">Custom</Badge> : null}
-                    {profile?.role === "admin" ? quality.map((item) => <Badge key={item} variant="outline">{item}</Badge>) : null}
+                    {!workout.is_global ? <Badge variant="success">{tr("custom")}</Badge> : null}
+                    {profile?.role === "admin" ? quality.map((item) => <Badge key={item} variant="outline">{tr(qualityLabels[item])}</Badge>) : null}
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <Badge variant="outline">{workout.equipment_required || workout.equipment}</Badge>
                   {workout.mechanics ? <Badge variant="outline">{workout.mechanics}</Badge> : null}
                   {workout.force_type ? <Badge variant="outline">{workout.force_type}</Badge> : null}
-                  {workout.sets ? <Badge variant="outline">{workout.sets} sets</Badge> : null}
+                  {workout.sets ? <Badge variant="outline">{tr("setsCount", { count: workout.sets })}</Badge> : null}
                   {workout.reps ? <Badge variant="outline">{workout.reps}</Badge> : null}
                 </div>
-                {workout.secondary_muscles?.length ? <p className="mt-2 text-xs text-muted-foreground">Secondary: {workout.secondary_muscles.join(", ")}</p> : null}
+                {workout.secondary_muscles?.length ? <p className="mt-2 text-xs text-muted-foreground">{tr("secondaryMusclesNamed", { names: workout.secondary_muscles.join(", ") })}</p> : null}
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <Button asChild className="min-h-12">
-                    <Link href={`/workouts/session/${workout.id}`}><Play className="h-4 w-4" /> Start session</Link>
+                    <Link href={`/workouts/session/${workout.id}`}><Play className="h-4 w-4" /> {tr("startSession")}</Link>
                   </Button>
                   <Button asChild variant="outline" className="min-h-12">
-                    <Link href={`/workouts/${workout.id}`} aria-label={`Details for ${workout.name}`}><MoreHorizontal className="h-4 w-4" /> Details</Link>
+                    <Link href={`/workouts/${workout.id}`} aria-label={`${tr("details")}: ${workout.name}`}><MoreHorizontal className="h-4 w-4" /> {tr("details")}</Link>
                   </Button>
-                  <Button variant="outline" className="min-h-12" onClick={() => toggleFavorite(workout)} disabled={favoritePending} aria-label={favorite ? "Unfavorite" : "Favorite"} aria-busy={favoritePending}>
+                  <Button variant="outline" className="min-h-12" onClick={() => toggleFavorite(workout)} disabled={favoritePending} aria-label={favorite ? tr("unfavorite") : tr("favorite")} aria-busy={favoritePending}>
                     <Heart className={cn("h-4 w-4", favorite && "fill-current text-primary")} />
-                    {favoritePending ? "Saving..." : favorite ? "Saved" : "Save"}
+                    {favoritePending ? tr("saving") : favorite ? tr("savedLabel") : tr("save")}
                   </Button>
                   {guideUrl ? (
                     <Button asChild variant="outline" className="min-h-12">
-                      <a href={guideUrl} target="_blank" rel="noreferrer" aria-label={`Guide for ${workout.name}`}><ExternalLink className="h-4 w-4" /> Guide</a>
+                      <a href={guideUrl} target="_blank" rel="noreferrer" aria-label={`${tr("guide")}: ${workout.name}`}><ExternalLink className="h-4 w-4" /> {tr("guide")}</a>
                     </Button>
                   ) : (
-                    <Button type="button" variant="outline" className="min-h-12" disabled>No guide</Button>
+                    <Button type="button" variant="outline" className="min-h-12" disabled>{tr("noGuide")}</Button>
                   )}
                 </div>
                 {favoriteError ? <p className="mt-3 text-sm leading-6 text-destructive">{favoriteError}</p> : null}
@@ -702,7 +681,7 @@ export function WorkoutBrowser() {
           );
         })}
       </div>
-      {hasMore && !favoritesOnly ? <div className="flex justify-center"><Button className="min-h-12" variant="outline" onClick={loadMore} disabled={isLoading}>{isLoading ? "Loading..." : "Load more"}</Button></div> : null}
+      {hasMore && !favoritesOnly ? <div className="flex justify-center"><Button className="min-h-12" variant="outline" onClick={loadMore} disabled={isLoading}>{isLoading ? tr("loadingLabel") : tr("loadMore")}</Button></div> : null}
       {dialog}
     </div>
   );
@@ -792,18 +771,27 @@ function QualityMetric({ label, value, detail }: { label: string; value: number;
 function duplicateWorkoutNames(workouts: Workout[]) {
   const counts = new Map<string, number>();
   workouts.forEach((workout) => {
-    const key = normalizeText(workout.name);
+    const key = normalizeWorkoutFilterText(workout.name);
     if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
   });
   return new Set(Array.from(counts.entries()).filter(([, count]) => count > 1).map(([key]) => key));
 }
 
+type QualityWarning = "missingVideo" | "missingInstructions" | "missingMuscle" | "missingEquipment" | "duplicate";
+const qualityLabels = {
+  missingVideo: "missingVideo",
+  missingInstructions: "missingInstructions",
+  missingMuscle: "missingMuscle",
+  missingEquipment: "missingEquipment",
+  duplicate: "duplicateName"
+} as const;
+
 function exerciseQuality(workout: Workout, duplicateName: boolean) {
-  const warnings: string[] = [];
-  if (!workout.video_url && !workout.custom_video_url && !workout.exercise_url && !isLink(workout.notes)) warnings.push("missing video");
-  if (!workout.instructions?.trim()) warnings.push("missing instructions");
-  if (!workout.target_muscle && !workout.muscle_category) warnings.push("missing muscle");
-  if (!workout.equipment && !workout.equipment_required) warnings.push("missing equipment");
+  const warnings: QualityWarning[] = [];
+  if (!workout.video_url && !workout.custom_video_url && !workout.exercise_url && !isLink(workout.notes)) warnings.push("missingVideo");
+  if (!workout.instructions?.trim()) warnings.push("missingInstructions");
+  if (!workout.target_muscle && !workout.muscle_category) warnings.push("missingMuscle");
+  if (!workout.equipment && !workout.equipment_required) warnings.push("missingEquipment");
   if (duplicateName) warnings.push("duplicate");
   return warnings.slice(0, 3);
 }
@@ -811,11 +799,11 @@ function exerciseQuality(workout: Workout, duplicateName: boolean) {
 function summarizeExerciseQuality(workouts: Workout[], duplicates: Set<string>) {
   return workouts.reduce(
     (summary, workout) => {
-      const warnings = exerciseQuality(workout, duplicates.has(normalizeText(workout.name)));
+      const warnings = exerciseQuality(workout, duplicates.has(normalizeWorkoutFilterText(workout.name)));
       return {
-        missingVideo: summary.missingVideo + (warnings.includes("missing video") ? 1 : 0),
-        missingInstructions: summary.missingInstructions + (warnings.includes("missing instructions") ? 1 : 0),
-        missingLabels: summary.missingLabels + (warnings.includes("missing muscle") || warnings.includes("missing equipment") ? 1 : 0),
+        missingVideo: summary.missingVideo + (warnings.includes("missingVideo") ? 1 : 0),
+        missingInstructions: summary.missingInstructions + (warnings.includes("missingInstructions") ? 1 : 0),
+        missingLabels: summary.missingLabels + (warnings.includes("missingMuscle") || warnings.includes("missingEquipment") ? 1 : 0),
         duplicates: summary.duplicates + (warnings.includes("duplicate") ? 1 : 0)
       };
     },
@@ -823,7 +811,11 @@ function summarizeExerciseQuality(workouts: Workout[], duplicates: Set<string>) 
   );
 }
 
-function FilterGroup({ title, values, selected, open, onOpenChange, onToggle }: { title: string; values: string[]; selected: string[]; open: boolean; onOpenChange: () => void; onToggle: (value: string) => void; }) {
+function FilterGroup({ title, values, selected, open, onOpenChange, onToggle }: { title: string; values: WorkoutFilterOption[]; selected: string[]; open: boolean; onOpenChange: () => void; onToggle: (value: string) => void; }) {
+  const byValue = new Map(values.map((option) => [option.value, option]));
+  selected.forEach((value) => { if (!byValue.has(value)) byValue.set(value, { value, label: value }); });
+  const availableValues = Array.from(byValue.values()).sort((left, right) => left.label.localeCompare(right.label));
+  if (!availableValues.length) return null;
   return (
     <div className="solid-row p-3">
       <button type="button" onClick={onOpenChange} aria-expanded={open} className="flex min-h-12 w-full items-center justify-between gap-2 rounded-md px-1 text-left">
@@ -832,13 +824,12 @@ function FilterGroup({ title, values, selected, open, onOpenChange, onToggle }: 
       </button>
       {open ? (
         <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto pr-1">
-          {values.map((value) => (
-            <label key={value} className="flex min-h-12 cursor-pointer items-center gap-2 rounded-xl px-2 text-sm transition hover:bg-card">
-              <input type="checkbox" checked={selected.includes(value)} onChange={() => onToggle(value)} className="h-4 w-4 rounded border-border text-primary" />
-              <span className="min-w-0 truncate">{value}</span>
+          {availableValues.map((option) => (
+            <label key={option.value} className="flex min-h-12 cursor-pointer items-center gap-2 rounded-xl px-2 text-sm transition hover:bg-card">
+              <input type="checkbox" checked={selected.includes(option.value)} onChange={() => onToggle(option.value)} className="h-4 w-4 rounded border-border text-primary" />
+              <span className="min-w-0 truncate">{option.label}</span>
             </label>
           ))}
-          {!values.length ? <p className="text-sm text-muted-foreground">No options yet.</p> : null}
         </div>
       ) : null}
     </div>

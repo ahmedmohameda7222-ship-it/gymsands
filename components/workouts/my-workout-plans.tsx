@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   BookOpen,
-  Bot,
   CalendarDays,
   Check,
   ChevronRight,
@@ -32,8 +31,10 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Disclosure } from "@/components/ui/disclosure";
 import { CardGridSkeleton, ErrorState } from "@/components/ui/state-views";
 import { useToast } from "@/components/ui/toaster";
+import { OpenAiActionContent, TrainPageContainer } from "@/components/workouts/train-ui";
+import { TrainWeekSelector, type TrainWeekItem } from "@/components/workouts/train-week-selector";
 import { activeWorkoutEvent } from "@/lib/active-workout";
-import { localDateToIso, todayIso } from "@/lib/date-utils";
+import { todayIso } from "@/lib/date-utils";
 import { resolveTodayWorkout, todayWorkoutActionHref, workoutSessionLocalDate } from "@/lib/dashboard/today-model";
 import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
@@ -50,6 +51,7 @@ import {
 } from "@/lib/workouts/train-overview-runtime";
 import { resolveTrainWeekSelection, startTrainLocalDateRefresh } from "@/lib/workouts/train-local-date";
 import { shouldShowRestDayPlanAction } from "@/lib/workouts/train-visual";
+import { buildTrainWeek } from "@/lib/workouts/train-week";
 import { getDashboardProfileContext } from "@/services/database/dashboard-today-sources";
 import { setDefaultUserWorkoutPlan } from "@/services/database/workout-plans";
 import {
@@ -110,22 +112,6 @@ function nextScheduledDay(days: CalendarDay[], today: typeof englishWeekdays[num
   return [...days]
     .filter((day) => day.weekday && day.exercises.length)
     .sort((left, right) => ((englishWeekdays.indexOf(left.weekday!) - todayIndex + 7) % 7 || 7) - ((englishWeekdays.indexOf(right.weekday!) - todayIndex + 7) % 7 || 7))[0] ?? null;
-}
-
-function buildCurrentWeek(weekStartsOn: "monday" | "sunday", now = new Date()) {
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const weekStartIndex = weekStartsOn === "monday" ? 1 : 0;
-  const offset = (start.getDay() - weekStartIndex + 7) % 7;
-  start.setDate(start.getDate() - offset);
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
-    return {
-      date,
-      iso: localDateToIso(date),
-      weekday: englishWeekdays[date.getDay()]
-    };
-  });
 }
 
 export function MyWorkoutPlans() {
@@ -453,19 +439,19 @@ export function MyWorkoutPlans() {
   const showTodayCard = Boolean(visibleOpenSession) || (visiblePlansState === "loaded" && Boolean(activePlan));
 
   return (
-    <div className="space-y-6" dir={dir}>
+    <TrainPageContainer className="space-y-8" dir={dir}>
       <PageHeading
         title={tr("myWorkout")}
         description={tr("overviewDescription")}
         action={visiblePlansState === "loaded" && !availablePlans.length ? undefined : (
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <Button type="button" variant="outline" className="min-h-12 w-full sm:w-auto" onClick={() => openTrainPrompts()}>
-              <Bot className="h-4 w-4" /> {tr("askChatGpt")}
-            </Button>
-            <ActionMenu label={tr("createPlan")} visibleLabel={tr("createPlan")} icon={<Plus className="h-4 w-4" />} triggerVariant="default" triggerClassName="min-h-12 w-full sm:w-auto">
-              <ActionMenuItem onSelect={() => openTrainPrompts("create-workout-plan")}>{tr("createWithChatGpt")}</ActionMenuItem>
+            <ActionMenu label={tr("createPlan")} visibleLabel={tr("createPlan")} icon={<Plus className="h-4 w-4" />} triggerVariant="default" triggerClassName="min-h-[52px] w-full sm:min-h-12 sm:w-auto">
+              <ActionMenuItem onSelect={() => openTrainPrompts("create-workout-plan")}><OpenAiActionContent>{tr("createWithChatGpt")}</OpenAiActionContent></ActionMenuItem>
               <ActionMenuItem onSelect={() => router.push("/my-workout/plans/builder")}>{tr("createManually")}</ActionMenuItem>
             </ActionMenu>
+            <Button type="button" variant="outline" className="min-h-[52px] w-full sm:min-h-12 sm:w-auto" onClick={() => openTrainPrompts()}>
+              <OpenAiActionContent>{tr("askChatGpt")}</OpenAiActionContent>
+            </Button>
           </div>
         )}
       />
@@ -502,7 +488,7 @@ export function MyWorkoutPlans() {
               <h2 className="text-xl font-semibold">{tr("createFirstPlan")}</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{tr("createFirstPlanDescription")}</p>
             </div>
-            <div className="flex flex-wrap gap-2"><Button type="button" className="min-h-12" onClick={() => openTrainPrompts("create-workout-plan")}><Bot className="h-4 w-4" /> {tr("createWithChatGpt")}</Button><Button variant="outline" className="min-h-12" onClick={() => router.push("/my-workout/plans/builder")}><Plus className="h-4 w-4" /> {tr("createManually")}</Button></div>
+            <div className="flex flex-wrap gap-2"><Button type="button" className="min-h-[52px]" onClick={() => openTrainPrompts("create-workout-plan")}><OpenAiActionContent primary>{tr("createWithChatGpt")}</OpenAiActionContent></Button><Button variant="outline" className="min-h-[52px]" onClick={() => router.push("/my-workout/plans/builder")}><Plus className="h-4 w-4" /> {tr("createManually")}</Button></div>
           </CardContent>
         </Card>
       ) : null}
@@ -587,7 +573,7 @@ export function MyWorkoutPlans() {
       ) : null}
 
       {dialog}
-    </div>
+    </TrainPageContainer>
   );
 }
 
@@ -674,7 +660,7 @@ function TodayCard({
             ) : null}
           </div>
 
-          <div className="flex min-h-28 flex-col justify-center rounded-2xl border border-border/70 bg-background/80 p-3.5">
+          <div className="flex min-h-28 flex-col justify-center lg:ps-4">
             {statusState === "loading" && !showActiveAction ? <Button disabled className="min-h-12 w-full">{tr("checkingStatus")}</Button> : null}
             {statusState !== "loading" && statusError && !showActiveAction ? (
               <><p className="mb-3 text-sm leading-5 text-muted-foreground">{statusError}</p><Button variant="outline" className="min-h-12 w-full" onClick={() => void onRetryStatus()}><RefreshCcw className="h-4 w-4" /> {tr("retryStatus")}</Button></>
@@ -714,7 +700,7 @@ function ThisWeek({
   todayResolution: ReturnType<typeof resolveTodayWorkout>;
 }) {
   const { locale, tr } = useTrainTranslation();
-  const week = useMemo(() => buildCurrentWeek(weekStartsOn, new Date(`${today}T12:00:00`)), [today, weekStartsOn]);
+  const week = useMemo(() => buildTrainWeek(weekStartsOn, new Date(`${today}T12:00:00`)), [today, weekStartsOn]);
   const [selectedIso, setSelectedIso] = useState(today);
   const weekIsos = useMemo(() => week.map((day) => day.iso), [week]);
   useEffect(() => {
@@ -722,49 +708,35 @@ function ThisWeek({
   }, [today, weekIsos]);
   const selectedWeekDay = week.find((day) => day.iso === selectedIso) ?? week[0];
   const selectedDay = days.find((day) => day.weekday === selectedWeekDay?.weekday) ?? null;
+  const items = useMemo<TrainWeekItem[]>(() => week.map(({ date, iso, weekday }) => {
+    const planDay = days.find((day) => day.weekday === weekday) ?? null;
+    const session = planDay ? sessions.find((item) => item.plan_day_id === planDay.id && workoutSessionLocalDate(item) === iso) : null;
+    const isToday = iso === today;
+    const status = isToday && planDay && planDay.id === todayPlanDayId
+      ? todayResolution.state
+      : session?.status === "completed"
+        ? "completed"
+        : session?.status === "skipped"
+          ? "skipped"
+          : planDay
+            ? "scheduled"
+            : "rest";
+    const normalizedStatus: TrainWeekItem["status"] = status === "active" ? "active" : status === "completed" ? "completed" : status === "scheduled" ? "scheduled" : status === "skipped" ? "skipped" : "rest";
+    return {
+      date,
+      iso,
+      isToday,
+      status: normalizedStatus,
+      title: planDay?.dayName ?? tr("rest"),
+      stateLabel: normalizedStatus === "active" ? tr("inProgress") : normalizedStatus === "completed" ? tr("completed") : normalizedStatus === "scheduled" ? tr("scheduled") : normalizedStatus === "skipped" ? tr("skippedToday") : tr("rest")
+    };
+  }), [days, sessions, today, todayPlanDayId, todayResolution.state, tr, week]);
 
   return (
     <section aria-labelledby="this-week-heading" className="space-y-3" data-train-week>
       <SectionHeading id="this-week-heading" title={tr("thisWeek")} description={tr("thisWeekDescription")} />
-      <div className="grid snap-x grid-flow-col auto-cols-[minmax(104px,1fr)] gap-2 overflow-x-auto pb-2 lg:grid-flow-row lg:grid-cols-7 lg:overflow-visible" role="tablist" aria-label={tr("thisWeek")}>
-        {week.map(({ date, iso, weekday }) => {
-          const planDay = days.find((day) => day.weekday === weekday) ?? null;
-          const session = planDay ? sessions.find((item) => item.plan_day_id === planDay.id && workoutSessionLocalDate(item) === iso) : null;
-          const isToday = iso === today;
-          const isSelected = selectedIso === iso;
-          const status = isToday && planDay && planDay.id === todayPlanDayId
-            ? todayResolution.state
-            : session?.status === "completed"
-              ? "completed"
-              : session?.status === "skipped"
-                ? "skipped"
-                : planDay
-                  ? "scheduled"
-                  : "rest";
-          const stateLabel = status === "active" ? tr("inProgress") : status === "completed" ? tr("completed") : status === "scheduled" ? tr("scheduled") : status === "skipped" ? tr("skippedToday") : tr("rest");
-          return (
-            <button
-              type="button"
-              role="tab"
-              key={iso}
-              onClick={() => setSelectedIso(iso)}
-              aria-selected={isSelected}
-              aria-current={isToday ? "date" : undefined}
-              data-week-state={status}
-              data-week-selected={isSelected || undefined}
-              className={`min-h-24 snap-start rounded-2xl border p-2.5 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isSelected ? "border-primary bg-primary/10 ring-1 ring-primary/25" : isToday ? "border-primary/50 bg-primary/[0.04]" : "border-border/70 bg-card"}`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div><p className="text-xs font-semibold uppercase text-muted-foreground">{date.toLocaleDateString(locale, { weekday: "short" })}</p><p className="mt-0.5 text-base font-semibold">{date.getDate()}</p></div>
-                <div className="flex flex-col items-end gap-1">{isToday ? <Badge variant="outline" className="px-1.5 py-0 text-[10px]">{tr("todayLabel")}</Badge> : null}{isSelected && !isToday ? <span className="text-[10px] font-semibold text-primary">{tr("selectedDay")}</span> : null}</div>
-              </div>
-              <p className="mt-2 line-clamp-1 text-xs font-semibold">{planDay?.dayName ?? tr("rest")}</p>
-              <span className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">{status === "completed" ? <Check className="h-3.5 w-3.5 text-success" /> : <span className={`h-2 w-2 rounded-full ${status === "active" ? "bg-primary" : status === "skipped" ? "bg-warning" : status === "scheduled" ? "bg-foreground/50" : "bg-muted-foreground/40"}`} />}{stateLabel}</span>
-            </button>
-          );
-        })}
-      </div>
-      <div className="rounded-2xl border border-border/70 bg-card p-4" data-selected-day-preview>
+       <TrainWeekSelector items={items} selectedIso={selectedIso} onSelect={setSelectedIso} label={tr("thisWeek")} locale={locale} todayLabel={tr("todayLabel")} selectedLabel={tr("selectedDay")} idBase="train-overview-week" panelId="train-overview-week-panel" />
+       <div id="train-overview-week-panel" role="tabpanel" aria-labelledby={`train-overview-week-tab-${selectedIso}`} className="rounded-2xl border border-border/70 bg-card p-4" data-selected-day-preview>
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <div className="min-w-0">
             <p className="text-xs font-medium text-muted-foreground">{selectedWeekDay?.date.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" })}</p>

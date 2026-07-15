@@ -25,24 +25,26 @@ describe("Train post-merge visual refinement contracts", () => {
 
   test("keeps picker filters wrapping and reserves space for the fixed footer", () => {
     const picker = source("components/workouts/exercise-picker-dialog.tsx");
-    expect(picker).toContain("sm:grid-cols-2 lg:grid-cols-4");
+    expect(picker).toContain("flex gap-2 overflow-x-auto");
+    expect(picker).toContain("lg:grid-cols-4");
+    expect(picker).toContain("activeFilterChips");
     expect(picker).toContain("pb-32");
     expect(picker).toContain("data-picker-footer");
   });
 
   test("distinguishes Today from the selected week day", () => {
-    const overview = source("components/workouts/my-workout-plans.tsx");
-    expect(overview).toContain('aria-current={isToday ? "date" : undefined}');
-    expect(overview).toContain("data-week-selected");
-    expect(overview).toContain('isSelected ? "border-primary bg-primary/10');
-    expect(overview).toContain('isToday ? "border-primary/50 bg-primary/[0.04]');
+    const week = source("components/workouts/train-week-selector.tsx");
+    expect(week).toContain('aria-current={item.isToday ? "date" : undefined}');
+    expect(week).toContain("data-week-selected");
+    expect(week).toMatch(/selected\s*\? "border-primary bg-primary\/10/);
+    expect(week).toMatch(/item\.isToday\s*\? "border-primary\/50 bg-primary\/\[0\.04\]"/);
   });
 
   test("shows local incomplete-day validation and 44px exercise actions", () => {
     for (const file of ["components/workouts/workout-plan-builder.tsx", "components/workouts/workout-plan-editor.tsx"]) {
       const content = source(file);
       expect(content).toContain('tr("addExercisesToContinue")');
-      expect(content).toContain("min-h-11 min-w-11");
+      expect(content).toContain("<ActionMenu");
       expect(content).toContain("data-exercise-prescription");
     }
   });

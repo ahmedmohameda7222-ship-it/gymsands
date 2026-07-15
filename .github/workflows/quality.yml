@@ -16,7 +16,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 120
     services:
       postgres:
         image: postgres:16
@@ -238,6 +238,20 @@ jobs:
           ) 2>&1 | tee quality-reports/rendered-qa.log
           echo "${PIPESTATUS[0]}" > quality-reports/rendered-qa.exit
 
+          (
+            set -euo pipefail
+            NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/train-qa-server.log 2>&1 &
+            server_pid=$!
+            trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+            for attempt in $(seq 1 90); do
+              if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
+              sleep 1
+            done
+            curl --fail --silent http://localhost:3000/ > /dev/null
+            QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=quality-reports/train-qa-evidence npm run qa:train
+          ) 2>&1 | tee quality-reports/train-qa.log
+          echo "${PIPESTATUS[0]}" > quality-reports/train-qa.exit
+
           npm run release:manifest -- \
             --commit "${PLAIVRA_COMMIT_SHA}" \
             --build-timestamp "${PLAIVRA_BUILD_TIMESTAMP}" \
@@ -272,7 +286,7 @@ jobs:
         run: |
           set -euo pipefail
           failed=0
-          for check in full-migration-chain database-lint database-preflight integrity lint migration-ledger script-tests dependency-audit typecheck unit integration telemetry-tests environment-validation release-metadata build rendered-qa manifest release-preflight; do
+          for check in full-migration-chain database-lint database-preflight integrity lint migration-ledger script-tests dependency-audit typecheck unit integration telemetry-tests environment-validation release-metadata build rendered-qa train-qa manifest release-preflight; do
             code="$(cat "quality-reports/${check}.exit")"
             echo "${check}: exit ${code}"
             if [ "$code" != "0" ]; then
