@@ -1,8 +1,8 @@
 # Production migration ledger reconciliation
 
-**Project:** `bkwezjxvapaeasfvlhvv`  
-**Read-only verification:** 2026-07-14 23:24 UTC  
-**Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)  
+**Project:** `bkwezjxvapaeasfvlhvv`
+**Read-only verification:** 2026-07-14 23:24 UTC
+**Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 **Reconciliation status:** **Pending / NO-GO**
 
 This document records evidence. It is not authorization to edit production migration history, apply the forward correction, update the compatibility marker, merge, or deploy. Applied migration files and production identities must never be renamed, rewritten, deleted, or replayed.
