@@ -101,7 +101,7 @@ describe("workout library bounded pagination", () => {
     expect(catalogClient.searchCatalogActivities).toHaveBeenNthCalledWith(2, expect.objectContaining({ offset: 60, limit: 60 }), "test-catalog-group");
   });
 
-  it("forwards every single-value picker compatibility filter before pagination", async () => {
+  it("forwards every single-value picker filter before pagination", async () => {
     catalogClient.searchCatalogActivities.mockResolvedValue(searchResult([activity("matching")], 0, null));
 
     const result = await getWorkoutsWithStatus("bench", {
@@ -121,17 +121,17 @@ describe("workout library bounded pagination", () => {
       activityType: "strength",
       difficulty: "beginner",
       equipment: ["barbell"],
-      primaryMuscle: "pectoralis_major",
-      secondaryMuscle: "triceps",
-      muscleCategory: "upper_body",
-      movementPattern: "horizontal_push",
-      forceType: "push",
+      primaryMuscles: ["pectoralis_major"],
+      secondaryMuscles: ["triceps"],
+      muscleCategories: ["upper_body"],
+      movementPatterns: ["horizontal_push"],
+      forceTypes: ["push"],
       limit: 60,
       offset: 0
     }), "test-catalog-group");
   });
 
-  it("keeps unsupported multi-select combinations bounded by the final safety predicate", async () => {
+  it("forwards bounded multi-select groups so correctness does not depend on browser page scanning", async () => {
     catalogClient.searchCatalogActivities.mockResolvedValue(searchResult([
       activity("strength"),
       activity("cardio", { difficulty: "advanced", activityType: { id: "cardio", slug: "cardio", name: "Cardio" } }),
@@ -139,14 +139,16 @@ describe("workout library bounded pagination", () => {
     ]));
 
     const result = await getWorkoutsWithStatus("", {
-      exerciseTypes: ["Strength", "Cardio"],
-      experienceLevels: ["Beginner", "Advanced"]
+      exerciseTypes: ["strength", "cardio"],
+      experienceLevels: ["beginner", "advanced"]
     });
 
     expect(result.data.map((workout) => workout.id)).toEqual(["strength", "cardio"]);
-    expect(catalogClient.searchCatalogActivities).toHaveBeenCalledWith(expect.not.objectContaining({
-      activityType: expect.anything(),
-      difficulty: expect.anything()
+    expect(catalogClient.searchCatalogActivities).toHaveBeenCalledWith(expect.objectContaining({
+      activityTypes: ["strength", "cardio"],
+      difficulties: ["beginner", "advanced"],
+      limit: 60,
+      offset: 0
     }), "test-catalog-group");
   });
 
@@ -156,7 +158,7 @@ describe("workout library bounded pagination", () => {
         sports: [], sessionTypes: [], sessionPhases: [], trainingGoals: [],
         activityTypes: [{ id: "strength", slug: "strength", name: "Strength" }],
         equipment: [{ id: "barbell", slug: "barbell", name: "Barbell" }],
-        difficulties: ["beginner"],
+        difficulties: ["Beginner"],
         primaryMuscles: [{ id: "chest", slug: "pectoralis_major", name: "Pectoralis Major" }],
         secondaryMuscles: [{ id: "triceps", slug: "triceps", name: "Triceps" }],
         muscleCategories: [{ id: "upper", slug: "upper_body", name: "Upper Body" }],
@@ -171,7 +173,7 @@ describe("workout library bounded pagination", () => {
     expect(result.data).toMatchObject({
       exerciseTypes: [{ value: "strength", label: "Strength", aliases: [] }],
       equipmentRequired: [{ value: "barbell", label: "Barbell", aliases: [] }],
-      experienceLevels: [{ value: "beginner", label: "beginner", aliases: [] }],
+      experienceLevels: [{ value: "beginner", label: "Beginner", aliases: [] }],
       primaryMuscles: [{ value: "pectoralis_major", label: "Pectoralis Major", aliases: [] }],
       secondaryMuscles: [{ value: "triceps", label: "Triceps", aliases: [] }],
       muscleCategories: [{ value: "upper_body", label: "Upper Body", aliases: [] }],
