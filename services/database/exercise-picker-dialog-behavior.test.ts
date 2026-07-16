@@ -197,9 +197,11 @@ describe("ExercisePickerDialog request generations", () => {
 
     expect(mocks.getFilters).toHaveBeenCalledTimes(1);
     expect(mocks.getWorkouts).toHaveBeenCalledTimes(1);
-    expect(mocks.getFilters.mock.calls[0]?.[1]).toMatchObject({ requestGroupId: "picker-open-group" });
+    const filterGroup = mocks.getFilters.mock.calls[0]?.[1]?.requestGroupId;
+    const initialActivityGroup = mocks.getWorkouts.mock.calls[0]?.[4]?.requestGroupId;
+    expect(typeof filterGroup).toBe("string");
+    expect(initialActivityGroup).toBe(filterGroup);
     expect(mocks.getWorkouts.mock.calls[0]?.[2]).toBe(0);
-    expect(mocks.getWorkouts.mock.calls[0]?.[4]).toMatchObject({ requestGroupId: "picker-open-group" });
 
     const selectButton = container.querySelector<HTMLButtonElement>('button[aria-pressed="false"]');
     expect(selectButton).not.toBeNull();
@@ -212,7 +214,7 @@ describe("ExercisePickerDialog request generations", () => {
 
     expect(mocks.getWorkouts).toHaveBeenCalledTimes(2);
     expect(mocks.getWorkouts.mock.calls[1]?.[2]).toBe(60);
-    expect(mocks.getWorkouts.mock.calls[1]?.[4]).toMatchObject({ requestGroupId: "picker-open-group" });
+    expect(mocks.getWorkouts.mock.calls[1]?.[4]?.requestGroupId).toBe(initialActivityGroup);
     expect(Array.from(container.querySelectorAll("h3")).map((node) => node.textContent)).toEqual(["Exercise a", "Exercise b"]);
     expect(container.textContent).toContain("selectedCount:1");
   });
@@ -225,6 +227,7 @@ describe("ExercisePickerDialog request generations", () => {
     await render();
     await advanceDebounce();
     const firstSignal = mocks.getWorkouts.mock.calls[0]?.[4]?.signal as AbortSignal;
+    const firstGroup = mocks.getWorkouts.mock.calls[0]?.[4]?.requestGroupId;
 
     const input = container.querySelector<HTMLInputElement>('input[placeholder="searchExercises"]');
     expect(input).not.toBeNull();
@@ -236,7 +239,9 @@ describe("ExercisePickerDialog request generations", () => {
 
     expect(firstSignal.aborted).toBe(true);
     expect(mocks.getWorkouts).toHaveBeenCalledTimes(2);
-    expect(mocks.getWorkouts.mock.calls[1]?.[4]).toMatchObject({ requestGroupId: "picker-search-group" });
+    const latestGroup = mocks.getWorkouts.mock.calls[1]?.[4]?.requestGroupId;
+    expect(typeof latestGroup).toBe("string");
+    expect(latestGroup).not.toBe(firstGroup);
 
     await act(async () => fast.resolve(result([workout("latest")])));
     expect(Array.from(container.querySelectorAll("h3")).map((node) => node.textContent)).toEqual(["Exercise latest"]);
