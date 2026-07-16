@@ -26,7 +26,7 @@ const meta = { source: "external" as const, degraded: false, catalogVersion: "v1
 function searchPage(offset: number, nextOffset: number | null) {
   return {
     data: [],
-    pagination: { limit: 100, offset, returned: 0, nextOffset },
+    pagination: { limit: 60, offset, returned: 0, nextOffset },
     meta
   };
 }
@@ -41,31 +41,46 @@ describe("Exercise Library catalog request grouping", () => {
     });
   });
 
-  it("reuses one generated group ID across the existing sequential pagination loop", async () => {
-    mocks.searchActivities
-      .mockResolvedValueOnce(searchPage(0, 100))
-      .mockResolvedValueOnce(searchPage(100, null));
+  it("creates one generated group for one bounded first-page activities request", async () => {
+    mocks.searchActivities.mockResolvedValueOnce(searchPage(0, 60));
 
     await getWorkoutsWithStatus("", {}, 0, "en");
 
     expect(mocks.createGroup).toHaveBeenCalledOnce();
-    expect(mocks.searchActivities).toHaveBeenCalledTimes(2);
-    expect(mocks.searchActivities.mock.calls[0][1]).toBe("generated-library-load-1");
-    expect(mocks.searchActivities.mock.calls[1][1]).toBe("generated-library-load-1");
-    expect(mocks.searchActivities.mock.calls.map((call) => call[0].offset)).toEqual([0, 100]);
+    expect(mocks.searchActivities).toHaveBeenCalledTimes(1);
+    expect(mocks.searchActivities).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 60, offset: 0, locale: "en" }),
+      "generated-library-load-1"
+    );
   });
 
-  it("propagates one explicit logical-load group across related filters and activities calls", async () => {
-    mocks.searchActivities.mockResolvedValueOnce(searchPage(0, null));
+  it("propagates one explicit logical-load group across related filters and initial activities calls", async () => {
+    mocks.searchActivities.mockResolvedValueOnce(searchPage(0, 60));
 
     await getCanonicalWorkoutFilterOptionsWithStatus("en", "exercise-picker-load-1");
     await getWorkoutsWithStatus("", {}, 0, "en", "exercise-picker-load-1");
 
     expect(mocks.getFilters).toHaveBeenCalledWith({ locale: "en" }, "exercise-picker-load-1");
     expect(mocks.searchActivities).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 100, offset: 0, locale: "en" }),
+      expect.objectContaining({ limit: 60, offset: 0, locale: "en" }),
       "exercise-picker-load-1"
     );
     expect(mocks.createGroup).not.toHaveBeenCalled();
+  });
+
+  it("reuses the active generation group for one explicit load-more cursor request", async () => {
+    mocks.searchActivities
+      .mockResolvedValueOnce(searchPage(0, 60))
+      .mockResolvedValueOnce(searchPage(60, null));
+
+    const first = await getWorkoutsWithStatus("", {}, 0, "en", "exercise-picker-generation-2");
+    await getWorkoutsWithStatus("", {}, first.pagination?.nextOffset ?? 0, "en", "exercise-picker-generation-2");
+
+    expect(mocks.searchActivities).toHaveBeenCalledTimes(2);
+    expect(mocks.searchActivities.mock.calls.map((call) => call[0].offset)).toEqual([0, 60]);
+    expect(mocks.searchActivities.mock.calls.map((call) => call[1])).toEqual([
+      "exercise-picker-generation-2",
+      "exercise-picker-generation-2"
+    ]);
   });
 });
