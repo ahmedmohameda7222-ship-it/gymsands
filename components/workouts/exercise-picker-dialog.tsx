@@ -77,17 +77,6 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   const initialCatalogRequestGroupId = useMemo(() => open ? createCatalogRequestGroupId() : null, [locale, open]);
   const existing = useMemo(() => new Set(existingKeys), [existingKeys]);
 
-  if (open && typeof document !== "undefined") {
-    const activeElement = document.activeElement;
-    if (
-      activeElement instanceof HTMLElement &&
-      activeElement !== document.body &&
-      !activeElement.closest("[data-train-exercise-picker]")
-    ) {
-      returnFocusRef.current = activeElement;
-    }
-  }
-
   const activeFilters = useMemo(() => ({
     primaryMuscles: muscle ? [muscle] : [],
     equipmentRequired: equipment ? [equipment] : [],
@@ -98,6 +87,23 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
     exerciseTypes: exerciseType ? [exerciseType] : [],
     mechanics: mechanics ? [mechanics] : []
   }), [difficulty, equipment, exerciseType, forceType, mechanics, muscle, muscleCategory, secondaryMuscle]);
+
+  useEffect(() => {
+    if (open || typeof document === "undefined") return;
+    const captureReturnTarget = () => {
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof HTMLElement &&
+        activeElement !== document.body &&
+        !activeElement.closest("[data-train-exercise-picker]")
+      ) {
+        returnFocusRef.current = activeElement;
+      }
+    };
+    captureReturnTarget();
+    document.addEventListener("focusin", captureReturnTarget, true);
+    return () => document.removeEventListener("focusin", captureReturnTarget, true);
+  }, [open]);
 
   useEffect(() => {
     if (!open || !initialCatalogRequestGroupId) return;
@@ -267,6 +273,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
         dir={dir}
         data-train-exercise-picker
         onOpenAutoFocus={() => {
+          if (returnFocusRef.current?.isConnected) return;
           const activeElement = document.activeElement;
           if (activeElement instanceof HTMLElement && !activeElement.closest("[data-train-exercise-picker]")) {
             returnFocusRef.current = activeElement;
@@ -276,9 +283,9 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
           const returnTarget = returnFocusRef.current;
           if (!returnTarget?.isConnected) return;
           event.preventDefault();
-          returnTarget.focus({ preventScroll: true });
+          returnTarget.focus();
           window.requestAnimationFrame(() => {
-            if (document.activeElement !== returnTarget) returnTarget.focus({ preventScroll: true });
+            if (document.activeElement !== returnTarget) returnTarget.focus();
           });
         }}
       >
