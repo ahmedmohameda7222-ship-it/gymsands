@@ -434,12 +434,6 @@ select public.publish_user_custom_exercise_mapping_set(:'custom_a_set_id'::uuid)
 reset role;
 
 set local role authenticated;
-select set_config('request.jwt.claim.sub', :'user_b_id', true);
-select set_config('request.jwt.claim.role', 'authenticated', true);
-select public.publish_user_custom_exercise_mapping_set(:'custom_b_set_id'::uuid);
-reset role;
-
-set local role authenticated;
 select set_config('request.jwt.claim.sub', :'delete_id', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select public.publish_user_custom_exercise_mapping_set(:'custom_delete_set_id'::uuid);
@@ -454,6 +448,12 @@ select pg_temp.assert_true(
 );
 select pg_temp.assert_intruder_custom_insert_denied(:'custom_b_set_id'::uuid);
 select pg_temp.assert_intruder_custom_publish_denied(:'custom_b_set_id'::uuid);
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', :'user_b_id', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select public.publish_user_custom_exercise_mapping_set(:'custom_b_set_id'::uuid);
 reset role;
 
 set local role authenticated;

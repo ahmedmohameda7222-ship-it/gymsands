@@ -102,6 +102,9 @@ describe("Muscle Intelligence Phase 1 migration contract", () => {
       'PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/muscle-intelligence-phase1.sql'
     );
     expect(verification.trimEnd().endsWith("rollback;")).toBe(true);
+    expect(verification.indexOf("select pg_temp.assert_intruder_custom_insert_denied(:'custom_b_set_id'::uuid)")).toBeLessThan(
+      verification.indexOf("select public.publish_user_custom_exercise_mapping_set(:'custom_b_set_id'::uuid)")
+    );
   });
 
   it("exports only owner-scoped custom mappings and documents the no-runtime-cutover boundary", () => {
