@@ -23,6 +23,14 @@ import { getCanonicalWorkoutFilterOptionsWithStatus, getWorkoutsWithStatus } fro
 
 const meta = { source: "external" as const, degraded: false, catalogVersion: "v1" };
 
+function searchPage(offset: number, nextOffset: number | null) {
+  return {
+    data: [],
+    pagination: { limit: 100, offset, returned: 0, nextOffset },
+    meta
+  };
+}
+
 describe("Exercise Library catalog request grouping", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -31,20 +39,13 @@ describe("Exercise Library catalog request grouping", () => {
       data: { sports: [], activityTypes: [], sessionTypes: [], sessionPhases: [], equipment: [], trainingGoals: [], difficulties: [] },
       meta
     });
-    mocks.searchActivities
-      .mockResolvedValueOnce({
-        data: [],
-        pagination: { limit: 100, offset: 0, returned: 0, nextOffset: 100 },
-        meta
-      })
-      .mockResolvedValueOnce({
-        data: [],
-        pagination: { limit: 100, offset: 100, returned: 0, nextOffset: null },
-        meta
-      });
   });
 
   it("reuses one generated group ID across the existing sequential pagination loop", async () => {
+    mocks.searchActivities
+      .mockResolvedValueOnce(searchPage(0, 100))
+      .mockResolvedValueOnce(searchPage(100, null));
+
     await getWorkoutsWithStatus("", {}, 0, "en");
 
     expect(mocks.createGroup).toHaveBeenCalledOnce();
@@ -54,9 +55,17 @@ describe("Exercise Library catalog request grouping", () => {
     expect(mocks.searchActivities.mock.calls.map((call) => call[0].offset)).toEqual([0, 100]);
   });
 
-  it("passes an explicit logical-load group ID to the filters request", async () => {
+  it("propagates one explicit logical-load group across related filters and activities calls", async () => {
+    mocks.searchActivities.mockResolvedValueOnce(searchPage(0, null));
+
     await getCanonicalWorkoutFilterOptionsWithStatus("en", "exercise-picker-load-1");
+    await getWorkoutsWithStatus("", {}, 0, "en", "exercise-picker-load-1");
+
     expect(mocks.getFilters).toHaveBeenCalledWith({ locale: "en" }, "exercise-picker-load-1");
+    expect(mocks.searchActivities).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 100, offset: 0, locale: "en" }),
+      "exercise-picker-load-1"
+    );
     expect(mocks.createGroup).not.toHaveBeenCalled();
   });
 });
