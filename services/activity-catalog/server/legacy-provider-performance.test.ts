@@ -10,7 +10,7 @@ import {
 } from "./legacy-provider";
 
 type TableResult = { data: Array<Record<string, unknown>> | null; error: { message: string } | null };
-type QueryRecord = { table: string; filters: Array<[string, unknown]>; order: string | null; limit: number | null };
+type QueryRecord = { table: string; filters: Array<[string, unknown]>; orders: string[]; limit: number | null };
 
 function workout(id: string, overrides: Record<string, unknown> = {}) {
   return {
@@ -44,12 +44,12 @@ function createSupabase(
 
   const supabase = {
     from(table: string) {
-      const record: QueryRecord = { table, filters: [], order: null, limit: null };
+      const record: QueryRecord = { table, filters: [], orders: [], limit: null };
       queries.push(record);
       const chain = {
         select() { return chain; },
         eq(key: string, value: unknown) { record.filters.push([key, value]); return chain; },
-        order(key: string) { record.order = key; return chain; },
+        order(key: string) { record.orders.push(key); return chain; },
         async limit(value: number) {
           record.limit = value;
           if (options.deferred) await options.deferred;
@@ -65,6 +65,10 @@ function createSupabase(
   };
 
   return { supabase: supabase as unknown as SupabaseClient, queries };
+}
+
+function ids(result: Awaited<ReturnType<LegacyActivityCatalogProvider["searchActivities"]>>) {
+  return result.data.activities.map((activity) => activity.id);
 }
 
 describe("legacy Activity Catalog performance contract", () => {
@@ -126,7 +130,7 @@ describe("legacy Activity Catalog performance contract", () => {
     await expect(provider.searchActivities({ limit: 60, offset: 0 })).rejects.toThrow("temporary query failure");
     const retry = await provider.searchActivities({ limit: 60, offset: 0 });
 
-    expect(retry.data.activities.map((activity) => activity.id)).toContain("retry");
+    expect(ids(retry)).toContain("retry");
     expect(fixture.queries).toHaveLength(6);
   });
 
@@ -140,7 +144,7 @@ describe("legacy Activity Catalog performance contract", () => {
 
     const result = await provider.searchActivities({ primaryMuscles: ["chest"], limit: 60, offset: 0 });
 
-    expect(result.data.activities.map((activity) => activity.id)).toEqual(["late-match"]);
+    expect(ids(result)).toEqual(["late-match"]);
     expect(result.data.pagination).toEqual({ limit: 60, offset: 0, returned: 1, nextOffset: null });
   });
 
@@ -179,7 +183,7 @@ describe("legacy Activity Catalog performance contract", () => {
       offset: 0
     });
 
-    expect(result.data.activities.map((activity) => activity.id)).toEqual(["matching"]);
+    expect(ids(result)).toEqual(["matching"]);
   });
 
   it("supports OR semantics within bounded multi-select dimensions before slicing", async () => {
@@ -203,7 +207,7 @@ describe("legacy Activity Catalog performance contract", () => {
       offset: 0
     });
 
-    expect(result.data.activities.map((activity) => activity.id)).toEqual(["strength", "cardio"]);
+    expect(ids(result)).toEqual(["cardio", "strength"]);
   });
 
   it("normalizes free-text search across case and diacritics", async () => {
@@ -212,7 +216,7 @@ describe("legacy Activity Catalog performance contract", () => {
 
     const result = await provider.searchActivities({ query: "تمرين الصدر", limit: 60, offset: 0 });
 
-    expect(result.data.activities.map((activity) => activity.id)).toEqual(["arabic"]);
+    expect(ids(result)).toEqual(["arabic"]);
   });
 
   it("returns complete, deduplicated, deterministically sorted filter metadata", async () => {
@@ -236,6 +240,102 @@ describe("legacy Activity Catalog performance contract", () => {
     expect(result.data.movementPatterns?.map((item) => item.name)).toEqual(["Horizontal Push"]);
     expect(result.data.forceTypes?.map((item) => item.name)).toEqual(["Push"]);
     expect(result.data.equipment.map((item) => item.name)).toEqual(["Barbell", "Cable"]);
+  });
+
+  it("uses stable primary and secondary ordering on every global source query", async () => {
+    const fixture = createSupabase();
+    const provider = new LegacyActivityCatalogProvider(fixture.supabase);
+
+    await provider.getFilters();
+
+    expect(fixture.queries.find((query) => query.table === "workouts")?.orders).toEqual(["name", "id"]);
+    expect(fixture.queries.find((query) => query.table === "exercise_videos")?.orders).toEqual(["exercise_name", "id"]);
+    expect(fixture.queries.find((query) => query.table === "exercises")?.orders).toEqual(["name", "id"]);
+  });
+
+  it("keeps tied-name activities in the same stable ID order after source shuffles and cache reset", async () => {
+    const firstFixture = createSupabase({
+      workouts: {
+        data: [
+          workout("same-name-c", { name: "Same Name" }),
+          workout("same-name-a", { name: "Same Name" }),
+          workout("same-name-b", { name: "Same Name" })
+        ],
+        error: null
+      }
+    });
+    const first = await new LegacyActivityCatalogProvider(firstFixture.supabase)
+      .searchActivities({ limit: 60, offset: 0 });
+
+    __resetLegacyCatalogSnapshotCacheForTests();
+
+    const secondFixture = createSupabase({
+      workouts: {
+        data: [
+          workout("same-name-b", { name: "Same Name" }),
+          workout("same-name-c", { name: "Same Name" }),
+          workout("same-name-a", { name: "Same Name" })
+        ],
+        error: null
+      }
+    });
+    const second = await new LegacyActivityCatalogProvider(secondFixture.supabase)
+      .searchActivities({ limit: 60, offset: 0 });
+
+    expect(ids(first)).toEqual(["same-name-a", "same-name-b", "same-name-c"]);
+    expect(ids(second)).toEqual(ids(first));
+  });
+
+  it("keeps a tied-name group deterministic across the page-60 boundary and cache resets", async () => {
+    const earlier = Array.from({ length: 58 }, (_, index) =>
+      workout(`earlier-${String(index).padStart(2, "0")}`, {
+        name: `A Earlier ${String(index).padStart(2, "0")}`
+      })
+    );
+    const tiedFirstOrder = ["c", "a", "e", "b", "d"].map((suffix) =>
+      workout(`boundary-${suffix}`, { name: "Boundary Activity" })
+    );
+    const tiedSecondOrder = ["b", "d", "a", "e", "c"].map((suffix) =>
+      workout(`boundary-${suffix}`, { name: "Boundary Activity" })
+    );
+    const later = Array.from({ length: 4 }, (_, index) =>
+      workout(`later-${String(index).padStart(2, "0")}`, {
+        name: `Z Later ${String(index).padStart(2, "0")}`
+      })
+    );
+
+    const loadPages = async (rows: Array<Record<string, unknown>>) => {
+      const fixture = createSupabase({ workouts: { data: rows, error: null } });
+      const provider = new LegacyActivityCatalogProvider(fixture.supabase);
+      const page1 = await provider.searchActivities({ limit: 60, offset: 0 });
+      const page2 = await provider.searchActivities({ limit: 60, offset: 60 });
+      const full = await provider.searchActivities({ limit: 120, offset: 0 });
+      return { page1, page2, full };
+    };
+
+    const beforeReset = await loadPages([...earlier, ...tiedFirstOrder, ...later]);
+    __resetLegacyCatalogSnapshotCacheForTests();
+    const afterReset = await loadPages([...later].reverse().concat(tiedSecondOrder, [...earlier].reverse()));
+
+    const beforePage1Ids = ids(beforeReset.page1);
+    const beforePage2Ids = ids(beforeReset.page2);
+    const afterPage1Ids = ids(afterReset.page1);
+    const afterPage2Ids = ids(afterReset.page2);
+    const combined = [...beforePage1Ids, ...beforePage2Ids];
+    const expected = ids(beforeReset.full);
+    const duplicateCount = combined.length - new Set(combined).size;
+    const missingCount = expected.filter((id) => !combined.includes(id)).length;
+
+    expect(beforePage1Ids).toHaveLength(60);
+    expect(beforePage2Ids[0]).toBe("boundary-c");
+    expect(beforeReset.page1.data.pagination.nextOffset).toBe(60);
+    expect(beforeReset.page2.data.pagination.nextOffset).toBeNull();
+    expect(duplicateCount).toBe(0);
+    expect(missingCount).toBe(0);
+    expect(combined).toEqual(expected.slice(0, 120));
+    expect(afterPage1Ids).toEqual(beforePage1Ids);
+    expect(afterPage2Ids).toEqual(beforePage2Ids);
+    expect([...afterPage1Ids, ...afterPage2Ids]).toEqual(combined);
   });
 
   it("proves the cached snapshot queries only globally scoped rows", async () => {
