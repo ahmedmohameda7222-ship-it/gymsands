@@ -56,7 +56,11 @@ const ROUTE_SPECS: Record<string, CatalogRouteSpec> = {
     endpoint: "/api/activity-catalog/activities",
     operation: "list_activities",
     pageDefaults: { limit: 30, offset: 0 },
-    filterKeys: ["sport", "sessionType", "phase", "activityType", "difficulty", "equipment", "goal"]
+    filterKeys: [
+      "sport", "sessionType", "phase", "activityType", "difficulty", "equipment", "goal",
+      "activityTypes", "difficulties", "primaryMuscles", "secondaryMuscles",
+      "muscleCategories", "movementPatterns", "forceTypes"
+    ]
   },
   "activity-catalog-activity": {
     endpoint: "/api/activity-catalog/activities/[identifier]",
@@ -311,6 +315,19 @@ function optionalSlug(searchParams: URLSearchParams, key: string) {
   return value;
 }
 
+function optionalSlugList(searchParams: URLSearchParams, key: string) {
+  const raw = searchParams.get(key)?.trim();
+  if (!raw) return undefined;
+  const values = raw.split(",").map((value) => value.trim());
+  if (
+    values.length > 20 || values.some((value) => !value || value.length > 100 || !CATALOG_SLUG.test(value)) ||
+    new Set(values).size !== values.length
+  ) {
+    throw new CatalogError("catalog_bad_request");
+  }
+  return values;
+}
+
 function boundedInteger(searchParams: URLSearchParams, key: string, fallback: number, minimum: number, maximum: number) {
   const raw = searchParams.get(key);
   if (raw === null || raw === "") return fallback;
@@ -339,15 +356,23 @@ export function parseCatalogOptions(request: Request, allowed: readonly string[]
 }
 
 export function parseActivitySearch(request: Request): ActivitySearchParams {
-  const allowed = ["query", "sport", "sessionType", "phase", "activityType", "difficulty", "equipment", "goal", "limit", "offset", "locale"];
+  const allowed = [
+    "query", "sport", "sessionType", "phase", "activityType", "difficulty", "equipment", "goal", "limit", "offset", "locale",
+    "activityTypes", "difficulties", "primaryMuscles", "secondaryMuscles", "muscleCategories", "movementPatterns", "forceTypes"
+  ];
   const { searchParams, locale } = parseCatalogOptions(request, allowed);
   const query = searchParams.get("query")?.trim();
   if (query && query.length > 100) throw new CatalogError("catalog_bad_request");
   const difficulty = searchParams.get("difficulty")?.trim();
   if (difficulty && !["beginner", "intermediate", "advanced"].includes(difficulty)) throw new CatalogError("catalog_bad_request");
-  const rawEquipment = searchParams.get("equipment")?.trim();
-  const equipment = rawEquipment ? rawEquipment.split(",").map((item) => item.trim()) : undefined;
-  if (equipment && (equipment.length > 20 || equipment.some((item) => item.length > 100 || !CATALOG_SLUG.test(item)))) throw new CatalogError("catalog_bad_request");
+  const equipment = optionalSlugList(searchParams, "equipment");
+  const activityTypes = optionalSlugList(searchParams, "activityTypes");
+  const difficulties = optionalSlugList(searchParams, "difficulties");
+  const primaryMuscles = optionalSlugList(searchParams, "primaryMuscles");
+  const secondaryMuscles = optionalSlugList(searchParams, "secondaryMuscles");
+  const muscleCategories = optionalSlugList(searchParams, "muscleCategories");
+  const movementPatterns = optionalSlugList(searchParams, "movementPatterns");
+  const forceTypes = optionalSlugList(searchParams, "forceTypes");
   return {
     ...(query ? { query } : {}),
     ...(optionalSlug(searchParams, "sport") ? { sport: optionalSlug(searchParams, "sport") } : {}),
@@ -357,6 +382,13 @@ export function parseActivitySearch(request: Request): ActivitySearchParams {
     ...(difficulty ? { difficulty: difficulty as ActivitySearchParams["difficulty"] } : {}),
     ...(equipment?.length ? { equipment } : {}),
     ...(optionalSlug(searchParams, "goal") ? { goal: optionalSlug(searchParams, "goal") } : {}),
+    ...(activityTypes?.length ? { activityTypes } : {}),
+    ...(difficulties?.length ? { difficulties } : {}),
+    ...(primaryMuscles?.length ? { primaryMuscles } : {}),
+    ...(secondaryMuscles?.length ? { secondaryMuscles } : {}),
+    ...(muscleCategories?.length ? { muscleCategories } : {}),
+    ...(movementPatterns?.length ? { movementPatterns } : {}),
+    ...(forceTypes?.length ? { forceTypes } : {}),
     limit: boundedInteger(searchParams, "limit", 30, 1, 100),
     offset: boundedInteger(searchParams, "offset", 0, 0, 10_000),
     ...(locale ? { locale } : {})

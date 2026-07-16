@@ -67,6 +67,7 @@ export type TrainingActivity = {
   guideUrl?: string | null;
   videoUrl?: string | null;
   legacyIdentifier?: string | null;
+  forceType?: string | null;
 };
 
 export type SportSessionTemplate = {
@@ -83,6 +84,12 @@ export type ActivityCatalogFilters = {
   equipment: TaxonomyItem[];
   trainingGoals: TaxonomyItem[];
   difficulties: string[];
+  /** Legacy compatibility dimensions. External providers may omit these fields. */
+  primaryMuscles?: TaxonomyItem[];
+  secondaryMuscles?: TaxonomyItem[];
+  muscleCategories?: TaxonomyItem[];
+  movementPatterns?: TaxonomyItem[];
+  forceTypes?: TaxonomyItem[];
 };
 
 export type ActivityAlternative = {
@@ -123,6 +130,14 @@ export type ActivitySearchParams = CatalogRequestOptions & {
   difficulty?: "beginner" | "intermediate" | "advanced";
   equipment?: string[];
   goal?: string;
+  /** Internal Plaivra compatibility filters. The external API contract does not support these lists. */
+  activityTypes?: string[];
+  difficulties?: string[];
+  primaryMuscles?: string[];
+  secondaryMuscles?: string[];
+  muscleCategories?: string[];
+  movementPatterns?: string[];
+  forceTypes?: string[];
   limit?: number;
   offset?: number;
 };

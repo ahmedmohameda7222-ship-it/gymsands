@@ -22,15 +22,27 @@ type SearchResponse = {
   meta: CatalogResult<unknown>["meta"];
 };
 
+export type CatalogClientRequestOptions = {
+  requestGroupId?: string;
+  signal?: AbortSignal;
+};
+
+type CatalogClientRequestContext = string | CatalogClientRequestOptions | undefined;
+
 export function createCatalogRequestGroupId() {
   return createOperationalCorrelationId();
+}
+
+function normalizeRequestOptions(context?: CatalogClientRequestContext): CatalogClientRequestOptions {
+  return typeof context === "string" ? { requestGroupId: context } : (context ?? {});
 }
 
 function resolveCatalogRequestGroupId(value?: string) {
   return isValidOperationalCorrelationId(value) ? value!.trim() : createCatalogRequestGroupId();
 }
 
-async function catalogRequest<T>(path: string, requestGroupId?: string): Promise<T> {
+async function catalogRequest<T>(path: string, context?: CatalogClientRequestContext): Promise<T> {
+  const options = normalizeRequestOptions(context);
   const session = supabase ? await supabase.auth.getSession() : null;
   // The non-production mock-auth fixture uses an inert marker so rendered QA
   // can intercept the internal request without creating a real Supabase token.
@@ -41,10 +53,11 @@ async function catalogRequest<T>(path: string, requestGroupId?: string): Promise
     method: "GET",
     cache: "no-store",
     credentials: "same-origin",
+    signal: options.signal,
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: "application/json",
-      [CATALOG_REQUEST_GROUP_ID_HEADER]: resolveCatalogRequestGroupId(requestGroupId)
+      [CATALOG_REQUEST_GROUP_ID_HEADER]: resolveCatalogRequestGroupId(options.requestGroupId)
     }
   });
   const payload = await response.json().catch(() => ({}));
@@ -62,18 +75,18 @@ function queryString(values: Record<string, string | number | string[] | undefin
   return serialized ? `?${serialized}` : "";
 }
 
-export function getCatalogFilters(options: { sport?: string; locale?: string } = {}, requestGroupId?: string) {
-  return catalogRequest<CatalogResult<ActivityCatalogFilters>>(`/api/activity-catalog/filters${queryString(options)}`, requestGroupId);
+export function getCatalogFilters(options: { sport?: string; locale?: string } = {}, context?: CatalogClientRequestContext) {
+  return catalogRequest<CatalogResult<ActivityCatalogFilters>>(`/api/activity-catalog/filters${queryString(options)}`, context);
 }
 
-export function searchCatalogActivities(params: ActivitySearchParams, requestGroupId?: string) {
-  return catalogRequest<SearchResponse>(`/api/activity-catalog/activities${queryString(params)}`, requestGroupId);
+export function searchCatalogActivities(params: ActivitySearchParams, context?: CatalogClientRequestContext) {
+  return catalogRequest<SearchResponse>(`/api/activity-catalog/activities${queryString(params)}`, context);
 }
 
-export function getCatalogActivity(identifier: string, locale?: string, requestGroupId?: string) {
-  return catalogRequest<CatalogResult<TrainingActivity>>(`/api/activity-catalog/activities/${encodeURIComponent(identifier)}${queryString({ locale })}`, requestGroupId);
+export function getCatalogActivity(identifier: string, locale?: string, context?: CatalogClientRequestContext) {
+  return catalogRequest<CatalogResult<TrainingActivity>>(`/api/activity-catalog/activities/${encodeURIComponent(identifier)}${queryString({ locale })}`, context);
 }
 
-export function getCatalogActivityAlternatives(identifier: string, options: { limit?: number; locale?: string } = {}, requestGroupId?: string) {
-  return catalogRequest<CatalogResult<ActivityAlternative[]>>(`/api/activity-catalog/activities/${encodeURIComponent(identifier)}/alternatives${queryString(options)}`, requestGroupId);
+export function getCatalogActivityAlternatives(identifier: string, options: { limit?: number; locale?: string } = {}, context?: CatalogClientRequestContext) {
+  return catalogRequest<CatalogResult<ActivityAlternative[]>>(`/api/activity-catalog/activities/${encodeURIComponent(identifier)}/alternatives${queryString(options)}`, context);
 }

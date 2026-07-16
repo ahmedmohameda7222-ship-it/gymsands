@@ -17,6 +17,13 @@ import type { ExerciseVideo, Workout } from "@/types";
 import type { ActivityCatalogProvider } from "./provider";
 
 type LegacyRow = Record<string, unknown>;
+type LegacySnapshot = { activities: TrainingActivity[]; degraded: boolean };
+type CachedLegacySnapshot = { activities: TrainingActivity[]; expiresAt: number };
+
+export const LEGACY_CATALOG_SNAPSHOT_TTL_MS = 60_000;
+
+let cachedLegacySnapshot: CachedLegacySnapshot | null = null;
+let legacySnapshotInFlight: Promise<LegacySnapshot> | null = null;
 
 const legacyMeta = (degraded = false): CatalogSourceMetadata => ({
   source: "legacy",
@@ -37,6 +44,38 @@ function stableSlug(value: string) {
   return slug || "legacy_activity";
 }
 
+function normalizeSearchText(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function normalizeStableSortText(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function compareStableText(left: string, right: string) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function compareLegacyActivities(left: TrainingActivity, right: TrainingActivity) {
+  const nameComparison = compareStableText(
+    normalizeStableSortText(left.name),
+    normalizeStableSortText(right.name)
+  );
+  return nameComparison || compareStableText(left.id, right.id);
+}
+
 function taxonomy(name: string | null, prefix: string): TaxonomyItem | null {
   if (!name) return null;
   const slug = stableSlug(name);
@@ -54,9 +93,12 @@ function workoutRow(activity: Workout | LegacyRow): TrainingActivity | null {
   const name = text(row.name);
   if (!id || !name) return null;
   const category = text(row.category) ?? text(row.mechanics) ?? text(row.movement_pattern);
-  const primary = text(row.target_muscle) ?? text(row.muscle_category) ?? text(row.primary_muscle);
+  const primary = text(row.target_muscle) ?? text(row.primary_muscle) ?? text(row.muscle_category);
+  const bodyRegion = text(row.muscle_category);
   const secondary = texts(row.secondary_muscles);
-  const equipment = texts(row.equipment).length ? texts(row.equipment) : [text(row.equipment_required) ?? text(row.equipment)].filter((item): item is string => Boolean(item));
+  const equipment = texts(row.equipment).length
+    ? texts(row.equipment)
+    : [text(row.equipment_required) ?? text(row.equipment)].filter((item): item is string => Boolean(item));
   const activityType = taxonomy(category, "legacy-type");
   return {
     id,
@@ -67,15 +109,16 @@ function workoutRow(activity: Workout | LegacyRow): TrainingActivity | null {
     instructions: instructions(row.instructions),
     difficulty: text(row.difficulty) ?? text(row.experience_level),
     movementPattern: text(row.movement_pattern) ?? text(row.mechanics),
+    forceType: text(row.force_type),
     version: typeof row.version === "number" && Number.isInteger(row.version) ? row.version : null,
     activityType,
     sports: [],
     sessionTypes: [],
     sessionPhases: [],
-    equipment: equipment.map((name) => ({ ...(taxonomy(name, "legacy-equipment") as TaxonomyItem), isRequired: true })),
+    equipment: equipment.map((equipmentName) => ({ ...(taxonomy(equipmentName, "legacy-equipment") as TaxonomyItem), isRequired: true })),
     muscles: [
-      ...(primary ? [{ ...(taxonomy(primary, "legacy-muscle") as TaxonomyItem), role: "primary" as const }] : []),
-      ...secondary.map((name) => ({ ...(taxonomy(name, "legacy-muscle") as TaxonomyItem), role: "secondary" as const }))
+      ...(primary ? [{ ...(taxonomy(primary, "legacy-muscle") as TaxonomyItem), ...(bodyRegion ? { bodyRegion } : {}), role: "primary" as const }] : []),
+      ...secondary.map((muscleName) => ({ ...(taxonomy(muscleName, "legacy-muscle") as TaxonomyItem), role: "secondary" as const }))
     ],
     trainingGoals: [],
     translations: {},
@@ -93,6 +136,7 @@ function videoRow(video: ExerciseVideo | LegacyRow): TrainingActivity | null {
     name: row.exercise_name,
     category: row.category_type ?? row.category,
     target_muscle: row.muscle_category ?? row.category,
+    muscle_category: row.muscle_category,
     equipment_required: row.equipment_required,
     difficulty: row.experience_level,
     mechanics: row.mechanics,
@@ -105,26 +149,44 @@ function videoRow(video: ExerciseVideo | LegacyRow): TrainingActivity | null {
   });
 }
 
+function matchesOne(actual: string | null | undefined, selected: string[] | undefined) {
+  return !selected?.length || Boolean(actual && selected.includes(actual));
+}
+
+function matchesAny(actual: Array<string | null | undefined>, selected: string[] | undefined) {
+  if (!selected?.length) return true;
+  const actualSet = new Set(actual.filter((value): value is string => Boolean(value)));
+  return selected.some((value) => actualSet.has(value));
+}
+
 function matches(activity: TrainingActivity, params: ActivitySearchParams) {
-  const normalized = params.query?.trim().toLowerCase();
+  const normalized = normalizeSearchText(params.query);
   if (normalized) {
-    const haystack = [
+    const haystack = normalizeSearchText([
       activity.name,
       activity.shortDescription,
       activity.activityType?.name,
       activity.movementPattern,
+      activity.forceType,
       ...activity.equipment.map((item) => item.name),
-      ...activity.muscles.map((item) => item.name)
-    ].filter(Boolean).join(" ").toLowerCase();
+      ...activity.muscles.flatMap((item) => [item.name, item.bodyRegion])
+    ].filter(Boolean).join(" "));
     if (!haystack.includes(normalized)) return false;
   }
   if (params.activityType && activity.activityType?.slug !== params.activityType) return false;
+  if (!matchesOne(activity.activityType?.slug, params.activityTypes)) return false;
   if (params.difficulty && activity.difficulty?.toLowerCase() !== params.difficulty) return false;
-  if (params.equipment?.length && !params.equipment.some((slug) => activity.equipment.some((item) => item.slug === slug))) return false;
+  if (!matchesOne(activity.difficulty ? stableSlug(activity.difficulty) : null, params.difficulties)) return false;
+  if (!matchesAny(activity.equipment.map((item) => item.slug), params.equipment)) return false;
   if (params.sport && !activity.sports.some((item) => item.slug === params.sport)) return false;
   if (params.sessionType && !activity.sessionTypes.some((item) => item.slug === params.sessionType)) return false;
   if (params.phase && !activity.sessionPhases.some((item) => item.slug === params.phase)) return false;
   if (params.goal && !activity.trainingGoals.some((item) => item.slug === params.goal)) return false;
+  if (!matchesAny(activity.muscles.filter((item) => item.role === "primary").map((item) => item.slug), params.primaryMuscles)) return false;
+  if (!matchesAny(activity.muscles.filter((item) => item.role !== "primary").map((item) => item.slug), params.secondaryMuscles)) return false;
+  if (!matchesAny(activity.muscles.map((item) => item.bodyRegion ? stableSlug(item.bodyRegion) : null), params.muscleCategories)) return false;
+  if (!matchesOne(activity.movementPattern ? stableSlug(activity.movementPattern) : null, params.movementPatterns)) return false;
+  if (!matchesOne(activity.forceType ? stableSlug(activity.forceType) : null, params.forceTypes)) return false;
   return true;
 }
 
@@ -136,6 +198,49 @@ function uniqueActivities(activities: TrainingActivity[]) {
     keys.add(key);
     return true;
   });
+}
+
+async function loadLegacySnapshot(supabase: SupabaseClient): Promise<LegacySnapshot> {
+  const now = Date.now();
+  if (cachedLegacySnapshot && cachedLegacySnapshot.expiresAt > now) {
+    return { activities: cachedLegacySnapshot.activities, degraded: false };
+  }
+  if (cachedLegacySnapshot) cachedLegacySnapshot = null;
+  if (legacySnapshotInFlight) return legacySnapshotInFlight;
+
+  const loadPromise = (async () => {
+    const [workoutResult, videoResult, exerciseResult] = await Promise.all([
+      supabase.from("workouts").select("*").eq("is_global", true).order("name").order("id").limit(5000),
+      supabase.from("exercise_videos").select("*").eq("is_global", true).order("exercise_name").order("id").limit(5000),
+      supabase.from("exercises").select("*").eq("is_global", true).eq("is_approved", true).order("name").order("id").limit(5000)
+    ]);
+    const degraded = Boolean(workoutResult.error || videoResult.error || exerciseResult.error);
+    const activities = uniqueActivities([
+      ...((exerciseResult.data ?? []) as LegacyRow[]).map(workoutRow),
+      ...((workoutResult.data ?? []) as LegacyRow[]).map(workoutRow),
+      ...((videoResult.data ?? []) as LegacyRow[]).map(videoRow),
+      ...(workoutResult.error ? sampleWorkouts.map(workoutRow) : []),
+      ...(videoResult.error ? sampleExerciseVideos.map(videoRow) : [])
+    ].filter((activity): activity is TrainingActivity => Boolean(activity))).sort(compareLegacyActivities);
+
+    if (!degraded) {
+      cachedLegacySnapshot = { activities, expiresAt: Date.now() + LEGACY_CATALOG_SNAPSHOT_TTL_MS };
+    }
+    return { activities, degraded };
+  })();
+
+  legacySnapshotInFlight = loadPromise;
+  try {
+    return await loadPromise;
+  } finally {
+    if (legacySnapshotInFlight === loadPromise) legacySnapshotInFlight = null;
+  }
+}
+
+export function __resetLegacyCatalogSnapshotCacheForTests() {
+  if (process.env.NODE_ENV !== "test") throw new Error("Legacy catalog cache reset is test-only.");
+  cachedLegacySnapshot = null;
+  legacySnapshotInFlight = null;
 }
 
 export class LegacyActivityCatalogProvider implements ActivityCatalogProvider {
@@ -150,7 +255,7 @@ export class LegacyActivityCatalogProvider implements ActivityCatalogProvider {
   }
 
   async getFilters(options: CatalogRequestOptions & { sport?: string } = {}): Promise<CatalogResult<ActivityCatalogFilters>> {
-    const result = await this.loadActivities();
+    const result = await loadLegacySnapshot(this.supabase);
     const activities = options.sport ? result.activities.filter((activity) => activity.sports.some((sport) => sport.slug === options.sport)) : result.activities;
     return {
       data: {
@@ -160,14 +265,19 @@ export class LegacyActivityCatalogProvider implements ActivityCatalogProvider {
         sessionPhases: uniqueTaxonomy(activities.flatMap((activity) => activity.sessionPhases)),
         equipment: uniqueTaxonomy(activities.flatMap((activity) => activity.equipment)),
         trainingGoals: uniqueTaxonomy(activities.flatMap((activity) => activity.trainingGoals)),
-        difficulties: Array.from(new Set(activities.map((activity) => activity.difficulty).filter((value): value is string => Boolean(value)))).sort()
+        difficulties: Array.from(new Set(activities.map((activity) => activity.difficulty).filter((value): value is string => Boolean(value)))).sort(),
+        primaryMuscles: uniqueTaxonomy(activities.flatMap((activity) => activity.muscles.filter((muscle) => muscle.role === "primary"))),
+        secondaryMuscles: uniqueTaxonomy(activities.flatMap((activity) => activity.muscles.filter((muscle) => muscle.role !== "primary"))),
+        muscleCategories: uniqueTaxonomy(activities.flatMap((activity) => activity.muscles.map((muscle) => taxonomy(muscle.bodyRegion ?? null, "legacy-region")).filter((item): item is TaxonomyItem => Boolean(item)))),
+        movementPatterns: uniqueTaxonomy(activities.map((activity) => taxonomy(activity.movementPattern, "legacy-movement")).filter((item): item is TaxonomyItem => Boolean(item))),
+        forceTypes: uniqueTaxonomy(activities.map((activity) => taxonomy(activity.forceType ?? null, "legacy-force")).filter((item): item is TaxonomyItem => Boolean(item)))
       },
       meta: legacyMeta(result.degraded)
     };
   }
 
   async searchActivities(params: ActivitySearchParams) {
-    const result = await this.loadActivities();
+    const result = await loadLegacySnapshot(this.supabase);
     const offset = params.offset ?? 0;
     const limit = params.limit ?? 30;
     const filtered = result.activities.filter((activity) => matches(activity, params));
@@ -180,7 +290,7 @@ export class LegacyActivityCatalogProvider implements ActivityCatalogProvider {
   }
 
   async getActivity(identifier: string) {
-    const result = await this.loadActivities();
+    const result = await loadLegacySnapshot(this.supabase);
     const activity = result.activities.find((item) => item.id === identifier || item.slug === identifier || item.legacyIdentifier === identifier);
     if (!activity) throw new CatalogError("catalog_not_found");
     return { data: activity, meta: legacyMeta(result.degraded) };
@@ -188,23 +298,6 @@ export class LegacyActivityCatalogProvider implements ActivityCatalogProvider {
 
   async getActivityAlternatives() {
     return { data: [], meta: legacyMeta() };
-  }
-
-  private async loadActivities() {
-    const [workoutResult, videoResult, exerciseResult] = await Promise.all([
-      this.supabase.from("workouts").select("*").eq("is_global", true).order("name").limit(5000),
-      this.supabase.from("exercise_videos").select("*").eq("is_global", true).order("exercise_name").limit(5000),
-      this.supabase.from("exercises").select("*").eq("is_global", true).eq("is_approved", true).order("name").limit(5000)
-    ]);
-    const degraded = Boolean(workoutResult.error || videoResult.error || exerciseResult.error);
-    const activities = [
-      ...((exerciseResult.data ?? []) as LegacyRow[]).map(workoutRow),
-      ...((workoutResult.data ?? []) as LegacyRow[]).map(workoutRow),
-      ...((videoResult.data ?? []) as LegacyRow[]).map(videoRow),
-      ...(workoutResult.error ? sampleWorkouts.map(workoutRow) : []),
-      ...(videoResult.error ? sampleExerciseVideos.map(videoRow) : [])
-    ].filter((activity): activity is TrainingActivity => Boolean(activity));
-    return { activities: uniqueActivities(activities), degraded };
   }
 }
 
