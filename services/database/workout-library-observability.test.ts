@@ -51,7 +51,7 @@ describe("Exercise Library catalog request grouping", () => {
     expect(mocks.searchActivities).toHaveBeenCalledTimes(2);
     expect(mocks.searchActivities.mock.calls[0][1]).toBe("generated-library-load-1");
     expect(mocks.searchActivities.mock.calls[1][1]).toBe("generated-library-load-1");
-    expect(mocks.searchActivities.mock.calls.map(([params]) => params.offset)).toEqual([0, 100]);
+    expect(mocks.searchActivities.mock.calls.map((call) => call[0].offset)).toEqual([0, 100]);
   });
 
   it("passes an explicit logical-load group ID to the filters request", async () => {
