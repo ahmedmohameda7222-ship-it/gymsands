@@ -126,19 +126,6 @@ function activityToLibraryWorkout(activity: TrainingActivity, meta: CatalogSourc
   return { ...workout, muscle_category: muscleCategories.join(", ") || null, force_type: activity.forceType ?? workout.force_type };
 }
 
-function emptyFilterOptions(): WorkoutFilterOptions {
-  return {
-    muscleCategories: [],
-    primaryMuscles: [],
-    equipmentRequired: [],
-    mechanics: [],
-    exerciseTypes: [],
-    forceTypes: [],
-    experienceLevels: [],
-    secondaryMuscles: []
-  };
-}
-
 export function emptyCanonicalWorkoutFilterOptions(): CanonicalWorkoutFilterOptions {
   return {
     muscleCategories: [], primaryMuscles: [], equipmentRequired: [], mechanics: [],
@@ -349,7 +336,9 @@ async function loadWorkoutPage(query: string, filters: WorkoutFilters, startOffs
     .filter((activity) => matchesWorkoutFilters(activity, filters))
     .map((activity) => activityToLibraryWorkout(activity, response.meta));
   const providerNextOffset = response.pagination.nextOffset ?? null;
-  const nextOffset = providerNextOffset !== null && providerNextOffset > requestOffset ? providerNextOffset : null;
+  const nextOffset = response.data.length > 0 && providerNextOffset !== null && providerNextOffset > requestOffset
+    ? providerNextOffset
+    : null;
   return {
     workouts,
     filterOptions,
