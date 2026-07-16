@@ -4,7 +4,13 @@ import { activityToWorkout, alternativeToWorkout } from "@/lib/activity-catalog/
 import type { ActivitySearchParams, CatalogSourceMetadata, TrainingActivity } from "@/lib/activity-catalog/types";
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
-import { getCatalogActivity, getCatalogActivityAlternatives, getCatalogFilters, searchCatalogActivities } from "@/services/activity-catalog/client";
+import {
+  createCatalogRequestGroupId,
+  getCatalogActivity,
+  getCatalogActivityAlternatives,
+  getCatalogFilters,
+  searchCatalogActivities
+} from "@/services/activity-catalog/client";
 import type { ExerciseVideo, UserExerciseVideo, Workout } from "@/types";
 
 const workoutPageSize = 500;
@@ -272,20 +278,20 @@ function catalogSearchParams(query: string, filters: WorkoutFilters, limit: numb
   };
 }
 
-export async function getWorkoutCategories(locale?: string) {
-  const filters = await getCatalogFilters({ locale });
+export async function getWorkoutCategories(locale?: string, requestGroupId?: string) {
+  const filters = await getCatalogFilters({ locale }, requestGroupId);
   return Array.from(new Set([
     ...filters.data.activityTypes.map((item) => item.name),
     ...filters.data.equipment.map((item) => item.name)
   ])).sort((left, right) => left.localeCompare(right));
 }
 
-export async function getWorkoutFilterOptions(locale?: string) {
-  return (await getWorkoutFilterOptionsWithStatus(locale)).data;
+export async function getWorkoutFilterOptions(locale?: string, requestGroupId?: string) {
+  return (await getWorkoutFilterOptionsWithStatus(locale, requestGroupId)).data;
 }
 
-export async function getWorkoutFilterOptionsWithStatus(locale?: string): Promise<WorkoutLibraryResult<WorkoutFilterOptions>> {
-  const canonical = await getCanonicalWorkoutFilterOptionsWithStatus(locale);
+export async function getWorkoutFilterOptionsWithStatus(locale?: string, requestGroupId?: string): Promise<WorkoutLibraryResult<WorkoutFilterOptions>> {
+  const canonical = await getCanonicalWorkoutFilterOptionsWithStatus(locale, requestGroupId);
   const labels = (items: WorkoutFilterOption[]) => items.map((item) => item.label);
   return {
     data: Object.fromEntries((Object.keys(canonical.data) as Array<keyof CanonicalWorkoutFilterOptions>)
@@ -294,8 +300,8 @@ export async function getWorkoutFilterOptionsWithStatus(locale?: string): Promis
   };
 }
 
-export async function getCanonicalWorkoutFilterOptionsWithStatus(locale?: string): Promise<WorkoutLibraryResult<CanonicalWorkoutFilterOptions>> {
-  const filters = await getCatalogFilters({ locale });
+export async function getCanonicalWorkoutFilterOptionsWithStatus(locale?: string, requestGroupId?: string): Promise<WorkoutLibraryResult<CanonicalWorkoutFilterOptions>> {
+  const filters = await getCatalogFilters({ locale }, requestGroupId);
   const data = emptyCanonicalWorkoutFilterOptions();
   data.equipmentRequired = filters.data.equipment.map((item) => filterOption(item.slug, item.name)).filter((item): item is WorkoutFilterOption => Boolean(item));
   data.exerciseTypes = filters.data.activityTypes.map((item) => filterOption(item.slug, item.name)).filter((item): item is WorkoutFilterOption => Boolean(item));
@@ -306,11 +312,12 @@ export async function getCanonicalWorkoutFilterOptionsWithStatus(locale?: string
   };
 }
 
-async function loadWorkoutPage(query: string, filters: WorkoutFilters, startOffset: number, locale?: string) {
+async function loadWorkoutPage(query: string, filters: WorkoutFilters, startOffset: number, locale?: string, requestGroupId?: string) {
   const workouts: Workout[] = [];
   let filterOptions = emptyCanonicalWorkoutFilterOptions();
   let meta: CatalogSourceMetadata | null = null;
   let nextOffset: number | null = startOffset;
+  const catalogRequestGroupId = requestGroupId ?? createCatalogRequestGroupId();
   for (let requestIndex = 0; requestIndex < maxCatalogRequestsPerPage && nextOffset !== null; requestIndex += 1) {
     const requestOffset: number = nextOffset;
     const response = await searchCatalogActivities(catalogSearchParams(
@@ -319,7 +326,7 @@ async function loadWorkoutPage(query: string, filters: WorkoutFilters, startOffs
       catalogRequestPageSize,
       requestOffset,
       locale
-    ));
+    ), catalogRequestGroupId);
     meta = response.meta;
     filterOptions = mergeCanonicalWorkoutFilterOptions(filterOptions, activityFilterOptions(response.data));
     workouts.push(...response.data.filter((activity) => matchesWorkoutFilters(activity, filters)).map((activity) => activityToLibraryWorkout(activity, response.meta)));
@@ -335,30 +342,30 @@ async function loadWorkoutPage(query: string, filters: WorkoutFilters, startOffs
   };
 }
 
-export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page = 0, locale?: string) {
-  return (await loadWorkoutPage(query.trim(), filters, page * workoutPageSize, locale)).workouts;
+export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page = 0, locale?: string, requestGroupId?: string) {
+  return (await loadWorkoutPage(query.trim(), filters, page * workoutPageSize, locale, requestGroupId)).workouts;
 }
 
-export async function getWorkoutsWithStatus(query = "", filters: WorkoutFilters = {}, providerOffset = 0, locale?: string): Promise<WorkoutLibraryResult<Workout[]>> {
-  const result = await loadWorkoutPage(query.trim(), filters, Math.max(0, providerOffset), locale);
+export async function getWorkoutsWithStatus(query = "", filters: WorkoutFilters = {}, providerOffset = 0, locale?: string, requestGroupId?: string): Promise<WorkoutLibraryResult<Workout[]>> {
+  const result = await loadWorkoutPage(query.trim(), filters, Math.max(0, providerOffset), locale, requestGroupId);
   return { data: result.workouts, status: statusFromMeta(result.meta), pagination: result.pagination, filterOptions: result.filterOptions };
 }
 
-export async function getWorkout(id: string, locale?: string) {
-  const result = await getCatalogActivity(id, locale);
+export async function getWorkout(id: string, locale?: string, requestGroupId?: string) {
+  const result = await getCatalogActivity(id, locale, requestGroupId);
   return activityToLibraryWorkout(result.data, result.meta);
 }
 
-export async function getWorkoutAlternatives(id: string, limit = 6, locale?: string) {
-  const result = await getCatalogActivityAlternatives(id, { limit: Math.min(Math.max(limit, 1), 20), locale });
+export async function getWorkoutAlternatives(id: string, limit = 6, locale?: string, requestGroupId?: string) {
+  const result = await getCatalogActivityAlternatives(id, { limit: Math.min(Math.max(limit, 1), 20), locale }, requestGroupId);
   return {
     data: result.data.map((alternative) => alternativeToWorkout(alternative, result.meta)),
     status: statusFromMeta(result.meta)
   };
 }
 
-export async function getExerciseVideos(query = "", locale?: string) {
-  const result = await searchCatalogActivities({ ...(query.trim() ? { query: query.trim() } : {}), ...(locale ? { locale } : {}), limit: 100, offset: 0 });
+export async function getExerciseVideos(query = "", locale?: string, requestGroupId?: string) {
+  const result = await searchCatalogActivities({ ...(query.trim() ? { query: query.trim() } : {}), ...(locale ? { locale } : {}), limit: 100, offset: 0 }, requestGroupId);
   return result.data.map((activity): ExerciseVideo => ({
     id: activity.id,
     exercise_name: activity.name,
