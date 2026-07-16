@@ -49,6 +49,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   onAdd: (exercises: Workout[]) => void;
 }) {
   const { dir, locale, tr } = useTrainTranslation();
+  const libraryLoadFailedMessage = tr("libraryLoadFailed");
   const [query, setQuery] = useState("");
   const [muscle, setMuscle] = useState("");
   const [equipment, setEquipment] = useState("");
@@ -140,7 +141,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
           if (controller.signal.aborted || generationRef.current !== generation || isAbortError(loadError)) return;
           setResults([]);
           setPagination(emptyPagination);
-          setError(userSafeError(loadError, tr("libraryLoadFailed")));
+          setError(userSafeError(loadError, libraryLoadFailedMessage));
         })
         .finally(() => {
           if (!controller.signal.aborted && generationRef.current === generation) setLoading(false);
@@ -150,7 +151,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [activeFilters, locale, open, query, tr]);
+  }, [activeFilters, libraryLoadFailedMessage, locale, open, query]);
 
   useEffect(() => {
     if (open) return;
