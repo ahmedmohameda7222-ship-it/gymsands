@@ -9,13 +9,14 @@ import {
   getCatalogActivity,
   getCatalogActivityAlternatives,
   getCatalogFilters,
-  searchCatalogActivities
+  searchCatalogActivities,
+  type CatalogClientRequestOptions
 } from "@/services/activity-catalog/client";
 import type { ExerciseVideo, UserExerciseVideo, Workout } from "@/types";
 
-const workoutPageSize = 500;
-const catalogRequestPageSize = 100;
-const maxCatalogRequestsPerPage = 20;
+export const WORKOUT_LIBRARY_PAGE_SIZE = 60;
+
+type WorkoutLibraryRequestContext = string | CatalogClientRequestOptions | undefined;
 
 export type WorkoutFilters = {
   category?: string;
@@ -86,13 +87,13 @@ function includesSelected(actualValues: Array<string | null | undefined>, select
 function canonicalApiValues(...values: Array<string | string[] | undefined>) {
   return Array.from(new Set(values.flatMap((value) => Array.isArray(value) ? value : value ? [value] : [])
     .map((value) => value.trim())
-    .filter((value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value))));
+    .filter((value) => /^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(value))));
 }
 
 /**
- * The public catalog can pre-filter only a subset of the legacy browser
- * dimensions. Apply the complete browser contract to canonical records so a
- * visible selection can never become a no-op or broaden a result set.
+ * Retain a final bounded safety predicate at the client boundary. Correctness
+ * for the Exercise Library does not depend on scanning additional browser
+ * pages: the legacy provider applies these same dimensions before pagination.
  */
 export function matchesWorkoutFilters(activity: TrainingActivity, filters: WorkoutFilters) {
   const activityTypes = selectedValues(filters.exerciseTypes, filters.categories, filters.category);
@@ -110,9 +111,7 @@ export function matchesWorkoutFilters(activity: TrainingActivity, filters: Worko
     includesSelected(primaryMuscles, selectedValues(filters.primaryMuscles)) &&
     includesSelected([activity.movementPattern], selectedValues(filters.mechanics)) &&
     includesSelected(secondaryMuscles, selectedValues(filters.secondaryMuscles)) &&
-    // Canonical catalog records have no force-type field. A stale force-type
-    // URL selection must produce no matches instead of silently broadening.
-    !(filters.forceTypes?.length)
+    includesSelected([activity.forceType], selectedValues(filters.forceTypes))
   );
 }
 
@@ -124,7 +123,7 @@ function statusFromMeta(meta: CatalogSourceMetadata): WorkoutLibraryStatus {
 function activityToLibraryWorkout(activity: TrainingActivity, meta: CatalogSourceMetadata) {
   const workout = activityToWorkout(activity, meta);
   const muscleCategories = Array.from(new Set(activity.muscles.map((muscle) => muscle.bodyRegion?.trim()).filter(Boolean) as string[]));
-  return { ...workout, muscle_category: muscleCategories.join(", ") || null };
+  return { ...workout, muscle_category: muscleCategories.join(", ") || null, force_type: activity.forceType ?? workout.force_type };
 }
 
 function emptyFilterOptions(): WorkoutFilterOptions {
@@ -178,14 +177,19 @@ function activityFilterOptions(activities: TrainingActivity[]): CanonicalWorkout
   activities.forEach((activity) => {
     add("exerciseTypes", filterOption(activity.activityType?.slug, activity.activityType?.name));
     add("experienceLevels", filterOption(activity.difficulty?.toLowerCase(), activity.difficulty));
-    add("mechanics", filterOption(activity.movementPattern, activity.movementPattern));
+    add("mechanics", filterOption(activity.movementPattern ? normalizeCatalogSlug(activity.movementPattern) : null, activity.movementPattern));
+    add("forceTypes", filterOption(activity.forceType ? normalizeCatalogSlug(activity.forceType) : null, activity.forceType));
     activity.equipment.forEach((item) => add("equipmentRequired", filterOption(item.slug, item.name)));
     activity.muscles.forEach((muscle) => {
-      add("muscleCategories", filterOption(muscle.bodyRegion, muscle.bodyRegion));
+      add("muscleCategories", filterOption(muscle.bodyRegion ? normalizeCatalogSlug(muscle.bodyRegion) : null, muscle.bodyRegion));
       add(muscle.role === "primary" ? "primaryMuscles" : "secondaryMuscles", filterOption(muscle.slug, muscle.name));
     });
   });
   return mergeCanonicalWorkoutFilterOptions(emptyCanonicalWorkoutFilterOptions(), options);
+}
+
+function normalizeCatalogSlug(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
 export function resolveCanonicalWorkoutFilterValues(filters: WorkoutFilters, options: CanonicalWorkoutFilterOptions): WorkoutFilters {
@@ -257,41 +261,51 @@ export function mergeWorkoutFilterOptions(current: WorkoutFilterOptions, workout
   };
 }
 
+function singleCanonicalValue(...values: Array<string | string[] | undefined>) {
+  const selected = canonicalApiValues(...values);
+  return selected.length === 1 ? selected[0] : undefined;
+}
+
 function catalogSearchParams(query: string, filters: WorkoutFilters, limit: number, offset: number, locale?: string): ActivitySearchParams {
   const selectedEquipment = canonicalApiValues(filters.equipmentRequired, filters.equipment);
-  const selectedActivityTypes = canonicalApiValues(filters.exerciseTypes, filters.categories, filters.category);
-  const selectedDifficulties = canonicalApiValues(filters.experienceLevels, filters.difficulty);
-  // The upstream contract accepts multiple equipment values but only one
-  // activity type and difficulty. Multi-select values stay client-filtered so
-  // choosing a second value cannot silently exclude it upstream.
+  const activityType = singleCanonicalValue(filters.exerciseTypes, filters.categories, filters.category);
+  const difficulty = singleCanonicalValue(filters.experienceLevels, filters.difficulty);
   const equipment = selectedEquipment.length === 1 ? selectedEquipment : [];
-  const activityType = selectedActivityTypes.length === 1 ? selectedActivityTypes[0] : undefined;
-  const difficulty = selectedDifficulties.length === 1 ? selectedDifficulties[0] : undefined;
+  const primaryMuscle = singleCanonicalValue(filters.primaryMuscles);
+  const secondaryMuscle = singleCanonicalValue(filters.secondaryMuscles);
+  const muscleCategory = singleCanonicalValue(filters.muscleCategories);
+  const movementPattern = singleCanonicalValue(filters.mechanics);
+  const forceType = singleCanonicalValue(filters.forceTypes);
   return {
     ...(query ? { query } : {}),
     ...(equipment.length ? { equipment } : {}),
     ...(activityType ? { activityType } : {}),
     ...(["beginner", "intermediate", "advanced"].includes(difficulty ?? "") ? { difficulty: difficulty as ActivitySearchParams["difficulty"] } : {}),
+    ...(primaryMuscle ? { primaryMuscle } : {}),
+    ...(secondaryMuscle ? { secondaryMuscle } : {}),
+    ...(muscleCategory ? { muscleCategory } : {}),
+    ...(movementPattern ? { movementPattern } : {}),
+    ...(forceType ? { forceType } : {}),
     ...(locale ? { locale } : {}),
     limit,
     offset
   };
 }
 
-export async function getWorkoutCategories(locale?: string, requestGroupId?: string) {
-  const filters = await getCatalogFilters({ locale }, requestGroupId);
+export async function getWorkoutCategories(locale?: string, context?: WorkoutLibraryRequestContext) {
+  const filters = await getCatalogFilters({ locale }, context);
   return Array.from(new Set([
     ...filters.data.activityTypes.map((item) => item.name),
     ...filters.data.equipment.map((item) => item.name)
   ])).sort((left, right) => left.localeCompare(right));
 }
 
-export async function getWorkoutFilterOptions(locale?: string, requestGroupId?: string) {
-  return (await getWorkoutFilterOptionsWithStatus(locale, requestGroupId)).data;
+export async function getWorkoutFilterOptions(locale?: string, context?: WorkoutLibraryRequestContext) {
+  return (await getWorkoutFilterOptionsWithStatus(locale, context)).data;
 }
 
-export async function getWorkoutFilterOptionsWithStatus(locale?: string, requestGroupId?: string): Promise<WorkoutLibraryResult<WorkoutFilterOptions>> {
-  const canonical = await getCanonicalWorkoutFilterOptionsWithStatus(locale, requestGroupId);
+export async function getWorkoutFilterOptionsWithStatus(locale?: string, context?: WorkoutLibraryRequestContext): Promise<WorkoutLibraryResult<WorkoutFilterOptions>> {
+  const canonical = await getCanonicalWorkoutFilterOptionsWithStatus(locale, context);
   const labels = (items: WorkoutFilterOption[]) => items.map((item) => item.label);
   return {
     data: Object.fromEntries((Object.keys(canonical.data) as Array<keyof CanonicalWorkoutFilterOptions>)
@@ -300,72 +314,69 @@ export async function getWorkoutFilterOptionsWithStatus(locale?: string, request
   };
 }
 
-export async function getCanonicalWorkoutFilterOptionsWithStatus(locale?: string, requestGroupId?: string): Promise<WorkoutLibraryResult<CanonicalWorkoutFilterOptions>> {
-  const filters = await getCatalogFilters({ locale }, requestGroupId);
+export async function getCanonicalWorkoutFilterOptionsWithStatus(locale?: string, context?: WorkoutLibraryRequestContext): Promise<WorkoutLibraryResult<CanonicalWorkoutFilterOptions>> {
+  const filters = await getCatalogFilters({ locale }, context);
   const data = emptyCanonicalWorkoutFilterOptions();
-  data.equipmentRequired = filters.data.equipment.map((item) => filterOption(item.slug, item.name)).filter((item): item is WorkoutFilterOption => Boolean(item));
-  data.exerciseTypes = filters.data.activityTypes.map((item) => filterOption(item.slug, item.name)).filter((item): item is WorkoutFilterOption => Boolean(item));
+  const mapTaxonomy = (items = []) => items.map((item: { slug: string; name: string }) => filterOption(item.slug, item.name)).filter((item): item is WorkoutFilterOption => Boolean(item));
+  data.equipmentRequired = mapTaxonomy(filters.data.equipment);
+  data.exerciseTypes = mapTaxonomy(filters.data.activityTypes);
   data.experienceLevels = filters.data.difficulties.map((item) => filterOption(item.toLowerCase(), item)).filter((option): option is WorkoutFilterOption => Boolean(option));
+  data.primaryMuscles = mapTaxonomy(filters.data.primaryMuscles);
+  data.secondaryMuscles = mapTaxonomy(filters.data.secondaryMuscles);
+  data.muscleCategories = mapTaxonomy(filters.data.muscleCategories);
+  data.mechanics = mapTaxonomy(filters.data.movementPatterns);
+  data.forceTypes = mapTaxonomy(filters.data.forceTypes);
   return {
     data,
     status: statusFromMeta(filters.meta)
   };
 }
 
-async function loadWorkoutPage(query: string, filters: WorkoutFilters, startOffset: number, locale?: string, requestGroupId?: string) {
-  const workouts: Workout[] = [];
-  let filterOptions = emptyCanonicalWorkoutFilterOptions();
-  let meta: CatalogSourceMetadata | null = null;
-  let nextOffset: number | null = startOffset;
-  const catalogRequestGroupId = requestGroupId ?? createCatalogRequestGroupId();
-  for (let requestIndex = 0; requestIndex < maxCatalogRequestsPerPage && nextOffset !== null; requestIndex += 1) {
-    const requestOffset: number = nextOffset;
-    const response = await searchCatalogActivities(catalogSearchParams(
-      query,
-      filters,
-      catalogRequestPageSize,
-      requestOffset,
-      locale
-    ), catalogRequestGroupId);
-    meta = response.meta;
-    filterOptions = mergeCanonicalWorkoutFilterOptions(filterOptions, activityFilterOptions(response.data));
-    workouts.push(...response.data.filter((activity) => matchesWorkoutFilters(activity, filters)).map((activity) => activityToLibraryWorkout(activity, response.meta)));
-    const providerNextOffset = response.pagination.nextOffset ?? null;
-    nextOffset = providerNextOffset !== null && providerNextOffset > requestOffset ? providerNextOffset : null;
-    if (workouts.length >= workoutPageSize) break;
-  }
+async function loadWorkoutPage(query: string, filters: WorkoutFilters, startOffset: number, locale?: string, context?: WorkoutLibraryRequestContext) {
+  const requestOffset = Number.isSafeInteger(startOffset) && startOffset >= 0 ? startOffset : 0;
+  const requestContext = context ?? createCatalogRequestGroupId();
+  const response = await searchCatalogActivities(
+    catalogSearchParams(query, filters, WORKOUT_LIBRARY_PAGE_SIZE, requestOffset, locale),
+    requestContext
+  );
+  const filterOptions = activityFilterOptions(response.data);
+  const workouts = response.data
+    .filter((activity) => matchesWorkoutFilters(activity, filters))
+    .map((activity) => activityToLibraryWorkout(activity, response.meta));
+  const providerNextOffset = response.pagination.nextOffset ?? null;
+  const nextOffset = providerNextOffset !== null && providerNextOffset > requestOffset ? providerNextOffset : null;
   return {
     workouts,
     filterOptions,
-    meta: meta ?? { source: "legacy", degraded: true, catalogVersion: "legacy" },
+    meta: response.meta,
     pagination: { hasMore: nextOffset !== null, nextOffset }
   };
 }
 
-export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page = 0, locale?: string, requestGroupId?: string) {
-  return (await loadWorkoutPage(query.trim(), filters, page * workoutPageSize, locale, requestGroupId)).workouts;
+export async function getWorkouts(query = "", filters: WorkoutFilters = {}, page = 0, locale?: string, context?: WorkoutLibraryRequestContext) {
+  return (await loadWorkoutPage(query.trim(), filters, Math.max(0, page) * WORKOUT_LIBRARY_PAGE_SIZE, locale, context)).workouts;
 }
 
-export async function getWorkoutsWithStatus(query = "", filters: WorkoutFilters = {}, providerOffset = 0, locale?: string, requestGroupId?: string): Promise<WorkoutLibraryResult<Workout[]>> {
-  const result = await loadWorkoutPage(query.trim(), filters, Math.max(0, providerOffset), locale, requestGroupId);
+export async function getWorkoutsWithStatus(query = "", filters: WorkoutFilters = {}, providerOffset = 0, locale?: string, context?: WorkoutLibraryRequestContext): Promise<WorkoutLibraryResult<Workout[]>> {
+  const result = await loadWorkoutPage(query.trim(), filters, providerOffset, locale, context);
   return { data: result.workouts, status: statusFromMeta(result.meta), pagination: result.pagination, filterOptions: result.filterOptions };
 }
 
-export async function getWorkout(id: string, locale?: string, requestGroupId?: string) {
-  const result = await getCatalogActivity(id, locale, requestGroupId);
+export async function getWorkout(id: string, locale?: string, context?: WorkoutLibraryRequestContext) {
+  const result = await getCatalogActivity(id, locale, context);
   return activityToLibraryWorkout(result.data, result.meta);
 }
 
-export async function getWorkoutAlternatives(id: string, limit = 6, locale?: string, requestGroupId?: string) {
-  const result = await getCatalogActivityAlternatives(id, { limit: Math.min(Math.max(limit, 1), 20), locale }, requestGroupId);
+export async function getWorkoutAlternatives(id: string, limit = 6, locale?: string, context?: WorkoutLibraryRequestContext) {
+  const result = await getCatalogActivityAlternatives(id, { limit: Math.min(Math.max(limit, 1), 20), locale }, context);
   return {
     data: result.data.map((alternative) => alternativeToWorkout(alternative, result.meta)),
     status: statusFromMeta(result.meta)
   };
 }
 
-export async function getExerciseVideos(query = "", locale?: string, requestGroupId?: string) {
-  const result = await searchCatalogActivities({ ...(query.trim() ? { query: query.trim() } : {}), ...(locale ? { locale } : {}), limit: 100, offset: 0 }, requestGroupId);
+export async function getExerciseVideos(query = "", locale?: string, context?: WorkoutLibraryRequestContext) {
+  const result = await searchCatalogActivities({ ...(query.trim() ? { query: query.trim() } : {}), ...(locale ? { locale } : {}), limit: 100, offset: 0 }, context);
   return result.data.map((activity): ExerciseVideo => ({
     id: activity.id,
     exercise_name: activity.name,
@@ -378,7 +389,7 @@ export async function getExerciseVideos(query = "", locale?: string, requestGrou
     muscle_category: Array.from(new Set(activity.muscles.map((muscle) => muscle.bodyRegion?.trim()).filter(Boolean))).join(", ") || null,
     equipment_required: activity.equipment.map((item) => item.name).join(", ") || null,
     mechanics: activity.movementPattern,
-    force_type: null,
+    force_type: activity.forceType ?? null,
     experience_level: activity.difficulty,
     secondary_muscles: activity.muscles.filter((muscle) => muscle.role !== "primary").map((muscle) => muscle.name),
     is_global: true
