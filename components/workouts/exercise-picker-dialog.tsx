@@ -263,9 +263,12 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
         }}
         onCloseAutoFocus={(event) => {
           const returnTarget = returnFocusRef.current;
-          if (!returnTarget) return;
+          if (!returnTarget?.isConnected) return;
           event.preventDefault();
-          window.requestAnimationFrame(() => returnTarget.focus());
+          returnTarget.focus();
+          window.requestAnimationFrame(() => {
+            if (document.activeElement !== returnTarget) returnTarget.focus();
+          });
         }}
       >
         <DialogHeader className="mb-0 shrink-0 border-b px-5 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] pe-16 text-start lg:pt-4">
