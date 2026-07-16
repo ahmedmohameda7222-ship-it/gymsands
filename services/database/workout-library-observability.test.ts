@@ -73,8 +73,8 @@ describe("Exercise Library catalog request grouping", () => {
       .mockResolvedValueOnce(searchPage(0, 60))
       .mockResolvedValueOnce(searchPage(60, null));
 
-    const first = await getWorkoutsWithStatus("", {}, 0, "en", "exercise-picker-generation-2");
-    await getWorkoutsWithStatus("", {}, first.pagination?.nextOffset ?? 0, "en", "exercise-picker-generation-2");
+    await getWorkoutsWithStatus("", {}, 0, "en", "exercise-picker-generation-2");
+    await getWorkoutsWithStatus("", {}, 60, "en", "exercise-picker-generation-2");
 
     expect(mocks.searchActivities).toHaveBeenCalledTimes(2);
     expect(mocks.searchActivities.mock.calls.map((call) => call[0].offset)).toEqual([0, 60]);
