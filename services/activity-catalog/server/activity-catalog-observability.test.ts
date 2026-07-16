@@ -59,8 +59,8 @@ describe("Activity Catalog provider execution observability", () => {
   });
 
   it.each([
-    ["external", "external"],
-    ["external_with_legacy_fallback", "external"]
+    "external",
+    "external_with_legacy_fallback"
   ] as const)("records %s success through the external provider", async (mode) => {
     const observer = createActivityCatalogExecutionObserver();
     const legacySearch = vi.fn(async () => searchResult("legacy"));
