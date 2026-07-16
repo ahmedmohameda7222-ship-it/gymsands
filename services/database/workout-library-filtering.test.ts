@@ -23,27 +23,20 @@ import {
   getWorkoutFilterOptionsWithStatus,
   getWorkoutsWithStatus,
   matchesWorkoutRecord,
-  mergeWorkoutFilterOptions,
-  type WorkoutFilterOptions
+  WORKOUT_LIBRARY_PAGE_SIZE
 } from "./workout-library";
 
-const meta: CatalogSourceMetadata = { source: "external", degraded: false, catalogVersion: "v1" };
-const noOptions: WorkoutFilterOptions = {
-  muscleCategories: [], primaryMuscles: [], equipmentRequired: [], mechanics: [],
-  exerciseTypes: [], forceTypes: [], experienceLevels: [], secondaryMuscles: []
-};
+const meta: CatalogSourceMetadata = { source: "legacy", degraded: false, catalogVersion: "legacy" };
 
-function activity(
-  id: string,
-  overrides: Partial<TrainingActivity> = {}
-): TrainingActivity {
+function activity(id: string, overrides: Partial<TrainingActivity> = {}): TrainingActivity {
   return {
     id,
-    slug: `activity-${id}`,
+    slug: `activity_${id}`,
     name: `Activity ${id}`,
     instructions: [],
     difficulty: "beginner",
     movementPattern: "Horizontal Push",
+    forceType: "Push",
     version: 1,
     activityType: { id: `type-${id}`, slug: "strength", name: "Strength" },
     sports: [],
@@ -51,7 +44,7 @@ function activity(
     sessionPhases: [],
     equipment: [{ id: `equipment-${id}`, slug: "barbell", name: "Barbell", isRequired: true }],
     muscles: [
-      { id: `primary-${id}`, slug: "pectoralis-major", name: "Pectoralis Major", bodyRegion: "Upper Body", role: "primary" },
+      { id: `primary-${id}`, slug: "pectoralis_major", name: "Pectoralis Major", bodyRegion: "Upper Body", role: "primary" },
       { id: `secondary-${id}`, slug: "triceps", name: "Triceps", bodyRegion: "Upper Body", role: "secondary" }
     ],
     trainingGoals: [],
@@ -64,27 +57,85 @@ function activity(
 function searchResult(data: TrainingActivity[], offset = 0, nextOffset: number | null = null) {
   return {
     data,
-    pagination: { limit: 100, offset, returned: data.length, nextOffset },
+    pagination: { limit: WORKOUT_LIBRARY_PAGE_SIZE, offset, returned: data.length, nextOffset },
     meta
   };
 }
 
-describe("workout library compatibility filters", () => {
+describe("workout library bounded pagination", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("keeps multi-select activity types and difficulties client-side and returns only either selected value", async () => {
+  it("uses exactly one first-page request with offset zero and limit 60", async () => {
+    catalogClient.searchCatalogActivities.mockResolvedValue(searchResult(
+      Array.from({ length: 60 }, (_, index) => activity(String(index))),
+      0,
+      60
+    ));
+
+    const result = await getWorkoutsWithStatus("", {}, 0);
+
+    expect(result.data).toHaveLength(60);
+    expect(result.pagination).toEqual({ hasMore: true, nextOffset: 60 });
+    expect(catalogClient.searchCatalogActivities).toHaveBeenCalledTimes(1);
+    expect(catalogClient.searchCatalogActivities).toHaveBeenCalledWith(expect.objectContaining({
+      limit: 60,
+      offset: 0
+    }), "test-catalog-group");
+  });
+
+  it("uses the exact provider cursor for one additional request and rejects offset regression", async () => {
+    catalogClient.searchCatalogActivities
+      .mockResolvedValueOnce(searchResult(Array.from({ length: 60 }, (_, index) => activity(String(index))), 0, 60))
+      .mockResolvedValueOnce(searchResult([activity("tail")], 60, null))
+      .mockResolvedValueOnce(searchResult([activity("regressed")], 120, 120));
+
+    const first = await getWorkoutsWithStatus("", {}, 0);
+    const second = await getWorkoutsWithStatus("", {}, first.pagination?.nextOffset ?? 0);
+    const regressed = await getWorkoutsWithStatus("", {}, 120);
+
+    expect(second.data.map((workout) => workout.id)).toEqual(["tail"]);
+    expect(second.pagination).toEqual({ hasMore: false, nextOffset: null });
+    expect(regressed.pagination).toEqual({ hasMore: false, nextOffset: null });
+    expect(catalogClient.searchCatalogActivities).toHaveBeenNthCalledWith(2, expect.objectContaining({ offset: 60, limit: 60 }), "test-catalog-group");
+  });
+
+  it("forwards every single-value picker compatibility filter before pagination", async () => {
+    catalogClient.searchCatalogActivities.mockResolvedValue(searchResult([activity("matching")], 0, null));
+
+    const result = await getWorkoutsWithStatus("bench", {
+      exerciseTypes: ["strength"],
+      experienceLevels: ["beginner"],
+      equipmentRequired: ["barbell"],
+      primaryMuscles: ["pectoralis_major"],
+      secondaryMuscles: ["triceps"],
+      muscleCategories: ["upper_body"],
+      mechanics: ["horizontal_push"],
+      forceTypes: ["push"]
+    });
+
+    expect(result.data.map((workout) => workout.id)).toEqual(["matching"]);
+    expect(catalogClient.searchCatalogActivities).toHaveBeenCalledWith(expect.objectContaining({
+      query: "bench",
+      activityType: "strength",
+      difficulty: "beginner",
+      equipment: ["barbell"],
+      primaryMuscle: "pectoralis_major",
+      secondaryMuscle: "triceps",
+      muscleCategory: "upper_body",
+      movementPattern: "horizontal_push",
+      forceType: "push",
+      limit: 60,
+      offset: 0
+    }), "test-catalog-group");
+  });
+
+  it("keeps unsupported multi-select combinations bounded by the final safety predicate", async () => {
     catalogClient.searchCatalogActivities.mockResolvedValue(searchResult([
-      activity("strength", { difficulty: "beginner" }),
-      activity("cardio", {
-        difficulty: "advanced",
-        activityType: { id: "cardio", slug: "cardio", name: "Cardio" }
-      }),
-      activity("mobility", {
-        difficulty: "intermediate",
-        activityType: { id: "mobility", slug: "mobility", name: "Mobility" }
-      })
+      activity("strength"),
+      activity("cardio", { difficulty: "advanced", activityType: { id: "cardio", slug: "cardio", name: "Cardio" } }),
+      activity("mobility", { difficulty: "intermediate", activityType: { id: "mobility", slug: "mobility", name: "Mobility" } })
     ]));
 
     const result = await getWorkoutsWithStatus("", {
@@ -99,120 +150,60 @@ describe("workout library compatibility filters", () => {
     }), "test-catalog-group");
   });
 
-  it("applies equipment, movement, primary-muscle, and secondary-muscle selections without broadening", async () => {
-    catalogClient.searchCatalogActivities.mockResolvedValue(searchResult([
-      activity("matching"),
-      activity("wrong-movement", { movementPattern: "Vertical Pull" }),
-      activity("wrong-muscle", {
-        muscles: [{ id: "back", slug: "latissimus-dorsi", name: "Latissimus Dorsi", bodyRegion: "Upper Body", role: "primary" }]
-      }),
-      activity("wrong-equipment", {
-        equipment: [{ id: "machine", slug: "machine", name: "Machine", isRequired: true }]
-      })
-    ]));
-
-    const result = await getWorkoutsWithStatus("", {
-      equipmentRequired: ["Barbell", "Resistance Band"],
-      mechanics: ["Horizontal Push"],
-      muscleCategories: ["Upper Body"],
-      primaryMuscles: ["Pectoralis Major"],
-      secondaryMuscles: ["Triceps"]
-    });
-
-    expect(result.data.map((workout) => workout.id)).toEqual(["matching"]);
-    expect(catalogClient.searchCatalogActivities).toHaveBeenCalledWith(expect.not.objectContaining({
-      equipment: expect.anything()
-    }), "test-catalog-group");
-  });
-
-  it("keeps body-region muscle categories distinct from primary muscle names and slugs", async () => {
-    catalogClient.searchCatalogActivities.mockResolvedValue(searchResult([
-      activity("upper-body"),
-      activity("lower-body", {
-        muscles: [{ id: "quad", slug: "quadriceps", name: "Quadriceps", bodyRegion: "Lower Body", role: "primary" }]
-      })
-    ]));
-
-    const byRegion = await getWorkoutsWithStatus("", { muscleCategories: ["Upper Body"] });
-    expect(byRegion.data.map((workout) => workout.id)).toEqual(["upper-body"]);
-    expect(byRegion.data[0]?.muscle_category).toBe("Upper Body");
-    expect(mergeWorkoutFilterOptions(noOptions, byRegion.data)).toMatchObject({
-      muscleCategories: ["Upper Body"],
-      primaryMuscles: ["Pectoralis Major"],
-      mechanics: ["Horizontal Push"]
-    });
-
-    const byPrimarySlug = await getWorkoutsWithStatus("", { primaryMuscles: ["pectoralis-major"] });
-    expect(byPrimarySlug.data.map((workout) => workout.id)).toEqual(["upper-body"]);
-
-    const categoryMustNotMatchMuscleName = await getWorkoutsWithStatus("", { muscleCategories: ["Pectoralis Major"] });
-    expect(categoryMustNotMatchMuscleName.data).toEqual([]);
-  });
-
-  it("does not render unsupported filter groups with no available or selected values", () => {
-    const browser = readFileSync(resolve(process.cwd(), "components/workouts/workout-browser.tsx"), "utf8");
-    expect(browser).toContain("if (!availableValues.length) return null;");
-    expect(browser).not.toContain("No options yet.");
-  });
-
-  it("forwards the selected catalog locale through filter, search, detail, and alternatives calls", async () => {
+  it("loads complete canonical metadata including legacy compatibility dimensions", async () => {
     catalogClient.getCatalogFilters.mockResolvedValue({
       data: {
-        sports: [], activityTypes: [], sessionTypes: [], sessionPhases: [],
-        equipment: [], trainingGoals: [], difficulties: []
+        sports: [], sessionTypes: [], sessionPhases: [], trainingGoals: [],
+        activityTypes: [{ id: "strength", slug: "strength", name: "Strength" }],
+        equipment: [{ id: "barbell", slug: "barbell", name: "Barbell" }],
+        difficulties: ["beginner"],
+        primaryMuscles: [{ id: "chest", slug: "pectoralis_major", name: "Pectoralis Major" }],
+        secondaryMuscles: [{ id: "triceps", slug: "triceps", name: "Triceps" }],
+        muscleCategories: [{ id: "upper", slug: "upper_body", name: "Upper Body" }],
+        movementPatterns: [{ id: "push", slug: "horizontal_push", name: "Horizontal Push" }],
+        forceTypes: [{ id: "force", slug: "push", name: "Push" }]
       },
+      meta
+    });
+
+    const result = await getCanonicalWorkoutFilterOptionsWithStatus("en");
+
+    expect(result.data).toMatchObject({
+      exerciseTypes: [{ value: "strength", label: "Strength", aliases: [] }],
+      equipmentRequired: [{ value: "barbell", label: "Barbell", aliases: [] }],
+      experienceLevels: [{ value: "beginner", label: "beginner", aliases: [] }],
+      primaryMuscles: [{ value: "pectoralis_major", label: "Pectoralis Major", aliases: [] }],
+      secondaryMuscles: [{ value: "triceps", label: "Triceps", aliases: [] }],
+      muscleCategories: [{ value: "upper_body", label: "Upper Body", aliases: [] }],
+      mechanics: [{ value: "horizontal_push", label: "Horizontal Push", aliases: [] }],
+      forceTypes: [{ value: "push", label: "Push", aliases: [] }]
+    });
+    expect(catalogClient.getCatalogFilters).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards locale and cancellation context through catalog calls", async () => {
+    const controller = new AbortController();
+    const context = { requestGroupId: "group-localized", signal: controller.signal };
+    catalogClient.getCatalogFilters.mockResolvedValue({
+      data: { sports: [], activityTypes: [], sessionTypes: [], sessionPhases: [], equipment: [], trainingGoals: [], difficulties: [] },
       meta
     });
     catalogClient.searchCatalogActivities.mockResolvedValue(searchResult([activity("localized")]));
     catalogClient.getCatalogActivity.mockResolvedValue({ data: activity("localized"), meta });
     catalogClient.getCatalogActivityAlternatives.mockResolvedValue({ data: [], meta });
 
-    await getWorkoutFilterOptionsWithStatus("de-DE");
-    await getWorkoutsWithStatus("druecken", {}, 0, "de-DE");
-    await getWorkout("localized", "de-DE");
-    await getWorkoutAlternatives("localized", 6, "de-DE");
+    await getWorkoutFilterOptionsWithStatus("de-DE", context);
+    await getWorkoutsWithStatus("druecken", {}, 0, "de-DE", context);
+    await getWorkout("localized", "de-DE", context);
+    await getWorkoutAlternatives("localized", 6, "de-DE", context);
 
-    expect(catalogClient.getCatalogFilters).toHaveBeenCalledWith({ locale: "de-DE" }, undefined);
-    expect(catalogClient.searchCatalogActivities).toHaveBeenCalledWith(expect.objectContaining({ locale: "de-DE" }), "test-catalog-group");
-    expect(catalogClient.getCatalogActivity).toHaveBeenCalledWith("localized", "de-DE", undefined);
-    expect(catalogClient.getCatalogActivityAlternatives).toHaveBeenCalledWith("localized", { limit: 6, locale: "de-DE" }, undefined);
+    expect(catalogClient.getCatalogFilters).toHaveBeenCalledWith({ locale: "de-DE" }, context);
+    expect(catalogClient.searchCatalogActivities).toHaveBeenCalledWith(expect.objectContaining({ locale: "de-DE" }), context);
+    expect(catalogClient.getCatalogActivity).toHaveBeenCalledWith("localized", "de-DE", context);
+    expect(catalogClient.getCatalogActivityAlternatives).toHaveBeenCalledWith("localized", { limit: 6, locale: "de-DE" }, context);
   });
 
-  it("keeps localized taxonomy labels separate from canonical API slug values", async () => {
-    catalogClient.getCatalogFilters.mockResolvedValue({
-      data: {
-        sports: [], sessionTypes: [], sessionPhases: [], trainingGoals: [],
-        activityTypes: [{ id: "strength-id", slug: "strength", name: "قوة" }],
-        equipment: [{ id: "dumbbell-id", slug: "dumbbell", name: "دُمبل" }],
-        difficulties: ["beginner"]
-      },
-      meta
-    });
-    const localizedActivity = activity("arabic", {
-      name: "تَمْرِين الصَّدْر",
-      activityType: { id: "strength-id", slug: "strength", name: "قوة" },
-      equipment: [{ id: "dumbbell-id", slug: "dumbbell", name: "دُمبل", isRequired: true }]
-    });
-    catalogClient.searchCatalogActivities.mockResolvedValue(searchResult([localizedActivity]));
-
-    const options = await getCanonicalWorkoutFilterOptionsWithStatus("ar");
-    expect(options.data.equipmentRequired).toEqual([{ value: "dumbbell", label: "دُمبل", aliases: [] }]);
-    expect(options.data.exerciseTypes).toEqual([{ value: "strength", label: "قوة", aliases: [] }]);
-
-    await getWorkoutsWithStatus("", { equipmentRequired: ["dumbbell"], exerciseTypes: ["strength"] }, 0, "ar");
-    expect(catalogClient.searchCatalogActivities).toHaveBeenLastCalledWith(expect.objectContaining({
-      equipment: ["dumbbell"], activityType: "strength", locale: "ar"
-    }), "test-catalog-group");
-
-    const legacyLocalizedSelection = await getWorkoutsWithStatus("", { equipmentRequired: ["دُمبل"] }, 0, "ar");
-    expect(catalogClient.searchCatalogActivities).toHaveBeenLastCalledWith(
-      expect.not.objectContaining({ equipment: expect.anything() }),
-      "test-catalog-group"
-    );
-    expect(legacyLocalizedSelection.data.map((workout) => workout.id)).toEqual(["arabic"]);
-  });
-
-  it("matches Arabic custom exercise queries and canonical filter selections across diacritics", () => {
+  it("matches Arabic custom exercise queries and canonical selections across diacritics", () => {
     const custom: Workout = {
       id: "custom-arabic",
       name: "تَمْرِين الصَّدْر",
@@ -237,24 +228,16 @@ describe("workout library compatibility filters", () => {
     expect(matchesWorkoutRecord(custom, "تمرين الظهر", {}, options)).toBe(false);
   });
 
-  it("returns the provider cursor and hasMore truthfully across compatibility-filtered pages", async () => {
-    catalogClient.searchCatalogActivities.mockImplementation(async ({ offset = 0 }: { offset?: number }) => {
-      if (offset >= 500) {
-        return searchResult(Array.from({ length: 20 }, (_, index) => activity(`tail-${index}`)), offset, null);
-      }
-      return searchResult(
-        Array.from({ length: 100 }, (_, index) => activity(`${offset + index}`)),
-        offset,
-        offset + 100
-      );
-    });
+  it("locks the source contract to explicit pagination and active cancellation", () => {
+    const library = readFileSync(resolve(process.cwd(), "services/database/workout-library.ts"), "utf8");
+    const picker = readFileSync(resolve(process.cwd(), "components/workouts/exercise-picker-dialog.tsx"), "utf8");
 
-    const first = await getWorkoutsWithStatus("", {}, 0);
-    expect(first.data).toHaveLength(500);
-    expect(first.pagination).toEqual({ hasMore: true, nextOffset: 500 });
-
-    const second = await getWorkoutsWithStatus("", {}, first.pagination?.nextOffset ?? 0);
-    expect(second.data).toHaveLength(20);
-    expect(second.pagination).toEqual({ hasMore: false, nextOffset: null });
+    expect(library).toContain("WORKOUT_LIBRARY_PAGE_SIZE = 60");
+    expect(library).not.toContain("maxCatalogRequestsPerPage");
+    expect(library).not.toContain("catalogRequestPageSize");
+    expect(picker).not.toContain("slice(0, 60)");
+    expect(picker).toContain("AbortController");
+    expect(picker).toContain("data-picker-load-more");
+    expect(picker).toContain("pagination.nextOffset");
   });
 });
