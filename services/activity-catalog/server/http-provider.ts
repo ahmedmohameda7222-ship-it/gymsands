@@ -40,7 +40,7 @@ export class HttpActivityCatalogProvider implements ActivityCatalogProvider {
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: HttpProviderOptions) {
-    if (!options.apiKey.trim()) throw new CatalogError("catalog_not_configured");
+    if (!options.apiKey.trim()) throw new CatalogError("catalog_not_configured", { failureStage: "provider_request" });
     try {
       const baseUrl = new URL(options.baseUrl);
       const localHttp = baseUrl.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(baseUrl.hostname);
@@ -49,7 +49,7 @@ export class HttpActivityCatalogProvider implements ActivityCatalogProvider {
       }
       this.baseUrl = baseUrl;
     } catch (error) {
-      throw new CatalogError("catalog_not_configured", { cause: error });
+      throw new CatalogError("catalog_not_configured", { cause: error, failureStage: "provider_request" });
     }
     this.apiKey = options.apiKey;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -124,18 +124,24 @@ export class HttpActivityCatalogProvider implements ActivityCatalogProvider {
       });
       if (!response.ok) throw statusError(response.status);
       const declaredLength = Number(response.headers.get("content-length") ?? 0);
-      if (declaredLength > MAX_RESPONSE_BYTES) throw new CatalogError("catalog_invalid_response");
+      if (declaredLength > MAX_RESPONSE_BYTES) {
+        throw new CatalogError("catalog_invalid_response", { failureStage: "response_validation" });
+      }
       const text = await response.text();
-      if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) throw new CatalogError("catalog_invalid_response");
+      if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) {
+        throw new CatalogError("catalog_invalid_response", { failureStage: "response_validation" });
+      }
       try {
         return JSON.parse(text);
       } catch (error) {
-        throw new CatalogError("catalog_invalid_response", { cause: error });
+        throw new CatalogError("catalog_invalid_response", { cause: error, failureStage: "response_parse" });
       }
     } catch (error) {
       if (error instanceof CatalogError) throw error;
-      if (controller.signal.aborted) throw new CatalogError("catalog_timeout", { allowLegacyFallback: true, cause: error });
-      throw new CatalogError("catalog_network_error", { allowLegacyFallback: true, cause: error });
+      if (controller.signal.aborted) {
+        throw new CatalogError("catalog_timeout", { allowLegacyFallback: true, cause: error, failureStage: "provider_request" });
+      }
+      throw new CatalogError("catalog_network_error", { allowLegacyFallback: true, cause: error, failureStage: "provider_request" });
     } finally {
       clearTimeout(timeout);
     }
@@ -149,10 +155,11 @@ function localeQuery(options: CatalogRequestOptions) {
 }
 
 function statusError(status: number) {
-  if (status === 401) return new CatalogError("catalog_unauthorized");
-  if (status === 403) return new CatalogError("catalog_forbidden");
-  if (status === 404) return new CatalogError("catalog_not_found", { allowLegacyFallback: true });
-  if (status === 429) return new CatalogError("catalog_rate_limited", { allowLegacyFallback: true });
-  if (status >= 500) return new CatalogError("catalog_upstream_error", { allowLegacyFallback: true });
-  return new CatalogError("catalog_bad_request");
+  const options = { failureStage: "response_status" as const };
+  if (status === 401) return new CatalogError("catalog_unauthorized", options);
+  if (status === 403) return new CatalogError("catalog_forbidden", options);
+  if (status === 404) return new CatalogError("catalog_not_found", { ...options, allowLegacyFallback: true });
+  if (status === 429) return new CatalogError("catalog_rate_limited", { ...options, allowLegacyFallback: true });
+  if (status >= 500) return new CatalogError("catalog_upstream_error", { ...options, allowLegacyFallback: true });
+  return new CatalogError("catalog_bad_request", options);
 }
