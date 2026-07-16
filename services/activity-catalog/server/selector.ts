@@ -119,9 +119,9 @@ export function createActivityCatalogProvider(
     observer?: ActivityCatalogExecutionObserver;
   } = {}
 ) {
-  const mode = options.mode ?? parseCatalogProviderMode(serverEnv.plaivraActivityCatalogMode);
-  options.observer?.providerRequested(mode);
   try {
+    const mode = options.mode ?? parseCatalogProviderMode(serverEnv.plaivraActivityCatalogMode);
+    options.observer?.providerRequested(mode);
     const legacy = options.legacy ?? new LegacyActivityCatalogProvider(supabase);
     let selected: ActivityCatalogProvider;
     if (mode === "legacy") {
