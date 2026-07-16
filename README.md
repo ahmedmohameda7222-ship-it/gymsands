@@ -130,11 +130,12 @@ Verified production state on 2026-07-16:
 
 - Supabase migration history contains 33 applied migrations through `20260715190000_train_phase2a_program_architecture`.
 - The authenticated nutrition override ACL remains exactly `SELECT`, `INSERT`, `UPDATE`, and `DELETE`; `TRUNCATE`, `TRIGGER`, `REFERENCES`, and `MAINTAIN` are absent.
-- Current repository counts are `pendingCount=0`, `schemaAppliedUntrackedCount=0`, and `unresolvedCount=0`.
-- `historyRepair.state` is `reconciled`.
+- Current repository counts are `pendingCount=1`, `schemaAppliedUntrackedCount=0`, and `unresolvedCount=1`.
+- `20260716215602_muscle_intelligence_phase1_foundation.sql` is pending safe-database verification and has not been applied to production.
+- `historyRepair.state` is `pending` while that forward migration remains unapplied.
 - Train Phase 2A was applied from reviewed commit `5851486009f99dc9e7629b8b01f43cd690a3a04b` after exact Git blob and physical backfill verification.
 - The latest verified production migration is `20260715190000`.
-- Migration-history reconciliation is complete; application release readiness remains subject to all remaining exact-commit quality, compatibility, deployment, and smoke gates.
+- Previously applied migration history remains reconciled through `20260715190000`; release readiness is false while the pending Muscle Intelligence migration remains unresolved.
 
 Do not replay any applied migration. Run `npm run migration:ledger:check` to validate repository classification, production identities, counts, and documentation consistency.
 

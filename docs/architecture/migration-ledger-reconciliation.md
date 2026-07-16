@@ -6,20 +6,29 @@
 
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 
-**Reconciliation status:** **Reconciled / release gate eligible**
+**Reconciliation status:** **Pending forward migration / not release gate eligible**
 
 This document records verified production migration history. It is not authorization to replay migration SQL, change compatibility markers, deploy, promote, or merge. Applied migration files and production identities must never be renamed, rewritten, deleted, or replayed.
 
 ## Current state
 
 - Supabase migration history contains 33 applied migrations.
-- `pendingCount = 0`
+- `pendingCount = 1`
 - `schemaAppliedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
+- `unresolvedCount = 1`
+- `historyRepair.state = pending`
 - The latest verified production migration is `20260715190000_train_phase2a_program_architecture`.
-- Repository and production migration identities are aligned.
-- Migration-ledger reconciliation no longer blocks release preflight.
+- Repository and production migration identities are aligned through the latest applied migration.
+- `20260716215602_muscle_intelligence_phase1_foundation.sql` is pending safe local/development database verification and is not applied to production.
+- The pending migration blocks migration-ledger release readiness.
+
+## Pending forward migration
+
+```text
+20260716215602_muscle_intelligence_phase1_foundation.sql
+```
+
+This migration is intentionally classified as `pending`. It must not be recorded as applied until it has passed the disposable database verification and its exact production identity has been confirmed. Do not replay any previously applied migration.
 
 ## Train Phase 2A production application
 
@@ -128,7 +137,7 @@ The ledger-level `releaseReady` value requires:
 - `unresolvedCount === 0`
 - all resolved production identities are valid.
 
-Those migration-specific conditions are now satisfied. Application release readiness remains independently fail-closed on exact artifact identity, schema compatibility, database migration-marker compatibility, retained quality evidence, deployment identity, and production smoke verification.
+Those migration-specific conditions are not currently satisfied because `20260716215602_muscle_intelligence_phase1_foundation.sql` is pending. Application release readiness remains fail-closed on that database gate plus exact artifact identity, schema compatibility, retained quality evidence, deployment identity, and production smoke verification.
 
 ## Read-only preflight
 

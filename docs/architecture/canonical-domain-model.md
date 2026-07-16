@@ -122,6 +122,14 @@ Target concepts:
 - user media override;
 - immutable plan-exercise snapshot.
 
+Muscle Intelligence Phase 1 adds mapping authority without creating another exercise catalog:
+
+- `exercise_provider_links` stores explicit, non-authoritative provider aliases for `exercises.id`;
+- `exercise_muscle_mapping_sets` and `exercise_muscle_mapping_entries` store immutable published global mapping versions;
+- `user_custom_exercise_mapping_sets` and `user_custom_exercise_mapping_entries` store owner-scoped custom mapping versions.
+
+Mappings are separate from exercise definitions. The 24-muscle taxonomy is authoritative in the versioned TypeScript registry, while the database stores constrained canonical ID strings. Phase 1 does not change Train runtime behavior, plan/session roots, writers, or visible UI.
+
 `workouts` is a legacy name for exercise catalog records and must not cause new code to treat one exercise as a full workout.
 
 Do not seed the same 600 exercises into multiple active catalogs.
