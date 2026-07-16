@@ -10,6 +10,12 @@ export type CatalogErrorCode =
   | "catalog_upstream_error"
   | "catalog_invalid_response";
 
+export type CatalogFailureStage =
+  | "provider_request"
+  | "response_status"
+  | "response_parse"
+  | "response_validation";
+
 const statusByCode: Record<CatalogErrorCode, number> = {
   catalog_bad_request: 400,
   catalog_not_configured: 503,
@@ -40,18 +46,24 @@ export class CatalogError extends Error {
   readonly code: CatalogErrorCode;
   readonly status: number;
   readonly allowLegacyFallback: boolean;
+  readonly failureStage?: CatalogFailureStage;
 
-  constructor(code: CatalogErrorCode, options: { allowLegacyFallback?: boolean; cause?: unknown } = {}) {
+  constructor(code: CatalogErrorCode, options: {
+    allowLegacyFallback?: boolean;
+    cause?: unknown;
+    failureStage?: CatalogFailureStage;
+  } = {}) {
     super(safeMessageByCode[code], { cause: options.cause });
     this.name = "CatalogError";
     this.code = code;
     this.status = statusByCode[code];
     this.allowLegacyFallback = Boolean(options.allowLegacyFallback);
+    this.failureStage = options.failureStage;
   }
 }
 
 export function asCatalogError(error: unknown) {
   return error instanceof CatalogError
     ? error
-    : new CatalogError("catalog_upstream_error", { cause: error });
+    : new CatalogError("catalog_upstream_error", { cause: error, failureStage: "provider_request" });
 }
