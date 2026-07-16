@@ -176,7 +176,7 @@ function activityFilterOptions(activities: TrainingActivity[]): CanonicalWorkout
   const add = (key: keyof CanonicalWorkoutFilterOptions, option: WorkoutFilterOption | null) => { if (option) options[key].push(option); };
   activities.forEach((activity) => {
     add("exerciseTypes", filterOption(activity.activityType?.slug, activity.activityType?.name));
-    add("experienceLevels", filterOption(activity.difficulty?.toLowerCase(), activity.difficulty));
+    add("experienceLevels", filterOption(activity.difficulty ? normalizeCatalogSlug(activity.difficulty) : null, activity.difficulty));
     add("mechanics", filterOption(activity.movementPattern ? normalizeCatalogSlug(activity.movementPattern) : null, activity.movementPattern));
     add("forceTypes", filterOption(activity.forceType ? normalizeCatalogSlug(activity.forceType) : null, activity.forceType));
     activity.equipment.forEach((item) => add("equipmentRequired", filterOption(item.slug, item.name)));
@@ -261,31 +261,30 @@ export function mergeWorkoutFilterOptions(current: WorkoutFilterOptions, workout
   };
 }
 
-function singleCanonicalValue(...values: Array<string | string[] | undefined>) {
-  const selected = canonicalApiValues(...values);
-  return selected.length === 1 ? selected[0] : undefined;
-}
-
 function catalogSearchParams(query: string, filters: WorkoutFilters, limit: number, offset: number, locale?: string): ActivitySearchParams {
-  const selectedEquipment = canonicalApiValues(filters.equipmentRequired, filters.equipment);
-  const activityType = singleCanonicalValue(filters.exerciseTypes, filters.categories, filters.category);
-  const difficulty = singleCanonicalValue(filters.experienceLevels, filters.difficulty);
-  const equipment = selectedEquipment.length === 1 ? selectedEquipment : [];
-  const primaryMuscle = singleCanonicalValue(filters.primaryMuscles);
-  const secondaryMuscle = singleCanonicalValue(filters.secondaryMuscles);
-  const muscleCategory = singleCanonicalValue(filters.muscleCategories);
-  const movementPattern = singleCanonicalValue(filters.mechanics);
-  const forceType = singleCanonicalValue(filters.forceTypes);
+  const activityTypes = canonicalApiValues(filters.exerciseTypes, filters.categories, filters.category);
+  const difficulties = canonicalApiValues(filters.experienceLevels, filters.difficulty);
+  const equipment = canonicalApiValues(filters.equipmentRequired, filters.equipment);
+  const primaryMuscles = canonicalApiValues(filters.primaryMuscles);
+  const secondaryMuscles = canonicalApiValues(filters.secondaryMuscles);
+  const muscleCategories = canonicalApiValues(filters.muscleCategories);
+  const movementPatterns = canonicalApiValues(filters.mechanics);
+  const forceTypes = canonicalApiValues(filters.forceTypes);
+  const singleDifficulty = difficulties.length === 1 && ["beginner", "intermediate", "advanced"].includes(difficulties[0])
+    ? difficulties[0] as ActivitySearchParams["difficulty"]
+    : undefined;
   return {
     ...(query ? { query } : {}),
     ...(equipment.length ? { equipment } : {}),
-    ...(activityType ? { activityType } : {}),
-    ...(["beginner", "intermediate", "advanced"].includes(difficulty ?? "") ? { difficulty: difficulty as ActivitySearchParams["difficulty"] } : {}),
-    ...(primaryMuscle ? { primaryMuscle } : {}),
-    ...(secondaryMuscle ? { secondaryMuscle } : {}),
-    ...(muscleCategory ? { muscleCategory } : {}),
-    ...(movementPattern ? { movementPattern } : {}),
-    ...(forceType ? { forceType } : {}),
+    ...(activityTypes.length === 1 ? { activityType: activityTypes[0] } : {}),
+    ...(activityTypes.length > 1 ? { activityTypes } : {}),
+    ...(singleDifficulty ? { difficulty: singleDifficulty } : {}),
+    ...(!singleDifficulty && difficulties.length ? { difficulties } : {}),
+    ...(primaryMuscles.length ? { primaryMuscles } : {}),
+    ...(secondaryMuscles.length ? { secondaryMuscles } : {}),
+    ...(muscleCategories.length ? { muscleCategories } : {}),
+    ...(movementPatterns.length ? { movementPatterns } : {}),
+    ...(forceTypes.length ? { forceTypes } : {}),
     ...(locale ? { locale } : {}),
     limit,
     offset
@@ -322,7 +321,9 @@ export async function getCanonicalWorkoutFilterOptionsWithStatus(locale?: string
     .filter((item): item is WorkoutFilterOption => Boolean(item));
   data.equipmentRequired = mapTaxonomy(filters.data.equipment);
   data.exerciseTypes = mapTaxonomy(filters.data.activityTypes);
-  data.experienceLevels = filters.data.difficulties.map((item) => filterOption(item.toLowerCase(), item)).filter((option): option is WorkoutFilterOption => Boolean(option));
+  data.experienceLevels = filters.data.difficulties
+    .map((item) => filterOption(normalizeCatalogSlug(item), item))
+    .filter((option): option is WorkoutFilterOption => Boolean(option));
   data.primaryMuscles = mapTaxonomy(filters.data.primaryMuscles);
   data.secondaryMuscles = mapTaxonomy(filters.data.secondaryMuscles);
   data.muscleCategories = mapTaxonomy(filters.data.muscleCategories);
