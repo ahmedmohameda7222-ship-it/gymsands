@@ -231,8 +231,10 @@ describe("ExercisePickerDialog request generations", () => {
 
     const input = container.querySelector<HTMLInputElement>('input[placeholder="searchExercises"]');
     expect(input).not.toBeNull();
+    const setNativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    expect(setNativeValue).toBeDefined();
     await act(async () => {
-      input!.value = "new";
+      setNativeValue!.call(input, "new");
       input!.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await advanceDebounce();
