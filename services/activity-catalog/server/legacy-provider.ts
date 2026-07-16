@@ -44,6 +44,15 @@ function stableSlug(value: string) {
   return slug || "legacy_activity";
 }
 
+function normalizeSearchText(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
 function taxonomy(name: string | null, prefix: string): TaxonomyItem | null {
   if (!name) return null;
   const slug = stableSlug(name);
@@ -117,10 +126,20 @@ function videoRow(video: ExerciseVideo | LegacyRow): TrainingActivity | null {
   });
 }
 
+function matchesOne(actual: string | null | undefined, selected: string[] | undefined) {
+  return !selected?.length || Boolean(actual && selected.includes(actual));
+}
+
+function matchesAny(actual: Array<string | null | undefined>, selected: string[] | undefined) {
+  if (!selected?.length) return true;
+  const actualSet = new Set(actual.filter((value): value is string => Boolean(value)));
+  return selected.some((value) => actualSet.has(value));
+}
+
 function matches(activity: TrainingActivity, params: ActivitySearchParams) {
-  const normalized = params.query?.trim().toLowerCase();
+  const normalized = normalizeSearchText(params.query);
   if (normalized) {
-    const haystack = [
+    const haystack = normalizeSearchText([
       activity.name,
       activity.shortDescription,
       activity.activityType?.name,
@@ -128,21 +147,23 @@ function matches(activity: TrainingActivity, params: ActivitySearchParams) {
       activity.forceType,
       ...activity.equipment.map((item) => item.name),
       ...activity.muscles.flatMap((item) => [item.name, item.bodyRegion])
-    ].filter(Boolean).join(" ").toLowerCase();
+    ].filter(Boolean).join(" "));
     if (!haystack.includes(normalized)) return false;
   }
   if (params.activityType && activity.activityType?.slug !== params.activityType) return false;
+  if (!matchesOne(activity.activityType?.slug, params.activityTypes)) return false;
   if (params.difficulty && activity.difficulty?.toLowerCase() !== params.difficulty) return false;
-  if (params.equipment?.length && !params.equipment.some((slug) => activity.equipment.some((item) => item.slug === slug))) return false;
+  if (!matchesOne(activity.difficulty ? stableSlug(activity.difficulty) : null, params.difficulties)) return false;
+  if (!matchesAny(activity.equipment.map((item) => item.slug), params.equipment)) return false;
   if (params.sport && !activity.sports.some((item) => item.slug === params.sport)) return false;
   if (params.sessionType && !activity.sessionTypes.some((item) => item.slug === params.sessionType)) return false;
   if (params.phase && !activity.sessionPhases.some((item) => item.slug === params.phase)) return false;
   if (params.goal && !activity.trainingGoals.some((item) => item.slug === params.goal)) return false;
-  if (params.primaryMuscle && !activity.muscles.some((item) => item.role === "primary" && item.slug === params.primaryMuscle)) return false;
-  if (params.secondaryMuscle && !activity.muscles.some((item) => item.role !== "primary" && item.slug === params.secondaryMuscle)) return false;
-  if (params.muscleCategory && !activity.muscles.some((item) => item.bodyRegion && stableSlug(item.bodyRegion) === params.muscleCategory)) return false;
-  if (params.movementPattern && (!activity.movementPattern || stableSlug(activity.movementPattern) !== params.movementPattern)) return false;
-  if (params.forceType && (!activity.forceType || stableSlug(activity.forceType) !== params.forceType)) return false;
+  if (!matchesAny(activity.muscles.filter((item) => item.role === "primary").map((item) => item.slug), params.primaryMuscles)) return false;
+  if (!matchesAny(activity.muscles.filter((item) => item.role !== "primary").map((item) => item.slug), params.secondaryMuscles)) return false;
+  if (!matchesAny(activity.muscles.map((item) => item.bodyRegion ? stableSlug(item.bodyRegion) : null), params.muscleCategories)) return false;
+  if (!matchesOne(activity.movementPattern ? stableSlug(activity.movementPattern) : null, params.movementPatterns)) return false;
+  if (!matchesOne(activity.forceType ? stableSlug(activity.forceType) : null, params.forceTypes)) return false;
   return true;
 }
 
