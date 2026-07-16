@@ -82,12 +82,25 @@ describe("deterministic resistance-set muscle load", () => {
     }
   });
 
-  it("returns identical normalized output after item and entry shuffling", () => {
-    const input = { mode: "planned" as const, period: { kind: "week" as const }, items: [
-      { itemId: "b", mapping: { ...fly, entries: [...fly.entries].reverse() }, workload: { model: "resistance_sets_v1" as const, qualifyingSets: 2 } },
-      { itemId: "a", mapping: bench, workload: { model: "resistance_sets_v1" as const, qualifyingSets: 3 } }
-    ] };
-    expect(calculateMuscleLoad(input)).toEqual(calculateMuscleLoad({ ...input, items: [...input.items].reverse() }));
+  it("returns byte-for-byte deterministic output after period, item, and mapping-entry reordering", () => {
+    const resultA = calculateMuscleLoad({
+      mode: "planned",
+      period: { kind: "long_period", weekCount: 4 },
+      items: [
+        { itemId: "a", mapping: bench, workload: { model: "resistance_sets_v1", qualifyingSets: 3 } },
+        { itemId: "b", mapping: { ...fly, entries: [...fly.entries].reverse() }, workload: { model: "resistance_sets_v1", qualifyingSets: 2 } }
+      ]
+    });
+    const resultB = calculateMuscleLoad({
+      mode: "planned",
+      period: { weekCount: 4, kind: "long_period" },
+      items: [
+        { itemId: "b", mapping: fly, workload: { model: "resistance_sets_v1", qualifyingSets: 2 } },
+        { itemId: "a", mapping: { ...bench, entries: [...bench.entries].reverse() }, workload: { model: "resistance_sets_v1", qualifyingSets: 3 } }
+      ]
+    });
+
+    expect(JSON.stringify(resultA)).toBe(JSON.stringify(resultB));
   });
 
   it("uses weekly average for long-period level while preserving total raw score", () => {

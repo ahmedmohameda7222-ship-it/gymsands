@@ -5,6 +5,7 @@ const migrationPath = "supabase/migrations/20260716215602_muscle_intelligence_ph
 const verificationPath = "supabase/verification/muscle-intelligence-phase1.sql";
 const migration = readFileSync(migrationPath, "utf8").toLowerCase();
 const verification = readFileSync(verificationPath, "utf8").toLowerCase();
+const qualityWorkflow = readFileSync(".github/workflows/quality.yml", "utf8");
 const privacyExport = readFileSync("lib/privacy/data-export.ts", "utf8");
 const adr = readFileSync("docs/architecture/decisions/0005-muscle-intelligence-taxonomy-and-mapping-authority.md", "utf8");
 const canonical = readFileSync("docs/architecture/canonical-domain-model.md", "utf8");
@@ -94,6 +95,13 @@ describe("Muscle Intelligence Phase 1 migration contract", () => {
     expect(verification).toContain("member global write unexpectedly succeeded");
     expect(verification).toContain("user a read user b custom mapping");
     expect(verification).toContain("published global mapping entry mutation unexpectedly succeeded");
+  });
+
+  it("executes the disposable Phase 1 verification in the authoritative Quality database preflight", () => {
+    expect(qualityWorkflow).toContain(
+      'PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/muscle-intelligence-phase1.sql'
+    );
+    expect(verification.trimEnd().endsWith("rollback;")).toBe(true);
   });
 
   it("exports only owner-scoped custom mappings and documents the no-runtime-cutover boundary", () => {

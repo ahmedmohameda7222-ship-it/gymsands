@@ -69,6 +69,17 @@ function normalizeScore(value: number): number {
   return Number(value.toFixed(6));
 }
 
+function normalizePeriod(period: CalculateMuscleLoadInput["period"]): CalculateMuscleLoadInput["period"] {
+  switch (period.kind) {
+    case "session":
+      return { kind: "session" };
+    case "week":
+      return { kind: "week" };
+    case "long_period":
+      return { kind: "long_period", weekCount: period.weekCount };
+  }
+}
+
 function completenessFor(total: number, included: number, unmapped: number, unsupported: number): MuscleAnalysisCompleteness {
   if (total === 0 || included === total) return "complete";
   if (included > 0) return "partial";
@@ -93,7 +104,8 @@ export function getExerciseMuscleFocus(mapping: MuscleMappingReference) {
 }
 
 export function calculateMuscleLoad(input: CalculateMuscleLoadInput): MuscleLoadAnalysisResult {
-  validatePeriod(input.period);
+  const period = normalizePeriod(input.period);
+  validatePeriod(period);
   const rawScores = new Map<CanonicalMuscleId, number>(CANONICAL_MUSCLES.map((muscle) => [muscle.id, 0]));
   const contributionBreakdown: MuscleContributionBreakdown[] = [];
   const mappingVersions = new Map<string, MuscleMappingVersionUsed>();
@@ -143,17 +155,17 @@ export function calculateMuscleLoad(input: CalculateMuscleLoadInput): MuscleLoad
 
   const muscles = CANONICAL_MUSCLES.map<MuscleLoadScore>((muscle) => {
     const rawScore = rawScores.get(muscle.id) ?? 0;
-    const levelInputScore = input.period.kind === "long_period"
-      ? normalizeScore(rawScore / input.period.weekCount)
+    const levelInputScore = period.kind === "long_period"
+      ? normalizeScore(rawScore / period.weekCount)
       : rawScore;
-    const level = input.period.kind === "session"
+    const level = period.kind === "session"
       ? getSessionMuscleLoadLevel(levelInputScore)
       : getWeeklyMuscleLoadLevel(levelInputScore);
     return {
       muscleId: muscle.id,
       rawScore,
       levelInputScore,
-      ...(input.period.kind === "long_period" ? { averageWeeklyRawScore: levelInputScore } : {}),
+      ...(period.kind === "long_period" ? { averageWeeklyRawScore: levelInputScore } : {}),
       level
     };
   });
@@ -169,7 +181,7 @@ export function calculateMuscleLoad(input: CalculateMuscleLoadInput): MuscleLoad
     engineVersion: MUSCLE_CALCULATION_ENGINE_VERSION,
     thresholdVersion: MUSCLE_THRESHOLD_PROFILE_VERSION,
     mode: input.mode,
-    period: input.period,
+    period,
     completeness: completenessFor(input.items.length, includedItemCount, unmappedItemCount, unsupportedItemCount),
     muscles,
     contributionBreakdown,
