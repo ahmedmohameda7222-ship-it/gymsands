@@ -138,7 +138,7 @@ describe("legacy Activity Catalog performance contract", () => {
     const fixture = createSupabase({ workouts: { data: rows, error: null } });
     const provider = new LegacyActivityCatalogProvider(fixture.supabase);
 
-    const result = await provider.searchActivities({ primaryMuscle: "chest", limit: 60, offset: 0 });
+    const result = await provider.searchActivities({ primaryMuscles: ["chest"], limit: 60, offset: 0 });
 
     expect(result.data.activities.map((activity) => activity.id)).toEqual(["late-match"]);
     expect(result.data.pagination).toEqual({ limit: 60, offset: 0, returned: 1, nextOffset: null });
@@ -170,16 +170,49 @@ describe("legacy Activity Catalog performance contract", () => {
       activityType: "strength",
       difficulty: "beginner",
       equipment: ["barbell"],
-      primaryMuscle: "chest",
-      secondaryMuscle: "triceps",
-      muscleCategory: "upper_body",
-      movementPattern: "horizontal_push",
-      forceType: "push",
+      primaryMuscles: ["chest"],
+      secondaryMuscles: ["triceps"],
+      muscleCategories: ["upper_body"],
+      movementPatterns: ["horizontal_push"],
+      forceTypes: ["push"],
       limit: 60,
       offset: 0
     });
 
     expect(result.data.activities.map((activity) => activity.id)).toEqual(["matching"]);
+  });
+
+  it("supports OR semantics within bounded multi-select dimensions before slicing", async () => {
+    const fixture = createSupabase({
+      workouts: {
+        data: [
+          workout("strength"),
+          workout("cardio", { category: "Cardio", difficulty: "Advanced", target_muscle: "Quadriceps" }),
+          workout("mobility", { category: "Mobility", difficulty: "Intermediate", target_muscle: "Hamstrings" })
+        ],
+        error: null
+      }
+    });
+    const provider = new LegacyActivityCatalogProvider(fixture.supabase);
+
+    const result = await provider.searchActivities({
+      activityTypes: ["strength", "cardio"],
+      difficulties: ["beginner", "advanced"],
+      primaryMuscles: ["chest", "quadriceps"],
+      limit: 60,
+      offset: 0
+    });
+
+    expect(result.data.activities.map((activity) => activity.id)).toEqual(["strength", "cardio"]);
+  });
+
+  it("normalizes free-text search across case and diacritics", async () => {
+    const fixture = createSupabase({ workouts: { data: [workout("arabic", { name: "تَمْرِين الصَّدْر" })], error: null } });
+    const provider = new LegacyActivityCatalogProvider(fixture.supabase);
+
+    const result = await provider.searchActivities({ query: "تمرين الصدر", limit: 60, offset: 0 });
+
+    expect(result.data.activities.map((activity) => activity.id)).toEqual(["arabic"]);
   });
 
   it("returns complete, deduplicated, deterministically sorted filter metadata", async () => {
