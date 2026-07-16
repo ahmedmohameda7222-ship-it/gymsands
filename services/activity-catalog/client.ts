@@ -2,6 +2,11 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { env } from "@/lib/env";
+import {
+  CATALOG_REQUEST_GROUP_ID_HEADER,
+  createOperationalCorrelationId,
+  isValidOperationalCorrelationId
+} from "@/lib/observability/correlation-id";
 import type {
   ActivityAlternative,
   ActivityCatalogFilters,
@@ -17,7 +22,15 @@ type SearchResponse = {
   meta: CatalogResult<unknown>["meta"];
 };
 
-async function catalogRequest<T>(path: string): Promise<T> {
+export function createCatalogRequestGroupId() {
+  return createOperationalCorrelationId();
+}
+
+function resolveCatalogRequestGroupId(value?: string) {
+  return isValidOperationalCorrelationId(value) ? value!.trim() : createCatalogRequestGroupId();
+}
+
+async function catalogRequest<T>(path: string, requestGroupId?: string): Promise<T> {
   const session = supabase ? await supabase.auth.getSession() : null;
   // The non-production mock-auth fixture uses an inert marker so rendered QA
   // can intercept the internal request without creating a real Supabase token.
@@ -28,7 +41,11 @@ async function catalogRequest<T>(path: string): Promise<T> {
     method: "GET",
     cache: "no-store",
     credentials: "same-origin",
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" }
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+      [CATALOG_REQUEST_GROUP_ID_HEADER]: resolveCatalogRequestGroupId(requestGroupId)
+    }
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "The exercise catalog could not load.");
@@ -45,18 +62,18 @@ function queryString(values: Record<string, string | number | string[] | undefin
   return serialized ? `?${serialized}` : "";
 }
 
-export function getCatalogFilters(options: { sport?: string; locale?: string } = {}) {
-  return catalogRequest<CatalogResult<ActivityCatalogFilters>>(`/api/activity-catalog/filters${queryString(options)}`);
+export function getCatalogFilters(options: { sport?: string; locale?: string } = {}, requestGroupId?: string) {
+  return catalogRequest<CatalogResult<ActivityCatalogFilters>>(`/api/activity-catalog/filters${queryString(options)}`, requestGroupId);
 }
 
-export function searchCatalogActivities(params: ActivitySearchParams) {
-  return catalogRequest<SearchResponse>(`/api/activity-catalog/activities${queryString(params)}`);
+export function searchCatalogActivities(params: ActivitySearchParams, requestGroupId?: string) {
+  return catalogRequest<SearchResponse>(`/api/activity-catalog/activities${queryString(params)}`, requestGroupId);
 }
 
-export function getCatalogActivity(identifier: string, locale?: string) {
-  return catalogRequest<CatalogResult<TrainingActivity>>(`/api/activity-catalog/activities/${encodeURIComponent(identifier)}${queryString({ locale })}`);
+export function getCatalogActivity(identifier: string, locale?: string, requestGroupId?: string) {
+  return catalogRequest<CatalogResult<TrainingActivity>>(`/api/activity-catalog/activities/${encodeURIComponent(identifier)}${queryString({ locale })}`, requestGroupId);
 }
 
-export function getCatalogActivityAlternatives(identifier: string, options: { limit?: number; locale?: string } = {}) {
-  return catalogRequest<CatalogResult<ActivityAlternative[]>>(`/api/activity-catalog/activities/${encodeURIComponent(identifier)}/alternatives${queryString(options)}`);
+export function getCatalogActivityAlternatives(identifier: string, options: { limit?: number; locale?: string } = {}, requestGroupId?: string) {
+  return catalogRequest<CatalogResult<ActivityAlternative[]>>(`/api/activity-catalog/activities/${encodeURIComponent(identifier)}/alternatives${queryString(options)}`, requestGroupId);
 }

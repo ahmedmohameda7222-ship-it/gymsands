@@ -32,7 +32,7 @@ describe("approved Train Phase 1 UI contracts", () => {
     }
   });
 
-  it("keeps picker selection, duplicates, whole-card keyboard selection, and focus return", () => {
+  it("keeps picker selection, duplicates, whole-card keyboard selection, focus return, and request grouping", () => {
     const picker = source("components/workouts/exercise-picker-dialog.tsx");
     expect(picker).not.toContain('role="option"');
     expect(picker).toContain("aria-pressed={isSelected}");
@@ -45,10 +45,11 @@ describe("approved Train Phase 1 UI contracts", () => {
     expect(picker).toContain("hasAdvancedOptions");
     expect(picker).toContain("key={chip.id}");
     expect(picker).toContain('if (exercise.catalog_slug) return `catalog:${exercise.catalog_slug}`');
-    expect(picker).toContain("getCanonicalWorkoutFilterOptionsWithStatus(locale)");
+    expect(picker).toContain("createCatalogRequestGroupId()");
+    expect(picker).toContain("getCanonicalWorkoutFilterOptionsWithStatus(locale, initialCatalogRequestGroupId)");
     expect(picker).toContain("mergeCanonicalWorkoutFilterOptions(options, result.filterOptions!)");
     expect(picker).toContain("optionLabel(muscleOptions, muscle)");
-    expect(picker).toContain("}, 0, locale)");
+    expect(picker).toContain("}, 0, locale, requestGroupId)");
   });
 
   it("localizes the day-focus session while preserving stable set and replacement identifiers", () => {

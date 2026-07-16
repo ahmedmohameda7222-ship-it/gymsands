@@ -5,6 +5,7 @@ import type { CatalogSourceMetadata, TrainingActivity } from "@/lib/activity-cat
 import type { Workout } from "@/types";
 
 const catalogClient = vi.hoisted(() => ({
+  createCatalogRequestGroupId: vi.fn(() => "test-catalog-group"),
   getCatalogActivity: vi.fn(),
   getCatalogActivityAlternatives: vi.fn(),
   getCatalogFilters: vi.fn(),
@@ -95,7 +96,7 @@ describe("workout library compatibility filters", () => {
     expect(catalogClient.searchCatalogActivities).toHaveBeenCalledWith(expect.not.objectContaining({
       activityType: expect.anything(),
       difficulty: expect.anything()
-    }));
+    }), "test-catalog-group");
   });
 
   it("applies equipment, movement, primary-muscle, and secondary-muscle selections without broadening", async () => {
@@ -121,7 +122,7 @@ describe("workout library compatibility filters", () => {
     expect(result.data.map((workout) => workout.id)).toEqual(["matching"]);
     expect(catalogClient.searchCatalogActivities).toHaveBeenCalledWith(expect.not.objectContaining({
       equipment: expect.anything()
-    }));
+    }), "test-catalog-group");
   });
 
   it("keeps body-region muscle categories distinct from primary muscle names and slugs", async () => {
@@ -171,10 +172,10 @@ describe("workout library compatibility filters", () => {
     await getWorkout("localized", "de-DE");
     await getWorkoutAlternatives("localized", 6, "de-DE");
 
-    expect(catalogClient.getCatalogFilters).toHaveBeenCalledWith({ locale: "de-DE" });
-    expect(catalogClient.searchCatalogActivities).toHaveBeenCalledWith(expect.objectContaining({ locale: "de-DE" }));
-    expect(catalogClient.getCatalogActivity).toHaveBeenCalledWith("localized", "de-DE");
-    expect(catalogClient.getCatalogActivityAlternatives).toHaveBeenCalledWith("localized", { limit: 6, locale: "de-DE" });
+    expect(catalogClient.getCatalogFilters).toHaveBeenCalledWith({ locale: "de-DE" }, undefined);
+    expect(catalogClient.searchCatalogActivities).toHaveBeenCalledWith(expect.objectContaining({ locale: "de-DE" }), "test-catalog-group");
+    expect(catalogClient.getCatalogActivity).toHaveBeenCalledWith("localized", "de-DE", undefined);
+    expect(catalogClient.getCatalogActivityAlternatives).toHaveBeenCalledWith("localized", { limit: 6, locale: "de-DE" }, undefined);
   });
 
   it("keeps localized taxonomy labels separate from canonical API slug values", async () => {
@@ -201,10 +202,13 @@ describe("workout library compatibility filters", () => {
     await getWorkoutsWithStatus("", { equipmentRequired: ["dumbbell"], exerciseTypes: ["strength"] }, 0, "ar");
     expect(catalogClient.searchCatalogActivities).toHaveBeenLastCalledWith(expect.objectContaining({
       equipment: ["dumbbell"], activityType: "strength", locale: "ar"
-    }));
+    }), "test-catalog-group");
 
     const legacyLocalizedSelection = await getWorkoutsWithStatus("", { equipmentRequired: ["دُمبل"] }, 0, "ar");
-    expect(catalogClient.searchCatalogActivities).toHaveBeenLastCalledWith(expect.not.objectContaining({ equipment: expect.anything() }));
+    expect(catalogClient.searchCatalogActivities).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ equipment: expect.anything() }),
+      "test-catalog-group"
+    );
     expect(legacyLocalizedSelection.data.map((workout) => workout.id)).toEqual(["arabic"]);
   });
 
