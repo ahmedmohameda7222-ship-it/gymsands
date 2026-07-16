@@ -33,6 +33,10 @@ function externalMeta(locale?: string): CatalogSourceMetadata {
   return { source: "external", degraded: false, catalogVersion: "v1", ...(locale ? { locale } : {}) };
 }
 
+function hasUnsupportedCompatibilityFilter(params: ActivitySearchParams) {
+  return Boolean(params.primaryMuscle || params.secondaryMuscle || params.muscleCategory || params.movementPattern || params.forceType);
+}
+
 export class HttpActivityCatalogProvider implements ActivityCatalogProvider {
   private readonly baseUrl: URL;
   private readonly apiKey: string;
@@ -80,6 +84,11 @@ export class HttpActivityCatalogProvider implements ActivityCatalogProvider {
   }
 
   async searchActivities(params: ActivitySearchParams) {
+    // Compatibility-only filters are an internal Plaivra legacy extension. The
+    // external public API must never receive or silently ignore them.
+    if (hasUnsupportedCompatibilityFilter(params)) {
+      throw new CatalogError("catalog_bad_request", { failureStage: "provider_request" });
+    }
     const query = localeQuery(params);
     for (const key of ["query", "sport", "sessionType", "phase", "activityType", "difficulty", "goal"] as const) {
       if (params[key]) query.set(key, String(params[key]));
@@ -127,12 +136,12 @@ export class HttpActivityCatalogProvider implements ActivityCatalogProvider {
       if (declaredLength > MAX_RESPONSE_BYTES) {
         throw new CatalogError("catalog_invalid_response", { failureStage: "response_validation" });
       }
-      const text = await response.text();
-      if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) {
+      const body = await response.text();
+      if (new TextEncoder().encode(body).byteLength > MAX_RESPONSE_BYTES) {
         throw new CatalogError("catalog_invalid_response", { failureStage: "response_validation" });
       }
       try {
-        return JSON.parse(text);
+        return JSON.parse(body);
       } catch (error) {
         throw new CatalogError("catalog_invalid_response", { cause: error, failureStage: "response_parse" });
       }
