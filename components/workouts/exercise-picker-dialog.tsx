@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/select-field";
 import { CardGridSkeleton } from "@/components/ui/state-views";
 import { userSafeError } from "@/lib/error-formatting";
 import { useTrainTranslation } from "@/lib/i18n/train";
+import { createCatalogRequestGroupId } from "@/services/activity-catalog/client";
 import {
   emptyCanonicalWorkoutFilterOptions,
   getCanonicalWorkoutFilterOptionsWithStatus,
@@ -57,22 +58,30 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const initialActivityRequestGroupRef = useRef<string | null>(null);
+  const initialCatalogRequestGroupId = useMemo(() => open ? createCatalogRequestGroupId() : null, [locale, open]);
   const existing = useMemo(() => new Set(existingKeys), [existingKeys]);
 
   useEffect(() => {
-    if (!open) return;
+    initialActivityRequestGroupRef.current = initialCatalogRequestGroupId;
+  }, [initialCatalogRequestGroupId]);
+
+  useEffect(() => {
+    if (!open || !initialCatalogRequestGroupId) return;
     let current = true;
-    void getCanonicalWorkoutFilterOptionsWithStatus(locale).then((result) => {
+    void getCanonicalWorkoutFilterOptionsWithStatus(locale, initialCatalogRequestGroupId).then((result) => {
       if (current) setFilterOptions(result.data);
     }).catch(() => {
       // Result-derived options remain available if filter metadata fails.
     });
     return () => { current = false; };
-  }, [locale, open]);
+  }, [initialCatalogRequestGroupId, locale, open]);
 
   useEffect(() => {
     if (!open) return;
     let current = true;
+    const requestGroupId = initialActivityRequestGroupRef.current ?? createCatalogRequestGroupId();
+    initialActivityRequestGroupRef.current = null;
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError("");
@@ -85,7 +94,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
         forceTypes: forceType ? [forceType] : [],
         exerciseTypes: exerciseType ? [exerciseType] : [],
         mechanics: mechanics ? [mechanics] : []
-      }, 0, locale)
+      }, 0, locale, requestGroupId)
         .then((result) => {
           if (!current) return;
           setResults(result.data.slice(0, 60));
