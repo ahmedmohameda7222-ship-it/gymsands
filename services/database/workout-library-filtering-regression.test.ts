@@ -102,7 +102,7 @@ describe("workout library filtering regressions", () => {
     const result = await getWorkoutsWithStatus("", { equipmentRequired: ["dumbbell"], primaryMuscles: ["chest"] }, 0, "ar");
     expect(result.data.map((workout) => workout.id)).toEqual(["arabic"]);
     expect(catalogClient.searchCatalogActivities).toHaveBeenCalledWith(expect.objectContaining({
-      equipment: ["dumbbell"], primaryMuscle: "chest", locale: "ar"
+      equipment: ["dumbbell"], primaryMuscles: ["chest"], locale: "ar"
     }), "regression-group");
   });
 
