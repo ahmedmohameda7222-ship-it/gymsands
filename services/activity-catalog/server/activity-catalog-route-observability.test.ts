@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   rateLimit: vi.fn(),
@@ -85,9 +85,14 @@ function observedProvider(options: {
 describe("Activity Catalog route completion observability", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("PLAIVRA_ACTIVITY_CATALOG_MODE", "legacy");
     mocks.rateLimit.mockReturnValue(null);
     mocks.requireEligibleUser.mockResolvedValue({ user: { id: "member-id" }, accessToken: "member-token", supabase: {} });
     mocks.createProvider.mockImplementation(observedProvider());
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("reuses valid correlation IDs and emits one privacy-safe activities completion event", async () => {
@@ -95,7 +100,9 @@ describe("Activity Catalog route completion observability", () => {
       "/api/activity-catalog/activities?query=private-squat-search&sport=strength&equipment=barbell&difficulty=intermediate&limit=100&offset=100",
       {
         [REQUEST_ID_HEADER]: "request-accepted-1",
-        [CATALOG_REQUEST_GROUP_ID_HEADER]: "catalog-load-accepted-1"
+        [CATALOG_REQUEST_GROUP_ID_HEADER]: "catalog-load-accepted-1",
+        Cookie: "session=private-cookie",
+        "x-api-key": "private-api-key"
       }
     ));
 
@@ -127,7 +134,10 @@ describe("Activity Catalog route completion observability", () => {
     const logged = JSON.stringify(mocks.logEvent.mock.calls[0][0]);
     expect(logged).not.toContain("private-squat-search");
     expect(logged).not.toContain("member-token");
+    expect(logged).not.toContain("private-cookie");
+    expect(logged).not.toContain("private-api-key");
     expect(logged).not.toContain("Authorization");
+    expect(logged).not.toContain("activity-0");
     expect(mocks.logEvent.mock.calls[0][0].total_duration_ms).toBeGreaterThanOrEqual(0);
     expect(mocks.logEvent.mock.calls[0][0].response_bytes).toBeGreaterThan(0);
   });
@@ -144,6 +154,20 @@ describe("Activity Catalog route completion observability", () => {
     expect(isValidOperationalCorrelationId(selectedGroupId)).toBe(true);
     expect(selectedRequestId).not.toBe("x".repeat(129));
     expect(selectedGroupId).not.toBe("group with spaces");
+    expect(mocks.logEvent).toHaveBeenCalledOnce();
+    expect(mocks.logEvent.mock.calls[0][0]).toMatchObject({
+      request_id: selectedRequestId,
+      catalog_request_group_id: selectedGroupId
+    });
+  });
+
+  it("generates valid correlation IDs when headers are missing", async () => {
+    const response = await getActivities(request("/api/activity-catalog/activities"));
+    const selectedRequestId = response.headers.get(REQUEST_ID_HEADER);
+    const selectedGroupId = response.headers.get(CATALOG_REQUEST_GROUP_ID_HEADER);
+
+    expect(isValidOperationalCorrelationId(selectedRequestId)).toBe(true);
+    expect(isValidOperationalCorrelationId(selectedGroupId)).toBe(true);
     expect(mocks.logEvent).toHaveBeenCalledOnce();
     expect(mocks.logEvent.mock.calls[0][0]).toMatchObject({
       request_id: selectedRequestId,
@@ -203,6 +227,7 @@ describe("Activity Catalog route completion observability", () => {
     expect(mocks.createProvider).not.toHaveBeenCalled();
     expect(mocks.logEvent).toHaveBeenCalledOnce();
     expect(mocks.logEvent).toHaveBeenCalledWith(expect.objectContaining({
+      provider_requested: "legacy",
       provider_used: "none",
       fallback_occurred: false,
       outcome: "invalid_request",
