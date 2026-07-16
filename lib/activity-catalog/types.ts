@@ -130,12 +130,14 @@ export type ActivitySearchParams = CatalogRequestOptions & {
   difficulty?: "beginner" | "intermediate" | "advanced";
   equipment?: string[];
   goal?: string;
-  /** Internal Plaivra compatibility filters. The external API contract does not support them. */
-  primaryMuscle?: string;
-  secondaryMuscle?: string;
-  muscleCategory?: string;
-  movementPattern?: string;
-  forceType?: string;
+  /** Internal Plaivra compatibility filters. The external API contract does not support these lists. */
+  activityTypes?: string[];
+  difficulties?: string[];
+  primaryMuscles?: string[];
+  secondaryMuscles?: string[];
+  muscleCategories?: string[];
+  movementPatterns?: string[];
+  forceTypes?: string[];
   limit?: number;
   offset?: number;
 };
