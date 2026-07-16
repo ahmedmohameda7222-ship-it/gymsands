@@ -10,7 +10,9 @@ const canonical = readFileSync("docs/architecture/canonical-domain-model.md", "u
 const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
 const migrationLedger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
   historyRepair: { state: string };
-  entries: Array<{ localFile: string; state: string }>;
+  pendingCount: number;
+  unresolvedCount: number;
+  entries: Array<{ localFile: string; state: string; productionVersion?: string; productionName?: string }>;
 };
 
 const requiredTables = [
@@ -94,9 +96,16 @@ describe("Train Phase 2A architecture contract", () => {
     expect(workflow).toContain("-f supabase/verification/train-phase2a-program-architecture.sql");
   });
 
-  it("keeps the unapplied Phase 2A migration classified in the Train domain", () => {
-    expect(migrationLedger.entries.find((entry) => entry.localFile === "20260715190000_train_phase2a_program_architecture.sql")?.state).toBe("pending");
-    expect(migrationLedger.historyRepair.state).toBe("pending");
+  it("records the verified Phase 2A production identity and reconciles migration history", () => {
+    const phase2aEntry = migrationLedger.entries.find(
+      (entry) => entry.localFile === "20260715190000_train_phase2a_program_architecture.sql"
+    );
+    expect(phase2aEntry?.state).toBe("applied");
+    expect(phase2aEntry?.productionVersion).toBe("20260715190000");
+    expect(phase2aEntry?.productionName).toBe("train_phase2a_program_architecture");
+    expect(migrationLedger.historyRepair.state).toBe("reconciled");
+    expect(migrationLedger.pendingCount).toBe(0);
+    expect(migrationLedger.unresolvedCount).toBe(0);
   });
 
   it("documents the target model without claiming runtime cutover", () => {
