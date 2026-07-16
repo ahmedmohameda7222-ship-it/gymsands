@@ -1,4 +1,5 @@
 import {
+  MuscleCalculationInputError,
   validateMuscleMappingEntries,
   type CalculateMuscleLoadInput,
   type MuscleAnalysisCompleteness,
@@ -69,6 +70,12 @@ function normalizeScore(value: number): number {
   return Number(value.toFixed(6));
 }
 
+function compareStableText(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
 function normalizePeriod(period: CalculateMuscleLoadInput["period"]): CalculateMuscleLoadInput["period"] {
   switch (period.kind) {
     case "session":
@@ -94,6 +101,16 @@ function validatePeriod(period: CalculateMuscleLoadInput["period"]): void {
   }
 }
 
+function validateUniqueItemIds(input: CalculateMuscleLoadInput): void {
+  const itemIds = new Set<string>();
+  for (const item of input.items) {
+    if (itemIds.has(item.itemId)) {
+      throw new MuscleCalculationInputError(`Duplicate work item ID: ${JSON.stringify(item.itemId)}.`);
+    }
+    itemIds.add(item.itemId);
+  }
+}
+
 export function getExerciseMuscleFocus(mapping: MuscleMappingReference) {
   return validateMuscleMappingEntries(mapping.entries, { requirePrimary: true }).map((entry) => ({
     muscleId: entry.muscleId,
@@ -106,6 +123,7 @@ export function getExerciseMuscleFocus(mapping: MuscleMappingReference) {
 export function calculateMuscleLoad(input: CalculateMuscleLoadInput): MuscleLoadAnalysisResult {
   const period = normalizePeriod(input.period);
   validatePeriod(period);
+  validateUniqueItemIds(input);
   const rawScores = new Map<CanonicalMuscleId, number>(CANONICAL_MUSCLES.map((muscle) => [muscle.id, 0]));
   const contributionBreakdown: MuscleContributionBreakdown[] = [];
   const mappingVersions = new Map<string, MuscleMappingVersionUsed>();
@@ -113,7 +131,7 @@ export function calculateMuscleLoad(input: CalculateMuscleLoadInput): MuscleLoad
   let unmappedItemCount = 0;
   let unsupportedItemCount = 0;
 
-  for (const item of [...input.items].sort((left, right) => left.itemId.localeCompare(right.itemId))) {
+  for (const item of [...input.items].sort((left, right) => compareStableText(left.itemId, right.itemId))) {
     if (!item.mapping) {
       unmappedItemCount += 1;
       continue;
@@ -185,7 +203,7 @@ export function calculateMuscleLoad(input: CalculateMuscleLoadInput): MuscleLoad
     completeness: completenessFor(input.items.length, includedItemCount, unmappedItemCount, unsupportedItemCount),
     muscles,
     contributionBreakdown,
-    mappingVersionsUsed: [...mappingVersions.values()].sort((left, right) => left.mappingSetId.localeCompare(right.mappingSetId)),
+    mappingVersionsUsed: [...mappingVersions.values()].sort((left, right) => compareStableText(left.mappingSetId, right.mappingSetId)),
     coverage: {
       totalItemCount: input.items.length,
       includedItemCount,

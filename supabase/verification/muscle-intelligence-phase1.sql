@@ -306,6 +306,151 @@ end
 $assert$;
 grant execute on function pg_temp.assert_intruder_custom_publish_denied(uuid) to authenticated;
 
+create function pg_temp.assert_intruder_custom_set_update_zero_rows(p_mapping_set_id uuid)
+returns void language plpgsql as $assert$
+declare
+  affected_row_count integer;
+begin
+  update public.user_custom_exercise_mapping_sets
+  set mapping_version = 99
+  where id = p_mapping_set_id;
+  get diagnostics affected_row_count = row_count;
+  if affected_row_count <> 0 then
+    raise exception 'User A updated User B custom mapping set.';
+  end if;
+end
+$assert$;
+grant execute on function pg_temp.assert_intruder_custom_set_update_zero_rows(uuid) to authenticated;
+
+create function pg_temp.assert_intruder_custom_set_delete_zero_rows(p_mapping_set_id uuid)
+returns void language plpgsql as $assert$
+declare
+  affected_row_count integer;
+begin
+  delete from public.user_custom_exercise_mapping_sets where id = p_mapping_set_id;
+  get diagnostics affected_row_count = row_count;
+  if affected_row_count <> 0 then
+    raise exception 'User A deleted User B custom mapping set.';
+  end if;
+end
+$assert$;
+grant execute on function pg_temp.assert_intruder_custom_set_delete_zero_rows(uuid) to authenticated;
+
+create function pg_temp.assert_intruder_custom_entry_update_zero_rows(p_entry_id uuid)
+returns void language plpgsql as $assert$
+declare
+  affected_row_count integer;
+begin
+  update public.user_custom_exercise_mapping_entries
+  set contribution = 0.75
+  where id = p_entry_id;
+  get diagnostics affected_row_count = row_count;
+  if affected_row_count <> 0 then
+    raise exception 'User A updated User B custom mapping entry.';
+  end if;
+end
+$assert$;
+grant execute on function pg_temp.assert_intruder_custom_entry_update_zero_rows(uuid) to authenticated;
+
+create function pg_temp.assert_intruder_custom_entry_delete_zero_rows(p_entry_id uuid)
+returns void language plpgsql as $assert$
+declare
+  affected_row_count integer;
+begin
+  delete from public.user_custom_exercise_mapping_entries where id = p_entry_id;
+  get diagnostics affected_row_count = row_count;
+  if affected_row_count <> 0 then
+    raise exception 'User A deleted User B custom mapping entry.';
+  end if;
+end
+$assert$;
+grant execute on function pg_temp.assert_intruder_custom_entry_delete_zero_rows(uuid) to authenticated;
+
+create function pg_temp.assert_custom_published_entry_insert_immutable(p_mapping_set_id uuid)
+returns void language plpgsql as $assert$
+begin
+  begin
+    insert into public.user_custom_exercise_mapping_entries(mapping_set_id, muscle_id, role, contribution, sort_order)
+    values (p_mapping_set_id, 'quadriceps', 'primary', 1.00, 9);
+  exception when check_violation then return;
+  end;
+  raise exception 'Published custom mapping entry insert unexpectedly succeeded.';
+end
+$assert$;
+grant execute on function pg_temp.assert_custom_published_entry_insert_immutable(uuid) to authenticated;
+
+create function pg_temp.assert_custom_published_entry_update_immutable(p_entry_id uuid)
+returns void language plpgsql as $assert$
+begin
+  begin
+    update public.user_custom_exercise_mapping_entries set contribution = 0.75 where id = p_entry_id;
+  exception when check_violation then return;
+  end;
+  raise exception 'Published custom mapping entry update unexpectedly succeeded.';
+end
+$assert$;
+grant execute on function pg_temp.assert_custom_published_entry_update_immutable(uuid) to authenticated;
+
+create function pg_temp.assert_custom_published_entry_delete_immutable(p_entry_id uuid)
+returns void language plpgsql as $assert$
+begin
+  begin
+    delete from public.user_custom_exercise_mapping_entries where id = p_entry_id;
+  exception when check_violation then return;
+  end;
+  raise exception 'Published custom mapping entry delete unexpectedly succeeded.';
+end
+$assert$;
+grant execute on function pg_temp.assert_custom_published_entry_delete_immutable(uuid) to authenticated;
+
+create function pg_temp.assert_custom_retired_entry_update_immutable(p_entry_id uuid)
+returns void language plpgsql as $assert$
+begin
+  begin
+    update public.user_custom_exercise_mapping_entries set contribution = 0.75 where id = p_entry_id;
+  exception when check_violation then return;
+  end;
+  raise exception 'Retired custom mapping entry update unexpectedly succeeded.';
+end
+$assert$;
+grant execute on function pg_temp.assert_custom_retired_entry_update_immutable(uuid) to authenticated;
+
+create function pg_temp.assert_custom_retired_entry_delete_immutable(p_entry_id uuid)
+returns void language plpgsql as $assert$
+begin
+  begin
+    delete from public.user_custom_exercise_mapping_entries where id = p_entry_id;
+  exception when check_violation then return;
+  end;
+  raise exception 'Retired custom mapping entry delete unexpectedly succeeded.';
+end
+$assert$;
+grant execute on function pg_temp.assert_custom_retired_entry_delete_immutable(uuid) to authenticated;
+
+create function pg_temp.assert_global_retired_entry_immutable(p_entry_id uuid)
+returns void language plpgsql as $assert$
+begin
+  begin
+    update public.exercise_muscle_mapping_entries set contribution = 0.75 where id = p_entry_id;
+  exception when check_violation then return;
+  end;
+  raise exception 'Retired global mapping entry mutation unexpectedly succeeded.';
+end
+$assert$;
+grant execute on function pg_temp.assert_global_retired_entry_immutable(uuid) to authenticated;
+
+create function pg_temp.assert_global_current_published_entry_immutable(p_entry_id uuid)
+returns void language plpgsql as $assert$
+begin
+  begin
+    update public.exercise_muscle_mapping_entries set contribution = 0.75 where id = p_entry_id;
+  exception when check_violation then return;
+  end;
+  raise exception 'Current published global mapping entry mutation unexpectedly succeeded.';
+end
+$assert$;
+grant execute on function pg_temp.assert_global_current_published_entry_immutable(uuid) to authenticated;
+
 insert into auth.users (
   id, aud, role, email, encrypted_password,
   raw_app_meta_data, raw_user_meta_data, created_at, updated_at
@@ -362,6 +507,10 @@ values
   (:'global_v2_id'::uuid, 'pectoralis_major', 'primary', 1.00, 'bilateral', 1),
   (:'global_v2_id'::uuid, 'anterior_deltoid', 'secondary', 0.25, 'bilateral', 2),
   (:'global_v2_id'::uuid, 'triceps_brachii', 'stabilizer', 0.00, 'bilateral', 3);
+select id as global_v2_entry_id
+from public.exercise_muscle_mapping_entries
+where mapping_set_id = :'global_v2_id'::uuid and muscle_id = 'pectoralis_major'
+\gset
 update public.exercise_muscle_mapping_sets
 set checksum = private.exercise_muscle_mapping_checksum(id)
 where id = :'global_v2_id'::uuid;
@@ -397,8 +546,20 @@ values (:'user_b_id'::uuid, :'custom_b_id'::uuid, 1, 'exercise_muscle_mapping_v1
 returning id as custom_b_set_id \gset
 insert into public.user_custom_exercise_mapping_entries(mapping_set_id, muscle_id, role, contribution, sort_order)
 values (:'custom_b_set_id'::uuid, 'hamstrings', 'primary', 1.00, 1);
+select id as custom_b_v1_entry_id
+from public.user_custom_exercise_mapping_entries
+where mapping_set_id = :'custom_b_set_id'::uuid and muscle_id = 'hamstrings'
+\gset
 update public.user_custom_exercise_mapping_sets set checksum = private.user_custom_exercise_mapping_checksum(id)
 where id = :'custom_b_set_id'::uuid;
+
+insert into public.user_custom_exercise_mapping_sets(user_id, custom_exercise_id, mapping_version, schema_version, checksum)
+values (:'user_b_id'::uuid, :'custom_b_id'::uuid, 2, 'exercise_muscle_mapping_v1', repeat('0', 64))
+returning id as custom_b_v2_set_id \gset
+insert into public.user_custom_exercise_mapping_entries(mapping_set_id, muscle_id, role, contribution, sort_order)
+values (:'custom_b_v2_set_id'::uuid, 'quadriceps', 'primary', 1.00, 1);
+update public.user_custom_exercise_mapping_sets set checksum = private.user_custom_exercise_mapping_checksum(id)
+where id = :'custom_b_v2_set_id'::uuid;
 
 insert into public.user_custom_exercise_mapping_sets(user_id, custom_exercise_id, mapping_version, schema_version, checksum)
 values (:'delete_id'::uuid, :'custom_delete_id'::uuid, 1, 'exercise_muscle_mapping_v1', repeat('0', 64))
@@ -444,16 +605,54 @@ select set_config('request.jwt.claim.sub', :'user_a_id', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select pg_temp.assert_true(
   (select count(*) = 0 from public.user_custom_exercise_mapping_sets where id = :'custom_b_set_id'::uuid),
-  'User A read User B custom mapping.'
+  'Cross-owner custom mapping-set read denial failed.'
+);
+select pg_temp.assert_true(
+  (select count(*) = 0 from public.user_custom_exercise_mapping_entries where mapping_set_id = :'custom_b_set_id'::uuid),
+  'Cross-owner custom mapping-entry read denial failed.'
 );
 select pg_temp.assert_intruder_custom_insert_denied(:'custom_b_set_id'::uuid);
+select pg_temp.assert_intruder_custom_set_update_zero_rows(:'custom_b_set_id'::uuid);
+select pg_temp.assert_intruder_custom_entry_update_zero_rows(:'custom_b_v1_entry_id'::uuid);
+select pg_temp.assert_intruder_custom_entry_delete_zero_rows(:'custom_b_v1_entry_id'::uuid);
+select pg_temp.assert_intruder_custom_set_delete_zero_rows(:'custom_b_set_id'::uuid);
 select pg_temp.assert_intruder_custom_publish_denied(:'custom_b_set_id'::uuid);
 reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', :'user_b_id', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
+select pg_temp.assert_true(
+  (select count(*) = 1 from public.user_custom_exercise_mapping_sets
+   where id = :'custom_b_set_id'::uuid and user_id = :'user_b_id'::uuid and mapping_version = 1 and status = 'draft'),
+  'Owner draft custom mapping-set read or unchanged-value proof failed.'
+);
+select pg_temp.assert_true(
+  (select count(*) = 1 from public.user_custom_exercise_mapping_entries
+   where id = :'custom_b_v1_entry_id'::uuid and mapping_set_id = :'custom_b_set_id'::uuid
+     and muscle_id = 'hamstrings' and contribution = 1.00),
+  'Owner draft custom mapping-entry read or unchanged-value proof failed.'
+);
 select public.publish_user_custom_exercise_mapping_set(:'custom_b_set_id'::uuid);
+select pg_temp.assert_custom_published_entry_insert_immutable(:'custom_b_set_id'::uuid);
+select pg_temp.assert_custom_published_entry_update_immutable(:'custom_b_v1_entry_id'::uuid);
+select pg_temp.assert_custom_published_entry_delete_immutable(:'custom_b_v1_entry_id'::uuid);
+select public.publish_user_custom_exercise_mapping_set(:'custom_b_v2_set_id'::uuid) as result \gset custom_b_v2_first_
+select public.publish_user_custom_exercise_mapping_set(:'custom_b_v2_set_id'::uuid) as result \gset custom_b_v2_second_
+select pg_temp.assert_true(
+  :'custom_b_v2_first_result'::uuid = :'custom_b_v2_set_id'::uuid
+  and :'custom_b_v2_second_result'::uuid = :'custom_b_v2_set_id'::uuid,
+  'Custom version-2 publication idempotency failed.'
+);
+select pg_temp.assert_true(
+  (select count(*) = 1 from public.user_custom_exercise_mapping_sets
+   where custom_exercise_id = :'custom_b_id'::uuid and status = 'published')
+  and (select status = 'retired' from public.user_custom_exercise_mapping_sets where id = :'custom_b_set_id'::uuid)
+  and (select status = 'published' from public.user_custom_exercise_mapping_sets where id = :'custom_b_v2_set_id'::uuid),
+  'Custom version-2 atomic replacement failed.'
+);
+select pg_temp.assert_custom_retired_entry_update_immutable(:'custom_b_v1_entry_id'::uuid);
+select pg_temp.assert_custom_retired_entry_delete_immutable(:'custom_b_v1_entry_id'::uuid);
 reset role;
 
 set local role authenticated;
@@ -461,6 +660,8 @@ select set_config('request.jwt.claim.sub', :'admin_id', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select public.publish_exercise_muscle_mapping_set(:'global_v2_id'::uuid);
 select public.publish_exercise_muscle_mapping_set(:'global_v2_id'::uuid);
+select pg_temp.assert_global_retired_entry_immutable(:'global_v1_entry_id'::uuid);
+select pg_temp.assert_global_current_published_entry_immutable(:'global_v2_entry_id'::uuid);
 reset role;
 
 select pg_temp.assert_true(

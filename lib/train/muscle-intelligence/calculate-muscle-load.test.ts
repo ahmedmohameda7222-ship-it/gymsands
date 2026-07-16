@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { MuscleMappingReference } from "./contracts";
+import { MuscleCalculationInputError, type MuscleMappingReference } from "./contracts";
 import { calculateMuscleLoad, getExerciseMuscleFocus } from "./calculate-muscle-load";
 import { MUSCLE_MAPPING_SCHEMA_VERSION } from "./versions";
 
@@ -82,25 +83,54 @@ describe("deterministic resistance-set muscle load", () => {
     }
   });
 
-  it("returns byte-for-byte deterministic output after period, item, and mapping-entry reordering", () => {
+  it("returns byte-for-byte deterministic output after locale-sensitive period, item, and mapping-entry reordering", () => {
+    const zMapping = mapping("z-map", bench.entries);
+    const accentedMapping = mapping("ä-map", fly.entries);
     const resultA = calculateMuscleLoad({
       mode: "planned",
       period: { kind: "long_period", weekCount: 4 },
       items: [
-        { itemId: "a", mapping: bench, workload: { model: "resistance_sets_v1", qualifyingSets: 3 } },
-        { itemId: "b", mapping: { ...fly, entries: [...fly.entries].reverse() }, workload: { model: "resistance_sets_v1", qualifyingSets: 2 } }
+        { itemId: "z-item", mapping: zMapping, workload: { model: "resistance_sets_v1", qualifyingSets: 3 } },
+        { itemId: "ä-item", mapping: { ...accentedMapping, entries: [...accentedMapping.entries].reverse() }, workload: { model: "resistance_sets_v1", qualifyingSets: 2 } }
       ]
     });
     const resultB = calculateMuscleLoad({
       mode: "planned",
       period: { weekCount: 4, kind: "long_period" },
       items: [
-        { itemId: "b", mapping: fly, workload: { model: "resistance_sets_v1", qualifyingSets: 2 } },
-        { itemId: "a", mapping: { ...bench, entries: [...bench.entries].reverse() }, workload: { model: "resistance_sets_v1", qualifyingSets: 3 } }
+        { itemId: "ä-item", mapping: accentedMapping, workload: { model: "resistance_sets_v1", qualifyingSets: 2 } },
+        { itemId: "z-item", mapping: { ...zMapping, entries: [...zMapping.entries].reverse() }, workload: { model: "resistance_sets_v1", qualifyingSets: 3 } }
       ]
     });
 
     expect(JSON.stringify(resultA)).toBe(JSON.stringify(resultB));
+    expect(resultA.contributionBreakdown.map((entry) => entry.itemId)).toEqual([
+      "z-item", "z-item", "z-item", "ä-item", "ä-item", "ä-item"
+    ]);
+    expect(resultA.mappingVersionsUsed.map((mappingVersion) => mappingVersion.mappingSetId)).toEqual([
+      "z-map-mapping", "ä-map-mapping"
+    ]);
+  });
+
+  it("rejects duplicate exact work-item IDs before scoring", () => {
+    const calculate = () => calculateMuscleLoad({
+      mode: "planned",
+      period: { kind: "session" },
+      items: [
+        { itemId: "duplicate-item", mapping: bench, workload: { model: "resistance_sets_v1", qualifyingSets: 3 } },
+        { itemId: "duplicate-item", mapping: fly, workload: { model: "resistance_sets_v1", qualifyingSets: -1 } }
+      ]
+    });
+
+    expect(calculate).toThrow(MuscleCalculationInputError);
+    expect(calculate).toThrow('Duplicate work item ID: "duplicate-item".');
+  });
+
+  it("does not use locale-aware collation in the calculation source", () => {
+    const source = readFileSync("lib/train/muscle-intelligence/calculate-muscle-load.ts", "utf8");
+    expect(source).toContain("compareStableText");
+    expect(source).not.toContain("localeCompare");
+    expect(source).not.toContain("Intl.Collator");
   });
 
   it("uses weekly average for long-period level while preserving total raw score", () => {

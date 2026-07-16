@@ -67,6 +67,13 @@ export class MuscleMappingValidationError extends Error {
   }
 }
 
+export class MuscleCalculationInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MuscleCalculationInputError";
+  }
+}
+
 function includes<T extends readonly unknown[]>(values: T, value: unknown): value is T[number] {
   return values.includes(value as never);
 }

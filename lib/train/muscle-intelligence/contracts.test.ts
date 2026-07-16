@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MUSCLE_CONTRIBUTIONS,
+  MuscleCalculationInputError,
   isMuscleContribution,
   isValidRoleContribution,
   validateMuscleMappingEntries
@@ -15,6 +16,14 @@ const entry = {
 };
 
 describe("muscle mapping contracts", () => {
+  it("provides a calculation-specific domain error", () => {
+    const error = new MuscleCalculationInputError('Duplicate work item ID: "session-item".');
+    expect(error).toMatchObject({
+      name: "MuscleCalculationInputError",
+      message: 'Duplicate work item ID: "session-item".'
+    });
+  });
+
   it("allows only approved discrete contribution values and role pairs", () => {
     expect(MUSCLE_CONTRIBUTIONS).toEqual([1, 0.75, 0.5, 0.25, 0]);
     expect(isMuscleContribution(0.75)).toBe(true);

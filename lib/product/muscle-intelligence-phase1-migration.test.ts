@@ -93,7 +93,7 @@ describe("Muscle Intelligence Phase 1 migration contract", () => {
     expect(migration).toContain("grant execute on function public.publish_user_custom_exercise_mapping_set(uuid) to authenticated, service_role");
     expect(migration).not.toMatch(/service[_-]?role[_-]?(?:key|secret)\s*=/);
     expect(verification).toContain("member global write unexpectedly succeeded");
-    expect(verification).toContain("user a read user b custom mapping");
+    expect(verification).toContain("cross-owner custom mapping-set read denial failed");
     expect(verification).toContain("published global mapping entry mutation unexpectedly succeeded");
   });
 
@@ -105,6 +105,29 @@ describe("Muscle Intelligence Phase 1 migration contract", () => {
     expect(verification.indexOf("select pg_temp.assert_intruder_custom_insert_denied(:'custom_b_set_id'::uuid)")).toBeLessThan(
       verification.indexOf("select public.publish_user_custom_exercise_mapping_set(:'custom_b_set_id'::uuid)")
     );
+  });
+
+  it("retains the complete cross-owner and immutable-version executable proof", () => {
+    const requiredVerificationMarkers = [
+      "cross-owner custom mapping-entry read denial failed",
+      "assert_intruder_custom_set_update_zero_rows",
+      "assert_intruder_custom_set_delete_zero_rows",
+      "assert_intruder_custom_entry_update_zero_rows",
+      "assert_intruder_custom_entry_delete_zero_rows",
+      "assert_intruder_custom_publish_denied",
+      "assert_custom_published_entry_insert_immutable",
+      "assert_custom_published_entry_update_immutable",
+      "assert_custom_published_entry_delete_immutable",
+      "assert_custom_retired_entry_update_immutable",
+      "assert_custom_retired_entry_delete_immutable",
+      "custom version-2 atomic replacement failed",
+      "custom version-2 publication idempotency failed",
+      "assert_global_retired_entry_immutable",
+      "assert_global_current_published_entry_immutable"
+    ];
+    for (const marker of requiredVerificationMarkers) {
+      expect(verification).toContain(marker);
+    }
   });
 
   it("exports only owner-scoped custom mappings and documents the no-runtime-cutover boundary", () => {
