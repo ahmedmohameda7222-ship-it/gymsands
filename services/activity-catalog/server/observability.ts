@@ -32,6 +32,14 @@ export type ActivityCatalogExecutionObserver = {
   providerFailed(error: unknown, durationMs: number): void;
 };
 
+export function configuredActivityCatalogProviderMode(
+  value: string | undefined = process.env.PLAIVRA_ACTIVITY_CATALOG_MODE
+): CatalogProviderMode | undefined {
+  if (!value || value === "legacy") return "legacy";
+  if (value === "external" || value === "external_with_legacy_fallback") return value;
+  return undefined;
+}
+
 export function classifyActivityCatalogFallbackReason(error: CatalogError): ActivityCatalogFallbackReason {
   switch (error.code) {
     case "catalog_timeout": return "external_timeout";
@@ -62,8 +70,11 @@ function roundedDuration(durationMs: number) {
   return Math.max(0, Math.round(durationMs));
 }
 
-export function createActivityCatalogExecutionObserver(): ActivityCatalogExecutionObserver {
+export function createActivityCatalogExecutionObserver(
+  initialProviderRequested: CatalogProviderMode | undefined = configuredActivityCatalogProviderMode()
+): ActivityCatalogExecutionObserver {
   const metadata: ActivityCatalogExecutionMetadata = {
+    ...(initialProviderRequested ? { providerRequested: initialProviderRequested } : {}),
     providerUsed: "none",
     fallbackOccurred: false,
     fallbackReason: "none",
