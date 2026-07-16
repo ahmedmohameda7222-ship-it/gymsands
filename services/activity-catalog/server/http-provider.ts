@@ -34,7 +34,11 @@ function externalMeta(locale?: string): CatalogSourceMetadata {
 }
 
 function hasUnsupportedCompatibilityFilter(params: ActivitySearchParams) {
-  return Boolean(params.primaryMuscle || params.secondaryMuscle || params.muscleCategory || params.movementPattern || params.forceType);
+  return Boolean(
+    params.activityTypes?.length || params.difficulties?.length || params.primaryMuscles?.length ||
+    params.secondaryMuscles?.length || params.muscleCategories?.length ||
+    params.movementPatterns?.length || params.forceTypes?.length
+  );
 }
 
 export class HttpActivityCatalogProvider implements ActivityCatalogProvider {
@@ -84,7 +88,7 @@ export class HttpActivityCatalogProvider implements ActivityCatalogProvider {
   }
 
   async searchActivities(params: ActivitySearchParams) {
-    // Compatibility-only filters are an internal Plaivra legacy extension. The
+    // Compatibility lists are an internal Plaivra legacy extension. The
     // external public API must never receive or silently ignore them.
     if (hasUnsupportedCompatibilityFilter(params)) {
       throw new CatalogError("catalog_bad_request", { failureStage: "provider_request" });
