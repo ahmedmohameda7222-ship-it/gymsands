@@ -89,4 +89,24 @@ describe("approved Train Phase 1 UI contracts", () => {
     expect(activeWorkout).toContain('tr("cancelActiveWorkoutQuestion")');
     expect(activeWorkout).not.toContain("Return to workout</Link>");
   });
+
+  it("localizes Train destinations and preserves the hidden session shell with safe actions", () => {
+    const library = source("app/(private)/workouts/page.tsx");
+    const history = source("app/(private)/workout-history/page.tsx");
+    const session = source("app/(private)/workouts/session/[id]/page.tsx");
+    const sessionForm = source("components/workouts/workout-session-form.tsx");
+    const shell = source("components/layout/app-shell.tsx");
+    const translations = source("lib/i18n/train.ts");
+    for (const route of [library, history]) {
+      expect(route).toContain("useTrainTranslation");
+      expect(route).toContain("<TrainPageContainer");
+      expect(route).toContain("dir={dir}");
+    }
+    expect(session).toContain("<WorkoutSessionScreen confirmExit>");
+    expect(sessionForm).toContain("<MobileStickyActions allowOnSession>");
+    expect(sessionForm).toContain("<MobileStickyActionsSpacer allowOnSession />");
+    expect(shell.match(/Logout/g)?.length ?? 0).toBeLessThanOrEqual(1);
+    expect(translations.match(/browseExercisesDescription:/g)?.length).toBe(3);
+    expect(translations.match(/closeWorkoutSession:/g)?.length).toBe(3);
+  });
 });
