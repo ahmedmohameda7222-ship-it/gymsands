@@ -102,7 +102,7 @@ The route returns HTTP 200 only when final release readiness is true. It returns
 - provider deployment evidence;
 - production monitoring.
 
-The current repository ledger records 32 applied migrations, zero pending migrations, zero schema-applied-untracked migrations, zero unresolved migrations, and reconciliation state `reconciled`. Repository metadata and the production compatibility marker are aligned at migration `20260715010000`; application release readiness now depends on all remaining release gates passing.
+The current repository ledger records 33 applied migrations, zero pending migrations, zero schema-applied-untracked migrations, zero unresolved migrations, and reconciliation state `reconciled`. Repository metadata and production migration history are aligned at `20260715190000_train_phase2a_program_architecture`; application release readiness still depends on every remaining exact-commit quality, compatibility, deployment, and smoke gate passing.
 
 ## Release manifest
 

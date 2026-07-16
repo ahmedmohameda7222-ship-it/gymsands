@@ -1,24 +1,78 @@
 # Production migration ledger reconciliation
 
 **Project:** `bkwezjxvapaeasfvlhvv`
-**Verified production state:** 2026-07-15
-**Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
-**Reconciliation status:** **Reconciled / release still NO-GO**
 
-This document records the verified production state supplied after the controlled reconciliation sequence. It is not authorization to replay migration SQL, change the compatibility marker, deploy, promote, or merge. Applied migration files and production identities must never be renamed, rewritten, deleted, or replayed.
+**Verified production state:** 2026-07-16
+
+**Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
+
+**Reconciliation status:** **Reconciled / release gate eligible**
+
+This document records verified production migration history. It is not authorization to replay migration SQL, change compatibility markers, deploy, promote, or merge. Applied migration files and production identities must never be renamed, rewritten, deleted, or replayed.
 
 ## Current state
 
-- Supabase migration history contains 32 applied migrations.
-- All eight reconciliation-scope identities are present in production migration history exactly once.
+- Supabase migration history contains 33 applied migrations.
 - `pendingCount = 0`
 - `schemaAppliedUntrackedCount = 0`
 - `unresolvedCount = 0`
 - `historyRepair.state = reconciled`
-- The migration-ledger reconciliation gate is satisfied.
-- The database compatibility marker and repository release metadata are aligned at `20260715010000`. All remaining required release gates must still pass before production release.
+- The latest verified production migration is `20260715190000_train_phase2a_program_architecture`.
+- Repository and production migration identities are aligned.
+- Migration-ledger reconciliation no longer blocks release preflight.
 
-The verified production identities are:
+## Train Phase 2A production application
+
+The repository migration:
+
+```text
+20260715190000_train_phase2a_program_architecture.sql
+```
+
+was applied to production on 2026-07-16 from reviewed commit:
+
+```text
+5851486009f99dc9e7629b8b01f43cd690a3a04b
+```
+
+Before execution, the fetched file was verified against Git blob:
+
+```text
+be4102a5b0e0aaec8926362950742290b94d39c3
+```
+
+The production migration history identity was reconciled to:
+
+```text
+version: 20260715190000
+name: train_phase2a_program_architecture
+```
+
+Do not replay this migration.
+
+## Physical verification evidence
+
+Production verification confirmed:
+
+- all five Phase 2A hierarchy tables exist;
+- `private.can_access_workout_plan(uuid)` exists;
+- `public.detach_workout_plan_week_atomic(uuid, uuid)` exists;
+- RLS is enabled for the new hierarchy;
+- same-plan week/template integrity holds;
+- no duplicate live legacy plan-day mapping exists;
+- no duplicate live legacy plan-exercise mapping exists;
+- the temporary HTTP extension used only to retrieve the exact reviewed migration was removed;
+- legacy backfill produced exactly:
+  - 5 week templates for 5 plans;
+  - 12 assigned weeks;
+  - 16 Phase 2 sessions for 16 legacy plan days;
+  - 53 Phase 2 activities for 53 legacy plan exercises.
+
+The full clean migration chain, database lint, executable database preflight, unit tests, integration tests, build, rendered QA, and Train QA had already passed on the reviewed candidate before production reconciliation.
+
+## Existing reconciliation scope
+
+The following earlier production identities remain applied and must not be replayed:
 
 1. `20260711213000_adaptive_onboarding_v2.sql`
 2. `20260712173000_persistent_meal_plan_skip_status.sql`
@@ -28,12 +82,11 @@ The verified production identities are:
 6. `20260713170000_finalize_train_schedule_delete_integrity.sql`
 7. `20260714030000_harden_train_plan_rpc_execution.sql`
 8. `20260715010000_restrict_nutrition_target_override_acl.sql`
+9. `20260715190000_train_phase2a_program_architecture.sql`
 
-The first seven identities were repaired in production migration history only after complete physical-equivalence verification. The eighth identity was applied and recorded normally as the forward-only ACL correction. None of these files may be replayed.
+## Nutrition override ACL
 
-## Final nutrition override ACL
-
-The authenticated role now has exactly:
+The authenticated role retains exactly:
 
 ```text
 DELETE
@@ -42,7 +95,7 @@ SELECT
 UPDATE
 ```
 
-The following privileges are absent:
+The following privileges remain absent:
 
 ```text
 MAINTAIN
@@ -50,24 +103,6 @@ REFERENCES
 TRIGGER
 TRUNCATE
 ```
-
-RLS, the four owner policies, service-role access, owner administration, and application data remain outside the scope of this repository-only completion and were preserved by the verified production operation.
-
-## Final Train reconciliation evidence
-
-Production verification for `20260714030000_harden_train_plan_rpc_execution.sql` confirmed:
-
-- all six canonical Train RPC signatures exist;
-- all six are `SECURITY DEFINER`;
-- all six have an explicitly empty `search_path`;
-- authenticated and service-role execute are present;
-- anonymous and PUBLIC execute are denied;
-- every RPC invokes `public.assert_workout_actor(p_user_id)`;
-- `assert_workout_actor(uuid)` contains the service-role-aware `auth.role()` path and owner mismatch denial;
-- no unexpected overload remains outside the six canonical signatures;
-- checked active-plan, orphan, duplicate-schedule, and scheduled-history counts are zero.
-
-Its exact production migration identity is now present and classified as `applied`.
 
 ## Fail-closed ledger semantics
 
@@ -82,48 +117,46 @@ Its exact production migration identity is now present and classified as `applie
 - `latestAppliedMigrationVersion`
 - `releaseReady`
 
-Resolved states are `applied` and `applied_version_alias`. Every other state is unresolved.
+Resolved states are `applied` and `applied_version_alias`. The current ledger uses the exact `applied` identity for Phase 2A.
 
-The ledger-level `releaseReady` value requires all of the following:
+The ledger-level `releaseReady` value requires:
 
 - `historyRepair.state === "reconciled"`
 - `pendingCount === 0`
 - `schemaAppliedUntrackedCount === 0`
 - `ledgerDriftReviewCount === 0`
 - `unresolvedCount === 0`
-- all resolved production identities are valid
+- all resolved production identities are valid.
 
-The production ledger now satisfies those migration-specific conditions. The application-level release readiness calculation remains independently fail-closed on artifact identity, schema compatibility, database migration-marker compatibility, and the remaining release evidence.
+Those migration-specific conditions are now satisfied. Application release readiness remains independently fail-closed on exact artifact identity, schema compatibility, database migration-marker compatibility, retained quality evidence, deployment identity, and production smoke verification.
 
 ## Read-only preflight
 
 `supabase/verification/production-release-migration-preflight.sql` continues to block on:
 
 - missing migration objects;
-- function security/search-path mismatch;
-- incomplete Train RPC contract;
-- any Train RPC signature outside the six canonical signatures;
+- function security or search-path mismatch;
+- incomplete Train RPC contracts;
+- unexpected Train RPC overloads;
 - Train integrity conflicts;
-- disabled RLS or incorrect policy count;
+- disabled RLS or incorrect policy counts;
 - missing required nutrition override CRUD privileges;
 - any extra authenticated nutrition override privilege, including PostgreSQL 17 `MAINTAIN`.
 
-The ACL inspection uses `pg_class.relacl` and `aclexplode`, not only `information_schema`, so PostgreSQL 17 privileges remain visible.
-
 ## Remaining release work
 
-Migration-history reconciliation is complete. A separate approved release workflow must still:
+Before merge or deployment:
 
-1. keep the compatibility marker unchanged until its own reviewed forward operation is authorized;
-2. update that marker only after the required release evidence is complete;
-3. run the complete release preflight and all repository quality gates;
-4. confirm the Vercel main-only deployment policy integrated into PR #57 remains validated by the current Quality workflow;
-5. deploy only the exact approved commit;
-6. verify provider commit metadata, `/api/version`, health checks, and required browser smoke evidence;
-7. merge only after independent quality-control approval.
+1. run the complete repository Quality workflow on the exact final PR head;
+2. confirm migration-ledger validation reports `reconciliation=reconciled` and `release_ready=true`;
+3. confirm release preflight passes for that same commit;
+4. obtain independent quality-control approval;
+5. merge only the approved exact change;
+6. verify Vercel built the exact resulting `main` SHA;
+7. verify provider metadata, `/api/version`, `/api/health`, and required production smoke evidence.
 
-This PR does not perform any Supabase write, migration repair, migration replay, compatibility-marker update, deployment, promotion, or merge.
+No deployment or merge was performed as part of the migration reconciliation operation.
 
 ## Advisor status
 
-Separate advisor notices remain outside this correction, including authenticated `SECURITY DEFINER` warnings for intended narrow RPC boundaries, leaked-password protection disabled, unindexed foreign keys, duplicate indexes, and multiple permissive policies. They do not authorize unrelated changes in this branch.
+Separate advisor notices remain outside this correction, including intended narrow `SECURITY DEFINER` boundaries, leaked-password protection configuration, unindexed foreign keys, duplicate indexes, and multiple permissive policies. They do not authorize unrelated changes in this branch.

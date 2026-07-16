@@ -180,16 +180,31 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     }
     keyboard = { checked: true, focusVisible, tabSelectionChanged, pickerFocusReturned };
   }
-  let mobileKeyboardState = { checked: false, focused: false, visualViewport: null };
+  let mobileKeyboardState = { checked: false, focused: false, visualViewport: null, diagnostic: null };
   if (mobileKeyboard) {
-    const input = page.locator('input:not([type="hidden"]), textarea').filter({ visible: true }).first();
-    if (await input.count()) {
-      await input.focus();
+    const editableSelector = 'input:not([type="hidden"]):not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly])';
+    const input = page.locator(editableSelector).filter({ visible: true }).first();
+    try {
+      await input.waitFor({ state: "visible", timeout: 20_000 });
       const keyboardViewport = { width: renderedViewport.width, height: Math.max(280, Math.floor(renderedViewport.height * 0.55)) };
       await page.setViewportSize(keyboardViewport);
-      mobileKeyboardState = { checked: true, focused: await input.evaluate((element) => element === document.activeElement), visualViewport: `${keyboardViewport.width}x${keyboardViewport.height}` };
-    } else {
-      mobileKeyboardState = { checked: true, focused: false, visualViewport: null };
+      await input.focus();
+      await page.waitForTimeout(100);
+      const focused = await input.evaluate((element) => element === document.activeElement);
+      mobileKeyboardState = {
+        checked: true,
+        focused,
+        visualViewport: `${keyboardViewport.width}x${keyboardViewport.height}`,
+        diagnostic: focused ? null : "Editable control rendered but did not retain focus after keyboard viewport resize."
+      };
+    } catch (error) {
+      const editableCount = await page.locator(editableSelector).count();
+      mobileKeyboardState = {
+        checked: true,
+        focused: false,
+        visualViewport: null,
+        diagnostic: `Editable control did not become focusable: ${error instanceof Error ? error.message : String(error)}; matching controls: ${editableCount}`
+      };
     }
   }
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));

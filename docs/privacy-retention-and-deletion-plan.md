@@ -13,6 +13,8 @@ Status: implementation prepared; destructive production execution disabled. Prof
 
 The export explicitly omits OAuth authorization codes, token hashes, integration access/refresh tokens, idempotency hashes, raw MCP input, and internal security telemetry. Direct rows are constrained to the authenticated `user_id`; child rows are constrained through owned parent IDs. A two-user automated test verifies that a caller-supplied user ID cannot expand the export scope.
 
+The workout export also includes the Train Phase 2A program graph through owned parent relationships: `user_workout_plan_week_templates`, `user_workout_plan_weeks`, `user_workout_plan_sessions`, `user_workout_plan_phases`, and `user_workout_plan_activities`. Stable IDs and parent references are preserved; Activity Catalog credentials and provider secrets are never exported.
+
 ## Deletion request and execution sequence
 
 1. The member reviews the impact summary and types `DELETE MY PLAIVRA ACCOUNT`.
@@ -24,7 +26,7 @@ The export explicitly omits OAuth authorization codes, token hashes, integration
 7. The worker marks the account `deletion_processing`; authenticated APIs then fail closed.
 8. Private Storage objects are enumerated under the authenticated owner folder and through canonical photo metadata, then removed through the Storage API in batches of at most 1,000.
 9. Provider cleanup runs. Unknown legacy `user_integrations` block the job with `provider_cleanup_adapter_required`; they are never silently abandoned.
-10. Non-cascading log/import references are deleted or detached, then Supabase Auth deletes the user server-side. Profile-owned rows cascade in the reviewed dependency graph.
+10. Non-cascading log/import references are deleted or detached, then Supabase Auth deletes the user server-side. Profile-owned rows cascade in the reviewed dependency graph. Train Phase 2A program rows inherit ownership through `user_workout_plans` and are removed through the verified plan/template/session/phase/activity cascade chain.
 11. The completion email recipient is held only as AES-256-GCM ciphertext and cleared after notification. Delivery failures retry; an unavailable email provider is recorded as a manual action.
 12. The service-only job retains minimized evidence: stage, counts, safe error code, attempt count, timestamps, and a one-way subject hash. It retains no email, token, prompt, note, measurement, or photo path after completion.
 

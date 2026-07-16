@@ -126,14 +126,15 @@ Never commit real secrets or production tokens.
 
 The machine-readable authority is [`supabase/migration-ledger.json`](supabase/migration-ledger.json). The human reconciliation record is [`docs/architecture/migration-ledger-reconciliation.md`](docs/architecture/migration-ledger-reconciliation.md).
 
-Verified production state on 2026-07-15:
+Verified production state on 2026-07-16:
 
-- Supabase migration history contains 32 applied migrations through `20260715010000_restrict_nutrition_target_override_acl`.
-- These eight reconciliation-scope versions are present exactly once: `20260711213000`, `20260712173000`, `20260712195000`, `20260713153000`, `20260713160000`, `20260713170000`, `20260714030000`, and `20260715010000`.
-- The authenticated nutrition override ACL is exactly `SELECT`, `INSERT`, `UPDATE`, and `DELETE`; `TRUNCATE`, `TRIGGER`, `REFERENCES`, and `MAINTAIN` are absent.
-- Current counts are `pendingCount=0`, `schemaAppliedUntrackedCount=0`, and `unresolvedCount=0`.
-- Migration-history reconciliation is **reconciled**.
-- The production compatibility marker is aligned at `20260715010000`. Application release readiness now depends on the remaining required release gates.
+- Supabase migration history contains 33 applied migrations through `20260715190000_train_phase2a_program_architecture`.
+- The authenticated nutrition override ACL remains exactly `SELECT`, `INSERT`, `UPDATE`, and `DELETE`; `TRUNCATE`, `TRIGGER`, `REFERENCES`, and `MAINTAIN` are absent.
+- Current repository counts are `pendingCount=0`, `schemaAppliedUntrackedCount=0`, and `unresolvedCount=0`.
+- `historyRepair.state` is `reconciled`.
+- Train Phase 2A was applied from reviewed commit `5851486009f99dc9e7629b8b01f43cd690a3a04b` after exact Git blob and physical backfill verification.
+- The latest verified production migration is `20260715190000`.
+- Migration-history reconciliation is complete; application release readiness remains subject to all remaining exact-commit quality, compatibility, deployment, and smoke gates.
 
 Do not replay any applied migration. Run `npm run migration:ledger:check` to validate repository classification, production identities, counts, and documentation consistency.
 

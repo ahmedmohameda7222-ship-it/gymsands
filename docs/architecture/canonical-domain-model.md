@@ -40,20 +40,38 @@ Public ChatGPT context should expose functional constraints, not detailed clinic
 
 ## 4. Workout plans
 
-Current canonical plan write path:
+The approved target program architecture is:
+
+```text
+user_workout_plans
+├── user_workout_plan_week_templates
+│   └── user_workout_plan_sessions
+│       └── user_workout_plan_phases
+│           └── user_workout_plan_activities
+└── user_workout_plan_weeks
+    └── references one reusable week template
+```
+
+This target supports genuine multi-week programs, reusable repeated week templates, session-level sport identity, extensible phases, Activity Catalog snapshots, and planned prescriptions separated from metric schemas. See [`decisions/0004-train-multi-week-multi-sport-program-model.md`](decisions/0004-train-multi-week-multi-sport-program-model.md).
+
+Phase 2A is additive architecture only. Until later writer, schedule, UI, and compatibility gates complete cutover, the active runtime plan write path remains:
 
 - `user_workout_plans`;
 - `user_workout_plan_days`;
 - `user_workout_plan_exercises`.
 
+Do not describe the new hierarchy as the active runtime writer yet. Existing Train routes, schedule generation, execution, history, and personal-record behavior continue through the legacy compatibility path.
+
 Do not create new plan features on:
 
 - `user_workout_plan_blocks`;
-- `user_workout_plan_block_items`;
+- `user_workout_plan_block_items`.
 
-unless an approved ADR explicitly adopts the block model.
+ADR 0004 explicitly rejects those tables as the Phase 2 model because they retain legacy block assumptions and mix execution-state concepts into plan-template data.
 
-Warmup, strength, cardio, and cooldown may remain represented by `block_type` on canonical plan exercises until a migration proves a separate block entity is necessary.
+ADR 0004 approves the target multi-week, multi-sport program hierarchy: `user_workout_plans` → reusable `user_workout_plan_week_templates` → assigned `user_workout_plan_weeks` → `user_workout_plan_sessions` → `user_workout_plan_phases` → generic `user_workout_plan_activities`. Assigned weeks may share templates and may be atomically detached. See [`decisions/0004-train-multi-week-multi-sport-program-model.md`](decisions/0004-train-multi-week-multi-sport-program-model.md).
+
+This is a staged target architecture, not a runtime cutover. The legacy plan tables remain the active compatibility write and schedule-generation path until later phases complete projection, writer, privacy, and regression gates.
 
 ## 5. Performed workout sessions
 

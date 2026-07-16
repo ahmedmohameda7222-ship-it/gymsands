@@ -167,6 +167,11 @@ export async function buildCurrentUserDataExport(
 
   const planDays = await relatedRows("user_workout_plan_days", "plan_id", ids(owned.user_workout_plans));
   const planExercises = await relatedRows("user_workout_plan_exercises", "plan_day_id", ids(planDays));
+  const planWeekTemplates = await relatedRows("user_workout_plan_week_templates", "plan_id", ids(owned.user_workout_plans));
+  const planWeeks = await relatedRows("user_workout_plan_weeks", "plan_id", ids(owned.user_workout_plans));
+  const planSessionsV2 = await relatedRows("user_workout_plan_sessions", "week_template_id", ids(planWeekTemplates));
+  const planPhasesV2 = await relatedRows("user_workout_plan_phases", "plan_session_id", ids(planSessionsV2));
+  const planActivitiesV2 = await relatedRows("user_workout_plan_activities", "plan_phase_id", ids(planPhasesV2));
   const planBlocks = await relatedRows("user_workout_plan_blocks", "plan_day_id", ids(planDays));
   const planBlockItems = await relatedRows("user_workout_plan_block_items", "block_id", ids(planBlocks));
   const exerciseLogs = await relatedRows("exercise_logs", "workout_session_id", ids(owned.workout_sessions));
@@ -230,6 +235,11 @@ export async function buildCurrentUserDataExport(
         plans: owned.user_workout_plans,
         plan_days: planDays,
         plan_exercises: planExercises,
+        program_week_templates: planWeekTemplates,
+        program_weeks: planWeeks,
+        program_sessions: planSessionsV2,
+        program_phases: planPhasesV2,
+        planned_activities: planActivitiesV2,
         legacy_plan_blocks: planBlocks,
         legacy_plan_block_items: planBlockItems,
         sessions: owned.workout_sessions,

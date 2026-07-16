@@ -297,11 +297,9 @@ describe("Eat meal-log redesign contracts", () => {
 
   it("records the reconciled nutrition migration identities without replay", () => {
     const ledger = JSON.parse(source("supabase/migration-ledger.json")) as {
-      historyRepair: { state: string };
       entries: Array<{ localFile: string; state: string }>;
     };
     expect(ledger.entries.find((entry) => entry.localFile === "20260712195000_nutrition_target_date_overrides.sql")?.state).toBe("applied");
     expect(ledger.entries.find((entry) => entry.localFile === "20260715010000_restrict_nutrition_target_override_acl.sql")?.state).toBe("applied");
-    expect(ledger.historyRepair.state).toBe("reconciled");
   });
 });

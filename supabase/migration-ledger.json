@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-15T00:51:50Z",
-  "auditedRepositoryCommit": "10d49bd8f41fccb605b6015f92f8d0402a836128",
-  "productionMigrationCount": 32,
+  "capturedAt": "2026-07-16T00:03:12Z",
+  "auditedRepositoryCommit": "5851486009f99dc9e7629b8b01f43cd690a3a04b",
+  "productionMigrationCount": 33,
   "schemaVerifiedUntrackedCount": 0,
   "pendingCount": 0,
   "unresolvedCount": 0,
@@ -12,7 +12,7 @@
     "schemaAppliedUntrackedCount": 0,
     "pendingCount": 0,
     "unresolvedCount": 0,
-    "note": "Production migration history contains all 32 repository identities, including the normally applied ACL correction and the seven repaired historical identities. The authenticated nutrition override ACL was verified as CRUD-only. Do not replay applied migrations. The compatibility marker remains 20260711014500 and is outside this reconciliation record."
+    "note": "Production migration history contains all 33 repository migration identities. Train Phase 2A was applied from reviewed commit 5851486009f99dc9e7629b8b01f43cd690a3a04b after Git blob be4102a5b0e0aaec8926362950742290b94d39c3 and physical backfill verification, then recorded under exact identity 20260715190000_train_phase2a_program_architecture. Do not replay any applied migration."
   },
   "entries": [
     { "productionVersion": "202606290000", "productionName": "clean_initial_schema", "localFile": "202606290000_clean_initial_schema.sql", "state": "applied" },
@@ -46,6 +46,7 @@
     { "productionVersion": "20260713160000", "productionName": "train_section_atomic_integrity", "localFile": "20260713160000_train_section_atomic_integrity.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified on 2026-07-15. Do not replay." },
     { "productionVersion": "20260713170000", "productionName": "finalize_train_schedule_delete_integrity", "localFile": "20260713170000_finalize_train_schedule_delete_integrity.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified on 2026-07-15. Do not replay." },
     { "productionVersion": "20260714030000", "productionName": "harden_train_plan_rpc_execution", "localFile": "20260714030000_harden_train_plan_rpc_execution.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified on 2026-07-15. Do not replay." },
-    { "productionVersion": "20260715010000", "productionName": "restrict_nutrition_target_override_acl", "localFile": "20260715010000_restrict_nutrition_target_override_acl.sql", "state": "applied", "note": "Normally applied production identity verified with authenticated privileges exactly DELETE, INSERT, SELECT, and UPDATE on 2026-07-15. Do not replay." }
+    { "productionVersion": "20260715010000", "productionName": "restrict_nutrition_target_override_acl", "localFile": "20260715010000_restrict_nutrition_target_override_acl.sql", "state": "applied", "note": "Normally applied production identity verified with authenticated privileges exactly DELETE, INSERT, SELECT, and UPDATE on 2026-07-15. Do not replay." },
+    { "productionVersion": "20260715190000", "productionName": "train_phase2a_program_architecture", "localFile": "20260715190000_train_phase2a_program_architecture.sql", "state": "applied", "note": "Applied to production on 2026-07-16 from reviewed commit 5851486009f99dc9e7629b8b01f43cd690a3a04b after exact Git blob verification (be4102a5b0e0aaec8926362950742290b94d39c3). Physical verification confirmed 5 templates, 12 assigned weeks, 16 sessions, and 53 activities with no duplicate live legacy mappings. Do not replay." }
   ]
 }
