@@ -53,6 +53,29 @@ function normalizeSearchText(value: string | null | undefined) {
     .trim();
 }
 
+function normalizeStableSortText(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function compareStableText(left: string, right: string) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function compareLegacyActivities(left: TrainingActivity, right: TrainingActivity) {
+  const nameComparison = compareStableText(
+    normalizeStableSortText(left.name),
+    normalizeStableSortText(right.name)
+  );
+  return nameComparison || compareStableText(left.id, right.id);
+}
+
 function taxonomy(name: string | null, prefix: string): TaxonomyItem | null {
   if (!name) return null;
   const slug = stableSlug(name);
@@ -187,9 +210,9 @@ async function loadLegacySnapshot(supabase: SupabaseClient): Promise<LegacySnaps
 
   const loadPromise = (async () => {
     const [workoutResult, videoResult, exerciseResult] = await Promise.all([
-      supabase.from("workouts").select("*").eq("is_global", true).order("name").limit(5000),
-      supabase.from("exercise_videos").select("*").eq("is_global", true).order("exercise_name").limit(5000),
-      supabase.from("exercises").select("*").eq("is_global", true).eq("is_approved", true).order("name").limit(5000)
+      supabase.from("workouts").select("*").eq("is_global", true).order("name").order("id").limit(5000),
+      supabase.from("exercise_videos").select("*").eq("is_global", true).order("exercise_name").order("id").limit(5000),
+      supabase.from("exercises").select("*").eq("is_global", true).eq("is_approved", true).order("name").order("id").limit(5000)
     ]);
     const degraded = Boolean(workoutResult.error || videoResult.error || exerciseResult.error);
     const activities = uniqueActivities([
@@ -198,7 +221,7 @@ async function loadLegacySnapshot(supabase: SupabaseClient): Promise<LegacySnaps
       ...((videoResult.data ?? []) as LegacyRow[]).map(videoRow),
       ...(workoutResult.error ? sampleWorkouts.map(workoutRow) : []),
       ...(videoResult.error ? sampleExerciseVideos.map(videoRow) : [])
-    ].filter((activity): activity is TrainingActivity => Boolean(activity)));
+    ].filter((activity): activity is TrainingActivity => Boolean(activity))).sort(compareLegacyActivities);
 
     if (!degraded) {
       cachedLegacySnapshot = { activities, expiresAt: Date.now() + LEGACY_CATALOG_SNAPSHOT_TTL_MS };
