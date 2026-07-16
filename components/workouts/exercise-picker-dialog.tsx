@@ -68,7 +68,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   const [loadMoreError, setLoadMoreError] = useState("");
   const [pagination, setPagination] = useState(emptyPagination);
   const returnFocusRef = useRef<HTMLElement | null>(null);
-  const initialActivityRequestGroupRef = useRef<string | null>(null);
+  const initialRequestGroupConsumedRef = useRef<string | null>(null);
   const activeGenerationGroupRef = useRef<string | null>(null);
   const generationRef = useRef(0);
   const filtersControllerRef = useRef<AbortController | null>(null);
@@ -76,6 +76,17 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   const loadMoreControllerRef = useRef<AbortController | null>(null);
   const initialCatalogRequestGroupId = useMemo(() => open ? createCatalogRequestGroupId() : null, [locale, open]);
   const existing = useMemo(() => new Set(existingKeys), [existingKeys]);
+
+  if (open && typeof document !== "undefined") {
+    const activeElement = document.activeElement;
+    if (
+      activeElement instanceof HTMLElement &&
+      activeElement !== document.body &&
+      !activeElement.closest("[data-train-exercise-picker]")
+    ) {
+      returnFocusRef.current = activeElement;
+    }
+  }
 
   const activeFilters = useMemo(() => ({
     primaryMuscles: muscle ? [muscle] : [],
@@ -87,10 +98,6 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
     exerciseTypes: exerciseType ? [exerciseType] : [],
     mechanics: mechanics ? [mechanics] : []
   }), [difficulty, equipment, exerciseType, forceType, mechanics, muscle, muscleCategory, secondaryMuscle]);
-
-  useEffect(() => {
-    initialActivityRequestGroupRef.current = initialCatalogRequestGroupId;
-  }, [initialCatalogRequestGroupId]);
 
   useEffect(() => {
     if (!open || !initialCatalogRequestGroupId) return;
@@ -118,10 +125,12 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
     loadMoreControllerRef.current?.abort();
     const controller = new AbortController();
     activitiesControllerRef.current = controller;
-    const requestGroupId = initialActivityRequestGroupRef.current ?? createCatalogRequestGroupId();
-    initialActivityRequestGroupRef.current = null;
+    const initialGroupId = initialCatalogRequestGroupId;
+    const useInitialGroup = initialGroupId !== null && initialRequestGroupConsumedRef.current !== initialGroupId;
+    const requestGroupId = useInitialGroup ? initialGroupId : createCatalogRequestGroupId();
     activeGenerationGroupRef.current = requestGroupId;
     const timer = window.setTimeout(() => {
+      if (useInitialGroup && initialGroupId) initialRequestGroupConsumedRef.current = initialGroupId;
       setLoading(true);
       setLoadingMore(false);
       setError("");
@@ -151,7 +160,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [activeFilters, libraryLoadFailedMessage, locale, open, query]);
+  }, [activeFilters, initialCatalogRequestGroupId, libraryLoadFailedMessage, locale, open, query]);
 
   useEffect(() => {
     if (open) return;
@@ -159,6 +168,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
     activitiesControllerRef.current?.abort();
     loadMoreControllerRef.current?.abort();
     generationRef.current += 1;
+    initialRequestGroupConsumedRef.current = null;
     activeGenerationGroupRef.current = null;
     setSelected(new Map());
     setResults([]);
@@ -266,9 +276,9 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
           const returnTarget = returnFocusRef.current;
           if (!returnTarget?.isConnected) return;
           event.preventDefault();
-          returnTarget.focus();
+          returnTarget.focus({ preventScroll: true });
           window.requestAnimationFrame(() => {
-            if (document.activeElement !== returnTarget) returnTarget.focus();
+            if (document.activeElement !== returnTarget) returnTarget.focus({ preventScroll: true });
           });
         }}
       >
