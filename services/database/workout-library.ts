@@ -317,7 +317,9 @@ export async function getWorkoutFilterOptionsWithStatus(locale?: string, context
 export async function getCanonicalWorkoutFilterOptionsWithStatus(locale?: string, context?: WorkoutLibraryRequestContext): Promise<WorkoutLibraryResult<CanonicalWorkoutFilterOptions>> {
   const filters = await getCatalogFilters({ locale }, context);
   const data = emptyCanonicalWorkoutFilterOptions();
-  const mapTaxonomy = (items = []) => items.map((item: { slug: string; name: string }) => filterOption(item.slug, item.name)).filter((item): item is WorkoutFilterOption => Boolean(item));
+  const mapTaxonomy = (items: Array<{ slug: string; name: string }> = []) => items
+    .map((item) => filterOption(item.slug, item.name))
+    .filter((item): item is WorkoutFilterOption => Boolean(item));
   data.equipmentRequired = mapTaxonomy(filters.data.equipment);
   data.exerciseTypes = mapTaxonomy(filters.data.activityTypes);
   data.experienceLevels = filters.data.difficulties.map((item) => filterOption(item.toLowerCase(), item)).filter((option): option is WorkoutFilterOption => Boolean(option));
@@ -339,7 +341,9 @@ async function loadWorkoutPage(query: string, filters: WorkoutFilters, startOffs
     catalogSearchParams(query, filters, WORKOUT_LIBRARY_PAGE_SIZE, requestOffset, locale),
     requestContext
   );
-  const filterOptions = activityFilterOptions(response.data);
+  const filterOptions = response.meta.source === "legacy"
+    ? activityFilterOptions(response.data)
+    : emptyCanonicalWorkoutFilterOptions();
   const workouts = response.data
     .filter((activity) => matchesWorkoutFilters(activity, filters))
     .map((activity) => activityToLibraryWorkout(activity, response.meta));
