@@ -6,14 +6,15 @@ A Plaivra release is one compatible package: reviewed code, reconciled database 
 
 Keep these operations separate:
 
-1. **Pre-merge release gate** — complete review, exact-head CI, migration-history reconciliation, compatibility checks, environment validation, release preflight, and explicit release-owner approval.
-2. **Merge** — merge only the approved exact head to `main`.
-3. **Automatic Vercel deployment** — the current Git-connected model may deploy the resulting `main` commit.
-4. **Production verification** — prove the provider built the exact resulting 40-character `main` SHA and that `/api/version` and `/api/health` identify it.
-5. **Production acceptance** — complete anonymous and authenticated synthetic smoke, browser/console/network review, timings, request counts, and retained evidence.
-6. **Rollback or forward fix** — use a separately reviewed code/schema-compatible release pair; never substitute an unrelated old deployment.
+1. **Pull-request review gate** — prove exact-head repository integrity, full migration-chain rehearsal, database verification, manifest consistency, runtime identity, and all quality evidence. A migration PR may be review-ready while its repository-only migrations remain pending, but only when the state is pending-only and contains zero schema-applied-untracked migrations.
+2. **Production release gate** — reconcile migration history, compatibility markers, and the exact reviewed release candidate, then pass strict release preflight and obtain explicit release-owner approval.
+3. **Merge** — merge only the approved exact head to `main`.
+4. **Automatic Vercel deployment** — the current Git-connected model may deploy the resulting `main` commit.
+5. **Production verification** — prove the provider built the exact resulting 40-character `main` SHA and that `/api/version` and `/api/health` identify it.
+6. **Production acceptance** — complete anonymous and authenticated synthetic smoke, browser/console/network review, timings, request counts, and retained evidence.
+7. **Rollback or forward fix** — use a separately reviewed code/schema-compatible release pair; never substitute an unrelated old deployment.
 
-Any failed or blocked preflight is a no-go before merge. The migration ledger must be reconciled before the production-triggering merge. A provider `READY` state alone is not acceptance.
+A passing review preflight is not production release authorization. Any failed or blocked strict release preflight is a no-go before merge. The migration ledger must be reconciled before the production-triggering merge. A provider `READY` state alone is not acceptance.
 
 ## Current production migration state
 
@@ -59,7 +60,7 @@ Quality must retain results for:
 - production environment validation;
 - release metadata and production build;
 - rendered QA and Train QA;
-- release manifest and release preflight.
+- release manifest and preflight evidence, including separate review and release readiness.
 
 After deployment, retain exact-provider identity, anonymous smoke, populated synthetic smoke, empty-state synthetic smoke, browser/console/network review, screenshots, timings, and the final release verdict.
 
@@ -79,15 +80,39 @@ Build metadata must include:
 
 `GET /api/version` is a public release assertion. It fails closed when artifact identity, schema compatibility, expected migration identity, or migration reconciliation is invalid. It does not replace physical-schema verification, migration rehearsal, provider evidence, or authenticated browser smoke.
 
-## Preflight
+## Preflight modes
+
+### Pull-request review
+
+For an explicit local review of a migration PR:
+
+```bash
+npm run release:preflight -- \
+  --mode review \
+  --commit "$REVIEWED_COMMIT" \
+  --repository ahmedmohameda7222-ship-it/gymsands \
+  --quality-reports quality-reports \
+  --output quality-reports/release-preflight.json
+```
+
+GitHub pull-request workflows select `review` mode from the trusted `GITHUB_EVENT_NAME=pull_request` context when no explicit mode is supplied. Review mode accepts only an internally consistent pending-only migration state with `pendingCount > 0`, zero schema-applied-untracked migrations, and `unresolvedCount = pendingCount`. It still validates the exact commit, manifest, runtime, and every required quality gate.
+
+A successful pending-only review records `reviewReady=true`, `releaseReady=false`, and retains `migration_ledger_not_reconciled` in `releaseBlockers`. It does not authorize database application, merge, or deployment.
+
+### Strict production release
 
 Run before any production-triggering merge:
 
 ```bash
-npm run release:preflight --   --commit "$REVIEWED_COMMIT"   --repository ahmedmohameda7222-ship-it/gymsands   --quality-reports quality-reports   --output quality-reports/release-preflight.json
+npm run release:preflight -- \
+  --mode release \
+  --commit "$REVIEWED_COMMIT" \
+  --repository ahmedmohameda7222-ship-it/gymsands \
+  --quality-reports quality-reports \
+  --output quality-reports/release-preflight.json
 ```
 
-The command performs no provider or Supabase write.
+`release` is the default mode outside a pull-request workflow. It remains fail-closed while any migration is pending or otherwise unreconciled. Unknown modes fail closed. The command performs no provider or Supabase write.
 
 ## Production runbook
 
@@ -95,7 +120,7 @@ The command performs no provider or Supabase write.
 2. Complete migration-history reconciliation and independent verification.
 3. Confirm the compatibility marker and expected migration identity.
 4. Run strict production environment validation without exposing secret values.
-5. Run `npm run release:preflight` and retain its passing result.
+5. Run `npm run release:preflight -- --mode release ...` and retain its passing result.
 6. Obtain explicit release-owner approval for the exact reviewed change.
 7. Merge the approved exact change to `main`.
 8. Record the exact resulting 40-character `main` SHA.
