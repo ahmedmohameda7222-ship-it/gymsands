@@ -1,180 +1,57 @@
 # Plaivra Platform Roadmap
 
-**Version:** 2026.2  
-**Status:** Strategic source of truth  
-**Authority:** Subordinate to the Product Constitution and Long-Term Plan
+**Version:** 2026.4
+**Authority:** subordinate to the Product Constitution and Long-Term Plan
 
-## 1. Platform sequence
+## Strategic sequence
 
-Plaivra will be delivered in this order:
+1. stable premium responsive web product;
+2. public ChatGPT app using curated MCP and CIMD/OAuth;
+3. Product Constitution Lock;
+4. provider-neutral entitlements and web subscription;
+5. iOS;
+6. Android.
 
-1. premium and stable responsive web application;
-2. public ChatGPT app using MCP and CIMD;
-3. unified entitlement service and web subscription;
-4. iOS application;
-5. Android application.
+The existing Next.js repository remains the main product repository. Native work must wait for stable product, data, permission, API, analytics, and design contracts.
 
-The order is deliberate. Native applications must be built on stable product, data, permission, and design contracts rather than duplicating an unfinished web product.
+## Current implementation status
 
-## 2. Repository strategy
+| Capability | Status |
+|---|---|
+| Product and cross-platform constitutions | Implemented as current authority |
+| Repository/documentation reset | Current baseline refreshed; generated and historical evidence is excluded from the active source tree |
+| Obsolete AI request/safety workflow | Removed from active runtime and database |
+| Canonical domain ADRs | ADRs 0001–0005 accepted |
+| Premium web routes | Active; continued stabilization and accessibility/performance work required |
+| Context Projection Service | Implemented for task-specific contexts; public launch acceptance remains incomplete |
+| Public MCP catalog and execution | Implemented foundation with typed contracts, permissions, idempotency, and tests; platform publication remains incomplete |
+| CIMD/OAuth | Infrastructure implemented; final production configuration and platform review remain |
+| Train Phase 2A | Additive multi-week hierarchy applied; writer/runtime cutover remains future work |
+| Muscle Intelligence | Phase 1 foundation applied and merged; trusted mapping registry and UI phases remain |
+| Entitlements/billing | Provider-neutral database/service foundation exists; checkout and offerings remain disabled |
+| iOS/Android | Planning only; no native binary |
 
-Current phase:
+## Shared versus platform-specific
 
-- keep the existing Next.js repository as the main product repository;
-- separate domain logic, validation, permissions, API access, and UI semantics from route components;
-- avoid creating independent iOS and Android repositories now.
+Share product/domain rules, validation, permission contracts, entitlement semantics, API/MCP contracts, analytics meaning, design tokens, and accessibility outcomes.
 
-When native development begins, migrate deliberately toward a monorepo shape:
+Do not blindly share DOM components, desktop assumptions, browser navigation, hover behavior, web dialogs, native system controls, billing UX, or platform permission flows.
 
-```text
-apps/
-  web/
-  mobile/
-packages/
-  core/
-  api-client/
-  design-tokens/
-  validation/
-  analytics-contracts/
-```
+## Next active priorities
 
-One Expo/React Native mobile foundation is the default direction for iOS and Android unless later evidence justifies separate native implementations.
+1. regenerate and verify the repository graph from clean `main`;
+2. continue Muscle Intelligence with the approved trusted exercise-mapping phase;
+3. complete remaining Train Phase 2 projection/writer/cutover work in controlled phases;
+4. finish public MCP/CIMD production configuration, acceptance, and submission evidence;
+5. stabilize web performance, accessibility, error states, and release observability;
+6. declare Product Constitution Lock only after core P0/P1 gates close;
+7. approve offerings and activate provider-neutral entitlements/web billing;
+8. begin iOS, then Android, from stable shared contracts.
 
-## 3. Shared versus platform-specific
+## Native direction
 
-Share:
+When native development begins, prefer a deliberate monorepo shape with web, mobile, core contracts, API client, validation, design tokens, and analytics contracts. Expo/React Native remains the default shared mobile direction unless evidence justifies separate native implementations.
 
-- product and domain rules;
-- validation schemas;
-- context and permission contracts;
-- entitlement logic;
-- API/MCP contracts;
-- analytics semantics;
-- design tokens;
-- accessibility outcomes;
-- copy where appropriate.
+## Global quality rule
 
-Do not blindly share:
-
-- exact React DOM components;
-- desktop layout assumptions;
-- browser-only navigation;
-- hover interactions;
-- web modals;
-- iOS/Android system controls;
-- platform billing and permission UX.
-
-Use `docs/design-system/PLAIVRA_CROSS_PLATFORM_UI_CONSTITUTION.md` and its platform files.
-
-## 4. Phase 1 — Web product foundation
-
-Required outcomes:
-
-- Product Constitution implemented;
-- persistent profile and context model stable;
-- core Today, Train, Eat, Progress, and Account flows stable;
-- loading, empty, error, pending, success, offline, and revoked states covered;
-- domain services separated from UI where practical;
-- mobile-web and desktop rendered QA passes;
-- authentication, privacy, export, deletion, and consent flows work;
-- no unresolved P0 and no high-impact core-flow P1.
-
-## 5. Phase 2 — ChatGPT application
-
-Required outcomes:
-
-- task-specific Context Projection Service;
-- curated public MCP allowlist;
-- explicit input/output schemas;
-- CIMD-based client identification;
-- Plaivra-branded login and consent;
-- no copied client IDs/tokens;
-- production OAuth, scope, ownership, revocation, retry, and idempotency tests;
-- OpenAI submission package generated from the exact deployed commit.
-
-Reference:
-
-- `docs/chatgpt-app/README.md`
-- `docs/chatgpt-app/cimd-authentication-architecture.md`
-
-## 6. Phase 3 — Product Constitution Lock
-
-Declare the lock only when the core product, design system, context architecture, and public ChatGPT execution model meet the acceptance gates.
-
-After lock, broad changes require evidence and a Product Change Proposal.
-
-## 7. Phase 4 — Unified entitlements and web billing
-
-Create a provider-independent entitlement service.
-
-```text
-verified provider event
-→ normalized Plaivra entitlement
-→ capability check
-```
-
-Web provider: Stripe Billing.
-
-Normalized states must cover trial, active, grace period, billing issue, cancellation, expiry, and revocation.
-
-The product never checks Stripe directly to decide general capability outside the entitlement boundary.
-
-## 8. Phase 5 — iOS
-
-Use the stable shared domain/API/design foundation.
-
-Required native work:
-
-- iOS navigation and safe areas;
-- Dynamic Type and VoiceOver;
-- secure storage;
-- OAuth/deep links;
-- notifications;
-- Sign in with Apple where required;
-- StoreKit and entitlement synchronization;
-- TestFlight testing;
-- iPhone and iPad adaptive layouts.
-
-Reference: `docs/design-system/platforms/ios.md`.
-
-## 9. Phase 6 — Android
-
-Adapt the shared mobile foundation for:
-
-- Android navigation and predictive back;
-- adaptive windows, tablets, and foldables;
-- TalkBack and font/display scaling;
-- secure storage;
-- app links and notifications;
-- Google sign-in where required;
-- Google Play Billing and entitlement synchronization;
-- staged Play testing.
-
-Reference: `docs/design-system/platforms/android.md`.
-
-## 10. Global quality rule
-
-Do not ship three inconsistent Plaivra products.
-
-A feature is cross-platform-ready when it has:
-
-- one domain contract;
-- one permission model;
-- one analytics meaning;
-- one data migration strategy;
-- shared semantic design rules;
-- documented web, iOS, and Android adaptations;
-- tests appropriate to each platform.
-
-## 11. Current priorities
-
-1. repository/documentation reset;
-2. remove obsolete AI action-request workflow;
-3. decide canonical database models;
-4. stabilize premium web product;
-5. implement Context Projection Service;
-6. implement CIMD;
-7. prepare public ChatGPT MCP v1;
-8. lock product constitution;
-9. build entitlement service;
-10. begin iOS, then Android.
+A feature is cross-platform-ready only when it has one domain contract, permission model, analytics meaning, migration strategy, semantic design rule set, platform adaptations, and appropriate tests. Do not ship three inconsistent Plaivra products.

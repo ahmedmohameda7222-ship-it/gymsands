@@ -1,142 +1,79 @@
 # Plaivra Agent Instructions
 
-These instructions apply to Codex and every coding agent working in this repository.
+These rules apply to Codex and every coding agent working in this repository.
 
-## 1. Read order
+## Authority
 
-Before broad product, architecture, UX, MCP, Supabase, auth, or platform work, read:
+For broad product or architecture work, use the authority order in `README.md`. For a scoped implementation, read only the minimum authority and direct contracts named by the approved prompt.
 
-1. `docs/product/PLAIVRA_PRODUCT_CONSTITUTION.md`
-2. `docs/product/PLAIVRA_LONG_TERM_PRODUCT_AND_PLATFORM_PLAN.md`
-3. `docs/product/ai-first-tracker-model.md`
-4. `docs/design-system/PLAIVRA_CROSS_PLATFORM_UI_CONSTITUTION.md`
-5. the relevant platform file under `docs/design-system/platforms/`
-6. `docs/chatgpt-app/README.md`
-7. `docs/chatgpt-app/cimd-authentication-architecture.md`
-8. `docs/architecture/canonical-domain-model.md`
-9. `docs/platform-roadmap/README.md`
-10. task-specific code and current tests
+Historical reports, old prompts, branch handoffs, generated QA evidence, and Git history are evidence, not current authority.
 
-When documents conflict, earlier items win.
+## Execution model
 
-Audit reports, completed prompts, old status files, and code history are evidence, not product authority.
+Plaivra planning and implementation are separate responsibilities:
 
-## 2. Product model
+- the Planner performs broad repository analysis, approves architecture and scope, and prepares implementation-ready prompts;
+- the executor implements one approved phase or correction;
+- independent quality control inspects the actual branch, diff, tests, CI, database evidence, and PR state.
 
-Plaivra is a persistent, user-controlled fitness context and execution platform for ChatGPT.
+Use one branch, one pull request, and one completion report per phase. Do not start a later phase automatically.
 
-- ChatGPT is the reasoning and intelligent-execution layer.
-- Plaivra is the storage, context, permission, visualization, tracking, history, correction, privacy, and direct-execution layer.
-- For executable requests, ChatGPT writes through authorized Plaivra tools.
-- Do not build a normal copy/import queue or second in-app approval workflow.
-- Preserve fast direct controls for workout logging, meal completion, hydration, tasks, habits, supplements, editing, correction, and privacy.
-- Plaivra does not diagnose or prescribe.
+## Bounded inspection
 
-## 3. Pre-launch change policy
+Every implementation prompt must distinguish:
 
-Before Product Constitution Lock, broad improvements are allowed when evidence supports them.
+1. **Must read** — exact files and contracts required before editing.
+2. **Search only** — areas inspected with targeted search for references and dependencies.
+3. **Conditional expansion** — additional files opened only because of imports, tests, database/security boundaries, or established conventions.
+4. **Inspection record** — list each additional file and why it was needed.
+5. **Do not read** — unrelated modules, old prompts, historical reports, and later phases.
+6. **Validation** — run real relevant checks; never claim an unrun check passed.
 
-Routes, features, navigation, UI, components, and architecture may be added, removed, merged, split, renamed, redesigned, or rebuilt.
+Repository-wide remediation is an explicit exception and must still preserve domain boundaries and record deletion proof.
 
-Always preserve:
+## Scope and safety
 
-- authentication and authorization correctness;
-- user ownership;
-- data integrity;
-- migration safety;
-- privacy and consent;
-- accessibility;
-- rollback capability.
+- change only the approved outcome;
+- preserve authentication, authorization, ownership, data integrity, privacy, consent, accessibility, and rollback;
+- remove obsolete behavior only after dependency proof;
+- do not add abstractions without a concrete repeated need;
+- do not commit generated screenshots, logs, manifests, or historical branch evidence to the active tree;
+- never rewrite an applied Supabase migration;
+- use new named migrations for DDL;
+- prove route, service, MCP, export, deletion, test, RLS, grant, and foreign-key dependencies before data-model removal.
 
-Do not preserve obsolete behavior merely because it already exists.
+## Product model
 
-## 4. Scope discipline
+ChatGPT is the reasoning and intelligent-execution layer. Plaivra is the persistent context, permission, storage, visualization, tracking, history, correction, privacy, and direct-execution layer.
 
-For normal tasks:
+Do not build a normal copy/import queue or second approval workflow after successful tool execution. Preserve fast direct controls for real-world execution and correction. Plaivra does not diagnose or prescribe.
 
-- inspect the relevant domain before editing;
-- use existing services and contracts where they are correct;
-- do not touch unrelated files;
-- do not add a new abstraction without a concrete repeated need;
-- remove dead compatibility code when the task proves it is unused;
-- do not create new historical status documents.
+## MCP and public ChatGPT
 
-For repo-wide remediation, produce a route/domain matrix and preserve completed compliant work.
+- public tools are an explicit allowlist;
+- no admin tools in public member OAuth;
+- use task-specific context projections;
+- validate scope, ownership, resource, expiry, active connection, permissions, and revocation server-side;
+- destructive actions require explicit confirmation;
+- do not report success before tool-confirmed success;
+- use domain services, never arbitrary client table access.
 
-## 5. Supabase rules
+## Agents, Ruflo, and Graphify
 
-- Never rewrite applied migration history.
-- All DDL changes are new named migrations.
-- Do not drop a table because it has zero rows.
-- Prove code, route, MCP, export, deletion, and foreign-key dependencies before removal.
-- Use staged convergence: add/migrate/update/verify/stop old reads/drop later.
-- RLS and service-role assumptions must be explicit and tested.
-- No plain-text third-party refresh/access tokens in general application tables.
-- Public MCP tools must use domain services, not arbitrary table access.
+Agents and Ruflo are off by default. Use one executor unless genuinely independent workstreams justify bounded parallelism. Do not use swarms or autopilot merely because the repository is large.
 
-Current database convergence authority: `docs/architecture/canonical-domain-model.md`.
+Graphify is a dependency-discovery and context-reduction aid. It never replaces source inspection, tests, SQL verification, runtime evidence, or security review. Regenerate it from clean `main` after major merged architecture phases.
 
-## 6. MCP and ChatGPT app rules
+## CI failure boundary
 
-- Public tools are an explicit allowlist.
-- No admin tools in public member OAuth.
-- No deprecated aliases in the final public catalog.
-- Use task-specific context projections; do not return the complete profile by default.
-- Every public tool requires strict input and output schemas.
-- Validate scope, ownership, resource, token expiry, active connection, saved permissions, and revocation server-side.
-- Destructive actions require explicit confirmation before execution.
-- Do not report success before tool-confirmed success.
-- CIMD is the target client-identification architecture.
+When a Codex implementation prompt requires CI and any required check fails, is cancelled, times out, or requires action, Codex must output exactly:
 
-## 7. UI rules
+```text
+Send me the correction prompt.
+```
 
-Use `docs/design-system/PLAIVRA_CROSS_PLATFORM_UI_CONSTITUTION.md`.
+Then stop. Do not investigate, rerun, modify files, download artifacts, or update the report. Independent quality control performs the diagnosis.
 
-Key constraints:
+## Completion
 
-- one dominant user job per route;
-- one primary action per visible section;
-- web mobile targets at least 44 × 44 px, preferably 48 × 48;
-- iOS targets at least 44 × 44 pt;
-- Android targets at least 48 × 48 dp;
-- use the approved spacing, typography, radius, motion, and data-state systems;
-- rendered QA must include mobile, tablet, and desktop where relevant;
-- web, iOS, and Android share semantics but use platform-native behavior.
-
-## 8. Quality requirements
-
-Run the relevant available checks from `package.json`:
-
-- lint;
-- typecheck;
-- unit/integration tests;
-- production build;
-- rendered browser QA for changed flows;
-- security tests for auth, MCP, permissions, privacy, or data changes.
-
-Do not claim a check passed unless it ran successfully.
-
-## 9. Agent/Ruflo usage
-
-Use the lightest coordination setup that can complete the task.
-
-- small targeted change: coder + tester;
-- medium multi-file change: coder + reviewer + tester;
-- auth, MCP, Supabase, privacy, or security: security review + coder + reviewer + tester;
-- repo-wide independent workstreams: swarm only when real parallel decomposition exists.
-
-Do not invoke every skill by default. Coordination is not a substitute for implementation.
-
-## 10. Final report
-
-Report:
-
-1. changed files;
-2. product/architecture decision applied;
-3. data or migration impact;
-4. tests and rendered checks actually run;
-5. security/privacy impact;
-6. remaining risks or unverified behavior;
-7. rollback or follow-up requirement.
-
-Do not commit or push when the user explicitly prohibits it. Otherwise use clear conventional commit messages and avoid unrelated changes in the same commit.
+Report changed files, implemented decision, database/migration impact, checks actually run, security/privacy impact, remaining risk, and rollback/follow-up boundary. Do not merge, deploy, mutate production, or begin a later phase without explicit authorization.

@@ -1,13 +1,21 @@
-RUN ORDER IN SUPABASE SQL EDITOR
+PLAIVRA SEED-ONLY GUIDE
 
-Run migrations first, then seed only app-owned data.
+This file is not migration authority.
 
-1. Run every file in ../migrations in the canonical order documented in README.md.
-2. Run 001_egyptian_foods.sql.
-3. Run 002_sample_workouts_and_videos.sql only if you want the small manual demo set.
-4. Register your first user.
-5. Run 004_admin_setup_placeholder.sql after editing the target admin email if needed.
+Migration authority:
+- supabase/migration-ledger.json
+- the immutable files under supabase/migrations/
+- the repository's supported Supabase CLI/release procedure
 
-FitLife Hub does not generate workout plans internally and no workout-template recommendation seed should be run.
-Exercise data comes from ../migrations/016_seed_real_600_exercise_library.sql.
-Do not run retired duplicate exercise seeds or wger activation migrations for a new database.
+Never copy, replay, rename, rewrite, delete, or manually reorder an applied migration from this directory or the Supabase SQL Editor.
+
+Seeds are optional data fixtures for a fresh local, isolated development, or explicitly approved reviewer environment. Do not run them against production unless a separately reviewed operation explicitly authorizes the exact seed and target.
+
+Available seed files:
+1. 001_egyptian_foods.sql — optional app-owned food reference data for an appropriate fresh environment.
+2. 002_sample_workouts_and_videos.sql — optional small demo fixture only.
+3. 004_admin_setup_placeholder.sql — manual placeholder; edit and review the target identity before use.
+
+Use `supabase db reset --local` for the repository's local migration chain. The Quality workflow resets with `--no-seed`, so seeds are not required for migration or application correctness.
+
+Exercise catalog data comes from the current migration/provider architecture. Do not search for or run retired numbered FitLife migrations or duplicate exercise seeds.
