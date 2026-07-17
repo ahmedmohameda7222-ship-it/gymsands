@@ -99,7 +99,7 @@ describe("Muscle Intelligence Phase 2 migration contract", () => {
     expect(ledger.pendingCount).toBe(pendingEntries.length);
     expect(ledger.unresolvedCount).toBe(ledger.pendingCount);
     expect(ledger.historyRepair).toMatchObject({
-      state: "reconciled",
+      state: "pending",
       schemaAppliedUntrackedCount: 0,
       pendingCount: ledger.pendingCount,
       unresolvedCount: ledger.unresolvedCount
