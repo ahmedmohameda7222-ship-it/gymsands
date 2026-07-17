@@ -59,6 +59,7 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 - Train Phase 2A provides the additive multi-week hierarchy; the legacy plan writer remains active until later cutover phases.
 - Muscle Intelligence Phase 2 now versions and validates the approved 60-exercise registry, six normalized curation tables, 60 mappings with 180 entries, 180 localizations, 180 aliases, 32 relationships, nine exact provider links, and five golden-plan fixtures without changing visible Train behavior.
 - The generated 600-row legacy exercise catalog remains retired. The reviewed 60-exercise curated registry and mapping cohort are now applied to production and tracked through migration `20260717051011_muscle_intelligence_phase2_curated_seed`.
+- Muscle Intelligence Phase 3 now freezes immutable, owner-scoped interpretations under the existing performed-session root and exposes deterministic planned/completed historical analysis without adding the Heat Map UI. Its explicitly authorized production migrations are tracked through `20260717202151_muscle_intelligence_phase3_integrity_corrections`.
 - Entitlement and billing foundations exist, but checkout remains disabled until offerings and release controls are approved.
 - No native iOS or Android binary exists.
 
@@ -83,8 +84,8 @@ Human record: `docs/architecture/migration-ledger-reconciliation.md`
 
 Verified production state on 2026-07-17:
 
-- 37 applied migrations;
-- latest migration: `20260717051011_muscle_intelligence_phase2_curated_seed`;
+- 39 applied migrations;
+- latest migration: `20260717202151_muscle_intelligence_phase3_integrity_corrections`;
 - the Phase 2 schema and deterministic seed migrations are applied and tracked;
 - `pendingCount=0`;
 - `schemaAppliedUntrackedCount=0`;

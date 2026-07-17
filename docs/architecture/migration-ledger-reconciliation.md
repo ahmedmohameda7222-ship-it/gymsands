@@ -6,21 +6,27 @@
 
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 
-**Reconciliation status:** **Reconciled through Muscle Intelligence Phase 2**
+**Reconciliation status:** **Reconciled through Muscle Intelligence Phase 3 integrity corrections**
 
 This document records verified production migration history. It is not authorization to replay migration SQL, deploy, promote, update compatibility markers, or merge. Applied migration files and production identities must never be renamed, rewritten, deleted, manually reordered, or replayed.
 
 ## Current state
 
-- Supabase migration history contains 37 applied migrations.
+- Supabase migration history contains 39 applied migrations.
 - `pendingCount = 0`
 - `schemaAppliedUntrackedCount = 0`
 - `unresolvedCount = 0`
 - `historyRepair.state = reconciled`
-- The latest verified production migration is `20260717051011_muscle_intelligence_phase2_curated_seed`.
+- The latest verified production migration is `20260717202151_muscle_intelligence_phase3_integrity_corrections`.
 - Repository and production migration identities are aligned through the latest applied migration.
 - Ledger-level migration-history release readiness is true.
 - The production compatibility marker intentionally remains `20260717032851` until a separately coordinated code merge and deployment operation.
+
+## Muscle Intelligence Phase 3 session snapshots
+
+`20260717194847_muscle_intelligence_phase3_session_snapshots.sql` was applied transactionally through the Supabase management integration on 2026-07-17 after explicit user authorization. Production history records the exact version and name once. Read-only verification confirmed nine snapshots for nine performed sessions, 29 stable historical items, zero missing snapshots, zero ownership mismatches, RLS on both new tables, no anonymous table/RPC access, no member table mutation grants, and authenticated access only to the controlled replacement RPC. All nine legacy snapshots are explicitly unavailable because no exact historical mapping could be proven; no names were matched. Do not replay this migration.
+
+`20260717202151_muscle_intelligence_phase3_integrity_corrections.sql` was then applied as a separate forward-only correction after independent review; the first migration remains byte-immutable. Git blob `af02da43e4d61f9248ad6110b9e58f99cac84560`. It adds cascade-safe FK nullification/deletion for account privacy lifecycle, published-only future mapping selection, active-interval cleanup for existing history, owner-validated reads of retired frozen global mappings, orthogonal terminal performance state, identity-first replacement retry idempotency, and validated mapping bundles. Production postconditions found zero invalid historical mapping intervals and both bundle constraints validated. Do not replay this migration.
 
 ## Muscle Intelligence Phase 2
 
@@ -71,7 +77,7 @@ Do not replay either migration. Any later correction requires a new named forwar
 The physical production migration head is now:
 
 ```text
-20260717051011
+20260717202151
 ```
 
 The deployed release compatibility marker remains:

@@ -106,6 +106,7 @@ jobs:
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-phase2a-program-architecture.sql
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/muscle-intelligence-phase1.sql
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/muscle-intelligence-phase2.sql
+            PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/muscle-intelligence-phase3-session-snapshots.sql
             PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres" node scripts/test-database-preflight-control.mjs
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
           ) 2>&1 | tee quality-reports/database-preflight.log

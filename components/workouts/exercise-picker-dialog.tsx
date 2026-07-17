@@ -41,12 +41,13 @@ function isAbortError(error: unknown) {
 
 const emptyPagination = { hasMore: false, nextOffset: null as number | null };
 
-export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys, onAdd }: {
+export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys, onAdd, maxSelection }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   dayName: string;
   existingKeys: string[];
   onAdd: (exercises: Workout[]) => void;
+  maxSelection?: number;
 }) {
   const { dir, locale, tr } = useTrainTranslation();
   const libraryLoadFailedMessage = tr("libraryLoadFailed");
@@ -74,7 +75,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   const filtersControllerRef = useRef<AbortController | null>(null);
   const activitiesControllerRef = useRef<AbortController | null>(null);
   const loadMoreControllerRef = useRef<AbortController | null>(null);
-  const initialCatalogRequestGroupId = useMemo(() => open ? createCatalogRequestGroupId() : null, [locale, open]);
+  const initialCatalogRequestGroupId = useMemo(() => open ? createCatalogRequestGroupId() : null, [open]);
   const existing = useMemo(() => new Set(existingKeys), [existingKeys]);
 
   const activeFilters = useMemo(() => ({
@@ -199,9 +200,13 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
     const key = exerciseKey(exercise);
     if (existing.has(key)) return;
     setSelected((current) => {
-      const next = new Map(current);
-      if (next.has(key)) next.delete(key);
-      else next.set(key, exercise);
+      if (current.has(key)) {
+        const next = new Map(current);
+        next.delete(key);
+        return next;
+      }
+      const next = maxSelection === 1 ? new Map<string, Workout>() : new Map(current);
+      next.set(key, exercise);
       return next;
     });
   }

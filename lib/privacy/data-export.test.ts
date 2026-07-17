@@ -49,6 +49,8 @@ function exportSupabaseMock() {
       if (table === "user_workout_plan_phases") return { data: [{ id: "phase-a", plan_session_id: "plan-session-a" }], error: null };
       if (table === "user_workout_plan_activities") return { data: [{ id: "activity-a", plan_phase_id: "phase-a" }], error: null };
       if (table === "workout_sessions") return { data: [{ id: "session-a", user_id: userA }], error: null };
+      if (table === "workout_session_muscle_snapshots") return { data: [{ id: "snapshot-a", user_id: userA, workout_session_id: "session-a" }], error: null };
+      if (table === "workout_session_muscle_snapshot_items") return { data: [{ id: "snapshot-item-a", snapshot_id: "snapshot-a", user_id: userA }], error: null };
       if (table === "user_workout_sessions") return { data: [{ id: "scheduled-a", user_id: userA }], error: null };
       if (table === "user_custom_exercise_mapping_sets") return { data: [{ id: "custom-mapping-a", user_id: userA, custom_exercise_id: "user_custom_exercises-a" }], error: null };
       if (table === "user_custom_exercise_mapping_entries") return { data: [{ id: "custom-entry-a", mapping_set_id: "custom-mapping-a" }], error: null };
@@ -82,6 +84,7 @@ describe("current-user privacy export", () => {
     const directlyOwnedTables = [
       "onboarding_answers", "user_app_settings", "user_ai_permission_settings", "user_consents",
       "privacy_requests", "user_workout_plans", "workout_sessions", "user_workout_sessions",
+      "workout_session_muscle_snapshots",
       "user_custom_exercise_mapping_sets",
       "food_logs", "calorie_targets", "user_food_items", "user_meal_plan_items", "meals",
       "water_logs", "progress_entries", "body_measurements", "progress_photos", "personal_records",
@@ -101,12 +104,15 @@ describe("current-user privacy export", () => {
     expect(calls.find((call) => call.table === "user_workout_plan_phases")?.inFilters).toContainEqual(["plan_session_id", ["plan-session-a"]]);
     expect(calls.find((call) => call.table === "user_workout_plan_activities")?.inFilters).toContainEqual(["plan_phase_id", ["phase-a"]]);
     expect(calls.find((call) => call.table === "user_custom_exercise_mapping_entries")?.inFilters).toContainEqual(["mapping_set_id", ["custom-mapping-a"]]);
+    expect(calls.find((call) => call.table === "workout_session_muscle_snapshot_items")?.inFilters).toContainEqual(["snapshot_id", ["snapshot-a"]]);
     expect(payload.data.workouts).toMatchObject({
       program_week_templates: [{ id: "template-a", plan_id: "plan-a" }],
       program_weeks: [{ id: "week-a", plan_id: "plan-a", week_template_id: "template-a" }],
       program_sessions: [{ id: "plan-session-a", week_template_id: "template-a" }],
       program_phases: [{ id: "phase-a", plan_session_id: "plan-session-a" }],
       planned_activities: [{ id: "activity-a", plan_phase_id: "phase-a" }],
+      muscle_analysis_snapshots: [{ id: "snapshot-a", user_id: userA, workout_session_id: "session-a" }],
+      muscle_analysis_snapshot_items: [{ id: "snapshot-item-a", snapshot_id: "snapshot-a", user_id: userA }],
       custom_exercise_mapping_sets: [{ id: "custom-mapping-a", user_id: userA, custom_exercise_id: "user_custom_exercises-a" }],
       custom_exercise_mapping_entries: [{ id: "custom-entry-a", mapping_set_id: "custom-mapping-a" }]
     });
