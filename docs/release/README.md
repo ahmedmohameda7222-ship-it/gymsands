@@ -19,11 +19,13 @@ Any failed or blocked preflight is a no-go before merge. The migration ledger mu
 
 Verified on 2026-07-17:
 
-- 34 applied migrations;
-- latest identity: `20260716215602_muscle_intelligence_phase1_foundation`;
+- 35 applied migrations;
+- latest identity: `20260717032851_retire_legacy_600_exercise_catalog`;
 - zero pending, schema-applied-untracked, or unresolved migrations;
 - `historyRepair.state=reconciled`;
 - ledger-level `releaseReady=true`.
+
+The latest migration retired only the provenance-matched generated 600-row legacy exercise catalog across `exercises`, `workouts`, and `exercise_library`. Post-application verification confirmed zero target rows remain and existing user workout plans and performed sessions were preserved.
 
 The machine authority is `supabase/migration-ledger.json`. The human record is `docs/architecture/migration-ledger-reconciliation.md`. Applied migrations are immutable and must never be replayed, renamed, rewritten, deleted, or manually reordered.
 
