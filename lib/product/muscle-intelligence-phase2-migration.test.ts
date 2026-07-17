@@ -13,10 +13,12 @@ const registry = JSON.parse(readFileSync("data/muscle-intelligence/v1/registry.j
   relationships: unknown[];
 };
 const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
+  productionMigrationCount: number;
+  schemaVerifiedUntrackedCount: number;
   pendingCount: number;
   unresolvedCount: number;
-  historyRepair: { state: string; pendingCount: number };
-  entries: Array<{ localFile: string; state: string }>;
+  historyRepair: { state: string; schemaAppliedUntrackedCount: number; pendingCount: number; unresolvedCount: number };
+  entries: Array<{ productionVersion?: string; productionName?: string; localFile: string; state: string }>;
 };
 
 const phase2Tables = [
@@ -77,12 +79,29 @@ describe("Muscle Intelligence Phase 2 migration contract", () => {
     expect(verification.trimEnd().endsWith("rollback;")).toBe(true);
   });
 
-  it("classifies both forward migrations as pending while production remains unchanged", () => {
-    expect(ledger.entries.find((entry) => entry.localFile === schemaPath.split("/").at(-1))?.state).toBe("pending");
-    expect(ledger.entries.find((entry) => entry.localFile === seedPath.split("/").at(-1))?.state).toBe("pending");
-    expect(ledger.pendingCount).toBe(2);
-    expect(ledger.unresolvedCount).toBe(2);
-    expect(ledger.historyRepair.state).toBe("pending");
-    expect(ledger.historyRepair.pendingCount).toBe(2);
+  it("classifies both production migrations as applied and fully reconciled", () => {
+    const schemaEntry = ledger.entries.find((entry) => entry.localFile === schemaPath.split("/").at(-1));
+    const seedEntry = ledger.entries.find((entry) => entry.localFile === seedPath.split("/").at(-1));
+
+    expect(schemaEntry).toMatchObject({
+      state: "applied",
+      productionVersion: "20260717051008",
+      productionName: "muscle_intelligence_phase2_curated_schema"
+    });
+    expect(seedEntry).toMatchObject({
+      state: "applied",
+      productionVersion: "20260717051011",
+      productionName: "muscle_intelligence_phase2_curated_seed"
+    });
+    expect(ledger.productionMigrationCount).toBe(37);
+    expect(ledger.schemaVerifiedUntrackedCount).toBe(0);
+    expect(ledger.pendingCount).toBe(0);
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair).toMatchObject({
+      state: "reconciled",
+      schemaAppliedUntrackedCount: 0,
+      pendingCount: 0,
+      unresolvedCount: 0
+    });
   });
 });
