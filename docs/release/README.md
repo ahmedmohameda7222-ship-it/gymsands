@@ -122,15 +122,14 @@ npm run release:preflight -- \
 4. Run strict production environment validation without exposing secret values.
 5. Run `npm run release:preflight -- --mode release ...` and retain its passing result.
 6. Obtain explicit release-owner approval for the exact reviewed change.
-7. Coordinate any required compatibility-marker advancement with the exact merge/deployment operation.
-8. Merge the approved exact change to `main`.
-9. Record the exact resulting 40-character `main` SHA.
-10. Confirm Vercel production was built from that exact SHA.
-11. Verify provider metadata, `/api/version`, and `/api/health`.
-12. Run anonymous smoke.
-13. Run populated and empty authenticated synthetic smoke.
-14. Review browser, console, network, screenshots, route timings, and request counts.
-15. Record the final launch verdict.
+7. Merge the approved exact change to `main` only as part of the coordinated compatibility-marker and deployment operation.
+8. Record the exact resulting 40-character `main` SHA.
+9. Confirm Vercel production was built from that exact SHA.
+10. Verify provider metadata, `/api/version`, and `/api/health`.
+11. Run anonymous smoke.
+12. Run populated and empty authenticated synthetic smoke.
+13. Review browser, console, network, screenshots, route timings, and request counts.
+14. Record the final launch verdict.
 
 ## Rollback
 
