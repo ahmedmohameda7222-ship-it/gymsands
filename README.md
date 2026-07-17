@@ -58,7 +58,7 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 - Public MCP, OAuth/CIMD, task-specific context projections, privacy, idempotency, and release foundations exist; publication and full production acceptance remain separate gates.
 - Train Phase 2A provides the additive multi-week hierarchy; the legacy plan writer remains active until later cutover phases.
 - Muscle Intelligence Phase 2 now versions and validates the approved 60-exercise registry, six normalized curation tables, 60 mappings with 180 entries, 180 localizations, 180 aliases, 32 relationships, nine exact provider links, and five golden-plan fixtures without changing visible Train behavior.
-- The generated 600-row legacy exercise catalog remains retired. Production stays empty until the two Phase 2 migrations are separately reviewed, authorized, applied, and reconciled.
+- The generated 600-row legacy exercise catalog remains retired. The reviewed 60-exercise curated registry and mapping cohort are now applied to production and tracked through migration `20260717051011_muscle_intelligence_phase2_curated_seed`.
 - Entitlement and billing foundations exist, but checkout remains disabled until offerings and release controls are approved.
 - No native iOS or Android binary exists.
 
@@ -83,15 +83,15 @@ Human record: `docs/architecture/migration-ledger-reconciliation.md`
 
 Verified production state on 2026-07-17:
 
-- 35 applied migrations;
-- latest migration: `20260717032851_retire_legacy_600_exercise_catalog`;
-- two repository-only Phase 2 migrations are pending production application;
-- pending files: `20260717051008_muscle_intelligence_phase2_curated_schema.sql` and `20260717051011_muscle_intelligence_phase2_curated_seed.sql`;
-- `pendingCount=2`;
+- 37 applied migrations;
+- latest migration: `20260717051011_muscle_intelligence_phase2_curated_seed`;
+- the Phase 2 schema and deterministic seed migrations are applied and tracked;
+- `pendingCount=0`;
 - `schemaAppliedUntrackedCount=0`;
-- `unresolvedCount=2`;
-- `historyRepair.state=pending`;
-- ledger-level release readiness is false until a separately authorized database application and reconciliation occurs.
+- `unresolvedCount=0`;
+- `historyRepair.state=reconciled`;
+- ledger-level release readiness is true for migration-history reconciliation;
+- the deployed application compatibility marker intentionally remains `20260717032851` until a separately coordinated exact-head merge and deployment release operation.
 
 Never replay, rename, rewrite, delete, or manually reorder an applied migration. Seed documentation is not migration authority.
 
