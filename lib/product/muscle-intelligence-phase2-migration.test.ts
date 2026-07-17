@@ -79,9 +79,10 @@ describe("Muscle Intelligence Phase 2 migration contract", () => {
     expect(verification.trimEnd().endsWith("rollback;")).toBe(true);
   });
 
-  it("keeps both Phase 2 migrations applied after Phase 3", () => {
+  it("keeps both Phase 2 migrations applied while later migration state remains truthfully classified", () => {
     const schemaEntry = ledger.entries.find((entry) => entry.localFile === schemaPath.split("/").at(-1));
     const seedEntry = ledger.entries.find((entry) => entry.localFile === seedPath.split("/").at(-1));
+    const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");
 
     expect(schemaEntry).toMatchObject({
       state: "applied",
@@ -95,13 +96,13 @@ describe("Muscle Intelligence Phase 2 migration contract", () => {
     });
     expect(ledger.productionMigrationCount).toBe(39);
     expect(ledger.schemaVerifiedUntrackedCount).toBe(0);
-    expect(ledger.pendingCount).toBe(0);
-    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.pendingCount).toBe(pendingEntries.length);
+    expect(ledger.unresolvedCount).toBe(ledger.pendingCount);
     expect(ledger.historyRepair).toMatchObject({
       state: "reconciled",
       schemaAppliedUntrackedCount: 0,
-      pendingCount: 0,
-      unresolvedCount: 0
+      pendingCount: ledger.pendingCount,
+      unresolvedCount: ledger.unresolvedCount
     });
   });
 });

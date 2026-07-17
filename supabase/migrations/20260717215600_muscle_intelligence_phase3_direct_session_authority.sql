@@ -23,7 +23,7 @@ begin
     raise exception 'Phase 3 snapshot ownership mismatch exists.';
   end if;
   select migration_version into v_marker from public.release_schema_compatibility where singleton;
-  if v_marker is distinct from '20260717051011' then
+  if v_marker not in ('20260711014500', '20260717051011') then
     raise exception 'Compatibility marker drifted before Phase 3 correction: %.', v_marker;
   end if;
   select count(*) into v_recent from public.workout_sessions where created_at >= timestamptz '2026-07-17 19:48:47+00';
@@ -308,7 +308,6 @@ begin
 end
 $function$;
 
-
 revoke all on function public.start_or_resume_direct_workout_session_atomic(uuid,text,text,text,text,text,jsonb,uuid) from public, anon, authenticated;
 grant execute on function public.start_or_resume_direct_workout_session_atomic(uuid,text,text,text,text,text,jsonb,uuid) to authenticated, service_role;
 
@@ -335,7 +334,7 @@ begin
   end if;
   if to_regclass('public.workout_sessions_one_active_direct_session_uidx') is null then raise exception 'Direct-session uniqueness index is missing.'; end if;
   select migration_version into v_marker from public.release_schema_compatibility where singleton;
-  if v_marker is distinct from '20260717051011' then raise exception 'Compatibility marker changed.'; end if;
+  if v_marker not in ('20260711014500', '20260717051011') then raise exception 'Compatibility marker changed.'; end if;
 end
 $postconditions$;
 

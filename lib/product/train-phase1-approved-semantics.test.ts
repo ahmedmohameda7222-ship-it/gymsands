@@ -73,8 +73,7 @@ describe("approved Train Phase 1 semantic contracts", () => {
     expect(picker).toContain("returnTarget.focus()");
     expect(picker).toContain("aria-pressed={isSelected}");
     expect(picker).toContain("disabled={disabled}");
-    expect(picker).toContain("if (existing.has(key)) return");
-    expect(picker).toContain("if (!isActionable(key)) return");
+    expect(picker).toContain("if (existing.has(key) || !isActionable(key)) return");
     expect(picker).toContain('tr("alreadyAdded")');
     expect(picker).toContain("env(safe-area-inset-bottom)");
     expect(picker).toContain('className="absolute inset-x-0 bottom-0 z-30');
