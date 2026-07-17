@@ -183,4 +183,3 @@ select pg_temp.assert_true(
   and not exists (select 1 from public.workout_session_muscle_snapshot_items where user_id = :'member_id'::uuid),
   'Account deletion did not remove owner-scoped snapshot history.'
 );
-

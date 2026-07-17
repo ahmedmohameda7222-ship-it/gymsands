@@ -136,4 +136,3 @@ select pg_temp.assert_true(
   ),
   'Started-then-skipped session did not reconcile exactly once.'
 );
-
