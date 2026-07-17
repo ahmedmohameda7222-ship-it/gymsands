@@ -2,24 +2,39 @@
 
 **Project:** `bkwezjxvapaeasfvlhvv`
 
-**Verified production state:** 2026-07-16
+**Verified production state:** 2026-07-17
 
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 
-**Reconciliation status:** **Reconciled / release gate eligible**
+**Reconciliation status:** **Reconciled / migration-ledger release gate eligible**
 
 This document records verified production migration history. It is not authorization to replay migration SQL, change compatibility markers, deploy, promote, or merge. Applied migration files and production identities must never be renamed, rewritten, deleted, or replayed.
 
 ## Current state
 
-- Supabase migration history contains 33 applied migrations.
+- Supabase migration history contains 34 applied migrations.
 - `pendingCount = 0`
 - `schemaAppliedUntrackedCount = 0`
 - `unresolvedCount = 0`
 - `historyRepair.state = reconciled`
-- The latest verified production migration is `20260715190000_train_phase2a_program_architecture`.
-- Repository and production migration identities are aligned.
-- Migration-ledger reconciliation no longer blocks release preflight.
+- The latest verified production migration is `20260716215602_muscle_intelligence_phase1_foundation`.
+- Repository and production migration identities are aligned through the latest applied migration.
+- Migration-ledger validation is expected to report `release_ready=true`; complete release readiness remains subject to exact-head CI and the other fail-closed release gates.
+
+## Muscle Intelligence Phase 1 production application
+
+```text
+20260716215602_muscle_intelligence_phase1_foundation.sql
+```
+
+Supabase migration history contains the exact production identity:
+
+```text
+version: 20260716215602
+name: muscle_intelligence_phase1_foundation
+```
+
+Read-only production verification on 2026-07-17 also confirmed all five Phase 1 tables and both publication functions exist. The migration is classified as `applied`. Do not replay it or any previously applied migration.
 
 ## Train Phase 2A production application
 
@@ -83,6 +98,7 @@ The following earlier production identities remain applied and must not be repla
 7. `20260714030000_harden_train_plan_rpc_execution.sql`
 8. `20260715010000_restrict_nutrition_target_override_acl.sql`
 9. `20260715190000_train_phase2a_program_architecture.sql`
+10. `20260716215602_muscle_intelligence_phase1_foundation.sql`
 
 ## Nutrition override ACL
 
@@ -117,7 +133,7 @@ TRUNCATE
 - `latestAppliedMigrationVersion`
 - `releaseReady`
 
-Resolved states are `applied` and `applied_version_alias`. The current ledger uses the exact `applied` identity for Phase 2A.
+Resolved states are `applied` and `applied_version_alias`. The current ledger uses exact `applied` identities for Phase 2A and Muscle Intelligence Phase 1.
 
 The ledger-level `releaseReady` value requires:
 
@@ -128,7 +144,7 @@ The ledger-level `releaseReady` value requires:
 - `unresolvedCount === 0`
 - all resolved production identities are valid.
 
-Those migration-specific conditions are now satisfied. Application release readiness remains independently fail-closed on exact artifact identity, schema compatibility, database migration-marker compatibility, retained quality evidence, deployment identity, and production smoke verification.
+Those migration-specific conditions are now satisfied, so release preflight is expected to become ready when the exact-head Quality evidence and manifest are complete. Application release readiness remains fail-closed on exact artifact identity, schema compatibility, retained quality evidence, deployment identity, and production smoke verification.
 
 ## Read-only preflight
 
@@ -155,7 +171,14 @@ Before merge or deployment:
 6. verify Vercel built the exact resulting `main` SHA;
 7. verify provider metadata, `/api/version`, `/api/health`, and required production smoke evidence.
 
-No deployment or merge was performed as part of the migration reconciliation operation.
+No deployment or merge was performed as part of this repository migration-ledger reconciliation.
+
+## Bounded inspection record
+
+- `scripts/check-migration-ledger.mjs` and `scripts/check-migration-ledger.test.mjs`: direct ledger validation contract and aggregate-state tests.
+- `scripts/release-preflight.mjs` and `scripts/release-preflight.test.mjs`: direct consumer of ledger reconciliation and release-ready state.
+- `lib/product/muscle-intelligence-phase1-migration.test.ts`: direct Phase 1 ledger-state assertion requiring reconciliation.
+- `.github/workflows/quality.yml`: direct CI consumer that derives the expected production migration and runs release preflight.
 
 ## Advisor status
 

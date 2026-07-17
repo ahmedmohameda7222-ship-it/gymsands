@@ -19,6 +19,7 @@ const OWNED_EXPORT_TABLES = [
   "user_exercise_alternatives",
   "user_exercise_favorites",
   "user_custom_exercises",
+  "user_custom_exercise_mapping_sets",
   "user_exercise_videos",
   "food_logs",
   "calorie_targets",
@@ -176,6 +177,11 @@ export async function buildCurrentUserDataExport(
   const planBlockItems = await relatedRows("user_workout_plan_block_items", "block_id", ids(planBlocks));
   const exerciseLogs = await relatedRows("exercise_logs", "workout_session_id", ids(owned.workout_sessions));
   const userExerciseLogs = await relatedRows("user_exercise_logs", "user_workout_session_id", ids(owned.user_workout_sessions));
+  const customExerciseMappingEntries = await relatedRows(
+    "user_custom_exercise_mapping_entries",
+    "mapping_set_id",
+    ids(owned.user_custom_exercise_mapping_sets)
+  );
   const customMealItems = await relatedRows("custom_meal_items", "meal_id", ids(owned.custom_meals));
   const mealFoodItems = await relatedRows("meal_food_items", "meal_id", ids(owned.meals));
   const recipeIngredients = await relatedRows("saved_recipe_ingredients", "recipe_id", ids(owned.saved_recipes));
@@ -250,6 +256,8 @@ export async function buildCurrentUserDataExport(
         exercise_alternatives: owned.user_exercise_alternatives,
         exercise_favorites: owned.user_exercise_favorites,
         custom_exercises: owned.user_custom_exercises,
+        custom_exercise_mapping_sets: owned.user_custom_exercise_mapping_sets,
+        custom_exercise_mapping_entries: customExerciseMappingEntries,
         exercise_videos: owned.user_exercise_videos
       },
       nutrition: {

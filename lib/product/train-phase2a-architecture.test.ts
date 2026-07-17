@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 
 const migrationPath = "supabase/migrations/20260715190000_train_phase2a_program_architecture.sql";
 const verificationPath = "supabase/verification/train-phase2a-program-architecture.sql";
-const migration = readFileSync(migrationPath, "utf8").toLowerCase();
-const verification = readFileSync(verificationPath, "utf8").toLowerCase();
+const migration = readFileSync(migrationPath, "utf8").replaceAll("\r\n", "\n").toLowerCase();
+const verification = readFileSync(verificationPath, "utf8").replaceAll("\r\n", "\n").toLowerCase();
 const adr = readFileSync("docs/architecture/decisions/0004-train-multi-week-multi-sport-program-model.md", "utf8");
 const canonical = readFileSync("docs/architecture/canonical-domain-model.md", "utf8");
 const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
@@ -96,16 +96,13 @@ describe("Train Phase 2A architecture contract", () => {
     expect(workflow).toContain("-f supabase/verification/train-phase2a-program-architecture.sql");
   });
 
-  it("records the verified Phase 2A production identity and reconciles migration history", () => {
+  it("records the verified Phase 2A production identity independently of later forward migrations", () => {
     const phase2aEntry = migrationLedger.entries.find(
       (entry) => entry.localFile === "20260715190000_train_phase2a_program_architecture.sql"
     );
     expect(phase2aEntry?.state).toBe("applied");
     expect(phase2aEntry?.productionVersion).toBe("20260715190000");
     expect(phase2aEntry?.productionName).toBe("train_phase2a_program_architecture");
-    expect(migrationLedger.historyRepair.state).toBe("reconciled");
-    expect(migrationLedger.pendingCount).toBe(0);
-    expect(migrationLedger.unresolvedCount).toBe(0);
   });
 
   it("documents the target model without claiming runtime cutover", () => {
