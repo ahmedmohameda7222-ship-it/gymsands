@@ -1,6 +1,6 @@
 # Plaivra Canonical Domain Model
 
-**Version:** 2026.5
+**Version:** 2026.5  
 **Status:** Current convergence and cleanup authority
 
 ## Principles
@@ -16,51 +16,39 @@
 
 ## Current status matrix
 
-| Domain | Current canonical direction | Status |
+| Domain | Canonical direction | Current status |
 |---|---|---|
-| Profile/context | `profiles`, onboarding answers, structured preference profiles, functional constraints, AI permissions, app settings, consents | Active; task-specific context projections are implemented and continue to replace broad reads |
-| Workout plans | Multi-week Phase 2A hierarchy under `user_workout_plans` | Additive model is applied; legacy writer cutover is not complete |
-| Performed sessions | `workout_sessions` + `exercise_logs`; `user_workout_sessions` remains schedule-instance data | Decided by ADR 0001; compatibility links remain |
-| Exercise catalog | `exercises` is the canonical global definition target | Generated 600-row legacy seed retired; approved 60-exercise cohort is implemented in pending forward migrations |
-| Saved nutrition | `saved_recipes` + `saved_recipe_ingredients` | Active canonical target; legacy custom-meal data must be preserved during cutover |
-| ChatGPT/OAuth | curated public MCP, task projections, OAuth/CIMD records, permissions, audit, idempotency | Foundation implemented; publication and production acceptance remain separate gates |
-| Muscle Intelligence | code-authoritative taxonomy, versioned mappings, deterministic engine | Phase 2 curated registry implemented; production application and visible runtime features remain separate |
-| Entitlements | provider-neutral offerings, customers, subscriptions, events, and entitlements | Database foundation exists; checkout remains disabled |
-| Native | shared contracts only | No iOS or Android binary exists |
-
-## Profile and context
-
-Canonical responsibilities include:
-
-- `profiles` for account-adjacent core profile data;
-- `onboarding_answers` and structured preference/profile tables for editable planning context;
-- `user_fitness_constraints` for user-authored functional constraints, not diagnoses;
-- `user_ai_permission_settings`, `user_app_settings`, and `user_consents`;
-- versioned task-specific context projections for ChatGPT.
-
-`user_safety_profiles` and the broad AI request workflow were retired and dropped. Do not recreate them or expose detailed clinical fields through public tools.
+| Profile/context | `profiles`, onboarding answers, structured preferences, functional constraints, permissions, settings, consents | Active; task-specific projections continue replacing broad reads |
+| Workout plans | Multi-week Phase 2A hierarchy under `user_workout_plans` | Additive model applied; legacy writer cutover remains |
+| Performed sessions | `workout_sessions` plus `exercise_logs`; `user_workout_sessions` is schedule-instance data | ADR 0001 active; compatibility links remain |
+| Exercise catalog | `exercises` | Generated 600-row legacy catalog retired; approved 60-exercise cohort applied and tracked |
+| Saved nutrition | `saved_recipes` plus `saved_recipe_ingredients` | Canonical target active; legacy custom-meal data must be preserved during cutover |
+| ChatGPT/OAuth | Curated MCP, task projections, OAuth/CIMD, permissions, audit, idempotency | Foundation implemented; publication and production acceptance remain separate gates |
+| Muscle Intelligence | Code-authoritative taxonomy, immutable mappings, deterministic calculation | Phase 2 curated registry and mappings applied; visible runtime features remain separate |
+| Entitlements | Provider-neutral offerings, subscriptions, events, entitlements | Foundation exists; checkout remains disabled |
+| Native | Shared contracts only | No iOS or Android binary exists |
 
 ## Workout plans
 
-The approved target program architecture is:
+The approved target hierarchy is:
 
 ```text
 user_workout_plans
-├── user_workout_plan_week_templates
-│   └── user_workout_plan_sessions
-│       └── user_workout_plan_phases
-│           └── user_workout_plan_activities
-└── user_workout_plan_weeks
-    └── references one reusable week template
+- user_workout_plan_week_templates
+  - user_workout_plan_sessions
+    - user_workout_plan_phases
+      - user_workout_plan_activities
+- user_workout_plan_weeks
+  - references one reusable week template
 ```
 
-Phase 2A is additive. Until later projection, writer, schedule, privacy, and regression gates complete cutover, the active runtime plan write path remains:
+Until later projection, writer, schedule, privacy, and regression gates complete cutover, the active compatibility writer remains:
 
 - `user_workout_plans`;
 - `user_workout_plan_days`;
 - `user_workout_plan_exercises`.
 
-Do not create new plan features on `user_workout_plan_blocks` or `user_workout_plan_block_items`. ADR 0004 governs the target hierarchy and prohibits a third performed-session root.
+Do not create a third performed-session model or new features on the retired block architecture.
 
 ## Performed workout sessions
 
@@ -68,98 +56,85 @@ ADR 0001 selects:
 
 - `workout_sessions` as the performed-session root;
 - `exercise_logs` as performed exercise/set history;
-- `user_workout_sessions` as the schedule-instance model;
-- `user_exercise_logs` only as a bounded compatibility snapshot until link and backfill gates are complete.
-
-No third performed-session model is allowed.
+- `user_workout_sessions` as schedule-instance state;
+- `user_exercise_logs` only as a bounded compatibility snapshot until link and backfill gates complete.
 
 ## Exercise catalog and Activity Catalog
 
-ADR 0002 selects `exercises` as the target global definition table. The generated 600-row FitLife/Plaivra seed was retired from `exercises`, `workouts`, and `exercise_library` through applied migration `20260717032851_retire_legacy_600_exercise_catalog` after zero dependent user or mapping references were verified. The approved 60-exercise cohort is now repository-authoritative under `data/muscle-intelligence/v1/`, while production remains empty until the pending Phase 2 migrations are separately authorized and applied.
+ADR 0002 selects `exercises` as the canonical global definition table.
 
-`workouts` and `exercise_library` remain compatibility schemas only; they are not separate future catalogs and must not be repopulated with a duplicate curated seed.
+Applied migration `20260717032851_retire_legacy_600_exercise_catalog` removed the generated legacy seed from `exercises`, `workouts`, and `exercise_library` after dependency checks. The approved registry under `data/muscle-intelligence/v1/` was then applied through:
 
-The Activity Catalog boundary supports:
+- `20260717051008_muscle_intelligence_phase2_curated_schema`;
+- `20260717051011_muscle_intelligence_phase2_curated_seed`.
 
-- `external` provider use when deliberately configured;
-- `legacy` compatibility data;
-- controlled `external_with_legacy_fallback`;
-- structured provider/fallback observability;
-- deterministic canonical ordering and pagination.
+Production now contains the reviewed 60-exercise cohort. `workouts` and `exercise_library` remain compatibility schemas and must not be repopulated with a duplicate curated seed.
 
-The external provider may still return exercises while the production Supabase canonical catalog is empty. Provider names, slugs, translations, or free-text muscle fields are not canonical exercise identity; only the nine reviewed exact links in the Phase 2 registry may create provider-link rows.
+The Activity Catalog boundary supports explicit external use, legacy compatibility, controlled external-with-legacy fallback, provider observability, and deterministic ordering/pagination. Provider names and text fields are not canonical identity. Only the nine reviewed exact links create provider-link rows.
 
-For compatibility, the legacy Activity Catalog provider normalizes curated JSON instruction arrays stored in the exercise text field into ordered structured steps. Ordinary historical plain text remains one step, and provider selection or fallback policy is unchanged.
+For compatibility, the legacy provider converts curated JSON instruction arrays stored in the text field into ordered instruction steps. Historical plain text remains one step. Provider selection and fallback policy are unchanged.
 
 ## Muscle Intelligence
 
-Phase 1 adds:
+Phase 1 provides:
 
 - one code-authoritative 24-muscle taxonomy;
-- `exercise_provider_links` for explicit non-authoritative provider aliases;
-- immutable versioned global and user-custom mapping sets/entries;
-- server-hardened publication functions;
-- a deterministic shared resistance-set calculation engine.
+- explicit provider identity links;
+- immutable versioned global and user-custom mapping sets and entries;
+- hardened publication functions;
+- deterministic resistance-set calculation.
 
-Mappings remain separate from exercise definitions. Phase 1 does not change Train runtime behavior, visible UI, plan/session writers, or seed trusted mappings.
+Phase 2 provides:
 
-Phase 2 adds the exact 60-exercise curated authority, EN/DE/AR localizations, controlled aliases, reviewed directed relationships, research/evidence/review provenance, nine exact Activity Catalog links, and one immutable published mapping version per exercise. Publication occurs only through `publish_exercise_muscle_mapping_set(...)`. The two forward migrations are pending and do not authorize a production write, release-marker update, UI cutover, Heat Map, or Phase 3/4 work.
+- 60 canonical curated exercises;
+- 180 EN/DE/AR localizations;
+- 180 controlled aliases;
+- 32 reviewed relationships;
+- 21 research sources and 89 evidence rows;
+- 60 internal reviews;
+- nine exact provider links;
+- 60 published mapping sets with 180 entries.
 
-## Nutrition
+Both Phase 2 migrations are applied and reconciled in production. All mappings are published, checksum-valid, and immutable. This does not by itself authorize a compatibility-marker update, UI cutover, Heat Map, or later runtime phase.
 
-Active canonical user data includes food logs, nutrition targets and date overrides, meal-plan items, grocery items, food favorites, saved recipes, and saved recipe ingredients.
+The physical production migration head is `20260717051011`. The deployed compatibility marker remains `20260717032851` until a coordinated exact-code merge and production deployment.
 
-ADR 0003 selects `saved_recipes` plus `saved_recipe_ingredients` as the canonical saved-content target. Preserve and source-link existing `custom_meals` and `custom_meal_items` before writer cutover or removal.
+## Other canonical domains
 
-## Progress and wellness
+- Profile and context remain under `profiles`, onboarding answers, structured preference tables, `user_fitness_constraints`, AI permission settings, app settings, consents, and task-specific context projections.
+- Saved nutrition converges on `saved_recipes` plus `saved_recipe_ingredients`; preserve and source-link legacy custom-meal data before cutover.
+- Progress and wellness include progress entries, measurements, photos, hydration, sleep/recovery, supplements, habits, daily tasks, personal records, and daily check-ins.
+- ChatGPT/OAuth infrastructure includes connections, authorization records, tokens, assertions, continuations, idempotency, rate limits, audit, permissions, and task-specific projections.
+- Entitlement and billing foundations remain disabled for checkout until separately approved.
 
-Active user-owned domains include progress entries, body measurements, progress photos, hydration, sleep/recovery, supplements, habits, daily tasks, personal records, and daily check-ins. Cleanup must preserve history, export, deletion, ownership, and privacy behavior.
+## Retired and dormant models
 
-## ChatGPT, OAuth, and CIMD
+`ai_action_requests` and `user_safety_profiles` were removed through applied migrations and must not be recreated.
 
-Current infrastructure includes:
-
-- `chatgpt_connections`;
-- OAuth authorization codes and access tokens;
-- OAuth client assertions and authorization continuations;
-- MCP idempotency, rate limits, audit logs, and permissions;
-- CIMD metadata validation and discovery support;
-- task-specific context projections.
-
-Client identity, user-owned connection, and issued token records remain distinct. No public member OAuth surface may expose admin tools, internal security state, or arbitrary database access.
-
-## Retired models
-
-`ai_action_requests` and `user_safety_profiles` were removed through applied migrations. Their old removal plans are historical evidence only. No new code, documentation, export path, permission, or tool may depend on them.
-
-## Dormant integrations/imports
-
-Models such as `user_integrations`, imported foods/cardio, import batches, and video imports require a named roadmap owner and activation phase. Zero rows alone are not deletion proof. Third-party credentials require provider-specific encrypted storage, rotation, least privilege, and revocation.
+Dormant integrations and imports require a named roadmap owner and activation phase. Zero rows are not deletion proof. Provider credentials require encrypted storage, rotation, least privilege, and revocation.
 
 ## Cleanup procedure
 
-For every data-model removal:
+For any removal:
 
 ```text
 prove code, route, MCP, export, deletion, test, and foreign-key dependencies
-→ stop new writes
-→ migrate or prove no required data
-→ update reads
-→ validate ownership, RLS, privacy, and release behavior
-→ deploy and monitor
-→ drop only in a later named migration
+stop new writes
+migrate or prove no required data
+update reads
+validate ownership, RLS, privacy, and release behavior
+deploy and monitor
+drop only in a later named migration
 ```
-
-For repository files and assets, prove runtime, build, test, workflow, and documentation references before deletion. Historical reports and generated evidence belong in Git history, pull requests, or retained release artifacts rather than the active tree.
 
 ## Decisions
 
 Accepted ADRs:
 
-- 0001 — performed workout sessions;
-- 0002 — exercise catalog;
-- 0003 — saved nutrition content;
-- 0004 — multi-week multi-sport program model;
-- 0005 — Muscle Intelligence taxonomy and mapping authority.
+- 0001 - performed workout sessions;
+- 0002 - exercise catalog;
+- 0003 - saved nutrition content;
+- 0004 - multi-week multi-sport program model;
+- 0005 - Muscle Intelligence taxonomy and mapping authority.
 
-Remaining work is staged implementation and cutover, not reopening these decisions without new evidence.
+Remaining work is staged implementation and cutover, not reopening approved decisions without new evidence.
