@@ -54,9 +54,8 @@ function normalizePreflightMode(value) {
   return normalized;
 }
 
-export function resolvePreflightMode(value, eventName = process.env.GITHUB_EVENT_NAME) {
-  if (value?.trim()) return normalizePreflightMode(value);
-  return eventName === "pull_request" ? "review" : "release";
+export function resolvePreflightMode(value) {
+  return normalizePreflightMode(value?.trim() ? value : "release");
 }
 
 function unique(values) {
@@ -184,7 +183,7 @@ export function evaluateReleasePreflight({
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const mode = resolvePreflightMode(options.mode || process.env.PLAIVRA_PREFLIGHT_MODE, process.env.GITHUB_EVENT_NAME);
+  const mode = resolvePreflightMode(options.mode || process.env.PLAIVRA_PREFLIGHT_MODE);
   const expectedCommit = exactSha(options.commit || process.env.PLAIVRA_RELEASE_PREFLIGHT_SHA, "Reviewed commit");
   const expectedRepository = safeRepository(options.repository || process.env.GITHUB_REPOSITORY || "ahmedmohameda7222-ship-it/gymsands");
   const checkedOutCommit = exactSha(git("rev-parse", "HEAD"), "Checked-out commit");

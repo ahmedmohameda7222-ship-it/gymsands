@@ -89,6 +89,8 @@ The Activity Catalog boundary supports:
 
 The external provider may still return exercises while the production Supabase canonical catalog is empty. Provider names, slugs, translations, or free-text muscle fields are not canonical exercise identity; only the nine reviewed exact links in the Phase 2 registry may create provider-link rows.
 
+For compatibility, the legacy Activity Catalog provider normalizes curated JSON instruction arrays stored in the exercise text field into ordered structured steps. Ordinary historical plain text remains one step, and provider selection or fallback policy is unchanged.
+
 ## Muscle Intelligence
 
 Phase 1 adds:

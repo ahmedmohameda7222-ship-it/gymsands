@@ -271,8 +271,10 @@ jobs:
             --quality-reports quality-reports 2>&1 | tee quality-reports/manifest.log
           echo "${PIPESTATUS[0]}" > quality-reports/manifest.exit
 
+          preflight_mode="${{ github.event_name == 'pull_request' && 'review' || 'release' }}"
           set +e
           npm run release:preflight -- \
+            --mode "${preflight_mode}" \
             --commit "${PLAIVRA_COMMIT_SHA}" \
             --repository "${GITHUB_REPOSITORY}" \
             --quality-reports quality-reports \

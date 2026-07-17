@@ -67,7 +67,7 @@ Public support/security contact: `Ahmed.Mohamed04@outlook.de`. Ask reporters to 
 
 ## Launch-day sequence
 
-Pull-request review preflight is CI evidence only. It may accept an internally consistent pending-only migration state, but it never authorizes merge or deployment. Before a production-triggering merge, migration history must be reconciled and the exact head must pass strict release mode.
+Pull-request review preflight is CI evidence only and requires explicit `--mode review`; omitted mode is always strict `release`, regardless of environment. Review mode may accept an internally consistent pending-only migration state, but it never authorizes merge or deployment. Before a production-triggering merge, migration history must be reconciled and the exact head must pass strict release mode.
 
 1. Complete code review and all required CI checks for the candidate change.
 2. Complete migration-history reconciliation and independent verification.

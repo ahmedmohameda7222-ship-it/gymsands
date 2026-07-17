@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
 import { evaluateReleasePreflight, resolvePreflightMode } from "./release-preflight.mjs";
 
@@ -83,14 +85,31 @@ test("defaults programmatic evaluation to strict release mode", () => {
   assert.deepEqual(result.failures, []);
 });
 
-test("selects review only for a pull-request workflow when no explicit mode is supplied", () => {
-  assert.equal(resolvePreflightMode(undefined, "pull_request"), "review");
-  assert.equal(resolvePreflightMode(undefined, "push"), "release");
-  assert.equal(resolvePreflightMode("release", "pull_request"), "release");
+test("defaults omitted mode to release even in a pull-request environment", () => {
+  const previousEventName = process.env.GITHUB_EVENT_NAME;
+  process.env.GITHUB_EVENT_NAME = "pull_request";
+  try {
+    assert.equal(resolvePreflightMode(undefined), "release");
+    assert.equal(resolvePreflightMode("review"), "review");
+    assert.equal(resolvePreflightMode("release"), "release");
+  } finally {
+    if (previousEventName === undefined) delete process.env.GITHUB_EVENT_NAME;
+    else process.env.GITHUB_EVENT_NAME = previousEventName;
+  }
 });
 
 test("strict release mode rejects a valid pending-only migration state", () => {
   const result = evaluateReleasePreflight({ ...pendingInput(), mode: "release" });
+  assert.equal(result.ready, false);
+  assert.equal(result.reviewReady, true);
+  assert.equal(result.releaseReady, false);
+  assert.deepEqual(result.failures, ["migration_ledger_not_reconciled"]);
+  assert.deepEqual(result.releaseBlockers, ["migration_ledger_not_reconciled"]);
+});
+
+test("default release mode rejects a valid pending-only migration state", () => {
+  const result = evaluateReleasePreflight(pendingInput());
+  assert.equal(result.mode, "release");
   assert.equal(result.ready, false);
   assert.equal(result.reviewReady, true);
   assert.equal(result.releaseReady, false);
@@ -195,6 +214,16 @@ test("unknown modes fail closed", () => {
     () => resolvePreflightMode("deploy", "pull_request"),
     /Preflight mode must be one of: release, review/
   );
+});
+
+test("Quality passes an explicit trusted review or release mode", () => {
+  const workflow = readFileSync(resolve(process.cwd(), ".github/workflows/quality.yml"), "utf8");
+  assert.match(
+    workflow,
+    /preflight_mode="\$\{\{ github\.event_name == 'pull_request' && 'review' \|\| 'release' \}\}"/
+  );
+  assert.match(workflow, /release:preflight -- \\\r?\n\s+--mode "\$\{preflight_mode\}"/);
+  assert.match(workflow, /on:\r?\n\s+pull_request:\r?\n\s+push:\r?\n\s+branches:\r?\n\s+- main/);
 });
 
 function expectFailure(input, code, mode) {

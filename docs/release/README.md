@@ -95,7 +95,7 @@ npm run release:preflight -- \
   --output quality-reports/release-preflight.json
 ```
 
-GitHub pull-request workflows select `review` mode from the trusted `GITHUB_EVENT_NAME=pull_request` context when no explicit mode is supplied. Review mode accepts only an internally consistent pending-only migration state with `pendingCount > 0`, zero schema-applied-untracked migrations, and `unresolvedCount = pendingCount`. It still validates the exact commit, manifest, runtime, and every required quality gate.
+The GitHub Quality workflow explicitly passes `--mode review` for `pull_request` events and `--mode release` for pushes to `main`. The Node preflight never infers a weaker mode from environment context. Review mode accepts only an internally consistent pending-only migration state with `pendingCount > 0`, zero schema-applied-untracked migrations, and `unresolvedCount = pendingCount`. It still validates the exact commit, manifest, runtime, and every required quality gate.
 
 A successful pending-only review records `reviewReady=true`, `releaseReady=false`, and retains `migration_ledger_not_reconciled` in `releaseBlockers`. It does not authorize database application, merge, or deployment.
 
@@ -112,7 +112,7 @@ npm run release:preflight -- \
   --output quality-reports/release-preflight.json
 ```
 
-`release` is the default mode outside a pull-request workflow. It remains fail-closed while any migration is pending or otherwise unreconciled. Unknown modes fail closed. The command performs no provider or Supabase write.
+`release` is the universal default whenever mode is omitted, including in a pull-request environment. Only an explicit `--mode review` selects review behavior. Release mode remains fail-closed while any migration is pending or otherwise unreconciled, and unknown modes fail closed. The command performs no provider or Supabase write.
 
 ## Production runbook
 
