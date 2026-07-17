@@ -27,8 +27,8 @@ The existing Next.js repository remains the main product repository. Native work
 | Public MCP catalog and execution | Implemented foundation with typed contracts, permissions, idempotency, and tests; platform publication remains incomplete |
 | CIMD/OAuth | Infrastructure implemented; final production configuration and platform review remain |
 | Train Phase 2A | Additive multi-week hierarchy applied; writer/runtime cutover remains future work |
-| Exercise catalog reset | Generated 600-row legacy catalog retired; approved 60-exercise replacement is implemented in pending forward migrations |
-| Muscle Intelligence | Phase 2 trusted curated registry, mappings, provenance, tests, and migration rehearsal implemented; production application remains separately gated |
+| Exercise catalog reset | Generated 600-row legacy catalog retired; approved 60-exercise replacement is applied and tracked in production |
+| Muscle Intelligence | Phase 2 curated registry, mappings, provenance, and migration reconciliation complete; runtime snapshot integration and visible features remain future phases |
 | Entitlements/billing | Provider-neutral database/service foundation exists; checkout and offerings remain disabled |
 | iOS/Android | Planning only; no native binary |
 
@@ -40,14 +40,15 @@ Do not blindly share DOM components, desktop assumptions, browser navigation, ho
 
 ## Next active priorities
 
-1. independently review the Phase 2 registry, migrations, RLS, checksums, and exact-head CI evidence;
-2. apply and reconcile the two pending Phase 2 migrations only under separate production authorization;
-3. complete remaining Train Phase 2 projection/writer/cutover work in controlled phases;
-4. finish public MCP/CIMD production configuration, acceptance, and submission evidence;
-5. stabilize web performance, accessibility, error states, and release observability;
-6. declare Product Constitution Lock only after core P0/P1 gates close;
-7. approve offerings and activate provider-neutral entitlements/web billing;
-8. begin iOS, then Android, from stable shared contracts.
+1. complete fresh exact-head review and merge/release coordination for PR #67;
+2. coordinate the compatibility marker with the exact merged and deployed application release;
+3. begin the next approved Muscle Intelligence runtime phase only after PR #67 is merged and production identity is verified;
+4. complete remaining Train Phase 2 projection/writer/cutover work in controlled phases;
+5. finish public MCP/CIMD production configuration, acceptance, and submission evidence;
+6. stabilize web performance, accessibility, error states, and release observability;
+7. declare Product Constitution Lock only after core P0/P1 gates close;
+8. approve offerings and activate provider-neutral entitlements/web billing;
+9. begin iOS, then Android, from stable shared contracts.
 
 ## Native direction
 
