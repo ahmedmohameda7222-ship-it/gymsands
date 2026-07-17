@@ -140,10 +140,10 @@ describe("Muscle Intelligence Phase 1 migration contract", () => {
     expect(canonical.toLowerCase()).toContain("phase 1 does not change train runtime behavior");
   });
 
-  it("classifies the forward migration as pending without claiming production application", () => {
-    expect(migrationLedger.entries.find((entry) => entry.localFile === "20260716215602_muscle_intelligence_phase1_foundation.sql")?.state).toBe("pending");
-    expect(migrationLedger.pendingCount).toBe(1);
-    expect(migrationLedger.unresolvedCount).toBe(1);
-    expect(migrationLedger.historyRepair.state).toBe("pending");
+  it("classifies the production migration as applied with reconciled aggregate state", () => {
+    expect(migrationLedger.entries.find((entry) => entry.localFile === "20260716215602_muscle_intelligence_phase1_foundation.sql")?.state).toBe("applied");
+    expect(migrationLedger.pendingCount).toBe(0);
+    expect(migrationLedger.unresolvedCount).toBe(0);
+    expect(migrationLedger.historyRepair.state).toBe("reconciled");
   });
 });

@@ -115,6 +115,19 @@ The migration also adds the compatible unique constraint on `user_custom_exercis
 - `git diff --check`: passed.
 - `npx.cmd supabase status`: could not connect because local Docker was unavailable at `//./pipe/docker_engine`; no local database command was claimed as passed.
 
+Ledger finalization validation on 2026-07-17:
+
+- `node --test scripts/check-migration-ledger.test.mjs scripts/release-preflight.test.mjs`: passed, 19 tests.
+- `npm.cmd run migration:ledger:check`: passed with 34 applied, 0 pending, 0 schema-untracked, 0 unresolved, `reconciliation=reconciled`, `release_ready=true`, and expected migration `20260716215602`.
+- `npx.cmd vitest run --config vitest.unit.config.mjs lib/product/muscle-intelligence-phase1-migration.test.ts`: passed, 1 file / 8 tests.
+- `npm.cmd run lint`: passed with the same pre-existing unrelated `exercise-picker-dialog.tsx` hook dependency warning.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run test:scripts`: passed, 66 tests.
+- `npm.cmd run test:unit`: passed, 152 files / 1001 tests.
+- `npm.cmd run test:integration`: passed, 10 tests; 38 environment-gated tests skipped.
+- `npm.cmd run build`: passed; Next.js production compilation and 91 static pages completed.
+- `git diff --check`: passed.
+
 ## Pull-request CI validation
 
 - Correction SHA `4a03eaa5e304966706247469744153d9c4e9ecdb`: Phase A Diff Validation run `29540566727` concluded `success`; Quality run `29540566672` concluded `failure`. Its artifact proved the full migration chain, database lint, and every non-release check passed, but database preflight exited `3` at `supabase/verification/muscle-intelligence-phase1.sql:455` because of the verification-order defect described above. The independent release preflight also remained fail-closed with `migration_ledger_not_reconciled`.
@@ -124,7 +137,7 @@ The migration also adds the compatible unique constraint on `user_custom_exercis
 ## Safe-database verification
 
 - Connected Plaivra production metadata was queried read-only before implementation. It confirmed the five proposed tables were absent and the canonical exercise/custom-exercise columns and policies matched the approved baseline. No user rows were queried.
-- The migration was not applied to production.
+- On 2026-07-17, read-only production verification confirmed migration history version `20260716215602` with name `muscle_intelligence_phase1_foundation`, all five Phase 1 tables, and both publication functions. No user rows were queried and no database mutation was performed during reconciliation.
 - Local execution remained unavailable because Docker was not running (`//./pipe/docker_engine` not found).
 - Quality run `29540566672` executed `supabase/verification/muscle-intelligence-phase1.sql` against the disposable local Supabase database and exposed the verification-order defect above.
 - Corrected Quality run `29541182434` applied the full migration chain to its disposable local Supabase database and completed `supabase/verification/muscle-intelligence-phase1.sql` successfully with `ON_ERROR_STOP=1`. Its `database-preflight.exit` is `0`, and the log reached the verification transaction's final `ROLLBACK`. This runtime-proves the catalog/constraint checks, RLS and member write boundary, cross-owner custom mapping isolation, publication authorization, checksum parity, published-entry immutability, one-current publication behavior, and account-deletion cascade behavior covered by the SQL.
@@ -135,7 +148,7 @@ The migration also adds the compatible unique constraint on `user_custom_exercis
 ## Known limitations and remaining gate
 
 - The expanded disposable Quality database-preflight gate passed on final code-bearing correction SHA `3d176da70d49424ea85f120765a9d27997b6d526`.
-- The migration ledger intentionally classifies `20260716215602_muscle_intelligence_phase1_foundation.sql` as `pending`; repository release readiness remains false.
+- The migration ledger classifies `20260716215602_muscle_intelligence_phase1_foundation.sql` as `applied`, with 34 applied, 0 pending, 0 schema-untracked, 0 unresolved, and `historyRepair.state = reconciled`. Release preflight is expected to become ready once exact-head CI regenerates complete evidence.
 - Phase 1 does not persist analysis output or historical mapping snapshots.
 - No trusted exercise mappings are seeded.
 
@@ -145,7 +158,15 @@ No UI, body SVG, heat map, builder/library filters, plan/session lifecycle chang
 
 ## Production and deployment status
 
-- Production migration: **not applied**
+- Production migration: **applied and verified read-only in production history**
+- Migration history: **reconciled**
 - Deployment: **not performed**
 - Merge: **not performed**
 - Final Git status: clean after the report metadata commit and push; exact branch head verified in the PR and final handoff
+
+## Ledger-finalization inspection scope
+
+- Required ledger/report sources: `supabase/migration-ledger.json`, `docs/architecture/migration-ledger-reconciliation.md`, this report, and PR #64 metadata.
+- Direct contracts inspected: `scripts/check-migration-ledger.mjs`, `scripts/check-migration-ledger.test.mjs`, `scripts/release-preflight.mjs`, `scripts/release-preflight.test.mjs`, and `lib/product/muscle-intelligence-phase1-migration.test.ts`.
+- Additional direct consumer inspected: `.github/workflows/quality.yml`, because it derives the expected production migration from the ledger and executes release preflight.
+- No unrelated product module, UI, provider, old prompt, future phase, application code, or migration SQL was inspected or modified for ledger finalization.
