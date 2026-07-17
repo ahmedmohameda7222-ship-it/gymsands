@@ -2,6 +2,7 @@
 
 import { Check, Dumbbell, ExternalLink, Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@/components/auth/auth-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +20,13 @@ import {
   type CanonicalWorkoutFilterOptions,
   type WorkoutFilterOption
 } from "@/services/database/workout-library";
+import {
+  getWorkoutReplacementEligibility,
+  isReplacementCandidateActionable,
+  replacementEligibilityMessage,
+  shouldClosePickerAfterAdd,
+  type ReplacementEligibility
+} from "@/services/database/workout-replacement-eligibility";
 import type { Workout } from "@/types";
 
 function normalizeIdentityPart(value: string | null | undefined) {
@@ -49,8 +57,10 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   onAdd: (exercises: Workout[]) => void;
   maxSelection?: number;
 }) {
+  const { user } = useAuth();
   const { dir, locale, tr } = useTrainTranslation();
   const libraryLoadFailedMessage = tr("libraryLoadFailed");
+  const replacementMode = maxSelection === 1;
   const [query, setQuery] = useState("");
   const [muscle, setMuscle] = useState("");
   const [equipment, setEquipment] = useState("");
@@ -63,6 +73,9 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   const [results, setResults] = useState<Workout[]>([]);
   const [filterOptions, setFilterOptions] = useState<CanonicalWorkoutFilterOptions>(() => emptyCanonicalWorkoutFilterOptions());
   const [selected, setSelected] = useState<Map<string, Workout>>(new Map());
+  const [eligibility, setEligibility] = useState<Map<string, ReplacementEligibility>>(new Map());
+  const [eligibilityLoading, setEligibilityLoading] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
@@ -72,6 +85,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   const initialRequestGroupConsumedRef = useRef<string | null>(null);
   const activeGenerationGroupRef = useRef<string | null>(null);
   const generationRef = useRef(0);
+  const eligibilityGenerationRef = useRef(0);
   const filtersControllerRef = useRef<AbortController | null>(null);
   const activitiesControllerRef = useRef<AbortController | null>(null);
   const loadMoreControllerRef = useRef<AbortController | null>(null);
@@ -116,10 +130,8 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
       signal: controller.signal
     }).then((result) => {
       if (!controller.signal.aborted) setFilterOptions(result.data);
-    }).catch((loadError) => {
-      if (!isAbortError(loadError)) {
-        // Result-derived options remain available if filter metadata fails.
-      }
+    }).catch(() => {
+      // Result-derived options remain available if filter metadata fails.
     });
     return () => controller.abort();
   }, [initialCatalogRequestGroupId, locale, open]);
@@ -170,15 +182,57 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   }, [activeFilters, initialCatalogRequestGroupId, libraryLoadFailedMessage, locale, open, query]);
 
   useEffect(() => {
+    if (!open || !replacementMode) {
+      setEligibility(new Map());
+      setEligibilityLoading(false);
+      setEligibilityError("");
+      return;
+    }
+    const generation = eligibilityGenerationRef.current + 1;
+    eligibilityGenerationRef.current = generation;
+    if (!user?.id) {
+      setEligibility(new Map());
+      setEligibilityLoading(false);
+      setEligibilityError("Sign in again to verify replacement eligibility.");
+      return;
+    }
+    if (!results.length) {
+      setEligibility(new Map());
+      setEligibilityLoading(false);
+      setEligibilityError("");
+      return;
+    }
+    setEligibilityLoading(true);
+    setEligibilityError("");
+    void getWorkoutReplacementEligibility(
+      user.id,
+      results.map((workout) => ({ key: exerciseKey(workout), workout }))
+    ).then((next) => {
+      if (eligibilityGenerationRef.current !== generation) return;
+      setEligibility(next);
+    }).catch((loadError) => {
+      if (eligibilityGenerationRef.current !== generation) return;
+      setEligibility(new Map());
+      setEligibilityError(userSafeError(loadError, "Replacement eligibility could not be verified. Your current exercise was preserved."));
+    }).finally(() => {
+      if (eligibilityGenerationRef.current === generation) setEligibilityLoading(false);
+    });
+  }, [open, replacementMode, results, user?.id]);
+
+  useEffect(() => {
     if (open) return;
     filtersControllerRef.current?.abort();
     activitiesControllerRef.current?.abort();
     loadMoreControllerRef.current?.abort();
     generationRef.current += 1;
+    eligibilityGenerationRef.current += 1;
     initialRequestGroupConsumedRef.current = null;
     activeGenerationGroupRef.current = null;
     setSelected(new Map());
     setResults([]);
+    setEligibility(new Map());
+    setEligibilityLoading(false);
+    setEligibilityError("");
     setPagination(emptyPagination);
     setLoading(false);
     setLoadingMore(false);
@@ -196,9 +250,14 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   const mechanicsOptions = filterOptions.mechanics;
   const hasAdvancedOptions = Boolean(muscleCategoryOptions.length || secondaryMuscleOptions.length || forceTypeOptions.length || exerciseTypeOptions.length || mechanicsOptions.length);
 
+  function isActionable(key: string) {
+    if (!replacementMode) return true;
+    return isReplacementCandidateActionable(eligibility.get(key), eligibilityLoading, eligibilityError);
+  }
+
   function toggle(exercise: Workout) {
     const key = exerciseKey(exercise);
-    if (existing.has(key)) return;
+    if (existing.has(key) || !isActionable(key)) return;
     setSelected((current) => {
       if (current.has(key)) {
         const next = new Map(current);
@@ -212,8 +271,10 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   }
 
   function addSelected() {
-    onAdd(Array.from(selected.values()));
-    onOpenChange(false);
+    const chosen = Array.from(selected.values());
+    if (!chosen.length) return;
+    onAdd(chosen);
+    if (shouldClosePickerAfterAdd(replacementMode)) onOpenChange(false);
   }
 
   function clearFilters() {
@@ -326,6 +387,11 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
 
           {loading ? <div className="mt-4"><CardGridSkeleton count={4} rows={3} /></div> : null}
           {error ? <div role="alert" className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm">{error}</div> : null}
+          {replacementMode && eligibilityError ? (
+            <div role="alert" className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+              {eligibilityError}
+            </div>
+          ) : null}
 
           {!loading && !error ? (
             <>
@@ -334,13 +400,17 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
                   const key = exerciseKey(exercise);
                   const duplicate = existing.has(key);
                   const isSelected = selected.has(key);
+                  const candidateEligibility = eligibility.get(key);
+                  const candidatePending = replacementMode && eligibilityLoading;
+                  const ineligible = replacementMode && !candidatePending && candidateEligibility?.eligible !== true;
+                  const disabled = duplicate || candidatePending || ineligible || Boolean(replacementMode && eligibilityError);
                   const guideUrl = exercise.custom_video_url || exercise.video_url || exercise.exercise_url;
                   return (
                     <article
                       key={key}
-                      className={`relative flex min-h-[152px] flex-col rounded-2xl border p-4 ${duplicate ? "border-border/60 bg-muted/30" : isSelected ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "bg-card"}`}
+                      className={`relative flex min-h-[152px] flex-col rounded-2xl border p-4 ${disabled ? "border-border/60 bg-muted/30" : isSelected ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "bg-card"}`}
                     >
-                      <button type="button" className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" disabled={duplicate} aria-pressed={isSelected} onClick={() => toggle(exercise)}><span className="sr-only">{isSelected ? tr("deselect") : tr("select")}: {exercise.name}</span></button>
+                      <button type="button" className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" disabled={disabled} aria-pressed={isSelected} onClick={() => toggle(exercise)}><span className="sr-only">{isSelected ? tr("deselect") : tr("select")}: {exercise.name}</span></button>
                       <div className="pointer-events-none relative z-10 flex min-w-0 items-start justify-between gap-3">
                         <div className="min-w-0">
                           <h3 className="break-words text-base font-semibold leading-6">{exercise.name}</h3>
@@ -349,10 +419,12 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
                         {exercise.difficulty ? <Badge variant="outline" className="shrink-0">{exercise.difficulty}</Badge> : null}
                       </div>
                       <p className="pointer-events-none relative z-10 mt-3 line-clamp-2 text-sm leading-5 text-muted-foreground">{exercise.instructions}</p>
+                      {replacementMode && candidatePending ? <p className="relative z-10 mt-2 text-xs text-muted-foreground">Verifying tracked replacement eligibility…</p> : null}
+                      {replacementMode && ineligible ? <p className="relative z-10 mt-2 text-xs text-muted-foreground">{replacementEligibilityMessage(candidateEligibility?.reason)}</p> : null}
                       <div className={`relative z-10 mt-auto grid gap-2 pt-4 ${guideUrl ? "sm:grid-cols-2" : "grid-cols-1"}`}>
-                        <Button type="button" variant={isSelected ? "default" : "outline"} className="min-h-11 w-full" disabled={duplicate} aria-pressed={isSelected} onClick={() => toggle(exercise)}>
+                        <Button type="button" variant={isSelected ? "default" : "outline"} className="min-h-11 w-full" disabled={disabled} aria-pressed={isSelected} onClick={() => toggle(exercise)}>
                           {duplicate || isSelected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                          {duplicate ? tr("alreadyAdded") : isSelected ? tr("deselect") : tr("select")}
+                          {duplicate ? tr("alreadyAdded") : isSelected ? tr("deselect") : ineligible ? "Unavailable" : candidatePending ? "Checking…" : tr("select")}
                         </Button>
                         {guideUrl ? <Button asChild type="button" variant="ghost" className="min-h-11"><a href={guideUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}><ExternalLink className="h-4 w-4" />{tr("viewGuide")}</a></Button> : null}
                       </div>
@@ -376,7 +448,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
               <span className="text-sm font-semibold">{tr("selectedCount", { count: selected.size })}</span>
               <Button type="button" variant="ghost" className="min-h-11" onClick={() => setSelected(new Map())} disabled={!selected.size}>{tr("clear")}</Button>
             </div>
-            <Button type="button" className="min-h-[52px] w-full sm:w-auto sm:min-w-44" onClick={addSelected} disabled={!selected.size}>{tr("addNExercises", { count: selected.size })}</Button>
+            <Button type="button" className="min-h-[52px] w-full sm:w-auto sm:min-w-44" onClick={addSelected} disabled={!selected.size || (replacementMode && (eligibilityLoading || Boolean(eligibilityError)))}>{tr("addNExercises", { count: selected.size })}</Button>
           </div>
         </div>
       </DialogContent>

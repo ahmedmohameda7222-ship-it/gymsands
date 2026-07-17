@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/integrations/env";
 import { getWorkoutSessionMuscleAnalysis, SessionMuscleAnalysisError } from "@/lib/train/muscle-intelligence/session-analysis";
+import { applyPhase3SessionAnalysisContract } from "@/lib/train/muscle-intelligence/session-analysis-contract";
 import { rateLimit } from "@/lib/integrations/rate-limit";
+import { isUuid } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -15,9 +17,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Analysis mode must be planned or completed.", code: "invalid_analysis_mode" }, { status: 400 });
   }
   const { id } = await params;
+  if (!isUuid(id)) {
+    return NextResponse.json(
+      { error: "Workout session ID is invalid.", code: "invalid_session_id" },
+      { status: 400 }
+    );
+  }
   try {
     const result = await getWorkoutSessionMuscleAnalysis(context.supabase, context.user.id, id, mode);
-    return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
+    return NextResponse.json(applyPhase3SessionAnalysisContract(result), { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     if (error instanceof SessionMuscleAnalysisError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });

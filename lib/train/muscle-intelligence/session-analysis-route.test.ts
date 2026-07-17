@@ -39,12 +39,39 @@ describe("GET /api/workouts/sessions/[id]/muscle-analysis", () => {
     expect(mocks.getAnalysis).not.toHaveBeenCalled();
   });
 
+  it("rejects malformed session IDs before any database analysis call", async () => {
+    const response = await GET(
+      new Request("https://plaivra.test/api/workouts/sessions/not-a-uuid/muscle-analysis"),
+      { params: Promise.resolve({ id: "not-a-uuid" }) }
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Workout session ID is invalid.",
+      code: "invalid_session_id"
+    });
+    expect(mocks.getAnalysis).not.toHaveBeenCalled();
+  });
+
   it("passes only the authenticated owner and requested session to the service", async () => {
-    mocks.getAnalysis.mockResolvedValue({ sessionId, snapshotId: "snapshot-1", analysis: { mode: "completed" } });
+    mocks.getAnalysis.mockResolvedValue({
+      sessionId,
+      snapshotId: "snapshot-1",
+      snapshotSchemaVersion: "workout_session_muscle_snapshot_v1",
+      frozenAt: "2026-07-17T00:00:00Z",
+      source: "session_start",
+      snapshotCompleteness: "complete",
+      reasonCodes: [],
+      analysis: {
+        completeness: "complete",
+        coverage: { totalItemCount: 1, includedItemCount: 1, unmappedItemCount: 0, unsupportedItemCount: 0 },
+        warnings: []
+      }
+    });
     const response = await GET(new Request(`https://plaivra.test/api/workouts/sessions/${sessionId}/muscle-analysis?mode=completed`), context);
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(mocks.getAnalysis).toHaveBeenCalledWith(expect.anything(), userId, sessionId, "completed");
+    expect(await response.json()).toMatchObject({ effectiveCompleteness: "complete" });
   });
 
   it.each([

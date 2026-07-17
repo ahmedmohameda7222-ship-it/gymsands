@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock, ExternalLink, Plus, Timer, TimerReset, X } from "lucide-react";
+import { CheckCircle2, Clock, ExternalLink, Plus, Timer, TimerReset } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,9 +13,10 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
 import { clearActiveWorkoutState, isValidActiveWorkoutRoute, readActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
-import { completeWorkoutSession, getOrStartWorkoutSession, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
+import { getOrStartWorkoutSession } from "@/services/database/direct-workout-sessions";
+import { completeWorkoutSession, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
 import type { Workout, WorkoutSession, WorkoutSessionSummary } from "@/types";
-import { useConfirm, ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 import { useTrainTranslation } from "@/lib/i18n/train";
 import { findPreviousWorkoutSet } from "@/lib/workouts/workout-session-history";
@@ -155,13 +156,6 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
     setTimerEndsAtMs(deadline);
     setIsTimerRunning(true);
     storeTimestamp(restTimerKey, deadline);
-  }
-
-  function stopRestTimer() {
-    setTimerLeft(0);
-    setTimerEndsAtMs(null);
-    setIsTimerRunning(false);
-    clearStoredValue(restTimerKey);
   }
 
   async function complete() {
