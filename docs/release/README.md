@@ -20,16 +20,16 @@ A passing review preflight is not production release authorization. Any failed o
 
 Verified on 2026-07-17:
 
-- 35 applied migrations;
-- latest identity: `20260717032851_retire_legacy_600_exercise_catalog`;
-- two repository-only Muscle Intelligence Phase 2 migrations pending production application;
-- zero schema-applied-untracked migrations, with `pendingCount=2` and `unresolvedCount=2`;
-- `historyRepair.state=pending`;
-- ledger-level `releaseReady=false`.
+- 37 applied migrations;
+- latest identity: `20260717051011_muscle_intelligence_phase2_curated_seed`;
+- the two Muscle Intelligence Phase 2 migrations are applied and tracked;
+- zero schema-applied-untracked migrations, with `pendingCount=0` and `unresolvedCount=0`;
+- `historyRepair.state=reconciled`;
+- ledger-level migration-history `releaseReady=true`.
 
-The latest migration retired only the provenance-matched generated 600-row legacy exercise catalog across `exercises`, `workouts`, and `exercise_library`. Post-application verification confirmed zero target rows remain and existing user workout plans and performed sessions were preserved.
+The applied Phase 2 schema and seed produced the reviewed 60-exercise cohort, six RLS-protected curation tables, 60 published mapping sets, 180 entries, 180 localizations, 180 aliases, 32 relationships, 21 research sources, 89 evidence rows, 60 reviews, and nine exact provider links. Post-application verification found zero checksum drift, zero drafts, zero alias collisions, and zero retired legacy target rows.
 
-The pending Phase 2 schema and seed migrations are repository artifacts only. They must not be applied, marked applied, or used to advance the release marker without separate authorization and production reconciliation.
+The physical production migration head is `20260717051011`. The deployed release compatibility marker intentionally remains `20260717032851` until a separately coordinated exact-head code merge and production deployment. Do not advance the marker independently.
 
 The machine authority is `supabase/migration-ledger.json`. The human record is `docs/architecture/migration-ledger-reconciliation.md`. Applied migrations are immutable and must never be replayed, renamed, rewritten, deleted, or manually reordered.
 
@@ -95,9 +95,9 @@ npm run release:preflight -- \
   --output quality-reports/release-preflight.json
 ```
 
-The GitHub Quality workflow explicitly passes `--mode review` for `pull_request` events and `--mode release` for pushes to `main`. The Node preflight never infers a weaker mode from environment context. Review mode accepts only an internally consistent pending-only migration state with `pendingCount > 0`, zero schema-applied-untracked migrations, and `unresolvedCount = pendingCount`. It still validates the exact commit, manifest, runtime, and every required quality gate.
+The GitHub Quality workflow explicitly passes `--mode review` for `pull_request` events and `--mode release` for pushes to `main`. The Node preflight never infers a weaker mode from environment context. Review mode still validates the exact commit, manifest, runtime, migration state, and every required quality gate.
 
-A successful pending-only review records `reviewReady=true`, `releaseReady=false`, and retains `migration_ledger_not_reconciled` in `releaseBlockers`. It does not authorize database application, merge, or deployment.
+With reconciled migration history, both review and strict release evaluation may report migration readiness. This still does not authorize merge, compatibility-marker advancement, or deployment.
 
 ### Strict production release
 
@@ -112,7 +112,7 @@ npm run release:preflight -- \
   --output quality-reports/release-preflight.json
 ```
 
-`release` is the universal default whenever mode is omitted, including in a pull-request environment. Only an explicit `--mode review` selects review behavior. Release mode remains fail-closed while any migration is pending or otherwise unreconciled, and unknown modes fail closed. The command performs no provider or Supabase write.
+`release` is the universal default whenever mode is omitted, including in a pull-request environment. Only an explicit `--mode review` selects review behavior. Release mode remains fail-closed for identity, evidence, runtime, manifest, or migration-history failures, and unknown modes fail closed. The command performs no provider or Supabase write.
 
 ## Production runbook
 
@@ -122,14 +122,15 @@ npm run release:preflight -- \
 4. Run strict production environment validation without exposing secret values.
 5. Run `npm run release:preflight -- --mode release ...` and retain its passing result.
 6. Obtain explicit release-owner approval for the exact reviewed change.
-7. Merge the approved exact change to `main`.
-8. Record the exact resulting 40-character `main` SHA.
-9. Confirm Vercel production was built from that exact SHA.
-10. Verify provider metadata, `/api/version`, and `/api/health`.
-11. Run anonymous smoke.
-12. Run populated and empty authenticated synthetic smoke.
-13. Review browser, console, network, screenshots, route timings, and request counts.
-14. Record the final launch verdict.
+7. Coordinate any required compatibility-marker advancement with the exact merge/deployment operation.
+8. Merge the approved exact change to `main`.
+9. Record the exact resulting 40-character `main` SHA.
+10. Confirm Vercel production was built from that exact SHA.
+11. Verify provider metadata, `/api/version`, and `/api/health`.
+12. Run anonymous smoke.
+13. Run populated and empty authenticated synthetic smoke.
+14. Review browser, console, network, screenshots, route timings, and request counts.
+15. Record the final launch verdict.
 
 ## Rollback
 
