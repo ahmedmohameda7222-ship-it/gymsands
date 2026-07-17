@@ -53,27 +53,31 @@ test("release documentation distinguishes repository intent from actual provider
   assert.match(launchRunbook, /actual provider behavior requires post-push Vercel verification/);
 });
 
-test("launch documentation places reconciliation, preflight, and owner approval before merge", () => {
-  const documents = [
-    readFileSync(resolve(root, "docs/release/README.md"), "utf8"),
-    readFileSync(resolve(root, "docs/operations/launch-runbook.md"), "utf8")
-  ];
+test("launch documentation places reconciliation, strict preflight, and owner approval before merge", () => {
+  const releaseReadme = readFileSync(resolve(root, "docs/release/README.md"), "utf8");
+  const launchRunbook = readFileSync(resolve(root, "docs/operations/launch-runbook.md"), "utf8");
+  const documents = [releaseReadme, launchRunbook];
 
   for (const document of documents) {
     const reconciliation = document.indexOf("2. Complete migration-history reconciliation");
-    const preflight = document.indexOf("5. Run `npm run release:preflight`");
+    const preflight = document.indexOf("5. Run `npm run release:preflight");
+    const releaseMode = document.indexOf("--mode release", preflight);
     const approval = document.indexOf("6. Obtain explicit release-owner approval");
     const merge = document.indexOf("7. Merge the approved exact change to `main`");
 
     assert.ok(reconciliation >= 0, "migration reconciliation step is missing");
     assert.ok(preflight > reconciliation, "release preflight must follow migration reconciliation");
-    assert.ok(approval > preflight, "owner approval must follow a passing preflight");
+    assert.ok(releaseMode > preflight, "production preflight must explicitly select strict release mode");
+    assert.ok(approval > releaseMode, "owner approval must follow a passing strict release preflight");
     assert.ok(merge > approval, "the production-triggering merge must follow approval");
-    assert.match(document, /Any failed or blocked preflight is a no-go before merge/);
+    assert.match(document, /Any failed or blocked strict release preflight is a no-go before merge/);
     assert.match(document, /migration ledger must be reconciled before/);
     assert.match(document, /A provider `READY` state alone is not acceptance/);
     assert.match(document, /Netlify remains separate/);
   }
+
+  assert.match(releaseReadme, /A passing review preflight is not production release authorization/);
+  assert.match(launchRunbook, /Pull-request review preflight is CI evidence only/);
 });
 
 test("active configuration has no Vercel preview or production SHA approval dependency", () => {

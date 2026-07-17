@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
-import { evaluateReleasePreflight } from "./release-preflight.mjs";
+import { evaluateReleasePreflight, resolvePreflightMode } from "./release-preflight.mjs";
 
 const sha = "60a204d5fc20fc396be1b1b47e748c42ebba6abf";
 const buildTimestamp = "2026-07-14T01:00:00.000Z";
@@ -53,81 +55,179 @@ function validInput() {
   };
 }
 
-test("passes only one exact reviewed code/evidence/migration identity", () => {
-  assert.deepEqual(evaluateReleasePreflight(validInput()), { ready: true, failures: [] });
-});
-
-test("rejects an old deployment artifact as a substitute for the reviewed SHA", () => {
-  const input = validInput();
-  input.checkedOutCommit = "fce4f9dacd16ade098d1bbfc1eb6793d50cb5eb9";
-  const result = evaluateReleasePreflight(input);
-  assert.equal(result.ready, false);
-  assert.ok(result.failures.includes("checkout_commit_mismatch"));
-});
-
-test("fails while any migration entry remains unresolved", () => {
+function pendingInput() {
   const input = validInput();
   input.migrationState = {
     ...input.migrationState,
     reconciliationState: "pending",
-    pendingCount: 1,
-    schemaAppliedUntrackedCount: 7,
-    unresolvedCount: 8,
+    pendingCount: 2,
+    schemaAppliedUntrackedCount: 0,
+    unresolvedCount: 2,
     releaseReady: false
   };
   input.manifest.release = {
     ...input.manifest.release,
     migrationLedgerReconciliationState: "pending",
-    pendingMigrationCount: 1,
-    schemaAppliedUntrackedCount: 7,
-    unresolvedMigrationCount: 8
+    pendingMigrationCount: 2,
+    schemaAppliedUntrackedCount: 0,
+    unresolvedMigrationCount: 2
   };
-  const result = evaluateReleasePreflight(input);
-  assert.deepEqual(result, { ready: false, failures: ["migration_ledger_not_reconciled"] });
+  return input;
+}
+
+test("defaults programmatic evaluation to strict release mode", () => {
+  const result = evaluateReleasePreflight(validInput());
+  assert.equal(result.mode, "release");
+  assert.equal(result.ready, true);
+  assert.equal(result.reviewReady, true);
+  assert.equal(result.releaseReady, true);
+  assert.deepEqual(result.releaseBlockers, []);
+  assert.deepEqual(result.failures, []);
 });
 
-test("rejects manifest count drift", () => {
+test("defaults omitted mode to release even in a pull-request environment", () => {
+  const previousEventName = process.env.GITHUB_EVENT_NAME;
+  process.env.GITHUB_EVENT_NAME = "pull_request";
+  try {
+    assert.equal(resolvePreflightMode(undefined), "release");
+    assert.equal(resolvePreflightMode("review"), "review");
+    assert.equal(resolvePreflightMode("release"), "release");
+  } finally {
+    if (previousEventName === undefined) delete process.env.GITHUB_EVENT_NAME;
+    else process.env.GITHUB_EVENT_NAME = previousEventName;
+  }
+});
+
+test("strict release mode rejects a valid pending-only migration state", () => {
+  const result = evaluateReleasePreflight({ ...pendingInput(), mode: "release" });
+  assert.equal(result.ready, false);
+  assert.equal(result.reviewReady, true);
+  assert.equal(result.releaseReady, false);
+  assert.deepEqual(result.failures, ["migration_ledger_not_reconciled"]);
+  assert.deepEqual(result.releaseBlockers, ["migration_ledger_not_reconciled"]);
+});
+
+test("default release mode rejects a valid pending-only migration state", () => {
+  const result = evaluateReleasePreflight(pendingInput());
+  assert.equal(result.mode, "release");
+  assert.equal(result.ready, false);
+  assert.equal(result.reviewReady, true);
+  assert.equal(result.releaseReady, false);
+  assert.deepEqual(result.failures, ["migration_ledger_not_reconciled"]);
+  assert.deepEqual(result.releaseBlockers, ["migration_ledger_not_reconciled"]);
+});
+
+test("review mode accepts a valid pending-only migration state without claiming release readiness", () => {
+  const result = evaluateReleasePreflight({ ...pendingInput(), mode: "review" });
+  assert.equal(result.ready, true);
+  assert.equal(result.reviewReady, true);
+  assert.equal(result.releaseReady, false);
+  assert.deepEqual(result.failures, []);
+  assert.deepEqual(result.releaseBlockers, ["migration_ledger_not_reconciled"]);
+});
+
+test("review mode rejects schema-applied-untracked migration state", () => {
+  const input = pendingInput();
+  input.migrationState.schemaAppliedUntrackedCount = 1;
+  input.manifest.release.schemaAppliedUntrackedCount = 1;
+  const result = evaluateReleasePreflight({ ...input, mode: "review" });
+  assert.equal(result.ready, false);
+  assert.ok(result.failures.includes("migration_schema_applied_untracked"));
+});
+
+test("review mode rejects unresolved counts that differ from pending counts", () => {
+  const input = pendingInput();
+  input.migrationState.unresolvedCount = 3;
+  input.manifest.release.unresolvedMigrationCount = 3;
+  const result = evaluateReleasePreflight({ ...input, mode: "review" });
+  assert.equal(result.ready, false);
+  assert.ok(result.failures.includes("migration_unresolved_count_mismatch"));
+});
+
+test("both modes reject an old deployment artifact as a substitute for the reviewed SHA", () => {
+  for (const mode of ["release", "review"]) {
+    const input = validInput();
+    input.checkedOutCommit = "fce4f9dacd16ade098d1bbfc1eb6793d50cb5eb9";
+    const result = evaluateReleasePreflight({ ...input, mode });
+    assert.equal(result.ready, false);
+    assert.ok(result.failures.includes("checkout_commit_mismatch"));
+  }
+});
+
+test("both modes reject manifest count drift", () => {
   for (const [field, code] of [
     ["pendingMigrationCount", "release_manifest_pending_count_mismatch"],
     ["schemaAppliedUntrackedCount", "release_manifest_untracked_count_mismatch"],
     ["unresolvedMigrationCount", "release_manifest_unresolved_count_mismatch"]
   ]) {
-    const input = validInput();
-    input.manifest.release[field] = 1;
-    const result = evaluateReleasePreflight(input);
-    assert.ok(result.failures.includes(code));
+    for (const mode of ["release", "review"]) {
+      const input = validInput();
+      input.manifest.release[field] = 1;
+      const result = evaluateReleasePreflight({ ...input, mode });
+      assert.ok(result.failures.includes(code));
+    }
   }
 });
 
-test("distinguishes missing and failed quality evidence", () => {
-  const input = validInput();
+test("review mode still distinguishes missing and failed quality evidence", () => {
+  const input = pendingInput();
   input.manifest.qualityGates.productionBuild = { status: "passed", evidence: null };
-  const result = evaluateReleasePreflight(input);
+  const result = evaluateReleasePreflight({ ...input, mode: "review" });
   assert.ok(result.failures.includes("quality_gate_productionBuild_missing"));
 
-  const browserInput = validInput();
+  const browserInput = pendingInput();
   browserInput.manifest.qualityGates.renderedBrowserQa.status = "failed";
-  expectFailure(browserInput, "quality_gate_renderedBrowserQa_failed");
+  expectFailure(browserInput, "quality_gate_renderedBrowserQa_failed", "review");
 });
 
-test("distinguishes commit-mismatched and stale quality evidence", () => {
-  const commitInput = validInput();
+test("review mode still rejects commit-mismatched and stale quality evidence", () => {
+  const commitInput = pendingInput();
   commitInput.manifest.qualityGates.unitTests.commitSha = "fce4f9dacd16ade098d1bbfc1eb6793d50cb5eb9";
-  expectFailure(commitInput, "quality_gate_unitTests_commit_mismatch");
+  expectFailure(commitInput, "quality_gate_unitTests_commit_mismatch", "review");
 
-  const staleInput = validInput();
+  const staleInput = pendingInput();
   staleInput.manifest.qualityGates.integrationTests.capturedAt = "2026-07-14T00:59:59.000Z";
-  expectFailure(staleInput, "quality_gate_integrationTests_stale");
+  expectFailure(staleInput, "quality_gate_integrationTests_stale", "review");
+});
+
+test("reconciled state passes both review and release modes", () => {
+  for (const mode of ["release", "review"]) {
+    const result = evaluateReleasePreflight({ ...validInput(), mode });
+    assert.equal(result.ready, true);
+    assert.equal(result.reviewReady, true);
+    assert.equal(result.releaseReady, true);
+  }
 });
 
 test("rejects a manifest whose Next.js evidence differs from the installed runtime", () => {
   const input = validInput();
   input.manifest.runtime.nextVersion = "^16.0.3";
-  expectFailure(input, "release_manifest_next_version_mismatch");
+  expectFailure(input, "release_manifest_next_version_mismatch", "release");
 });
 
-function expectFailure(input, code) {
-  const result = evaluateReleasePreflight(input);
+test("unknown modes fail closed", () => {
+  assert.throws(
+    () => evaluateReleasePreflight({ ...validInput(), mode: "deploy" }),
+    /Preflight mode must be one of: release, review/
+  );
+  assert.throws(
+    () => resolvePreflightMode("deploy", "pull_request"),
+    /Preflight mode must be one of: release, review/
+  );
+});
+
+test("Quality passes an explicit trusted review or release mode", () => {
+  const workflow = readFileSync(resolve(process.cwd(), ".github/workflows/quality.yml"), "utf8");
+  assert.match(
+    workflow,
+    /preflight_mode="\$\{\{ github\.event_name == 'pull_request' && 'review' \|\| 'release' \}\}"/
+  );
+  assert.match(workflow, /release:preflight -- \\\r?\n\s+--mode "\$\{preflight_mode\}"/);
+  assert.match(workflow, /on:\r?\n\s+pull_request:\r?\n\s+push:\r?\n\s+branches:\r?\n\s+- main/);
+});
+
+function expectFailure(input, code, mode) {
+  const result = evaluateReleasePreflight({ ...input, mode });
   assert.equal(result.ready, false);
   assert.ok(result.failures.includes(code));
 }

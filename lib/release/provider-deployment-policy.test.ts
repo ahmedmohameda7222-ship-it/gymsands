@@ -49,25 +49,30 @@ describe("provider deployment policy", () => {
     expect(launchRunbook).toContain("actual provider behavior requires post-push Vercel verification");
   });
 
-  it("places migration reconciliation, preflight, and owner approval before the production-triggering merge", () => {
+  it("places migration reconciliation, strict preflight, and owner approval before the production-triggering merge", () => {
     const releaseReadme = readFileSync(`${repositoryRoot}/docs/release/README.md`, "utf8");
     const launchRunbook = readFileSync(`${repositoryRoot}/docs/operations/launch-runbook.md`, "utf8");
 
     for (const document of [releaseReadme, launchRunbook]) {
       const reconciliation = document.indexOf("2. Complete migration-history reconciliation");
-      const preflight = document.indexOf("5. Run `npm run release:preflight`");
+      const preflight = document.indexOf("5. Run `npm run release:preflight");
+      const releaseMode = document.indexOf("--mode release", preflight);
       const approval = document.indexOf("6. Obtain explicit release-owner approval");
       const merge = document.indexOf("7. Merge the approved exact change to `main`");
 
       expect(reconciliation).toBeGreaterThanOrEqual(0);
       expect(preflight).toBeGreaterThan(reconciliation);
-      expect(approval).toBeGreaterThan(preflight);
+      expect(releaseMode).toBeGreaterThan(preflight);
+      expect(approval).toBeGreaterThan(releaseMode);
       expect(merge).toBeGreaterThan(approval);
-      expect(document).toContain("Any failed or blocked preflight is a no-go before merge");
+      expect(document).toContain("Any failed or blocked strict release preflight is a no-go before merge");
       expect(document).toContain("migration ledger must be reconciled before");
       expect(document).toContain("A provider `READY` state alone is not acceptance");
       expect(document).toContain("Netlify remains separate");
     }
+
+    expect(releaseReadme).toContain("A passing review preflight is not production release authorization");
+    expect(launchRunbook).toContain("Pull-request review preflight is CI evidence only");
   });
 
   it("keeps the Netlify ignore command and local build behavior", () => {

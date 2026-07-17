@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-17T03:35:00Z",
-  "auditedRepositoryCommit": "705f4f7292dd3415506dbf32aff2b0598982c53c",
-  "productionMigrationCount": 35,
+  "capturedAt": "2026-07-17T17:16:30Z",
+  "auditedRepositoryCommit": "9b3006c1a512512bee8c16a4fb2ae34a16b7b7f6",
+  "productionMigrationCount": 37,
   "schemaVerifiedUntrackedCount": 0,
   "pendingCount": 0,
   "unresolvedCount": 0,
@@ -12,7 +12,7 @@
     "schemaAppliedUntrackedCount": 0,
     "pendingCount": 0,
     "unresolvedCount": 0,
-    "note": "Production migration history contains all 35 repository identities through the guarded retirement of the generated legacy 600-exercise catalog. Version 20260717032851 and zero remaining target rows in exercises, workouts, and exercise_library were verified read-only on 2026-07-17. Do not replay any applied migration."
+    "note": "Production migration history contains all 37 repository identities through the verified Muscle Intelligence Phase 2 curated seed. Both Phase 2 migrations were applied through tracked Supabase CLI db push from reviewed source head 9b3006c1a512512bee8c16a4fb2ae34a16b7b7f6 and verified read-only. Do not replay any applied migration."
   },
   "entries": [
     { "productionVersion": "202606290000", "productionName": "clean_initial_schema", "localFile": "202606290000_clean_initial_schema.sql", "state": "applied" },
@@ -49,6 +49,8 @@
     { "productionVersion": "20260715010000", "productionName": "restrict_nutrition_target_override_acl", "localFile": "20260715010000_restrict_nutrition_target_override_acl.sql", "state": "applied", "note": "Normally applied production identity verified with authenticated privileges exactly DELETE, INSERT, SELECT, and UPDATE on 2026-07-15. Do not replay." },
     { "productionVersion": "20260715190000", "productionName": "train_phase2a_program_architecture", "localFile": "20260715190000_train_phase2a_program_architecture.sql", "state": "applied", "note": "Applied to production on 2026-07-16 from reviewed commit 5851486009f99dc9e7629b8b01f43cd690a3a04b after exact Git blob verification (be4102a5b0e0aaec8926362950742290b94d39c3). Physical verification confirmed 5 templates, 12 assigned weeks, 16 sessions, and 53 activities with no duplicate live legacy mappings. Do not replay." },
     { "productionVersion": "20260716215602", "productionName": "muscle_intelligence_phase1_foundation", "localFile": "20260716215602_muscle_intelligence_phase1_foundation.sql", "state": "applied", "note": "Production migration history identity and the five Phase 1 tables plus both publication functions were verified read-only on 2026-07-17. Do not replay." },
-    { "productionVersion": "20260717032851", "productionName": "retire_legacy_600_exercise_catalog", "localFile": "20260717032851_retire_legacy_600_exercise_catalog.sql", "state": "applied", "note": "Applied directly to production on 2026-07-17 after guarded verification of exactly 600 provenance-matched rows in each legacy catalog layer and zero dependent plan, session, favorite, video, provider-link, or mapping references. Post-application verification confirmed zero target rows remain in exercises, workouts, and exercise_library. Do not replay." }
+    { "productionVersion": "20260717032851", "productionName": "retire_legacy_600_exercise_catalog", "localFile": "20260717032851_retire_legacy_600_exercise_catalog.sql", "state": "applied", "note": "Applied directly to production on 2026-07-17 after guarded verification of exactly 600 provenance-matched rows in each legacy catalog layer and zero dependent plan, session, favorite, video, provider-link, or mapping references. Post-application verification confirmed zero target rows remain in exercises, workouts, and exercise_library. Do not replay." },
+    { "productionVersion": "20260717051008", "productionName": "muscle_intelligence_phase2_curated_schema", "localFile": "20260717051008_muscle_intelligence_phase2_curated_schema.sql", "state": "applied", "note": "Applied to production on 2026-07-17 through tracked Supabase CLI db push from reviewed source head 9b3006c1a512512bee8c16a4fb2ae34a16b7b7f6. Git blob 628327a9de7983e7ed12f7bddbc164947618deb0. Read-only verification confirmed all six Phase 2 tables, RLS, expected policies, and no anonymous privileges. Do not replay." },
+    { "productionVersion": "20260717051011", "productionName": "muscle_intelligence_phase2_curated_seed", "localFile": "20260717051011_muscle_intelligence_phase2_curated_seed.sql", "state": "applied", "note": "Applied to production on 2026-07-17 through tracked Supabase CLI db push from reviewed source head 9b3006c1a512512bee8c16a4fb2ae34a16b7b7f6. Git blob d3364955cd8ad53eb513c9456addbf9c8ee86fe8. Verification confirmed 60 curated exercises, 180 localizations, 180 aliases, 32 relationships, 21 sources, 89 evidence rows, 60 reviews, 9 provider links, 60 published mappings, 180 entries, zero checksum drift, zero drafts, zero alias collisions, and the retired catalog still empty. Do not replay." }
   ]
 }

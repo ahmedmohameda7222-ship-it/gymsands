@@ -14,7 +14,7 @@ For every candidate branch push, inspect Vercel provider metadata for the exact 
 - Vercel does not use `ignoreCommand`.
 - Vercel does not use `PLAIVRA_PREVIEW_RELEASE_SHA` or `PLAIVRA_PRODUCTION_RELEASE_SHA`.
 - Repository tests verify configuration intent, preserved cron schedules, and removal of obsolete gate dependencies; actual provider behavior requires post-push Vercel verification.
-- Required GitHub review and CI checks, migration reconciliation, release preflight, and explicit release-owner approval must complete before changes enter `main`.
+- Required GitHub review and CI checks, migration reconciliation, strict release preflight (`--mode release`), and explicit release-owner approval must complete before changes enter `main`.
 - Under the current Vercel Git model, a merge to `main` is production-triggering.
 - After merge, confirm that Vercel built the exact resulting 40-character `main` SHA.
 - Verify that provider metadata, `/api/version`, and `/api/health` identify the expected deployed commit.
@@ -67,11 +67,13 @@ Public support/security contact: `Ahmed.Mohamed04@outlook.de`. Ask reporters to 
 
 ## Launch-day sequence
 
+Pull-request review preflight is CI evidence only and requires explicit `--mode review`; omitted mode is always strict `release`, regardless of environment. Review mode may accept an internally consistent pending-only migration state, but it never authorizes merge or deployment. Before a production-triggering merge, migration history must be reconciled and the exact head must pass strict release mode.
+
 1. Complete code review and all required CI checks for the candidate change.
 2. Complete migration-history reconciliation and independent verification.
 3. Confirm the compatibility marker and expected migration identity.
 4. Run strict production environment validation without exposing secret values.
-5. Run `npm run release:preflight` and retain its result.
+5. Run `npm run release:preflight -- --mode release ...` and retain its passing result.
 6. Obtain explicit release-owner approval for the exact reviewed change.
 7. Merge the approved exact change to `main`.
 8. Record the exact resulting 40-character `main` SHA.
@@ -82,4 +84,4 @@ Public support/security contact: `Ahmed.Mohamed04@outlook.de`. Ask reporters to 
 13. Review browser, console, network, screenshots, route timings, and request counts.
 14. Record the final launch verdict.
 
-Any failed or blocked preflight is a no-go before merge. The migration ledger must be reconciled before a production-triggering merge to `main`. A provider `READY` state alone is not acceptance. Netlify remains separate and keeps its exact-SHA production gate. A manual, external, missing, blocked, or failed item remains a no-go until resolved and evidenced.
+Any failed or blocked strict release preflight is a no-go before merge. The migration ledger must be reconciled before a production-triggering merge to `main`. A provider `READY` state alone is not acceptance. Netlify remains separate and keeps its exact-SHA production gate. A manual, external, missing, blocked, or failed item remains a no-go until resolved and evidenced.

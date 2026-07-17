@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 
 const migrationPath = "supabase/migrations/20260716215602_muscle_intelligence_phase1_foundation.sql";
 const verificationPath = "supabase/verification/muscle-intelligence-phase1.sql";
-const migration = readFileSync(migrationPath, "utf8").toLowerCase();
-const verification = readFileSync(verificationPath, "utf8").toLowerCase();
+const migration = readFileSync(migrationPath, "utf8").replaceAll("\r\n", "\n").toLowerCase();
+const verification = readFileSync(verificationPath, "utf8").replaceAll("\r\n", "\n").toLowerCase();
 const qualityWorkflow = readFileSync(".github/workflows/quality.yml", "utf8");
 const privacyExport = readFileSync("lib/privacy/data-export.ts", "utf8");
 const adr = readFileSync("docs/architecture/decisions/0005-muscle-intelligence-taxonomy-and-mapping-authority.md", "utf8");
@@ -140,7 +140,7 @@ describe("Muscle Intelligence Phase 1 migration contract", () => {
     expect(canonical.toLowerCase()).toContain("phase 1 does not change train runtime behavior");
   });
 
-  it("classifies the production migration as applied with reconciled aggregate state", () => {
+  it("keeps Phase 1 applied after Phase 2 production reconciliation", () => {
     expect(migrationLedger.entries.find((entry) => entry.localFile === "20260716215602_muscle_intelligence_phase1_foundation.sql")?.state).toBe("applied");
     expect(migrationLedger.pendingCount).toBe(0);
     expect(migrationLedger.unresolvedCount).toBe(0);

@@ -15,6 +15,7 @@ import type {
 } from "@/lib/activity-catalog/types";
 import type { ExerciseVideo, Workout } from "@/types";
 import type { ActivityCatalogProvider } from "./provider";
+import { normalizeLegacyInstructions } from "./legacy-instructions";
 
 type LegacyRow = Record<string, unknown>;
 type LegacySnapshot = { activities: TrainingActivity[]; degraded: boolean };
@@ -82,11 +83,6 @@ function taxonomy(name: string | null, prefix: string): TaxonomyItem | null {
   return { id: `${prefix}:${slug}`, slug, name };
 }
 
-function instructions(value: unknown) {
-  const instruction = text(value);
-  return instruction ? [{ order: 1, text: instruction }] : [];
-}
-
 function workoutRow(activity: Workout | LegacyRow): TrainingActivity | null {
   const row = activity as LegacyRow;
   const id = text(row.id);
@@ -106,7 +102,7 @@ function workoutRow(activity: Workout | LegacyRow): TrainingActivity | null {
     slug: text(row.slug) ?? stableSlug(name),
     name,
     ...(row.short_description !== undefined ? { shortDescription: text(row.short_description) } : {}),
-    instructions: instructions(row.instructions),
+    instructions: normalizeLegacyInstructions(row.instructions),
     difficulty: text(row.difficulty) ?? text(row.experience_level),
     movementPattern: text(row.movement_pattern) ?? text(row.mechanics),
     forceType: text(row.force_type),
