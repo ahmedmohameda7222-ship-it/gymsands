@@ -19,7 +19,7 @@ The existing Next.js repository remains the main product repository. Native work
 | Capability | Status |
 |---|---|
 | Product and cross-platform constitutions | Implemented as current authority |
-| Repository/documentation reset | Active cleanup; generated and historical evidence is being removed from the source tree |
+| Repository/documentation reset | Current baseline refreshed; generated and historical evidence is excluded from the active source tree |
 | Obsolete AI request/safety workflow | Removed from active runtime and database |
 | Canonical domain ADRs | ADRs 0001–0005 accepted |
 | Premium web routes | Active; continued stabilization and accessibility/performance work required |
@@ -39,7 +39,7 @@ Do not blindly share DOM components, desktop assumptions, browser navigation, ho
 
 ## Next active priorities
 
-1. complete repository cleanup and regenerate the repository graph from clean `main`;
+1. regenerate and verify the repository graph from clean `main`;
 2. continue Muscle Intelligence with the approved trusted exercise-mapping phase;
 3. complete remaining Train Phase 2 projection/writer/cutover work in controlled phases;
 4. finish public MCP/CIMD production configuration, acceptance, and submission evidence;

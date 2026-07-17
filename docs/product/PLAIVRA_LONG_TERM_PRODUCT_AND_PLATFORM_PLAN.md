@@ -71,7 +71,7 @@ Accepted ADRs currently cover performed sessions, exercise catalog, saved nutrit
 | Workstream | Status |
 |---|---|
 | Product/design authority | Implemented |
-| Repository hygiene and current documentation | Active cleanup, then maintained continuously |
+| Repository hygiene and current documentation | Current baseline refreshed; continuous maintenance required |
 | Obsolete AI request/safety workflow | Removed |
 | Task-specific context projections | Implemented foundation; public launch acceptance incomplete |
 | Curated MCP, permissions, idempotency, audit | Implemented foundation; platform publication incomplete |
@@ -107,7 +107,7 @@ Plaivra does not store raw payment credentials or collect card data through MCP.
 
 ## Delivery roadmap
 
-1. finish web stabilization, repository hygiene, and current architecture documentation;
+1. maintain the refreshed repository and documentation baseline while stabilizing the web product;
 2. complete task-specific context and public MCP/CIMD production acceptance;
 3. complete staged Train and canonical-data cutovers;
 4. continue Muscle Intelligence phases without bypassing trusted mapping and historical-version gates;
