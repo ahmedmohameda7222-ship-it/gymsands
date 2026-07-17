@@ -30,7 +30,7 @@
 
 ## Workout plans
 
-The approved target hierarchy is:
+The approved target program architecture is:
 
 ```text
 user_workout_plans
@@ -42,7 +42,7 @@ user_workout_plans
   - references one reusable week template
 ```
 
-Until later projection, writer, schedule, privacy, and regression gates complete cutover, the active compatibility writer remains:
+Until later projection, writer, schedule, privacy, and regression gates complete cutover, the active runtime plan write path remains:
 
 - `user_workout_plans`;
 - `user_workout_plan_days`;
@@ -83,6 +83,8 @@ Phase 1 provides:
 - immutable versioned global and user-custom mapping sets and entries;
 - hardened publication functions;
 - deterministic resistance-set calculation.
+
+Phase 1 does not change Train runtime behavior, visible UI, plan or session writers, or seed trusted mappings.
 
 Phase 2 provides:
 
