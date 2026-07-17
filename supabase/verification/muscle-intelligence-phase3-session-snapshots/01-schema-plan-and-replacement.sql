@@ -45,10 +45,10 @@ begin
   end loop;
 
   if exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public'
-      and table_name in ('workout_session_muscle_snapshots', 'workout_session_muscle_snapshot_items')
-      and column_name ~ '(health|profile|conversation)'
+    select 1 from information_schema.columns column_info
+    where column_info.table_schema = 'public'
+      and column_info.table_name in ('workout_session_muscle_snapshots', 'workout_session_muscle_snapshot_items')
+      and column_info.column_name ~ '(health|profile|conversation)'
   ) then
     raise exception 'Phase 3 snapshot schema contains prohibited health/profile/conversation data.';
   end if;
