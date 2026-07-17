@@ -5,12 +5,7 @@ export const env = {
   supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
   appUrl: process.env.NEXT_PUBLIC_APP_URL || developmentAppUrl,
   chatgptConnectUrl: process.env.NEXT_PUBLIC_CHATGPT_CONNECT_URL || "",
-  plaivraMcpServerUrl:
-    process.env.NEXT_PUBLIC_PLAIVRA_MCP_SERVER_URL ||
-    process.env.NEXT_PUBLIC_FITLIFE_MCP_SERVER_URL ||
-    process.env.VITE_FITLIFE_MCP_SERVER_URL ||
-    process.env.REACT_APP_FITLIFE_MCP_SERVER_URL ||
-    "",
+  plaivraMcpServerUrl: process.env.NEXT_PUBLIC_PLAIVRA_MCP_SERVER_URL || "",
   manualChatGptSetupEnabled: process.env.NEXT_PUBLIC_ENABLE_MANUAL_CHATGPT_SETUP === "true",
   useMockAuth: process.env.NEXT_PUBLIC_USE_MOCK_AUTH === "true"
 };

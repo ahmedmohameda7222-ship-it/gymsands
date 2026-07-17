@@ -1,404 +1,125 @@
 # Plaivra Long-Term Product and Platform Plan
 
-**Version:** 2026.2  
+**Version:** 2026.4  
 **Status:** Strategic source of truth  
 **Time horizon:** Multi-year
 
-## 1. Mission
+## Mission
 
-Build Plaivra into a globally credible personal fitness context and execution platform that makes ChatGPT-created plans persistent, structured, safe, editable, visual, and useful across web, ChatGPT, iOS, and Android.
+Build Plaivra into a globally credible personal fitness context and execution platform that makes ChatGPT-created plans persistent, structured, permissioned, editable, visual, and useful across web, ChatGPT, iOS, and Android.
 
-## 2. User problem
+## Target experience
 
-A user should not repeat the same profile in every new ChatGPT conversation:
+Plaivra stores user-maintained fitness and nutrition context once. ChatGPT receives only the authorized task-specific projection, asks only for essential missing information, reasons about the request, and writes confirmed structured results through Plaivra tools. Plaivra then tracks, visualizes, edits, corrects, exports, and deletes those records.
 
-- age, height, weight, goals, experience, activity level;
-- available equipment, available days, session duration;
-- food preferences, dislikes, cuisines, cooking skill, cooking time;
-- budget, meal frequency, kitchen equipment;
-- relevant user-authored fitness constraints;
-- current plans, targets, adherence, and recent progress.
+Plaivra is not a second reasoning engine and does not add a copy/import/review queue after successful tool execution.
 
-Plaivra stores and maintains this context once. ChatGPT retrieves only the authorized projection needed for the current task.
-
-## 3. Target experience
-
-```text
-User: Connect to Plaivra, check my nutrition context, and create a realistic plan for next week.
-
-ChatGPT:
-- obtains the required authorized context;
-- does not repeat known questions;
-- asks only for essential missing information;
-- creates the plan;
-- saves it with Plaivra tools;
-- reports confirmed success.
-
-Plaivra:
-- displays the structured week;
-- visualizes calories and macros;
-- builds grocery and completion workflows;
-- preserves history;
-- allows correction, replacement, export, and deletion.
-```
-
-## 4. Platform architecture
-
-### 4.1 Shared layers
+## Shared platform architecture
 
 All clients share:
 
 - Supabase-backed account and data platform;
-- domain types and validation;
-- permission and consent rules;
-- task-specific context contracts;
-- MCP tool contracts;
-- entitlement logic;
-- analytics event semantics;
-- design tokens and accessibility requirements.
+- domain types, validation, and ownership rules;
+- task-specific context and permission contracts;
+- MCP/API contracts;
+- entitlement semantics;
+- analytics meaning;
+- design tokens and accessibility outcomes.
 
-### 4.2 Client layers
+Client surfaces remain platform appropriate:
 
-- **Web:** Next.js reference product and administration surface.
-- **ChatGPT app:** MCP tools, OAuth/CIMD account connection, selective conversational UI.
-- **iOS:** native-feeling mobile client using shared domain logic and Apple platform behavior.
-- **Android:** native-feeling mobile client using shared domain logic and Android platform behavior.
+- **Web:** active Next.js reference product and administration surface;
+- **ChatGPT:** curated MCP tools with OAuth/CIMD account connection;
+- **iOS:** future native-feeling client using shared contracts and Apple behavior;
+- **Android:** future native-feeling client using shared contracts and Android behavior.
 
-The clients may not fork product rules.
+## Persistent Context Service
 
-## 5. Persistent Context Service
+Public ChatGPT access uses versioned task-specific projections rather than broad profile reads. Projection families include training planning, nutrition planning, workout adjustment, meal preparation, daily execution, progress summary, and available capabilities.
 
-Create a versioned context-projection layer between storage and ChatGPT.
+Every projection defines purpose, included/excluded fields, permission scope, sensitivity, output schema, maximum size, audit behavior, version, and tests.
 
-Required projections:
+## Public ChatGPT architecture
 
-- `training_planning_context`;
-- `nutrition_planning_context`;
-- `workout_adjustment_context`;
-- `meal_preparation_context`;
-- `daily_execution_context`;
-- `progress_summary_context`;
-- `available_capabilities_context`.
+The public catalog is an explicit allowlist covering connection/capabilities, task-specific context, user-owned plans/logs/targets, daily execution, progress, correction, and deletion.
 
-Every projection must define:
+Exclude admin tools, deprecated aliases, internal workflow state, broad exports, detailed clinical profile tools, and untested experiments.
 
-- purpose;
-- included fields;
-- excluded fields;
-- permission scope;
-- sensitivity class;
-- output schema;
-- maximum output size;
-- audit event;
-- version;
-- tests.
+Every public tool requires strict input/output schemas, OAuth requirements, annotations, bounded structured output, ownership enforcement, stable errors, and positive/negative tests.
 
-Broad profile reads are compatibility-only and must not be the normal public ChatGPT path.
+Users must never copy a connection UUID, client ID, or bearer token. Plaivra owns branded login, consent, permissions, connection management, and revocation. CIMD/OAuth infrastructure is implemented; final production configuration and platform publication remain separate acceptance gates.
 
-## 6. Profile architecture
+## Canonical data architecture
 
-### Core profile
-
-- preferred name;
-- age or age range;
-- height and current weight;
-- preferred units;
-- time zone and language;
-- general fitness goal and activity level.
-
-### Training profile
-
-- experience;
-- available days and duration;
-- environment and equipment;
-- preferred and avoided movements;
-- training preferences;
-- current active plan reference.
-
-### Nutrition profile
-
-- nutrition goal and targets;
-- food preferences and dislikes;
-- preferred cuisines;
-- budget and currency;
-- cooking time and skill;
-- kitchen equipment;
-- meal frequency and preparation preferences;
-- user-provided allergies or intolerances where legally supported.
-
-### Execution context
-
-- current plans;
-- scheduled items;
-- recent completion and adherence;
-- current targets;
-- user-selected quick actions.
-
-### Private and sensitive context
-
-Private fields are not automatically ChatGPT-shareable. Public ChatGPT v1 uses functional fitness constraints instead of detailed clinical data.
-
-## 7. ChatGPT app architecture
-
-### 7.1 Initial public form
-
-The first public Plaivra integration should be a curated MCP app with a small, high-quality tool catalog. Custom in-chat UI is optional and should be added only where it improves the conversation.
-
-### 7.2 Public tool groups
-
-- connection and capabilities;
-- task-specific profile context;
-- nutrition logs and targets;
-- meal plans and grocery lists;
-- workout plans and execution;
-- hydration and daily completion;
-- progress summaries;
-- user-owned correction and deletion.
-
-Exclude:
-
-- admin tools;
-- deprecated aliases;
-- internal workflow state;
-- broad database exports;
-- detailed clinical profile tools;
-- untested experimental tools.
-
-### 7.3 Tool standard
-
-Every public tool requires:
-
-- canonical name and description;
-- input schema;
-- output schema;
-- OAuth security requirements;
-- read/write/destructive/idempotent annotations;
-- bounded structured output;
-- ownership enforcement;
-- safe error contract;
-- positive and negative tests;
-- production review evidence.
-
-## 8. CIMD authentication plan
-
-CIMD is the target ChatGPT client-identification model.
-
-Required user journey:
-
-```text
-Choose Plaivra in ChatGPT
-→ Connect
-→ Plaivra-branded login
-→ clear permission consent
-→ authorize or deny
-→ return to ChatGPT
-```
-
-Users must not copy connection UUIDs, client IDs, or bearer tokens.
-
-Required protocol behavior:
-
-- OAuth 2.1 authorization-code flow;
-- PKCE S256;
-- protected-resource metadata;
-- authorization-server/OpenID discovery;
-- CIMD support metadata;
-- HTTPS client metadata validation;
-- exact redirect validation;
-- `resource` binding;
-- issuer, audience, expiry, scope, ownership, connection, and revocation checks;
-- useful `WWW-Authenticate` challenges;
-- reauthorization and scope reduction.
-
-Plaivra owns branding, consent, permissions, and account linking. Established identity infrastructure handles authentication security primitives behind an abstraction.
-
-## 9. Data and privacy architecture
-
-Every field must be classified as one of:
-
-- standard account data;
-- profile data;
-- preference data;
-- tracking data;
-- progress data;
-- sensitive user-provided context;
-- private Plaivra-only data;
-- ChatGPT-shareable context;
-- operational metadata;
-- prohibited from public ChatGPT tools.
-
-For every category document:
-
-- purpose;
-- legal basis/consent where required;
-- storage location;
-- retention;
-- export behavior;
-- deletion behavior;
-- processors;
-- ChatGPT access rule;
-- audit logging rule.
-
-## 10. Canonical data-model convergence
-
-The current database contains multiple generations of workout, exercise, meal, and integration models. Convergence must happen domain by domain.
-
-Required ADRs:
-
-1. canonical workout plan and performed-session model;
-2. canonical exercise definition/media/override model;
-3. canonical saved-meal/recipe/ingredient model;
-4. canonical profile and context model;
-5. canonical audit and security event model.
-
-Migration sequence:
+Applied migrations are immutable. Convergence happens domain by domain:
 
 ```text
 add canonical model
-→ migrate data
+→ migrate or backfill data
 → update writes
-→ support compatibility reads if required
-→ verify
+→ retain bounded compatibility reads where required
+→ verify ownership, privacy, and behavior
 → remove old reads
 → monitor
 → drop deprecated objects in a later migration
 ```
 
-Applied migration history is never rewritten.
+Accepted ADRs currently cover performed sessions, exercise catalog, saved nutrition content, the multi-week program hierarchy, and Muscle Intelligence taxonomy/mapping authority. These decisions are implemented at different stages; accepted architecture does not imply every writer cutover is complete.
 
-## 11. Cross-platform UI strategy
+## Status matrix
 
-Plaivra uses one design language with platform-native adaptation.
+| Workstream | Status |
+|---|---|
+| Product/design authority | Implemented |
+| Repository hygiene and current documentation | Active cleanup, then maintained continuously |
+| Obsolete AI request/safety workflow | Removed |
+| Task-specific context projections | Implemented foundation; public launch acceptance incomplete |
+| Curated MCP, permissions, idempotency, audit | Implemented foundation; platform publication incomplete |
+| CIMD/OAuth | Implemented infrastructure; final external configuration/review incomplete |
+| Canonical performed-session decision | Accepted; compatibility linking/cutover remains |
+| Canonical exercise decision | Accepted; legacy compatibility sources remain |
+| Canonical saved-recipe decision | Accepted; legacy custom-meal convergence remains |
+| Train Phase 2A hierarchy | Applied; runtime writer cutover remains |
+| Muscle Intelligence Phase 1 | Applied and merged; trusted mapping registry and UI remain future phases |
+| Entitlement service | Provider-neutral foundation exists; checkout/offering activation future |
+| Product Constitution Lock | Not yet declared |
+| iOS and Android | Future; no binary exists |
 
-Shared:
+## Privacy and safety
 
-- semantics;
-- content hierarchy;
-- spacing and typography tokens;
-- component contracts;
-- data states;
-- permission language;
-- accessibility outcomes;
-- analytics semantics.
+Every field is classified by purpose, sensitivity, storage, consent/legal basis where required, retention, export, deletion, processors, ChatGPT access, and audit rules.
 
-Platform-specific:
+Public ChatGPT uses functional user-authored constraints rather than detailed clinical records. Plaivra does not diagnose, treat, prescribe, or replace professional care.
 
-- navigation mechanics;
-- system controls and sheets;
-- safe areas;
-- back behavior;
-- keyboard behavior;
-- haptics;
-- native permissions;
-- billing UI;
-- platform accessibility APIs.
+Destructive operations require explicit confirmation and server-side ownership, permission, token, connection, and revocation enforcement.
 
-The web client is the functional reference, not a pixel-perfect native template.
+## Subscription architecture
 
-## 12. Subscription architecture
-
-Create a unified Plaivra Entitlement Service.
-
-Provider events flow into one normalized account state:
+Provider events normalize into one Plaivra entitlement boundary:
 
 ```text
-Stripe / Apple / Google
-→ verified provider event
-→ Plaivra entitlement record
-→ product capability checks
+verified Stripe / Apple / Google event
+→ provider-neutral entitlement record
+→ capability check
 ```
 
-Normalized states may include:
+Plaivra does not store raw payment credentials or collect card data through MCP. Checkout remains disabled until offerings, recovery behavior, provider configuration, and release gates are approved.
 
-- inactive;
-- trialing;
-- active;
-- grace period;
-- billing issue;
-- cancelled but active;
-- expired;
-- revoked.
+## Delivery roadmap
 
-Never store raw payment credentials in Plaivra or collect card information through MCP.
+1. finish web stabilization, repository hygiene, and current architecture documentation;
+2. complete task-specific context and public MCP/CIMD production acceptance;
+3. complete staged Train and canonical-data cutovers;
+4. continue Muscle Intelligence phases without bypassing trusted mapping and historical-version gates;
+5. declare Product Constitution Lock after core P0/P1 closure;
+6. activate provider-neutral web entitlements and Stripe;
+7. build and test iOS;
+8. adapt and test Android.
 
-## 13. Delivery roadmap
+## World-class quality gates
 
-### Phase 0 — Repository and constitution reset
+Plaivra is launch-ready only when the product is explainable, task context is minimized, tool writes are reliable and idempotent, every generated record is correctable, destructive actions are unambiguous, privacy/export/deletion/revocation work, logs are redacted, high-impact security/performance findings are resolved or explicitly accepted, and reviewed code, deployed code, migration history, configuration, and submission evidence match exactly.
 
-- establish authoritative documents;
-- remove obsolete audits, prompts, progress trackers, and historical migration copies;
-- update agent read order;
-- map database duplication;
-- remove the obsolete AI action-request queue.
+## Governance
 
-### Phase 1 — Premium web product
-
-- complete core information architecture;
-- stabilize daily-use routes;
-- implement all required data states;
-- meet accessibility and performance budgets;
-- separate domain logic from React components;
-- complete privacy and account controls.
-
-### Phase 2 — Context Projection Service
-
-- implement versioned task-specific context;
-- remove broad public profile reads;
-- add field-level permissions and audit events;
-- validate minimum-context behavior.
-
-### Phase 3 — CIMD and public MCP v1
-
-- replace manual per-user client configuration;
-- implement CIMD validation and OAuth discovery;
-- publish curated public tools with output schemas;
-- remove deprecated/internal/clinical tools from the public catalog;
-- complete production testing and review evidence.
-
-### Phase 4 — Product Constitution Lock
-
-- close P0 and core P1 issues;
-- approve canonical domain ADRs;
-- lock core product and UX contracts;
-- require evidence for broad later changes.
-
-### Phase 5 — Entitlements and web subscription
-
-- implement entitlement service;
-- integrate Stripe;
-- implement trial, cancellation, recovery, and customer-portal behavior;
-- keep provider logic outside domain capabilities.
-
-### Phase 6 — iOS
-
-- create the shared mobile foundation;
-- implement Apple-native navigation, Dynamic Type, accessibility, secure storage, notifications, deep links, Sign in with Apple, and StoreKit;
-- release through TestFlight before public launch.
-
-### Phase 7 — Android
-
-- adapt the shared mobile foundation to Android navigation, predictive back, accessibility, secure storage, notifications, deep links, and Google Play Billing;
-- release through staged testing.
-
-## 14. World-class quality gates
-
-Plaivra is launch-ready only when:
-
-- the product can be explained in one sentence;
-- ChatGPT does not ask for known profile information unnecessarily;
-- only task-relevant authorized context is exposed;
-- tool writes are reliable and idempotent;
-- the user can correct every generated record;
-- no destructive action is ambiguous;
-- web and mobile layouts meet the cross-platform constitution;
-- account, export, deletion, consent, and revocation work;
-- logs are redacted and operational monitoring exists;
-- canonical data models have owners;
-- security and performance advisors have no unexplained high-impact findings;
-- the reviewed commit, deployed commit, database migrations, and submission evidence match.
-
-## 15. Governance
-
-This plan may evolve before Product Constitution Lock, but changes must update the Product Constitution and dependent architecture documents in the same change.
-
-After lock, broad changes require a Product Change Proposal.
+Before Product Constitution Lock, evidence-backed changes may update this plan and dependent architecture documents together. After lock, broad changes require a formal Product Change Proposal.

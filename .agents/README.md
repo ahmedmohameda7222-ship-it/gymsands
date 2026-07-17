@@ -1,31 +1,23 @@
-# Plaivra Agent Configuration
+# Plaivra optional agent skills
 
-This directory intentionally contains a small local Codex/Ruflo skill surface.
+This directory contains optional specialist skills. It is not a mandatory execution stack.
 
-Product and engineering authority is defined in:
+Current authority:
 
 - `AGENTS.md`
-- `docs/product/PLAIVRA_PRODUCT_CONSTITUTION.md`
-- the task-specific architecture or design document
+- `CHATGPT_CODEX_PROMPT_RULES.md`
+- the minimum task-specific product, architecture, design, database, and test contracts
 
-## Enabled local skills
+## Default
 
-- `swarm-orchestration` — repo-wide work that has genuinely independent workstreams
-- `memory-management` — reusable implementation context
-- `security-audit` — auth, MCP, privacy, Supabase, and sensitive-data review
-- `performance-analysis` — measured performance investigation
-- `agent-coder` — implementation
-- `agent-reviewer` — focused code and architecture review
-- `agent-tester` — verification
+Use one Codex executor with agents and Ruflo off.
 
-Do not restore the removed generic skill corpus unless a recurring Plaivra use case is demonstrated.
+Enable a specialist skill only when the approved prompt identifies a genuine independent need:
 
-## Model selection
+- `security-audit` for a bounded auth, MCP, privacy, Supabase, or sensitive-data review;
+- `performance-analysis` for measured performance investigation;
+- `agent-reviewer` or `agent-tester` for an independent workstream that does not duplicate the executor;
+- `memory-management` only for reusable implementation facts;
+- `swarm-orchestration` only for truly independent repo-wide workstreams with clear ownership.
 
-Model and reasoning level are chosen per task in Codex CLI. They are not hardcoded in `.agents/config.toml`.
-
-Repository size alone does not justify maximum or parallel reasoning. Use the smallest relevant scope and the lightest model/reasoning combination that can meet the quality requirement.
-
-## Invocation
-
-Skills use `$skill-name` syntax. Use only the skills needed for the current task; do not invoke every enabled skill by default.
+Do not invoke coder/reviewer/tester/security stacks automatically. Coordination does not replace implementation, source inspection, SQL verification, tests, or independent quality control.
