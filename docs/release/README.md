@@ -35,7 +35,7 @@ The machine authority is `supabase/migration-ledger.json`. The human record is `
 
 After candidate pushes, inspect the Vercel deployment list for the exact pushed SHA. Any unexpected feature-branch or pull-request deployment is a release-control failure.
 
-Vercel does not use `ignoreCommand`, `PLAIVRA_PREVIEW_RELEASE_SHA`, or `PLAIVRA_PRODUCTION_RELEASE_SHA`. A merge to `main` is production-triggering under the current model, so all fail-closed gates and explicit authorization must precede merge.
+Vercel does not use `ignoreCommand`, `PLAIVRA_PREVIEW_RELEASE_SHA`, or `PLAIVRA_PRODUCTION_RELEASE_SHA`. Vercel does not use preview or production exact-SHA approval environment variables. A merge to `main` is production-triggering under the current model, so all fail-closed gates and explicit authorization must precede merge.
 
 ### Netlify
 
