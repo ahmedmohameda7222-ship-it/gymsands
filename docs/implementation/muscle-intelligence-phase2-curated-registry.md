@@ -4,11 +4,11 @@
 
 - Starting `main`: `99df1c97d7acbd7ab77c597cd859533d20ad9981`
 - Implementation branch: `feat/muscle-intelligence-phase2-curated-registry`
-- Final-correction starting head: `4733126084adb738c86506457a80c8fc382d8573`
+- Reviewed migration-source head: `9b3006c1a512512bee8c16a4fb2ae34a16b7b7f6`
 - Machine authority: `data/muscle-intelligence/v1/registry.json`
 - Decision context: `data/muscle-intelligence/v1/CURATION.md`
 - Registry SHA-256: `892a3aa65692eaa8e053617f33c7a4c66f90df234ab9126884de1c8f7c4020aa`
-- Production, deployment, merge, and later-phase work are outside this implementation.
+- Merge, compatibility-marker advancement, deployment, and later-phase work remain separate operations.
 
 ## Implemented decision
 
@@ -16,71 +16,82 @@ Phase 2 adds the exact approved cohort of 60 canonical global exercises, 180 EN/
 
 The seed asserts the retired catalog stays empty, rejects pre-existing deterministic identities, preserves non-target and user-owned counts, verifies every database checksum, and publishes each mapping only through `public.publish_exercise_muscle_mapping_set(...)`.
 
-PR #67's final compatibility correction keeps omitted preflight mode universally strict (`release`), makes GitHub Quality pass explicit review/release modes, and normalizes the curated JSON instruction arrays stored in the legacy exercise text field into ordered readable steps. Invalid structured entries are ignored; malformed payloads or arrays with no valid entries preserve the original trimmed legacy text as one step. Provider selection, fallback policy, the registry, and both pending migrations remain unchanged.
+PR #67's compatibility correction keeps omitted preflight mode universally strict (`release`), makes GitHub Quality pass explicit review/release modes, and normalizes curated JSON instruction arrays stored in the legacy exercise text field into ordered readable steps. Provider selection, fallback policy, registry content, and migration bytes were not changed by that correction.
 
-## Forward migrations
+## Production application
+
+The two reviewed migrations were applied to production project `bkwezjxvapaeasfvlhvv` on 2026-07-17 through tracked Supabase CLI `db push` after a dry run listed exactly these files, in order:
 
 - `20260717051008_muscle_intelligence_phase2_curated_schema.sql`
 - `20260717051011_muscle_intelligence_phase2_curated_seed.sql`
 
-Both are classified as `pending` in `supabase/migration-ledger.json`. Production remains at `20260717032851_retire_legacy_600_exercise_catalog` until a separate authorized application and reconciliation.
+Supabase production history now contains 37 migrations and ends at `20260717051011_muscle_intelligence_phase2_curated_seed`. Both exact repository versions are recorded once. The Docker warning printed after the remote push concerned optional local migration-catalog caching only; it did not affect the completed remote transaction or migration history.
 
-## Bounded inspection record
+Direct backup/PITR evidence was not captured in this repository before the manual application. This is an operational evidence gap and must not be rewritten as a passed backup check.
 
-Must-read authority:
+## Production verification
 
-- attached implementation prompt;
-- attached curated registry JSON;
-- attached curation package.
-- PR #67 required final corrections prompt.
+Read-only verification after application confirmed:
 
-Search-only areas:
+- 60 curated exercises;
+- 180 localizations;
+- 180 aliases;
+- 32 relationships;
+- 21 research sources;
+- 89 mapping-evidence rows;
+- 60 mapping reviews;
+- 9 exact provider links;
+- 60 mapping sets, all published;
+- 0 curated draft mappings;
+- 180 mapping entries;
+- 0 checksum drift;
+- 0 alias collision groups;
+- 0 duplicate relationship groups;
+- all six Phase 2 tables have RLS enabled;
+- no anonymous table privileges exist on the six new tables;
+- member-readable policies exist only for localizations, aliases, and relationships;
+- research, evidence, and review policies remain admin-only;
+- retired legacy target rows remain zero in `exercises`, `workouts`, and `exercise_library`.
 
-- migration and checksum/publication references under `supabase/`, `lib/train/muscle-intelligence/`, and `lib/product/`;
-- current release/migration metadata references in `README.md`, `docs/`, `release/`, and `.github/workflows/quality.yml`.
+The nine provider identities match the approved allowlist exactly. The other 51 curated exercises have no provider-link row.
 
-Conditional source inspection:
+Supabase security advisors introduced no Phase 2 security finding. Performance advisors reported expected non-blocking notices for newly unused indexes and overlapping permissive admin/member SELECT policies on the three member-readable tables. No production correction was made because these are not data-integrity or security blockers for this phase.
 
-- `supabase/migrations/20260716215602_muscle_intelligence_phase1_foundation.sql` — reused the exact mapping constraints, checksum function, lifecycle triggers, publication function, grants, and admin policy convention;
-- `supabase/migrations/20260717032851_retire_legacy_600_exercise_catalog.sql` — preserved its provenance and user-data safety boundary;
-- `supabase/migrations/202606290000_clean_initial_schema.sql` — confirmed available `exercises` columns and existing RLS conventions;
-- `lib/train/muscle-intelligence/{taxonomy,contracts,checksum,calculate-muscle-load}.ts` — reused canonical muscle IDs, validation, checksum canonicalization, and deterministic result behavior;
-- `scripts/check-migration-ledger.mjs` and `.github/workflows/quality.yml` — kept pending-migration and full-chain verification semantics truthful;
-- current canonical-domain, roadmap, release, and migration-reconciliation documentation — updated only current authority.
+## Repository reconciliation
 
-- `scripts/release-preflight.mjs`, its script tests, and `.github/workflows/quality.yml` - restored a universally strict default and explicit trusted workflow mode selection;
-- `services/activity-catalog/server/legacy-provider.ts`, the Activity Catalog adapter/types, and focused provider tests - added bounded compatibility parsing without changing provider selection or fallback policy.
+`supabase/migration-ledger.json` now records:
 
-Graphify was not used because targeted source search resolved the required dependencies without expanding the inspection boundary.
+- `productionMigrationCount = 37`;
+- `pendingCount = 0`;
+- `schemaVerifiedUntrackedCount = 0`;
+- `unresolvedCount = 0`;
+- `historyRepair.state = reconciled`.
+
+Both Phase 2 entries are immutable applied identities tied to reviewed source head `9b3006c1a512512bee8c16a4fb2ae34a16b7b7f6` and their original Git blobs. Do not replay either migration.
 
 ## Security and privacy boundary
 
-- RLS is enabled on all six new tables.
 - Approved localizations, searchable aliases, and approved relationships are member-readable.
 - Research sources, mapping evidence, and internal review rationale remain admin/service-role only.
 - Anonymous access is revoked and there is no anonymous mutation path.
 - Existing Phase 1 mapping immutability and atomic publication remain authoritative.
-- No user-owned table, plan, session, log, custom exercise, or custom mapping is rewritten by the Phase 2 seed.
+- No user-owned table, plan, session, log, custom exercise, or custom mapping was rewritten by the Phase 2 seed.
 
-## Verification status
+## Compatibility and release boundary
 
-Local results on 2026-07-17:
+The production physical schema is now at `20260717051011`, while `public.release_schema_compatibility.migration_version` intentionally remains `20260717032851` for the currently deployed application pair.
 
-- registry/seed synchronization: pass;
-- migration-ledger validation: pass with `applied=35`, `pending=2`, `unresolved=2`, `reconciliation=pending`, and `release_ready=false`;
-- focused Phase 2 registry/migration tests: 16 passed, including semantic full-body, upper/lower, and push/pull/legs session contracts;
-- focused legacy instruction normalization: 7 passed, including every one of the 60 curated payloads and final adapter output;
-- unit configuration: 1,030 passed;
-- integration configuration: 10 passed and 38 environment-gated skips;
-- telemetry configuration: 16 passed;
-- script tests: 74 passed;
-- TypeScript: pass;
-- lint: pass with one pre-existing warning outside this phase;
-- production build: pass, including 91 generated static pages;
-- `git diff --check`: pass.
+Do not update that marker independently. Marker advancement must be coordinated with the exact reviewed merge and production deployment so `/api/version` continues to represent one compatible code/database release pair.
 
-The clean local Supabase migration-chain and disposable SQL verification could not run because Docker Desktop is unavailable in the Windows environment. The Draft PR's Docker-backed GitHub Quality job must supply that exact-head database-chain evidence; an unrun local check is not recorded as passed.
+This production application did not:
+
+- merge PR #67;
+- mark the PR ready for review;
+- update the compatibility marker;
+- deploy Vercel;
+- change production environment variables;
+- start Muscle Intelligence Phase 3 or Phase 4.
 
 ## Rollback and follow-up boundary
 
-Before production application, rollback is branch/commit reversion. After any future authorized application, the migrations are immutable and correction requires a new named forward migration. Do not merge, deploy, apply production migrations, update the production release marker, or start Phase 3/4 from this report.
+The applied migrations are now immutable. Any correction requires a separately reviewed forward migration. The next release operation is fresh exact-head CI, strict release preflight, explicit merge authorization, coordinated compatibility-marker handling, exact `main` deployment verification, and smoke acceptance.
