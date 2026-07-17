@@ -57,9 +57,9 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 - Web is the active product surface.
 - Public MCP, OAuth/CIMD, task-specific context projections, privacy, idempotency, and release foundations exist; publication and full production acceptance remain separate gates.
 - Train Phase 2A provides the additive multi-week hierarchy; the legacy plan writer remains active until later cutover phases.
-- Muscle Intelligence Phase 2 now versions and validates the approved 60-exercise registry, six normalized curation tables, 60 mappings with 180 entries, 180 localizations, 180 aliases, 32 relationships, nine exact provider links, and five golden-plan fixtures without changing visible Train behavior.
-- The generated 600-row legacy exercise catalog remains retired. The reviewed 60-exercise curated registry and mapping cohort are now applied to production and tracked through migration `20260717051011_muscle_intelligence_phase2_curated_seed`.
-- Muscle Intelligence Phase 3 now freezes immutable, owner-scoped interpretations under the existing performed-session root and exposes deterministic planned/completed historical analysis without adding the Heat Map UI. Its explicitly authorized production migrations are tracked through `20260717202151_muscle_intelligence_phase3_integrity_corrections`.
+- Muscle Intelligence Phase 2 versions and validates the approved 60-exercise registry, six normalized curation tables, 60 mappings with 180 entries, 180 localizations, 180 aliases, 32 relationships, nine exact provider links, and five golden-plan fixtures without changing visible Train behavior.
+- The generated 600-row legacy exercise catalog remains retired. The reviewed 60-exercise curated registry and mapping cohort are applied to production and tracked through migration `20260717051011_muscle_intelligence_phase2_curated_seed`.
+- Muscle Intelligence Phase 3 production history is applied through `20260717202151_muscle_intelligence_phase3_integrity_corrections`. Draft PR #68 contains three additional reviewed forward corrections for lifecycle/provider identity, direct-session authority, and replacement/repair hardening. Those files remain pending until the clean chain passes and exact production application is verified.
 - Entitlement and billing foundations exist, but checkout remains disabled until offerings and release controls are approved.
 - No native iOS or Android binary exists.
 
@@ -82,17 +82,18 @@ Machine authority: `supabase/migration-ledger.json`
 
 Human record: `docs/architecture/migration-ledger-reconciliation.md`
 
-Verified production state on 2026-07-17:
+Verified production state before applying the pending PR #68 corrections:
 
 - 39 applied migrations;
-- latest migration: `20260717202151_muscle_intelligence_phase3_integrity_corrections`;
-- the Phase 2 schema and deterministic seed migrations are applied and tracked;
-- `pendingCount=0`;
+- latest production migration: `20260717202151_muscle_intelligence_phase3_integrity_corrections`;
+- `pendingCount=3` and `unresolvedCount=3` because these reviewed local files are not yet in production history:
+  - `20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql`
+  - `20260717215600_muscle_intelligence_phase3_direct_session_authority.sql`
+  - `20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql`
 - `schemaAppliedUntrackedCount=0`;
-- `unresolvedCount=0`;
-- `historyRepair.state=reconciled`;
-- ledger-level release readiness is true for migration-history reconciliation;
-- the deployed application compatibility marker intentionally remains `20260717032851` until a separately coordinated exact-head merge and deployment release operation.
+- `historyRepair.state=pending` until the three exact files are applied and independently verified;
+- ledger-level release readiness is false while any pending migration remains;
+- the compatibility marker remains `20260717051011` and must not change in this correction task.
 
 Never replay, rename, rewrite, delete, or manually reorder an applied migration. Seed documentation is not migration authority.
 

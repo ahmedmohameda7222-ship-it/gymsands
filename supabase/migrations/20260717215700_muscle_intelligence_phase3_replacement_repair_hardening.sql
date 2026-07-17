@@ -13,7 +13,10 @@ begin
   end if;
   select count(*) into v_snapshots from public.workout_session_muscle_snapshots where source = 'legacy_backfill';
   select count(*) into v_items from public.workout_session_muscle_snapshot_items item join public.workout_session_muscle_snapshots snapshot on snapshot.id=item.snapshot_id where snapshot.source='legacy_backfill';
-  if v_snapshots <> 9 or v_items <> 29 then
+  if not (
+    (v_snapshots = 0 and v_items = 0)
+    or (v_snapshots = 9 and v_items = 29)
+  ) then
     raise exception 'Phase 3 legacy baseline drifted: % snapshots, % items.', v_snapshots, v_items;
   end if;
   if exists (select 1 from public.workout_session_muscle_snapshots snapshot join public.workout_sessions session on session.id=snapshot.workout_session_id where snapshot.user_id<>session.user_id) then

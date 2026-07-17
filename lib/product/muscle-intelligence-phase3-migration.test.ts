@@ -5,7 +5,18 @@ const migrationFile = "20260717194847_muscle_intelligence_phase3_session_snapsho
 const migration = readFileSync(`supabase/migrations/${migrationFile}`, "utf8").toLowerCase();
 const correctionFile = "20260717202151_muscle_intelligence_phase3_integrity_corrections.sql";
 const correction = readFileSync(`supabase/migrations/${correctionFile}`, "utf8").toLowerCase();
-const verification = readFileSync("supabase/verification/muscle-intelligence-phase3-session-snapshots.sql", "utf8").toLowerCase();
+const verificationEntrypoint = readFileSync("supabase/verification/muscle-intelligence-phase3-session-snapshots.sql", "utf8");
+const verification = [
+  verificationEntrypoint,
+  "01-schema-plan-and-replacement.sql",
+  "02-replacement-and-privacy.sql",
+  "03-terminal-and-plan-lifecycle.sql",
+  "04-direct-privacy-and-cleanup.sql"
+].map((file, index) => index === 0
+  ? file
+  : readFileSync(`supabase/verification/muscle-intelligence-phase3-session-snapshots/${file}`, "utf8"))
+  .join("\n")
+  .toLowerCase();
 const quality = readFileSync(".github/workflows/quality.yml", "utf8").toLowerCase();
 const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
   productionMigrationCount: number;
@@ -14,6 +25,11 @@ const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")
   historyRepair: { state: string; pendingCount: number; unresolvedCount: number };
   entries: Array<{ productionVersion?: string; productionName?: string; localFile: string; state: string }>;
 };
+const pendingCorrectionFiles = [
+  "20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql",
+  "20260717215600_muscle_intelligence_phase3_direct_session_authority.sql",
+  "20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql"
+];
 
 describe("Muscle Intelligence Phase 3 migration contract", () => {
   it("is one forward transactional migration that preserves the existing roots", () => {
@@ -65,7 +81,7 @@ describe("Muscle Intelligence Phase 3 migration contract", () => {
     expect(correction).toContain("not exists (select 1 from public.workout_sessions");
   });
 
-  it("keeps the applied production identity exact and rehearsed in Quality", () => {
+  it("keeps applied identities exact and classifies all reviewed correction migrations", () => {
     expect(ledger.entries.find((entry) => entry.localFile === migrationFile)).toMatchObject({
       state: "applied",
       productionVersion: "20260717194847",
@@ -73,21 +89,27 @@ describe("Muscle Intelligence Phase 3 migration contract", () => {
     });
     expect(ledger).toMatchObject({
       productionMigrationCount: 39,
-      pendingCount: 0,
-      unresolvedCount: 0,
-      historyRepair: { state: "reconciled", pendingCount: 0, unresolvedCount: 0 }
+      pendingCount: 3,
+      unresolvedCount: 3,
+      historyRepair: { state: "pending", pendingCount: 3, unresolvedCount: 3 }
     });
+    for (const localFile of pendingCorrectionFiles) {
+      expect(ledger.entries.find((entry) => entry.localFile === localFile)).toMatchObject({
+        localFile,
+        state: "pending"
+      });
+    }
     expect(quality).toContain("supabase/verification/muscle-intelligence-phase3-session-snapshots.sql");
-    expect(verification.trimEnd().endsWith("rollback;")).toBe(true);
+    expect(verificationEntrypoint.trimEnd().endsWith("rollback;")).toBe(true);
   });
 
-  it("applies integrity corrections only through a second forward transaction", () => {
+  it("applies integrity corrections only through forward transactions", () => {
     expect(correction.trimStart().startsWith("begin;")).toBe(true);
     expect(correction.trimEnd().endsWith("commit;")).toBe(true);
     expect(correction).not.toMatch(/drop\s+(?:table|column|schema)/);
     expect(verification).toContain("identical replacement retry rewrote the frozen mapping version");
     expect(verification).toContain("account deletion did not remove owner-scoped snapshot history");
-    expect(verification).toContain("custom exercise deletion erased compact historical interpretation");
+    expect(verification).toContain("custom exercise deletion erased copied historical interpretation");
     expect(ledger.entries.find((entry) => entry.localFile === correctionFile)).toMatchObject({
       state: "applied",
       productionVersion: "20260717202151",

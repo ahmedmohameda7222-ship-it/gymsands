@@ -36,7 +36,8 @@ describe("approved Train Phase 1 UI contracts", () => {
     const picker = source("components/workouts/exercise-picker-dialog.tsx");
     expect(picker).not.toContain('role="option"');
     expect(picker).toContain("aria-pressed={isSelected}");
-    expect(picker).toContain("if (existing.has(key)) return");
+    expect(picker).toContain("existing.has(key)");
+    expect(picker).toContain("!isActionable(key)");
     expect(picker).toContain("onCloseAutoFocus");
     expect(picker).toContain('className="absolute inset-0 rounded-2xl');
     expect(picker).toContain("activeFilterChips");

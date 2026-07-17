@@ -64,7 +64,7 @@ describe("approved Train Phase 1 semantic contracts", () => {
     expect(builder).toContain('tr("stepOf", { step, total: 3 })');
   });
 
-  it("keeps picker selection truthful, keyboard-focus-safe, and reachable above mobile safe areas", () => {
+  it("keeps picker selection truthful, keyboard-focus-safe, reachable, and authority-bounded", () => {
     const picker = source("components/workouts/exercise-picker-dialog.tsx");
     expect(picker).toContain('layout="responsive-drawer"');
     expect(picker).toContain("h-dvh max-h-dvh w-screen");
@@ -72,7 +72,9 @@ describe("approved Train Phase 1 semantic contracts", () => {
     expect(picker).toContain("onCloseAutoFocus");
     expect(picker).toContain("returnTarget.focus()");
     expect(picker).toContain("aria-pressed={isSelected}");
-    expect(picker).toContain("disabled={duplicate}");
+    expect(picker).toContain("disabled={disabled}");
+    expect(picker).toContain("if (existing.has(key)) return");
+    expect(picker).toContain("if (!isActionable(key)) return");
     expect(picker).toContain('tr("alreadyAdded")');
     expect(picker).toContain("env(safe-area-inset-bottom)");
     expect(picker).toContain('className="absolute inset-x-0 bottom-0 z-30');

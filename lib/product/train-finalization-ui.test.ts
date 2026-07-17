@@ -143,12 +143,13 @@ describe("Train finalization UI contracts", () => {
     expect(builder).toContain("<ExercisePickerDialog");
     expect(picker).toContain('layout="responsive-drawer"');
     expect(picker).toContain("const [selected, setSelected] = useState<Map<string, Workout>>(new Map())");
-    expect(picker).toContain("if (existing.has(key)) return");
+    expect(picker).toContain("existing.has(key)");
+    expect(picker).toContain("!isActionable(key)");
     expect(picker).toContain("aria-pressed={isSelected}");
     expect(picker).toContain("setSelected(new Map())");
     expect(picker).toContain("absolute inset-x-0 bottom-0");
     expect(picker).toContain("pb-[calc(env(safe-area-inset-bottom)+1rem)]");
-    expect(picker).toContain("onAdd(Array.from(selected.values()))");
+    expect(picker).toContain("onAdd(chosen)");
     expect(picker).toContain('tr("moreFilters")');
     expect(picker).toContain("getCanonicalWorkoutFilterOptionsWithStatus");
     expect(picker).toContain("secondaryMuscles:");

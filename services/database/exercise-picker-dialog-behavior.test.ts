@@ -11,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   getWorkouts: vi.fn()
 }));
 
+vi.mock("@/components/auth/auth-provider", () => ({
+  useAuth: () => ({ user: { id: "47000000-0000-4000-8000-000000000007" } })
+}));
+
 vi.mock("@/services/activity-catalog/client", () => ({
   createCatalogRequestGroupId: mocks.createGroup
 }));
