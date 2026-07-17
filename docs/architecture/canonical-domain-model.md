@@ -1,6 +1,6 @@
 # Plaivra Canonical Domain Model
 
-**Version:** 2026.4
+**Version:** 2026.5
 **Status:** Current convergence and cleanup authority
 
 ## Principles
@@ -21,9 +21,9 @@
 | Profile/context | `profiles`, onboarding answers, structured preference profiles, functional constraints, AI permissions, app settings, consents | Active; task-specific context projections are implemented and continue to replace broad reads |
 | Workout plans | Multi-week Phase 2A hierarchy under `user_workout_plans` | Additive model is applied; legacy writer cutover is not complete |
 | Performed sessions | `workout_sessions` + `exercise_logs`; `user_workout_sessions` remains schedule-instance data | Decided by ADR 0001; compatibility links remain |
-| Exercise catalog | `exercises` is the canonical global definition target | Decided by ADR 0002; legacy sources remain bounded compatibility inputs |
+| Exercise catalog | `exercises` is the canonical global definition target | Generated 600-row legacy seed retired; canonical catalog awaits the reviewed curated cohort |
 | Saved nutrition | `saved_recipes` + `saved_recipe_ingredients` | Active canonical target; legacy custom-meal data must be preserved during cutover |
-| ChatGPT/OAuth | curated public MCP, task projections, OAuth/CIMD records, permissions, audit, idempotency | Foundation implemed; publication and production acceptance remain separate gates |
+| ChatGPT/OAuth | curated public MCP, task projections, OAuth/CIMD records, permissions, audit, idempotency | Foundation implemented; publication and production acceptance remain separate gates |
 | Muscle Intelligence | code-authoritative taxonomy, versioned mappings, deterministic engine | Phase 1 applied and merged; no trusted mapping seed or visible runtime feature yet |
 | Entitlements | provider-neutral offerings, customers, subscriptions, events, and entitlements | Database foundation exists; checkout remains disabled |
 | Native | shared contracts only | No iOS or Android binary exists |
@@ -75,7 +75,9 @@ No third performed-session model is allowed.
 
 ## Exercise catalog and Activity Catalog
 
-ADR 0002 selects `exercises` as the target global definition table. `workouts` and `exercise_library` remain legacy compatibility sources and must not be treated as separate future catalogs.
+ADR 0002 selects `exercises` as the target global definition table. The generated 600-row FitLife/Plaivra seed was retired from `exercises`, `workouts`, and `exercise_library` through applied migration `20260717032851_retire_legacy_600_exercise_catalog` after zero dependent user or mapping references were verified. The canonical catalog is intentionally empty until the reviewed curated resistance-exercise cohort is introduced.
+
+`workouts` and `exercise_library` remain compatibility schemas only; they are not separate future catalogs and must not be repopulated with a duplicate curated seed.
 
 The Activity Catalog boundary supports:
 
@@ -85,7 +87,7 @@ The Activity Catalog boundary supports:
 - structured provider/fallback observability;
 - deterministic canonical ordering and pagination.
 
-Provider names, slugs, translations, or free-text muscle fields are not canonical exercise identity.
+The external provider may still return exercises while the Supabase canonical catalog is empty. Provider names, slugs, translations, or free-text muscle fields are not canonical exercise identity.
 
 ## Muscle Intelligence
 
