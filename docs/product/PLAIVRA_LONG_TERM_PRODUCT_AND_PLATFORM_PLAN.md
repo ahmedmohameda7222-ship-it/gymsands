@@ -1,7 +1,7 @@
 # Plaivra Long-Term Product and Platform Plan
 
-**Version:** 2026.4  
-**Status:** Strategic source of truth  
+**Version:** 2026.4
+**Status:** Strategic source of truth
 **Time horizon:** Multi-year
 
 ## Mission
@@ -55,13 +55,13 @@ Applied migrations are immutable. Convergence happens domain by domain:
 
 ```text
 add canonical model
-→ migrate or backfill data
-→ update writes
-→ retain bounded compatibility reads where required
-→ verify ownership, privacy, and behavior
-→ remove old reads
-→ monitor
-→ drop deprecated objects in a later migration
+-> migrate or backfill data
+-> update writes
+-> retain bounded compatibility reads where required
+-> verify ownership, privacy, and behavior
+-> remove old reads
+-> monitor
+-> drop deprecated objects in a later migration
 ```
 
 Accepted ADRs currently cover performed sessions, exercise catalog, saved nutrition content, the multi-week program hierarchy, and Muscle Intelligence taxonomy/mapping authority. These decisions are implemented at different stages; accepted architecture does not imply every writer cutover is complete.
@@ -99,8 +99,8 @@ Provider events normalize into one Plaivra entitlement boundary:
 
 ```text
 verified Stripe / Apple / Google event
-→ provider-neutral entitlement record
-→ capability check
+-> provider-neutral entitlement record
+-> capability check
 ```
 
 Plaivra does not store raw payment credentials or collect card data through MCP. Checkout remains disabled until offerings, recovery behavior, provider configuration, and release gates are approved.

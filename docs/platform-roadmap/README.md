@@ -1,6 +1,6 @@
 # Plaivra Platform Roadmap
 
-**Version:** 2026.4  
+**Version:** 2026.4
 **Authority:** subordinate to the Product Constitution and Long-Term Plan
 
 ## Strategic sequence
