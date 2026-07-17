@@ -6,20 +6,20 @@
 
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 
-**Reconciliation status:** **Reconciled / migration-ledger release gate eligible**
+**Reconciliation status:** **Pending / two repository-only Phase 2 migrations not applied**
 
 This document records verified production migration history. It is not authorization to replay migration SQL, deploy, promote, or merge. Applied migration files and production identities must never be renamed, rewritten, deleted, manually reordered, or replayed.
 
 ## Current state
 
 - Supabase migration history contains 35 applied migrations.
-- `pendingCount = 0`
+- `pendingCount = 2`
 - `schemaAppliedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
+- `unresolvedCount = 2`
+- `historyRepair.state = pending`
 - The latest verified production migration is `20260717032851_retire_legacy_600_exercise_catalog`.
-- Repository and production migration identities are aligned through the latest applied migration by this reconciliation branch.
-- Migration-ledger validation is expected to report `release_ready=true`; complete release readiness remains subject to exact-head CI and all other fail-closed release gates.
+- Repository and production migration identities are aligned through the latest applied migration; the two newer Phase 2 files intentionally remain pending.
+- Migration-ledger validation must report `release_ready=false` until those migrations are separately authorized, applied, and reconciled.
 
 ## Legacy 600-exercise catalog retirement
 
@@ -59,6 +59,15 @@ name: muscle_intelligence_phase1_foundation
 ```
 
 Read-only production verification confirmed all five Phase 1 tables and both publication functions exist. The migration remains classified as `applied` and must not be replayed.
+
+## Muscle Intelligence Phase 2 pending migrations
+
+```text
+supabase/migrations/20260717051008_muscle_intelligence_phase2_curated_schema.sql
+supabase/migrations/20260717051011_muscle_intelligence_phase2_curated_seed.sql
+```
+
+Both migrations are classified as `pending`. Production still has zero canonical exercises, provider links, and global mapping sets. This branch does not authorize applying the migrations or updating the production compatibility marker. After a separately authorized application, capture exact migration-history and physical-schema evidence, then update the ledger through a new reviewed reconciliation change. Do not replay either migration after it is applied.
 
 ## Train Phase 2A
 
@@ -105,6 +114,8 @@ The ledger-level `releaseReady` value requires reconciled history, no pending or
 ## Verification authority
 
 - `supabase/verification/legacy-600-exercise-catalog-retirement.sql` proves the three target layers remain empty.
+- `supabase/verification/muscle-intelligence-phase2.sql` proves exact curated counts, checksum publication, RLS boundaries, legacy emptiness, and mapping immutability on a disposable database.
+- `lib/product/muscle-intelligence-phase2-migration.test.ts` and `lib/train/muscle-intelligence/curated-registry.test.ts` enforce registry, migration, provider-link, relationship, golden-plan, and release-boundary contracts.
 - `lib/product/legacy-exercise-catalog-retirement-migration.test.ts` enforces the migration's transaction, provenance, safety, preservation, postcondition, and ledger contracts.
 - the full clean migration chain must seed the historical 600 rows and retire them through the new forward migration without modifying historical migration files.
 - database lint, executable preflight, unit, integration, build, rendered QA, Train QA, release manifest, and release preflight remain required on the exact final PR head.
@@ -114,8 +125,8 @@ The ledger-level `releaseReady` value requires reconciled history, no pending or
 Before merge or deployment:
 
 1. run the complete repository Quality workflow on the exact final PR head;
-2. confirm migration-ledger validation reports `reconciliation=reconciled` and `release_ready=true`;
-3. confirm full migration-chain rehearsal and the retirement contract tests pass;
+2. confirm migration-ledger validation truthfully reports `reconciliation=pending` and `release_ready=false` while production is unchanged;
+3. confirm full migration-chain rehearsal plus Phase 2 registry, RLS, checksum, and retirement compatibility tests pass;
 4. obtain independent quality-control approval;
 5. merge only after explicit authorization;
 6. verify Vercel built the exact resulting `main` SHA;

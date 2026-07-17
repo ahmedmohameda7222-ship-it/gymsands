@@ -57,8 +57,8 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 - Web is the active product surface.
 - Public MCP, OAuth/CIMD, task-specific context projections, privacy, idempotency, and release foundations exist; publication and full production acceptance remain separate gates.
 - Train Phase 2A provides the additive multi-week hierarchy; the legacy plan writer remains active until later cutover phases.
-- Muscle Intelligence Phase 1 provides the versioned taxonomy, mapping authority, database foundation, and deterministic engine without changing visible Train behavior or seeding trusted mappings.
-- The generated 600-row legacy exercise catalog has been retired from `exercises`, `workouts`, and `exercise_library`; the canonical catalog is intentionally empty until the reviewed curated resistance-exercise cohort is introduced.
+- Muscle Intelligence Phase 2 now versions and validates the approved 60-exercise registry, six normalized curation tables, 60 mappings with 180 entries, 180 localizations, 180 aliases, 32 relationships, nine exact provider links, and five golden-plan fixtures without changing visible Train behavior.
+- The generated 600-row legacy exercise catalog remains retired. Production stays empty until the two Phase 2 migrations are separately reviewed, authorized, applied, and reconciled.
 - Entitlement and billing foundations exist, but checkout remains disabled until offerings and release controls are approved.
 - No native iOS or Android binary exists.
 
@@ -85,11 +85,13 @@ Verified production state on 2026-07-17:
 
 - 35 applied migrations;
 - latest migration: `20260717032851_retire_legacy_600_exercise_catalog`;
-- `pendingCount=0`;
+- two repository-only Phase 2 migrations are pending production application;
+- pending files: `20260717051008_muscle_intelligence_phase2_curated_schema.sql` and `20260717051011_muscle_intelligence_phase2_curated_seed.sql`;
+- `pendingCount=2`;
 - `schemaAppliedUntrackedCount=0`;
-- `unresolvedCount=0`;
-- `historyRepair.state=reconciled`;
-- ledger-level release readiness is true; complete release readiness still depends on exact-head CI, deployment identity, compatibility, and smoke gates.
+- `unresolvedCount=2`;
+- `historyRepair.state=pending`;
+- ledger-level release readiness is false until a separately authorized database application and reconciliation occurs.
 
 Never replay, rename, rewrite, delete, or manually reorder an applied migration. Seed documentation is not migration authority.
 
@@ -101,6 +103,8 @@ Use Node.js 24.x.
 npm ci
 npm run lint
 npm run migration:ledger:check
+npm run registry:phase2:seed:check
+npm run test:muscle-intelligence:phase2
 npm run test:scripts
 npm run typecheck
 npm run test:unit

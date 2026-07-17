@@ -1,0 +1,107 @@
+[
+  {
+    "id": "golden_beginner_full_body_week_v1",
+    "kind": "beginner_full_body_week",
+    "sessions": [
+      {
+        "id": "full_body_a",
+        "focus": "full_body",
+        "exerciseSlugs": ["goblet-squat", "barbell-bench-press", "lat-pulldown", "barbell-hip-thrust", "front-plank"]
+      },
+      {
+        "id": "full_body_b",
+        "focus": "full_body",
+        "exerciseSlugs": ["leg-press", "seated-dumbbell-shoulder-press", "seated-cable-row", "seated-leg-curl", "pallof-press"]
+      },
+      {
+        "id": "full_body_c",
+        "focus": "full_body",
+        "exerciseSlugs": ["walking-lunge", "push-up", "one-arm-dumbbell-row", "standing-calf-raise", "reverse-crunch"]
+      }
+    ]
+  },
+  {
+    "id": "golden_upper_lower_split_v1",
+    "kind": "upper_lower_split",
+    "sessions": [
+      {
+        "id": "upper_a",
+        "focus": "upper",
+        "exerciseSlugs": ["incline-dumbbell-bench-press", "pull-up", "standing-barbell-overhead-press", "chest-supported-dumbbell-row", "dumbbell-lateral-raise", "barbell-curl", "cable-triceps-pushdown"]
+      },
+      {
+        "id": "lower_a",
+        "focus": "lower",
+        "exerciseSlugs": ["barbell-back-squat", "barbell-romanian-deadlift", "bulgarian-split-squat", "lying-leg-curl", "standing-calf-raise", "side-plank"]
+      },
+      {
+        "id": "upper_b",
+        "focus": "upper",
+        "exerciseSlugs": ["close-grip-barbell-bench-press", "chin-up", "cable-face-pull", "standing-cable-chest-fly", "barbell-shrug", "dumbbell-hammer-curl", "overhead-cable-triceps-extension"]
+      },
+      {
+        "id": "lower_b",
+        "focus": "lower",
+        "exerciseSlugs": ["barbell-front-squat", "conventional-deadlift", "step-up", "leg-extension", "hip-abduction-machine", "hip-adduction-machine", "hanging-knee-raise"]
+      }
+    ]
+  },
+  {
+    "id": "golden_push_pull_legs_split_v1",
+    "kind": "push_pull_legs_split",
+    "sessions": [
+      {
+        "id": "push_a",
+        "focus": "push",
+        "exerciseSlugs": ["barbell-bench-press", "push-up", "standing-cable-chest-fly", "standing-barbell-overhead-press", "dumbbell-lateral-raise", "push-up-plus", "cable-triceps-pushdown", "lying-triceps-extension"]
+      },
+      {
+        "id": "pull_a",
+        "focus": "pull",
+        "exerciseSlugs": ["reverse-pec-deck-fly", "cable-external-rotation", "pull-up", "lat-pulldown", "barbell-bent-over-row", "seated-cable-row", "straight-arm-cable-pulldown", "45-degree-back-extension", "barbell-curl", "preacher-curl"]
+      },
+      {
+        "id": "legs_a",
+        "focus": "legs",
+        "exerciseSlugs": ["barbell-back-squat", "goblet-squat", "bulgarian-split-squat", "step-up", "conventional-deadlift", "good-morning", "glute-bridge", "lying-leg-curl", "hip-adduction-machine", "standing-calf-raise", "tibialis-raise", "side-plank", "reverse-crunch", "pallof-press"]
+      },
+      {
+        "id": "push_b",
+        "focus": "push",
+        "exerciseSlugs": ["incline-dumbbell-bench-press", "parallel-bar-chest-dip", "pec-deck-fly", "seated-dumbbell-shoulder-press", "overhead-cable-triceps-extension", "close-grip-barbell-bench-press"]
+      },
+      {
+        "id": "pull_b",
+        "focus": "pull",
+        "exerciseSlugs": ["cable-face-pull", "chin-up", "one-arm-dumbbell-row", "chest-supported-dumbbell-row", "barbell-shrug", "farmers-carry", "dumbbell-hammer-curl", "cable-curl"]
+      },
+      {
+        "id": "legs_b",
+        "focus": "legs",
+        "exerciseSlugs": ["barbell-front-squat", "leg-press", "walking-lunge", "leg-extension", "barbell-romanian-deadlift", "barbell-hip-thrust", "seated-leg-curl", "hip-abduction-machine", "standing-cable-hip-flexion", "seated-calf-raise", "front-plank", "cable-crunch", "hanging-knee-raise", "cable-wood-chop"]
+      }
+    ]
+  },
+  {
+    "id": "golden_bodyweight_focused_v1",
+    "kind": "bodyweight_focused",
+    "sessions": [
+      {
+        "id": "bodyweight",
+        "focus": "bodyweight",
+        "exerciseSlugs": ["push-up", "parallel-bar-chest-dip", "push-up-plus", "pull-up", "chin-up", "front-plank", "side-plank", "reverse-crunch", "hanging-knee-raise"]
+      }
+    ]
+  },
+  {
+    "id": "golden_machine_cable_focused_v1",
+    "kind": "machine_cable_focused",
+    "sessions": [
+      {
+        "id": "machine_cable",
+        "focus": "machine_cable",
+        "exerciseSlugs": ["standing-cable-chest-fly", "pec-deck-fly", "reverse-pec-deck-fly", "cable-face-pull", "cable-external-rotation", "lat-pulldown", "seated-cable-row", "straight-arm-cable-pulldown", "cable-curl", "cable-triceps-pushdown", "overhead-cable-triceps-extension", "leg-press", "leg-extension", "seated-leg-curl", "lying-leg-curl", "hip-abduction-machine", "hip-adduction-machine", "standing-cable-hip-flexion", "cable-crunch", "pallof-press", "cable-wood-chop"]
+      }
+    ]
+  }
+]

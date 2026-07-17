@@ -21,11 +21,14 @@ Verified on 2026-07-17:
 
 - 35 applied migrations;
 - latest identity: `20260717032851_retire_legacy_600_exercise_catalog`;
-- zero pending, schema-applied-untracked, or unresolved migrations;
-- `historyRepair.state=reconciled`;
-- ledger-level `releaseReady=true`.
+- two repository-only Muscle Intelligence Phase 2 migrations pending production application;
+- zero schema-applied-untracked migrations, with `pendingCount=2` and `unresolvedCount=2`;
+- `historyRepair.state=pending`;
+- ledger-level `releaseReady=false`.
 
 The latest migration retired only the provenance-matched generated 600-row legacy exercise catalog across `exercises`, `workouts`, and `exercise_library`. Post-application verification confirmed zero target rows remain and existing user workout plans and performed sessions were preserved.
+
+The pending Phase 2 schema and seed migrations are repository artifacts only. They must not be applied, marked applied, or used to advance the release marker without separate authorization and production reconciliation.
 
 The machine authority is `supabase/migration-ledger.json`. The human record is `docs/architecture/migration-ledger-reconciliation.md`. Applied migrations are immutable and must never be replayed, renamed, rewritten, deleted, or manually reordered.
 

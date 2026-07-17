@@ -21,10 +21,10 @@
 | Profile/context | `profiles`, onboarding answers, structured preference profiles, functional constraints, AI permissions, app settings, consents | Active; task-specific context projections are implemented and continue to replace broad reads |
 | Workout plans | Multi-week Phase 2A hierarchy under `user_workout_plans` | Additive model is applied; legacy writer cutover is not complete |
 | Performed sessions | `workout_sessions` + `exercise_logs`; `user_workout_sessions` remains schedule-instance data | Decided by ADR 0001; compatibility links remain |
-| Exercise catalog | `exercises` is the canonical global definition target | Generated 600-row legacy seed retired; canonical catalog awaits the reviewed curated cohort |
+| Exercise catalog | `exercises` is the canonical global definition target | Generated 600-row legacy seed retired; approved 60-exercise cohort is implemented in pending forward migrations |
 | Saved nutrition | `saved_recipes` + `saved_recipe_ingredients` | Active canonical target; legacy custom-meal data must be preserved during cutover |
 | ChatGPT/OAuth | curated public MCP, task projections, OAuth/CIMD records, permissions, audit, idempotency | Foundation implemented; publication and production acceptance remain separate gates |
-| Muscle Intelligence | code-authoritative taxonomy, versioned mappings, deterministic engine | Phase 1 applied and merged; no trusted mapping seed or visible runtime feature yet |
+| Muscle Intelligence | code-authoritative taxonomy, versioned mappings, deterministic engine | Phase 2 curated registry implemented; production application and visible runtime features remain separate |
 | Entitlements | provider-neutral offerings, customers, subscriptions, events, and entitlements | Database foundation exists; checkout remains disabled |
 | Native | shared contracts only | No iOS or Android binary exists |
 
@@ -75,7 +75,7 @@ No third performed-session model is allowed.
 
 ## Exercise catalog and Activity Catalog
 
-ADR 0002 selects `exercises` as the target global definition table. The generated 600-row FitLife/Plaivra seed was retired from `exercises`, `workouts`, and `exercise_library` through applied migration `20260717032851_retire_legacy_600_exercise_catalog` after zero dependent user or mapping references were verified. The canonical catalog is intentionally empty until the reviewed curated resistance-exercise cohort is introduced.
+ADR 0002 selects `exercises` as the target global definition table. The generated 600-row FitLife/Plaivra seed was retired from `exercises`, `workouts`, and `exercise_library` through applied migration `20260717032851_retire_legacy_600_exercise_catalog` after zero dependent user or mapping references were verified. The approved 60-exercise cohort is now repository-authoritative under `data/muscle-intelligence/v1/`, while production remains empty until the pending Phase 2 migrations are separately authorized and applied.
 
 `workouts` and `exercise_library` remain compatibility schemas only; they are not separate future catalogs and must not be repopulated with a duplicate curated seed.
 
@@ -87,7 +87,7 @@ The Activity Catalog boundary supports:
 - structured provider/fallback observability;
 - deterministic canonical ordering and pagination.
 
-The external provider may still return exercises while the Supabase canonical catalog is empty. Provider names, slugs, translations, or free-text muscle fields are not canonical exercise identity.
+The external provider may still return exercises while the production Supabase canonical catalog is empty. Provider names, slugs, translations, or free-text muscle fields are not canonical exercise identity; only the nine reviewed exact links in the Phase 2 registry may create provider-link rows.
 
 ## Muscle Intelligence
 
@@ -100,6 +100,8 @@ Phase 1 adds:
 - a deterministic shared resistance-set calculation engine.
 
 Mappings remain separate from exercise definitions. Phase 1 does not change Train runtime behavior, visible UI, plan/session writers, or seed trusted mappings.
+
+Phase 2 adds the exact 60-exercise curated authority, EN/DE/AR localizations, controlled aliases, reviewed directed relationships, research/evidence/review provenance, nine exact Activity Catalog links, and one immutable published mapping version per exercise. Publication occurs only through `publish_exercise_muscle_mapping_set(...)`. The two forward migrations are pending and do not authorize a production write, release-marker update, UI cutover, Heat Map, or Phase 3/4 work.
 
 ## Nutrition
 

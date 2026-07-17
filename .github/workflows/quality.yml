@@ -105,6 +105,7 @@ jobs:
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-phase2a-program-architecture.sql
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/muscle-intelligence-phase1.sql
+            PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/muscle-intelligence-phase2.sql
             PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres" node scripts/test-database-preflight-control.mjs
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
           ) 2>&1 | tee quality-reports/database-preflight.log
@@ -174,7 +175,14 @@ jobs:
           npm run lint 2>&1 | tee quality-reports/lint.log
           echo "${PIPESTATUS[0]}" > quality-reports/lint.exit
           npm run migration:ledger:check 2>&1 | tee quality-reports/migration-ledger.log
-          echo "${PIPESTATUS[0]}" > quality-reports/migration-ledger.exit
+          migration_ledger_code="${PIPESTATUS[0]}"
+          npm run registry:phase2:seed:check 2>&1 | tee -a quality-reports/migration-ledger.log
+          registry_seed_code="${PIPESTATUS[0]}"
+          if [ "${migration_ledger_code}" = "0" ] && [ "${registry_seed_code}" = "0" ]; then
+            echo "0" > quality-reports/migration-ledger.exit
+          else
+            echo "1" > quality-reports/migration-ledger.exit
+          fi
           npm run test:scripts 2>&1 | tee quality-reports/script-tests.log
           echo "${PIPESTATUS[0]}" > quality-reports/script-tests.exit
           npm audit --omit=dev --audit-level=moderate 2>&1 | tee quality-reports/dependency-audit.log
