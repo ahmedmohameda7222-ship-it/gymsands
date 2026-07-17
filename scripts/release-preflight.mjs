@@ -8,6 +8,7 @@ import { installedNextVersion as readInstalledNextVersion } from "./release-runt
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const EXACT_SHA = /^[a-f0-9]{40}$/i;
+const PREFLIGHT_MODES = new Set(["release", "review"]);
 
 function parseArgs(argv) {
   const options = {};
@@ -45,7 +46,54 @@ function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
+function normalizePreflightMode(value) {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized || !PREFLIGHT_MODES.has(normalized)) {
+    throw new Error(`Preflight mode must be one of: ${[...PREFLIGHT_MODES].join(", ")}.`);
+  }
+  return normalized;
+}
+
+export function resolvePreflightMode(value, eventName = process.env.GITHUB_EVENT_NAME) {
+  if (value?.trim()) return normalizePreflightMode(value);
+  return eventName === "pull_request" ? "review" : "release";
+}
+
+function unique(values) {
+  return [...new Set(values)];
+}
+
+function reviewMigrationFailures(migrationState) {
+  const failures = [];
+  if (migrationState.releaseReady) {
+    if (
+      migrationState.reconciliationState !== "reconciled" ||
+      migrationState.pendingCount !== 0 ||
+      migrationState.schemaAppliedUntrackedCount !== 0 ||
+      migrationState.unresolvedCount !== 0
+    ) {
+      failures.push("migration_ledger_inconsistent");
+    }
+    return failures;
+  }
+
+  if (migrationState.reconciliationState !== "pending") {
+    failures.push("migration_ledger_not_reviewable");
+  }
+  if (!Number.isInteger(migrationState.pendingCount) || migrationState.pendingCount <= 0) {
+    failures.push("migration_pending_count_invalid");
+  }
+  if (migrationState.schemaAppliedUntrackedCount !== 0) {
+    failures.push("migration_schema_applied_untracked");
+  }
+  if (migrationState.unresolvedCount !== migrationState.pendingCount) {
+    failures.push("migration_unresolved_count_mismatch");
+  }
+  return failures;
+}
+
 export function evaluateReleasePreflight({
+  mode = "release",
   expectedCommit,
   checkedOutCommit,
   expectedRepository,
@@ -58,30 +106,30 @@ export function evaluateReleasePreflight({
   migrationState,
   manifest
 }) {
-  const failures = [];
-  if (!EXACT_SHA.test(expectedCommit)) failures.push("expected_commit_invalid");
-  if (checkedOutCommit !== expectedCommit) failures.push("checkout_commit_mismatch");
-  if (!remoteUrl.includes(expectedRepository)) failures.push("repository_origin_mismatch");
-  if (packageJson.engines?.node !== "24.x") failures.push("package_node_engine_mismatch");
-  if (!nodeVersion.startsWith("v24.")) failures.push("runtime_node_major_mismatch");
-  if (nvmVersion.trim() !== "24" || nodeFileVersion.trim() !== "24") failures.push("developer_node_pin_mismatch");
-  if (!migrationState.releaseReady) failures.push("migration_ledger_not_reconciled");
-  if (!manifest || manifest.release?.commitSha !== expectedCommit) failures.push("release_manifest_commit_mismatch");
-  if (manifest?.runtime?.nextVersion !== installedNextVersion) failures.push("release_manifest_next_version_mismatch");
+  const normalizedMode = normalizePreflightMode(mode);
+  const commonFailures = [];
+  if (!EXACT_SHA.test(expectedCommit)) commonFailures.push("expected_commit_invalid");
+  if (checkedOutCommit !== expectedCommit) commonFailures.push("checkout_commit_mismatch");
+  if (!remoteUrl.includes(expectedRepository)) commonFailures.push("repository_origin_mismatch");
+  if (packageJson.engines?.node !== "24.x") commonFailures.push("package_node_engine_mismatch");
+  if (!nodeVersion.startsWith("v24.")) commonFailures.push("runtime_node_major_mismatch");
+  if (nvmVersion.trim() !== "24" || nodeFileVersion.trim() !== "24") commonFailures.push("developer_node_pin_mismatch");
+  if (!manifest || manifest.release?.commitSha !== expectedCommit) commonFailures.push("release_manifest_commit_mismatch");
+  if (manifest?.runtime?.nextVersion !== installedNextVersion) commonFailures.push("release_manifest_next_version_mismatch");
   if (manifest?.release?.expectedDatabaseMigrationVersion !== migrationState.latestAppliedMigrationVersion) {
-    failures.push("release_manifest_migration_mismatch");
+    commonFailures.push("release_manifest_migration_mismatch");
   }
   if (manifest?.release?.migrationLedgerReconciliationState !== migrationState.reconciliationState) {
-    failures.push("release_manifest_reconciliation_mismatch");
+    commonFailures.push("release_manifest_reconciliation_mismatch");
   }
   if (manifest?.release?.pendingMigrationCount !== migrationState.pendingCount) {
-    failures.push("release_manifest_pending_count_mismatch");
+    commonFailures.push("release_manifest_pending_count_mismatch");
   }
   if (manifest?.release?.schemaAppliedUntrackedCount !== migrationState.schemaAppliedUntrackedCount) {
-    failures.push("release_manifest_untracked_count_mismatch");
+    commonFailures.push("release_manifest_untracked_count_mismatch");
   }
   if (manifest?.release?.unresolvedMigrationCount !== migrationState.unresolvedCount) {
-    failures.push("release_manifest_unresolved_count_mismatch");
+    commonFailures.push("release_manifest_unresolved_count_mismatch");
   }
 
   const requiredGates = [
@@ -94,31 +142,49 @@ export function evaluateReleasePreflight({
   for (const gate of requiredGates) {
     const evidence = manifest?.qualityGates?.[gate];
     if (!evidence || evidence.status === "missing" || !evidence.evidence) {
-      failures.push(`quality_gate_${gate}_missing`);
+      commonFailures.push(`quality_gate_${gate}_missing`);
       continue;
     }
     if (evidence.status === "failed") {
-      failures.push(`quality_gate_${gate}_failed`);
+      commonFailures.push(`quality_gate_${gate}_failed`);
       continue;
     }
     if (evidence.status !== "passed") {
-      failures.push(`quality_gate_${gate}_missing`);
+      commonFailures.push(`quality_gate_${gate}_missing`);
       continue;
     }
     if (evidence.commitSha !== expectedCommit) {
-      failures.push(`quality_gate_${gate}_commit_mismatch`);
+      commonFailures.push(`quality_gate_${gate}_commit_mismatch`);
       continue;
     }
     const capturedAt = Date.parse(evidence.capturedAt ?? "");
     if (evidence.stale === true || Number.isNaN(capturedAt) || Number.isNaN(manifestBuildTimestamp) || capturedAt < manifestBuildTimestamp) {
-      failures.push(`quality_gate_${gate}_stale`);
+      commonFailures.push(`quality_gate_${gate}_stale`);
     }
   }
-  return { ready: failures.length === 0, failures };
+
+  const releaseBlockers = unique([
+    ...commonFailures,
+    ...(!migrationState.releaseReady ? ["migration_ledger_not_reconciled"] : [])
+  ]);
+  const reviewFailures = unique([...commonFailures, ...reviewMigrationFailures(migrationState)]);
+  const releaseReady = releaseBlockers.length === 0;
+  const reviewReady = reviewFailures.length === 0;
+  const failures = normalizedMode === "release" ? releaseBlockers : reviewFailures;
+
+  return {
+    mode: normalizedMode,
+    ready: normalizedMode === "release" ? releaseReady : reviewReady,
+    reviewReady,
+    releaseReady,
+    releaseBlockers,
+    failures
+  };
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  const mode = resolvePreflightMode(options.mode || process.env.PLAIVRA_PREFLIGHT_MODE, process.env.GITHUB_EVENT_NAME);
   const expectedCommit = exactSha(options.commit || process.env.PLAIVRA_RELEASE_PREFLIGHT_SHA, "Reviewed commit");
   const expectedRepository = safeRepository(options.repository || process.env.GITHUB_REPOSITORY || "ahmedmohameda7222-ship-it/gymsands");
   const checkedOutCommit = exactSha(git("rev-parse", "HEAD"), "Checked-out commit");
@@ -131,6 +197,7 @@ async function main() {
   const manifestPath = resolve(reportsPath, "release-manifest.json");
   const manifest = existsSync(manifestPath) ? readJson(manifestPath) : null;
   const result = evaluateReleasePreflight({
+    mode,
     expectedCommit,
     checkedOutCommit,
     expectedRepository,
@@ -145,6 +212,7 @@ async function main() {
   });
   const evidence = {
     checkedAt: new Date().toISOString(),
+    mode,
     expectedRepository,
     expectedCommit,
     checkedOutCommit,
@@ -167,7 +235,8 @@ async function main() {
   writeFileSync(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
   console.log(outputPath);
   if (!result.ready) {
-    console.error(`Release preflight failed: ${result.failures.join(", ")}`);
+    const label = mode === "release" ? "Release" : "Review";
+    console.error(`${label} preflight failed: ${result.failures.join(", ")}`);
     process.exit(1);
   }
 }
