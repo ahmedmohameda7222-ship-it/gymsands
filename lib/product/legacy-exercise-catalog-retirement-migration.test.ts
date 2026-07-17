@@ -73,17 +73,17 @@ describe("legacy 600-exercise catalog retirement migration", () => {
     expect(verification).toContain("expected zero retired legacy exercise_library rows");
   });
 
-  it("keeps the retirement applied while the newer Phase 2 migrations remain pending", () => {
+  it("keeps the retirement applied after the newer Phase 2 migrations reconcile", () => {
     const entry = ledger.entries.find((item) => item.productionVersion === "20260717032851");
     expect(entry).toEqual(expect.objectContaining({
       productionName: "retire_legacy_600_exercise_catalog",
       localFile: "20260717032851_retire_legacy_600_exercise_catalog.sql",
       state: "applied"
     }));
-    expect(ledger.productionMigrationCount).toBe(35);
-    expect(ledger.pendingCount).toBe(2);
+    expect(ledger.productionMigrationCount).toBe(37);
+    expect(ledger.pendingCount).toBe(0);
     expect(ledger.schemaVerifiedUntrackedCount).toBe(0);
-    expect(ledger.unresolvedCount).toBe(2);
-    expect(ledger.historyRepair.state).toBe("pending");
+    expect(ledger.unresolvedCount).toBe(0);
+    expect(ledger.historyRepair.state).toBe("reconciled");
   });
 });
