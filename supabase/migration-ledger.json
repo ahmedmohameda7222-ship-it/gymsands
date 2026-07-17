@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-17T00:29:51Z",
-  "auditedRepositoryCommit": "f445aec2b624b536aeb8bd64319c0ee7d8e572ab",
-  "productionMigrationCount": 34,
+  "capturedAt": "2026-07-17T03:35:00Z",
+  "auditedRepositoryCommit": "705f4f7292dd3415506dbf32aff2b0598982c53c",
+  "productionMigrationCount": 35,
   "schemaVerifiedUntrackedCount": 0,
   "pendingCount": 0,
   "unresolvedCount": 0,
@@ -12,7 +12,7 @@
     "schemaAppliedUntrackedCount": 0,
     "pendingCount": 0,
     "unresolvedCount": 0,
-    "note": "Production migration history contains all 34 repository identities through Muscle Intelligence Phase 1. Version 20260716215602 and its required tables and publication functions were verified read-only on 2026-07-17. Do not replay any applied migration."
+    "note": "Production migration history contains all 35 repository identities through the guarded retirement of the generated legacy 600-exercise catalog. Version 20260717032851 and zero remaining target rows in exercises, workouts, and exercise_library were verified read-only on 2026-07-17. Do not replay any applied migration."
   },
   "entries": [
     { "productionVersion": "202606290000", "productionName": "clean_initial_schema", "localFile": "202606290000_clean_initial_schema.sql", "state": "applied" },
@@ -48,6 +48,7 @@
     { "productionVersion": "20260714030000", "productionName": "harden_train_plan_rpc_execution", "localFile": "20260714030000_harden_train_plan_rpc_execution.sql", "state": "applied", "note": "Production history identity and complete physical equivalence were verified on 2026-07-15. Do not replay." },
     { "productionVersion": "20260715010000", "productionName": "restrict_nutrition_target_override_acl", "localFile": "20260715010000_restrict_nutrition_target_override_acl.sql", "state": "applied", "note": "Normally applied production identity verified with authenticated privileges exactly DELETE, INSERT, SELECT, and UPDATE on 2026-07-15. Do not replay." },
     { "productionVersion": "20260715190000", "productionName": "train_phase2a_program_architecture", "localFile": "20260715190000_train_phase2a_program_architecture.sql", "state": "applied", "note": "Applied to production on 2026-07-16 from reviewed commit 5851486009f99dc9e7629b8b01f43cd690a3a04b after exact Git blob verification (be4102a5b0e0aaec8926362950742290b94d39c3). Physical verification confirmed 5 templates, 12 assigned weeks, 16 sessions, and 53 activities with no duplicate live legacy mappings. Do not replay." },
-    { "productionVersion": "20260716215602", "productionName": "muscle_intelligence_phase1_foundation", "localFile": "20260716215602_muscle_intelligence_phase1_foundation.sql", "state": "applied", "note": "Production migration history identity and the five Phase 1 tables plus both publication functions were verified read-only on 2026-07-17. Do not replay." }
+    { "productionVersion": "20260716215602", "productionName": "muscle_intelligence_phase1_foundation", "localFile": "20260716215602_muscle_intelligence_phase1_foundation.sql", "state": "applied", "note": "Production migration history identity and the five Phase 1 tables plus both publication functions were verified read-only on 2026-07-17. Do not replay." },
+    { "productionVersion": "20260717032851", "productionName": "retire_legacy_600_exercise_catalog", "localFile": "20260717032851_retire_legacy_600_exercise_catalog.sql", "state": "applied", "note": "Applied directly to production on 2026-07-17 after guarded verification of exactly 600 provenance-matched rows in each legacy catalog layer and zero dependent plan, session, favorite, video, provider-link, or mapping references. Post-application verification confirmed zero target rows remain in exercises, workouts, and exercise_library. Do not replay." }
   ]
 }
