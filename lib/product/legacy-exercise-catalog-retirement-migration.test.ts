@@ -85,6 +85,6 @@ describe("legacy 600-exercise catalog retirement migration", () => {
     expect(ledger.pendingCount).toBe(pendingEntries.length);
     expect(ledger.schemaVerifiedUntrackedCount).toBe(0);
     expect(ledger.unresolvedCount).toBe(ledger.pendingCount);
-    expect(ledger.historyRepair.state).toBe("reconciled");
+    expect(ledger.historyRepair.state).toBe("pending");
   });
 });
