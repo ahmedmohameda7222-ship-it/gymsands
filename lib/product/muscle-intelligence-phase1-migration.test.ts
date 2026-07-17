@@ -140,10 +140,10 @@ describe("Muscle Intelligence Phase 1 migration contract", () => {
     expect(canonical.toLowerCase()).toContain("phase 1 does not change train runtime behavior");
   });
 
-  it("keeps Phase 1 applied while Phase 2 remains truthfully pending", () => {
+  it("keeps Phase 1 applied after Phase 2 production reconciliation", () => {
     expect(migrationLedger.entries.find((entry) => entry.localFile === "20260716215602_muscle_intelligence_phase1_foundation.sql")?.state).toBe("applied");
-    expect(migrationLedger.pendingCount).toBe(2);
-    expect(migrationLedger.unresolvedCount).toBe(2);
-    expect(migrationLedger.historyRepair.state).toBe("pending");
+    expect(migrationLedger.pendingCount).toBe(0);
+    expect(migrationLedger.unresolvedCount).toBe(0);
+    expect(migrationLedger.historyRepair.state).toBe("reconciled");
   });
 });
