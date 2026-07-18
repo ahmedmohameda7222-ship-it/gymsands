@@ -116,7 +116,7 @@ jobs:
             mapfile -d '' files < <(git ls-files -z | grep -zE '\.(ts|tsx|js|jsx|mjs|cjs)$' || true)
           else
             base_sha="${{ github.event.pull_request.base.sha }}"
-            mapfile -d '' files < <(git diff --name-only -z "${base_sha}...HEAD" | grep -zE '\.(ts|tsx|js|jsx|mjs|cjs)$' || true)
+            mapfile -d '' files < <(git diff --diff-filter=ACMRT --name-only -z "${base_sha}...HEAD" | grep -zE '\.(ts|tsx|js|jsx|mjs|cjs)$' || true)
           fi
           if [ "${#files[@]}" -gt 0 ]; then
             npx eslint -- "${files[@]}"
@@ -137,12 +137,12 @@ jobs:
           fi
 
           base_sha="${{ github.event.pull_request.base.sha }}"
-          mapfile -d '' test_files < <(git diff --name-only -z "${base_sha}...HEAD" | grep -zE '\.(test|spec)\.(ts|tsx|js|jsx)$' || true)
+          mapfile -d '' test_files < <(git diff --diff-filter=ACMRT --name-only -z "${base_sha}...HEAD" | grep -zE '\.(test|spec)\.(ts|tsx|js|jsx)$' || true)
           if [ "${#test_files[@]}" -gt 0 ]; then
             npx vitest run --config vitest.unit.config.mjs "${test_files[@]}"
           fi
 
-          mapfile -d '' source_files < <(git diff --name-only -z "${base_sha}...HEAD" \
+          mapfile -d '' source_files < <(git diff --diff-filter=ACMRT --name-only -z "${base_sha}...HEAD" \
             | grep -zE '\.(ts|tsx|js|jsx)$' \
             | grep -zEv '\.(test|spec)\.(ts|tsx|js|jsx)$' || true)
           if [ "${#source_files[@]}" -gt 0 ]; then
