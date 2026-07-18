@@ -142,9 +142,10 @@ describe("Muscle Intelligence Phase 1 migration contract", () => {
 
   it("keeps Phase 1 applied while later migration state remains truthfully classified", () => {
     const pendingEntries = migrationLedger.entries.filter((entry) => entry.state === "pending");
+    const expectedReconciliationState = pendingEntries.length > 0 ? "pending" : "reconciled";
     expect(migrationLedger.entries.find((entry) => entry.localFile === "20260716215602_muscle_intelligence_phase1_foundation.sql")?.state).toBe("applied");
     expect(migrationLedger.pendingCount).toBe(pendingEntries.length);
     expect(migrationLedger.unresolvedCount).toBe(migrationLedger.pendingCount);
-    expect(migrationLedger.historyRepair.state).toBe("pending");
+    expect(migrationLedger.historyRepair.state).toBe(expectedReconciliationState);
   });
 });
