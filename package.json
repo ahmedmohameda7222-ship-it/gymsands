@@ -23,7 +23,6 @@
     "test:telemetry": "vitest run --config vitest.unit.config.mjs lib/observability/client-error.test.ts lib/observability/client-error-route.test.ts",
     "validate:env": "node scripts/validate-production-env.mjs",
     "migration:ledger:check": "node scripts/check-migration-ledger.mjs",
-    "registry:phase2:seed:check": "node scripts/generate-muscle-intelligence-phase2-seed.mjs --check",
     "release:manifest": "node scripts/create-release-manifest.mjs",
     "release:preflight": "node scripts/release-preflight.mjs",
     "release:verify-built-metadata": "node scripts/verify-built-release-metadata.mjs",
