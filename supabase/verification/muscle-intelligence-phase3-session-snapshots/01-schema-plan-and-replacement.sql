@@ -141,11 +141,34 @@ $assert$;
 create function pg_temp.assert_snapshot_item_update_denied(p_item_id uuid)
 returns void language plpgsql as $assert$
 begin
+  perform set_config('plaivra.session_snapshot_mutation_id', '', true);
+
   begin
-    update public.workout_session_muscle_snapshot_items set state = 'completed' where id = p_item_id;
-  exception when check_violation then return;
+    update public.workout_session_muscle_snapshot_items
+    set state = 'completed'
+    where id = p_item_id;
+  exception when check_violation then
+    return;
   end;
+
   raise exception 'Frozen snapshot item update unexpectedly succeeded.';
+end
+$assert$;
+
+create function pg_temp.assert_snapshot_update_denied(p_snapshot_id uuid)
+returns void language plpgsql as $assert$
+begin
+  perform set_config('plaivra.session_snapshot_mutation_id', '', true);
+
+  begin
+    update public.workout_session_muscle_snapshots
+    set completeness = 'complete'
+    where id = p_snapshot_id;
+  exception when check_violation then
+    return;
+  end;
+
+  raise exception 'Frozen snapshot update unexpectedly succeeded.';
 end
 $assert$;
 
