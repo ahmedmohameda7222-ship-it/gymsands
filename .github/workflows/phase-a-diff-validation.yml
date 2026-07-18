@@ -27,8 +27,5 @@ jobs:
         shell: bash
         run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
 
-      - name: Check working tree diff formatting
-        run: git diff --check
-
       - name: Check branch diff formatting against main
         run: git diff --check origin/main...HEAD
