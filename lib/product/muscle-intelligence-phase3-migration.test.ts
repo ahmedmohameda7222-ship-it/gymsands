@@ -33,6 +33,11 @@ const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")
 };
 const expectedCorrectionEntries = [
   {
+    localFile: "20260717215400_muscle_intelligence_phase3_account_deletion_authority.sql",
+    productionVersion: "20260717215400",
+    productionName: "muscle_intelligence_phase3_account_deletion_authority"
+  },
+  {
     localFile: "20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql",
     productionVersion: "20260717215500",
     productionName: "muscle_intelligence_phase3_lifecycle_provider_corrections"
@@ -159,7 +164,8 @@ describe("Muscle Intelligence Phase 3 migration contract", () => {
     expect(correction.trimEnd().endsWith("commit;")).toBe(true);
     expect(correction).not.toMatch(/drop\s+(?:table|column|schema)/);
     expect(verification).toContain("identical replacement retry rewrote the frozen mapping version");
-    expect(verification).toContain("account deletion did not remove owner-scoped snapshot history");
+    expect(verification).toContain("authoritative account-data purge did not remove owner-scoped application data");
+    expect(verification).toContain("auth deletion did not complete after the authoritative application-data purge");
     expect(verification).toContain("custom exercise deletion erased copied historical interpretation");
   });
 });
