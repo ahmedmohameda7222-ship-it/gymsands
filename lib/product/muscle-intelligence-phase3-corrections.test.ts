@@ -63,7 +63,7 @@ describe("Phase 3 required corrections", () => {
     ]) expect(sql).toContain(required);
   });
 
-  it("adds a service-role-only, idempotent application-data purge without weakening normal Train history guards", () => {
+  it("adds a service-role-only, lifecycle-bound, idempotent application-data purge without weakening normal Train history guards", () => {
     expect(accountDeletion).toContain("private.account_deletion_workout_identity_context");
     expect(accountDeletion).toContain("private.account_deletion_allows_workout_identity");
     expect(accountDeletion).toContain("public.prevent_workout_history_identity_delete");
@@ -71,6 +71,13 @@ describe("Phase 3 required corrections", () => {
     expect(accountDeletion).toContain("pg_advisory_xact_lock");
     expect(accountDeletion).toContain("profile_already_absent");
     expect(accountDeletion).toContain("account-data purge left owner-scoped application data behind");
+    expect(accountDeletion).toContain("public.account_deletion_jobs");
+    expect(accountDeletion).toContain("job.state = 'processing'");
+    expect(accountDeletion).toContain("job.stage = 'deleting_database'");
+    expect(accountDeletion).toContain("access_state.state = 'deletion_processing'");
+    expect(accountDeletion).toContain("public.privacy_deletion_legal_holds");
+    expect(accountDeletion).toContain("legal_hold.released_at is null");
+    expect(accountDeletion).toContain("deletion_job_id");
     expect(normalizedAccountDeletion).toContain(
       "revoke all on function public.purge_account_application_data_atomic(uuid) from public, anon, authenticated, service_role;"
     );
