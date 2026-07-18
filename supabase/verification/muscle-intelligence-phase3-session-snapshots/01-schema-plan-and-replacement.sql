@@ -138,14 +138,30 @@ begin
 end
 $assert$;
 
+
 create function pg_temp.assert_snapshot_item_update_denied(p_item_id uuid)
 returns void language plpgsql as $assert$
 begin
-  perform set_config('plaivra.session_snapshot_mutation_id', '', true);
+  if not exists (
+    select 1
+    from public.workout_session_muscle_snapshot_items
+    where id = p_item_id
+  ) then
+    raise exception 'Snapshot item immutability test target is missing.';
+  end if;
+
+  perform set_config(
+    'plaivra.session_snapshot_mutation_id',
+    '',
+    true
+  );
 
   begin
     update public.workout_session_muscle_snapshot_items
-    set state = 'completed'
+    set state = case
+      when state = 'completed' then 'adjusted'
+      else 'completed'
+    end
     where id = p_item_id;
   exception when check_violation then
     return;
@@ -158,11 +174,23 @@ $assert$;
 create function pg_temp.assert_snapshot_update_denied(p_snapshot_id uuid)
 returns void language plpgsql as $assert$
 begin
-  perform set_config('plaivra.session_snapshot_mutation_id', '', true);
+  if not exists (
+    select 1
+    from public.workout_session_muscle_snapshots
+    where id = p_snapshot_id
+  ) then
+    raise exception 'Snapshot immutability test target is missing.';
+  end if;
+
+  perform set_config(
+    'plaivra.session_snapshot_mutation_id',
+    '',
+    true
+  );
 
   begin
     update public.workout_session_muscle_snapshots
-    set completeness = 'complete'
+    set frozen_at = frozen_at + interval '1 microsecond'
     where id = p_snapshot_id;
   exception when check_violation then
     return;
@@ -171,6 +199,10 @@ begin
   raise exception 'Frozen snapshot update unexpectedly succeeded.';
 end
 $assert$;
+
+
+
+
 
 
 create function pg_temp.assert_plan_delete_denied(p_plan_id uuid)
