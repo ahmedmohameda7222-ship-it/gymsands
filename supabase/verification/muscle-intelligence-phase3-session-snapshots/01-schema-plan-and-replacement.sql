@@ -172,16 +172,6 @@ begin
 end
 $assert$;
 
-create function pg_temp.assert_snapshot_update_denied(p_snapshot_id uuid)
-returns void language plpgsql as $assert$
-begin
-  begin
-    update public.workout_session_muscle_snapshots set completeness = 'complete' where id = p_snapshot_id;
-  exception when check_violation then return;
-  end;
-  raise exception 'Frozen snapshot update unexpectedly succeeded.';
-end
-$assert$;
 
 create function pg_temp.assert_plan_delete_denied(p_plan_id uuid)
 returns void language plpgsql as $assert$
