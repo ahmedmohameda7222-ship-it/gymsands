@@ -1,0 +1,27 @@
+{
+  "asset_set": "Plaivra Muscle Intelligence Phase 4A approved source assets",
+  "canvas": "2:3 portrait",
+  "normalized_target_canvas": "1024x1536",
+  "files": [
+    {
+      "name": "muscle-anatomy-front.png",
+      "sha256": "7d9107aeb109d13bbf6622d849bba6640c02d2e1e8640cf91bfe7fecc612196c",
+      "bytes": 1832033
+    },
+    {
+      "name": "muscle-anatomy-back.png",
+      "sha256": "f7f59e9f4f843a43f9d02743160092967321a324f1cfd6079015c26100584d67",
+      "bytes": 1460332
+    },
+    {
+      "name": "muscle-mask-front.svg",
+      "sha256": "b132a503fab5d0d8193c68564092de1c8a038f614ca4e421a69b7fe61d848c89",
+      "bytes": 86771
+    },
+    {
+      "name": "muscle-mask-back.svg",
+      "sha256": "4f6b51441d7a3262f6be28863878c5d51aee33c54519cfd1810f67bf11d01e07",
+      "bytes": 67348
+    }
+  ]
+}

@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["lib/**/*.test.ts", "services/**/*.test.ts"],
+    include: ["lib/**/*.test.ts", "services/**/*.test.ts", "components/**/*.test.tsx"],
     exclude: ["**/*.integration.test.ts"]
   },
   resolve: {

@@ -1,0 +1,539 @@
+{
+  "schemaVersion": "advanced_visible_v1_target_view_registry_v1",
+  "targetViews": [
+    {
+      "canonicalId": "adductors.anterior_region",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "biceps.long_head",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "biceps.short_head",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "brachialis",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "brachioradialis",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "deltoid.anterior",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "deltoid.lateral",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "forearm.flexor_mass",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "forearm.pronator_teres",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": [
+        "hit-front-forearm-pronator-teres-right"
+      ]
+    },
+    {
+      "canonicalId": "hip_flexors.anterior",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "lower_leg.fibularis",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "lower_leg.tibialis_anterior",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "neck.sternocleidomastoid",
+      "view": "front",
+      "sides": [
+        "left",
+        "right",
+        "center"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "oblique.external_lower",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "oblique.external_upper",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "pectoralis.lower",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "pectoralis.middle",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "pectoralis.outer",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "pectoralis.upper",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "quadriceps.rectus_femoris",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "quadriceps.vastus_lateralis",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "quadriceps.vastus_medialis",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": [
+        "hit-front-quadriceps-vastus-medialis-left"
+      ]
+    },
+    {
+      "canonicalId": "rectus_abdominis.lower",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "rectus_abdominis.middle",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "rectus_abdominis.upper",
+      "view": "front",
+      "sides": [
+        "right",
+        "center"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "serratus.anterior",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": [
+        "hit-front-serratus-anterior-left"
+      ]
+    },
+    {
+      "canonicalId": "tensor_fasciae_latae",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": [
+        "hit-front-tensor-fasciae-latae-left"
+      ]
+    },
+    {
+      "canonicalId": "trapezius.upper",
+      "view": "front",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "adductors.posterior_region",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "brachioradialis",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "calf.gastrocnemius_lateral",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "calf.gastrocnemius_medial",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "calf.soleus",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "deltoid.posterior",
+      "view": "back",
+      "sides": [
+        "right",
+        "center"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "forearm.extensor_mass",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "gluteus.medius",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "gluteus_maximus.lower",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "gluteus_maximus.middle",
+      "view": "back",
+      "sides": [
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "gluteus_maximus.upper",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "hamstrings.biceps_femoris_long_head",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "hamstrings.biceps_femoris_short_head",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "hamstrings.semimembranosus",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "hamstrings.semitendinosus",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "infraspinatus",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "latissimus.lower",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "latissimus.middle",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "latissimus.outer",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "latissimus.upper",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "spinal_erectors.lower",
+      "view": "back",
+      "sides": [
+        "center"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "spinal_erectors.upper",
+      "view": "back",
+      "sides": [
+        "left",
+        "right",
+        "center"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "teres_major",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "teres_minor",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": [
+        "hit-back-teres-minor-left"
+      ]
+    },
+    {
+      "canonicalId": "trapezius.lower",
+      "view": "back",
+      "sides": [
+        "center"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "trapezius.middle",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "trapezius.upper",
+      "view": "back",
+      "sides": [
+        "left",
+        "right",
+        "center"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "triceps.lateral_head",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "triceps.long_head",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": []
+    },
+    {
+      "canonicalId": "triceps.medial_head",
+      "view": "back",
+      "sides": [
+        "left",
+        "right"
+      ],
+      "hitAreaIds": [
+        "hit-back-triceps-medial-head-right"
+      ]
+    }
+  ]
+}
