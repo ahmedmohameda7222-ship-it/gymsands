@@ -82,6 +82,7 @@ describe("Muscle Intelligence Phase 2 migration contract", () => {
   it("keeps both Phase 2 migrations applied while later migration state remains truthfully classified", () => {
     const schemaEntry = ledger.entries.find((entry) => entry.localFile === schemaPath.split("/").at(-1));
     const seedEntry = ledger.entries.find((entry) => entry.localFile === seedPath.split("/").at(-1));
+    const appliedEntries = ledger.entries.filter((entry) => entry.state === "applied");
     const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");
 
     expect(schemaEntry).toMatchObject({
@@ -94,7 +95,7 @@ describe("Muscle Intelligence Phase 2 migration contract", () => {
       productionVersion: "20260717051011",
       productionName: "muscle_intelligence_phase2_curated_seed"
     });
-    expect(ledger.productionMigrationCount).toBe(39);
+    expect(ledger.productionMigrationCount).toBe(appliedEntries.length);
     expect(ledger.schemaVerifiedUntrackedCount).toBe(0);
     expect(ledger.pendingCount).toBe(pendingEntries.length);
     expect(ledger.unresolvedCount).toBe(ledger.pendingCount);
