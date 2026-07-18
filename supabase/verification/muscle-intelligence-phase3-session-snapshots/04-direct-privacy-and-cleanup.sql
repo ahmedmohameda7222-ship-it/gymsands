@@ -234,6 +234,9 @@ returning id as account_deletion_job_id \gset
 
 set local role service_role;
 select public.purge_account_application_data_atomic(:'member_id'::uuid) as account_purge_result \gset
+select public.purge_account_application_data_atomic(:'member_id'::uuid) as account_purge_retry_result \gset
+reset role;
+
 select pg_temp.assert_true(
   (:'account_purge_result'::jsonb->>'application_data_purged')::boolean
   and not (:'account_purge_result'::jsonb->>'profile_already_absent')::boolean
@@ -255,10 +258,11 @@ select pg_temp.assert_true(
   'Authoritative account-data purge did not remove owner-scoped application data before Auth deletion.'
 );
 select pg_temp.assert_true(
-  (public.purge_account_application_data_atomic(:'member_id'::uuid)->>'profile_already_absent')::boolean,
+  (:'account_purge_retry_result'::jsonb->>'application_data_purged')::boolean
+  and (:'account_purge_retry_result'::jsonb->>'profile_already_absent')::boolean
+  and (:'account_purge_retry_result'::jsonb->>'deletion_job_id')::uuid = :'account_deletion_job_id'::uuid,
   'Authoritative account-data purge was not idempotent after application data was already absent.'
 );
-reset role;
 
 delete from auth.users where id = :'member_id'::uuid;
 select pg_temp.assert_true(
