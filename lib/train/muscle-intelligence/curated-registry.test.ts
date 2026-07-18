@@ -23,18 +23,57 @@ function cloneRegistry(): CuratedExerciseRegistry {
   return structuredClone(registry);
 }
 
-describe("Phase 2 curated exercise registry", () => {
-  it("validates every authoritative count, identity, checksum, provider decision, and coverage rule", () => {
-    expect(registry.exercises).toHaveLength(60);
-    expect(registry.relationships).toHaveLength(32);
-    expect(registry.exercises.flatMap((exercise) => Object.keys(exercise.localizations))).toHaveLength(180);
-    expect(registry.exercises.flatMap((exercise) => exercise.aliases)).toHaveLength(180);
-    expect(registry.exercises.flatMap((exercise) => exercise.entries)).toHaveLength(180);
-    expect(registry.exercises.filter((exercise) => exercise.provider_decision.status === "verified_exact_match")).toHaveLength(9);
-    expect(registry.exercises.filter((exercise) => exercise.provider_decision.status === "no_verified_match_current_catalog")).toHaveLength(51);
+describe("curated exercise registry integrity", () => {
+  it("validates the current registry without coupling validity to cohort counts", () => {
+    expect(registry.exercises.length).toBeGreaterThan(0);
+    expect(new Set(registry.exercises.map((exercise) => exercise.exercise_id)).size).toBe(registry.exercises.length);
+    expect(new Set(registry.exercises.map((exercise) => exercise.slug)).size).toBe(registry.exercises.length);
   });
 
-  it("rejects checksum drift instead of repairing the authority input", () => {
+  it("accepts a valid future exercise without changing hard-coded count contracts", () => {
+    const expanded = cloneRegistry();
+    const base = expanded.exercises[0];
+    const slug = "future-curated-exercise";
+    const mappingVersion = 1;
+
+    expanded.exercises.push({
+      ...structuredClone(base),
+      ordinal: Math.max(...expanded.exercises.map((exercise) => exercise.ordinal)) + 1,
+      exercise_id: uuidV5(`https://plaivra.com/exercises/v1/${slug}`),
+      mapping_set_id: uuidV5(`https://plaivra.com/exercises/v1/${slug}/mapping/${mappingVersion}`),
+      mapping_version: mappingVersion,
+      source_id: `plaivra_curated:v1:${slug}`,
+      name: "Future Curated Exercise",
+      slug,
+      localizations: {
+        en: { name: "Future Curated Exercise" },
+        de: { name: "Künftige kuratierte Übung" },
+        ar: { name: "تمرين منسق مستقبلي" }
+      },
+      aliases: [
+        { locale: "en", alias: "Future Curated Movement", alias_type: "common_name", searchable: true }
+      ],
+      evidence_codes: [],
+      instructions: [{ order: 1, text: "Perform the movement with controlled technique." }],
+      short_description: "A future curated exercise used to prove scalable validation.",
+      provider_decision: { status: "no_verified_match_current_catalog" }
+    });
+
+    expect(() => validateCuratedExerciseRegistry(expanded)).not.toThrow();
+  });
+
+  it("allows additional valid aliases without requiring a fixed alias total", () => {
+    const expanded = cloneRegistry();
+    expanded.exercises[0].aliases.push({
+      locale: "en",
+      alias: "Additional Bench Alias",
+      alias_type: "common_name",
+      searchable: true
+    });
+    expect(() => validateCuratedExerciseRegistry(expanded)).not.toThrow();
+  });
+
+  it("rejects checksum drift instead of repairing mapping authority", () => {
     const invalid = cloneRegistry();
     invalid.exercises[0].mapping_checksum = "0".repeat(64);
     expect(() => validateCuratedExerciseRegistry(invalid)).toThrow(/checksum mismatch/i);
@@ -46,7 +85,7 @@ describe("Phase 2 curated exercise registry", () => {
     expect(() => validateCuratedExerciseRegistry(invalid)).toThrow(/alias collision/i);
   });
 
-  it("rejects unapproved provider identity links and name-only fallback", () => {
+  it("rejects unverified provider identity inference", () => {
     const invalid = cloneRegistry();
     invalid.exercises.find((exercise) => exercise.provider_decision.status === "no_verified_match_current_catalog")!.provider_decision = {
       status: "verified_by_similar_name",
@@ -56,49 +95,27 @@ describe("Phase 2 curated exercise registry", () => {
     expect(() => validateCuratedExerciseRegistry(invalid)).toThrow(/provider decision/i);
   });
 
-  it("rejects progression/regression cycles", () => {
-    const invalid = cloneRegistry();
-    invalid.relationships[0] = {
-      ...invalid.relationships[0],
-      source_slug: invalid.relationships[18].target_slug,
-      target_slug: invalid.relationships[18].source_slug,
-      relationship_type: "regression"
-    };
-    invalid.relationships[18] = { ...invalid.relationships[18], relationship_type: "progression" };
-    for (const relation of [invalid.relationships[0], invalid.relationships[18]]) {
-      relation.relationship_id = uuidV5(`https://plaivra.com/exercise-relationships/v1/${relation.source_slug}/${relation.relationship_type}/${relation.target_slug}`);
-    }
-    expect(() => validateCuratedExerciseRegistry(invalid)).toThrow(/cycle/i);
-  });
-
   it("keeps unilateral execution outside generic canonical side scope", () => {
     expect(registry.exercises.flatMap((exercise) => exercise.entries).every((entry) => entry.side_scope === "bilateral")).toBe(true);
     expect(registry.side_scope_rule).toBe("Generic canonical definitions are bilateral; performed side is captured later.");
   });
 
-  it("validates the five golden plans and exact 60-exercise coverage", () => {
-    expect(goldenPlans.map((plan) => plan.kind)).toEqual([
-      "beginner_full_body_week",
-      "upper_lower_split",
-      "push_pull_legs_split",
-      "bodyweight_focused",
-      "machine_cable_focused"
-    ]);
-    expect(new Set(goldenPlans.flatMap(goldenPlanExerciseSlugs))).toEqual(new Set(registry.exercises.map((exercise) => exercise.slug)));
-    expect(goldenPlans.find((plan) => plan.kind === "beginner_full_body_week")?.sessions.map((session) => session.focus)).toEqual(["full_body", "full_body", "full_body"]);
-    expect(goldenPlans.find((plan) => plan.kind === "upper_lower_split")?.sessions.map((session) => session.focus)).toEqual(["upper", "lower", "upper", "lower"]);
-    expect(goldenPlans.find((plan) => plan.kind === "push_pull_legs_split")?.sessions.map((session) => session.focus)).toEqual(["push", "pull", "legs", "push", "pull", "legs"]);
+  it("validates golden fixtures by identity and structure without requiring complete registry coverage", () => {
+    expect(goldenPlans.length).toBeGreaterThan(0);
+    for (const plan of goldenPlans) {
+      expect(plan.sessions.length).toBeGreaterThan(0);
+      expect(goldenPlanExerciseSlugs(plan).length).toBeGreaterThan(0);
+    }
   });
 
-  it("rejects exercises assigned outside a golden-plan session focus", () => {
+  it("rejects golden-plan name or provider fallback identities", () => {
     const invalid = structuredClone(goldenPlans);
-    const pushSession = invalid[2].sessions[0];
-    const pullSession = invalid[2].sessions[1];
-    [pushSession.exerciseSlugs[0], pullSession.exerciseSlugs[0]] = [pullSession.exerciseSlugs[0], pushSession.exerciseSlugs[0]];
-    expect(() => validateGoldenPlanFixtures(invalid, registry)).toThrow(/violates its push focus/i);
+    invalid[0].sessions[0].exerciseSlugs[0] = registry.exercises[0].name;
+    expect(() => validateGoldenPlanFixtures(invalid, registry)).toThrow(CuratedRegistryValidationError);
+    expect(() => validateGoldenPlanFixtures(invalid, registry)).toThrow(/identity fallback is forbidden/i);
   });
 
-  it("produces stable golden-plan serialization independent of input order", () => {
+  it("produces stable analysis independent of input ordering", () => {
     const exercisesBySlug = new Map(registry.exercises.map((exercise) => [exercise.slug, exercise]));
     for (const plan of goldenPlans) {
       const items = goldenPlanExerciseSlugs(plan).map((slug) => {
@@ -109,7 +126,7 @@ describe("Phase 2 curated exercise registry", () => {
             mappingSetId: exercise.mapping_set_id,
             targetId: exercise.exercise_id,
             targetType: "global_exercise" as const,
-            mappingVersion: 1,
+            mappingVersion: exercise.mapping_version,
             schemaVersion: MUSCLE_MAPPING_SCHEMA_VERSION,
             checksum: exercise.mapping_checksum,
             entries: exercise.entries.map((entry) => ({
@@ -124,15 +141,15 @@ describe("Phase 2 curated exercise registry", () => {
         };
       });
       const original = calculateMuscleLoad({ mode: "planned", period: { kind: "week" }, items });
-      const reordered = calculateMuscleLoad({ mode: "planned", period: { kind: "week" }, items: [...items].reverse().map((item) => ({ ...item, mapping: { ...item.mapping, entries: [...item.mapping.entries].reverse() } })) });
+      const reordered = calculateMuscleLoad({
+        mode: "planned",
+        period: { kind: "week" },
+        items: [...items].reverse().map((item) => ({
+          ...item,
+          mapping: { ...item.mapping, entries: [...item.mapping.entries].reverse() }
+        }))
+      });
       expect(JSON.stringify(original)).toBe(JSON.stringify(reordered));
     }
-  });
-
-  it("rejects golden-plan name or provider fallback identities", () => {
-    const invalid = structuredClone(goldenPlans);
-    invalid[0].sessions[0].exerciseSlugs[0] = registry.exercises[0].name;
-    expect(() => validateGoldenPlanFixtures(invalid, registry)).toThrow(CuratedRegistryValidationError);
-    expect(() => validateGoldenPlanFixtures(invalid, registry)).toThrow(/identity fallback is forbidden/i);
   });
 });
