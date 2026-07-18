@@ -18,18 +18,52 @@ const verification = [
   .join("\n")
   .toLowerCase();
 const quality = readFileSync(".github/workflows/quality.yml", "utf8").toLowerCase();
+type LedgerEntry = {
+  productionVersion?: string;
+  productionName?: string;
+  localFile: string;
+  state: string;
+};
 const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
   productionMigrationCount: number;
   pendingCount: number;
   unresolvedCount: number;
   historyRepair: { state: string; pendingCount: number; unresolvedCount: number };
-  entries: Array<{ productionVersion?: string; productionName?: string; localFile: string; state: string }>;
+  entries: LedgerEntry[];
 };
-const pendingCorrectionFiles = [
-  "20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql",
-  "20260717215600_muscle_intelligence_phase3_direct_session_authority.sql",
-  "20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql"
-];
+const expectedCorrectionEntries = [
+  {
+    localFile: "20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql",
+    productionVersion: "20260717215500",
+    productionName: "muscle_intelligence_phase3_lifecycle_provider_corrections"
+  },
+  {
+    localFile: "20260717215600_muscle_intelligence_phase3_direct_session_authority.sql",
+    productionVersion: "20260717215600",
+    productionName: "muscle_intelligence_phase3_direct_session_authority"
+  },
+  {
+    localFile: "20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql",
+    productionVersion: "20260717215700",
+    productionName: "muscle_intelligence_phase3_replacement_repair_hardening"
+  },
+  {
+    localFile: "20260717215800_muscle_intelligence_phase3_plan_session_start_authority.sql",
+    productionVersion: "20260717215800",
+    productionName: "muscle_intelligence_phase3_plan_session_start_authority"
+  },
+  {
+    localFile: "20260717215900_muscle_intelligence_phase3_set_log_completion_authority.sql",
+    productionVersion: "20260717215900",
+    productionName: "muscle_intelligence_phase3_set_log_completion_authority"
+  }
+] as const;
+
+function exactLedgerEntry(localFile: string) {
+  const entries = ledger.entries.filter((entry) => entry.localFile === localFile);
+  expect(entries, localFile).toHaveLength(1);
+  return entries[0]!;
+}
 
 describe("Muscle Intelligence Phase 3 migration contract", () => {
   it("is one forward transactional migration that preserves the existing roots", () => {
@@ -75,6 +109,7 @@ describe("Muscle Intelligence Phase 3 migration contract", () => {
     expect(verification).toContain("anonymous role has phase 3 table access");
     expect(verification).toContain("member has authoritative phase 3 table mutation access");
     expect(verification).toContain("cross-owner snapshot read unexpectedly succeeded");
+    expect(verification).toContain("public can execute reviewed phase 3 rpc");
     expect(correction).toContain("get_workout_session_frozen_global_mappings");
     expect(correction).toContain("mapping.status = 'published'");
     expect(correction).toContain("mapping.retired_at <= snapshot.frozen_at");
@@ -82,23 +117,39 @@ describe("Muscle Intelligence Phase 3 migration contract", () => {
   });
 
   it("keeps applied identities exact and classifies all reviewed correction migrations", () => {
-    expect(ledger.entries.find((entry) => entry.localFile === migrationFile)).toMatchObject({
+    expect(exactLedgerEntry(migrationFile)).toMatchObject({
       state: "applied",
       productionVersion: "20260717194847",
       productionName: "muscle_intelligence_phase3_session_snapshots"
     });
-    expect(ledger).toMatchObject({
-      productionMigrationCount: 39,
-      pendingCount: 3,
-      unresolvedCount: 3,
-      historyRepair: { state: "pending", pendingCount: 3, unresolvedCount: 3 }
+    expect(exactLedgerEntry(correctionFile)).toMatchObject({
+      state: "applied",
+      productionVersion: "20260717202151",
+      productionName: "muscle_intelligence_phase3_integrity_corrections"
     });
-    for (const localFile of pendingCorrectionFiles) {
-      expect(ledger.entries.find((entry) => entry.localFile === localFile)).toMatchObject({
-        localFile,
-        state: "pending"
-      });
-    }
+
+    const correctionEntries = expectedCorrectionEntries.map((expected) => {
+      const entry = exactLedgerEntry(expected.localFile);
+      expect(["pending", "applied"], expected.localFile).toContain(entry.state);
+      if (entry.state === "applied") {
+        expect(entry).toMatchObject(expected);
+      } else {
+        expect(entry.productionVersion, `${expected.localFile} pending productionVersion`).toBeUndefined();
+        expect(entry.productionName, `${expected.localFile} pending productionName`).toBeUndefined();
+      }
+      return entry;
+    });
+    const pendingCorrectionCount = correctionEntries.filter((entry) => entry.state === "pending").length;
+    const appliedCorrectionCount = correctionEntries.filter((entry) => entry.state === "applied").length;
+
+    expect(ledger.productionMigrationCount).toBe(39 + appliedCorrectionCount);
+    expect(ledger.pendingCount).toBe(pendingCorrectionCount);
+    expect(ledger.unresolvedCount).toBe(pendingCorrectionCount);
+    expect(ledger.historyRepair.pendingCount).toBe(pendingCorrectionCount);
+    expect(ledger.historyRepair.unresolvedCount).toBe(pendingCorrectionCount);
+    expect(ledger.historyRepair.state).toBe(pendingCorrectionCount > 0 ? "pending" : "reconciled");
+    expect(pendingCorrectionCount + appliedCorrectionCount).toBe(expectedCorrectionEntries.length);
+
     expect(quality).toContain("supabase/verification/muscle-intelligence-phase3-session-snapshots.sql");
     expect(verificationEntrypoint.trimEnd().endsWith("rollback;")).toBe(true);
   });
@@ -110,10 +161,5 @@ describe("Muscle Intelligence Phase 3 migration contract", () => {
     expect(verification).toContain("identical replacement retry rewrote the frozen mapping version");
     expect(verification).toContain("account deletion did not remove owner-scoped snapshot history");
     expect(verification).toContain("custom exercise deletion erased copied historical interpretation");
-    expect(ledger.entries.find((entry) => entry.localFile === correctionFile)).toMatchObject({
-      state: "applied",
-      productionVersion: "20260717202151",
-      productionName: "muscle_intelligence_phase3_integrity_corrections"
-    });
   });
 });
