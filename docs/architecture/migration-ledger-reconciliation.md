@@ -6,69 +6,83 @@
 
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 
-**Status:** **Reconciled through `20260717215400`; five reviewed Phase 3 corrections remain pending**
+**Status:** **Fully reconciled through `20260717215900`; no pending repository migration remains**
 
 This document records verified production migration history. It is not authorization to replay migrations, deploy, promote, change compatibility markers, or merge. Applied migration files and production identities must remain immutable.
 
 ## Current production state
 
-- Applied migrations: 40
-- Latest migration: `20260717215400_muscle_intelligence_phase3_account_deletion_authority`
-- `pendingCount = 5`
+- Applied migrations: 45
+- Latest migration: `20260717215900_muscle_intelligence_phase3_set_log_completion_authority`
+- `pendingCount = 0`
 - `schemaAppliedUntrackedCount = 0`
-- `unresolvedCount = 5`
-- `historyRepair.state = pending`
+- `unresolvedCount = 0`
+- `historyRepair.state = reconciled`
 - Compatibility marker: `20260717051011`
-- Ledger release readiness remains false while pending migrations exist.
+- Ledger-level migration-history release readiness: true
 
-## Applied account-deletion authority
+## Applied PR #68 correction chain
 
-`20260717215400_muscle_intelligence_phase3_account_deletion_authority.sql` was executed through the Supabase SQL Editor and recorded exactly once in remote migration history through supported migration repair on 2026-07-18.
-
-Read-only verification confirmed:
-
-- 11 Auth users and 11 profiles remained unchanged;
-- nine performed sessions, nine snapshots, and 29 snapshot items remained unchanged;
-- `public.purge_account_application_data_atomic(uuid)` exists;
-- the function is `SECURITY DEFINER` with fixed empty `search_path`;
-- execute is denied to `PUBLIC`, `anon`, and `authenticated`;
-- execute is granted only to `service_role`;
-- all three Train history-preservation triggers remain enabled;
-- compatibility marker `20260717051011` remains unchanged.
-
-The function is lifecycle-bound, idempotent, and uses deterministic dependency ordering. Normal Train history protection remains active. Do not replay or modify this migration.
-
-## Pending PR #68 migrations
-
-The following files are reviewed but are not yet recorded in production history:
+The following reviewed forward migrations are recorded exactly once in Supabase migration history:
 
 ```text
-supabase/migrations/20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql
-supabase/migrations/20260717215600_muscle_intelligence_phase3_direct_session_authority.sql
-supabase/migrations/20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql
-supabase/migrations/20260717215800_muscle_intelligence_phase3_plan_session_start_authority.sql
-supabase/migrations/20260717215900_muscle_intelligence_phase3_set_log_completion_authority.sql
+20260717215400_muscle_intelligence_phase3_account_deletion_authority
+20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections
+20260717215600_muscle_intelligence_phase3_direct_session_authority
+20260717215700_muscle_intelligence_phase3_replacement_repair_hardening
+20260717215800_muscle_intelligence_phase3_plan_session_start_authority
+20260717215900_muscle_intelligence_phase3_set_log_completion_authority
 ```
 
-They must remain `pending` until each exact identity is applied in filename order, independently verified, and recorded once in Supabase migration history.
+They were executed through the Supabase SQL Editor in filename order and each exact version was recorded through supported migration repair.
+
+Exact Git blobs:
+
+```text
+20260717215400  93868fad063217196d7d78c14978242221494fb0
+20260717215500  2bb956fba6dcd31f67df12b17b4aedf315f78063
+20260717215600  c9313396b9d1fa718c5d26672304e5dd9eea2c8f
+20260717215700  acd893420c0761369899e9826553581feff52c25
+20260717215800  748e7c058468d3ba7c24ac7d4a688a9729327394
+20260717215900  9b725cc990af9565580cde16096c5bb6ece9b1e4
+```
+
+Do not replay or modify any applied migration.
+
+## Read-only production verification
+
+Verification after all six corrections confirmed:
+
+```text
+auth users = 11
+profiles = 11
+performed sessions = 9
+session snapshots = 9
+snapshot items = 29
+sessions missing snapshots = 0
+snapshot owner mismatches = 0
+duplicate snapshot envelopes = 0
+terminal snapshot items still planned = 0
+compatibility marker = 20260717051011
+```
+
+The account-deletion purge remains executable only by `service_role`. Direct-session start, replacement eligibility, plan-session start, set-log, and completion RPCs exist as `SECURITY DEFINER` functions with fixed empty `search_path`, no `PUBLIC` or anonymous execution, and intended authenticated/service-role execution. The active-direct-session uniqueness index exists. The lifecycle transition trigger and all three normal Train history-preservation triggers remain enabled.
 
 ## Applied Phase 3 baseline
 
 - `20260717194847_muscle_intelligence_phase3_session_snapshots.sql`
   - Git blob: `865f918091fbb9cf054e170417caaf384c65f049`
-  - Verified nine snapshots, 29 stable historical items, zero missing snapshot headers, and zero owner mismatches.
 - `20260717202151_muscle_intelligence_phase3_integrity_corrections.sql`
   - Git blob: `af02da43e4d61f9248ad6110b9e58f99cac84560`
-  - Verified mapping-interval, provenance, lifecycle, and immutability corrections.
 
-Do not replay or modify either migration.
+These migrations remain byte-immutable.
 
 ## Compatibility boundary
 
 Physical production migration head:
 
 ```text
-20260717215400
+20260717215900
 ```
 
 Deployed compatibility marker:
@@ -80,6 +94,10 @@ migration_version = 20260717051011
 
 The difference is intentional. The marker may advance only in a separately authorized coordinated release.
 
+## Supabase advisor review
+
+The post-DDL security advisor reported no critical finding. It continues to report informational deny-all RLS tables and generic warnings for authenticated `SECURITY DEFINER` RPCs. For the Phase 3 RPCs, authenticated execution is intentional and protected by direct actor checks, owner predicates, fixed search paths, and explicit ACLs. The pre-existing leaked-password-protection warning is outside PR #68 scope.
+
 ## Verification authority
 
 - `supabase/verification/muscle-intelligence-phase3-session-snapshots.sql`
@@ -90,11 +108,8 @@ The difference is intentional. The marker may advance only in a separately autho
 
 ## Remaining work
 
-1. Run fresh Phase A and Quality on the exact reconciled-ledger head.
-2. Confirm production still has 40 migrations ending at `20260717215400`.
-3. Apply only the five pending files in filename order through a controlled migration path.
-4. Verify each exact migration identity and production postcondition.
-5. Reconcile the ledger again.
-6. Run final exact-head Phase A and Quality.
+1. Run fresh Phase A and Quality on the exact final reconciled head.
+2. Keep PR #68 Draft and unmerged until the user separately authorizes the merge.
+3. Do not update the compatibility marker or start Phase 4 under this task.
 
 No merge, compatibility-marker update, deployment, Phase 4 work, or Heat Map UI is authorized.
