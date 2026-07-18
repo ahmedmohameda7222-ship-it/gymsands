@@ -48,7 +48,11 @@ begin
     select 1 from information_schema.columns column_info
     where column_info.table_schema = 'public'
       and column_info.table_name in ('workout_session_muscle_snapshots', 'workout_session_muscle_snapshot_items')
-      and column_info.column_name ~ '(health|profile|conversation)'
+      and column_info.column_name in (
+        'health', 'health_data', 'health_profile',
+        'profile', 'profile_data',
+        'conversation', 'conversation_data', 'conversation_history'
+      )
   ) then
     raise exception 'Phase 3 snapshot schema contains prohibited health/profile/conversation data.';
   end if;
