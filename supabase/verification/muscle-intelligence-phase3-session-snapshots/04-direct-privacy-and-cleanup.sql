@@ -177,19 +177,24 @@ select pg_temp.assert_true(
   'Custom exercise deletion erased copied historical interpretation.'
 );
 
-set local role authenticated;
-select set_config('request.jwt.claim.sub', :'member_id', true);
-select set_config('request.jwt.claim.role', 'authenticated', true);
-do $assert_member_purge_denied$
+create function pg_temp.assert_account_purge_denied(p_user_id uuid)
+returns void
+language plpgsql
+as $assert$
 begin
   begin
-    perform public.purge_account_application_data_atomic(:'member_id'::uuid);
+    perform public.purge_account_application_data_atomic(p_user_id);
   exception when insufficient_privilege then
     return;
   end;
   raise exception 'Authenticated member unexpectedly executed the account-data purge.';
 end
-$assert_member_purge_denied$;
+$assert$;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', :'member_id', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select pg_temp.assert_account_purge_denied(:'member_id'::uuid);
 reset role;
 
 set local role service_role;
