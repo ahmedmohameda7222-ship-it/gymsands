@@ -37,7 +37,7 @@ supabase/migrations/20260717215900_muscle_intelligence_phase3_set_log_completion
 
 They must remain classified as `pending` until the clean migration chain and Phase 3 executable verification pass, the exact production project and history are rechecked, and Supabase records each exact identity once. Do not classify them as applied based on repository presence alone.
 
-The first migration creates the long-term account-deletion boundary. It adds a service-role-only, idempotent `public.purge_account_application_data_atomic(uuid)` RPC, captures only the exact Train identities owned by the target profile inside the current backend and transaction, preserves all normal plan/day/exercise history guards, deletes the profile-owned application graph atomically, verifies owner-scoped Train data is gone, and leaves Auth deletion to the existing provider API call. It does not delete or mutate production user rows when the migration itself is applied.
+The first migration creates the long-term account-deletion boundary. It adds a service-role-only, lifecycle-bound, idempotent `public.purge_account_application_data_atomic(uuid)` RPC. The operation requires exactly one processing `deleting_database` job, an already-disabled `deletion_processing` access state, and no active legal hold. It removes performed and scheduled sessions first, then deletes both Train plan representations in deterministic child-to-parent order, and deletes the profile last. The existing plan/day/exercise history guard is not replaced, disabled, or bypassed. The migration itself performs DDL only and verifies that production row counts do not change while the function is installed.
 
 The fifth migration is a narrow clean-chain reconciliation for the existing plan-day session-start path. It converts only `public.start_or_resume_workout_session_atomic(uuid,uuid,uuid)` to an owner-privileged, actor-validated `SECURITY DEFINER` boundary with fixed search path and explicit authenticated/service-role execution. It does not update the compatibility marker or modify snapshot data.
 
@@ -110,7 +110,7 @@ The ledger-level `releaseReady` value requires reconciled history, no pending or
 
 - `supabase/verification/legacy-600-exercise-catalog-retirement.sql` proves the retired target layers remain empty.
 - `supabase/verification/muscle-intelligence-phase2.sql` proves exact curated counts, checksum publication, RLS boundaries, legacy emptiness, and mapping immutability on a disposable database.
-- `supabase/verification/muscle-intelligence-phase3-session-snapshots.sql` executes the split Phase 3 lifecycle, direct-session, replacement, plan-session start, direct set-save, completion, authorization, rollback, privacy, authoritative application-data purge, and final Auth deletion cases and must reach its final `ROLLBACK`.
+- `supabase/verification/muscle-intelligence-phase3-session-snapshots.sql` executes the split Phase 3 lifecycle, direct-session, replacement, plan-session start, direct set-save, completion, authorization, rollback, privacy, lifecycle-bound deterministic application-data purge, and final Auth deletion cases and must reach its final `ROLLBACK`.
 - `lib/product/muscle-intelligence-phase3-migration.test.ts` enforces immutable applied identities and truthful pending/applied classification.
 - the full clean migration chain must apply every repository migration from zero without modifying historical files.
 
@@ -122,7 +122,7 @@ Before the pending files may be applied:
 2. confirm the full clean chain and Phase 3 executable SQL pass;
 3. confirm production still has exactly 39 migrations ending at `20260717202151` and no data-count drift;
 4. apply only the six exact pending files to project `bkwezjxvapaeasfvlhvv` through a tracked migration path;
-5. independently verify each migration identity once, counts, purge RPC idempotency, normal history-guard preservation, repair results, ownership, mapping intervals, RLS, privileges, RPC ACLs, fixed search paths, and marker `20260717051011`;
+5. independently verify each migration identity once, counts, lifecycle binding, deterministic purge row counts, idempotency, normal history-guard preservation, repair results, ownership, mapping intervals, RLS, privileges, RPC ACLs, fixed search paths, and marker `20260717051011`;
 6. reconcile the ledger to the new applied production history;
 7. trigger fresh Phase A and Quality workflows on the final documentation/report head.
 
