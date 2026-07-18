@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 const migrations = [
   "supabase/migrations/20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql",
   "supabase/migrations/20260717215600_muscle_intelligence_phase3_direct_session_authority.sql",
-  "supabase/migrations/20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql"
+  "supabase/migrations/20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql",
+  "supabase/migrations/20260717215800_muscle_intelligence_phase3_plan_session_start_authority.sql"
 ];
 
 function gitBlobSha(content: Buffer) {
@@ -21,7 +22,7 @@ describe("Phase 3 required corrections", () => {
   });
 
   it("uses only explicit transactional forward corrections", () => {
-    expect(migrations).toHaveLength(3);
+    expect(migrations).toHaveLength(4);
     for (const path of migrations) {
       const sql = readFileSync(path, "utf8").toLowerCase();
       expect(sql.trimStart().startsWith("begin;")).toBe(true);
@@ -33,7 +34,7 @@ describe("Phase 3 required corrections", () => {
     }
   });
 
-  it("covers lifecycle, provider, direct-session, eligibility, and proven repair boundaries", () => {
+  it("covers lifecycle, provider, direct-session, eligibility, proven repair, and plan-session authority", () => {
     const sql = migrations.map((path) => readFileSync(path, "utf8").toLowerCase()).join("\n");
     for (const required of [
       "terminal_insert",
@@ -44,7 +45,8 @@ describe("Phase 3 required corrections", () => {
       "workout_sessions_one_active_direct_session_uidx",
       "phase3_terminal_insert_repairs",
       "direct workout sessions must use the authoritative start operation",
-      "security definer\nset search_path = ''"
+      "start_or_resume_workout_session_atomic(uuid, uuid, uuid)",
+      "security definer set search_path = ''"
     ]) expect(sql).toContain(required);
   });
 });
