@@ -2,20 +2,20 @@
 
 **Project:** `bkwezjxvapaeasfvlhvv`
 
-**Verified production state:** 2026-07-17
+**Verified production state:** 2026-07-18
 
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 
-**Reconciliation status:** **Production reconciled through Phase 3 integrity; three reviewed Phase 3 corrections pending**
+**Reconciliation status:** **Production reconciled through Phase 3 integrity; four reviewed Phase 3 corrections pending**
 
 This document records verified production migration history. It is not authorization to replay migration SQL, deploy, promote, update compatibility markers, or merge. Applied migration files and production identities must never be renamed, rewritten, deleted, manually reordered, or replayed.
 
 ## Current state
 
 - Supabase migration history contains 39 applied migrations.
-- `pendingCount = 3`
+- `pendingCount = 4`
 - `schemaAppliedUntrackedCount = 0`
-- `unresolvedCount = 3`
+- `unresolvedCount = 4`
 - `historyRepair.state = pending`
 - The latest verified production migration is `20260717202151_muscle_intelligence_phase3_integrity_corrections`.
 - Repository and production identities are aligned through that migration.
@@ -30,9 +30,12 @@ The following additive files are reviewed repository migrations but are not yet 
 supabase/migrations/20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql
 supabase/migrations/20260717215600_muscle_intelligence_phase3_direct_session_authority.sql
 supabase/migrations/20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql
+supabase/migrations/20260717215800_muscle_intelligence_phase3_plan_session_start_authority.sql
 ```
 
 They must remain classified as `pending` until the clean migration chain and Phase 3 executable verification pass, the exact production project and history are rechecked, and Supabase records each exact identity once. Do not classify them as applied based on repository presence alone.
+
+The fourth migration is a narrow clean-chain reconciliation for the existing plan-day session-start path. It converts only `public.start_or_resume_workout_session_atomic(uuid,uuid,uuid)` to an owner-privileged, actor-validated `SECURITY DEFINER` boundary with fixed search path and explicit authenticated/service-role execution. It does not update the compatibility marker or modify snapshot data.
 
 ## Muscle Intelligence Phase 3 applied baseline
 
@@ -101,7 +104,7 @@ The ledger-level `releaseReady` value requires reconciled history, no pending or
 
 - `supabase/verification/legacy-600-exercise-catalog-retirement.sql` proves the retired target layers remain empty.
 - `supabase/verification/muscle-intelligence-phase2.sql` proves exact curated counts, checksum publication, RLS boundaries, legacy emptiness, and mapping immutability on a disposable database.
-- `supabase/verification/muscle-intelligence-phase3-session-snapshots.sql` executes the split Phase 3 lifecycle, direct-session, replacement, privacy, and deletion cases and must reach its final `ROLLBACK`.
+- `supabase/verification/muscle-intelligence-phase3-session-snapshots.sql` executes the split Phase 3 lifecycle, direct-session, replacement, plan-session start, privacy, and deletion cases and must reach its final `ROLLBACK`.
 - `lib/product/muscle-intelligence-phase3-migration.test.ts` enforces immutable applied identities and truthful pending/applied classification.
 - the full clean migration chain must apply every repository migration from zero without modifying historical files.
 
@@ -112,7 +115,7 @@ Before the pending files may be applied:
 1. run fresh Phase A and Quality workflows on the exact pending-ledger head;
 2. confirm the full clean chain and Phase 3 executable SQL pass;
 3. confirm production still has exactly 39 migrations ending at `20260717202151` and no data-count drift;
-4. apply only the three exact pending files to project `bkwezjxvapaeasfvlhvv`;
+4. apply only the four exact pending files to project `bkwezjxvapaeasfvlhvv`;
 5. independently verify each migration identity once, counts, repair results, ownership, mapping intervals, RLS, privileges, RPC ACLs, fixed search paths, and marker `20260717051011`;
 6. reconcile the ledger to the new applied production history;
 7. trigger fresh Phase A and Quality workflows on the final documentation/report head.
