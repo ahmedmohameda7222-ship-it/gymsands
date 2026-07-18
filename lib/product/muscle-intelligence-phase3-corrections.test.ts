@@ -63,10 +63,7 @@ describe("Phase 3 required corrections", () => {
     ]) expect(sql).toContain(required);
   });
 
-  it("adds a service-role-only, lifecycle-bound, idempotent application-data purge without weakening normal Train history guards", () => {
-    expect(accountDeletion).toContain("private.account_deletion_workout_identity_context");
-    expect(accountDeletion).toContain("private.account_deletion_allows_workout_identity");
-    expect(accountDeletion).toContain("public.prevent_workout_history_identity_delete");
+  it("adds a service-role-only, lifecycle-bound, deterministic, idempotent purge without weakening normal Train history guards", () => {
     expect(accountDeletion).toContain("public.purge_account_application_data_atomic");
     expect(accountDeletion).toContain("pg_advisory_xact_lock");
     expect(accountDeletion).toContain("profile_already_absent");
@@ -78,15 +75,29 @@ describe("Phase 3 required corrections", () => {
     expect(accountDeletion).toContain("public.privacy_deletion_legal_holds");
     expect(accountDeletion).toContain("legal_hold.released_at is null");
     expect(accountDeletion).toContain("deletion_job_id");
+    expect(accountDeletion).toContain("delete from public.workout_sessions");
+    expect(accountDeletion).toContain("delete from public.user_workout_sessions");
+    expect(accountDeletion).toContain("delete from public.user_workout_plan_activities");
+    expect(accountDeletion).toContain("delete from public.user_workout_plan_phases");
+    expect(accountDeletion).toContain("delete from public.user_workout_plan_sessions");
+    expect(accountDeletion).toContain("delete from public.user_workout_plan_weeks");
+    expect(accountDeletion).toContain("delete from public.user_workout_plan_week_templates");
+    expect(accountDeletion).toContain("delete from public.user_workout_plan_block_items");
+    expect(accountDeletion).toContain("delete from public.user_workout_plan_blocks");
+    expect(accountDeletion).toContain("delete from public.user_workout_plan_exercises");
+    expect(accountDeletion).toContain("delete from public.user_workout_plan_days");
+    expect(accountDeletion).toContain("delete from public.user_workout_plans");
+    expect(accountDeletion).toContain("delete from public.profiles");
+    expect(accountDeletion).toContain("deterministic train purge deleted an unexpected number of rows");
     expect(normalizedAccountDeletion).toContain(
       "revoke all on function public.purge_account_application_data_atomic(uuid) from public, anon, authenticated, service_role;"
     );
     expect(normalizedAccountDeletion).toContain(
       "grant execute on function public.purge_account_application_data_atomic(uuid) to service_role;"
     );
-    expect(normalizedAccountDeletion).toContain(
-      "revoke all on function private.account_deletion_allows_workout_identity(text,uuid) from public, anon, authenticated, service_role;"
-    );
+    expect(accountDeletion).not.toContain("create table private.account_deletion_workout_identity_context");
+    expect(accountDeletion).not.toContain("create or replace function private.account_deletion_allows_workout_identity");
+    expect(accountDeletion).not.toContain("create or replace function public.prevent_workout_history_identity_delete");
     expect(accountDeletion).not.toContain("disable trigger");
     expect(accountDeletion).not.toContain("drop trigger");
   });
