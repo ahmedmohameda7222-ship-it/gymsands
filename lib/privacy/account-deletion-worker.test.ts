@@ -2,9 +2,30 @@ import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ACCOUNT_DELETION_STAGES, deletionRetryDelayMinutes, processAccountDeletionJob } from "./account-deletion-worker";
 
-function workerAdminMock({ legalHold = false, providers = [] as string[] } = {}) {
+function workerAdminMock({
+  legalHold = false,
+  providers = [] as string[],
+  purgeError = false
+} = {}) {
   const calls: Array<{ table: string; action: string; filters: Array<[string, unknown]> }> = [];
-  const deleteUser = vi.fn(async () => ({ error: null }));
+  const irreversibleOrder: string[] = [];
+  const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+    irreversibleOrder.push(`rpc:${name}`);
+    if (purgeError) return { data: null, error: { message: "purge failed" } };
+    return {
+      data: {
+        application_data_purged: true,
+        profile_already_absent: false,
+        profiles_deleted: 1
+      },
+      error: null,
+      args
+    };
+  });
+  const deleteUser = vi.fn(async () => {
+    irreversibleOrder.push("auth:deleteUser");
+    return { error: null };
+  });
   const updateUserById = vi.fn(async () => ({ error: null }));
   const remove = vi.fn(async () => ({ data: [], error: null }));
   const from = vi.fn((table: string) => {
@@ -29,10 +50,11 @@ function workerAdminMock({ legalHold = false, providers = [] as string[] } = {})
   });
   const client = {
     from,
+    rpc,
     storage: { from: () => ({ list: vi.fn(async () => ({ data: [], error: null })), remove }) },
     auth: { admin: { deleteUser, updateUserById } }
   } as unknown as SupabaseClient;
-  return { client, calls, deleteUser, updateUserById, remove };
+  return { client, calls, rpc, deleteUser, updateUserById, remove, irreversibleOrder };
 }
 
 describe("account deletion worker contract", () => {
@@ -62,6 +84,7 @@ describe("account deletion worker contract", () => {
     });
     expect(result.state).toBe("blocked_legal_hold");
     expect(mock.remove).not.toHaveBeenCalled();
+    expect(mock.rpc).not.toHaveBeenCalled();
     expect(mock.deleteUser).not.toHaveBeenCalled();
   });
 
@@ -74,8 +97,36 @@ describe("account deletion worker contract", () => {
     expect(result).toMatchObject({ state: "retry_scheduled", errorCode: "provider_cleanup_adapter_required" });
     expect(mock.remove).not.toHaveBeenCalled();
     expect(mock.updateUserById).not.toHaveBeenCalled();
+    expect(mock.rpc).not.toHaveBeenCalled();
     expect(mock.deleteUser).not.toHaveBeenCalled();
     expect(mock.calls.find((call) => call.table === "user_integrations")?.filters).toContainEqual(["user_id", "user-a"]);
+  });
+
+  it("purges application data through the service-role RPC before deleting the Auth user", async () => {
+    const mock = workerAdminMock();
+    const result = await processAccountDeletionJob(mock.client, {
+      id: "job-a", request_id: "request-a", user_id: "user-a", state: "processing", stage: "queued",
+      attempt_count: 1, evidence: {}, notification_recipient_ciphertext: null
+    });
+    expect(result).toMatchObject({ state: "completed" });
+    expect(mock.rpc).toHaveBeenCalledWith("purge_account_application_data_atomic", { p_user_id: "user-a" });
+    expect(mock.deleteUser).toHaveBeenCalledWith("user-a", false);
+    expect(mock.irreversibleOrder).toEqual([
+      "rpc:purge_account_application_data_atomic",
+      "auth:deleteUser"
+    ]);
+  });
+
+  it("does not delete the Auth user when the atomic application purge fails", async () => {
+    const mock = workerAdminMock({ purgeError: true });
+    const result = await processAccountDeletionJob(mock.client, {
+      id: "job-a", request_id: "request-a", user_id: "user-a", state: "processing", stage: "queued",
+      attempt_count: 1, evidence: {}, notification_recipient_ciphertext: null
+    });
+    expect(result).toMatchObject({ state: "retry_scheduled", errorCode: "database_application_purge_failed" });
+    expect(mock.rpc).toHaveBeenCalledTimes(1);
+    expect(mock.deleteUser).not.toHaveBeenCalled();
+    expect(mock.irreversibleOrder).toEqual(["rpc:purge_account_application_data_atomic"]);
   });
 
   it("resumes a notification-stage retry without repeating deletion work", async () => {
@@ -87,6 +138,7 @@ describe("account deletion worker contract", () => {
     expect(result).toMatchObject({ state: "completed", notificationStatus: "not_configured" });
     expect(mock.remove).not.toHaveBeenCalled();
     expect(mock.updateUserById).not.toHaveBeenCalled();
+    expect(mock.rpc).not.toHaveBeenCalled();
     expect(mock.deleteUser).not.toHaveBeenCalled();
   });
 });
