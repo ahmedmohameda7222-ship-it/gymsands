@@ -177,9 +177,45 @@ select pg_temp.assert_true(
   'Custom exercise deletion erased copied historical interpretation.'
 );
 
+set local role authenticated;
+select set_config('request.jwt.claim.sub', :'member_id', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+do $assert_member_purge_denied$
+begin
+  begin
+    perform public.purge_account_application_data_atomic(:'member_id'::uuid);
+  exception when insufficient_privilege then
+    return;
+  end;
+  raise exception 'Authenticated member unexpectedly executed the account-data purge.';
+end
+$assert_member_purge_denied$;
+reset role;
+
+set local role service_role;
+select public.purge_account_application_data_atomic(:'member_id'::uuid) as account_purge_result \gset
+select pg_temp.assert_true(
+  (:'account_purge_result'::jsonb->>'application_data_purged')::boolean
+  and not (:'account_purge_result'::jsonb->>'profile_already_absent')::boolean
+  and exists (select 1 from auth.users where id = :'member_id'::uuid)
+  and not exists (select 1 from public.profiles where id = :'member_id'::uuid)
+  and not exists (select 1 from public.user_workout_plans where user_id = :'member_id'::uuid)
+  and not exists (select 1 from public.user_workout_sessions where user_id = :'member_id'::uuid)
+  and not exists (select 1 from public.workout_sessions where user_id = :'member_id'::uuid)
+  and not exists (select 1 from public.workout_session_muscle_snapshots where user_id = :'member_id'::uuid)
+  and not exists (select 1 from public.workout_session_muscle_snapshot_items where user_id = :'member_id'::uuid),
+  'Authoritative account-data purge did not remove owner-scoped application data before Auth deletion.'
+);
+select pg_temp.assert_true(
+  (public.purge_account_application_data_atomic(:'member_id'::uuid)->>'profile_already_absent')::boolean,
+  'Authoritative account-data purge was not idempotent after application data was already absent.'
+);
+reset role;
+
 delete from auth.users where id = :'member_id'::uuid;
 select pg_temp.assert_true(
-  not exists (select 1 from public.workout_session_muscle_snapshots where user_id = :'member_id'::uuid)
+  not exists (select 1 from auth.users where id = :'member_id'::uuid)
+  and not exists (select 1 from public.workout_session_muscle_snapshots where user_id = :'member_id'::uuid)
   and not exists (select 1 from public.workout_session_muscle_snapshot_items where user_id = :'member_id'::uuid),
-  'Account deletion did not remove owner-scoped snapshot history.'
+  'Auth deletion did not complete after the authoritative application-data purge.'
 );
