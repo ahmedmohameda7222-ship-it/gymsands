@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-18T00:20:00Z",
-  "auditedRepositoryCommit": "83cc68d7b7dfab18252ff56984fa1abda5e3e3c3",
+  "capturedAt": "2026-07-18T01:29:13Z",
+  "auditedRepositoryCommit": "67577f95e0ab2d784e79527717b4d2e1d0a17b37",
   "productionMigrationCount": 39,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 4,
-  "unresolvedCount": 4,
+  "pendingCount": 5,
+  "unresolvedCount": 5,
   "historyRepair": {
     "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 4,
-    "unresolvedCount": 4,
-    "note": "Production migration history is reconciled through 20260717202151. Four reviewed Phase 3 forward corrections are pending repository migrations and have not been applied to production. Do not replay any applied migration; apply only the exact pending files after clean-chain validation and guarded production preflight."
+    "pendingCount": 5,
+    "unresolvedCount": 5,
+    "note": "Production migration history is reconciled through 20260717202151. Five reviewed Phase 3 forward corrections are pending repository migrations and have not been applied to production. Do not replay any applied migration; apply only the exact pending files after clean-chain validation and guarded production preflight."
   },
   "entries": [
     { "productionVersion": "202606290000", "productionName": "clean_initial_schema", "localFile": "202606290000_clean_initial_schema.sql", "state": "applied" },
@@ -57,6 +57,7 @@
     { "localFile": "20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction. Not applied to production yet; do not replay or classify as applied until Supabase migration history confirms the exact identity once." },
     { "localFile": "20260717215600_muscle_intelligence_phase3_direct_session_authority.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction. Not applied to production yet; do not replay or classify as applied until Supabase migration history confirms the exact identity once." },
     { "localFile": "20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction. Not applied to production yet; do not replay or classify as applied until Supabase migration history confirms the exact identity once." },
-    { "localFile": "20260717215800_muscle_intelligence_phase3_plan_session_start_authority.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction that hardens the existing plan-day session-start RPC without changing the compatibility marker. Not applied to production yet; do not classify as applied until Supabase migration history confirms the exact identity once." }
+    { "localFile": "20260717215800_muscle_intelligence_phase3_plan_session_start_authority.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction that hardens the existing plan-day session-start RPC without changing the compatibility marker. Not applied to production yet; do not classify as applied until Supabase migration history confirms the exact identity once." },
+    { "localFile": "20260717215900_muscle_intelligence_phase3_set_log_completion_authority.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction that hardens the existing set-log and completion RPCs without broad plan-table grants, data mutation, or compatibility-marker change. Not applied to production yet; do not classify as applied until Supabase migration history confirms the exact identity once." }
   ]
 }
