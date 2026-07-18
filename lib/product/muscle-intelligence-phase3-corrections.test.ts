@@ -2,14 +2,18 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+const accountDeletionPath = "supabase/migrations/20260717215400_muscle_intelligence_phase3_account_deletion_authority.sql";
+const authorityPath = "supabase/migrations/20260717215900_muscle_intelligence_phase3_set_log_completion_authority.sql";
 const migrations = [
+  accountDeletionPath,
   "supabase/migrations/20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql",
   "supabase/migrations/20260717215600_muscle_intelligence_phase3_direct_session_authority.sql",
   "supabase/migrations/20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql",
   "supabase/migrations/20260717215800_muscle_intelligence_phase3_plan_session_start_authority.sql",
-  "supabase/migrations/20260717215900_muscle_intelligence_phase3_set_log_completion_authority.sql"
+  authorityPath
 ];
-const authorityPath = migrations.at(-1)!;
+const accountDeletion = readFileSync(accountDeletionPath, "utf8").toLowerCase();
+const normalizedAccountDeletion = accountDeletion.replace(/\s+/g, " ");
 const authority = readFileSync(authorityPath, "utf8").toLowerCase();
 const normalizedAuthority = authority.replace(/\s+/g, " ");
 
@@ -26,7 +30,7 @@ describe("Phase 3 required corrections", () => {
   });
 
   it("uses only explicit transactional forward corrections", () => {
-    expect(migrations).toHaveLength(5);
+    expect(migrations).toHaveLength(6);
     for (const path of migrations) {
       const sql = readFileSync(path, "utf8").toLowerCase();
       expect(sql.trimStart().startsWith("begin;")).toBe(true);
@@ -54,8 +58,30 @@ describe("Phase 3 required corrections", () => {
       "start_or_resume_workout_session_atomic(uuid, uuid, uuid)",
       "upsert_workout_set_logs_atomic(uuid, uuid, jsonb)",
       "complete_workout_session_atomic(uuid, uuid, jsonb, integer, text)",
+      "purge_account_application_data_atomic",
       "security definer"
     ]) expect(sql).toContain(required);
+  });
+
+  it("adds a service-role-only, idempotent application-data purge without weakening normal Train history guards", () => {
+    expect(accountDeletion).toContain("private.account_deletion_workout_identity_context");
+    expect(accountDeletion).toContain("private.account_deletion_allows_workout_identity");
+    expect(accountDeletion).toContain("public.prevent_workout_history_identity_delete");
+    expect(accountDeletion).toContain("public.purge_account_application_data_atomic");
+    expect(accountDeletion).toContain("pg_advisory_xact_lock");
+    expect(accountDeletion).toContain("profile_already_absent");
+    expect(accountDeletion).toContain("account-data purge left owner-scoped application data behind");
+    expect(normalizedAccountDeletion).toContain(
+      "revoke all on function public.purge_account_application_data_atomic(uuid) from public, anon, authenticated, service_role;"
+    );
+    expect(normalizedAccountDeletion).toContain(
+      "grant execute on function public.purge_account_application_data_atomic(uuid) to service_role;"
+    );
+    expect(normalizedAccountDeletion).toContain(
+      "revoke all on function private.account_deletion_allows_workout_identity(text,uuid) from public, anon, authenticated, service_role;"
+    );
+    expect(accountDeletion).not.toContain("disable trigger");
+    expect(accountDeletion).not.toContain("drop trigger");
   });
 
   it("hardens set saving and completion without reopening plan-table access", () => {
