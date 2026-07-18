@@ -59,7 +59,7 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 - Train Phase 2A provides the additive multi-week hierarchy; the legacy plan writer remains active until later cutover phases.
 - Muscle Intelligence Phase 2 versions and validates the approved 60-exercise registry, six normalized curation tables, 60 mappings with 180 entries, 180 localizations, 180 aliases, 32 relationships, nine exact provider links, and five golden-plan fixtures without changing visible Train behavior.
 - The generated 600-row legacy exercise catalog remains retired. The reviewed 60-exercise curated registry and mapping cohort are applied to production and tracked through migration `20260717051011_muscle_intelligence_phase2_curated_seed`.
-- Muscle Intelligence Phase 3 production history is applied through `20260717215400_muscle_intelligence_phase3_account_deletion_authority`. Draft PR #68 contains five additional reviewed forward corrections for lifecycle/provider identity, direct-session authority, replacement/repair hardening, plan-session start authority, and set-log/completion authority. Those files remain pending until exact production application and post-application reconciliation are completed.
+- Muscle Intelligence Phase 3 production history is applied and reconciled through `20260717215900_muscle_intelligence_phase3_set_log_completion_authority`. Draft PR #68 contains the complete reviewed Phase 3 implementation and correction chain; no Phase 3 migration remains pending.
 - Entitlement and billing foundations exist, but checkout remains disabled until offerings and release controls are approved.
 - No native iOS or Android binary exists.
 
@@ -82,22 +82,20 @@ Machine authority: `supabase/migration-ledger.json`
 
 Human record: `docs/architecture/migration-ledger-reconciliation.md`
 
-Verified production state after applying the account-deletion authority correction:
+Verified production state after all reviewed PR #68 corrections:
 
-- 40 applied migrations;
-- latest production migration: `20260717215400_muscle_intelligence_phase3_account_deletion_authority`;
-- `pendingCount=5` and `unresolvedCount=5` because these reviewed local files are not yet in production history:
-  - `20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql`
-  - `20260717215600_muscle_intelligence_phase3_direct_session_authority.sql`
-  - `20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql`
-  - `20260717215800_muscle_intelligence_phase3_plan_session_start_authority.sql`
-  - `20260717215900_muscle_intelligence_phase3_set_log_completion_authority.sql`
+- 45 applied migrations;
+- latest production migration: `20260717215900_muscle_intelligence_phase3_set_log_completion_authority`;
+- `pendingCount=0` and `unresolvedCount=0`;
 - `schemaAppliedUntrackedCount=0`;
-- `historyRepair.state=pending` until the five exact files are applied and independently verified;
-- ledger-level release readiness is false while any pending migration remains;
-- the compatibility marker remains `20260717051011` and must not change in this correction task;
-- the applied account-deletion authority introduces a service-role-only, lifecycle-bound, idempotent deterministic application-data purge before Auth deletion while preserving normal Train history-protection triggers;
-- the remaining session persistence corrections harden actor-validated RPC boundaries and do not restore broad authenticated privileges on canonical plan tables.
+- `historyRepair.state=reconciled`;
+- ledger-level migration release readiness is true;
+- the compatibility marker remains `20260717051011` and intentionally has not advanced;
+- 11 Auth users, 11 profiles, nine performed sessions, nine snapshots, and 29 snapshot items remain present;
+- no workout session is missing a snapshot, no snapshot owner mismatch exists, and no duplicate snapshot envelope exists;
+- the account-deletion purge is service-role-only;
+- direct-session, replacement eligibility, plan-session start, set-log, and completion RPCs are actor-validated, `SECURITY DEFINER`, fixed-search-path boundaries with intended ACLs;
+- all three normal Train history-preservation triggers remain enabled.
 
 Never replay, rename, rewrite, delete, or manually reorder an applied migration. Seed documentation is not migration authority.
 
