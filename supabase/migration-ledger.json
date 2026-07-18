@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-18T01:29:13Z",
-  "auditedRepositoryCommit": "67577f95e0ab2d784e79527717b4d2e1d0a17b37",
-  "productionMigrationCount": 39,
+  "capturedAt": "2026-07-18T04:31:50Z",
+  "auditedRepositoryCommit": "da584cba203a024fc25969cbe1caa1f366bf43ef",
+  "productionMigrationCount": 40,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 6,
-  "unresolvedCount": 6,
+  "pendingCount": 5,
+  "unresolvedCount": 5,
   "historyRepair": {
     "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 6,
-    "unresolvedCount": 6,
-    "note": "Production migration history is reconciled through 20260717202151. Six reviewed Phase 3 forward corrections are pending repository migrations and have not been applied to production. Do not replay any applied migration; apply only the exact pending files after clean-chain validation and guarded production preflight."
+    "pendingCount": 5,
+    "unresolvedCount": 5,
+    "note": "Production migration history is reconciled through 20260717215400. Five reviewed Phase 3 forward corrections remain pending repository migrations and have not been applied to production. Do not replay any applied migration; apply only the exact pending files after clean-chain validation and guarded production preflight."
   },
   "entries": [
     { "productionVersion": "202606290000", "productionName": "clean_initial_schema", "localFile": "202606290000_clean_initial_schema.sql", "state": "applied" },
@@ -54,7 +54,7 @@
     { "productionVersion": "20260717051011", "productionName": "muscle_intelligence_phase2_curated_seed", "localFile": "20260717051011_muscle_intelligence_phase2_curated_seed.sql", "state": "applied", "note": "Applied to production on 2026-07-17 through tracked Supabase CLI db push from reviewed source head 9b3006c1a512512bee8c16a4fb2ae34a16b7b7f6. Git blob d3364955cd8ad53eb513c9456addbf9c8ee86fe8. Verification confirmed 60 curated exercises, 180 localizations, 180 aliases, 32 relationships, 21 sources, 89 evidence rows, 60 reviews, 9 provider links, 60 published mappings, 180 entries, zero checksum drift, zero drafts, zero alias collisions, and the retired catalog still empty. Do not replay." },
     { "productionVersion": "20260717194847", "productionName": "muscle_intelligence_phase3_session_snapshots", "localFile": "20260717194847_muscle_intelligence_phase3_session_snapshots.sql", "state": "applied", "note": "Applied transactionally to production on 2026-07-17 through the Supabase management integration after explicit user authorization. Git blob 865f918091fbb9cf054e170417caaf384c65f049. Read-only verification confirmed 9 snapshots for 9 performed sessions, 29 stable historical items, all 9 legacy sessions explicitly unavailable rather than name-matched, zero missing snapshots, zero ownership mismatches, RLS on both tables, no anonymous read or RPC execute, no member table mutation, and authenticated replacement RPC execute. Do not replay." },
     { "productionVersion": "20260717202151", "productionName": "muscle_intelligence_phase3_integrity_corrections", "localFile": "20260717202151_muscle_intelligence_phase3_integrity_corrections.sql", "state": "applied", "note": "Applied transactionally to production on 2026-07-17 through the Supabase management integration after explicit user authorization and independent review. Git blob af02da43e4d61f9248ad6110b9e58f99cac84560. This forward-only correction preserves the original applied migration and fixes cascade-safe privacy deletion, published-only future freeze selection, historical retired mapping reads, active-interval cleanup, orthogonal terminal state, identity-first replacement retries, and mapping bundle integrity. Read-only verification confirmed 9/9 snapshot coverage, 29 items, zero ownership mismatch, zero invalid historical mapping intervals, two validated bundle constraints, no anonymous historical-loader execute, authenticated owner-validated loader execute, and both original and corrected freeze routines present. Do not replay." },
-    { "localFile": "20260717215400_muscle_intelligence_phase3_account_deletion_authority.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction that introduces a service-role-only, idempotent application-data purge boundary while preserving normal Train history deletion guards. Not applied to production yet; do not classify as applied until Supabase migration history confirms the exact identity once." },
+    { "productionVersion": "20260717215400", "productionName": "muscle_intelligence_phase3_account_deletion_authority", "localFile": "20260717215400_muscle_intelligence_phase3_account_deletion_authority.sql", "state": "applied", "note": "Applied through the Supabase SQL Editor and recorded exactly once in remote migration history through supported migration repair on 2026-07-18 after exact-head Phase A #313 and Quality #809 succeeded. Read-only production verification confirmed 11 Auth users and 11 profiles unchanged, 9 performed sessions, 9 snapshots, 29 snapshot items, the lifecycle-bound purge RPC present as SECURITY DEFINER with fixed empty search_path, execute denied to PUBLIC/anon/authenticated and granted only to service_role, all three Train history-preservation triggers enabled, and compatibility marker 20260717051011 unchanged. Do not replay." },
     { "localFile": "20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction. Not applied to production yet; do not replay or classify as applied until Supabase migration history confirms the exact identity once." },
     { "localFile": "20260717215600_muscle_intelligence_phase3_direct_session_authority.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction. Not applied to production yet; do not replay or classify as applied until Supabase migration history confirms the exact identity once." },
     { "localFile": "20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction. Not applied to production yet; do not replay or classify as applied until Supabase migration history confirms the exact identity once." },
