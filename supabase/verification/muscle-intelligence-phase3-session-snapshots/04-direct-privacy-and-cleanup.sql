@@ -197,12 +197,55 @@ select set_config('request.jwt.claim.role', 'authenticated', true);
 select pg_temp.assert_account_purge_denied(:'member_id'::uuid);
 reset role;
 
+update public.account_access_states
+set state = 'deletion_processing',
+    reason_code = 'phase3_verification_account_deletion',
+    disabled_at = clock_timestamp()
+where user_id = :'member_id'::uuid;
+select pg_temp.assert_true(
+  exists (
+    select 1
+    from public.account_access_states
+    where user_id = :'member_id'::uuid
+      and state = 'deletion_processing'
+      and disabled_at is not null
+  ),
+  'Account-deletion verification did not disable account access before purge.'
+);
+
+insert into public.account_deletion_jobs(
+  user_id,
+  subject_hash,
+  idempotency_key_hash,
+  state,
+  stage,
+  attempt_count,
+  locked_at
+) values (
+  :'member_id'::uuid,
+  'phase3-verification-subject-' || :'member_id',
+  'phase3-verification-idempotency-' || :'member_id',
+  'processing',
+  'deleting_database',
+  1,
+  clock_timestamp()
+)
+returning id as account_deletion_job_id \gset
+
 set local role service_role;
 select public.purge_account_application_data_atomic(:'member_id'::uuid) as account_purge_result \gset
 select pg_temp.assert_true(
   (:'account_purge_result'::jsonb->>'application_data_purged')::boolean
   and not (:'account_purge_result'::jsonb->>'profile_already_absent')::boolean
+  and (:'account_purge_result'::jsonb->>'deletion_job_id')::uuid = :'account_deletion_job_id'::uuid
   and exists (select 1 from auth.users where id = :'member_id'::uuid)
+  and exists (
+    select 1 from public.account_deletion_jobs
+    where id = :'account_deletion_job_id'::uuid
+      and user_id = :'member_id'::uuid
+      and state = 'processing'
+      and stage = 'deleting_database'
+  )
   and not exists (select 1 from public.profiles where id = :'member_id'::uuid)
   and not exists (select 1 from public.user_workout_plans where user_id = :'member_id'::uuid)
   and not exists (select 1 from public.user_workout_sessions where user_id = :'member_id'::uuid)
@@ -220,6 +263,11 @@ reset role;
 delete from auth.users where id = :'member_id'::uuid;
 select pg_temp.assert_true(
   not exists (select 1 from auth.users where id = :'member_id'::uuid)
+  and exists (
+    select 1 from public.account_deletion_jobs
+    where id = :'account_deletion_job_id'::uuid
+      and user_id is null
+  )
   and not exists (select 1 from public.workout_session_muscle_snapshots where user_id = :'member_id'::uuid)
   and not exists (select 1 from public.workout_session_muscle_snapshot_items where user_id = :'member_id'::uuid),
   'Auth deletion did not complete after the authoritative application-data purge.'
