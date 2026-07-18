@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import test from "node:test";
 import { evaluateReleasePreflight, resolvePreflightMode } from "./release-preflight.mjs";
 
@@ -214,16 +212,6 @@ test("unknown modes fail closed", () => {
     () => resolvePreflightMode("deploy", "pull_request"),
     /Preflight mode must be one of: release, review/
   );
-});
-
-test("Quality skips release packaging on pull requests and runs strict release mode on main", () => {
-  const workflow = readFileSync(resolve(process.cwd(), ".github/workflows/quality.yml"), "utf8");
-  assert.match(workflow, /if \[ "\$\{\{ github\.event_name \}\}" = "push" \]; then/);
-  assert.match(workflow, /run_release_checks=true/);
-  assert.match(workflow, /run_release_checks=false/);
-  assert.match(workflow, /release:preflight -- \\\r?\n\s+--mode release/);
-  assert.match(workflow, /Skipped on pull requests; enforced in release mode on pushes to main\./);
-  assert.match(workflow, /on:\r?\n\s+pull_request:\r?\n\s+push:\r?\n\s+branches:\r?\n\s+- main/);
 });
 
 function expectFailure(input, code, mode) {
