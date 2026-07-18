@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-17T22:55:13Z",
-  "auditedRepositoryCommit": "d6c7b749d00907b88cbe55e1679bb8abe103c61e",
+  "capturedAt": "2026-07-18T00:20:00Z",
+  "auditedRepositoryCommit": "83cc68d7b7dfab18252ff56984fa1abda5e3e3c3",
   "productionMigrationCount": 39,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 3,
-  "unresolvedCount": 3,
+  "pendingCount": 4,
+  "unresolvedCount": 4,
   "historyRepair": {
     "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 3,
-    "unresolvedCount": 3,
-    "note": "Production migration history is reconciled through 20260717202151. Three reviewed Phase 3 forward corrections are pending repository migrations and have not been applied to production. Do not replay any applied migration; apply only the exact pending files after clean-chain validation and guarded production preflight."
+    "pendingCount": 4,
+    "unresolvedCount": 4,
+    "note": "Production migration history is reconciled through 20260717202151. Four reviewed Phase 3 forward corrections are pending repository migrations and have not been applied to production. Do not replay any applied migration; apply only the exact pending files after clean-chain validation and guarded production preflight."
   },
   "entries": [
     { "productionVersion": "202606290000", "productionName": "clean_initial_schema", "localFile": "202606290000_clean_initial_schema.sql", "state": "applied" },
@@ -56,6 +56,7 @@
     { "productionVersion": "20260717202151", "productionName": "muscle_intelligence_phase3_integrity_corrections", "localFile": "20260717202151_muscle_intelligence_phase3_integrity_corrections.sql", "state": "applied", "note": "Applied transactionally to production on 2026-07-17 through the Supabase management integration after explicit user authorization and independent review. Git blob af02da43e4d61f9248ad6110b9e58f99cac84560. This forward-only correction preserves the original applied migration and fixes cascade-safe privacy deletion, published-only future freeze selection, historical retired mapping reads, active-interval cleanup, orthogonal terminal state, identity-first replacement retries, and mapping bundle integrity. Read-only verification confirmed 9/9 snapshot coverage, 29 items, zero ownership mismatch, zero invalid historical mapping intervals, two validated bundle constraints, no anonymous historical-loader execute, authenticated owner-validated loader execute, and both original and corrected freeze routines present. Do not replay." },
     { "localFile": "20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction. Not applied to production yet; do not replay or classify as applied until Supabase migration history confirms the exact identity once." },
     { "localFile": "20260717215600_muscle_intelligence_phase3_direct_session_authority.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction. Not applied to production yet; do not replay or classify as applied until Supabase migration history confirms the exact identity once." },
-    { "localFile": "20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction. Not applied to production yet; do not replay or classify as applied until Supabase migration history confirms the exact identity once." }
+    { "localFile": "20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction. Not applied to production yet; do not replay or classify as applied until Supabase migration history confirms the exact identity once." },
+    { "localFile": "20260717215800_muscle_intelligence_phase3_plan_session_start_authority.sql", "state": "pending", "note": "Reviewed Phase 3 forward correction that hardens the existing plan-day session-start RPC without changing the compatibility marker. Not applied to production yet; do not classify as applied until Supabase migration history confirms the exact identity once." }
   ]
 }
