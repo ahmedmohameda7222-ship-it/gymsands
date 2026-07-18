@@ -30,7 +30,7 @@ The applied baseline contains nine session snapshots and 29 snapshot items for t
 
 ## 3. Pending forward corrections
 
-The repository now contains six pending Phase 3 forward migrations, in exact order:
+The repository contains six pending Phase 3 forward migrations, in exact order:
 
 ```text
 20260717215400_muscle_intelligence_phase3_account_deletion_authority.sql
@@ -45,7 +45,7 @@ All six remain `pending` in `supabase/migration-ledger.json` until the exact pro
 
 ## 4. CI failure audit
 
-The repeated Quality failures exposed three independent issues in sequence because the SQL verifier is fail-fast.
+The repeated Quality failures exposed separate defects in sequence because the SQL verifier is fail-fast.
 
 ### 4.1 Verification state leakage
 
@@ -66,9 +66,15 @@ The original final verifier deleted `auth.users` directly. PostgreSQL cascaded i
 
 The defect was architectural: normal Train history protection and full account deletion shared the same implicit cascade path, with no explicit trusted application-data deletion boundary.
 
+### 4.4 Overlapping Train cascade defect
+
+The first authoritative-purge implementation still deleted `profiles` and relied on its Train cascades. Exact-head Quality #804 proved that this remained unsafe: one cascade deleted `user_workout_plan_phases` while another cascade attempted to update `user_workout_plan_activities.source_legacy_plan_exercise_id`, causing a foreign-key failure.
+
+This was a second real schema interaction, not a false CI test. The final correction therefore removes reliance on implicit Train cascades entirely.
+
 ## 5. Long-term account-deletion correction
 
-The correction does not disable triggers and does not create a generic cascade bypass.
+The correction does not disable triggers, replace the Train history guard, or create a generic bypass.
 
 ### 5.1 Authoritative purge RPC
 
@@ -102,37 +108,64 @@ The purge is allowed only when all of these are true:
 
 The active deletion job is locked before destructive work. Missing, duplicate, incorrectly staged, non-disabled, or legally held deletion attempts fail closed.
 
-### 5.3 Exact Train identity authorization
+### 5.3 Deterministic Train deletion
 
-The migration creates a private context table and a private helper. During the authoritative purge, the database captures only the exact plan, day, and exercise identities owned by the target profile in the current backend and transaction.
+The purge explicitly removes Train data child-to-parent instead of relying on profile cascades.
 
-The existing Train history guard permits deletion only when the exact row is present in that private context and the same transaction also contains the target account identity. Normal plan/day/exercise deletion remains blocked when history exists.
+Deletion order:
 
-The correction does not:
+```text
+performed workout sessions
+→ scheduled workout sessions
+→ plan activities
+→ plan phases
+→ plan sessions
+→ assigned plan weeks
+→ week templates
+→ legacy block items
+→ legacy blocks
+→ legacy plan exercises
+→ legacy plan days
+→ workout plans
+→ profile
+```
 
-- disable or remove the three Train history triggers;
-- use a client-controlled flag;
-- grant direct plan-table mutation to authenticated users;
-- authorize another user’s identities;
-- make the deletion capability session-wide.
+This order has three important properties:
 
-### 5.4 Atomic application-data purge
+1. session logs, snapshots, and snapshot items are removed before plan identities;
+2. the normal plan/day/exercise history guard remains unchanged and naturally allows deletion only after history is gone;
+3. shared legacy bridge columns cannot receive competing `CASCADE` and `SET NULL` actions after their newer-hierarchy rows have already been removed.
 
-The purge deletes the target profile and its existing profile-owned cascade graph in one database transaction. It then verifies that no target-owned rows remain in:
+The function counts every targeted hierarchy before deletion, records every direct delete row count, and aborts if actual deletions differ from the precomputed target counts.
+
+### 5.4 Normal Train protection remains unchanged
+
+The migration does not recreate or weaken `public.prevent_workout_history_identity_delete()`.
+
+Outside the authoritative account-deletion RPC:
+
+- deleting a plan with session history remains blocked;
+- deleting a day with session history remains blocked;
+- deleting an exercise with exercise history remains blocked.
+
+No client-controlled capability, transaction flag, private bypass table, or broad authenticated table grant is introduced.
+
+### 5.5 Atomic postconditions
+
+After deterministic Train deletion, the purge deletes the profile and verifies that no target-owned rows remain in:
 
 - `profiles`;
 - `user_workout_plans`;
 - `user_workout_sessions`;
 - `workout_sessions`;
 - `workout_session_muscle_snapshots`;
-- `workout_session_muscle_snapshot_items`;
-- captured plan-day and plan-exercise identities.
+- `workout_session_muscle_snapshot_items`.
 
-Any failed postcondition rolls back the entire database purge.
+Any failed count comparison or postcondition rolls back the entire database purge.
 
-### 5.5 Auth deletion last
+### 5.6 Auth deletion last
 
-`lib/privacy/account-deletion-worker.ts` now performs this order:
+`lib/privacy/account-deletion-worker.ts` performs this order:
 
 ```text
 external/log dependency cleanup
@@ -148,14 +181,12 @@ The `account_deletion_jobs` evidence row survives Auth deletion because its `use
 
 Applying `20260717215400_muscle_intelligence_phase3_account_deletion_authority.sql` performs DDL only. It does not invoke the purge RPC and does not delete user data.
 
-The migration records baseline counts before object creation and verifies those same counts after object creation for:
+The migration records baseline counts before function creation and verifies the same counts afterward for:
 
 - Auth users;
 - profiles;
-- account access states;
-- account deletion jobs;
-- legal holds;
-- workout plans;
+- access states, deletion jobs, and legal holds;
+- both Train plan representations;
 - performed and scheduled sessions;
 - snapshot headers and items.
 
@@ -163,7 +194,7 @@ Any unexpected row-count mutation aborts the migration transaction.
 
 ## 7. Executable verification
 
-The Phase 3 SQL verification now proves:
+The Phase 3 SQL verification proves:
 
 - authenticated members cannot execute the purge RPC;
 - the account is disabled before purge;
