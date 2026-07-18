@@ -84,6 +84,7 @@ describe("Muscle Intelligence Phase 2 migration contract", () => {
     const seedEntry = ledger.entries.find((entry) => entry.localFile === seedPath.split("/").at(-1));
     const appliedEntries = ledger.entries.filter((entry) => entry.state === "applied");
     const pendingEntries = ledger.entries.filter((entry) => entry.state === "pending");
+    const expectedReconciliationState = pendingEntries.length > 0 ? "pending" : "reconciled";
 
     expect(schemaEntry).toMatchObject({
       state: "applied",
@@ -100,7 +101,7 @@ describe("Muscle Intelligence Phase 2 migration contract", () => {
     expect(ledger.pendingCount).toBe(pendingEntries.length);
     expect(ledger.unresolvedCount).toBe(ledger.pendingCount);
     expect(ledger.historyRepair).toMatchObject({
-      state: "pending",
+      state: expectedReconciliationState,
       schemaAppliedUntrackedCount: 0,
       pendingCount: ledger.pendingCount,
       unresolvedCount: ledger.unresolvedCount
