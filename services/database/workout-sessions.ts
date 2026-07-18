@@ -505,6 +505,37 @@ export async function completeWorkoutSession(sessionId: string, notes: string, d
   return true;
 }
 
+export async function replaceWorkoutSessionExercise(
+  userId: string,
+  sessionId: string,
+  planExerciseId: string,
+  replacement: Workout
+) {
+  requireWorkoutPersistence(userId, "Workout replacement");
+  requireWorkoutPersistence(sessionId, "Workout session");
+  requireWorkoutPersistence(planExerciseId, "Plan exercise");
+  const replacementType = replacement.catalog_source === "custom"
+    ? "custom_exercise"
+    : replacement.catalog_source === "external"
+      ? "provider_activity"
+    : isUuid(replacement.id)
+      ? "global_exercise"
+      : "provider_activity";
+  const { data, error } = await supabase!.rpc("replace_workout_session_snapshot_item_atomic", {
+    p_user_id: userId,
+    p_session_id: sessionId,
+    p_plan_exercise_id: planExerciseId,
+    p_replacement_type: replacementType,
+    p_replacement_identity: replacement.id,
+    p_provider: replacementType === "provider_activity" ? "plaivra_activity_catalog" : null
+  });
+  if (error) {
+    console.warn("Plaivra could not record the stable replacement identity.", error.message);
+    throw error;
+  }
+  return data;
+}
+
 export async function detectPersonalRecordsAfterWorkoutCompletion(
   userId: string,
   sessionId: string,

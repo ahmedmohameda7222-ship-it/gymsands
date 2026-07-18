@@ -57,6 +57,46 @@ jobs:
         shell: bash
         run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
 
+      - name: Detect conditional verification scope
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            run_telemetry=true
+            run_rendered_qa=true
+            run_train_qa=true
+            run_release_checks=true
+          else
+            git fetch --no-tags origin "${{ github.base_ref }}"
+            changed_files="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
+            printf '%s\n' "$changed_files"
+
+            run_telemetry=false
+            run_rendered_qa=false
+            run_train_qa=false
+            run_release_checks=false
+
+            if grep -Eq '^(\.github/workflows/quality\.yml|package(-lock)?\.json|vitest\.unit\.config\.mjs|lib/observability/|app/api/.*/client-error|scripts/.*telemetry)' <<< "$changed_files"; then
+              run_telemetry=true
+            fi
+
+            if grep -Eq '^(\.github/workflows/quality\.yml|package(-lock)?\.json|app/|components/|public/|styles/|lib/i18n/|next\.config\.|postcss\.config\.|tailwind\.config\.|scripts/run-rendered-qa\.mjs)' <<< "$changed_files"; then
+              run_rendered_qa=true
+            fi
+
+            if grep -Eq '^(\.github/workflows/quality\.yml|package(-lock)?\.json|app/.*/train/|app/api/activity-catalog/|components/train/|lib/train/|lib/activity-catalog/|services/activity-catalog/|services/.*/workout|scripts/run-train-layout-qa\.mjs|supabase/migrations/.*(train|muscle_intelligence)|supabase/verification/(train|muscle-intelligence)|types/database\.ts)' <<< "$changed_files"; then
+              run_train_qa=true
+            fi
+          fi
+
+          {
+            echo "RUN_TELEMETRY=${run_telemetry}"
+            echo "RUN_RENDERED_QA=${run_rendered_qa}"
+            echo "RUN_TRAIN_QA=${run_train_qa}"
+            echo "RUN_RELEASE_CHECKS=${run_release_checks}"
+          } >> "$GITHUB_ENV"
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -76,6 +116,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright Chromium
+        if: env.RUN_RENDERED_QA == 'true' || env.RUN_TRAIN_QA == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Capture build timestamp
@@ -106,74 +147,81 @@ jobs:
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-phase2a-program-architecture.sql
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/muscle-intelligence-phase1.sql
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/muscle-intelligence-phase2.sql
+            PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/muscle-intelligence-phase3-session-snapshots.sql
             PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres" node scripts/test-database-preflight-control.mjs
             PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
           ) 2>&1 | tee quality-reports/database-preflight.log
           echo "${PIPESTATUS[0]}" > quality-reports/database-preflight.exit
 
-          (
-            integrity_status=0
-            required_docs=(
-              docs/product/PLAIVRA_PRODUCT_CONSTITUTION.md
-              docs/product/PLAIVRA_LONG_TERM_PRODUCT_AND_PLATFORM_PLAN.md
-              docs/design-system/PLAIVRA_CROSS_PLATFORM_UI_CONSTITUTION.md
-              docs/design-system/platforms/web.md
-              docs/design-system/platforms/ios.md
-              docs/design-system/platforms/android.md
-              docs/chatgpt-app/README.md
-              docs/chatgpt-app/cimd-authentication-architecture.md
-              docs/architecture/canonical-domain-model.md
-              docs/release/README.md
-              docs/architecture/migration-ledger-reconciliation.md
-              plaivra_production_migration_reconciliation_plan.md
-            )
-            for document in "${required_docs[@]}"; do
-              if [ ! -f "$document" ]; then
-                echo "Missing authoritative document: $document"
+          if [ "${RUN_RELEASE_CHECKS}" = "true" ]; then
+            (
+              integrity_status=0
+              required_docs=(
+                docs/product/PLAIVRA_PRODUCT_CONSTITUTION.md
+                docs/product/PLAIVRA_LONG_TERM_PRODUCT_AND_PLATFORM_PLAN.md
+                docs/design-system/PLAIVRA_CROSS_PLATFORM_UI_CONSTITUTION.md
+                docs/design-system/platforms/web.md
+                docs/design-system/platforms/ios.md
+                docs/design-system/platforms/android.md
+                docs/chatgpt-app/README.md
+                docs/chatgpt-app/cimd-authentication-architecture.md
+                docs/architecture/canonical-domain-model.md
+                docs/release/README.md
+                docs/architecture/migration-ledger-reconciliation.md
+                plaivra_production_migration_reconciliation_plan.md
+              )
+              for document in "${required_docs[@]}"; do
+                if [ ! -f "$document" ]; then
+                  echo "Missing authoritative document: $document"
+                  integrity_status=1
+                fi
+              done
+              temporary_workflow="$(find .github/workflows -maxdepth 1 -type f -name 'temporary-*' -print -quit)"
+              if [ -n "$temporary_workflow" ]; then
+                echo "Temporary workflow remains: $temporary_workflow"
                 integrity_status=1
               fi
-            done
-            temporary_workflow="$(find .github/workflows -maxdepth 1 -type f -name 'temporary-*' -print -quit)"
-            if [ -n "$temporary_workflow" ]; then
-              echo "Temporary workflow remains: $temporary_workflow"
-              integrity_status=1
-            fi
-            if [ -e scripts/apply-clean-recheck-remediation.py ]; then
-              echo "One-shot remediation script remains in the repository."
-              integrity_status=1
-            fi
-            runtime_files=(
-              lib/mcp/tools.ts
-              lib/mcp/server.ts
-              lib/mcp/tool-executor.ts
-              lib/mcp/tool-executor-safe.ts
-              services/database/execution-layer.ts
-              components/profile/execution-profiles.tsx
-              types/database.ts
-            )
-            retired_pattern='get_fitlife_status|get_ai_action_requests|create_ai_action_request|update_ai_action_request_status|get_safety_profile|update_safety_profile|save_chatgpt_workout_plan|generate_workout_plan|replace_meal_plan_item|admin_api_status|admin_search_users|get_admin_user_summary|AiActionRequestStatus|UserSafetyProfile|SafetyRiskLevel|user_safety_profiles'
-            if grep -n -E "$retired_pattern" "${runtime_files[@]}"; then
-              echo "Retired Plaivra runtime names remain."
-              integrity_status=1
-            fi
-            legacy_brand_pattern='FitLife|S&S Gym'
-            if grep -R -n -E "$legacy_brand_pattern" app components lib services types --include='*.ts' --include='*.tsx'; then
-              echo "Legacy product branding remains in active application source."
-              integrity_status=1
-            fi
-            archive_files="$(find supabase/migrations_archive -type f -print 2>/dev/null)"
-            if [ -n "$archive_files" ]; then
-              echo "Legacy migration archive still contains files:"
-              printf '%s\n' "$archive_files"
-              integrity_status=1
-            fi
-            exit "$integrity_status"
-          ) > quality-reports/integrity.log 2>&1
-          echo "$?" > quality-reports/integrity.exit
-          cat quality-reports/integrity.log
+              if [ -e scripts/apply-clean-recheck-remediation.py ]; then
+                echo "One-shot remediation script remains in the repository."
+                integrity_status=1
+              fi
+              runtime_files=(
+                lib/mcp/tools.ts
+                lib/mcp/server.ts
+                lib/mcp/tool-executor.ts
+                lib/mcp/tool-executor-safe.ts
+                services/database/execution-layer.ts
+                components/profile/execution-profiles.tsx
+                types/database.ts
+              )
+              retired_pattern='get_fitlife_status|get_ai_action_requests|create_ai_action_request|update_ai_action_request_status|get_safety_profile|update_safety_profile|save_chatgpt_workout_plan|generate_workout_plan|replace_meal_plan_item|admin_api_status|admin_search_users|get_admin_user_summary|AiActionRequestStatus|UserSafetyProfile|SafetyRiskLevel|user_safety_profiles'
+              if grep -n -E "$retired_pattern" "${runtime_files[@]}"; then
+                echo "Retired Plaivra runtime names remain."
+                integrity_status=1
+              fi
+              legacy_brand_pattern='FitLife|S&S Gym'
+              if grep -R -n -E "$legacy_brand_pattern" app components lib services types --include='*.ts' --include='*.tsx'; then
+                echo "Legacy product branding remains in active application source."
+                integrity_status=1
+              fi
+              archive_files="$(find supabase/migrations_archive -type f -print 2>/dev/null)"
+              if [ -n "$archive_files" ]; then
+                echo "Legacy migration archive still contains files:"
+                printf '%s\n' "$archive_files"
+                integrity_status=1
+              fi
+              exit "$integrity_status"
+            ) > quality-reports/integrity.log 2>&1
+            echo "$?" > quality-reports/integrity.exit
+            cat quality-reports/integrity.log
+          else
+            echo "Skipped on pull requests; enforced on pushes to main." | tee quality-reports/integrity.log
+            echo "0" > quality-reports/integrity.exit
+          fi
 
           npm run lint 2>&1 | tee quality-reports/lint.log
           echo "${PIPESTATUS[0]}" > quality-reports/lint.exit
+
           npm run migration:ledger:check 2>&1 | tee quality-reports/migration-ledger.log
           migration_ledger_code="${PIPESTATUS[0]}"
           npm run registry:phase2:seed:check 2>&1 | tee -a quality-reports/migration-ledger.log
@@ -183,18 +231,29 @@ jobs:
           else
             echo "1" > quality-reports/migration-ledger.exit
           fi
+
           npm run test:scripts 2>&1 | tee quality-reports/script-tests.log
           echo "${PIPESTATUS[0]}" > quality-reports/script-tests.exit
+
           npm audit --omit=dev --audit-level=moderate 2>&1 | tee quality-reports/dependency-audit.log
           echo "${PIPESTATUS[0]}" > quality-reports/dependency-audit.exit
+
           npm run typecheck 2>&1 | tee quality-reports/typecheck.log
           echo "${PIPESTATUS[0]}" > quality-reports/typecheck.exit
+
           npm run test:unit 2>&1 | tee quality-reports/unit.log
           echo "${PIPESTATUS[0]}" > quality-reports/unit.exit
+
           npm run test:integration 2>&1 | tee quality-reports/integration.log
           echo "${PIPESTATUS[0]}" > quality-reports/integration.exit
-          npm run test:telemetry 2>&1 | tee quality-reports/telemetry-tests.log
-          echo "${PIPESTATUS[0]}" > quality-reports/telemetry-tests.exit
+
+          if [ "${RUN_TELEMETRY}" = "true" ]; then
+            npm run test:telemetry 2>&1 | tee quality-reports/telemetry-tests.log
+            echo "${PIPESTATUS[0]}" > quality-reports/telemetry-tests.exit
+          else
+            echo "Skipped because no telemetry-related files changed." | tee quality-reports/telemetry-tests.log
+            echo "0" > quality-reports/telemetry-tests.exit
+          fi
 
           (
             export PLAIVRA_VALIDATE_PRODUCTION_ENV=true
@@ -209,79 +268,98 @@ jobs:
           ) 2>&1 | tee quality-reports/environment-validation.log
           echo "${PIPESTATUS[0]}" > quality-reports/environment-validation.exit
 
-          npx vitest run --config vitest.unit.config.mjs lib/release/version.test.ts lib/release/readiness.test.ts 2>&1 | tee quality-reports/release-metadata.log
-          release_metadata_unit_code="${PIPESTATUS[0]}"
-
           NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build 2>&1 | tee quality-reports/build.log
           build_code="${PIPESTATUS[0]}"
           echo "${build_code}" > quality-reports/build.exit
 
-          if [ "${build_code}" = "0" ]; then
-            expected_migration="$(node -e 'const ledger=require("./supabase/migration-ledger.json"); console.log(ledger.entries.filter((entry) => entry.state === "applied" && entry.productionVersion).map((entry) => entry.productionVersion).sort().at(-1))')"
-            npm run release:verify-built-metadata -- \
+          if [ "${RUN_RELEASE_CHECKS}" = "true" ]; then
+            npx vitest run --config vitest.unit.config.mjs lib/release/version.test.ts lib/release/readiness.test.ts 2>&1 | tee quality-reports/release-metadata.log
+            release_metadata_unit_code="${PIPESTATUS[0]}"
+
+            if [ "${build_code}" = "0" ]; then
+              expected_migration="$(node -e 'const ledger=require("./supabase/migration-ledger.json"); console.log(ledger.entries.filter((entry) => entry.state === "applied" && entry.productionVersion).map((entry) => entry.productionVersion).sort().at(-1))')"
+              npm run release:verify-built-metadata -- \
+                --commit "${PLAIVRA_COMMIT_SHA}" \
+                --build-timestamp "${PLAIVRA_BUILD_TIMESTAMP}" \
+                --environment ci \
+                --expected-migration "${expected_migration}" 2>&1 | tee -a quality-reports/release-metadata.log
+              release_metadata_built_code="${PIPESTATUS[0]}"
+            else
+              echo "Built metadata verification skipped because the production build failed." | tee -a quality-reports/release-metadata.log
+              release_metadata_built_code=1
+            fi
+
+            if [ "${release_metadata_unit_code}" = "0" ] && [ "${release_metadata_built_code}" = "0" ]; then
+              echo "0" > quality-reports/release-metadata.exit
+            else
+              echo "1" > quality-reports/release-metadata.exit
+            fi
+          else
+            echo "Skipped on pull requests; enforced on pushes to main." | tee quality-reports/release-metadata.log
+            echo "0" > quality-reports/release-metadata.exit
+          fi
+
+          if [ "${RUN_RENDERED_QA}" = "true" ]; then
+            (
+              set -euo pipefail
+              NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/rendered-qa-server.log 2>&1 &
+              server_pid=$!
+              trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+              for attempt in $(seq 1 60); do
+                if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
+                sleep 1
+              done
+              curl --fail --silent http://localhost:3000/ > /dev/null
+              QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/rendered-qa-evidence npm run qa:rendered
+            ) 2>&1 | tee quality-reports/rendered-qa.log
+            echo "${PIPESTATUS[0]}" > quality-reports/rendered-qa.exit
+          else
+            echo "Skipped because no global UI or rendered-app files changed." | tee quality-reports/rendered-qa.log
+            echo "0" > quality-reports/rendered-qa.exit
+          fi
+
+          if [ "${RUN_TRAIN_QA}" = "true" ]; then
+            (
+              set -euo pipefail
+              NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/train-qa-server.log 2>&1 &
+              server_pid=$!
+              trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+              for attempt in $(seq 1 90); do
+                if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
+                sleep 1
+              done
+              curl --fail --silent http://localhost:3000/ > /dev/null
+              QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=quality-reports/train-qa-evidence npm run qa:train
+            ) 2>&1 | tee quality-reports/train-qa.log
+            echo "${PIPESTATUS[0]}" > quality-reports/train-qa.exit
+          else
+            echo "Skipped because no Train-related files changed." | tee quality-reports/train-qa.log
+            echo "0" > quality-reports/train-qa.exit
+          fi
+
+          if [ "${RUN_RELEASE_CHECKS}" = "true" ]; then
+            npm run release:manifest -- \
               --commit "${PLAIVRA_COMMIT_SHA}" \
               --build-timestamp "${PLAIVRA_BUILD_TIMESTAMP}" \
               --environment ci \
-              --expected-migration "${expected_migration}" 2>&1 | tee -a quality-reports/release-metadata.log
-            release_metadata_built_code="${PIPESTATUS[0]}"
+              --schema-compatibility 2 \
+              --output quality-reports/release-manifest.json \
+              --quality-reports quality-reports 2>&1 | tee quality-reports/manifest.log
+            echo "${PIPESTATUS[0]}" > quality-reports/manifest.exit
+
+            npm run release:preflight -- \
+              --mode release \
+              --commit "${PLAIVRA_COMMIT_SHA}" \
+              --repository "${GITHUB_REPOSITORY}" \
+              --quality-reports quality-reports \
+              --output quality-reports/release-preflight.json 2>&1 | tee quality-reports/release-preflight.log
+            echo "${PIPESTATUS[0]}" > quality-reports/release-preflight.exit
           else
-            echo "Built metadata verification skipped because the production build failed." | tee -a quality-reports/release-metadata.log
-            release_metadata_built_code=1
+            echo "Skipped on pull requests; generated and enforced on pushes to main." | tee quality-reports/manifest.log
+            echo "0" > quality-reports/manifest.exit
+            echo "Skipped on pull requests; enforced in release mode on pushes to main." | tee quality-reports/release-preflight.log
+            echo "0" > quality-reports/release-preflight.exit
           fi
-          if [ "${release_metadata_unit_code}" = "0" ] && [ "${release_metadata_built_code}" = "0" ]; then
-            echo "0" > quality-reports/release-metadata.exit
-          else
-            echo "1" > quality-reports/release-metadata.exit
-          fi
-
-          (
-            set -euo pipefail
-            NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/rendered-qa-server.log 2>&1 &
-            server_pid=$!
-            trap 'kill "$server_pid" 2>/dev/null || true' EXIT
-            for attempt in $(seq 1 60); do
-              if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
-              sleep 1
-            done
-            curl --fail --silent http://localhost:3000/ > /dev/null
-            QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/rendered-qa-evidence npm run qa:rendered
-          ) 2>&1 | tee quality-reports/rendered-qa.log
-          echo "${PIPESTATUS[0]}" > quality-reports/rendered-qa.exit
-
-          (
-            set -euo pipefail
-            NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/train-qa-server.log 2>&1 &
-            server_pid=$!
-            trap 'kill "$server_pid" 2>/dev/null || true' EXIT
-            for attempt in $(seq 1 90); do
-              if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
-              sleep 1
-            done
-            curl --fail --silent http://localhost:3000/ > /dev/null
-            QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=quality-reports/train-qa-evidence npm run qa:train
-          ) 2>&1 | tee quality-reports/train-qa.log
-          echo "${PIPESTATUS[0]}" > quality-reports/train-qa.exit
-
-          npm run release:manifest -- \
-            --commit "${PLAIVRA_COMMIT_SHA}" \
-            --build-timestamp "${PLAIVRA_BUILD_TIMESTAMP}" \
-            --environment ci \
-            --schema-compatibility 2 \
-            --output quality-reports/release-manifest.json \
-            --quality-reports quality-reports 2>&1 | tee quality-reports/manifest.log
-          echo "${PIPESTATUS[0]}" > quality-reports/manifest.exit
-
-          preflight_mode="${{ github.event_name == 'pull_request' && 'review' || 'release' }}"
-          set +e
-          npm run release:preflight -- \
-            --mode "${preflight_mode}" \
-            --commit "${PLAIVRA_COMMIT_SHA}" \
-            --repository "${GITHUB_REPOSITORY}" \
-            --quality-reports quality-reports \
-            --output quality-reports/release-preflight.json 2>&1 | tee quality-reports/release-preflight.log
-          preflight_code="${PIPESTATUS[0]}"
-          set -e
-          echo "${preflight_code}" > quality-reports/release-preflight.exit
 
       - name: Upload quality reports
         if: always()

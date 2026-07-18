@@ -2,153 +2,114 @@
 
 **Project:** `bkwezjxvapaeasfvlhvv`
 
-**Verified production state:** 2026-07-17
+**Verified production state:** 2026-07-18
 
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 
-**Reconciliation status:** **Reconciled through Muscle Intelligence Phase 2**
+**Status:** **Fully reconciled through `20260717215900`; no pending repository migration remains**
 
-This document records verified production migration history. It is not authorization to replay migration SQL, deploy, promote, update compatibility markers, or merge. Applied migration files and production identities must never be renamed, rewritten, deleted, manually reordered, or replayed.
+This document records verified production migration history. It is not authorization to replay migrations, deploy, promote, change compatibility markers, or merge. Applied migration files and production identities must remain immutable.
 
-## Current state
+## Current production state
 
-- Supabase migration history contains 37 applied migrations.
+- Applied migrations: 45
+- Latest migration: `20260717215900_muscle_intelligence_phase3_set_log_completion_authority`
 - `pendingCount = 0`
 - `schemaAppliedUntrackedCount = 0`
 - `unresolvedCount = 0`
 - `historyRepair.state = reconciled`
-- The latest verified production migration is `20260717051011_muscle_intelligence_phase2_curated_seed`.
-- Repository and production migration identities are aligned through the latest applied migration.
-- Ledger-level migration-history release readiness is true.
-- The production compatibility marker intentionally remains `20260717032851` until a separately coordinated code merge and deployment operation.
+- Compatibility marker: `20260717051011`
+- Ledger-level migration-history release readiness: true
 
-## Muscle Intelligence Phase 2
+## Applied PR #68 correction chain
 
-```text
-version: 20260717051008
-name: muscle_intelligence_phase2_curated_schema
-file: supabase/migrations/20260717051008_muscle_intelligence_phase2_curated_schema.sql
-Git blob: 628327a9de7983e7ed12f7bddbc164947618deb0
-
-version: 20260717051011
-name: muscle_intelligence_phase2_curated_seed
-file: supabase/migrations/20260717051011_muscle_intelligence_phase2_curated_seed.sql
-Git blob: d3364955cd8ad53eb513c9456addbf9c8ee86fe8
-reviewed source head: 9b3006c1a512512bee8c16a4fb2ae34a16b7b7f6
-```
-
-The migrations were applied through tracked Supabase CLI `db push` on 2026-07-17 after a dry run listed exactly the schema and seed migrations in order. Production history now records both exact repository versions once.
-
-Read-only post-application verification confirmed:
-
-- six Phase 2 tables exist with RLS enabled;
-- no anonymous table privileges exist on those tables;
-- approved member reads are limited to localizations, aliases, and relationships;
-- research sources, mapping evidence, and mapping reviews remain admin-only;
-- 60 curated exercises;
-- 180 localizations;
-- 180 aliases;
-- 32 relationships;
-- 21 research sources;
-- 89 mapping-evidence rows;
-- 60 mapping reviews;
-- exactly 9 approved provider links;
-- 60 published mapping sets and 0 target drafts;
-- 180 mapping entries;
-- 0 checksum drift;
-- 0 alias collision groups;
-- 0 duplicate relationship groups;
-- retired legacy target rows remain zero in `exercises`, `workouts`, and `exercise_library`.
-
-Supabase security advisors reported no new Phase 2 security finding. New performance notices are limited to immediately unused indexes and overlapping permissive SELECT policies on the three member-readable tables; they are non-blocking for this phase.
-
-Direct backup/PITR evidence was not captured in this repository before the manual application. That remains an operational evidence gap and is not recorded as passed.
-
-Do not replay either migration. Any later correction requires a new named forward migration.
-
-## Compatibility-marker boundary
-
-The physical production migration head is now:
+The following reviewed forward migrations are recorded exactly once in Supabase migration history:
 
 ```text
-20260717051011
+20260717215400_muscle_intelligence_phase3_account_deletion_authority
+20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections
+20260717215600_muscle_intelligence_phase3_direct_session_authority
+20260717215700_muscle_intelligence_phase3_replacement_repair_hardening
+20260717215800_muscle_intelligence_phase3_plan_session_start_authority
+20260717215900_muscle_intelligence_phase3_set_log_completion_authority
 ```
 
-The deployed release compatibility marker remains:
+They were executed through the Supabase SQL Editor in filename order and each exact version was recorded through supported migration repair.
+
+Exact Git blobs:
+
+```text
+20260717215400  93868fad063217196d7d78c14978242221494fb0
+20260717215500  2bb956fba6dcd31f67df12b17b4aedf315f78063
+20260717215600  c9313396b9d1fa718c5d26672304e5dd9eea2c8f
+20260717215700  acd893420c0761369899e9826553581feff52c25
+20260717215800  748e7c058468d3ba7c24ac7d4a688a9729327394
+20260717215900  9b725cc990af9565580cde16096c5bb6ece9b1e4
+```
+
+Do not replay or modify any applied migration.
+
+## Read-only production verification
+
+Verification after all six corrections confirmed:
+
+```text
+auth users = 11
+profiles = 11
+performed sessions = 9
+session snapshots = 9
+snapshot items = 29
+sessions missing snapshots = 0
+snapshot owner mismatches = 0
+duplicate snapshot envelopes = 0
+terminal snapshot items still planned = 0
+compatibility marker = 20260717051011
+```
+
+The account-deletion purge remains executable only by `service_role`. Direct-session start, replacement eligibility, plan-session start, set-log, and completion RPCs exist as `SECURITY DEFINER` functions with fixed empty `search_path`, no `PUBLIC` or anonymous execution, and intended authenticated/service-role execution. The active-direct-session uniqueness index exists. The lifecycle transition trigger and all three normal Train history-preservation triggers remain enabled.
+
+## Applied Phase 3 baseline
+
+- `20260717194847_muscle_intelligence_phase3_session_snapshots.sql`
+  - Git blob: `865f918091fbb9cf054e170417caaf384c65f049`
+- `20260717202151_muscle_intelligence_phase3_integrity_corrections.sql`
+  - Git blob: `af02da43e4d61f9248ad6110b9e58f99cac84560`
+
+These migrations remain byte-immutable.
+
+## Compatibility boundary
+
+Physical production migration head:
+
+```text
+20260717215900
+```
+
+Deployed compatibility marker:
 
 ```text
 version = 2
-migration_version = 20260717032851
+migration_version = 20260717051011
 ```
 
-This difference is intentional until the exact reviewed application commit is merged and deployed through a coordinated release operation. Do not advance the marker independently of the compatible code deployment.
+The difference is intentional. The marker may advance only in a separately authorized coordinated release.
 
-## Legacy 600-exercise catalog retirement
+## Supabase advisor review
 
-The applied identity remains:
-
-```text
-version: 20260717032851
-name: retire_legacy_600_exercise_catalog
-file: supabase/migrations/20260717032851_retire_legacy_600_exercise_catalog.sql
-```
-
-Post-application verification continues to show zero retired target rows in `exercises`, `workouts`, and `exercise_library`. Do not replay this migration.
-
-## Muscle Intelligence Phase 1
-
-```text
-version: 20260716215602
-name: muscle_intelligence_phase1_foundation
-```
-
-All five Phase 1 mapping tables and both publication functions remain present. The migration remains applied and immutable.
-
-## Train Phase 2A
-
-```text
-version: 20260715190000
-name: train_phase2a_program_architecture
-reviewed commit: 5851486009f99dc9e7629b8b01f43cd690a3a04b
-verified Git blob: be4102a5b0e0aaec8926362950742290b94d39c3
-```
-
-Physical verification confirmed five week templates, twelve assigned weeks, sixteen Phase 2 sessions, and fifty-three activities with no duplicate live legacy mappings. Do not replay this migration.
-
-## Fail-closed ledger semantics
-
-`scripts/check-migration-ledger.mjs` validates:
-
-- `pendingCount`
-- `schemaAppliedUntrackedCount`
-- `ledgerDriftReviewCount`
-- `unresolvedCount`
-- `invalidAppliedProductionIdentityCount`
-- `reconciliationState`
-- `latestAppliedMigrationVersion`
-- `releaseReady`
-
-The ledger-level `releaseReady` value requires reconciled history, no pending or untracked schema work, no unresolved identities, no drift-review items, and valid resolved production identities.
+The post-DDL security advisor reported no critical finding. It continues to report informational deny-all RLS tables and generic warnings for authenticated `SECURITY DEFINER` RPCs. For the Phase 3 RPCs, authenticated execution is intentional and protected by direct actor checks, owner predicates, fixed search paths, and explicit ACLs. The pre-existing leaked-password-protection warning is outside PR #68 scope.
 
 ## Verification authority
 
-- `supabase/verification/legacy-600-exercise-catalog-retirement.sql` proves the retired target layers remain empty.
-- `supabase/verification/muscle-intelligence-phase2.sql` proves exact curated counts, checksum publication, RLS boundaries, legacy emptiness, and mapping immutability on a disposable database.
-- `lib/product/muscle-intelligence-phase2-migration.test.ts` enforces the applied/reconciled ledger identities and migration contracts.
-- `lib/train/muscle-intelligence/curated-registry.test.ts` enforces registry, provider-link, relationship, golden-plan, and deterministic calculation contracts.
-- the full clean migration chain must continue to apply all 37 migrations from zero without modifying historical files.
+- `supabase/verification/muscle-intelligence-phase3-session-snapshots.sql`
+- `lib/product/muscle-intelligence-phase3-migration.test.ts`
+- `lib/product/muscle-intelligence-phase3-corrections.test.ts`
+- full clean migration-chain replay in GitHub Quality
+- `supabase/migration-ledger.json`
 
-## Remaining release work
+## Remaining work
 
-Before merge or deployment:
+1. Run fresh Phase A and Quality on the exact final reconciled head.
+2. Keep PR #68 Draft and unmerged until the user separately authorizes the merge.
+3. Do not update the compatibility marker or start Phase 4 under this task.
 
-1. run fresh Phase A and Quality workflows on the exact reconciliation head;
-2. confirm migration-ledger validation reports `reconciliation=reconciled` and `release_ready=true`;
-3. confirm the full migration-chain rehearsal and Phase 2 verification pass;
-4. run strict release preflight on the exact final head;
-5. obtain explicit release-owner approval;
-6. coordinate the compatibility-marker update with the exact code merge and deployment;
-7. verify Vercel built the resulting exact `main` SHA;
-8. verify provider metadata, `/api/version`, `/api/health`, and required production smoke evidence.
-
-No merge, compatibility-marker update, or deployment was performed as part of this reconciliation.
+No merge, compatibility-marker update, deployment, Phase 4 work, or Heat Map UI is authorized.

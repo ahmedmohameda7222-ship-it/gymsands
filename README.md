@@ -57,8 +57,9 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 - Web is the active product surface.
 - Public MCP, OAuth/CIMD, task-specific context projections, privacy, idempotency, and release foundations exist; publication and full production acceptance remain separate gates.
 - Train Phase 2A provides the additive multi-week hierarchy; the legacy plan writer remains active until later cutover phases.
-- Muscle Intelligence Phase 2 now versions and validates the approved 60-exercise registry, six normalized curation tables, 60 mappings with 180 entries, 180 localizations, 180 aliases, 32 relationships, nine exact provider links, and five golden-plan fixtures without changing visible Train behavior.
-- The generated 600-row legacy exercise catalog remains retired. The reviewed 60-exercise curated registry and mapping cohort are now applied to production and tracked through migration `20260717051011_muscle_intelligence_phase2_curated_seed`.
+- Muscle Intelligence Phase 2 versions and validates the approved 60-exercise registry, six normalized curation tables, 60 mappings with 180 entries, 180 localizations, 180 aliases, 32 relationships, nine exact provider links, and five golden-plan fixtures without changing visible Train behavior.
+- The generated 600-row legacy exercise catalog remains retired. The reviewed 60-exercise curated registry and mapping cohort are applied to production and tracked through migration `20260717051011_muscle_intelligence_phase2_curated_seed`.
+- Muscle Intelligence Phase 3 production history is applied and reconciled through `20260717215900_muscle_intelligence_phase3_set_log_completion_authority`. Draft PR #68 contains the complete reviewed Phase 3 implementation and correction chain; no Phase 3 migration remains pending.
 - Entitlement and billing foundations exist, but checkout remains disabled until offerings and release controls are approved.
 - No native iOS or Android binary exists.
 
@@ -81,17 +82,20 @@ Machine authority: `supabase/migration-ledger.json`
 
 Human record: `docs/architecture/migration-ledger-reconciliation.md`
 
-Verified production state on 2026-07-17:
+Verified production state after all reviewed PR #68 corrections:
 
-- 37 applied migrations;
-- latest migration: `20260717051011_muscle_intelligence_phase2_curated_seed`;
-- the Phase 2 schema and deterministic seed migrations are applied and tracked;
-- `pendingCount=0`;
+- 45 applied migrations;
+- latest production migration: `20260717215900_muscle_intelligence_phase3_set_log_completion_authority`;
+- `pendingCount=0` and `unresolvedCount=0`;
 - `schemaAppliedUntrackedCount=0`;
-- `unresolvedCount=0`;
 - `historyRepair.state=reconciled`;
-- ledger-level release readiness is true for migration-history reconciliation;
-- the deployed application compatibility marker intentionally remains `20260717032851` until a separately coordinated exact-head merge and deployment release operation.
+- ledger-level migration release readiness is true;
+- the compatibility marker remains `20260717051011` and intentionally has not advanced;
+- 11 Auth users, 11 profiles, nine performed sessions, nine snapshots, and 29 snapshot items remain present;
+- no workout session is missing a snapshot, no snapshot owner mismatch exists, and no duplicate snapshot envelope exists;
+- the account-deletion purge is service-role-only;
+- direct-session, replacement eligibility, plan-session start, set-log, and completion RPCs are actor-validated, `SECURITY DEFINER`, fixed-search-path boundaries with intended ACLs;
+- all three normal Train history-preservation triggers remain enabled.
 
 Never replay, rename, rewrite, delete, or manually reorder an applied migration. Seed documentation is not migration authority.
 

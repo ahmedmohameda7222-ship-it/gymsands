@@ -38,16 +38,18 @@ import {
   getOrStartWorkoutDaySession,
   getWorkoutHistoryDetailed,
   getWorkoutSessionLogs,
+  replaceWorkoutSessionExercise,
   saveWorkoutSetLogs,
   updateWorkoutSessionDuration
 } from "@/services/database/workout-sessions";
 import { createExerciseAlternative, getExerciseAlternatives, getProgressionTargets } from "@/services/database/execution-layer";
-import type { ExerciseLog, UserWorkoutPlanExercise, WorkoutPlanDaySession, WorkoutSession, WorkoutSessionSummary } from "@/types";
+import type { ExerciseLog, UserWorkoutPlanExercise, Workout, WorkoutPlanDaySession, WorkoutSession, WorkoutSessionSummary } from "@/types";
 import type { ExerciseAlternativeReason, UserExerciseAlternative, UserProgressionTarget } from "@/types";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
 import { OpenAiBlossom } from "@/components/brand/openai-blossom";
 import { useTrainTranslation } from "@/lib/i18n/train";
+import { ExercisePickerDialog } from "@/components/workouts/exercise-picker-dialog";
 
 type SetType = "normal" | "warmup" | "working" | "failure" | "drop";
 
@@ -396,7 +398,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const [actionsOpen, setActionsOpen] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
   const [replacementReason, setReplacementReason] = useState<ExerciseAlternativeReason>("machine_taken");
-  const [manualReplacementName, setManualReplacementName] = useState("");
+  const [replacementPickerOpen, setReplacementPickerOpen] = useState(false);
   const [isSavingAlternative, setIsSavingAlternative] = useState(false);
   const [setFeedback, setSetFeedback] = useState("");
   const [setFeedbackVariant, setSetFeedbackVariant] = useState<"info" | "error">("info");
@@ -726,26 +728,28 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     if (session) updateWorkoutSessionDuration(session.id, 1).catch(() => undefined);
   }
 
-  async function useManualReplacement() {
-    if (!user?.id || !activeExercise || !manualReplacementName.trim()) return;
+  async function applyStableReplacement(replacement: Workout) {
+    if (!user?.id || !session || !activeExercise) return;
     const originalName = activeExercise.exercise.exercise_name;
     setIsSavingAlternative(true);
     try {
-      const saved = await createExerciseAlternative(user.id, {
+      await replaceWorkoutSessionExercise(user.id, session.id, activeExercise.exercise.id, replacement);
+      setExerciseStates((current) => current.map((item, index) => index === activeExerciseIndex
+        ? { ...item, exercise: { ...item.exercise, exercise_name: replacement.name } }
+        : item));
+      setReplacementPickerOpen(false);
+      toast({ title: tr("replacementReady"), description: tr("replacementReadyDescription", { name: replacement.name }) });
+      void createExerciseAlternative(user.id, {
         plan_exercise_id: activeExercise.exercise.id,
         original_exercise_name: originalName,
-        alternative_exercise_name: manualReplacementName.trim(),
+        alternative_exercise_name: replacement.name,
         reason: replacementReason,
-        target_muscle: activeExercise.exercise.target_muscle,
-        equipment: activeExercise.exercise.equipment,
+        target_muscle: replacement.target_muscle || activeExercise.exercise.target_muscle,
+        equipment: replacement.equipment || activeExercise.exercise.equipment,
         created_by: "user"
+      }).then((saved) => setAlternatives((current) => [saved, ...current])).catch((error) => {
+        console.warn("Plaivra recorded the workout replacement but could not save the optional alternative shortcut.", error);
       });
-      setAlternatives((current) => [saved, ...current]);
-      setExerciseStates((current) => current.map((item, index) => index === activeExerciseIndex
-        ? { ...item, exercise: { ...item.exercise, exercise_name: saved.alternative_exercise_name } }
-        : item));
-      setManualReplacementName("");
-      toast({ title: tr("replacementReady"), description: tr("replacementReadyDescription", { name: saved.alternative_exercise_name }) });
     } catch (error) {
       toast({ title: tr("replacementFailed"), description: userSafeError(error) });
     } finally {
@@ -1075,8 +1079,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
               </ActionBlock>
 
               <ActionBlock icon={<RefreshCcw className="h-4 w-4" />} title={tr("replaceToday")} description={tr("replaceTodayDescription")}>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <Input className="h-12" value={manualReplacementName} onChange={(event) => setManualReplacementName(event.target.value)} placeholder={tr("replacementPlaceholder")} />
+                <div className="mt-3 grid gap-3">
                   <select value={replacementReason} onChange={(event) => setReplacementReason(event.target.value as ExerciseAlternativeReason)} className="h-12 rounded-md border border-input bg-card px-3 text-sm">
                     <option value="machine_taken">{tr("machineTaken")}</option>
                     <option value="no_equipment">{tr("noEquipment")}</option>
@@ -1092,7 +1095,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                 </div>
                 {activeAlternatives.length ? <div className="mt-3 rounded-[14px] bg-muted/40 p-3 text-xs text-muted-foreground">{tr("savedAlternatives", { names: activeAlternatives.slice(0, 3).map((alternative) => alternative.alternative_exercise_name).join(", ") })}</div> : null}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" className="min-h-12" onClick={useManualReplacement} disabled={!manualReplacementName.trim() || isSavingAlternative}>{isSavingAlternative ? tr("saving") : tr("useToday")}</Button>
+                  <Button type="button" className="min-h-12" onClick={() => { setActionsOpen(false); setReplacementPickerOpen(true); }} disabled={isSavingAlternative}>{isSavingAlternative ? tr("saving") : tr("useToday")}</Button>
                   <AiActionRequestDialog actions={[{ type: "replace_exercise", label: tr("askChatGpt"), description: tr("replaceWithChatGptDescription") }]} sourceType="plan_exercise" sourceId={activeExercise.exercise.id} context={{ ...workoutContext, replacement_reason: replacementReason, exercise_alternatives: activeAlternatives }} />
                 </div>
               </ActionBlock>
@@ -1115,6 +1118,18 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
             </div>
           </DialogContent>
       </Dialog>
+
+      <ExercisePickerDialog
+        open={replacementPickerOpen}
+        onOpenChange={setReplacementPickerOpen}
+        dayName={day.day_name}
+        existingKeys={[]}
+        maxSelection={1}
+        onAdd={(replacements) => {
+          const replacement = replacements[0];
+          if (replacement) void applyStableReplacement(replacement);
+        }}
+      />
 
       <Dialog open={finishOpen} onOpenChange={setFinishOpen}>
           <DialogContent layout="responsive-drawer" className="p-5 lg:max-w-lg lg:rounded-[28px]">

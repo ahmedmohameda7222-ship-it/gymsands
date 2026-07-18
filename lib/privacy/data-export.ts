@@ -14,6 +14,7 @@ const OWNED_EXPORT_TABLES = [
   "user_welcome_messages",
   "user_workout_plans",
   "workout_sessions",
+  "workout_session_muscle_snapshots",
   "user_workout_sessions",
   "user_progression_targets",
   "user_exercise_alternatives",
@@ -176,6 +177,11 @@ export async function buildCurrentUserDataExport(
   const planBlocks = await relatedRows("user_workout_plan_blocks", "plan_day_id", ids(planDays));
   const planBlockItems = await relatedRows("user_workout_plan_block_items", "block_id", ids(planBlocks));
   const exerciseLogs = await relatedRows("exercise_logs", "workout_session_id", ids(owned.workout_sessions));
+  const workoutSessionMuscleSnapshotItems = await relatedRows(
+    "workout_session_muscle_snapshot_items",
+    "snapshot_id",
+    ids(owned.workout_session_muscle_snapshots)
+  );
   const userExerciseLogs = await relatedRows("user_exercise_logs", "user_workout_session_id", ids(owned.user_workout_sessions));
   const customExerciseMappingEntries = await relatedRows(
     "user_custom_exercise_mapping_entries",
@@ -249,6 +255,8 @@ export async function buildCurrentUserDataExport(
         legacy_plan_blocks: planBlocks,
         legacy_plan_block_items: planBlockItems,
         sessions: owned.workout_sessions,
+        muscle_analysis_snapshots: owned.workout_session_muscle_snapshots,
+        muscle_analysis_snapshot_items: workoutSessionMuscleSnapshotItems,
         exercise_logs: exerciseLogs,
         scheduled_sessions: owned.user_workout_sessions,
         scheduled_exercise_logs: userExerciseLogs,

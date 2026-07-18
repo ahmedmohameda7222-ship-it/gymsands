@@ -99,7 +99,14 @@ Phase 2 provides:
 
 Both Phase 2 migrations are applied and reconciled in production. All mappings are published, checksum-valid, and immutable. This does not by itself authorize a compatibility-marker update, UI cutover, Heat Map, or later runtime phase.
 
-The physical production migration head is `20260717051011`. The deployed compatibility marker remains `20260717032851` until a coordinated exact-code merge and production deployment.
+Phase 3 adds immutable children of the existing `workout_sessions` performed-session root:
+
+- `workout_session_muscle_snapshots` freezes the owner, source-plan context, taxonomy, calculation engine, and completeness state exactly once when a session starts;
+- `workout_session_muscle_snapshot_items` preserves ordered planned prescription and exact immutable global mapping references, with compact owner-scoped custom mapping content only where deletion-safe historical interpretation requires it;
+- replacements preserve planned and actual identities separately, while skipped and adjusted/completed interpretation remains tied to the frozen snapshot plus authoritative logs;
+- planned and completed analysis are server-authoritative and deterministic. No Heat Map UI is part of Phase 3.
+
+Migrations `20260717194847_muscle_intelligence_phase3_session_snapshots` and `20260717202151_muscle_intelligence_phase3_integrity_corrections` are applied and reconciled in production under the user's explicit migration authorization for this task. The second is a forward-only correction; the first remains byte-immutable. The physical production migration head is `20260717202151`. The deployed compatibility marker remains `20260717032851` until a coordinated exact-code merge and production deployment.
 
 ## Other canonical domains
 

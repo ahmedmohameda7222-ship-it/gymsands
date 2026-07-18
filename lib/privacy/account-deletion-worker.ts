@@ -147,11 +147,21 @@ async function purgeDatabaseAndAuth(admin: SupabaseClient, userId: string) {
     throw new DeletionWorkerError("database_dependency_cleanup_failed");
   }
 
+  const purged = await admin.rpc("purge_account_application_data_atomic", { p_user_id: userId });
+  if (purged.error) throw new DeletionWorkerError("database_application_purge_failed");
+  const purgeEvidence = purged.data && typeof purged.data === "object" && !Array.isArray(purged.data)
+    ? purged.data as Record<string, unknown>
+    : { application_data_purged: true };
+
   const deleted = await admin.auth.admin.deleteUser(userId, false);
   const deletionStatus = deleted.error && "status" in deleted.error ? Number(deleted.error.status) : null;
   const alreadyAbsent = Boolean(deleted.error) && (deletionStatus === 404 || /not found/i.test(deleted.error?.message ?? ""));
   if (deleted.error && !alreadyAbsent) throw new DeletionWorkerError("auth_provider_delete_failed");
-  return { auth_user_deleted: !alreadyAbsent, auth_user_already_absent: alreadyAbsent };
+  return {
+    ...purgeEvidence,
+    auth_user_deleted: !alreadyAbsent,
+    auth_user_already_absent: alreadyAbsent
+  };
 }
 
 async function sendCompletionNotification(job: AccountDeletionJob) {

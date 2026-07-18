@@ -18,18 +18,19 @@ A passing review preflight is not production release authorization. Any failed o
 
 ## Current production migration state
 
-Verified on 2026-07-17:
+Verified on 2026-07-17 after the explicitly authorized Phase 3 migration application:
 
-- 37 applied migrations;
-- latest identity: `20260717051011_muscle_intelligence_phase2_curated_seed`;
+- 39 applied migrations;
+- latest identity: `20260717202151_muscle_intelligence_phase3_integrity_corrections`;
 - the two Muscle Intelligence Phase 2 migrations are applied and tracked;
+- the Muscle Intelligence Phase 3 session-snapshot migration is applied and tracked;
 - zero schema-applied-untracked migrations, with `pendingCount=0` and `unresolvedCount=0`;
 - `historyRepair.state=reconciled`;
 - ledger-level migration-history `releaseReady=true`.
 
 The applied Phase 2 schema and seed produced the reviewed 60-exercise cohort, six RLS-protected curation tables, 60 published mapping sets, 180 entries, 180 localizations, 180 aliases, 32 relationships, 21 research sources, 89 evidence rows, 60 reviews, and nine exact provider links. Post-application verification found zero checksum drift, zero drafts, zero alias collisions, and zero retired legacy target rows.
 
-The physical production migration head is `20260717051011`. The deployed release compatibility marker intentionally remains `20260717032851` until a separately coordinated exact-head code merge and production deployment. Do not advance the marker independently.
+Phase 3 verification found nine legacy performed sessions, nine owner-matched immutable snapshot envelopes, 29 snapshot items, zero missing snapshots, and all nine legacy snapshots explicitly unavailable rather than name-inferred. The forward correction adds cascade-safe privacy deletion, published-only future freezes, retired historical mapping reads, identity-first replacement idempotency, terminal-state integrity, and validated mapping bundles. The physical production migration head is `20260717202151`. The deployed release compatibility marker intentionally remains `20260717032851` until a separately coordinated exact-head code merge and production deployment. Do not advance the marker independently.
 
 The machine authority is `supabase/migration-ledger.json`. The human record is `docs/architecture/migration-ledger-reconciliation.md`. Applied migrations are immutable and must never be replayed, renamed, rewritten, deleted, or manually reordered.
 
