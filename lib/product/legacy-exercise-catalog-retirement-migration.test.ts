@@ -77,6 +77,7 @@ describe("legacy 600-exercise catalog retirement migration", () => {
     const entry = ledger.entries.find((item) => item.productionVersion === "20260717032851");
     const appliedEntries = ledger.entries.filter((item) => item.state === "applied");
     const pendingEntries = ledger.entries.filter((item) => item.state === "pending");
+    const expectedReconciliationState = pendingEntries.length > 0 ? "pending" : "reconciled";
     expect(entry).toEqual(expect.objectContaining({
       productionName: "retire_legacy_600_exercise_catalog",
       localFile: "20260717032851_retire_legacy_600_exercise_catalog.sql",
@@ -86,6 +87,6 @@ describe("legacy 600-exercise catalog retirement migration", () => {
     expect(ledger.pendingCount).toBe(pendingEntries.length);
     expect(ledger.schemaVerifiedUntrackedCount).toBe(0);
     expect(ledger.unresolvedCount).toBe(ledger.pendingCount);
-    expect(ledger.historyRepair.state).toBe("pending");
+    expect(ledger.historyRepair.state).toBe(expectedReconciliationState);
   });
 });
