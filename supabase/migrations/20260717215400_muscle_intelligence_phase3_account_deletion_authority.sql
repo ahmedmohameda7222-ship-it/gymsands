@@ -7,8 +7,11 @@ begin
   if to_regclass('public.profiles') is null
      or to_regclass('public.user_workout_plans') is null
      or to_regclass('public.user_workout_plan_days') is null
-     or to_regclass('public.user_workout_plan_exercises') is null then
-    raise exception 'Account-deletion authority requires the canonical profile and Train plan tables.';
+     or to_regclass('public.user_workout_plan_exercises') is null
+     or to_regclass('public.account_access_states') is null
+     or to_regclass('public.account_deletion_jobs') is null
+     or to_regclass('public.privacy_deletion_legal_holds') is null then
+    raise exception 'Account-deletion authority requires the canonical privacy lifecycle and Train tables.';
   end if;
   if to_regprocedure('public.prevent_workout_history_identity_delete()') is null then
     raise exception 'Train history-preservation guard is missing.';
@@ -31,6 +34,9 @@ create temporary table phase3_account_deletion_authority_baseline on commit drop
 select
   (select count(*) from auth.users) as auth_user_count,
   (select count(*) from public.profiles) as profile_count,
+  (select count(*) from public.account_access_states) as access_state_count,
+  (select count(*) from public.account_deletion_jobs) as deletion_job_count,
+  (select count(*) from public.privacy_deletion_legal_holds) as legal_hold_count,
   (select count(*) from public.user_workout_plans) as plan_count,
   (select count(*) from public.workout_sessions) as performed_session_count,
   (select count(*) from public.user_workout_sessions) as scheduled_session_count,
@@ -77,6 +83,15 @@ as $function$
         when 'user_workout_plan_exercises' then 'workout_exercise'
       end
       and context.identity_id = p_identity_id
+      and exists (
+        select 1
+        from private.account_deletion_workout_identity_context account_context
+        where account_context.backend_pid = context.backend_pid
+          and account_context.transaction_id = context.transaction_id
+          and account_context.user_id = context.user_id
+          and account_context.identity_type = 'account'
+          and account_context.identity_id = context.user_id
+      )
   );
 $function$;
 
@@ -138,6 +153,7 @@ as $function$
 declare
   v_backend_pid integer := pg_backend_pid();
   v_transaction_id bigint := txid_current();
+  v_deletion_job_id uuid;
   v_profile_deleted integer := 0;
   v_plan_count integer := 0;
   v_day_count integer := 0;
@@ -152,6 +168,39 @@ begin
   end if;
 
   perform pg_advisory_xact_lock(hashtextextended('plaivra-account-data-purge:' || p_user_id::text, 0));
+
+  begin
+    select job.id into strict v_deletion_job_id
+    from public.account_deletion_jobs job
+    where job.user_id = p_user_id
+      and job.state = 'processing'
+      and job.stage = 'deleting_database'
+    for update;
+  exception
+    when no_data_found then
+      raise exception 'An active deleting_database account-deletion job is required.' using errcode = '55000';
+    when too_many_rows then
+      raise exception 'Multiple active account-deletion jobs exist for the same user.' using errcode = '23514';
+  end;
+
+  if not exists (
+    select 1
+    from public.account_access_states access_state
+    where access_state.user_id = p_user_id
+      and access_state.state = 'deletion_processing'
+      and access_state.disabled_at is not null
+  ) then
+    raise exception 'Account access must be disabled before application data is purged.' using errcode = '55000';
+  end if;
+
+  if exists (
+    select 1
+    from public.privacy_deletion_legal_holds legal_hold
+    where legal_hold.user_id = p_user_id
+      and legal_hold.released_at is null
+  ) then
+    raise exception 'Account data cannot be purged while a legal hold is active.' using errcode = '55000';
+  end if;
 
   if exists (
     select 1
@@ -173,6 +222,7 @@ begin
 
     return jsonb_build_object(
       'application_data_purged', true,
+      'deletion_job_id', v_deletion_job_id,
       'profile_already_absent', true,
       'profiles_deleted', 0,
       'workout_plans_deleted', 0,
@@ -285,6 +335,7 @@ begin
 
   return jsonb_build_object(
     'application_data_purged', true,
+    'deletion_job_id', v_deletion_job_id,
     'profile_already_absent', false,
     'profiles_deleted', v_profile_deleted,
     'workout_plans_deleted', v_plan_count,
@@ -304,7 +355,7 @@ grant execute on function public.purge_account_application_data_atomic(uuid)
 to service_role;
 
 comment on function public.purge_account_application_data_atomic(uuid) is
-  'Service-role-only, idempotent application-data purge. Captures exact Train identities, preserves normal history guards, deletes the profile cascade atomically, and leaves Auth deletion to the provider API.';
+  'Service-role-only, lifecycle-bound, idempotent application-data purge. Requires one active deleting_database job, disabled access, and no legal hold; captures exact Train identities, preserves normal history guards, deletes the profile cascade atomically, and leaves Auth deletion to the provider API.';
 
 do $postconditions$
 declare
@@ -318,6 +369,9 @@ begin
     from phase3_account_deletion_authority_baseline baseline
     where baseline.auth_user_count <> (select count(*) from auth.users)
        or baseline.profile_count <> (select count(*) from public.profiles)
+       or baseline.access_state_count <> (select count(*) from public.account_access_states)
+       or baseline.deletion_job_count <> (select count(*) from public.account_deletion_jobs)
+       or baseline.legal_hold_count <> (select count(*) from public.privacy_deletion_legal_holds)
        or baseline.plan_count <> (select count(*) from public.user_workout_plans)
        or baseline.performed_session_count <> (select count(*) from public.workout_sessions)
        or baseline.scheduled_session_count <> (select count(*) from public.user_workout_sessions)
