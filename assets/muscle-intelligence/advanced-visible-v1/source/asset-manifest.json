@@ -1,0 +1,49 @@
+{
+  "asset_set": "Plaivra Muscle Intelligence Phase 4A approved source assets",
+  "canvas": "2:3 portrait",
+  "normalized_target_canvas": "1024x1536",
+  "files": [
+    {
+      "name": "muscle-anatomy-front.png",
+      "sha256": "7d9107aeb109d13bbf6622d849bba6640c02d2e1e8640cf91bfe7fecc612196c",
+      "bytes": 1832033,
+      "role": "grayscale_geometry_authority"
+    },
+    {
+      "name": "muscle-anatomy-back.png",
+      "sha256": "f7f59e9f4f843a43f9d02743160092967321a324f1cfd6079015c26100584d67",
+      "bytes": 1460332,
+      "role": "grayscale_geometry_authority"
+    },
+    {
+      "name": "muscle-mask-front.svg",
+      "sha256": "b132a503fab5d0d8193c68564092de1c8a038f614ca4e421a69b7fe61d848c89",
+      "bytes": 86771,
+      "role": "rejected_painter_provenance_only",
+      "used_for_generation": false,
+      "used_at_runtime": false
+    },
+    {
+      "name": "muscle-mask-back.svg",
+      "sha256": "4f6b51441d7a3262f6be28863878c5d51aee33c54519cfd1810f67bf11d01e07",
+      "bytes": 67348,
+      "role": "rejected_painter_provenance_only",
+      "used_for_generation": false,
+      "used_at_runtime": false
+    }
+  ],
+  "semantic_geometry_files": [
+    {
+      "name": "../semantic/muscle-semantic-front.svg",
+      "sha256": "1fc48267510a8fdce240a50d5ec508fbfaa1857d918e10071d3d65fc630bb91d",
+      "bytes": 103726,
+      "role": "grayscale_registered_semantic_geometry_authority"
+    },
+    {
+      "name": "../semantic/muscle-semantic-back.svg",
+      "sha256": "71ebb82e934b2800aa5ad09a82ecca0c9fe8b14c14541851bc6fd02c9a8cb0b4",
+      "bytes": 104207,
+      "role": "grayscale_registered_semantic_geometry_authority"
+    }
+  ]
+}

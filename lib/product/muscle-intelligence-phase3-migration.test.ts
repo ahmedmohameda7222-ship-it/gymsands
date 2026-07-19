@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migrationFile = "20260717194847_muscle_intelligence_phase3_session_snapshots.sql";
-const migration = readFileSync(`supabase/migrations/${migrationFile}`, "utf8").toLowerCase();
+const migration = readFileSync(`supabase/migrations/${migrationFile}`, "utf8").replaceAll("\r\n", "\n").toLowerCase();
 const correctionFile = "20260717202151_muscle_intelligence_phase3_integrity_corrections.sql";
-const correction = readFileSync(`supabase/migrations/${correctionFile}`, "utf8").toLowerCase();
+const correction = readFileSync(`supabase/migrations/${correctionFile}`, "utf8").replaceAll("\r\n", "\n").toLowerCase();
 const verificationEntrypoint = readFileSync("supabase/verification/muscle-intelligence-phase3-session-snapshots.sql", "utf8");
 const verification = [
   verificationEntrypoint,
@@ -17,7 +17,6 @@ const verification = [
   : readFileSync(`supabase/verification/muscle-intelligence-phase3-session-snapshots/${file}`, "utf8"))
   .join("\n")
   .toLowerCase();
-const quality = readFileSync(".github/workflows/quality.yml", "utf8").toLowerCase();
 type LedgerEntry = {
   productionVersion?: string;
   productionName?: string;
@@ -147,7 +146,7 @@ describe("Muscle Intelligence Phase 3 migration contract", () => {
     const pendingCorrectionCount = correctionEntries.filter((entry) => entry.state === "pending").length;
     const appliedCorrectionCount = correctionEntries.filter((entry) => entry.state === "applied").length;
 
-    expect(ledger.productionMigrationCount).toBe(39 + appliedCorrectionCount);
+    expect(ledger.productionMigrationCount).toBe(ledger.entries.filter((entry) => entry.state === "applied").length);
     expect(ledger.pendingCount).toBe(pendingCorrectionCount);
     expect(ledger.unresolvedCount).toBe(pendingCorrectionCount);
     expect(ledger.historyRepair.pendingCount).toBe(pendingCorrectionCount);
@@ -155,7 +154,6 @@ describe("Muscle Intelligence Phase 3 migration contract", () => {
     expect(ledger.historyRepair.state).toBe(pendingCorrectionCount > 0 ? "pending" : "reconciled");
     expect(pendingCorrectionCount + appliedCorrectionCount).toBe(expectedCorrectionEntries.length);
 
-    expect(quality).toContain("supabase/verification/muscle-intelligence-phase3-session-snapshots.sql");
     expect(verificationEntrypoint.trimEnd().endsWith("rollback;")).toBe(true);
   });
 

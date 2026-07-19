@@ -2,7 +2,11 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calculateMuscleLoad, type MuscleLoadAnalysisResult } from "./calculate-muscle-load";
-import { validateMuscleMappingEntries, type MuscleAnalysisMode, type MuscleMappingEntry, type MuscleMappingReference } from "./contracts";
+import { buildAdvancedSessionMuscleAnalysis } from "./advanced-session-analysis";
+import type { AdvancedExposureResult } from "./advanced-exposure";
+import type { BroadCompatibilityResult } from "./compatibility-projection";
+import { validateMuscleMappingEntries, type MuscleAnalysisMode, type MuscleMappingReference } from "./contracts";
+import { SessionMuscleAnalysisError } from "./session-analysis-error";
 import {
   MUSCLE_ANALYSIS_RESULT_SCHEMA_VERSION,
   MUSCLE_CALCULATION_ENGINE_VERSION,
@@ -11,22 +15,19 @@ import {
   MUSCLE_THRESHOLD_PROFILE_VERSION,
   RESISTANCE_SETS_WORKLOAD_MODEL
 } from "./versions";
+import {
+  ADVANCED_MUSCLE_ANALYSIS_RESULT_SCHEMA_VERSION,
+  ADVANCED_MUSCLE_ATLAS_VERSION,
+  ADVANCED_MUSCLE_CALCULATION_ENGINE_VERSION,
+  ADVANCED_MUSCLE_HEAT_SCALE_VERSION,
+  ADVANCED_MUSCLE_MAPPING_SCHEMA_VERSION,
+  ADVANCED_SESSION_MUSCLE_SNAPSHOT_SCHEMA_VERSION
+} from "./versions";
+
+export { SessionMuscleAnalysisError } from "./session-analysis-error";
+export type { SessionAnalysisReasonCode } from "./session-analysis-error";
 
 export const SESSION_MUSCLE_SNAPSHOT_SCHEMA_VERSION = "workout_session_muscle_snapshot_v1" as const;
-
-export type SessionAnalysisReasonCode =
-  | "snapshot_not_found"
-  | "session_not_terminal"
-  | "unsupported_snapshot_version"
-  | "snapshot_mapping_drift"
-  | "snapshot_read_failed";
-
-export class SessionMuscleAnalysisError extends Error {
-  constructor(public readonly code: SessionAnalysisReasonCode, message: string, public readonly status: number) {
-    super(message);
-    this.name = "SessionMuscleAnalysisError";
-  }
-}
 
 export type SessionMuscleSnapshotEnvelope = {
   id: string;
@@ -70,16 +71,16 @@ export type SessionMuscleSnapshotItem = {
   actual_custom_mapping_entries: unknown;
 };
 
-type FrozenGlobalMapping = {
+export type FrozenGlobalMapping = {
   id: string;
   exercise_id: string;
   mapping_version: number;
   schema_version: string;
   checksum: string;
-  entries: MuscleMappingEntry[];
+  entries: readonly unknown[];
 };
 
-type CompletedLog = {
+export type CompletedLog = {
   plan_exercise_id: string | null;
   exercise_order: number | null;
   completed_at: string | null;
@@ -104,11 +105,18 @@ export type SessionMuscleAnalysis = {
   analysis: MuscleLoadAnalysisResult;
 };
 
+export type AdvancedSessionMuscleAnalysis = Omit<SessionMuscleAnalysis, "snapshotSchemaVersion" | "analysis"> & {
+  snapshotSchemaVersion: typeof ADVANCED_SESSION_MUSCLE_SNAPSHOT_SCHEMA_VERSION;
+  analysis: AdvancedExposureResult | BroadCompatibilityResult | null;
+};
+
+export type VersionedSessionMuscleAnalysis = SessionMuscleAnalysis | AdvancedSessionMuscleAnalysis;
+
 function compareText(left: string, right: string) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function assertSupportedSnapshot(snapshot: SessionMuscleSnapshotEnvelope) {
+function supportedSnapshotVersion(snapshot: SessionMuscleSnapshotEnvelope): "v1" | "v2" {
   if (
     snapshot.snapshot_schema_version !== SESSION_MUSCLE_SNAPSHOT_SCHEMA_VERSION ||
     snapshot.taxonomy_version !== MUSCLE_TAXONOMY_VERSION ||
@@ -118,8 +126,18 @@ function assertSupportedSnapshot(snapshot: SessionMuscleSnapshotEnvelope) {
     snapshot.result_schema_version !== MUSCLE_ANALYSIS_RESULT_SCHEMA_VERSION ||
     snapshot.workload_model_version !== RESISTANCE_SETS_WORKLOAD_MODEL
   ) {
+    if (
+      snapshot.snapshot_schema_version === ADVANCED_SESSION_MUSCLE_SNAPSHOT_SCHEMA_VERSION &&
+      snapshot.taxonomy_version === ADVANCED_MUSCLE_ATLAS_VERSION &&
+      snapshot.mapping_schema_version === ADVANCED_MUSCLE_MAPPING_SCHEMA_VERSION &&
+      snapshot.calculation_engine_version === ADVANCED_MUSCLE_CALCULATION_ENGINE_VERSION &&
+      snapshot.threshold_profile_version === ADVANCED_MUSCLE_HEAT_SCALE_VERSION &&
+      snapshot.result_schema_version === ADVANCED_MUSCLE_ANALYSIS_RESULT_SCHEMA_VERSION &&
+      snapshot.workload_model_version === RESISTANCE_SETS_WORKLOAD_MODEL
+    ) return "v2";
     throw new SessionMuscleAnalysisError("unsupported_snapshot_version", "This historical analysis uses an unsupported version.", 409);
   }
+  return "v1";
 }
 
 function globalMappingFor(
@@ -179,8 +197,7 @@ function completedSetCount(item: SessionMuscleSnapshotItem, logs: CompletedLog[]
   )).length;
 }
 
-export function buildSessionMuscleAnalysis(input: BuildSessionMuscleAnalysisInput): SessionMuscleAnalysis {
-  assertSupportedSnapshot(input.snapshot);
+function buildV1SessionMuscleAnalysis(input: BuildSessionMuscleAnalysisInput): SessionMuscleAnalysis {
   const mappings = new Map(input.globalMappings.map((mapping) => [mapping.id, mapping]));
   const workItems = [...input.items].sort((left, right) => left.item_order - right.item_order || compareText(left.id, right.id)).map((item) => {
     const useActual = input.mode === "completed" && item.actual_target_type !== null;
@@ -217,12 +234,34 @@ export function buildSessionMuscleAnalysis(input: BuildSessionMuscleAnalysisInpu
   };
 }
 
+export function buildVersionedSessionMuscleAnalysis(input: BuildSessionMuscleAnalysisInput): VersionedSessionMuscleAnalysis {
+  const version = supportedSnapshotVersion(input.snapshot);
+  if (version === "v1") return buildV1SessionMuscleAnalysis(input);
+  return {
+    sessionId: input.snapshot.workout_session_id,
+    snapshotId: input.snapshot.id,
+    snapshotSchemaVersion: ADVANCED_SESSION_MUSCLE_SNAPSHOT_SCHEMA_VERSION,
+    frozenAt: input.snapshot.frozen_at,
+    source: input.snapshot.source,
+    snapshotCompleteness: input.snapshot.completeness,
+    reasonCodes: [...input.snapshot.reason_codes].sort(compareText),
+    analysis: buildAdvancedSessionMuscleAnalysis(input)
+  };
+}
+
+export function buildSessionMuscleAnalysis(input: BuildSessionMuscleAnalysisInput): SessionMuscleAnalysis {
+  if (supportedSnapshotVersion(input.snapshot) !== "v1") {
+    throw new SessionMuscleAnalysisError("unsupported_snapshot_version", "This analyzer accepts version-one snapshots only.", 409);
+  }
+  return buildV1SessionMuscleAnalysis(input);
+}
+
 export async function getWorkoutSessionMuscleAnalysis(
   supabase: SupabaseClient,
   userId: string,
   sessionId: string,
   mode: MuscleAnalysisMode
-): Promise<SessionMuscleAnalysis> {
+): Promise<VersionedSessionMuscleAnalysis> {
   const snapshotResult = await supabase
     .from("workout_session_muscle_snapshots")
     .select("id,workout_session_id,snapshot_schema_version,taxonomy_version,mapping_schema_version,calculation_engine_version,threshold_profile_version,result_schema_version,workload_model_version,completeness,reason_codes,source,frozen_at")
@@ -260,7 +299,7 @@ export async function getWorkoutSessionMuscleAnalysis(
       mapping_version: mapping.mapping_version,
       schema_version: mapping.schema_version,
       checksum: mapping.checksum,
-      entries: mapping.entries as MuscleMappingEntry[]
+      entries: mapping.entries as readonly unknown[]
     })) as FrozenGlobalMapping[];
   }
 
@@ -274,7 +313,7 @@ export async function getWorkoutSessionMuscleAnalysis(
     completedLogs = (logsResult.data ?? []) as CompletedLog[];
   }
 
-  return buildSessionMuscleAnalysis({
+  return buildVersionedSessionMuscleAnalysis({
     mode,
     snapshot: snapshotResult.data as SessionMuscleSnapshotEnvelope,
     items,
