@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, Dumbbell, GripVert
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ExercisePickerDialog, exerciseKey } from "@/components/workouts/exercise-picker-dialog";
+import { PlanMuscleLoadPanel } from "@/components/workouts/plan-muscle-load-panel";
 import { TrainPageContainer, TrainStickyFooter } from "@/components/workouts/train-ui";
 import { PageHeading } from "@/components/layout/page-heading";
 import { ActionMenu, ActionMenuItem } from "@/components/ui/action-menu";
@@ -31,6 +32,7 @@ type EditorDay = Omit<UserWorkoutPlanDay, "exercises"> & { clientKey: string; se
 type EditorPlan = Omit<UserWorkoutPlan, "days"> & { days: EditorDay[] };
 type StoredEditorDraft = { plan: EditorPlan; baseUpdatedAt: string };
 type SaveState = "idle" | "restored" | "dirty" | "saving" | "saved" | "failed";
+type TrainTranslator = (key: TrainKey, values?: Record<string, string | number>) => string;
 
 const weekDays: Weekday[] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -69,14 +71,26 @@ function plansEqual(left: EditorPlan, right: EditorPlan) {
 
 function exerciseFromLibrary(workout: Workout, dayId: string): EditorExercise {
   return {
-    clientKey: clientKey("exercise"), id: "", plan_day_id: dayId, workout_id: workout.id, source_workout_id: workout.id,
-    exercise_name: workout.name, category: workout.category || "strength", target_muscle: workout.target_muscle || null, equipment: workout.equipment || null,
-    sets: workout.sets ?? 3, reps: workout.reps ?? "8-12", rest_seconds: workout.rest_seconds ?? 75, sort_order: 1, notes: workout.notes ?? null,
-    instructions: workout.instructions, exercise_url: workout.exercise_url ?? null, video_url: workout.video_url ?? null, custom_video_url: workout.custom_video_url ?? null
+    clientKey: clientKey("exercise"),
+    id: "",
+    plan_day_id: dayId,
+    workout_id: workout.id,
+    source_workout_id: workout.id,
+    exercise_name: workout.name,
+    category: workout.category || "strength",
+    target_muscle: workout.target_muscle || null,
+    equipment: workout.equipment || null,
+    sets: workout.sets ?? 3,
+    reps: workout.reps ?? "8-12",
+    rest_seconds: workout.rest_seconds ?? 75,
+    sort_order: 1,
+    notes: workout.notes ?? null,
+    instructions: workout.instructions,
+    exercise_url: workout.exercise_url ?? null,
+    video_url: workout.video_url ?? null,
+    custom_video_url: workout.custom_video_url ?? null
   };
 }
-
-type TrainTranslator = (key: TrainKey, values?: Record<string, string | number>) => string;
 
 function validatePlan(plan: EditorPlan, tr: TrainTranslator) {
   if (!plan.name.trim()) return tr("enterPlanName");
@@ -100,7 +114,7 @@ export function WorkoutPlanEditor() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { dialog, ask } = useConfirm();
-  const { dir, locale, tr } = useTrainTranslation();
+  const { language, dir, locale, tr } = useTrainTranslation();
   const [basePlan, setBasePlan] = useState<EditorPlan | null>(null);
   const [draft, setDraft] = useState<EditorPlan | null>(null);
   const [draftBaseUpdatedAt, setDraftBaseUpdatedAt] = useState<string | null>(null);
@@ -122,15 +136,18 @@ export function WorkoutPlanEditor() {
       try {
         const plan = await getWorkoutPlanById(user.id, params.planId);
         if (!current) return;
-        if (!plan) { setLoadError(tr("planNotFoundEditor")); return; }
+        if (!plan) {
+          setLoadError(tr("planNotFoundEditor"));
+          return;
+        }
         const base = toEditorPlan(plan);
         const stored = readStoredJson<StoredEditorDraft>(draftKey);
         const restored = stored?.plan?.days && stored.baseUpdatedAt ? stored : null;
+        const loadedDraft = restored && !plansEqual(restored.plan, base) ? restored.plan : base;
         setBasePlan(base);
-        setDraft(restored && !plansEqual(restored.plan, base) ? restored.plan : base);
+        setDraft(loadedDraft);
         setDraftBaseUpdatedAt(restored?.baseUpdatedAt ?? base.updated_at);
         setSaveState(restored && !plansEqual(restored.plan, base) ? "restored" : "idle");
-        const loadedDraft = restored && !plansEqual(restored.plan, base) ? restored.plan : base;
         const requestedDay = searchParams.get("day");
         setSelectedDayKey(loadedDraft.days.find((day) => day.id === requestedDay)?.clientKey ?? loadedDraft.days[0]?.clientKey ?? null);
       } catch (error) {
@@ -166,10 +183,24 @@ export function WorkoutPlanEditor() {
 
   function patchPlan(patch: Partial<EditorPlan>) { change((current) => ({ ...current, ...patch })); }
   function patchDay(index: number, patch: Partial<EditorDay>) { change((current) => ({ ...current, days: current.days.map((day, itemIndex) => itemIndex === index ? { ...day, ...patch } : day) })); }
-  function patchExercise(dayIndex: number, exerciseIndex: number, patch: Partial<EditorExercise>) { change((current) => ({ ...current, days: current.days.map((day, itemIndex) => itemIndex === dayIndex ? { ...day, exercises: day.exercises.map((exercise, index) => index === exerciseIndex ? { ...exercise, ...patch } : exercise) } : day) })); }
+  function patchExercise(dayIndex: number, exerciseIndex: number, patch: Partial<EditorExercise>) {
+    change((current) => ({
+      ...current,
+      days: current.days.map((day, itemIndex) => itemIndex === dayIndex
+        ? { ...day, exercises: day.exercises.map((exercise, index) => index === exerciseIndex ? { ...exercise, ...patch } : exercise) }
+        : day)
+    }));
+  }
 
   function moveDay(index: number, direction: -1 | 1) {
-    change((current) => { const next = index + direction; if (next < 0 || next >= current.days.length) return current; const days = [...current.days]; const [day] = days.splice(index, 1); days.splice(next, 0, day); return { ...current, days }; });
+    change((current) => {
+      const next = index + direction;
+      if (next < 0 || next >= current.days.length) return current;
+      const days = [...current.days];
+      const [day] = days.splice(index, 1);
+      days.splice(next, 0, day);
+      return { ...current, days };
+    });
   }
 
   function addDay() {
@@ -185,47 +216,57 @@ export function WorkoutPlanEditor() {
   function removeDay(index: number) {
     if (!draft || draft.days.length <= 1) return;
     const target = draft.days[index];
-    ask({ title: tr("removeNamedDay", { name: target.day_name }), description: tr("removeDayDescription"), confirmLabel: tr("removeDay"), variant: "destructive", onConfirm: () => {
-      change((current) => ({ ...current, days: current.days.filter((_, itemIndex) => itemIndex !== index) }));
-      setSelectedDayKey(draft.days[index - 1]?.clientKey ?? draft.days[index + 1]?.clientKey ?? null);
-    } });
+    ask({
+      title: tr("removeNamedDay", { name: target.day_name }), description: tr("removeDayDescription"), confirmLabel: tr("removeDay"), variant: "destructive",
+      onConfirm: () => {
+        change((current) => ({ ...current, days: current.days.filter((_, itemIndex) => itemIndex !== index) }));
+        setSelectedDayKey(draft.days[index - 1]?.clientKey ?? draft.days[index + 1]?.clientKey ?? null);
+      }
+    });
   }
 
   function addLibraryExercises(dayIndex: number, workouts: Workout[]) {
-    change((current) => ({ ...current, days: current.days.map((day, index) => {
-      if (index !== dayIndex) return day;
-      const existing = new Set(day.exercises.map((exercise) => `${exercise.source_workout_id || exercise.workout_id || exercise.id}-${exercise.exercise_name}-${exercise.target_muscle || ""}`));
-      const additions = workouts.filter((workout) => !existing.has(exerciseKey(workout))).map((workout) => exerciseFromLibrary(workout, day.id));
-      return { ...day, exercises: [...day.exercises, ...additions] };
-    }) }));
+    change((current) => ({
+      ...current,
+      days: current.days.map((day, index) => {
+        if (index !== dayIndex) return day;
+        const existing = new Set(day.exercises.map((exercise) => `${exercise.source_workout_id || exercise.workout_id || exercise.id}-${exercise.exercise_name}-${exercise.target_muscle || ""}`));
+        const additions = workouts.filter((workout) => !existing.has(exerciseKey(workout))).map((workout) => exerciseFromLibrary(workout, day.id));
+        return { ...day, exercises: [...day.exercises, ...additions] };
+      })
+    }));
   }
 
   function moveExercise(dayIndex: number, exerciseIndex: number, direction: -1 | 1) {
-    change((current) => ({ ...current, days: current.days.map((day, index) => {
-      if (index !== dayIndex) return day;
-      const next = exerciseIndex + direction;
-      if (next < 0 || next >= day.exercises.length) return day;
-      const exercises = [...day.exercises]; const [exercise] = exercises.splice(exerciseIndex, 1); exercises.splice(next, 0, exercise);
-      return { ...day, exercises };
-    }) }));
+    change((current) => ({
+      ...current,
+      days: current.days.map((day, index) => {
+        if (index !== dayIndex) return day;
+        const next = exerciseIndex + direction;
+        if (next < 0 || next >= day.exercises.length) return day;
+        const exercises = [...day.exercises];
+        const [exercise] = exercises.splice(exerciseIndex, 1);
+        exercises.splice(next, 0, exercise);
+        return { ...day, exercises };
+      })
+    }));
   }
 
   function removeExercise(dayIndex: number, exerciseIndex: number) {
     const exercise = draft?.days[dayIndex]?.exercises[exerciseIndex];
     if (!exercise) return;
-    ask({ title: tr("removeNamedExercise", { name: exercise.exercise_name || tr("thisExercise") }), description: tr("removeExerciseDescription"), confirmLabel: tr("removeExercise"), variant: "destructive", onConfirm: () => {
-      change((current) => ({ ...current, days: current.days.map((day, index) => index === dayIndex ? { ...day, exercises: day.exercises.filter((_, itemIndex) => itemIndex !== exerciseIndex) } : day) }));
-    } });
+    ask({
+      title: tr("removeNamedExercise", { name: exercise.exercise_name || tr("thisExercise") }), description: tr("removeExerciseDescription"), confirmLabel: tr("removeExercise"), variant: "destructive",
+      onConfirm: () => change((current) => ({ ...current, days: current.days.map((day, index) => index === dayIndex ? { ...day, exercises: day.exercises.filter((_, itemIndex) => itemIndex !== exerciseIndex) } : day) }))
+    });
   }
 
   async function save(options: { navigate?: boolean } = {}): Promise<boolean> {
     if (!draft || !basePlan || !draftBaseUpdatedAt || !user?.id || saveState === "saving") return false;
-    if (validationError) {
-      setValidationAttempted(true);
-      return false;
-    }
+    if (validationError) { setValidationAttempted(true); return false; }
     setValidationAttempted(false);
-    setSaveState("saving"); setSaveError(null);
+    setSaveState("saving");
+    setSaveError(null);
     try {
       await saveWorkoutPlan(user.id, draft.id, toSavePlan(draft), draftBaseUpdatedAt);
       clearStoredValue(draftKey);
@@ -235,7 +276,8 @@ export function WorkoutPlanEditor() {
       return true;
     } catch (error) {
       const message = userSafeError(error, tr("draftPreserved"));
-      setSaveError(message); setSaveState("failed");
+      setSaveError(message);
+      setSaveState("failed");
       toast({ title: tr("couldNotSavePlan"), description: message, variant: "error" });
       return false;
     }
@@ -245,26 +287,14 @@ export function WorkoutPlanEditor() {
     dirty: isDirty,
     applying: saveState === "saving",
     onApply: () => save({ navigate: false }),
-    onDiscard: () => {
-      clearStoredValue(draftKey);
-      if (basePlan) setDraft(basePlan);
-    },
-    copy: {
-      title: tr("unsavedTitle"),
-      description: tr("unsavedDescription"),
-      apply: tr("applyContinue"),
-      discard: tr("discardContinue"),
-      stay: tr("stay")
-    }
+    onDiscard: () => { clearStoredValue(draftKey); if (basePlan) setDraft(basePlan); },
+    copy: { title: tr("unsavedTitle"), description: tr("unsavedDescription"), apply: tr("applyContinue"), discard: tr("discardContinue"), stay: tr("stay") }
   });
 
-  function cancel() {
-    requestNavigation(() => router.push(`/my-workout/plans/${params.planId}`));
-  }
+  function cancel() { requestNavigation(() => router.push(`/my-workout/plans/${params.planId}`)); }
 
   if (loading) return <div className="space-y-4" aria-busy="true"><div className="h-9 w-64 animate-pulse rounded-lg bg-muted" /><div className="h-96 animate-pulse rounded-2xl bg-muted" /></div>;
   if (loadError || !draft) return <ErrorState title={tr("editorUnavailable")} description={loadError || tr("editorLoadFallback")} fallbackHref="/my-workout/plans" fallbackLabel={tr("backToTrain")} />;
-
 
   return (
     <TrainPageContainer className="space-y-6" dir={dir} data-train-editor>
@@ -297,7 +327,7 @@ export function WorkoutPlanEditor() {
             <div className="space-y-2"><Label htmlFor="day-weekday">{tr("weekday")}</Label><Select id="day-weekday" value={selectedDay.weekday ?? ""} onChange={(value) => patchDay(selectedDayIndex, { weekday: (value || null) as Weekday | null })} placeholder={tr("unscheduled")} options={weekdayOptions} /></div>
             <Button variant="ghost" className="min-h-11 text-destructive" onClick={() => removeDay(selectedDayIndex)} disabled={draft.days.length <= 1}><Trash2 className="h-4 w-4" /> {tr("removeDay")}</Button>
             <div className="space-y-2 lg:col-span-3"><Label htmlFor="day-notes">{tr("dayNotes")}</Label><Input id="day-notes" value={selectedDay.notes ?? ""} onChange={(event) => patchDay(selectedDayIndex, { notes: event.target.value || null })} placeholder={tr("dayNotesPlaceholder")} /></div>
-             {validationAttempted && !selectedDay.exercises.length ? <p className="text-sm font-medium text-destructive lg:col-span-3">{selectedDay.day_name}: {tr("addExercisesToContinue")}</p> : null}
+            {validationAttempted && !selectedDay.exercises.length ? <p className="text-sm font-medium text-destructive lg:col-span-3">{selectedDay.day_name}: {tr("addExercisesToContinue")}</p> : null}
           </div>
 
           <section className="space-y-3" aria-labelledby="editor-selected-exercises"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 id="editor-selected-exercises" className="text-lg font-semibold">{tr("selectedExercises")}</h3><p className="text-sm text-muted-foreground">{tr("chooseThenEdit")}</p></div><div className="flex items-center gap-2"><Badge variant="outline">{selectedDay.exercises.length}</Badge><Button variant="outline" className="min-h-11" onClick={() => setPickerOpen(true)}><Plus className="h-4 w-4" /> {tr("addExercises")}</Button></div></div>
@@ -308,11 +338,7 @@ export function WorkoutPlanEditor() {
                     <div className="space-y-2"><Label htmlFor={`exercise-name-${exercise.clientKey}`}>{tr("exerciseNumber", { count: exerciseIndex + 1 })}</Label><Input id={`exercise-name-${exercise.clientKey}`} value={exercise.exercise_name} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { exercise_name: event.target.value })} placeholder={tr("exerciseName")} /><p className="truncate text-xs text-muted-foreground">{exercise.target_muscle || tr("general")} · {exercise.equipment || tr("noEquipment")}</p></div>
                     <ActionMenu label={`${tr("moreActions")}: ${exercise.exercise_name || tr("thisExercise")}`} visibleLabel={tr("moreActions")} triggerVariant="ghost"><ActionMenuItem disabled={exerciseIndex === 0} onSelect={() => moveExercise(selectedDayIndex, exerciseIndex, -1)}><ArrowUp className="me-2 inline h-4 w-4" />{tr("moveUp", { name: exercise.exercise_name || tr("thisExercise") })}</ActionMenuItem><ActionMenuItem disabled={exerciseIndex === selectedDay.exercises.length - 1} onSelect={() => moveExercise(selectedDayIndex, exerciseIndex, 1)}><ArrowDown className="me-2 inline h-4 w-4" />{tr("moveDown", { name: exercise.exercise_name || tr("thisExercise") })}</ActionMenuItem><ActionMenuItem destructive onSelect={() => removeExercise(selectedDayIndex, exerciseIndex)}><Trash2 className="me-2 inline h-4 w-4" />{tr("removeItem", { name: exercise.exercise_name || tr("thisExercise") })}</ActionMenuItem></ActionMenu>
                   </div>
-                  <div className="mt-3 grid grid-cols-3 gap-3 xl:max-w-md">
-                    <div className="space-y-2"><Label htmlFor={`sets-${exercise.clientKey}`}>{tr("sets")}</Label><Input id={`sets-${exercise.clientKey}`} type="number" min={1} value={exercise.sets ?? 3} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { sets: Number(event.target.value) || 0 })} /></div>
-                    <div className="space-y-2"><Label htmlFor={`reps-${exercise.clientKey}`}>{tr("reps")}</Label><Input id={`reps-${exercise.clientKey}`} value={exercise.reps ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { reps: event.target.value || null })} /></div>
-                    <div className="space-y-2"><Label htmlFor={`rest-${exercise.clientKey}`}>{tr("restSeconds")}</Label><Input id={`rest-${exercise.clientKey}`} type="number" min={0} value={exercise.rest_seconds ?? 75} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { rest_seconds: Number(event.target.value) || 0 })} /></div>
-                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-3 xl:max-w-md"><div className="space-y-2"><Label htmlFor={`sets-${exercise.clientKey}`}>{tr("sets")}</Label><Input id={`sets-${exercise.clientKey}`} type="number" min={1} value={exercise.sets ?? 3} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { sets: Number(event.target.value) || 0 })} /></div><div className="space-y-2"><Label htmlFor={`reps-${exercise.clientKey}`}>{tr("reps")}</Label><Input id={`reps-${exercise.clientKey}`} value={exercise.reps ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { reps: event.target.value || null })} /></div><div className="space-y-2"><Label htmlFor={`rest-${exercise.clientKey}`}>{tr("restSeconds")}</Label><Input id={`rest-${exercise.clientKey}`} type="number" min={0} value={exercise.rest_seconds ?? 75} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { rest_seconds: Number(event.target.value) || 0 })} /></div></div>
                   <details className="mt-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-2"><summary className="min-h-11 cursor-pointer content-center font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{tr("advancedDetails")}</summary><div className="mt-3 grid gap-3 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor={`muscle-${exercise.clientKey}`}>{tr("target")}</Label><Input id={`muscle-${exercise.clientKey}`} value={exercise.target_muscle ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { target_muscle: event.target.value || null })} placeholder={tr("targetPlaceholder")} /></div><div className="space-y-2"><Label htmlFor={`equipment-${exercise.clientKey}`}>{tr("equipment")}</Label><Input id={`equipment-${exercise.clientKey}`} value={exercise.equipment ?? ""} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { equipment: event.target.value || null })} /></div><div className="space-y-2 sm:col-span-2"><Label htmlFor={`notes-${exercise.clientKey}`}>{tr("notes")}</Label><Input id={`notes-${exercise.clientKey}`} value={userFacingExerciseNote(exercise.notes)} onChange={(event) => patchExercise(selectedDayIndex, exerciseIndex, { notes: mergeUserFacingExerciseNote(exercise.notes, event.target.value) })} /></div></div></details>
                 </article>
               ))}
@@ -322,13 +348,10 @@ export function WorkoutPlanEditor() {
         </CardContent></Card> : null}
       </div>
 
+      <PlanMuscleLoadPanel days={draft.days} activeDayIndex={Math.max(0, selectedDayIndex)} defaultScope="current_day" variant="builder" language={language} />
+
       {(validationAttempted && validationError) || saveError ? <div role="alert" tabIndex={-1} className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm font-medium text-destructive">{validationError || saveError}</div> : null}
-      <TrainStickyFooter>
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
-          <div className="text-sm"><p className="font-semibold">{validationAttempted && validationError ? tr("validationIssue") : saveState === "saving" ? tr("saving") : saveState === "saved" ? tr("saved") : isDirty ? tr("unsavedChanges") : tr("noUnsavedChanges")}</p><p className="text-muted-foreground">{tr("atomicSaveNotice")}</p></div>
-          <Button className="min-h-[52px] w-full sm:w-auto" onClick={() => void save()} disabled={!isDirty || saveState === "saving"}>{saveState === "saved" ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}{saveState === "saving" ? tr("saving") : tr("saveChanges")}</Button>
-        </div>
-      </TrainStickyFooter>
+      <TrainStickyFooter><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3"><div className="text-sm"><p className="font-semibold">{validationAttempted && validationError ? tr("validationIssue") : saveState === "saving" ? tr("saving") : saveState === "saved" ? tr("saved") : isDirty ? tr("unsavedChanges") : tr("noUnsavedChanges")}</p><p className="text-muted-foreground">{tr("atomicSaveNotice")}</p></div><Button className="min-h-[52px] w-full sm:w-auto" onClick={() => void save()} disabled={!isDirty || saveState === "saving"}>{saveState === "saved" ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}{saveState === "saving" ? tr("saving") : tr("saveChanges")}</Button></div></TrainStickyFooter>
       {selectedDay && selectedDayIndex >= 0 ? <ExercisePickerDialog open={pickerOpen} onOpenChange={setPickerOpen} dayName={selectedDay.day_name} existingKeys={selectedDay.exercises.map((exercise) => exerciseKey({ id: exercise.source_workout_id || exercise.workout_id || "", name: exercise.exercise_name, target_muscle: exercise.target_muscle || "", catalog_slug: null }))} onAdd={(workouts) => addLibraryExercises(selectedDayIndex, workouts)} /> : null}
       {dialog}
       {unsavedDialog}
