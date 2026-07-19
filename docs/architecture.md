@@ -1,33 +1,33 @@
 # Plaivra architecture and migration state
 
-Current product, platform, security, and domain authority remains in the focused documents linked from the repository `README.md`. This file records the migration-chain state required by the release preflight and does not replace those focused architecture documents.
+Current product, platform, security, and domain authority remains in the focused documents linked from the repository `README.md`. This file records the migration-chain state required by release preflight and does not replace those documents.
 
 ## Production baseline
 
 Production project `bkwezjxvapaeasfvlhvv` is reconciled through:
 
 ```text
-20260719000336_muscle_intelligence_phase4a_required_corrections.sql
+20260719094718_muscle_intelligence_phase4b_advanced_mappings_part_06.sql
 ```
 
-The release compatibility marker remains `20260717051011`. Physical schema advancement and compatibility-marker advancement are intentionally separate operations.
+There are 53 applied repository migrations, with no pending or unresolved migration entry. The release compatibility marker remains `20260717051011`; physical schema advancement and compatibility-marker advancement are intentionally separate operations.
 
-## Pending Phase 4B migration chain
+## Applied Phase 4B migration chain
 
-The following six forward-only migrations are pending exact production application and verification on Draft PR #71:
+The reviewed Phase 4B chain was applied exactly once in this order:
 
 ```text
-20260719210001_muscle_intelligence_phase4b_advanced_mappings_part_01.sql
-20260719210002_muscle_intelligence_phase4b_advanced_mappings_part_02.sql
-20260719210003_muscle_intelligence_phase4b_advanced_mappings_part_03.sql
-20260719210004_muscle_intelligence_phase4b_advanced_mappings_part_04.sql
-20260719210005_muscle_intelligence_phase4b_advanced_mappings_part_05.sql
-20260719210006_muscle_intelligence_phase4b_advanced_mappings_part_06.sql
+20260719094159_muscle_intelligence_phase4b_advanced_mappings_part_01.sql
+20260719094350_muscle_intelligence_phase4b_advanced_mappings_part_02.sql
+20260719094445_muscle_intelligence_phase4b_advanced_mappings_part_03.sql
+20260719094536_muscle_intelligence_phase4b_advanced_mappings_part_04.sql
+20260719094623_muscle_intelligence_phase4b_advanced_mappings_part_05.sql
+20260719094718_muscle_intelligence_phase4b_advanced_mappings_part_06.sql
 ```
 
-They must be applied in filename order. Their scope is limited to publishing the reviewed global `exercise_muscle_mapping_v2` records for the existing 60 curated exercises while preserving all V1 mappings.
+Production verification confirms 60 preserved published V1 mappings, 60 reviewed published V2 mappings, 453 V2 regional entries, zero checksum drift, zero custom or non-curated V2 publication, and zero V2 workout-session snapshots.
 
-They do not authorize:
+Phase 4B does not authorize:
 
 - custom-exercise V2 publication;
 - V2 workout-session snapshot cutover;
@@ -35,4 +35,4 @@ They do not authorize:
 - compatibility-marker advancement;
 - deployment, merge, or Phase 4C work.
 
-The machine-readable state is `supabase/migration-ledger.json`. The executable verification is `supabase/verification/muscle-intelligence-phase4b.sql`.
+The machine-readable authority is `supabase/migration-ledger.json`. The executable production verification is `supabase/verification/muscle-intelligence-phase4b.sql`.
