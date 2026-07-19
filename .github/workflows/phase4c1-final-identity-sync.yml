@@ -1,0 +1,114 @@
+name: Phase 4C1 Final Identity Sync
+
+on:
+  push:
+    branches:
+      - phase4c1-runtime-v2-cutover
+    paths:
+      - .github/workflows/phase4c1-final-identity-sync.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase4c1-runtime-v2-cutover
+          fetch-depth: 0
+      - name: Align repository with final production migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import json
+
+          mapping = {
+              '20260719221012_muscle_intelligence_phase4c1_runtime_v2_cutover.sql': '20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql',
+              '20260719221100_muscle_intelligence_phase4c1_snapshot_support.sql': '20260719223010_muscle_intelligence_phase4c1_snapshot_support.sql',
+              '20260719221152_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql': '20260719223020_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql',
+              '20260719221248_muscle_intelligence_phase4c1_direct_session_v2.sql': '20260719223030_muscle_intelligence_phase4c1_direct_session_v2.sql',
+              '20260719221331_muscle_intelligence_phase4c1_replacement_v2.sql': '20260719223040_muscle_intelligence_phase4c1_replacement_v2.sql',
+              '20260719221407_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql': '20260719223050_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql',
+              '20260719221450_muscle_intelligence_phase4c1_terminal_history_guard.sql': '20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql',
+              '20260719221508_muscle_intelligence_phase4c1_set_type_refresh.sql': '20260719223200_muscle_intelligence_phase4c1_set_type_refresh.sql',
+              '20260719221530_muscle_intelligence_phase4c1_trusted_log_cleanup.sql': '20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup.sql',
+          }
+
+          migrations = Path('supabase/migrations')
+          for old_name, new_name in mapping.items():
+              old_path = migrations / old_name
+              new_path = migrations / new_name
+              if old_path.exists():
+                  if new_path.exists():
+                      raise SystemExit(f'Duplicate target exists: {new_name}')
+                  old_path.rename(new_path)
+              elif not new_path.exists():
+                  raise SystemExit(f'Missing migration: {old_name}')
+
+          text_paths = [
+              Path('README.md'),
+              Path('docs/architecture/migration-ledger-reconciliation.md'),
+              Path('lib/product/muscle-intelligence-phase4c1.test.ts'),
+              Path('lib/product/muscle-intelligence-phase4c1-set-type.test.ts'),
+          ]
+          for path in text_paths:
+              text = path.read_text()
+              for old_name, new_name in mapping.items():
+                  text = text.replace(old_name, new_name)
+              text = text.replace('20260719221530', '20260719223300')
+              path.write_text(text)
+
+          ledger_path = Path('supabase/migration-ledger.json')
+          ledger = json.loads(ledger_path.read_text())
+          by_file = {entry['localFile']: entry for entry in ledger['entries']}
+          for old_name, new_name in mapping.items():
+              entry = by_file.get(old_name) or by_file.get(new_name)
+              if entry is None:
+                  raise SystemExit(f'Ledger entry missing: {old_name}')
+              version, name_sql = new_name.split('_', 1)
+              entry['localFile'] = new_name
+              entry['productionVersion'] = version
+              entry['productionName'] = name_sql.removesuffix('.sql')
+              entry['state'] = 'applied'
+              entry['note'] = (
+                  'Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. '
+                  'Production history was reconciled to this reviewed repository identity without replaying SQL. '
+                  'Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, '
+                  'kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.'
+              )
+          ledger['entries'].sort(key=lambda entry: entry['localFile'])
+          ledger['capturedAt'] = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+          ledger['productionMigrationCount'] = 62
+          ledger['pendingCount'] = 0
+          ledger['unresolvedCount'] = 0
+          ledger['historyRepair'] = {
+              'state': 'reconciled',
+              'schemaAppliedUntrackedCount': 0,
+              'pendingCount': 0,
+              'unresolvedCount': 0,
+              'note': 'Production migration history is reconciled through 20260719223300 with all 62 repository migrations recorded exactly once. Do not replay any applied migration.'
+          }
+          ledger_path.write_text(json.dumps(ledger, indent=2) + '\n')
+
+          check = json.loads(ledger_path.read_text())
+          assert check['productionMigrationCount'] == 62
+          assert check['pendingCount'] == 0 and check['unresolvedCount'] == 0
+          assert check['historyRepair']['state'] == 'reconciled'
+          assert check['entries'][-1]['productionVersion'] == '20260719223300'
+          assert all((migrations / entry['localFile']).exists() for entry in check['entries'])
+          PY
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add README.md docs/architecture/migration-ledger-reconciliation.md \
+            lib/product/muscle-intelligence-phase4c1.test.ts \
+            lib/product/muscle-intelligence-phase4c1-set-type.test.ts \
+            supabase/migration-ledger.json supabase/migrations
+          git commit -m 'chore(db): align Phase 4C.1 with final production identities'
+          git push origin HEAD:phase4c1-runtime-v2-cutover
