@@ -69,9 +69,9 @@ export type SessionMuscleSnapshotItem = {
   actual_mapping_schema_version: string | null;
   actual_mapping_checksum: string | null;
   actual_custom_mapping_entries: unknown;
-  performed_total_sets: number | null;
-  performed_qualifying_sets: number | null;
-  performed_frozen_at: string | null;
+  performed_total_sets?: number | null;
+  performed_qualifying_sets?: number | null;
+  performed_frozen_at?: string | null;
 };
 
 export type FrozenGlobalMapping = {
