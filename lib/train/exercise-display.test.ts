@@ -74,7 +74,7 @@ describe("member-facing exercise terminology", () => {
       exercises: Array<{ name: string; localizations: Record<string, { name: string }> }>;
     };
     expect(registry.exercises).toHaveLength(60);
-    expect(registry.status).not.toBe("approved_planning_input_not_implemented");
+    expect(registry.status).toBe("implemented_and_published");
     for (const exercise of registry.exercises) {
       expect(exercise.name).not.toMatch(/[_.]/);
       for (const locale of ["en", "de", "ar"]) {
@@ -101,7 +101,7 @@ describe("member-facing exercise terminology", () => {
     expect(browser).toContain("workout.target_muscle || workout.muscle_category");
     expect(today).toContain("exercise.target_muscle || exercise.muscle_category");
     expect(details).not.toContain("{displayTarget ? <Badge>{displayTarget}</Badge> : null}");
-    expect(details).not.toContain("{displayEquipment ? <Badge variant="outline">{displayEquipment}</Badge> : null}");
+    expect(details).not.toContain('{displayEquipment ? <Badge variant="outline">{displayEquipment}</Badge> : null}');
   });
 
   it("keeps plan review and plan editing metadata friendly without changing canonical identities", () => {
