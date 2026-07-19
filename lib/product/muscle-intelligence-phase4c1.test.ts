@@ -71,6 +71,9 @@ describe("Muscle Intelligence Phase 4C.1 runtime cutover", () => {
     expect(verification).toContain("exercise_logs_terminal_immutable");
     expect(verification).toContain("workout_sessions_terminal_delete_guard");
     expect(verification).toContain("terminal V2 session is missing immutable performed workload");
-    expect(verification).toContain("Phase 4C.1 must not advance the compatibility marker independently");
+    expect(verification).toContain("20260711014500");
+    expect(verification).toContain("20260717051011");
+    expect(verification).toContain("unsupported compatibility marker");
+    expect(verification).not.toMatch(/update\s+public\.release_schema_compatibility/i);
   });
 });
