@@ -152,7 +152,7 @@ describe("workout library bounded pagination", () => {
     }), "test-catalog-group");
   });
 
-  it("loads complete canonical metadata including legacy compatibility dimensions", async () => {
+  it("loads complete canonical metadata with member-facing labels and stable request values", async () => {
     catalogClient.getCatalogFilters.mockResolvedValue({
       data: {
         sports: [], sessionTypes: [], sessionPhases: [], trainingGoals: [],
@@ -171,10 +171,10 @@ describe("workout library bounded pagination", () => {
     const result = await getCanonicalWorkoutFilterOptionsWithStatus("en");
 
     expect(result.data).toMatchObject({
-      exerciseTypes: [{ value: "strength", label: "Strength", aliases: [] }],
+      exerciseTypes: [{ value: "strength", label: "Strength Training", aliases: [] }],
       equipmentRequired: [{ value: "barbell", label: "Barbell", aliases: [] }],
       experienceLevels: [{ value: "beginner", label: "Beginner", aliases: [] }],
-      primaryMuscles: [{ value: "pectoralis_major", label: "Pectoralis Major", aliases: [] }],
+      primaryMuscles: [{ value: "pectoralis_major", label: "Chest", aliases: [] }],
       secondaryMuscles: [{ value: "triceps", label: "Triceps", aliases: [] }],
       muscleCategories: [{ value: "upper_body", label: "Upper Body", aliases: [] }],
       mechanics: [{ value: "horizontal_push", label: "Horizontal Push", aliases: [] }],

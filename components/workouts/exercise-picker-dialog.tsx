@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/select-field";
 import { CardGridSkeleton } from "@/components/ui/state-views";
 import { userSafeError } from "@/lib/error-formatting";
 import { useTrainTranslation } from "@/lib/i18n/train";
+import { formatExerciseDisplayList, formatExerciseDisplayValue, type ExerciseDisplayDomain } from "@/lib/train/exercise-display";
 import { getMuscleIntelligenceCopy } from "@/lib/train/muscle-intelligence/muscle-intelligence-ui-copy";
 import { createCatalogRequestGroupId } from "@/services/activity-catalog/client";
 import {
@@ -41,8 +42,8 @@ function exerciseKey(exercise: Pick<Workout, "id" | "name" | "target_muscle" | "
   return `legacy:${normalizeIdentityPart(exercise.name)}:${normalizeIdentityPart(exercise.target_muscle)}`;
 }
 
-function optionLabel(options: WorkoutFilterOption[], value: string) {
-  return options.find((option) => option.value === value)?.label ?? value;
+function optionLabel(options: WorkoutFilterOption[], value: string, language: "en" | "de" | "ar", domain: ExerciseDisplayDomain) {
+  return options.find((option) => option.value === value)?.label ?? formatExerciseDisplayValue(value, language, domain);
 }
 
 function isAbortError(error: unknown) {
@@ -329,14 +330,14 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
 
   const hasFilters = Boolean(query || muscle || equipment || difficulty || muscleCategory || secondaryMuscle || forceType || exerciseType || mechanics);
   const activeFilterChips = [
-    muscle ? { id: "muscle", label: optionLabel(muscleOptions, muscle), clear: () => setMuscle("") } : null,
-    equipment ? { id: "equipment", label: optionLabel(equipmentOptions, equipment), clear: () => setEquipment("") } : null,
-    difficulty ? { id: "difficulty", label: optionLabel(difficultyOptions, difficulty), clear: () => setDifficulty("") } : null,
-    muscleCategory ? { id: "muscle-category", label: optionLabel(muscleCategoryOptions, muscleCategory), clear: () => setMuscleCategory("") } : null,
-    secondaryMuscle ? { id: "secondary-muscle", label: optionLabel(secondaryMuscleOptions, secondaryMuscle), clear: () => setSecondaryMuscle("") } : null,
-    forceType ? { id: "force-type", label: optionLabel(forceTypeOptions, forceType), clear: () => setForceType("") } : null,
-    exerciseType ? { id: "exercise-type", label: optionLabel(exerciseTypeOptions, exerciseType), clear: () => setExerciseType("") } : null,
-    mechanics ? { id: "mechanics", label: optionLabel(mechanicsOptions, mechanics), clear: () => setMechanics("") } : null
+    muscle ? { id: "muscle", label: optionLabel(muscleOptions, muscle, language, "muscle"), clear: () => setMuscle("") } : null,
+    equipment ? { id: "equipment", label: optionLabel(equipmentOptions, equipment, language, "equipment"), clear: () => setEquipment("") } : null,
+    difficulty ? { id: "difficulty", label: optionLabel(difficultyOptions, difficulty, language, "difficulty"), clear: () => setDifficulty("") } : null,
+    muscleCategory ? { id: "muscle-category", label: optionLabel(muscleCategoryOptions, muscleCategory, language, "muscle"), clear: () => setMuscleCategory("") } : null,
+    secondaryMuscle ? { id: "secondary-muscle", label: optionLabel(secondaryMuscleOptions, secondaryMuscle, language, "muscle"), clear: () => setSecondaryMuscle("") } : null,
+    forceType ? { id: "force-type", label: optionLabel(forceTypeOptions, forceType, language, "force"), clear: () => setForceType("") } : null,
+    exerciseType ? { id: "exercise-type", label: optionLabel(exerciseTypeOptions, exerciseType, language, "category"), clear: () => setExerciseType("") } : null,
+    mechanics ? { id: "mechanics", label: optionLabel(mechanicsOptions, mechanics, language, "movement"), clear: () => setMechanics("") } : null
   ].filter((chip): chip is { id: string; label: string; clear: () => void } => Boolean(chip));
 
   return (
@@ -395,7 +396,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
             const ineligible = replacementMode && !candidatePending && candidateEligibility?.eligible !== true;
             const disabled = duplicate || candidatePending || ineligible || Boolean(replacementMode && eligibilityError);
             const guideUrl = exercise.custom_video_url || exercise.video_url || exercise.exercise_url;
-            return <article key={key} className={`flex min-h-[170px] flex-col rounded-2xl border p-4 ${disabled ? "border-border/60 bg-muted/30" : isSelected ? "border-primary bg-primary/5 ring-1 ring-primary/20" : isFocused ? "border-primary/50 bg-card" : "bg-card"}`} data-picker-exercise-card><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words text-base font-semibold leading-6">{exercise.name}</h3><p className="mt-1 break-words text-sm text-muted-foreground">{exercise.target_muscle} · {exercise.equipment}</p></div>{exercise.difficulty ? <Badge variant="outline" className="shrink-0">{exercise.difficulty}</Badge> : null}</div><p className="mt-3 line-clamp-2 text-sm leading-5 text-muted-foreground">{exercise.instructions}</p>{replacementMode && candidatePending ? <p className="mt-2 text-xs text-muted-foreground">Verifying tracked replacement eligibility…</p> : null}{replacementMode && ineligible ? <p className="mt-2 text-xs text-muted-foreground">{replacementEligibilityMessage(candidateEligibility?.reason)}</p> : null}<div className="mt-auto grid gap-2 pt-4 sm:grid-cols-2"><Button type="button" variant={isSelected ? "default" : "outline"} className="min-h-11 w-full" disabled={disabled} aria-pressed={isSelected} onClick={() => toggle(exercise)}>{duplicate || isSelected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{duplicate ? tr("alreadyAdded") : isSelected ? tr("deselect") : ineligible ? "Unavailable" : candidatePending ? "Checking…" : tr("select")}</Button><Button type="button" variant={isFocused ? "default" : "outline"} className="min-h-11 w-full" aria-pressed={isFocused} onClick={() => setFocusedExercise(exercise)}><Eye className="h-4 w-4" />{muscleCopy.previewAction}</Button>{guideUrl ? <Button asChild type="button" variant="ghost" className="min-h-11 sm:col-span-2"><a href={guideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" />{tr("viewGuide")}</a></Button> : null}</div></article>;
+            return <article key={key} className={`flex min-h-[170px] flex-col rounded-2xl border p-4 ${disabled ? "border-border/60 bg-muted/30" : isSelected ? "border-primary bg-primary/5 ring-1 ring-primary/20" : isFocused ? "border-primary/50 bg-card" : "bg-card"}`} data-picker-exercise-card><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words text-base font-semibold leading-6">{exercise.name}</h3><p className="mt-1 break-words text-sm text-muted-foreground">{formatExerciseDisplayList(exercise.target_muscle, language, "muscle")} · {formatExerciseDisplayList(exercise.equipment, language, "equipment")}</p></div>{exercise.difficulty ? <Badge variant="outline" className="shrink-0">{formatExerciseDisplayValue(exercise.difficulty, language, "difficulty")}</Badge> : null}</div><p className="mt-3 line-clamp-2 text-sm leading-5 text-muted-foreground">{exercise.instructions}</p>{replacementMode && candidatePending ? <p className="mt-2 text-xs text-muted-foreground">Verifying tracked replacement eligibility…</p> : null}{replacementMode && ineligible ? <p className="mt-2 text-xs text-muted-foreground">{replacementEligibilityMessage(candidateEligibility?.reason)}</p> : null}<div className="mt-auto grid gap-2 pt-4 sm:grid-cols-2"><Button type="button" variant={isSelected ? "default" : "outline"} className="min-h-11 w-full" disabled={disabled} aria-pressed={isSelected} onClick={() => toggle(exercise)}>{duplicate || isSelected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{duplicate ? tr("alreadyAdded") : isSelected ? tr("deselect") : ineligible ? "Unavailable" : candidatePending ? "Checking…" : tr("select")}</Button><Button type="button" variant={isFocused ? "default" : "outline"} className="min-h-11 w-full" aria-pressed={isFocused} onClick={() => setFocusedExercise(exercise)}><Eye className="h-4 w-4" />{muscleCopy.previewAction}</Button>{guideUrl ? <Button asChild type="button" variant="ghost" className="min-h-11 sm:col-span-2"><a href={guideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" />{tr("viewGuide")}</a></Button> : null}</div></article>;
           })}</div>{results.length && (pagination.hasMore || loadMoreError) ? <div className="mt-5 flex flex-col items-center gap-3" data-picker-load-more>{loadMoreError ? <div role="alert" className="w-full rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm">{loadMoreError}</div> : null}{pagination.hasMore ? <Button type="button" variant="outline" className="min-h-12 min-w-40" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? tr("loadingLabel") : tr("loadMore")}</Button> : null}</div> : null}</> : null}
           {!loading && !error && !results.length ? <div className="mt-4 grid min-h-40 place-items-center rounded-2xl border border-dashed text-center"><div><Dumbbell className="mx-auto mb-2 h-6 w-6 text-muted-foreground" /><p className="font-medium">{tr("noExercisesFound")}</p><p className="text-sm text-muted-foreground">{tr("broaderSearch")}</p></div></div> : null}
         </div>

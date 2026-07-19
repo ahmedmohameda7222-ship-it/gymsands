@@ -39,6 +39,7 @@ import { resolveTodayWorkout, todayWorkoutActionHref, workoutSessionLocalDate } 
 import { logRecoverableError, technicalErrorDetails, userSafeError } from "@/lib/error-formatting";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
 import { useTrainTranslation } from "@/lib/i18n/train";
+import { formatExerciseDisplayValue } from "@/lib/train/exercise-display";
 import {
   buildTrainQuickPromptContext,
   clearedTrainQuickPromptContext,
@@ -601,7 +602,7 @@ function TodayCard({
   statusError: string | null;
   onRetryStatus: () => Promise<void>;
 }) {
-  const { locale, tr } = useTrainTranslation();
+  const { language, locale, tr } = useTrainTranslation();
   const preview = day?.exercises.slice(0, 3) ?? [];
   const remaining = Math.max(0, (day?.exercises.length ?? 0) - preview.length);
   const duration = plan ? (plan as PlanMeta).session_duration_minutes : null;
@@ -652,7 +653,7 @@ function TodayCard({
                 {preview.map((exercise, index) => (
                   <li key={exercise.plan_exercise_id ?? exercise.id} className="flex min-w-0 items-center gap-3 rounded-xl border border-border/60 bg-background/70 p-2.5">
                     <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">{index + 1}</span>
-                    <span className="min-w-0"><span className="block truncate text-sm font-semibold">{exercise.name}</span><span className="block text-xs text-muted-foreground">{exercise.sets ?? 3} × {exercise.reps ?? "8–12"}{exercise.target_muscle ? ` · ${exercise.target_muscle}` : ""}</span></span>
+                    <span className="min-w-0"><span className="block truncate text-sm font-semibold">{exercise.name}</span><span className="block text-xs text-muted-foreground">{exercise.sets ?? 3} × {exercise.reps ?? "8–12"}{exercise.target_muscle ? ` · ${formatExerciseDisplayValue(exercise.target_muscle, language, "muscle")}` : ""}</span></span>
                   </li>
                 ))}
                 {remaining ? <li className="flex min-h-12 items-center rounded-xl border border-dashed border-border/70 px-3 text-sm font-medium text-muted-foreground">{tr("moreExercises", { count: remaining })}</li> : null}

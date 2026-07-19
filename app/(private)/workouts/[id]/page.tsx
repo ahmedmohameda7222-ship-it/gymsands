@@ -22,6 +22,7 @@ import { findExerciseVideo } from "@/services/workouts/video-matching";
 import { userSafeError } from "@/lib/error-formatting";
 import { cn } from "@/lib/utils";
 import { useTrainTranslation } from "@/lib/i18n/train";
+import { formatExerciseDisplayList, formatExerciseDisplayValue } from "@/lib/train/exercise-display";
 import type { ExerciseLog, ExerciseVideo, Workout, WorkoutSessionSummary } from "@/types";
 
 function normalizeExerciseName(value: string) {
@@ -99,7 +100,7 @@ export default function WorkoutDetailsPage() {
   const { user } = useAuth();
   const userId = user?.id;
   const { toast } = useToast();
-  const { dir, locale, tr } = useTrainTranslation();
+  const { language, dir, locale, tr } = useTrainTranslation();
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [video, setVideo] = useState<ExerciseVideo | null>(null);
   const [customVideoUrl, setCustomVideoUrl] = useState("");
@@ -211,6 +212,12 @@ export default function WorkoutDetailsPage() {
       ? { id: workout.id, exercise_name: workout.name, category_type: workout.category, category: workout.target_muscle, exercise_url: guideUrl ?? "", video_url: customVideoUrl, instructions: workout.instructions, source: "user_custom", is_global: true }
       : null;
   const secondaryMuscles = workout.secondary_muscles ?? video?.secondary_muscles ?? [];
+  const displayTarget = formatExerciseDisplayList(workout.target_muscle || workout.muscle_category, language, "muscle");
+  const displayEquipment = formatExerciseDisplayList(workout.equipment_required || workout.equipment, language, "equipment");
+  const displayDifficulty = formatExerciseDisplayValue(workout.experience_level || workout.difficulty, language, "difficulty");
+  const displayMovement = formatExerciseDisplayValue(workout.movement_pattern || workout.mechanics || workout.category, language, "movement");
+  const displayForce = formatExerciseDisplayValue(workout.force_type, language, "force");
+  const displaySecondary = formatExerciseDisplayList(secondaryMuscles, language, "muscle");
   const favorite = favoriteIds.includes(workout.id);
   const mistakes = workout.notes && !workout.notes.startsWith("http") && /mistake|avoid|form/i.test(workout.notes) ? workout.notes : tr("noneSaved");
   const customVideoInvalid = hasInvalidUrl(customVideoDraft);
@@ -300,7 +307,7 @@ export default function WorkoutDetailsPage() {
     <TrainPageContainer className="space-y-6" dir={dir}>
       <PageHeading
         title={workout.name}
-        description={metadataLine(workout.target_muscle, workout.equipment, workout.difficulty)}
+        description={metadataLine(displayTarget, displayEquipment, displayDifficulty)}
         action={
           <div className="flex flex-wrap gap-2">
             <Button className="min-h-12" variant={favorite ? "default" : "outline"} onClick={toggleFavorite} disabled={isFavoritePending} aria-busy={isFavoritePending}>
@@ -320,23 +327,15 @@ export default function WorkoutDetailsPage() {
           <Card>
             <CardHeader><CardTitle>{tr("details")}</CardTitle></CardHeader>
             <CardContent className="space-y-5">
-              <div className="flex flex-wrap gap-2">
-                <Badge>{workout.muscle_category || workout.target_muscle}</Badge>
-                <Badge variant="outline">{workout.equipment_required || workout.equipment}</Badge>
-                <Badge variant="outline">{workout.experience_level || workout.difficulty}</Badge>
-                {!workout.is_global ? <Badge variant="success">{tr("custom")}</Badge> : null}
-                {workout.mechanics ? <Badge variant="outline">{workout.mechanics}</Badge> : null}
-                {workout.force_type ? <Badge variant="outline">{workout.force_type}</Badge> : null}
-              </div>
+              {!workout.is_global ? <div><Badge variant="success">{tr("custom")}</Badge></div> : null}
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <Detail label={tr("exerciseName")} value={workout.name} />
-                <Detail label={tr("target")} value={workout.muscle_category || workout.target_muscle} />
-                <Detail label={tr("secondaryMuscle")} value={secondaryMuscles.length ? secondaryMuscles.join(", ") : tr("noneSaved")} />
-                <Detail label={tr("equipment")} value={workout.equipment_required || workout.equipment} />
-                <Detail label={tr("mechanics")} value={workout.mechanics || workout.category} />
-                <Detail label={tr("forceType")} value={workout.force_type || tr("noneSaved")} />
-                <Detail label={tr("difficulty")} value={workout.experience_level || workout.difficulty} />
+                <Detail label={tr("primaryMuscle")} value={displayTarget || tr("noneSaved")} />
+                <Detail label={tr("secondaryMuscle")} value={displaySecondary || tr("noneSaved")} />
+                <Detail label={tr("equipment")} value={displayEquipment || tr("noneSaved")} />
+                <Detail label={tr("mechanics")} value={displayMovement || tr("noneSaved")} />
+                <Detail label={tr("forceType")} value={displayForce || tr("noneSaved")} />
+                <Detail label={tr("difficulty")} value={displayDifficulty || tr("noneSaved")} />
               </div>
 
               <TextPanel title={tr("instructions")} text={video?.instructions || workout.instructions} fallback={tr("noneSaved")} />
@@ -394,7 +393,7 @@ export default function WorkoutDetailsPage() {
             <CardContent className="grid gap-3 sm:grid-cols-2">
               {!alternatives.length ? <p className="text-sm text-muted-foreground">{tr("noAlternatives")}</p> : null}
               {alternatives.map((item) => {
-                const metadata = metadataLine(item.target_muscle, item.equipment);
+                const metadata = metadataLine(formatExerciseDisplayList(item.target_muscle, language, "muscle"), formatExerciseDisplayList(item.equipment, language, "equipment"));
                 return <Link key={item.id} href={`/workouts/${item.id}`} className="min-h-12 rounded-md border p-3 transition hover:border-primary"><p className="font-semibold">{item.name}</p>{metadata ? <p className="text-sm text-muted-foreground">{metadata}</p> : null}</Link>;
               })}
             </CardContent>

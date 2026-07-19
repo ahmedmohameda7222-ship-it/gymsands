@@ -13,6 +13,7 @@ import {
   type CatalogClientRequestOptions
 } from "@/services/activity-catalog/client";
 import type { ExerciseVideo, UserExerciseVideo, Workout } from "@/types";
+import { formatExerciseDisplayValue, resolveExerciseDisplayLanguage, type ExerciseDisplayDomain } from "@/lib/train/exercise-display";
 
 export const WORKOUT_LIBRARY_PAGE_SIZE = 60;
 
@@ -158,18 +159,20 @@ export function mergeCanonicalWorkoutFilterOptions(
     .map((key) => [key, merge(current[key], incoming[key])])) as CanonicalWorkoutFilterOptions;
 }
 
-function activityFilterOptions(activities: TrainingActivity[]): CanonicalWorkoutFilterOptions {
+function activityFilterOptions(activities: TrainingActivity[], locale?: string): CanonicalWorkoutFilterOptions {
   const options = emptyCanonicalWorkoutFilterOptions();
+  const language = resolveExerciseDisplayLanguage(locale);
   const add = (key: keyof CanonicalWorkoutFilterOptions, option: WorkoutFilterOption | null) => { if (option) options[key].push(option); };
+  const presented = (value: string | null | undefined, domain: ExerciseDisplayDomain) => value ? formatExerciseDisplayValue(value, language, domain) : value;
   activities.forEach((activity) => {
-    add("exerciseTypes", filterOption(activity.activityType?.slug, activity.activityType?.name));
-    add("experienceLevels", filterOption(activity.difficulty ? normalizeCatalogSlug(activity.difficulty) : null, activity.difficulty));
-    add("mechanics", filterOption(activity.movementPattern ? normalizeCatalogSlug(activity.movementPattern) : null, activity.movementPattern));
-    add("forceTypes", filterOption(activity.forceType ? normalizeCatalogSlug(activity.forceType) : null, activity.forceType));
-    activity.equipment.forEach((item) => add("equipmentRequired", filterOption(item.slug, item.name)));
+    add("exerciseTypes", filterOption(activity.activityType?.slug, presented(activity.activityType?.name ?? activity.activityType?.slug, "category")));
+    add("experienceLevels", filterOption(activity.difficulty ? normalizeCatalogSlug(activity.difficulty) : null, presented(activity.difficulty, "difficulty")));
+    add("mechanics", filterOption(activity.movementPattern ? normalizeCatalogSlug(activity.movementPattern) : null, presented(activity.movementPattern, "movement")));
+    add("forceTypes", filterOption(activity.forceType ? normalizeCatalogSlug(activity.forceType) : null, presented(activity.forceType, "force")));
+    activity.equipment.forEach((item) => add("equipmentRequired", filterOption(item.slug, presented(item.name || item.slug, "equipment"))));
     activity.muscles.forEach((muscle) => {
-      add("muscleCategories", filterOption(muscle.bodyRegion ? normalizeCatalogSlug(muscle.bodyRegion) : null, muscle.bodyRegion));
-      add(muscle.role === "primary" ? "primaryMuscles" : "secondaryMuscles", filterOption(muscle.slug, muscle.name));
+      add("muscleCategories", filterOption(muscle.bodyRegion ? normalizeCatalogSlug(muscle.bodyRegion) : null, presented(muscle.bodyRegion, "muscle")));
+      add(muscle.role === "primary" ? "primaryMuscles" : "secondaryMuscles", filterOption(muscle.slug, presented(muscle.name || muscle.slug, "muscle")));
     });
   });
   return mergeCanonicalWorkoutFilterOptions(emptyCanonicalWorkoutFilterOptions(), options);
@@ -303,19 +306,20 @@ export async function getWorkoutFilterOptionsWithStatus(locale?: string, context
 export async function getCanonicalWorkoutFilterOptionsWithStatus(locale?: string, context?: WorkoutLibraryRequestContext): Promise<WorkoutLibraryResult<CanonicalWorkoutFilterOptions>> {
   const filters = await getCatalogFilters({ locale }, context);
   const data = emptyCanonicalWorkoutFilterOptions();
-  const mapTaxonomy = (items: Array<{ slug: string; name: string }> = []) => items
-    .map((item) => filterOption(item.slug, item.name))
+  const language = resolveExerciseDisplayLanguage(locale);
+  const mapTaxonomy = (items: Array<{ slug: string; name: string }> = [], domain: ExerciseDisplayDomain) => items
+    .map((item) => filterOption(item.slug, formatExerciseDisplayValue(item.name || item.slug, language, domain)))
     .filter((item): item is WorkoutFilterOption => Boolean(item));
-  data.equipmentRequired = mapTaxonomy(filters.data.equipment);
-  data.exerciseTypes = mapTaxonomy(filters.data.activityTypes);
+  data.equipmentRequired = mapTaxonomy(filters.data.equipment, "equipment");
+  data.exerciseTypes = mapTaxonomy(filters.data.activityTypes, "category");
   data.experienceLevels = filters.data.difficulties
-    .map((item) => filterOption(normalizeCatalogSlug(item), item))
+    .map((item) => filterOption(normalizeCatalogSlug(item), formatExerciseDisplayValue(item, language, "difficulty")))
     .filter((option): option is WorkoutFilterOption => Boolean(option));
-  data.primaryMuscles = mapTaxonomy(filters.data.primaryMuscles);
-  data.secondaryMuscles = mapTaxonomy(filters.data.secondaryMuscles);
-  data.muscleCategories = mapTaxonomy(filters.data.muscleCategories);
-  data.mechanics = mapTaxonomy(filters.data.movementPatterns);
-  data.forceTypes = mapTaxonomy(filters.data.forceTypes);
+  data.primaryMuscles = mapTaxonomy(filters.data.primaryMuscles, "muscle");
+  data.secondaryMuscles = mapTaxonomy(filters.data.secondaryMuscles, "muscle");
+  data.muscleCategories = mapTaxonomy(filters.data.muscleCategories, "muscle");
+  data.mechanics = mapTaxonomy(filters.data.movementPatterns, "movement");
+  data.forceTypes = mapTaxonomy(filters.data.forceTypes, "force");
   return {
     data,
     status: statusFromMeta(filters.meta)
@@ -330,7 +334,7 @@ async function loadWorkoutPage(query: string, filters: WorkoutFilters, startOffs
     requestContext
   );
   const filterOptions = response.meta.source === "legacy"
-    ? activityFilterOptions(response.data)
+    ? activityFilterOptions(response.data, locale)
     : emptyCanonicalWorkoutFilterOptions();
   const workouts = response.data
     .filter((activity) => matchesWorkoutFilters(activity, filters))
