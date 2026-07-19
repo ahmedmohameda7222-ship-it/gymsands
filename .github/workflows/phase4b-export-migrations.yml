@@ -1,0 +1,36 @@
+name: Phase 4B Export Migrations
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    if: github.event.pull_request.number == 71 && github.event.pull_request.head.ref == 'feat/train-muscle-intelligence-phase4b-builder-integration'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Verify exact migration files
+        shell: bash
+        run: |
+          set -euo pipefail
+          for part in 01 02 03 04 05 06; do
+            test -f "supabase/migrations/202607192100${part#0}_muscle_intelligence_phase4b_advanced_mappings_part_${part}.sql" || \
+            test -f "supabase/migrations/2026071921000${part#0}_muscle_intelligence_phase4b_advanced_mappings_part_${part}.sql"
+          done
+
+      - name: Upload exact reviewed migrations
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4b-reviewed-migrations-${{ github.event.pull_request.head.sha }}
+          path: supabase/migrations/2026071921000*_muscle_intelligence_phase4b_advanced_mappings_part_*.sql
+          if-no-files-found: error
+          retention-days: 1
