@@ -6,40 +6,38 @@
 
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 
-**Status:** **Production is reconciled through `20260719094718`; nine Phase 4C.1 repository migrations are pending and unapplied**
+**Status:** **Fully reconciled through `20260719221530`; no pending repository migration remains**
 
-This document records verified production migration history and pending repository migrations. It is not authorization to replay migrations, apply pending migrations, deploy, promote, change compatibility markers, or merge. Applied migration files and production identities are immutable.
+This document records verified production migration history. It is not authorization to replay migrations, deploy, promote, change compatibility markers, or merge. Applied migration files and production identities are immutable.
 
 ## Current production and ledger state
 
-- Applied production migrations: 53
-- Latest production migration: `20260719094718_muscle_intelligence_phase4b_advanced_mappings_part_06`
-- `pendingCount = 9`
+- Applied production migrations: 62
+- Latest production migration: `20260719221530_muscle_intelligence_phase4c1_trusted_log_cleanup`
+- `pendingCount = 0`
 - `schemaAppliedUntrackedCount = 0`
-- `unresolvedCount = 9`
-- `historyRepair.state = pending`
+- `unresolvedCount = 0`
+- `historyRepair.state = reconciled`
 - Compatibility marker: `20260717051011`
-- Ledger-level migration-history release readiness: false until the pending Phase 4C.1 chain is explicitly handled
+- Ledger-level migration-history release readiness: true
 
-Production itself remains unchanged. The pending state describes repository files that have not been applied.
-
-## Pending Muscle Intelligence Phase 4C.1 chain
+## Applied Muscle Intelligence Phase 4C.1 chain
 
 ```text
-20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql
-20260719223010_muscle_intelligence_phase4c1_snapshot_support.sql
-20260719223020_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql
-20260719223030_muscle_intelligence_phase4c1_direct_session_v2.sql
-20260719223040_muscle_intelligence_phase4c1_replacement_v2.sql
-20260719223050_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql
-20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql
-20260719223200_muscle_intelligence_phase4c1_set_type_refresh.sql
-20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup.sql
+20260719221012_muscle_intelligence_phase4c1_runtime_v2_cutover.sql
+20260719221100_muscle_intelligence_phase4c1_snapshot_support.sql
+20260719221152_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql
+20260719221248_muscle_intelligence_phase4c1_direct_session_v2.sql
+20260719221331_muscle_intelligence_phase4c1_replacement_v2.sql
+20260719221407_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql
+20260719221450_muscle_intelligence_phase4c1_terminal_history_guard.sql
+20260719221508_muscle_intelligence_phase4c1_set_type_refresh.sql
+20260719221530_muscle_intelligence_phase4c1_trusted_log_cleanup.sql
 ```
 
-These migrations are classified as `pending` because they exist in the Draft Phase 4C.1 implementation but are absent from production migration history. They must not be applied, repaired as applied, merged, or deployed without explicit coordinated authorization. Do not replay any already-applied migration.
+These migrations were applied exactly once through the supported Supabase migration authority. Their local filenames now match production migration history. Do not replay or modify them.
 
-The split, ordered pending chain is designed to:
+The applied, ordered chain:
 
 - preserve every existing V1 workout-session snapshot unchanged;
 - freeze V2 mappings only for newly started sessions after cutover;

@@ -2,14 +2,14 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const runtimeMigrationPaths = [
-  "supabase/migrations/20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql",
-  "supabase/migrations/20260719223010_muscle_intelligence_phase4c1_snapshot_support.sql",
-  "supabase/migrations/20260719223020_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql",
-  "supabase/migrations/20260719223030_muscle_intelligence_phase4c1_direct_session_v2.sql",
-  "supabase/migrations/20260719223040_muscle_intelligence_phase4c1_replacement_v2.sql",
-  "supabase/migrations/20260719223050_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql"
+  "supabase/migrations/20260719221012_muscle_intelligence_phase4c1_runtime_v2_cutover.sql",
+  "supabase/migrations/20260719221100_muscle_intelligence_phase4c1_snapshot_support.sql",
+  "supabase/migrations/20260719221152_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql",
+  "supabase/migrations/20260719221248_muscle_intelligence_phase4c1_direct_session_v2.sql",
+  "supabase/migrations/20260719221331_muscle_intelligence_phase4c1_replacement_v2.sql",
+  "supabase/migrations/20260719221407_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql"
 ] as const;
-const historyGuardMigrationPath = "supabase/migrations/20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql";
+const historyGuardMigrationPath = "supabase/migrations/20260719221450_muscle_intelligence_phase4c1_terminal_history_guard.sql";
 
 function text(path: string): string {
   return readFileSync(path, "utf8");
