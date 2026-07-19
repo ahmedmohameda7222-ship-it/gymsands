@@ -226,7 +226,8 @@ describe("ExercisePickerDialog request generations", () => {
     const input = container.querySelector('input[placeholder="searchExercises"]') as HTMLInputElement;
     expect(input).toBeTruthy();
     await act(async () => {
-      input.value = "fast";
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(input, "fast");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => { vi.advanceTimersByTime(180); });
