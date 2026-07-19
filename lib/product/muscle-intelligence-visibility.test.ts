@@ -27,6 +27,8 @@ describe("Muscle Intelligence visibility correction", () => {
     expect(overview).toContain('defaultScope="entire_plan"');
     expect(overview).toContain('variant="review"');
     expect(overview).toContain("showScopeControl={false}");
+    expect(overview).toContain("requestGenerationRef");
+    expect(overview).toContain("generation !== requestGenerationRef.current");
     expect(overview).toContain("PlanMuscleLoadPanel");
     expect(panel).toContain('view="both"');
     expect(panel).toContain('mode={variant === "details" ? "compact" : "interactive"}');
