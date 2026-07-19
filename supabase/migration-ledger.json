@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-19T09:52:00Z",
-  "auditedRepositoryCommit": "3e4b94536798b7e47a36e2b82cf3d584f6d41e3a",
-  "productionMigrationCount": 53,
+  "capturedAt": "2026-07-19T22:26:41.487894Z",
+  "auditedRepositoryCommit": "d1485062b09a83c4202c1d4154e78b3512cfd621",
+  "productionMigrationCount": 62,
   "schemaVerifiedUntrackedCount": 0,
   "pendingCount": 0,
   "unresolvedCount": 0,
@@ -12,61 +12,405 @@
     "schemaAppliedUntrackedCount": 0,
     "pendingCount": 0,
     "unresolvedCount": 0,
-    "note": "Production migration history is reconciled through 20260719094718 with all 53 repository migrations recorded exactly once. Do not replay any applied migration."
+    "note": "Production migration history is reconciled through 20260719223300 with all 62 repository migrations recorded exactly once. Do not replay any applied migration."
   },
   "entries": [
-    { "productionVersion": "202606290000", "productionName": "clean_initial_schema", "localFile": "202606290000_clean_initial_schema.sql", "state": "applied" },
-    { "productionVersion": "202606290001", "productionName": "security_privacy_mcp_hardening", "localFile": "202606290001_security_privacy_mcp_hardening.sql", "state": "applied" },
-    { "productionVersion": "202606290002", "productionName": "seed_reference_data", "localFile": "202606290002_seed_reference_data.sql", "state": "applied" },
-    { "productionVersion": "20260701053859", "productionName": "mcp_security_launch_blockers", "localFile": "20260701053859_mcp_security_launch_blockers.sql", "state": "applied" },
-    { "productionVersion": "20260701063223", "productionName": "mcp_oauth_hardening", "localFile": "20260701063223_mcp_oauth_hardening.sql", "state": "applied" },
-    { "productionVersion": "20260702062000", "productionName": "phase6_consent_types", "localFile": "20260702062000_phase6_consent_types.sql", "state": "applied" },
-    { "productionVersion": "20260702120000", "productionName": "mcp_service_role_permissions", "localFile": "20260702120000_mcp_service_role_permissions.sql", "state": "applied" },
-    { "productionVersion": "20260702124724", "productionName": "fix_chatgpt_connection_rotation_ambiguous_columns", "localFile": "20260702124724_fix_chatgpt_connection_rotation_ambiguous_columns.sql", "state": "applied" },
-    { "productionVersion": "20260702174951", "productionName": "chatgpt_execution_layer_foundation", "localFile": "20260702174951_chatgpt_execution_layer_foundation.sql", "state": "applied" },
-    { "productionVersion": "20260702181448", "productionName": "execution_layer_reference_ownership_hardening", "localFile": "20260702181448_execution_layer_reference_ownership_hardening.sql", "state": "applied" },
-    { "productionVersion": "20260703151807", "productionName": "onboarding_coaching_quick_log_preferences", "localFile": "20260703151807_onboarding_coaching_quick_log_preferences.sql", "state": "applied" },
-    { "productionVersion": "20260710135000", "productionName": "functional_fitness_constraints", "localFile": "20260710135000_functional_fitness_constraints.sql", "state": "applied" },
-    { "productionVersion": "20260710164946", "productionName": "enforce_initial_launch_age_16", "localFile": "20260710164946_enforce_initial_launch_age_16.sql", "state": "applied" },
-    { "productionVersion": "20260710170000", "productionName": "drop_retired_ai_request_and_safety_tables", "localFile": "20260710170000_drop_retired_ai_request_and_safety_tables.sql", "state": "applied" },
-    { "productionVersion": "20260710193700", "productionName": "canonical_data_convergence_foundation", "localFile": "20260710193700_canonical_data_convergence_foundation.sql", "state": "applied" },
-    { "productionVersion": "20260710194238", "productionName": "private_admin_rls_and_query_indexes", "localFile": "20260710194238_private_admin_rls_and_query_indexes.sql", "state": "applied" },
-    { "productionVersion": "20260710195027", "productionName": "cimd_oauth_token_lifecycle", "localFile": "20260710195027_cimd_oauth_token_lifecycle.sql", "state": "applied" },
-    { "productionVersion": "20260710202758", "productionName": "mcp_idempotency_ledger", "localFile": "20260710202758_mcp_idempotency_ledger.sql", "state": "applied" },
-    { "productionVersion": "20260710211000", "productionName": "progressive_onboarding_and_legacy_constraints", "localFile": "20260710211000_progressive_onboarding_and_legacy_constraints.sql", "state": "applied" },
-    { "productionVersion": "20260710235035", "productionName": "privacy_deletion_export_retention_lifecycle", "localFile": "20260710235035_privacy_deletion_export_retention_lifecycle.sql", "state": "applied" },
-    { "productionVersion": "20260711001950", "productionName": "legal_document_version_2026_07_11", "localFile": "20260711001950_legal_document_version_2026_07_11.sql", "state": "applied" },
-    { "productionVersion": "20260711004551", "productionName": "subscription_entitlement_foundation", "localFile": "20260711004551_subscription_entitlement_foundation.sql", "state": "applied" },
-    { "productionVersion": "20260711013000", "productionName": "prelaunch_runtime_safety_corrections", "localFile": "20260711013000_prelaunch_runtime_safety_corrections.sql", "state": "applied" },
-    { "productionVersion": "20260711014500", "productionName": "idempotency_uncertain_completion_guard", "localFile": "20260711014500_idempotency_uncertain_completion_guard.sql", "state": "applied" },
-    { "productionVersion": "20260711213000", "productionName": "adaptive_onboarding_v2", "localFile": "20260711213000_adaptive_onboarding_v2.sql", "state": "applied" },
-    { "productionVersion": "20260712173000", "productionName": "persistent_meal_plan_skip_status", "localFile": "20260712173000_persistent_meal_plan_skip_status.sql", "state": "applied" },
-    { "productionVersion": "20260712195000", "productionName": "nutrition_target_date_overrides", "localFile": "20260712195000_nutrition_target_date_overrides.sql", "state": "applied" },
-    { "productionVersion": "20260713153000", "productionName": "meal_plan_atomic_execution", "localFile": "20260713153000_meal_plan_atomic_execution.sql", "state": "applied" },
-    { "productionVersion": "20260713160000", "productionName": "train_section_atomic_integrity", "localFile": "20260713160000_train_section_atomic_integrity.sql", "state": "applied" },
-    { "productionVersion": "20260713170000", "productionName": "finalize_train_schedule_delete_integrity", "localFile": "20260713170000_finalize_train_schedule_delete_integrity.sql", "state": "applied" },
-    { "productionVersion": "20260714030000", "productionName": "harden_train_plan_rpc_execution", "localFile": "20260714030000_harden_train_plan_rpc_execution.sql", "state": "applied" },
-    { "productionVersion": "20260715010000", "productionName": "restrict_nutrition_target_override_acl", "localFile": "20260715010000_restrict_nutrition_target_override_acl.sql", "state": "applied" },
-    { "productionVersion": "20260715190000", "productionName": "train_phase2a_program_architecture", "localFile": "20260715190000_train_phase2a_program_architecture.sql", "state": "applied" },
-    { "productionVersion": "20260716215602", "productionName": "muscle_intelligence_phase1_foundation", "localFile": "20260716215602_muscle_intelligence_phase1_foundation.sql", "state": "applied" },
-    { "productionVersion": "20260717032851", "productionName": "retire_legacy_600_exercise_catalog", "localFile": "20260717032851_retire_legacy_600_exercise_catalog.sql", "state": "applied" },
-    { "productionVersion": "20260717051008", "productionName": "muscle_intelligence_phase2_curated_schema", "localFile": "20260717051008_muscle_intelligence_phase2_curated_schema.sql", "state": "applied" },
-    { "productionVersion": "20260717051011", "productionName": "muscle_intelligence_phase2_curated_seed", "localFile": "20260717051011_muscle_intelligence_phase2_curated_seed.sql", "state": "applied" },
-    { "productionVersion": "20260717194847", "productionName": "muscle_intelligence_phase3_session_snapshots", "localFile": "20260717194847_muscle_intelligence_phase3_session_snapshots.sql", "state": "applied", "note": "Applied to production on 2026-07-17 and independently verified. Git blob 865f918091fbb9cf054e170417caaf384c65f049. Do not replay." },
-    { "productionVersion": "20260717202151", "productionName": "muscle_intelligence_phase3_integrity_corrections", "localFile": "20260717202151_muscle_intelligence_phase3_integrity_corrections.sql", "state": "applied", "note": "Applied to production on 2026-07-17 and independently verified. Git blob af02da43e4d61f9248ad6110b9e58f99cac84560. Do not replay." },
-    { "productionVersion": "20260717215400", "productionName": "muscle_intelligence_phase3_account_deletion_authority", "localFile": "20260717215400_muscle_intelligence_phase3_account_deletion_authority.sql", "state": "applied", "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob 93868fad063217196d7d78c14978242221494fb0. Production verification confirmed service-role-only purge authority, unchanged user/session counts, enabled history guards, and compatibility marker 20260717051011. Do not replay." },
-    { "productionVersion": "20260717215500", "productionName": "muscle_intelligence_phase3_lifecycle_provider_corrections", "localFile": "20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql", "state": "applied", "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob 2bb956fba6dcd31f67df12b17b4aedf315f78063. Production verification confirmed corrected lifecycle/provider routines, complete snapshot coverage, no ownership mismatch, and compatibility marker 20260717051011. Do not replay." },
-    { "productionVersion": "20260717215600", "productionName": "muscle_intelligence_phase3_direct_session_authority", "localFile": "20260717215600_muscle_intelligence_phase3_direct_session_authority.sql", "state": "applied", "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob c9313396b9d1fa718c5d26672304e5dd9eea2c8f. Production verification confirmed the hardened direct-session RPC, fixed search path, intended ACL, and active-direct-session uniqueness index. Do not replay." },
-    { "productionVersion": "20260717215700", "productionName": "muscle_intelligence_phase3_replacement_repair_hardening", "localFile": "20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql", "state": "applied", "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob acd893420c0761369899e9826553581feff52c25. Production verification confirmed the hardened replacement-eligibility RPC, no missing or duplicate snapshots, no terminal item left planned, and compatibility marker 20260717051011. Do not replay." },
-    { "productionVersion": "20260717215800", "productionName": "muscle_intelligence_phase3_plan_session_start_authority", "localFile": "20260717215800_muscle_intelligence_phase3_plan_session_start_authority.sql", "state": "applied", "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob 748e7c058468d3ba7c24ac7d4a688a9729327394. Production verification confirmed hardened plan-session start authority with intended authenticated/service-role execution and no public or anonymous execution. Do not replay." },
-    { "productionVersion": "20260717215900", "productionName": "muscle_intelligence_phase3_set_log_completion_authority", "localFile": "20260717215900_muscle_intelligence_phase3_set_log_completion_authority.sql", "state": "applied", "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob 9b725cc990af9565580cde16096c5bb6ece9b1e4. Production verification confirmed hardened set-log and completion RPCs, fixed search paths, intended ACLs, unchanged session/snapshot counts, and compatibility marker 20260717051011. Do not replay." },
-    { "productionVersion": "20260718214000", "productionName": "muscle_intelligence_phase4a_advanced_atlas_foundation", "localFile": "20260718214000_muscle_intelligence_phase4a_advanced_atlas_foundation.sql", "state": "applied", "note": "Applied once through the linked Supabase CLI on 2026-07-18. Git blob 7e5463bb43afc0645829f41cbab5f6a61c42f103; SHA-256 9b0d14c6711b98deced194a7e2d7fd08979a34470ef3126f4912f1865918a630. Transactional linked verification proved V1/V2 mapping isolation, checksums, publication authority, owner isolation, immutable publication, snapshot bundle consistency, unchanged historical rows, V1 defaults, and no visual database payload. Do not replay." },
-    { "productionVersion": "20260719000336", "productionName": "muscle_intelligence_phase4a_required_corrections", "localFile": "20260719000336_muscle_intelligence_phase4a_required_corrections.sql", "state": "applied", "note": "Applied once through the linked Supabase CLI on 2026-07-19. Git blob 28c8654f363d14c5b51ec85606127c88cafd3631; SHA-256 bde4d59ffadab98aebc5d61585257c5ca834135e079f70cbda6fb085741472d9. Transactional verification proved schema immutability, V1/V2 publication coexistence, schema-aware current resolvers, V1-only authoritative freeze and replacement paths, unchanged historical V1 snapshots, zero durable V2 mappings or snapshots, and the unchanged compatibility marker. Do not replay." },
-    { "productionVersion": "20260719094159", "productionName": "muscle_intelligence_phase4b_advanced_mappings_part_01", "localFile": "20260719094159_muscle_intelligence_phase4b_advanced_mappings_part_01.sql", "state": "applied", "note": "Applied once through Supabase apply_migration on 2026-07-19. Git blob d20171efa0288b8a47165012e1a7aaab1fcdf151; SHA-256 fe98714aec5ffa02188542b4bcc459cc52b94cd0fddedf22e65a059899adb5a6. Production verification preserved all 60 V1 mappings and published the first 10 reviewed V2 mappings without V2 session snapshots. Do not replay." },
-    { "productionVersion": "20260719094350", "productionName": "muscle_intelligence_phase4b_advanced_mappings_part_02", "localFile": "20260719094350_muscle_intelligence_phase4b_advanced_mappings_part_02.sql", "state": "applied", "note": "Applied once through Supabase apply_migration on 2026-07-19. Git blob 8130fe22f6e77f2f054a6f856aab0e484ce7eaf8; SHA-256 b8d3dc3bcc0406b32cb382f0d1f36078df649547b1d35b196ff5c79980d16b48. Production verification preserved all 60 V1 mappings and published 20 cumulative reviewed V2 mappings without V2 session snapshots. Do not replay." },
-    { "productionVersion": "20260719094445", "productionName": "muscle_intelligence_phase4b_advanced_mappings_part_03", "localFile": "20260719094445_muscle_intelligence_phase4b_advanced_mappings_part_03.sql", "state": "applied", "note": "Applied once through Supabase apply_migration on 2026-07-19. Git blob 80b3b9469009386be100c29478d1683a9ede9fdf; SHA-256 bbf00a901497767a9a8fd74bc9a2738fa04364c19650caff9b35f262af7bc5b7. Production verification preserved all 60 V1 mappings and published 30 cumulative reviewed V2 mappings without V2 session snapshots. Do not replay." },
-    { "productionVersion": "20260719094536", "productionName": "muscle_intelligence_phase4b_advanced_mappings_part_04", "localFile": "20260719094536_muscle_intelligence_phase4b_advanced_mappings_part_04.sql", "state": "applied", "note": "Applied once through Supabase apply_migration on 2026-07-19. Git blob a11c9242c30df74dcc35d2c51812dc75b065a619; SHA-256 0d9d98eb7040b975e52125684b2da1a29cc0585196650b41ebd8d1cb9ef78c08. Production verification preserved all 60 V1 mappings and published 40 cumulative reviewed V2 mappings without V2 session snapshots. Do not replay." },
-    { "productionVersion": "20260719094623", "productionName": "muscle_intelligence_phase4b_advanced_mappings_part_05", "localFile": "20260719094623_muscle_intelligence_phase4b_advanced_mappings_part_05.sql", "state": "applied", "note": "Applied once through Supabase apply_migration on 2026-07-19. Git blob b0172ed267254da8f561a3b79054378f3a7ad734; SHA-256 34eb5a0c1dba0abafe3a4ca10242d3a9cfd44e1678ee520f96fc9500529ba15c. Production verification preserved all 60 V1 mappings and published 50 cumulative reviewed V2 mappings without V2 session snapshots. Do not replay." },
-    { "productionVersion": "20260719094718", "productionName": "muscle_intelligence_phase4b_advanced_mappings_part_06", "localFile": "20260719094718_muscle_intelligence_phase4b_advanced_mappings_part_06.sql", "state": "applied", "note": "Applied once through Supabase apply_migration on 2026-07-19. Git blob aa97772d5c95f1b5dc760584318201a1dfb975db; SHA-256 fca05961a40ddc12d20661c423f66991f81aaf986bc97c21acbbe4249a6537d9. Production verification confirmed 60 published V2 mappings, 453 entries, zero checksum drift, zero non-curated V2 mappings, zero V2 session snapshots, unchanged 9/9/29 history counts, and compatibility marker 20260717051011. Do not replay." }
+    {
+      "productionVersion": "202606290000",
+      "productionName": "clean_initial_schema",
+      "localFile": "202606290000_clean_initial_schema.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "202606290001",
+      "productionName": "security_privacy_mcp_hardening",
+      "localFile": "202606290001_security_privacy_mcp_hardening.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "202606290002",
+      "productionName": "seed_reference_data",
+      "localFile": "202606290002_seed_reference_data.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260701053859",
+      "productionName": "mcp_security_launch_blockers",
+      "localFile": "20260701053859_mcp_security_launch_blockers.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260701063223",
+      "productionName": "mcp_oauth_hardening",
+      "localFile": "20260701063223_mcp_oauth_hardening.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702062000",
+      "productionName": "phase6_consent_types",
+      "localFile": "20260702062000_phase6_consent_types.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702120000",
+      "productionName": "mcp_service_role_permissions",
+      "localFile": "20260702120000_mcp_service_role_permissions.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702124724",
+      "productionName": "fix_chatgpt_connection_rotation_ambiguous_columns",
+      "localFile": "20260702124724_fix_chatgpt_connection_rotation_ambiguous_columns.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702174951",
+      "productionName": "chatgpt_execution_layer_foundation",
+      "localFile": "20260702174951_chatgpt_execution_layer_foundation.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260702181448",
+      "productionName": "execution_layer_reference_ownership_hardening",
+      "localFile": "20260702181448_execution_layer_reference_ownership_hardening.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260703151807",
+      "productionName": "onboarding_coaching_quick_log_preferences",
+      "localFile": "20260703151807_onboarding_coaching_quick_log_preferences.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260710135000",
+      "productionName": "functional_fitness_constraints",
+      "localFile": "20260710135000_functional_fitness_constraints.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260710164946",
+      "productionName": "enforce_initial_launch_age_16",
+      "localFile": "20260710164946_enforce_initial_launch_age_16.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260710170000",
+      "productionName": "drop_retired_ai_request_and_safety_tables",
+      "localFile": "20260710170000_drop_retired_ai_request_and_safety_tables.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260710193700",
+      "productionName": "canonical_data_convergence_foundation",
+      "localFile": "20260710193700_canonical_data_convergence_foundation.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260710194238",
+      "productionName": "private_admin_rls_and_query_indexes",
+      "localFile": "20260710194238_private_admin_rls_and_query_indexes.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260710195027",
+      "productionName": "cimd_oauth_token_lifecycle",
+      "localFile": "20260710195027_cimd_oauth_token_lifecycle.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260710202758",
+      "productionName": "mcp_idempotency_ledger",
+      "localFile": "20260710202758_mcp_idempotency_ledger.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260710211000",
+      "productionName": "progressive_onboarding_and_legacy_constraints",
+      "localFile": "20260710211000_progressive_onboarding_and_legacy_constraints.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260710235035",
+      "productionName": "privacy_deletion_export_retention_lifecycle",
+      "localFile": "20260710235035_privacy_deletion_export_retention_lifecycle.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260711001950",
+      "productionName": "legal_document_version_2026_07_11",
+      "localFile": "20260711001950_legal_document_version_2026_07_11.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260711004551",
+      "productionName": "subscription_entitlement_foundation",
+      "localFile": "20260711004551_subscription_entitlement_foundation.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260711013000",
+      "productionName": "prelaunch_runtime_safety_corrections",
+      "localFile": "20260711013000_prelaunch_runtime_safety_corrections.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260711014500",
+      "productionName": "idempotency_uncertain_completion_guard",
+      "localFile": "20260711014500_idempotency_uncertain_completion_guard.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260711213000",
+      "productionName": "adaptive_onboarding_v2",
+      "localFile": "20260711213000_adaptive_onboarding_v2.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260712173000",
+      "productionName": "persistent_meal_plan_skip_status",
+      "localFile": "20260712173000_persistent_meal_plan_skip_status.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260712195000",
+      "productionName": "nutrition_target_date_overrides",
+      "localFile": "20260712195000_nutrition_target_date_overrides.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260713153000",
+      "productionName": "meal_plan_atomic_execution",
+      "localFile": "20260713153000_meal_plan_atomic_execution.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260713160000",
+      "productionName": "train_section_atomic_integrity",
+      "localFile": "20260713160000_train_section_atomic_integrity.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260713170000",
+      "productionName": "finalize_train_schedule_delete_integrity",
+      "localFile": "20260713170000_finalize_train_schedule_delete_integrity.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260714030000",
+      "productionName": "harden_train_plan_rpc_execution",
+      "localFile": "20260714030000_harden_train_plan_rpc_execution.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260715010000",
+      "productionName": "restrict_nutrition_target_override_acl",
+      "localFile": "20260715010000_restrict_nutrition_target_override_acl.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260715190000",
+      "productionName": "train_phase2a_program_architecture",
+      "localFile": "20260715190000_train_phase2a_program_architecture.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260716215602",
+      "productionName": "muscle_intelligence_phase1_foundation",
+      "localFile": "20260716215602_muscle_intelligence_phase1_foundation.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260717032851",
+      "productionName": "retire_legacy_600_exercise_catalog",
+      "localFile": "20260717032851_retire_legacy_600_exercise_catalog.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260717051008",
+      "productionName": "muscle_intelligence_phase2_curated_schema",
+      "localFile": "20260717051008_muscle_intelligence_phase2_curated_schema.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260717051011",
+      "productionName": "muscle_intelligence_phase2_curated_seed",
+      "localFile": "20260717051011_muscle_intelligence_phase2_curated_seed.sql",
+      "state": "applied"
+    },
+    {
+      "productionVersion": "20260717194847",
+      "productionName": "muscle_intelligence_phase3_session_snapshots",
+      "localFile": "20260717194847_muscle_intelligence_phase3_session_snapshots.sql",
+      "state": "applied",
+      "note": "Applied to production on 2026-07-17 and independently verified. Git blob 865f918091fbb9cf054e170417caaf384c65f049. Do not replay."
+    },
+    {
+      "productionVersion": "20260717202151",
+      "productionName": "muscle_intelligence_phase3_integrity_corrections",
+      "localFile": "20260717202151_muscle_intelligence_phase3_integrity_corrections.sql",
+      "state": "applied",
+      "note": "Applied to production on 2026-07-17 and independently verified. Git blob af02da43e4d61f9248ad6110b9e58f99cac84560. Do not replay."
+    },
+    {
+      "productionVersion": "20260717215400",
+      "productionName": "muscle_intelligence_phase3_account_deletion_authority",
+      "localFile": "20260717215400_muscle_intelligence_phase3_account_deletion_authority.sql",
+      "state": "applied",
+      "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob 93868fad063217196d7d78c14978242221494fb0. Production verification confirmed service-role-only purge authority, unchanged user/session counts, enabled history guards, and compatibility marker 20260717051011. Do not replay."
+    },
+    {
+      "productionVersion": "20260717215500",
+      "productionName": "muscle_intelligence_phase3_lifecycle_provider_corrections",
+      "localFile": "20260717215500_muscle_intelligence_phase3_lifecycle_provider_corrections.sql",
+      "state": "applied",
+      "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob 2bb956fba6dcd31f67df12b17b4aedf315f78063. Production verification confirmed corrected lifecycle/provider routines, complete snapshot coverage, no ownership mismatch, and compatibility marker 20260717051011. Do not replay."
+    },
+    {
+      "productionVersion": "20260717215600",
+      "productionName": "muscle_intelligence_phase3_direct_session_authority",
+      "localFile": "20260717215600_muscle_intelligence_phase3_direct_session_authority.sql",
+      "state": "applied",
+      "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob c9313396b9d1fa718c5d26672304e5dd9eea2c8f. Production verification confirmed the hardened direct-session RPC, fixed search path, intended ACL, and active-direct-session uniqueness index. Do not replay."
+    },
+    {
+      "productionVersion": "20260717215700",
+      "productionName": "muscle_intelligence_phase3_replacement_repair_hardening",
+      "localFile": "20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql",
+      "state": "applied",
+      "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob acd893420c0761369899e9826553581feff52c25. Production verification confirmed the hardened replacement-eligibility RPC, no missing or duplicate snapshots, no terminal item left planned, and compatibility marker 20260717051011. Do not replay."
+    },
+    {
+      "productionVersion": "20260717215800",
+      "productionName": "muscle_intelligence_phase3_plan_session_start_authority",
+      "localFile": "20260717215800_muscle_intelligence_phase3_plan_session_start_authority.sql",
+      "state": "applied",
+      "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob 748e7c058468d3ba7c24ac7d4a688a9729327394. Production verification confirmed hardened plan-session start authority with intended authenticated/service-role execution and no public or anonymous execution. Do not replay."
+    },
+    {
+      "productionVersion": "20260717215900",
+      "productionName": "muscle_intelligence_phase3_set_log_completion_authority",
+      "localFile": "20260717215900_muscle_intelligence_phase3_set_log_completion_authority.sql",
+      "state": "applied",
+      "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob 9b725cc990af9565580cde16096c5bb6ece9b1e4. Production verification confirmed hardened set-log and completion RPCs, fixed search paths, intended ACLs, unchanged session/snapshot counts, and compatibility marker 20260717051011. Do not replay."
+    },
+    {
+      "productionVersion": "20260718214000",
+      "productionName": "muscle_intelligence_phase4a_advanced_atlas_foundation",
+      "localFile": "20260718214000_muscle_intelligence_phase4a_advanced_atlas_foundation.sql",
+      "state": "applied",
+      "note": "Applied once through the linked Supabase CLI on 2026-07-18. Git blob 7e5463bb43afc0645829f41cbab5f6a61c42f103; SHA-256 9b0d14c6711b98deced194a7e2d7fd08979a34470ef3126f4912f1865918a630. Transactional linked verification proved V1/V2 mapping isolation, checksums, publication authority, owner isolation, immutable publication, snapshot bundle consistency, unchanged historical rows, V1 defaults, and no visual database payload. Do not replay."
+    },
+    {
+      "productionVersion": "20260719000336",
+      "productionName": "muscle_intelligence_phase4a_required_corrections",
+      "localFile": "20260719000336_muscle_intelligence_phase4a_required_corrections.sql",
+      "state": "applied",
+      "note": "Applied once through the linked Supabase CLI on 2026-07-19. Git blob 28c8654f363d14c5b51ec85606127c88cafd3631; SHA-256 bde4d59ffadab98aebc5d61585257c5ca834135e079f70cbda6fb085741472d9. Transactional verification proved schema immutability, V1/V2 publication coexistence, schema-aware current resolvers, V1-only authoritative freeze and replacement paths, unchanged historical V1 snapshots, zero durable V2 mappings or snapshots, and the unchanged compatibility marker. Do not replay."
+    },
+    {
+      "productionVersion": "20260719094159",
+      "productionName": "muscle_intelligence_phase4b_advanced_mappings_part_01",
+      "localFile": "20260719094159_muscle_intelligence_phase4b_advanced_mappings_part_01.sql",
+      "state": "applied",
+      "note": "Applied once through Supabase apply_migration on 2026-07-19. Git blob d20171efa0288b8a47165012e1a7aaab1fcdf151; SHA-256 fe98714aec5ffa02188542b4bcc459cc52b94cd0fddedf22e65a059899adb5a6. Production verification preserved all 60 V1 mappings and published the first 10 reviewed V2 mappings without V2 session snapshots. Do not replay."
+    },
+    {
+      "productionVersion": "20260719094350",
+      "productionName": "muscle_intelligence_phase4b_advanced_mappings_part_02",
+      "localFile": "20260719094350_muscle_intelligence_phase4b_advanced_mappings_part_02.sql",
+      "state": "applied",
+      "note": "Applied once through Supabase apply_migration on 2026-07-19. Git blob 8130fe22f6e77f2f054a6f856aab0e484ce7eaf8; SHA-256 b8d3dc3bcc0406b32cb382f0d1f36078df649547b1d35b196ff5c79980d16b48. Production verification preserved all 60 V1 mappings and published 20 cumulative reviewed V2 mappings without V2 session snapshots. Do not replay."
+    },
+    {
+      "productionVersion": "20260719094445",
+      "productionName": "muscle_intelligence_phase4b_advanced_mappings_part_03",
+      "localFile": "20260719094445_muscle_intelligence_phase4b_advanced_mappings_part_03.sql",
+      "state": "applied",
+      "note": "Applied once through Supabase apply_migration on 2026-07-19. Git blob 80b3b9469009386be100c29478d1683a9ede9fdf; SHA-256 bbf00a901497767a9a8fd74bc9a2738fa04364c19650caff9b35f262af7bc5b7. Production verification preserved all 60 V1 mappings and published 30 cumulative reviewed V2 mappings without V2 session snapshots. Do not replay."
+    },
+    {
+      "productionVersion": "20260719094536",
+      "productionName": "muscle_intelligence_phase4b_advanced_mappings_part_04",
+      "localFile": "20260719094536_muscle_intelligence_phase4b_advanced_mappings_part_04.sql",
+      "state": "applied",
+      "note": "Applied once through Supabase apply_migration on 2026-07-19. Git blob a11c9242c30df74dcc35d2c51812dc75b065a619; SHA-256 0d9d98eb7040b975e52125684b2da1a29cc0585196650b41ebd8d1cb9ef78c08. Production verification preserved all 60 V1 mappings and published 40 cumulative reviewed V2 mappings without V2 session snapshots. Do not replay."
+    },
+    {
+      "productionVersion": "20260719094623",
+      "productionName": "muscle_intelligence_phase4b_advanced_mappings_part_05",
+      "localFile": "20260719094623_muscle_intelligence_phase4b_advanced_mappings_part_05.sql",
+      "state": "applied",
+      "note": "Applied once through Supabase apply_migration on 2026-07-19. Git blob b0172ed267254da8f561a3b79054378f3a7ad734; SHA-256 34eb5a0c1dba0abafe3a4ca10242d3a9cfd44e1678ee520f96fc9500529ba15c. Production verification preserved all 60 V1 mappings and published 50 cumulative reviewed V2 mappings without V2 session snapshots. Do not replay."
+    },
+    {
+      "productionVersion": "20260719094718",
+      "productionName": "muscle_intelligence_phase4b_advanced_mappings_part_06",
+      "localFile": "20260719094718_muscle_intelligence_phase4b_advanced_mappings_part_06.sql",
+      "state": "applied",
+      "note": "Applied once through Supabase apply_migration on 2026-07-19. Git blob aa97772d5c95f1b5dc760584318201a1dfb975db; SHA-256 fca05961a40ddc12d20661c423f66991f81aaf986bc97c21acbbe4249a6537d9. Production verification confirmed 60 published V2 mappings, 453 entries, zero checksum drift, zero non-curated V2 mappings, zero V2 session snapshots, unchanged 9/9/29 history counts, and compatibility marker 20260717051011. Do not replay."
+    },
+    {
+      "localFile": "20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql",
+      "state": "applied",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223000",
+      "productionName": "muscle_intelligence_phase4c1_runtime_v2_cutover"
+    },
+    {
+      "localFile": "20260719223010_muscle_intelligence_phase4c1_snapshot_support.sql",
+      "state": "applied",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223010",
+      "productionName": "muscle_intelligence_phase4c1_snapshot_support"
+    },
+    {
+      "localFile": "20260719223020_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql",
+      "state": "applied",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223020",
+      "productionName": "muscle_intelligence_phase4c1_v2_snapshot_freeze"
+    },
+    {
+      "localFile": "20260719223030_muscle_intelligence_phase4c1_direct_session_v2.sql",
+      "state": "applied",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223030",
+      "productionName": "muscle_intelligence_phase4c1_direct_session_v2"
+    },
+    {
+      "localFile": "20260719223040_muscle_intelligence_phase4c1_replacement_v2.sql",
+      "state": "applied",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223040",
+      "productionName": "muscle_intelligence_phase4c1_replacement_v2"
+    },
+    {
+      "localFile": "20260719223050_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql",
+      "state": "applied",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223050",
+      "productionName": "muscle_intelligence_phase4c1_terminal_reconcile_v2"
+    },
+    {
+      "localFile": "20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql",
+      "state": "applied",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223100",
+      "productionName": "muscle_intelligence_phase4c1_terminal_history_guard"
+    },
+    {
+      "localFile": "20260719223200_muscle_intelligence_phase4c1_set_type_refresh.sql",
+      "state": "applied",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223200",
+      "productionName": "muscle_intelligence_phase4c1_set_type_refresh"
+    },
+    {
+      "localFile": "20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup.sql",
+      "state": "applied",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223300",
+      "productionName": "muscle_intelligence_phase4c1_trusted_log_cleanup"
+    }
   ]
 }

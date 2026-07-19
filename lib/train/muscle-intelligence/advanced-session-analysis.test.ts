@@ -22,7 +22,8 @@ const v1Input: BuildSessionMuscleAnalysisInput = {
     planned_mapping_checksum: "a".repeat(64), planned_custom_mapping_entries: null, planned_sets: 3, state: "planned",
     actual_target_type: null, actual_global_exercise_id: null, actual_custom_exercise_id: null, actual_mapping_set_id: null,
     actual_custom_mapping_set_id: null, actual_mapping_version: null, actual_mapping_schema_version: null,
-    actual_mapping_checksum: null, actual_custom_mapping_entries: null
+    actual_mapping_checksum: null, actual_custom_mapping_entries: null,
+    performed_total_sets: null, performed_qualifying_sets: null, performed_frozen_at: null
   }],
   globalMappings: [{
     id: "mapping-v1", exercise_id: "exercise-1", mapping_version: 1, schema_version: "exercise_muscle_mapping_v1",
@@ -43,6 +44,20 @@ const v2Snapshot = {
   result_schema_version: "advanced_muscle_exposure_result_v1"
 };
 
+const v2Item = {
+  ...v1Input.items[0],
+  planned_mapping_set_id: "mapping-v2",
+  planned_mapping_version: 2,
+  planned_mapping_schema_version: "exercise_muscle_mapping_v2",
+  planned_mapping_checksum: "b".repeat(64)
+};
+
+const v2Mapping = {
+  id: "mapping-v2", exercise_id: "exercise-1", mapping_version: 2, schema_version: "exercise_muscle_mapping_v2",
+  checksum: "b".repeat(64),
+  entries: [{ muscleId: "pectoralis.upper", role: "primary", contribution: 1, sideScope: "bilateral", sortOrder: 1 }]
+};
+
 describe("versioned session muscle analysis", () => {
   it("keeps V1 output byte-identical through the dispatcher", () => {
     expect(JSON.stringify(buildVersionedSessionMuscleAnalysis(v1Input))).toBe(JSON.stringify(buildSessionMuscleAnalysis(v1Input)));
@@ -52,19 +67,57 @@ describe("versioned session muscle analysis", () => {
     const result = buildVersionedSessionMuscleAnalysis({
       ...v1Input,
       snapshot: v2Snapshot,
-      items: [{ ...v1Input.items[0], planned_mapping_set_id: "mapping-v2", planned_mapping_version: 2,
-        planned_mapping_schema_version: "exercise_muscle_mapping_v2", planned_mapping_checksum: "b".repeat(64) }],
-      globalMappings: [{
-        id: "mapping-v2", exercise_id: "exercise-1", mapping_version: 2, schema_version: "exercise_muscle_mapping_v2",
-        checksum: "b".repeat(64),
-        entries: [{ muscleId: "pectoralis.upper", role: "primary", contribution: 1, sideScope: "bilateral", sortOrder: 1 }]
-      }]
+      items: [v2Item],
+      globalMappings: [v2Mapping]
     });
     expect(result.snapshotSchemaVersion).toBe("workout_session_muscle_snapshot_v2");
     expect(result.analysis && "kind" in result.analysis ? result.analysis.kind : null).toBe("advanced");
     if (result.analysis && "kind" in result.analysis && result.analysis.kind === "advanced") {
       expect(result.analysis.targets.find((target) => target.targetId === "pectoralis.upper")).toMatchObject({ rawExposure: 3, heatLevel: "moderate" });
     }
+  });
+
+  it("degrades a stable V2 identity without a published mapping to unmapped coverage", () => {
+    const result = buildVersionedSessionMuscleAnalysis({
+      ...v1Input,
+      snapshot: { ...v2Snapshot, completeness: "partial", reason_codes: ["mapping_unavailable"] },
+      items: [{
+        ...v2Item,
+        planned_mapping_set_id: null,
+        planned_mapping_version: null,
+        planned_mapping_schema_version: null,
+        planned_mapping_checksum: null
+      }],
+      globalMappings: []
+    });
+    expect(result.analysis && "kind" in result.analysis ? result.analysis.kind : null).toBe("advanced");
+    if (result.analysis && "kind" in result.analysis && result.analysis.kind === "advanced") {
+      expect(result.analysis.coverage).toMatchObject({ totalItemCount: 1, includedItemCount: 0, unmappedItemCount: 1 });
+    }
+  });
+
+  it("uses frozen qualifying sets for completed V2 analysis instead of mutable logs", () => {
+    const result = buildVersionedSessionMuscleAnalysis({
+      ...v1Input,
+      mode: "completed",
+      snapshot: v2Snapshot,
+      items: [{ ...v2Item, state: "completed", performed_total_sets: 3, performed_qualifying_sets: 2, performed_frozen_at: "2026-07-19T10:00:00.000Z" }],
+      globalMappings: [v2Mapping],
+      completedLogs: [{ plan_exercise_id: null, exercise_order: 1, completed_at: "2026-07-19T10:00:00.000Z" }]
+    });
+    if (result.analysis && "kind" in result.analysis && result.analysis.kind === "advanced") {
+      expect(result.analysis.targets.find((target) => target.targetId === "pectoralis.upper")).toMatchObject({ rawExposure: 2 });
+    }
+  });
+
+  it("rejects completed V2 analysis when performed workload was not frozen", () => {
+    expect(() => buildVersionedSessionMuscleAnalysis({
+      ...v1Input,
+      mode: "completed",
+      snapshot: v2Snapshot,
+      items: [{ ...v2Item, state: "completed" }],
+      globalMappings: [v2Mapping]
+    })).toThrowError(expect.objectContaining<Partial<SessionMuscleAnalysisError>>({ code: "snapshot_workload_not_frozen", status: 409 }));
   });
 
   it("keeps a V1 item inside the V2 path broad-only", () => {

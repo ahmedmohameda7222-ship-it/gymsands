@@ -15,6 +15,7 @@ import type {
 import { SessionMuscleAnalysisError } from "./session-analysis-error";
 import {
   ADVANCED_MUSCLE_MAPPING_SCHEMA_VERSION,
+  ADVANCED_SESSION_MUSCLE_SNAPSHOT_SCHEMA_VERSION,
   MUSCLE_MAPPING_SCHEMA_VERSION,
   RESISTANCE_SETS_WORKLOAD_MODEL
 } from "./versions";
@@ -24,6 +25,16 @@ function compareText(left: string, right: string): number {
 }
 
 function completedSetCount(item: SessionMuscleSnapshotItem, input: BuildSessionMuscleAnalysisInput): number {
+  if (input.snapshot.snapshot_schema_version === ADVANCED_SESSION_MUSCLE_SNAPSHOT_SCHEMA_VERSION) {
+    if (item.performed_qualifying_sets == null || item.performed_frozen_at == null) {
+      throw new SessionMuscleAnalysisError(
+        "snapshot_workload_not_frozen",
+        "Completed muscle workload was not frozen with this workout.",
+        409
+      );
+    }
+    return item.performed_qualifying_sets;
+  }
   return input.completedLogs.filter((log) => Boolean(log.completed_at) && (
     item.source_plan_exercise_id
       ? log.plan_exercise_id === item.source_plan_exercise_id
@@ -45,6 +56,11 @@ function frozenFields(item: SessionMuscleSnapshotItem, actual: boolean) {
   };
 }
 
+function hasFrozenReference(fields: ReturnType<typeof frozenFields>) {
+  return fields.globalMappingSetId !== null || fields.customMappingSetId !== null ||
+    fields.mappingVersion !== null || fields.schemaVersion !== null || fields.checksum !== null || fields.customEntries !== null;
+}
+
 function assertReferenceBase(fields: ReturnType<typeof frozenFields>) {
   if (!fields.mappingVersion || !fields.schemaVersion || !fields.checksum) {
     throw new SessionMuscleAnalysisError("snapshot_mapping_drift", "A frozen mapping reference is incomplete.", 409);
@@ -57,7 +73,7 @@ function mappingFor(
   mappings: Map<string, FrozenGlobalMapping>
 ): MuscleMappingReference | AdvancedMuscleMappingReference | null {
   const fields = frozenFields(item, actual);
-  if (!fields.targetType) return null;
+  if (!fields.targetType || !hasFrozenReference(fields)) return null;
   assertReferenceBase(fields);
   let targetId: string;
   let mappingSetId: string;
