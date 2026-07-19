@@ -1,0 +1,26 @@
+{
+  "registry_version": "plaivra_advanced_exercise_mappings_v2",
+  "status": "approved_for_phase4b_publication",
+  "source_registry": "data/muscle-intelligence/v1/registry.json",
+  "repository_baseline_sha": "ffcbb69a7ef38a1065532e026f99a6a7b182c06b",
+  "atlas_version": "advanced_visible_v1",
+  "mapping_schema_version": "exercise_muscle_mapping_v2",
+  "mapping_version": 2,
+  "identity_rule": "UUIDv5(URL, https://plaivra.com/exercises/v1/{slug}/mapping/2)",
+  "side_scope_rule": "Generic canonical definitions are bilateral; performed side is captured later.",
+  "publication_rule": "Publish only through public.publish_exercise_muscle_mapping_set after deterministic checksum verification.",
+  "review_boundary": "Direct reviewed mappings only; runtime name matching, provider inference, automatic AI publication, and V2 session snapshot cutover are forbidden.",
+  "parts": [
+    "registry.part-01.json",
+    "registry.part-02.json",
+    "registry.part-03.json",
+    "registry.part-04.json",
+    "registry.part-05.json",
+    "registry.part-06.json"
+  ],
+  "validation_summary": {
+    "exercise_count": 60,
+    "mapping_set_count": 60,
+    "entry_count": 453
+  }
+}

@@ -20,6 +20,7 @@
     "test:muscle-intelligence:phase2": "vitest run --config vitest.unit.config.mjs lib/train/muscle-intelligence/curated-registry.test.ts lib/product/muscle-intelligence-phase2-migration.test.ts",
     "test:muscle-intelligence:phase3": "vitest run --config vitest.unit.config.mjs lib/train/muscle-intelligence/session-analysis.test.ts lib/train/muscle-intelligence/session-analysis-route.test.ts lib/product/muscle-intelligence-phase3-migration.test.ts",
     "test:muscle-intelligence:phase4a": "vitest run --config vitest.unit.config.mjs lib/train/muscle-intelligence/advanced-atlas.test.ts lib/train/muscle-intelligence/advanced-exposure.test.ts lib/train/muscle-intelligence/compatibility-projection.test.ts lib/train/muscle-intelligence/advanced-session-analysis.test.ts components/train/muscle-heat-map/muscle-heat-map.test.tsx lib/product/muscle-intelligence-phase4a-migration.test.ts",
+    "test:muscle-intelligence:phase4b": "vitest run --config vitest.unit.config.mjs lib/train/muscle-intelligence/advanced-mapping-registry.test.ts lib/train/muscle-intelligence/plan-advanced-analysis.test.ts lib/product/muscle-intelligence-phase4b.test.ts",
     "verify:muscle-atlas:geometry": "node scripts/verify-muscle-atlas-geometry.mjs",
     "test:scripts": "node --test scripts/*.test.mjs",
     "test:telemetry": "vitest run --config vitest.unit.config.mjs lib/observability/client-error.test.ts lib/observability/client-error-route.test.ts",
