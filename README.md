@@ -57,17 +57,8 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 - Web is the active product surface.
 - Public MCP, OAuth/CIMD, task-specific context projections, privacy, idempotency, and release foundations exist; publication and full production acceptance remain separate gates.
 - Train Phase 2A provides the additive multi-week hierarchy; the legacy plan writer remains active until later cutover phases.
-- Muscle Intelligence Phase 2 versions and validates the approved 60-exercise registry, six normalized curation tables, 60 mappings with 180 entries, 180 localizations, 180 aliases, 32 relationships, nine exact provider links, and five golden-plan fixtures without changing visible Train behavior.
-
-## Pending Phase 4B database migrations
-
-The following reviewed Phase 4B migrations are present on the Draft PR branch and are not yet classified as applied in production. Do not replay or apply them out of order. Production application, verification, ledger reconciliation, merge, and deployment remain separate gates.
-
-```text
-20260719210001_muscle_intelligence_phase4b_advanced_mappings_part_01.sql
-20260719210002_muscle_intelligence_phase4b_advanced_mappings_part_02.sql
-20260719210003_muscle_intelligence_phase4b_advanced_mappings_part_03.sql
-20260719210004_muscle_intelligence_phase4b_advanced_mappings_part_04.sql
-20260719210005_muscle_intelligence_phase4b_advanced_mappings_part_05.sql
-20260719210006_muscle_intelligence_phase4b_advanced_mappings_part_06.sql
-```
+- Muscle Intelligence Phase 2 versions and validates the approved 60-exercise registry, six normalized curation tables, 60 mappings with 180 entries, 180 localizations, 180 aliases, 32 relationships, nine exact provider links, and five golden-plan fixtures.
+- Muscle Intelligence Phase 3 preserves immutable per-session muscle snapshots and hardened owner-scoped lifecycle authority.
+- Muscle Intelligence Phase 4A provides the approved advanced visible atlas and schema-isolated V2 publication foundation while retaining V1 runtime behavior.
+- Muscle Intelligence Phase 4B publishes 60 reviewed advanced V2 mappings with 453 regional entries and adds plan-building, plan-editing, exercise-preview, and weekly-plan visualization surfaces. It does not cut Active Workout, completion, history, or workout-session snapshots over to V2.
+- Production migration history is reconciled through `20260719094718`; the deployed compatibility marker intentionally remains `20260717051011` until a separately authorized coordinated release.
