@@ -33,6 +33,7 @@ jobs:
         id: replay
         shell: bash
         run: |
+          set +e
           set -uo pipefail
           mkdir -p quality-reports
           status=0
@@ -71,6 +72,7 @@ jobs:
           fi
 
           echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Upload concise diagnostic
         if: always()
