@@ -24,6 +24,9 @@ export type PlanMuscleLoadPanelProps = {
   variant: "builder" | "review" | "details";
   language: SupportedLanguage;
   className?: string;
+  titleOverride?: string;
+  descriptionOverride?: string;
+  showScopeControl?: boolean;
 };
 
 function stateForAnalysis(
@@ -43,7 +46,10 @@ export function PlanMuscleLoadPanel({
   defaultScope,
   variant,
   language,
-  className
+  className,
+  titleOverride,
+  descriptionOverride,
+  showScopeControl = true
 }: PlanMuscleLoadPanelProps) {
   const [scope, setScope] = useState<"current_day" | "entire_plan">(defaultScope);
   const [mobileView, setMobileView] = useState<"front" | "back">("front");
@@ -61,12 +67,12 @@ export function PlanMuscleLoadPanel({
     }
   }, [activeDayIndex, days, scope]);
   const state = stateForAnalysis(calculation.analysis, calculation.failed);
-  const title = variant === "review" ? text.balanceTitle : variant === "details" ? text.weeklyTitle : text.plannedTitle;
-  const description = variant === "review"
+  const title = titleOverride ?? (variant === "review" ? text.balanceTitle : variant === "details" ? text.weeklyTitle : text.plannedTitle);
+  const description = descriptionOverride ?? (variant === "review"
     ? text.balanceDescription
     : variant === "details"
       ? text.weeklyDescription
-      : text.plannedDescription;
+      : text.plannedDescription);
   const coverage = calculation.analysis?.coverage ?? { totalItemCount: 0, includedItemCount: 0, unmappedItemCount: 0 };
   const coverageText = interpolateMuscleCopy(text.covered, {
     included: coverage.includedItemCount,
@@ -88,7 +94,7 @@ export function PlanMuscleLoadPanel({
             <h2 className={variant === "details" ? "text-lg font-semibold" : "text-xl font-semibold"}>{title}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           </div>
-          {variant !== "details" ? (
+          {variant !== "details" && showScopeControl ? (
             <div className="inline-flex w-full rounded-xl border p-1 sm:w-auto" aria-label={title}>
               <Button
                 type="button"
