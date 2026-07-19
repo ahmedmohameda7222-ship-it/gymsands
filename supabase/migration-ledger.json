@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-18T21:56:15Z",
-  "auditedRepositoryCommit": "f9e0972c399b6565b05dac1d63bfac7e08a052d3",
-  "productionMigrationCount": 46,
+  "capturedAt": "2026-07-19T00:59:24Z",
+  "auditedRepositoryCommit": "e39d9ef4b9745145091f10f16648e1b7456c5226",
+  "productionMigrationCount": 47,
   "schemaVerifiedUntrackedCount": 0,
   "pendingCount": 0,
   "unresolvedCount": 0,
@@ -12,7 +12,7 @@
     "schemaAppliedUntrackedCount": 0,
     "pendingCount": 0,
     "unresolvedCount": 0,
-    "note": "Production migration history is reconciled through 20260718214000 with all 46 repository migrations recorded exactly once. Do not replay any applied migration."
+    "note": "Production migration history is reconciled through 20260719000336 with all 47 repository migrations recorded exactly once. Do not replay any applied migration."
   },
   "entries": [
     { "productionVersion": "202606290000", "productionName": "clean_initial_schema", "localFile": "202606290000_clean_initial_schema.sql", "state": "applied" },
@@ -60,6 +60,7 @@
     { "productionVersion": "20260717215700", "productionName": "muscle_intelligence_phase3_replacement_repair_hardening", "localFile": "20260717215700_muscle_intelligence_phase3_replacement_repair_hardening.sql", "state": "applied", "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob acd893420c0761369899e9826553581feff52c25. Production verification confirmed the hardened replacement-eligibility RPC, no missing or duplicate snapshots, no terminal item left planned, and compatibility marker 20260717051011. Do not replay." },
     { "productionVersion": "20260717215800", "productionName": "muscle_intelligence_phase3_plan_session_start_authority", "localFile": "20260717215800_muscle_intelligence_phase3_plan_session_start_authority.sql", "state": "applied", "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob 748e7c058468d3ba7c24ac7d4a688a9729327394. Production verification confirmed hardened plan-session start authority with intended authenticated/service-role execution and no public or anonymous execution. Do not replay." },
     { "productionVersion": "20260717215900", "productionName": "muscle_intelligence_phase3_set_log_completion_authority", "localFile": "20260717215900_muscle_intelligence_phase3_set_log_completion_authority.sql", "state": "applied", "note": "Applied through the Supabase SQL Editor and recorded exactly once through migration repair on 2026-07-18. Git blob 9b725cc990af9565580cde16096c5bb6ece9b1e4. Production verification confirmed hardened set-log and completion RPCs, fixed search paths, intended ACLs, unchanged session/snapshot counts, and compatibility marker 20260717051011. Do not replay." },
-    { "productionVersion": "20260718214000", "productionName": "muscle_intelligence_phase4a_advanced_atlas_foundation", "localFile": "20260718214000_muscle_intelligence_phase4a_advanced_atlas_foundation.sql", "state": "applied", "note": "Applied once through the linked Supabase CLI on 2026-07-18. Git blob 7e5463bb43afc0645829f41cbab5f6a61c42f103; SHA-256 9b0d14c6711b98deced194a7e2d7fd08979a34470ef3126f4912f1865918a630. Transactional linked verification proved V1/V2 mapping isolation, checksums, publication authority, owner isolation, immutable publication, snapshot bundle consistency, unchanged historical rows, V1 defaults, and no visual database payload. Do not replay." }
+    { "productionVersion": "20260718214000", "productionName": "muscle_intelligence_phase4a_advanced_atlas_foundation", "localFile": "20260718214000_muscle_intelligence_phase4a_advanced_atlas_foundation.sql", "state": "applied", "note": "Applied once through the linked Supabase CLI on 2026-07-18. Git blob 7e5463bb43afc0645829f41cbab5f6a61c42f103; SHA-256 9b0d14c6711b98deced194a7e2d7fd08979a34470ef3126f4912f1865918a630. Transactional linked verification proved V1/V2 mapping isolation, checksums, publication authority, owner isolation, immutable publication, snapshot bundle consistency, unchanged historical rows, V1 defaults, and no visual database payload. Do not replay." },
+    { "productionVersion": "20260719000336", "productionName": "muscle_intelligence_phase4a_required_corrections", "localFile": "20260719000336_muscle_intelligence_phase4a_required_corrections.sql", "state": "applied", "note": "Applied once through the linked Supabase CLI on 2026-07-19. Git blob 28c8654f363d14c5b51ec85606127c88cafd3631; SHA-256 bde4d59ffadab98aebc5d61585257c5ca834135e079f70cbda6fb085741472d9. Transactional verification proved schema immutability, V1/V2 publication coexistence, schema-aware current resolvers, V1-only authoritative freeze and replacement paths, unchanged historical V1 snapshots, zero durable V2 mappings or snapshots, and the unchanged compatibility marker. Do not replay." }
   ]
 }
