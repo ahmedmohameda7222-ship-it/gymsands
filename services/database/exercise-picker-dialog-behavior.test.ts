@@ -166,7 +166,13 @@ describe("ExercisePickerDialog request generations", () => {
     const onAdd = vi.fn();
 
     await act(async () => {
-      root.render(<ExercisePickerDialog open onOpenChange={() => undefined} dayName="Push" existingKeys={[]} onAdd={onAdd} />);
+      root.render(React.createElement(ExercisePickerDialog, {
+        open: true,
+        onOpenChange: () => undefined,
+        dayName: "Push",
+        existingKeys: [],
+        onAdd
+      }));
     });
     await act(async () => { vi.advanceTimersByTime(180); });
     await flush();
@@ -204,7 +210,13 @@ describe("ExercisePickerDialog request generations", () => {
     mocks.getWorkouts.mockReturnValueOnce(slowPromise).mockResolvedValueOnce({ data: [fast], pagination: { hasMore: false, nextOffset: null } });
 
     await act(async () => {
-      root.render(<ExercisePickerDialog open onOpenChange={() => undefined} dayName="Push" existingKeys={[]} onAdd={() => undefined} />);
+      root.render(React.createElement(ExercisePickerDialog, {
+        open: true,
+        onOpenChange: () => undefined,
+        dayName: "Push",
+        existingKeys: [],
+        onAdd: () => undefined
+      }));
     });
     await act(async () => { vi.advanceTimersByTime(180); });
     const input = container.querySelector('input[placeholder="searchExercises"]') as HTMLInputElement;
