@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-19T21:20:00Z",
+  "capturedAt": "2026-07-19T22:05:00Z",
   "auditedRepositoryCommit": "3e4b94536798b7e47a36e2b82cf3d584f6d41e3a",
   "productionMigrationCount": 53,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 4,
-  "unresolvedCount": 4,
+  "pendingCount": 9,
+  "unresolvedCount": 9,
   "historyRepair": {
     "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 4,
-    "unresolvedCount": 4,
-    "note": "Production migration history remains reconciled through 20260719094718 with all 53 applied migrations recorded exactly once. Four Phase 4C.1 repository migrations are pending and have not been applied. Do not replay any applied migration or apply pending files without explicit coordinated authorization."
+    "pendingCount": 9,
+    "unresolvedCount": 9,
+    "note": "Production migration history remains reconciled through 20260719094718 with all 53 applied migrations recorded exactly once. Nine Phase 4C.1 repository migrations are pending and have not been applied. Do not replay any applied migration or apply pending files without explicit coordinated authorization."
   },
   "entries": [
     {
@@ -353,6 +353,31 @@
       "localFile": "20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql",
       "state": "pending",
       "note": "Phase 4C.1 implementation migration. Not applied to production; explicit coordinated authorization is required before apply."
+    },
+    {
+      "localFile": "20260719223010_muscle_intelligence_phase4c1_snapshot_support.sql",
+      "state": "pending",
+      "note": "Phase 4C.1 split runtime authority migration. Not applied to production; explicit coordinated authorization is required before apply."
+    },
+    {
+      "localFile": "20260719223020_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql",
+      "state": "pending",
+      "note": "Phase 4C.1 split runtime authority migration. Not applied to production; explicit coordinated authorization is required before apply."
+    },
+    {
+      "localFile": "20260719223030_muscle_intelligence_phase4c1_direct_session_v2.sql",
+      "state": "pending",
+      "note": "Phase 4C.1 split runtime authority migration. Not applied to production; explicit coordinated authorization is required before apply."
+    },
+    {
+      "localFile": "20260719223040_muscle_intelligence_phase4c1_replacement_v2.sql",
+      "state": "pending",
+      "note": "Phase 4C.1 split runtime authority migration. Not applied to production; explicit coordinated authorization is required before apply."
+    },
+    {
+      "localFile": "20260719223050_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql",
+      "state": "pending",
+      "note": "Phase 4C.1 split runtime authority migration. Not applied to production; explicit coordinated authorization is required before apply."
     },
     {
       "localFile": "20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql",
