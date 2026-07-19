@@ -38,6 +38,8 @@ export type ReviewedAdvancedMappingIdentity = {
   canonicalExerciseId?: string | null;
   workoutId?: string | null;
   sourceWorkoutId?: string | null;
+  workout_id?: string | null;
+  source_workout_id?: string | null;
   id?: string | null;
   canonicalSourceId?: string | null;
 };
@@ -128,6 +130,8 @@ export function resolveReviewedAdvancedMappingIdentity(
     identity.canonicalExerciseId,
     identity.workoutId,
     identity.sourceWorkoutId,
+    identity.workout_id,
+    identity.source_workout_id,
     identity.id
   ];
   for (const exerciseId of exactIds) {
