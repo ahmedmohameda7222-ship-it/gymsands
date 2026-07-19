@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { PageHeading } from "@/components/layout/page-heading";
@@ -22,13 +22,17 @@ export function TrainMuscleLoadOverview() {
   const text = getMuscleLoadVisibilityCopy(language);
   const userId = user?.id;
   const loadFailedDescription = text.loadFailedDescription;
+  const requestGenerationRef = useRef(0);
   const [plans, setPlans] = useState<UserWorkoutPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
+    const generation = ++requestGenerationRef.current;
+
     if (!userId) {
       setPlans([]);
+      setError("");
       setLoading(false);
       return;
     }
@@ -36,17 +40,23 @@ export function TrainMuscleLoadOverview() {
     setLoading(true);
     setError("");
     try {
-      setPlans(await getAllUserWorkoutPlans(userId));
+      const nextPlans = await getAllUserWorkoutPlans(userId);
+      if (generation !== requestGenerationRef.current) return;
+      setPlans(nextPlans);
     } catch (reason) {
+      if (generation !== requestGenerationRef.current) return;
       setPlans([]);
       setError(userSafeError(reason, loadFailedDescription));
     } finally {
-      setLoading(false);
+      if (generation === requestGenerationRef.current) setLoading(false);
     }
   }, [loadFailedDescription, userId]);
 
   useEffect(() => {
     void load();
+    return () => {
+      requestGenerationRef.current += 1;
+    };
   }, [load]);
 
   const activePlan = useMemo(() => {
