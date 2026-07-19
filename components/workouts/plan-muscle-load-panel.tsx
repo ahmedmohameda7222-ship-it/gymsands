@@ -47,8 +47,9 @@ export function PlanMuscleLoadPanel({
 }: PlanMuscleLoadPanelProps) {
   const [scope, setScope] = useState<"current_day" | "entire_plan">(defaultScope);
   const [mobileView, setMobileView] = useState<"front" | "back">("front");
-  const text = getMuscleIntelligenceCopy(language);
-  const labels = useMemo(() => getMuscleHeatMapLabels(language), [language]);
+  const resolvedLanguage = language ?? "en";
+  const text = getMuscleIntelligenceCopy(resolvedLanguage);
+  const labels = useMemo(() => getMuscleHeatMapLabels(resolvedLanguage), [resolvedLanguage]);
   const calculation = useMemo(() => {
     try {
       return {
