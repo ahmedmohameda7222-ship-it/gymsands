@@ -1,13 +1,12 @@
 {
-  "schemaVersion": "advanced_visible_v1_target_view_registry_v2",
+  "schemaVersion": "advanced_visible_v1_target_view_registry_v3",
   "targetViews": [
     {
       "canonicalId": "adductors.anterior_region",
       "view": "front",
       "sides": [
         "left",
-        "right",
-        "center"
+        "right"
       ],
       "hitAreaIds": []
     },
@@ -117,8 +116,7 @@
       "view": "front",
       "sides": [
         "left",
-        "right",
-        "center"
+        "right"
       ],
       "hitAreaIds": []
     },
@@ -447,7 +445,8 @@
       "canonicalId": "spinal_erectors.lower",
       "view": "back",
       "sides": [
-        "center"
+        "left",
+        "right"
       ],
       "hitAreaIds": []
     },
@@ -456,8 +455,7 @@
       "view": "back",
       "sides": [
         "left",
-        "right",
-        "center"
+        "right"
       ],
       "hitAreaIds": []
     },
@@ -485,7 +483,8 @@
       "canonicalId": "trapezius.lower",
       "view": "back",
       "sides": [
-        "center"
+        "left",
+        "right"
       ],
       "hitAreaIds": []
     },
@@ -503,8 +502,7 @@
       "view": "back",
       "sides": [
         "left",
-        "right",
-        "center"
+        "right"
       ],
       "hitAreaIds": []
     },

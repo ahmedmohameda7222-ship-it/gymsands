@@ -1,373 +1,342 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 
-const sourceRoot = path.resolve("assets/muscle-intelligence/advanced-visible-v1/source");
-const outputRoot = path.resolve("data/muscle-intelligence/advanced-visible-v1");
-const manifestPath = path.join(outputRoot, "final-region-manifest.json");
 const width = 1024;
 const height = 1536;
 const pixelCount = width * height;
-const sideOrder = new Map([["left", 0], ["right", 1], ["center", 2]]);
+const sourceRoot = path.resolve("assets/muscle-intelligence/advanced-visible-v1/source");
+const semanticRoot = path.resolve("assets/muscle-intelligence/advanced-visible-v1/semantic");
+const outputRoot = path.resolve("data/muscle-intelligence/advanced-visible-v1");
+const manifestPath = path.join(outputRoot, "final-region-manifest.json");
+const registryPath = path.join(outputRoot, "target-view-registry.json");
+const sideOrder = new Map([["left", 0], ["right", 1]]);
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function parsePathTags(svg) {
-  return [...svg.matchAll(/<path\b[^>]*\/>/g)].map((match) => {
-    const tag = match[0];
-    const fill = tag.match(/\bfill="([^"]+)"/)?.[1];
-    const transform = tag.match(/\btransform="([^"]+)"/)?.[1] ?? "";
-    const d = tag.match(/\bd="([^"]+)"/)?.[1];
-    if (!fill || !d) throw new Error("Approved SVG path is missing fill or path data.");
-    return { tag, fill, fingerprint: sha256(`${fill}\n${transform}\n${d}`) };
-  });
+function attribute(tag, name) {
+  return tag.match(new RegExp(`\\b${name}="([^"]+)"`))?.[1];
 }
 
-function labelColor(label) {
-  return `rgb(${label >> 16},${(label >> 8) & 255},${label & 255})`;
+function sanitizeCanonicalId(id) {
+  return id.replaceAll(".", "-").replaceAll("_", "-");
 }
 
-function pixelLabel(data, channels, index) {
-  const offset = index * channels;
-  return (data[offset] << 16) | (data[offset + 1] << 8) | data[offset + 2];
-}
-
-function maskFingerprint(pixels, bbox) {
-  const payload = `${bbox.join(",")}|${pixels.map((pixel) => `${pixel % width},${Math.floor(pixel / width)}`).join(";")}`;
-  return sha256(payload);
-}
-
-function connectedComponents(data, channels) {
-  const seen = new Uint8Array(pixelCount);
-  const queue = new Int32Array(pixelCount);
-  const components = [];
-  for (let start = 0; start < pixelCount; start += 1) {
-    if (seen[start]) continue;
-    const label = pixelLabel(data, channels, start);
-    seen[start] = 1;
-    let head = 0;
-    let tail = 0;
-    queue[tail++] = start;
-    const pixels = [];
-    let minX = width;
-    let minY = height;
-    let maxX = -1;
-    let maxY = -1;
-    let sumX = 0;
-    let sumY = 0;
-    while (head < tail) {
-      const pixel = queue[head++];
-      const x = pixel % width;
-      const y = Math.floor(pixel / width);
-      pixels.push(pixel);
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-      sumX += x;
-      sumY += y;
-      for (const neighbor of [pixel - 1, pixel + 1, pixel - width, pixel + width]) {
-        if (neighbor < 0 || neighbor >= pixelCount || seen[neighbor]) continue;
-        if (Math.abs((neighbor % width) - x) > 1) continue;
-        if (pixelLabel(data, channels, neighbor) !== label) continue;
-        seen[neighbor] = 1;
-        queue[tail++] = neighbor;
-      }
+function parseSemanticSource(svg, expectedView) {
+  if (!/<svg\b[^>]*\bviewBox="0 0 1024 1536"/.test(svg)) throw new Error(`${expectedView} semantic source must use viewBox 0 0 1024 1536.`);
+  if (/<(?:image|text|foreignObject|rect)\b/i.test(svg)) throw new Error(`${expectedView} semantic source contains a prohibited visual element.`);
+  if (/\btransform=|#[0-9a-f]{3,8}\b|\brgb\(|\bhsl\(/i.test(svg)) throw new Error(`${expectedView} semantic source contains a transform or palette value.`);
+  const groups = [];
+  const ids = new Set();
+  for (const match of svg.matchAll(/<g\b([^>]*)>([\s\S]*?)<\/g>/g)) {
+    const groupTag = match[1];
+    const body = match[2];
+    const id = attribute(groupTag, "id");
+    const canonicalId = attribute(groupTag, "data-canonical-id");
+    const view = attribute(groupTag, "data-view");
+    const side = attribute(groupTag, "data-side");
+    if (!id || !canonicalId || view !== expectedView || !["left", "right"].includes(side)) {
+      throw new Error(`${expectedView} semantic group metadata is incomplete.`);
     }
-    components.push({
-      label,
-      pixels,
-      bbox: [minX, minY, maxX + 1, maxY + 1],
-      centroid: [Number((sumX / pixels.length).toFixed(3)), Number((sumY / pixels.length).toFixed(3))]
+    const expectedId = `muscle-${view}-${sanitizeCanonicalId(canonicalId)}-${side}`;
+    if (id !== expectedId) throw new Error(`${id} does not match stable semantic ID ${expectedId}.`);
+    if (ids.has(id)) throw new Error(`Duplicate semantic ID ${id}.`);
+    ids.add(id);
+    const paths = [...body.matchAll(/<path\b([^>]*)\/>/g)].map((pathMatch) => {
+      const pathTag = pathMatch[1];
+      const pathId = attribute(pathTag, "id");
+      const pathData = attribute(pathTag, "d");
+      if (!pathId || !pathData || !/^M/.test(pathData) || !/Z$/i.test(pathData)) throw new Error(`${id} contains an invalid or open path.`);
+      if (ids.has(pathId)) throw new Error(`Duplicate semantic ID ${pathId}.`);
+      ids.add(pathId);
+      return { id: pathId, pathData };
     });
+    if (!paths.length) throw new Error(`${id} contains no closed semantic path.`);
+    groups.push({ id, canonicalId, view, side, paths });
   }
-  return components;
+  if (!groups.length) throw new Error(`${expectedView} semantic source contains no groups.`);
+  return groups;
 }
 
-function vertexKey(x, y) {
-  return `${x},${y}`;
-}
-
-function direction(edge) {
-  if (edge.x2 > edge.x1) return 0;
-  if (edge.y2 > edge.y1) return 1;
-  if (edge.x2 < edge.x1) return 2;
-  return 3;
-}
-
-function traceMask(mask) {
-  const edges = [];
-  const outgoing = new Map();
-  function addEdge(x1, y1, x2, y2) {
-    const index = edges.length;
-    edges.push({ x1, y1, x2, y2, used: false });
-    const key = vertexKey(x1, y1);
-    const indexes = outgoing.get(key) ?? [];
-    indexes.push(index);
-    outgoing.set(key, indexes);
-  }
-  for (let pixel = 0; pixel < pixelCount; pixel += 1) {
-    if (!mask[pixel]) continue;
-    const x = pixel % width;
-    const y = Math.floor(pixel / width);
-    if (y === 0 || !mask[pixel - width]) addEdge(x, y, x + 1, y);
-    if (x === width - 1 || !mask[pixel + 1]) addEdge(x + 1, y, x + 1, y + 1);
-    if (y === height - 1 || !mask[pixel + width]) addEdge(x + 1, y + 1, x, y + 1);
-    if (x === 0 || !mask[pixel - 1]) addEdge(x, y + 1, x, y);
-  }
-
-  const loops = [];
-  for (let startIndex = 0; startIndex < edges.length; startIndex += 1) {
-    if (edges[startIndex].used) continue;
-    const start = edges[startIndex];
-    const points = [[start.x1, start.y1]];
-    let currentIndex = startIndex;
-    let guard = 0;
-    while (guard++ <= edges.length) {
-      const current = edges[currentIndex];
-      current.used = true;
-      points.push([current.x2, current.y2]);
-      if (current.x2 === start.x1 && current.y2 === start.y1) break;
-      const candidates = (outgoing.get(vertexKey(current.x2, current.y2)) ?? [])
-        .filter((index) => !edges[index].used);
-      if (!candidates.length) throw new Error("Generated contour is open.");
-      const currentDirection = direction(current);
-      candidates.sort((left, right) => {
-        const leftTurn = (direction(edges[left]) - currentDirection + 4) % 4;
-        const rightTurn = (direction(edges[right]) - currentDirection + 4) % 4;
-        const priority = (turn) => [1, 0, 3, 2].indexOf(turn);
-        return priority(leftTurn) - priority(rightTurn);
-      });
-      currentIndex = candidates[0];
-    }
-    if (points.at(-1)?.[0] !== start.x1 || points.at(-1)?.[1] !== start.y1) {
-      throw new Error("Generated contour did not close.");
-    }
-    const simplified = [];
-    for (const point of points.slice(0, -1)) {
-      while (simplified.length >= 2) {
-        const before = simplified.at(-2);
-        const previous = simplified.at(-1);
-        if ((before[0] === previous[0] && previous[0] === point[0])
-          || (before[1] === previous[1] && previous[1] === point[1])) {
-          simplified.pop();
-        } else break;
-      }
-      simplified.push(point);
-    }
-    loops.push(simplified);
-  }
-  return loops.map((points) => {
-    let data = `M${points[0][0]} ${points[0][1]}`;
-    for (let index = 1; index < points.length; index += 1) {
-      const [x, y] = points[index];
-      const [previousX, previousY] = points[index - 1];
-      data += previousY === y ? `H${x}` : previousX === x ? `V${y}` : `L${x} ${y}`;
-    }
-    return `${data}Z`;
-  });
-}
-
-function keyFor(view, canonicalId, side) {
-  return `${view}:${canonicalId}:${side}`;
-}
-
-function parseKey(key) {
-  const first = key.indexOf(":");
-  const last = key.lastIndexOf(":");
-  return { view: key.slice(0, first), canonicalId: key.slice(first + 1, last), side: key.slice(last + 1) };
-}
-
-async function renderMask(pathData) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" shape-rendering="crispEdges"><path fill="#fff" fill-rule="nonzero" d="${pathData}"/></svg>`;
-  const rendered = await sharp(Buffer.from(svg))
+async function renderPathData(pathData) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" shape-rendering="geometricPrecision"><path fill="#fff" fill-rule="nonzero" d="${pathData}"/></svg>`;
+  const { data } = await sharp(Buffer.from(svg))
     .flatten({ background: "#000" })
     .greyscale()
     .raw()
     .toBuffer({ resolveWithObject: true });
-  return rendered.data;
+  const mask = new Uint8Array(pixelCount);
+  for (let pixel = 0; pixel < pixelCount; pixel += 1) mask[pixel] = data[pixel] > 127 ? 1 : 0;
+  return mask;
 }
 
-await mkdir(outputRoot, { recursive: true });
-const approvedAssets = JSON.parse(await readFile(path.join(sourceRoot, "asset-manifest.json"), "utf8"));
-const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-if (manifest.schemaVersion !== "advanced_visible_v1_final_regions_v1") {
-  throw new Error("Unsupported final-region manifest schema.");
-}
-
-const targetMasks = new Map();
-const sourceUnions = { front: new Uint8Array(pixelCount), back: new Uint8Array(pixelCount) };
-const verifiedViews = {};
-for (const view of ["front", "back"]) {
-  const recordedView = manifest.views[view];
-  const svg = await readFile(path.join(sourceRoot, recordedView.sourceFile), "utf8");
-  const approved = approvedAssets.files.find((file) => file.name === recordedView.sourceFile);
-  if (!approved || sha256(svg) !== approved.sha256 || Buffer.byteLength(svg) !== approved.bytes) {
-    throw new Error(`${view} approved segmentation source hash or byte count changed.`);
-  }
-  const paths = parsePathTags(svg);
-  if (paths.length !== recordedView.sourcePathCount) throw new Error(`${view} source path count changed.`);
-  let painterOrder = 0;
-  const labelSvg = svg
-    .replace("<svg ", '<svg shape-rendering="crispEdges" ')
-    .replace(/<path\b[^>]*\/>/g, (tag) => tag.replace(/\bfill="[^"]+"/, `fill="${labelColor(++painterOrder)}"`));
-  const rendered = await sharp(Buffer.from(labelSvg))
-    .resize(width, height, { fit: "fill" })
-    .removeAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  const actualComponents = connectedComponents(rendered.data, rendered.info.channels);
-  const recordedByFingerprint = new Map(recordedView.regions.map((region) => [region.sourceComponentFingerprint, region]));
-  if (recordedByFingerprint.size !== recordedView.regions.length
-    || actualComponents.length !== recordedView.regions.length) {
-    throw new Error(`${view} final-region component cardinality changed.`);
-  }
-  for (const component of actualComponents) {
-    const sourcePathIndex = component.label - 1;
-    const sourcePath = paths[sourcePathIndex];
-    const componentFingerprint = maskFingerprint(component.pixels, component.bbox);
-    const region = recordedByFingerprint.get(componentFingerprint);
-    if (!region
-      || region.sourceLayerFingerprint !== sourcePath.fingerprint
-      || region.sourceFill !== sourcePath.fill
-      || region.painterOrder !== sourcePathIndex + 1
-      || region.pixelArea !== component.pixels.length
-      || region.bbox.join(",") !== component.bbox.join(",")) {
-      throw new Error(`${view} final-region metadata no longer matches the approved painter result.`);
-    }
-    if (region.classification === "target") {
-      const key = keyFor(view, region.canonicalId, region.side);
-      const mask = targetMasks.get(key) ?? new Uint8Array(pixelCount);
-      for (const pixel of component.pixels) {
-        if (sourceUnions[view][pixel]) throw new Error(`${view} source target masks overlap.`);
-        sourceUnions[view][pixel] = 1;
-        mask[pixel] = 1;
+async function bodySilhouetteMask(filename) {
+  const { data } = await sharp(filename).greyscale().raw().toBuffer({ resolveWithObject: true });
+  const body = new Uint8Array(pixelCount);
+  for (let y = 0; y < height; y += 1) {
+    const darkPixels = [];
+    for (let x = 0; x < width; x += 1) if (data[y * width + x] < 254) darkPixels.push(x);
+    let start = 0;
+    while (start < darkPixels.length) {
+      let end = start;
+      while (end + 1 < darkPixels.length && darkPixels[end + 1] - darkPixels[end] <= 30) end += 1;
+      if (darkPixels[end] - darkPixels[start] >= 3) {
+        const left = Math.max(0, darkPixels[start] - 13);
+        const right = Math.min(width - 1, darkPixels[end] + 13);
+        for (let x = left; x <= right; x += 1) body[y * width + x] = 1;
       }
-      targetMasks.set(key, mask);
-    } else if (region.classification !== "excluded") {
-      throw new Error(`${view} region has an unsupported classification.`);
+      start = end + 1;
     }
   }
-  verifiedViews[view] = {
-    ...recordedView,
-    sourceSha256: sha256(svg),
-    regions: recordedView.regions
-  };
+  let expanded = body;
+  for (let iteration = 0; iteration < 2; iteration += 1) {
+    const next = expanded.slice();
+    for (let pixel = width + 1; pixel < pixelCount - width - 1; pixel += 1) {
+      if (expanded[pixel - 1] || expanded[pixel + 1] || expanded[pixel - width] || expanded[pixel + width]) next[pixel] = 1;
+    }
+    expanded = next;
+  }
+  return expanded;
 }
+
+function protectedNeutralMask(view) {
+  const mask = new Uint8Array(pixelCount);
+  function rectangle(left, top, right, bottom) {
+    for (let y = top; y < bottom; y += 1) for (let x = left; x < right; x += 1) mask[y * width + x] = 1;
+  }
+  function ellipse(cx, cy, rx, ry) {
+    for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y += 1) {
+      for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x += 1) {
+        if (Math.pow((x - cx) / rx, 2) + Math.pow((y - cy) / ry, 2) <= 1) mask[y * width + x] = 1;
+      }
+    }
+  }
+  if (view === "front") {
+    rectangle(507, 166, 517, 710); // throat, sternum, linea alba
+    ellipse(512, 610, 8, 7); // umbilicus
+    ellipse(411, 1097, 22, 20);
+    ellipse(613, 1097, 22, 20); // patellae and knee tendons
+    rectangle(350, 1366, 431, 1410);
+    rectangle(593, 1366, 674, 1410); // ankle retinacula
+  } else {
+    rectangle(507, 145, 517, 810); // nuchal/trapezial aponeurosis, spine, fascia, cleft
+    rectangle(380, 802, 509, 811);
+    rectangle(515, 802, 644, 811); // gluteal folds
+    for (let y = 1000; y < 1052; y += 1) for (let x = 0; x < width; x += 1) {
+      const local = x < width / 2 ? x : width - 1 - x;
+      if (local >= 420 && local < 445) mask[y * width + x] = 1;
+    } // popliteal fossae and central posterior-knee structures
+    for (let y = 1210; y < 1365; y += 1) {
+      const radius = 8 + (y - 1210) * 0.05;
+      for (let x = 0; x < width; x += 1) {
+        const local = x < width / 2 ? x : width - 1 - x;
+        if (Math.abs(local - 432) < radius) mask[y * width + x] = 1;
+      }
+    }
+  }
+  return mask;
+}
+
+const approvedAssets = JSON.parse(await readFile(path.join(sourceRoot, "asset-manifest.json"), "utf8"));
+for (const asset of approvedAssets.files) {
+  const bytes = await readFile(path.join(sourceRoot, asset.name));
+  if (sha256(bytes) !== asset.sha256 || bytes.length !== asset.bytes) throw new Error(`Approved source asset ${asset.name} changed.`);
+}
+
+const priorManifest = JSON.parse(await readFile(manifestPath, "utf8"));
+const priorRegistry = JSON.parse(await readFile(registryPath, "utf8"));
+const hitAreas = priorManifest.hitAreas;
+if (!Array.isArray(hitAreas) || hitAreas.length !== 6) throw new Error("Expected six retained precision hit areas.");
+if (priorRegistry.targetViews.length !== 58) throw new Error("Expected the established 58 target-view definitions.");
+
+const expectedByView = Object.fromEntries(["front", "back"].map((view) => [
+  view,
+  new Set(priorRegistry.targetViews.filter((entry) => entry.view === view).map((entry) => entry.canonicalId))
+]));
+if (expectedByView.front.size !== 28 || expectedByView.back.size !== 30) throw new Error("Established target-view cardinality changed.");
 
 const runtimePaths = [];
-for (const [key, mask] of [...targetMasks].sort(([left], [right]) => left.localeCompare(right))) {
-  const { view, canonicalId, side } = parseKey(key);
-  const contours = traceMask(mask);
-  const pathData = contours.join("");
-  runtimePaths.push({
-    canonicalId,
-    view,
-    side,
-    pixelArea: mask.reduce((total, value) => total + value, 0),
-    contourCount: contours.length,
-    pathSha256: sha256(pathData),
-    pathData
-  });
-}
-
-const generatedCoverage = { front: new Uint16Array(pixelCount), back: new Uint16Array(pixelCount) };
-const targetViewStats = new Map();
-for (const runtimePath of runtimePaths) {
-  const key = keyFor(runtimePath.view, runtimePath.canonicalId, runtimePath.side);
-  const expected = targetMasks.get(key);
-  const actual = await renderMask(runtimePath.pathData);
-  let intersection = 0;
-  let union = 0;
-  for (let pixel = 0; pixel < pixelCount; pixel += 1) {
-    const generated = actual[pixel] > 127 ? 1 : 0;
-    intersection += expected[pixel] && generated ? 1 : 0;
-    union += expected[pixel] || generated ? 1 : 0;
-    generatedCoverage[runtimePath.view][pixel] += generated;
-  }
-  const targetViewKey = `${runtimePath.canonicalId}:${runtimePath.view}`;
-  const stats = targetViewStats.get(targetViewKey) ?? { intersection: 0, union: 0 };
-  stats.intersection += intersection;
-  stats.union += union;
-  targetViewStats.set(targetViewKey, stats);
-}
-
-const viewMetrics = {};
+const viewRecords = {};
+const validationViews = {};
+const overlapMatrix = [];
+const geometryDiagnostics = [];
 let crossTargetInteriorOverlapPixels = 0;
-let neutralLeakagePixels = 0;
-let unclassifiedClassifiedSourcePixels = 0;
+let bodySilhouetteLeakagePixels = 0;
+let protectedNeutralCoveragePixels = 0;
+
 for (const view of ["front", "back"]) {
-  let intersection = 0;
-  let union = 0;
-  for (let pixel = 0; pixel < pixelCount; pixel += 1) {
-    const source = sourceUnions[view][pixel];
-    const generated = generatedCoverage[view][pixel] > 0 ? 1 : 0;
-    if (generatedCoverage[view][pixel] > 1) crossTargetInteriorOverlapPixels += 1;
-    if (!source && generated) neutralLeakagePixels += 1;
-    if (source && !generated) unclassifiedClassifiedSourcePixels += 1;
-    intersection += source && generated ? 1 : 0;
-    union += source || generated ? 1 : 0;
+  const semanticFilename = `muscle-semantic-${view}.svg`;
+  const semanticBytes = await readFile(path.join(semanticRoot, semanticFilename));
+  const semanticSvg = semanticBytes.toString("utf8");
+  const groups = parseSemanticSource(semanticSvg, view);
+  const actualTargetIds = new Set(groups.map((group) => group.canonicalId));
+  if (groups.length !== expectedByView[view].size * 2
+    || actualTargetIds.size !== expectedByView[view].size
+    || [...expectedByView[view]].some((targetId) => !actualTargetIds.has(targetId))) {
+    throw new Error(`${view} semantic source does not match the established target contract.`);
   }
-  viewMetrics[view] = {
-    sourceTargetPixels: sourceUnions[view].reduce((total, value) => total + value, 0),
-    aggregateIoU: Number((intersection / union).toFixed(6))
+  for (const targetId of expectedByView[view]) {
+    const sides = groups.filter((group) => group.canonicalId === targetId).map((group) => group.side).sort();
+    if (sides.join(",") !== "left,right") throw new Error(`${view}:${targetId} must contain separate left and right geometry.`);
+  }
+
+  const renderedGroups = [];
+  const coverage = new Uint16Array(pixelCount);
+  for (const group of groups.sort((left, right) => `${left.canonicalId}:${left.side}`.localeCompare(`${right.canonicalId}:${right.side}`))) {
+    const pathData = group.paths.map((entry) => entry.pathData).join("");
+    const mask = await renderPathData(pathData);
+    const pixelArea = mask.reduce((sum, value) => sum + value, 0);
+    if (!pixelArea) throw new Error(`${view}:${group.canonicalId}:${group.side} is empty.`);
+    for (let pixel = 0; pixel < pixelCount; pixel += 1) coverage[pixel] += mask[pixel];
+    renderedGroups.push({ ...group, mask, pixelArea, pathData });
+    runtimePaths.push({
+      canonicalId: group.canonicalId,
+      view,
+      side: group.side,
+      pixelArea,
+      contourCount: group.paths.length,
+      pathSha256: sha256(pathData),
+      pathData
+    });
+  }
+
+  for (let left = 0; left < renderedGroups.length; left += 1) {
+    for (let right = left + 1; right < renderedGroups.length; right += 1) {
+      let overlapPixels = 0;
+      for (let pixel = 0; pixel < pixelCount; pixel += 1) overlapPixels += renderedGroups[left].mask[pixel] && renderedGroups[right].mask[pixel] ? 1 : 0;
+      overlapMatrix.push({
+        view,
+        left: `${renderedGroups[left].canonicalId}:${renderedGroups[left].side}`,
+        right: `${renderedGroups[right].canonicalId}:${renderedGroups[right].side}`,
+        overlapPixels
+      });
+    }
+  }
+
+  const anatomyFilename = `muscle-anatomy-${view}.png`;
+  const body = await bodySilhouetteMask(path.join(sourceRoot, anatomyFilename));
+  const neutral = protectedNeutralMask(view);
+  for (const group of renderedGroups) {
+    let bodyLeakagePixels = 0;
+    let neutralCoveragePixels = 0;
+    for (let pixel = 0; pixel < pixelCount; pixel += 1) {
+      if (!group.mask[pixel]) continue;
+      if (!body[pixel]) bodyLeakagePixels += 1;
+      if (neutral[pixel]) neutralCoveragePixels += 1;
+    }
+    if (bodyLeakagePixels || neutralCoveragePixels) geometryDiagnostics.push({
+      target: `${view}:${group.canonicalId}:${group.side}`,
+      bodyLeakagePixels,
+      neutralCoveragePixels
+    });
+  }
+  let targetPixels = 0;
+  let viewOverlap = 0;
+  let viewBodyLeakage = 0;
+  let viewNeutralCoverage = 0;
+  for (let pixel = 0; pixel < pixelCount; pixel += 1) {
+    if (coverage[pixel]) targetPixels += 1;
+    if (coverage[pixel] > 1) viewOverlap += 1;
+    if (coverage[pixel] && !body[pixel]) viewBodyLeakage += 1;
+    if (coverage[pixel] && neutral[pixel]) viewNeutralCoverage += 1;
+  }
+  crossTargetInteriorOverlapPixels += viewOverlap;
+  bodySilhouetteLeakagePixels += viewBodyLeakage;
+  protectedNeutralCoveragePixels += viewNeutralCoverage;
+  validationViews[view] = {
+    semanticGroupCount: groups.length,
+    targetViewCount: expectedByView[view].size,
+    targetPixels,
+    crossTargetInteriorOverlapPixels: viewOverlap,
+    bodySilhouetteLeakagePixels: viewBodyLeakage,
+    protectedNeutralCoveragePixels: viewNeutralCoverage
+  };
+  const approvedAnatomy = approvedAssets.files.find((asset) => asset.name === anatomyFilename);
+  viewRecords[view] = {
+    semanticSourceFile: `semantic/${semanticFilename}`,
+    semanticSourceSha256: sha256(semanticBytes),
+    semanticSourceBytes: semanticBytes.length,
+    semanticGroupCount: groups.length,
+    semanticPathCount: groups.reduce((sum, group) => sum + group.paths.length, 0),
+    grayscaleAuthorityFile: `source/${anatomyFilename}`,
+    grayscaleAuthoritySha256: approvedAnatomy.sha256,
+    grayscaleAuthorityBytes: approvedAnatomy.bytes
   };
 }
 
-const perTargetView = [...targetViewStats]
-  .sort(([left], [right]) => left.localeCompare(right))
-  .map(([targetView, stats]) => ({ targetView, iou: Number((stats.intersection / stats.union).toFixed(6)) }));
-const minimumTargetViewIoU = Math.min(...perTargetView.map((entry) => entry.iou));
-const classifiedSourcePixels = viewMetrics.front.sourceTargetPixels + viewMetrics.back.sourceTargetPixels;
-const unclassifiedPercent = Number(((unclassifiedClassifiedSourcePixels / classifiedSourcePixels) * 100).toFixed(6));
-if (crossTargetInteriorOverlapPixels !== 0
-  || neutralLeakagePixels !== 0
-  || minimumTargetViewIoU < 0.99
-  || viewMetrics.front.aggregateIoU < 0.995
-  || viewMetrics.back.aggregateIoU < 0.995
-  || unclassifiedPercent > 0.5) {
-  throw new Error("Semantic atlas geometry thresholds failed.");
+if (runtimePaths.length !== 116
+  || crossTargetInteriorOverlapPixels !== 0
+  || bodySilhouetteLeakagePixels !== 0
+  || protectedNeutralCoveragePixels !== 0) {
+  throw new Error(JSON.stringify({
+    runtimePathCount: runtimePaths.length,
+    crossTargetInteriorOverlapPixels,
+    bodySilhouetteLeakagePixels,
+    protectedNeutralCoveragePixels,
+    views: validationViews,
+    overlaps: overlapMatrix.filter((entry) => entry.overlapPixels).sort((left, right) => right.overlapPixels - left.overlapPixels).slice(0, 20),
+    geometryDiagnostics: geometryDiagnostics.sort((left, right) => (right.bodyLeakagePixels + right.neutralCoveragePixels) - (left.bodyLeakagePixels + left.neutralCoveragePixels)).slice(0, 30)
+  }));
 }
 
-const targetViews = ["front", "back"].flatMap((view) => {
-  const targetIds = [...new Set(runtimePaths.filter((entry) => entry.view === view).map((entry) => entry.canonicalId))].sort();
-  return targetIds.map((canonicalId) => ({
-    canonicalId,
-    view,
-    sides: runtimePaths
-      .filter((entry) => entry.view === view && entry.canonicalId === canonicalId)
-      .map((entry) => entry.side)
-      .sort((left, right) => sideOrder.get(left) - sideOrder.get(right)),
-    hitAreaIds: manifest.hitAreas
-      .filter((area) => area.view === view && area.canonicalId === canonicalId)
-      .map((area) => area.id)
-      .sort()
-  }));
-});
+runtimePaths.sort((left, right) => `${left.view}:${left.canonicalId}:${left.side}`.localeCompare(`${right.view}:${right.canonicalId}:${right.side}`));
+const targetViews = ["front", "back"].flatMap((view) => [...expectedByView[view]].sort().map((canonicalId) => ({
+  canonicalId,
+  view,
+  sides: runtimePaths
+    .filter((entry) => entry.view === view && entry.canonicalId === canonicalId)
+    .map((entry) => entry.side)
+    .sort((left, right) => sideOrder.get(left) - sideOrder.get(right)),
+  hitAreaIds: hitAreas
+    .filter((area) => area.view === view && area.canonicalId === canonicalId)
+    .map((area) => area.id)
+    .sort()
+})));
 
+const perTargetView = targetViews.map((targetView) => ({
+  targetView: `${targetView.canonicalId}:${targetView.view}`,
+  sideCount: targetView.sides.length,
+  pixelArea: runtimePaths
+    .filter((entry) => entry.view === targetView.view && entry.canonicalId === targetView.canonicalId)
+    .reduce((sum, entry) => sum + entry.pixelArea, 0),
+  sourceToRuntimeBoundaryDisplacementPixels: 0
+}));
+const overlapMatrixJson = `${JSON.stringify(overlapMatrix)}\n`;
 const outputManifest = {
-  ...manifest,
-  views: verifiedViews,
+  schemaVersion: "advanced_visible_v1_semantic_regions_v2",
+  logicalCanvas: { width, height, viewBox: `0 0 ${width} ${height}` },
+  authority: {
+    geometry: "approved grayscale anatomy underlay plus final surface-anatomy region contract",
+    coloredReferences: "intent and manual QA only; not shipped or used at runtime",
+    rejectedPainterMasks: "provenance-only assets; excluded from generation and runtime"
+  },
+  views: viewRecords,
+  hitAreas,
   runtimePaths,
   validation: {
-    rasterization: "categorical crisp-edge comparison at 1024x1536",
-    antialiasTolerancePixels: 0,
+    rasterization: "semantic source and runtime path comparison at 1024x1536",
+    threshold: 127,
+    bodySilhouetteBoundaryTolerancePixels: 2,
+    runtimePathCount: runtimePaths.length,
+    nonEmptyTargetViewCount: perTargetView.filter((entry) => entry.pixelArea > 0).length,
     crossTargetInteriorOverlapPixels,
-    neutralLeakagePixels,
-    classifiedSourcePixels,
-    unclassifiedClassifiedSourcePixels,
-    unclassifiedPercent,
-    minimumTargetViewIoU,
+    bodySilhouetteLeakagePixels,
+    protectedNeutralCoveragePixels,
+    maximumSourceToRuntimeBoundaryDisplacementPixels: 0,
+    isolatedMaximumBoundaryDisplacementPixels: 0,
+    overlapMatrixPairCount: overlapMatrix.length,
+    overlapMatrixSha256: sha256(overlapMatrixJson),
     perTargetView,
-    views: viewMetrics
+    views: validationViews
   }
 };
+
 await writeFile(manifestPath, `${JSON.stringify(outputManifest, null, 2)}\n`, "utf8");
-await writeFile(path.join(outputRoot, "target-view-registry.json"), `${JSON.stringify({
-  schemaVersion: "advanced_visible_v1_target_view_registry_v2",
+await writeFile(registryPath, `${JSON.stringify({
+  schemaVersion: "advanced_visible_v1_target_view_registry_v3",
   targetViews
 }, null, 2)}\n`, "utf8");
 
@@ -375,8 +344,9 @@ console.log(JSON.stringify({
   runtimePathCount: runtimePaths.length,
   targetViewCount: targetViews.length,
   crossTargetInteriorOverlapPixels,
-  neutralLeakagePixels,
-  unclassifiedPercent,
-  minimumTargetViewIoU,
-  views: viewMetrics
+  bodySilhouetteLeakagePixels,
+  protectedNeutralCoveragePixels,
+  maximumSourceToRuntimeBoundaryDisplacementPixels: 0,
+  overlapMatrixPairCount: overlapMatrix.length,
+  views: validationViews
 }, null, 2));

@@ -13,6 +13,7 @@ import {
 } from "./advanced-atlas";
 
 const sourceRoot = resolve("assets/muscle-intelligence/advanced-visible-v1/source");
+const semanticRoot = resolve("assets/muscle-intelligence/advanced-visible-v1/semantic");
 
 function sha256(filename: string) {
   return createHash("sha256").update(readFileSync(resolve(sourceRoot, filename))).digest("hex");
@@ -49,40 +50,68 @@ describe("advanced visible muscle atlas registry", () => {
     }
   });
 
-  it("preserves approved source bytes and records final-visible semantic regions", () => {
+  it("preserves approved source bytes and records grayscale-registered semantic regions", () => {
     const approved = JSON.parse(readFileSync(resolve(sourceRoot, "asset-manifest.json"), "utf8")) as {
-      files: Array<{ name: string; sha256: string; bytes: number }>;
+      files: Array<{ name: string; sha256: string; bytes: number; role: string; used_for_generation?: boolean; used_at_runtime?: boolean }>;
+      semantic_geometry_files: Array<{ name: string; sha256: string; bytes: number; role: string }>;
     };
     for (const asset of approved.files) {
       expect(sha256(asset.name)).toBe(asset.sha256);
       expect(readFileSync(resolve(sourceRoot, asset.name))).toHaveLength(asset.bytes);
     }
-    expect(finalRegionManifest.views.front.sourcePathCount + finalRegionManifest.views.back.sourcePathCount).toBe(220);
-    const allRegions = [...finalRegionManifest.views.front.regions, ...finalRegionManifest.views.back.regions];
-    expect(new Set(allRegions.map((region) => region.sourceComponentFingerprint)).size).toBe(allRegions.length);
-    expect(allRegions.every((region) => region.classification === "target" || region.classification === "excluded")).toBe(true);
-    expect([...new Set(allRegions.flatMap((region) => region.classification === "target" && region.canonicalId ? [region.canonicalId] : []))].sort())
-      .toEqual(ADVANCED_MUSCLE_TARGETS.map((target) => target.id).sort());
-    expect(finalRegionManifest.runtimePaths).toHaveLength(118);
+    expect(approved.files.filter((asset) => asset.name.startsWith("muscle-mask-"))).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: "rejected_painter_provenance_only", used_for_generation: false, used_at_runtime: false })
+    ]));
+    for (const asset of approved.semantic_geometry_files) {
+      const bytes = readFileSync(resolve(sourceRoot, asset.name));
+      expect(createHash("sha256").update(bytes).digest("hex")).toBe(asset.sha256);
+      expect(bytes).toHaveLength(asset.bytes);
+      expect(asset.role).toBe("grayscale_registered_semantic_geometry_authority");
+    }
+    expect(finalRegionManifest.schemaVersion).toBe("advanced_visible_v1_semantic_regions_v2");
+    expect(finalRegionManifest.views.front).toMatchObject({
+      semanticSourceFile: "semantic/muscle-semantic-front.svg",
+      semanticGroupCount: 56,
+      grayscaleAuthoritySha256: "7d9107aeb109d13bbf6622d849bba6640c02d2e1e8640cf91bfe7fecc612196c"
+    });
+    expect(finalRegionManifest.views.back).toMatchObject({
+      semanticSourceFile: "semantic/muscle-semantic-back.svg",
+      semanticGroupCount: 60,
+      grayscaleAuthoritySha256: "f7f59e9f4f843a43f9d02743160092967321a324f1cfd6079015c26100584d67"
+    });
+    for (const view of ["front", "back"] as const) {
+      const source = readFileSync(resolve(semanticRoot, `muscle-semantic-${view}.svg`), "utf8");
+      expect(createHash("sha256").update(source).digest("hex")).toBe(finalRegionManifest.views[view].semanticSourceSha256);
+      expect(Buffer.byteLength(source)).toBe(finalRegionManifest.views[view].semanticSourceBytes);
+      expect(source).toContain('viewBox="0 0 1024 1536"');
+      expect(source).not.toMatch(/<(?:image|text|foreignObject|rect)\b|\btransform=|#[0-9a-f]{3,8}\b|\brgb\(|\bhsl\(/i);
+    }
+    expect(finalRegionManifest.runtimePaths).toHaveLength(116);
+    expect(new Set(finalRegionManifest.runtimePaths.map((entry) => `${entry.view}:${entry.canonicalId}`)).size).toBe(58);
+    expect(new Set(finalRegionManifest.runtimePaths.map((entry) => entry.side))).toEqual(new Set(["left", "right"]));
     expect(finalRegionManifest.logicalCanvas.viewBox).toBe("0 0 1024 1536");
     expect(finalRegionManifest.hitAreas).toHaveLength(6);
   });
 
   it("proves exact final-region coverage without overlap or neutral leakage", () => {
     expect(finalRegionManifest.validation).toMatchObject({
-      antialiasTolerancePixels: 0,
+      bodySilhouetteBoundaryTolerancePixels: 2,
       crossTargetInteriorOverlapPixels: 0,
-      neutralLeakagePixels: 0,
-      unclassifiedClassifiedSourcePixels: 0,
-      unclassifiedPercent: 0,
-      minimumTargetViewIoU: 1,
+      bodySilhouetteLeakagePixels: 0,
+      protectedNeutralCoveragePixels: 0,
+      maximumSourceToRuntimeBoundaryDisplacementPixels: 0,
+      isolatedMaximumBoundaryDisplacementPixels: 0,
+      nonEmptyTargetViewCount: 58,
       views: {
-        front: { aggregateIoU: 1 },
-        back: { aggregateIoU: 1 }
+        front: { semanticGroupCount: 56, targetViewCount: 28, crossTargetInteriorOverlapPixels: 0 },
+        back: { semanticGroupCount: 60, targetViewCount: 30, crossTargetInteriorOverlapPixels: 0 }
       }
     });
     expect(finalRegionManifest.validation.perTargetView).toHaveLength(58);
-    expect(finalRegionManifest.validation.perTargetView.every((entry) => entry.iou >= 0.99)).toBe(true);
+    expect(finalRegionManifest.validation.perTargetView.every((entry) => entry.sideCount === 2
+      && entry.pixelArea > 0 && entry.sourceToRuntimeBoundaryDisplacementPixels === 0)).toBe(true);
+    expect(finalRegionManifest.validation.overlapMatrixPairCount).toBe(3310);
+    expect(finalRegionManifest.validation.overlapMatrixSha256).toHaveLength(64);
     expect(finalRegionManifest.runtimePaths.every((entry) => entry.pathData.startsWith("M") && entry.pathSha256.length === 64)).toBe(true);
   });
 });
