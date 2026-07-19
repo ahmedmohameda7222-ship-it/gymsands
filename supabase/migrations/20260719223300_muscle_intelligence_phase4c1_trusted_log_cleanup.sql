@@ -1,6 +1,8 @@
 begin;
 
 do $preflight$
+declare
+  v_marker text;
 begin
   if to_regprocedure('private.enforce_terminal_exercise_log_immutability()') is null
      or to_regprocedure('public.purge_account_application_data_atomic(uuid)') is null then
@@ -11,8 +13,19 @@ begin
           not in ('postgres', 'supabase_admin') then
     raise exception 'Account purge authority is not owned by a trusted SECURITY DEFINER role.';
   end if;
+  select migration_version into v_marker
+  from public.release_schema_compatibility
+  where singleton;
+  if v_marker not in ('20260711014500', '20260717051011') then
+    raise exception 'Compatibility marker drifted before terminal log cleanup hardening: %.', v_marker;
+  end if;
 end
 $preflight$;
+
+create temporary table phase4c1_trusted_log_marker on commit drop as
+select migration_version as marker
+from public.release_schema_compatibility
+where singleton;
 
 create or replace function private.enforce_terminal_exercise_log_immutability()
 returns trigger
@@ -60,6 +73,8 @@ revoke all on function private.enforce_terminal_exercise_log_immutability()
 do $postconditions$
 declare
   v_guard oid := to_regprocedure('private.enforce_terminal_exercise_log_immutability()');
+  v_marker text;
+  v_baseline text;
 begin
   if v_guard is null or (select prosecdef from pg_proc where oid = v_guard) then
     raise exception 'Terminal exercise-log guard must remain SECURITY INVOKER.';
@@ -67,8 +82,11 @@ begin
   if pg_get_functiondef(v_guard) !~* 'current_user in \(''postgres'', ''supabase_admin'', ''service_role''\)' then
     raise exception 'Trusted account-cleanup role allowance is missing.';
   end if;
-  if (select migration_version from public.release_schema_compatibility where singleton)
-       is distinct from '20260717051011' then
+  select migration_version into v_marker
+  from public.release_schema_compatibility
+  where singleton;
+  select marker into strict v_baseline from phase4c1_trusted_log_marker;
+  if v_marker is distinct from v_baseline then
     raise exception 'Compatibility marker changed during terminal log cleanup hardening.';
   end if;
 end
