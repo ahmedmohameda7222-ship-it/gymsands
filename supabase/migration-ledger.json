@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-19T22:22:55.900276Z",
+  "capturedAt": "2026-07-19T22:26:41.487894Z",
   "auditedRepositoryCommit": "d1485062b09a83c4202c1d4154e78b3512cfd621",
   "productionMigrationCount": 62,
   "schemaVerifiedUntrackedCount": 0,
@@ -12,7 +12,7 @@
     "schemaAppliedUntrackedCount": 0,
     "pendingCount": 0,
     "unresolvedCount": 0,
-    "note": "Production migration history is reconciled through 20260719221530 with all 62 repository migrations recorded exactly once. Do not replay any applied migration."
+    "note": "Production migration history is reconciled through 20260719223300 with all 62 repository migrations recorded exactly once. Do not replay any applied migration."
   },
   "entries": [
     {
@@ -350,66 +350,66 @@
       "note": "Applied once through Supabase apply_migration on 2026-07-19. Git blob aa97772d5c95f1b5dc760584318201a1dfb975db; SHA-256 fca05961a40ddc12d20661c423f66991f81aaf986bc97c21acbbe4249a6537d9. Production verification confirmed 60 published V2 mappings, 453 entries, zero checksum drift, zero non-curated V2 mappings, zero V2 session snapshots, unchanged 9/9/29 history counts, and compatibility marker 20260717051011. Do not replay."
     },
     {
-      "localFile": "20260719221012_muscle_intelligence_phase4c1_runtime_v2_cutover.sql",
+      "localFile": "20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql",
       "state": "applied",
-      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Post-apply verification confirmed the Phase 4C.1 V2 runtime cutover, terminal integrity guards, unchanged historical V1 snapshots, and unchanged compatibility marker 20260717051011. Do not replay.",
-      "productionVersion": "20260719221012",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223000",
       "productionName": "muscle_intelligence_phase4c1_runtime_v2_cutover"
     },
     {
-      "localFile": "20260719221100_muscle_intelligence_phase4c1_snapshot_support.sql",
+      "localFile": "20260719223010_muscle_intelligence_phase4c1_snapshot_support.sql",
       "state": "applied",
-      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Post-apply verification confirmed the Phase 4C.1 V2 runtime cutover, terminal integrity guards, unchanged historical V1 snapshots, and unchanged compatibility marker 20260717051011. Do not replay.",
-      "productionVersion": "20260719221100",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223010",
       "productionName": "muscle_intelligence_phase4c1_snapshot_support"
     },
     {
-      "localFile": "20260719221152_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql",
+      "localFile": "20260719223020_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql",
       "state": "applied",
-      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Post-apply verification confirmed the Phase 4C.1 V2 runtime cutover, terminal integrity guards, unchanged historical V1 snapshots, and unchanged compatibility marker 20260717051011. Do not replay.",
-      "productionVersion": "20260719221152",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223020",
       "productionName": "muscle_intelligence_phase4c1_v2_snapshot_freeze"
     },
     {
-      "localFile": "20260719221248_muscle_intelligence_phase4c1_direct_session_v2.sql",
+      "localFile": "20260719223030_muscle_intelligence_phase4c1_direct_session_v2.sql",
       "state": "applied",
-      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Post-apply verification confirmed the Phase 4C.1 V2 runtime cutover, terminal integrity guards, unchanged historical V1 snapshots, and unchanged compatibility marker 20260717051011. Do not replay.",
-      "productionVersion": "20260719221248",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223030",
       "productionName": "muscle_intelligence_phase4c1_direct_session_v2"
     },
     {
-      "localFile": "20260719221331_muscle_intelligence_phase4c1_replacement_v2.sql",
+      "localFile": "20260719223040_muscle_intelligence_phase4c1_replacement_v2.sql",
       "state": "applied",
-      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Post-apply verification confirmed the Phase 4C.1 V2 runtime cutover, terminal integrity guards, unchanged historical V1 snapshots, and unchanged compatibility marker 20260717051011. Do not replay.",
-      "productionVersion": "20260719221331",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223040",
       "productionName": "muscle_intelligence_phase4c1_replacement_v2"
     },
     {
-      "localFile": "20260719221407_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql",
+      "localFile": "20260719223050_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql",
       "state": "applied",
-      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Post-apply verification confirmed the Phase 4C.1 V2 runtime cutover, terminal integrity guards, unchanged historical V1 snapshots, and unchanged compatibility marker 20260717051011. Do not replay.",
-      "productionVersion": "20260719221407",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223050",
       "productionName": "muscle_intelligence_phase4c1_terminal_reconcile_v2"
     },
     {
-      "localFile": "20260719221450_muscle_intelligence_phase4c1_terminal_history_guard.sql",
+      "localFile": "20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql",
       "state": "applied",
-      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Post-apply verification confirmed the Phase 4C.1 V2 runtime cutover, terminal integrity guards, unchanged historical V1 snapshots, and unchanged compatibility marker 20260717051011. Do not replay.",
-      "productionVersion": "20260719221450",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223100",
       "productionName": "muscle_intelligence_phase4c1_terminal_history_guard"
     },
     {
-      "localFile": "20260719221508_muscle_intelligence_phase4c1_set_type_refresh.sql",
+      "localFile": "20260719223200_muscle_intelligence_phase4c1_set_type_refresh.sql",
       "state": "applied",
-      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Post-apply verification confirmed the Phase 4C.1 V2 runtime cutover, terminal integrity guards, unchanged historical V1 snapshots, and unchanged compatibility marker 20260717051011. Do not replay.",
-      "productionVersion": "20260719221508",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223200",
       "productionName": "muscle_intelligence_phase4c1_set_type_refresh"
     },
     {
-      "localFile": "20260719221530_muscle_intelligence_phase4c1_trusted_log_cleanup.sql",
+      "localFile": "20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup.sql",
       "state": "applied",
-      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Post-apply verification confirmed the Phase 4C.1 V2 runtime cutover, terminal integrity guards, unchanged historical V1 snapshots, and unchanged compatibility marker 20260717051011. Do not replay.",
-      "productionVersion": "20260719221530",
+      "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
+      "productionVersion": "20260719223300",
       "productionName": "muscle_intelligence_phase4c1_trusted_log_cleanup"
     }
   ]

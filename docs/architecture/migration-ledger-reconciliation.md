@@ -6,14 +6,14 @@
 
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 
-**Status:** **Fully reconciled through `20260719221530`; no pending repository migration remains**
+**Status:** **Fully reconciled through `20260719223300`; no pending repository migration remains**
 
 This document records verified production migration history. It is not authorization to replay migrations, deploy, promote, change compatibility markers, or merge. Applied migration files and production identities are immutable.
 
 ## Current production and ledger state
 
 - Applied production migrations: 62
-- Latest production migration: `20260719221530_muscle_intelligence_phase4c1_trusted_log_cleanup`
+- Latest production migration: `20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup`
 - `pendingCount = 0`
 - `schemaAppliedUntrackedCount = 0`
 - `unresolvedCount = 0`
@@ -24,15 +24,15 @@ This document records verified production migration history. It is not authoriza
 ## Applied Muscle Intelligence Phase 4C.1 chain
 
 ```text
-20260719221012_muscle_intelligence_phase4c1_runtime_v2_cutover.sql
-20260719221100_muscle_intelligence_phase4c1_snapshot_support.sql
-20260719221152_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql
-20260719221248_muscle_intelligence_phase4c1_direct_session_v2.sql
-20260719221331_muscle_intelligence_phase4c1_replacement_v2.sql
-20260719221407_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql
-20260719221450_muscle_intelligence_phase4c1_terminal_history_guard.sql
-20260719221508_muscle_intelligence_phase4c1_set_type_refresh.sql
-20260719221530_muscle_intelligence_phase4c1_trusted_log_cleanup.sql
+20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql
+20260719223010_muscle_intelligence_phase4c1_snapshot_support.sql
+20260719223020_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql
+20260719223030_muscle_intelligence_phase4c1_direct_session_v2.sql
+20260719223040_muscle_intelligence_phase4c1_replacement_v2.sql
+20260719223050_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql
+20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql
+20260719223200_muscle_intelligence_phase4c1_set_type_refresh.sql
+20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup.sql
 ```
 
 These migrations were applied exactly once through the supported Supabase migration authority. Their local filenames now match production migration history. Do not replay or modify them.
