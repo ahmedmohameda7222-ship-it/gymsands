@@ -11,11 +11,16 @@ begin
   select migration_version into v_marker
   from public.release_schema_compatibility
   where singleton;
-  if v_marker is distinct from '20260717051011' then
+  if v_marker not in ('20260711014500', '20260717051011') then
     raise exception 'Compatibility marker drifted before terminal history protection: %.', v_marker;
   end if;
 end
 $preflight$;
+
+create temporary table phase4c1_terminal_history_marker on commit drop as
+select migration_version as marker
+from public.release_schema_compatibility
+where singleton;
 
 create or replace function private.enforce_terminal_workout_session_delete()
 returns trigger
@@ -49,11 +54,13 @@ for each row execute function private.enforce_terminal_workout_session_delete();
 do $postconditions$
 declare
   v_marker text;
+  v_baseline text;
 begin
   select migration_version into v_marker
   from public.release_schema_compatibility
   where singleton;
-  if v_marker is distinct from '20260717051011' then
+  select marker into strict v_baseline from phase4c1_terminal_history_marker;
+  if v_marker is distinct from v_baseline then
     raise exception 'Compatibility marker changed while protecting terminal history.';
   end if;
   if not exists (
