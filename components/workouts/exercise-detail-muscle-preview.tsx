@@ -39,7 +39,7 @@ export function ExerciseDetailMusclePreview() {
   if (!exercise) return null;
 
   return (
-    <TrainPageContainer className="pt-0" dir={dir} data-exercise-detail-muscle-preview>
+    <TrainPageContainer className="mt-6" dir={dir} data-exercise-detail-muscle-preview>
       <ExerciseMusclePreview exercise={exercise} language={language} />
     </TrainPageContainer>
   );
