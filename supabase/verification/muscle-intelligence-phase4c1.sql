@@ -71,6 +71,19 @@ begin
     raise exception 'Terminal exercise-log mutation guard is missing.';
   end if;
 
+  if not exists (
+    select 1
+    from pg_trigger trigger_row
+    join pg_class table_row on table_row.oid = trigger_row.tgrelid
+    join pg_namespace schema_row on schema_row.oid = table_row.relnamespace
+    where not trigger_row.tgisinternal
+      and schema_row.nspname = 'public'
+      and table_row.relname = 'workout_sessions'
+      and trigger_row.tgname = 'workout_sessions_terminal_delete_guard'
+  ) then
+    raise exception 'Terminal workout-session deletion guard is missing.';
+  end if;
+
   if v_direct is null or v_replace is null or v_complete is null or v_supported is null or v_v2_freeze is null then
     raise exception 'A Phase 4C.1 runtime authority is missing.';
   end if;
