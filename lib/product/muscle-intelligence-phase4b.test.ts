@@ -62,10 +62,16 @@ describe("Muscle Intelligence Phase 4B implementation boundary", () => {
     const combined = migrations.join("\n");
 
     expect(migrations).toHaveLength(6);
-    expect(migrations.every((migration) => migration.includes("exercise_muscle_mapping_v2"))).toBe(true);
-    expect(migrations.every((migration) => migration.includes("exercise_muscle_mapping_v1"))).toBe(true);
-    expect(migrations.every((migration) => migration.includes("public.publish_exercise_muscle_mapping_set"))).toBe(true);
-    expect(migrations.every((migration) => migration.includes("private.exercise_muscle_mapping_checksum"))).toBe(true);
+    expect(migrations[0]).toContain("exercise_muscle_mapping_v2");
+    expect(migrations[0]).toContain("exercise_muscle_mapping_v1");
+    expect(migrations[0]).toContain("public.publish_exercise_muscle_mapping_set");
+    expect(migrations[0]).toContain("private.exercise_muscle_mapping_checksum");
+    expect(migrations[1]).toContain("create or replace function private.phase4b_publish_reviewed_advanced_mapping_part");
+    expect(migrations.slice(1).every((migration) => migration.includes("private.phase4b_publish_reviewed_advanced_mapping_part"))).toBe(true);
+    expect(combined).toContain("exercise_muscle_mapping_v2");
+    expect(combined).toContain("exercise_muscle_mapping_v1");
+    expect(combined).toContain("public.publish_exercise_muscle_mapping_set");
+    expect(combined).toContain("private.exercise_muscle_mapping_checksum");
     expect(combined).not.toMatch(/insert\s+into\s+public\.workout_session_muscle_snapshots/i);
     expect(combined).not.toMatch(/update\s+public\.release_schema_compatibility/i);
     expect(combined).not.toMatch(/delete\s+from\s+public\.exercise_muscle_mapping_sets/i);
