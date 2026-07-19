@@ -77,6 +77,25 @@ describe("versioned session muscle analysis", () => {
     }
   });
 
+  it("degrades a stable V2 identity without a published mapping to unmapped coverage", () => {
+    const result = buildVersionedSessionMuscleAnalysis({
+      ...v1Input,
+      snapshot: { ...v2Snapshot, completeness: "partial", reason_codes: ["mapping_unavailable"] },
+      items: [{
+        ...v2Item,
+        planned_mapping_set_id: null,
+        planned_mapping_version: null,
+        planned_mapping_schema_version: null,
+        planned_mapping_checksum: null
+      }],
+      globalMappings: []
+    });
+    expect(result.analysis && "kind" in result.analysis ? result.analysis.kind : null).toBe("advanced");
+    if (result.analysis && "kind" in result.analysis && result.analysis.kind === "advanced") {
+      expect(result.analysis.coverage).toMatchObject({ totalItemCount: 1, includedItemCount: 0, unmappedItemCount: 1 });
+    }
+  });
+
   it("uses frozen qualifying sets for completed V2 analysis instead of mutable logs", () => {
     const result = buildVersionedSessionMuscleAnalysis({
       ...v1Input,
