@@ -6,20 +6,42 @@
 
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 
-**Status:** **Fully reconciled through `20260719094718`; no pending repository migration remains**
+**Status:** **Production is reconciled through `20260719094718`; four Phase 4C.1 repository migrations are pending and unapplied**
 
-This document records verified production migration history. It is not authorization to replay migrations, deploy, promote, change compatibility markers, or merge. Applied migration files and production identities are immutable.
+This document records verified production migration history and pending repository migrations. It is not authorization to replay migrations, apply pending migrations, deploy, promote, change compatibility markers, or merge. Applied migration files and production identities are immutable.
 
-## Current production state
+## Current production and ledger state
 
-- Applied migrations: 53
-- Latest migration: `20260719094718_muscle_intelligence_phase4b_advanced_mappings_part_06`
-- `pendingCount = 0`
+- Applied production migrations: 53
+- Latest production migration: `20260719094718_muscle_intelligence_phase4b_advanced_mappings_part_06`
+- `pendingCount = 4`
 - `schemaAppliedUntrackedCount = 0`
-- `unresolvedCount = 0`
-- `historyRepair.state = reconciled`
+- `unresolvedCount = 4`
+- `historyRepair.state = pending`
 - Compatibility marker: `20260717051011`
-- Ledger-level migration-history release readiness: true
+- Ledger-level migration-history release readiness: false until the pending Phase 4C.1 chain is explicitly handled
+
+Production itself remains unchanged. The pending state describes repository files that have not been applied.
+
+## Pending Muscle Intelligence Phase 4C.1 chain
+
+```text
+20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql
+20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql
+20260719223200_muscle_intelligence_phase4c1_set_type_refresh.sql
+20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup.sql
+```
+
+These migrations are classified as `pending` because they exist in the Draft Phase 4C.1 implementation but are absent from production migration history. They must not be applied, repaired as applied, merged, or deployed without explicit coordinated authorization. Do not replay any already-applied migration.
+
+The pending chain is designed to:
+
+- preserve every existing V1 workout-session snapshot unchanged;
+- freeze V2 mappings only for newly started sessions after cutover;
+- add structured set types and exclude warm-up sets from qualifying performed workload;
+- freeze performed total and qualifying set counts at terminal completion;
+- prevent ordinary mutation or deletion of terminal workout history;
+- keep the deployed compatibility marker unchanged during implementation.
 
 ## Applied Muscle Intelligence Phase 4B chain
 
@@ -91,7 +113,7 @@ Phase 4A remains immutable. It established the advanced atlas and schema-isolate
 20260717215900_muscle_intelligence_phase3_set_log_completion_authority
 ```
 
-The existing owner, privacy, lifecycle, snapshot, and RPC security contracts remain unchanged.
+The existing owner, privacy, lifecycle, snapshot, and RPC security contracts remain active.
 
 ## Compatibility boundary
 
@@ -108,16 +130,19 @@ version = 2
 migration_version = 20260717051011
 ```
 
-The difference is intentional. The marker may advance only in a separately authorized coordinated release.
+The difference is intentional. The marker may advance only in a separately authorized coordinated release. Phase 4C.1 does not advance it.
 
 ## Verification authority
 
 - `supabase/verification/muscle-intelligence-phase4b.sql`
+- `supabase/verification/muscle-intelligence-phase4c1.sql`
 - `lib/product/muscle-intelligence-phase4b.test.ts`
+- `lib/product/muscle-intelligence-phase4c1.test.ts`
+- `lib/product/muscle-intelligence-phase4c1-set-type.test.ts`
 - `lib/train/muscle-intelligence/advanced-mapping-registry.test.ts`
-- `lib/train/muscle-intelligence/plan-advanced-analysis.test.ts`
+- `lib/train/muscle-intelligence/advanced-session-analysis.test.ts`
 - full clean migration-chain replay in GitHub Quality
-- exact-head production build and Train browser QA
+- exact-head production build
 - `supabase/migration-ledger.json`
 
-PR merge, deployment, compatibility-marker advancement, V2 session cutover, and Phase 4C remain separate decisions.
+Phase 4C.1 migration apply, PR merge, deployment, compatibility-marker advancement, Phase 4C.2, and Phase 4C.3 remain separate decisions.
