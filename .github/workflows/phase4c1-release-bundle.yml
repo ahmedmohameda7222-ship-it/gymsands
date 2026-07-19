@@ -1,11 +1,9 @@
 name: Phase 4C1 Release Bundle
 
 on:
-  push:
+  pull_request:
     branches:
-      - phase4c1-runtime-v2-cutover
-    paths:
-      - .github/workflows/phase4c1-release-bundle.yml
+      - main
 
 permissions:
   contents: read
@@ -14,10 +12,10 @@ jobs:
   bundle:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout exact branch head
+      - name: Checkout exact pull request head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Upload reviewed Phase 4C.1 migrations
         uses: actions/upload-artifact@v4
         with:
