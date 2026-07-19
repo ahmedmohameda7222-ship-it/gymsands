@@ -212,7 +212,7 @@ export default function WorkoutDetailsPage() {
       ? { id: workout.id, exercise_name: workout.name, category_type: workout.category, category: workout.target_muscle, exercise_url: guideUrl ?? "", video_url: customVideoUrl, instructions: workout.instructions, source: "user_custom", is_global: true }
       : null;
   const secondaryMuscles = workout.secondary_muscles ?? video?.secondary_muscles ?? [];
-  const displayTarget = formatExerciseDisplayList(workout.muscle_category || workout.target_muscle, language, "muscle");
+  const displayTarget = formatExerciseDisplayList(workout.target_muscle || workout.muscle_category, language, "muscle");
   const displayEquipment = formatExerciseDisplayList(workout.equipment_required || workout.equipment, language, "equipment");
   const displayDifficulty = formatExerciseDisplayValue(workout.experience_level || workout.difficulty, language, "difficulty");
   const displayMovement = formatExerciseDisplayValue(workout.movement_pattern || workout.mechanics || workout.category, language, "movement");
@@ -327,12 +327,7 @@ export default function WorkoutDetailsPage() {
           <Card>
             <CardHeader><CardTitle>{tr("details")}</CardTitle></CardHeader>
             <CardContent className="space-y-5">
-              <div className="flex flex-wrap gap-2">
-                {displayTarget ? <Badge>{displayTarget}</Badge> : null}
-                {displayEquipment ? <Badge variant="outline">{displayEquipment}</Badge> : null}
-                {displayDifficulty ? <Badge variant="outline">{displayDifficulty}</Badge> : null}
-                {!workout.is_global ? <Badge variant="success">{tr("custom")}</Badge> : null}
-              </div>
+              {!workout.is_global ? <div><Badge variant="success">{tr("custom")}</Badge></div> : null}
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <Detail label={tr("primaryMuscle")} value={displayTarget || tr("noneSaved")} />

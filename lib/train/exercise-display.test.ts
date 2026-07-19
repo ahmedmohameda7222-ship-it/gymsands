@@ -93,6 +93,17 @@ describe("member-facing exercise terminology", () => {
     }
   });
 
+  it("uses the primary muscle before the broader body region and avoids duplicate details metadata", () => {
+    const details = readFileSync("app/(private)/workouts/[id]/page.tsx", "utf8");
+    const browser = readFileSync("components/workouts/workout-browser.tsx", "utf8");
+    const today = readFileSync("components/workouts/todays-workout.tsx", "utf8");
+    expect(details).toContain("workout.target_muscle || workout.muscle_category");
+    expect(browser).toContain("workout.target_muscle || workout.muscle_category");
+    expect(today).toContain("exercise.target_muscle || exercise.muscle_category");
+    expect(details).not.toContain("{displayTarget ? <Badge>{displayTarget}</Badge> : null}");
+    expect(details).not.toContain("{displayEquipment ? <Badge variant="outline">{displayEquipment}</Badge> : null}");
+  });
+
   it("keeps plan review and plan editing metadata friendly without changing canonical identities", () => {
     const editor = readFileSync("components/workouts/workout-plan-editor.tsx", "utf8");
     const detail = readFileSync("components/workouts/workout-plan-detail.tsx", "utf8");

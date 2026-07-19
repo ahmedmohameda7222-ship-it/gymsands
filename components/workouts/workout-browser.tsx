@@ -641,7 +641,7 @@ export function WorkoutBrowser() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="font-semibold text-foreground">{workout.name}</h3>
-                    <p className="mt-0.5 text-sm text-muted-foreground">{formatExerciseDisplayList(workout.muscle_category || workout.target_muscle, language, "muscle")}</p>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{formatExerciseDisplayList(workout.target_muscle || workout.muscle_category, language, "muscle")}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1.5">
                     <Badge>{formatExerciseDisplayValue(workout.experience_level || workout.difficulty, language, "difficulty")}</Badge>
@@ -651,7 +651,7 @@ export function WorkoutBrowser() {
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <Badge variant="outline">{formatExerciseDisplayList(workout.equipment_required || workout.equipment, language, "equipment")}</Badge>
-                  {workout.mechanics ? <Badge variant="outline">{formatExerciseDisplayValue(workout.movement_pattern || workout.mechanics, language, "movement")}</Badge> : null}
+                  {workout.movement_pattern || workout.mechanics ? <Badge variant="outline">{formatExerciseDisplayValue(workout.movement_pattern || workout.mechanics, language, "movement")}</Badge> : null}
                   {workout.force_type ? <Badge variant="outline">{formatExerciseDisplayValue(workout.force_type, language, "force")}</Badge> : null}
                   {workout.sets ? <Badge variant="outline">{tr("setsCount", { count: workout.sets })}</Badge> : null}
                   {workout.reps ? <Badge variant="outline">{workout.reps}</Badge> : null}

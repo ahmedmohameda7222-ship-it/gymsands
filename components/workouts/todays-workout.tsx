@@ -141,7 +141,7 @@ export function TodaysWorkout() {
               <div key={`${exercise.id}-${index}`} className="rounded-md border bg-card p-3">
                 <p className="font-semibold text-foreground">{index + 1}. {exercise.name}</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {formatExerciseDisplayList(exercise.muscle_category || exercise.target_muscle, language, "muscle")} · {formatExerciseDisplayList(exercise.equipment_required || exercise.equipment, language, "equipment")}
+                  {formatExerciseDisplayList(exercise.target_muscle || exercise.muscle_category, language, "muscle")} · {formatExerciseDisplayList(exercise.equipment_required || exercise.equipment, language, "equipment")}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Badge variant="outline">{exercise.sets ?? 3} sets</Badge>
