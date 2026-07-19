@@ -113,7 +113,7 @@ jobs:
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/(private)/workouts/[id]/page.tsx components/workouts/workout-browser.tsx components/workouts/todays-workout.tsx lib/i18n/train.ts lib/train/exercise-display.test.ts
+          git add -- "app/(private)/workouts/[id]/page.tsx" "components/workouts/workout-browser.tsx" "components/workouts/todays-workout.tsx" "lib/i18n/train.ts" "lib/train/exercise-display.test.ts"
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 0
