@@ -9,6 +9,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
 import { userSafeError } from "@/lib/error-formatting";
 import { useTranslation } from "@/lib/i18n/use-translation";
+import { formatExerciseDisplayList } from "@/lib/train/exercise-display";
 import Link from "next/link";
 import { getTodayMealPlanItems, markMealPlanItemDone } from "@/services/database/nutrition";
 import { getCurrentWeekday, getDefaultUserWorkoutPlan, workoutsFromPlanDay } from "@/services/database/workout-plans";
@@ -29,7 +30,7 @@ function customVideoUrl(exercise: Workout) {
 export function TodaysWorkout() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { t, dir } = useTranslation();
+  const { language, t, dir } = useTranslation();
   const [plan, setPlan] = useState<UserWorkoutPlan | null>(null);
   const [mealItems, setMealItems] = useState<MealPlanItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -140,7 +141,7 @@ export function TodaysWorkout() {
               <div key={`${exercise.id}-${index}`} className="rounded-md border bg-card p-3">
                 <p className="font-semibold text-foreground">{index + 1}. {exercise.name}</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {exercise.muscle_category || exercise.target_muscle} | {exercise.equipment_required || exercise.equipment}
+                  {formatExerciseDisplayList(exercise.muscle_category || exercise.target_muscle, language, "muscle")} · {formatExerciseDisplayList(exercise.equipment_required || exercise.equipment, language, "equipment")}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Badge variant="outline">{exercise.sets ?? 3} sets</Badge>

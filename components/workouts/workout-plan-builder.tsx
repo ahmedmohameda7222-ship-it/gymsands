@@ -18,6 +18,7 @@ import { todayIso } from "@/lib/date-utils";
 import { userSafeError } from "@/lib/error-formatting";
 import { useUnsavedChangesGuard } from "@/lib/hooks/use-unsaved-changes-guard";
 import { useTrainTranslation, type TrainKey } from "@/lib/i18n/train";
+import { formatExerciseDisplayList } from "@/lib/train/exercise-display";
 import { clearStoredValue, readStoredJson, storeJson, workoutStorageKey } from "@/lib/workout-persistence";
 import { mergeUserFacingExerciseNote, userFacingExerciseNote } from "@/lib/workouts/train-visual";
 import { createUserWorkoutPlan, weekDays } from "@/services/database/workout-plans";
@@ -290,7 +291,7 @@ export function WorkoutPlanBuilder({ onSaved }: { loadActivePlan?: boolean; onSa
               {activeDay.exercises.map((exercise, index) => (
                 <article key={`${identity(exercise)}-${index}`} className="rounded-2xl border border-border/70 bg-card p-4" data-exercise-prescription>
                   <div className="flex min-w-0 items-start justify-between gap-3 border-b border-border/60 pb-3">
-                    <div className="min-w-0"><p className="font-semibold">{index + 1}. {exercise.name}</p><p className="mt-1 text-sm text-muted-foreground">{exercise.target_muscle} · {exercise.equipment}</p></div>
+                    <div className="min-w-0"><p className="font-semibold">{index + 1}. {exercise.name}</p><p className="mt-1 text-sm text-muted-foreground">{formatExerciseDisplayList(exercise.target_muscle, language, "muscle")} · {formatExerciseDisplayList(exercise.equipment, language, "equipment")}</p></div>
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-3 xl:grid-cols-[88px_112px_112px_minmax(180px,1fr)_132px] xl:items-end">
                     <div className="space-y-2"><Label htmlFor={`builder-sets-${index}`}>{tr("sets")}</Label><Input id={`builder-sets-${index}`} type="number" min={1} value={exercise.sets ?? 3} onChange={(event) => patchExercise(activeDayIndex, index, { sets: Number(event.target.value) || 0 })} /></div>

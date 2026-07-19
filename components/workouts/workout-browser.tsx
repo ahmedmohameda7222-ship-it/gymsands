@@ -30,6 +30,7 @@ import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { userSafeError } from "@/lib/error-formatting";
 import { useTrainTranslation } from "@/lib/i18n/train";
+import { formatExerciseDisplayList, formatExerciseDisplayValue } from "@/lib/train/exercise-display";
 import type { Workout } from "@/types";
 
 type FilterKey =
@@ -134,7 +135,7 @@ export function WorkoutBrowser() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const { dialog, ask } = useConfirm();
-  const { dir, locale, tr } = useTrainTranslation();
+  const { language, dir, locale, tr } = useTrainTranslation();
   const userId = user?.id;
   const [query, setQuery] = useState("");
   const [filterOptions, setFilterOptions] = useState<CanonicalWorkoutFilterOptions>(emptyOptions);
@@ -640,22 +641,22 @@ export function WorkoutBrowser() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="font-semibold text-foreground">{workout.name}</h3>
-                    <p className="mt-0.5 text-sm text-muted-foreground">{workout.muscle_category || workout.target_muscle}</p>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{formatExerciseDisplayList(workout.muscle_category || workout.target_muscle, language, "muscle")}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1.5">
-                    <Badge>{workout.experience_level || workout.difficulty}</Badge>
+                    <Badge>{formatExerciseDisplayValue(workout.experience_level || workout.difficulty, language, "difficulty")}</Badge>
                     {!workout.is_global ? <Badge variant="success">{tr("custom")}</Badge> : null}
                     {profile?.role === "admin" ? quality.map((item) => <Badge key={item} variant="outline">{tr(qualityLabels[item])}</Badge>) : null}
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  <Badge variant="outline">{workout.equipment_required || workout.equipment}</Badge>
-                  {workout.mechanics ? <Badge variant="outline">{workout.mechanics}</Badge> : null}
-                  {workout.force_type ? <Badge variant="outline">{workout.force_type}</Badge> : null}
+                  <Badge variant="outline">{formatExerciseDisplayList(workout.equipment_required || workout.equipment, language, "equipment")}</Badge>
+                  {workout.mechanics ? <Badge variant="outline">{formatExerciseDisplayValue(workout.movement_pattern || workout.mechanics, language, "movement")}</Badge> : null}
+                  {workout.force_type ? <Badge variant="outline">{formatExerciseDisplayValue(workout.force_type, language, "force")}</Badge> : null}
                   {workout.sets ? <Badge variant="outline">{tr("setsCount", { count: workout.sets })}</Badge> : null}
                   {workout.reps ? <Badge variant="outline">{workout.reps}</Badge> : null}
                 </div>
-                {workout.secondary_muscles?.length ? <p className="mt-2 text-xs text-muted-foreground">{tr("secondaryMusclesNamed", { names: workout.secondary_muscles.join(", ") })}</p> : null}
+                {workout.secondary_muscles?.length ? <p className="mt-2 text-xs text-muted-foreground">{tr("secondaryMusclesNamed", { names: formatExerciseDisplayList(workout.secondary_muscles, language, "muscle") })}</p> : null}
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <Button asChild className="min-h-12">
                     <Link href={`/workouts/session/${workout.id}`}><Play className="h-4 w-4" /> {tr("startSession")}</Link>

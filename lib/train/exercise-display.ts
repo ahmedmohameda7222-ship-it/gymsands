@@ -212,7 +212,7 @@ function humanizeTechnicalValue(value: string) {
     .replace(/[_.-]+/g, " ")
     .replace(/\s+/g, " ");
   if (!clean) return "";
-  if (!/[_.-]/.test(value) && /[^\x00-\x7F]/.test(value)) return clean;
+  if (!/[_.-]/.test(value)) return clean;
   return clean
     .split(" ")
     .map((part) => {
