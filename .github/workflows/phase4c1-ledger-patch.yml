@@ -12,7 +12,6 @@ permissions:
 
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
@@ -29,50 +28,38 @@ jobs:
           import json
 
           path = Path('supabase/migration-ledger.json')
-          text = path.read_text()
-          ledger = json.loads(text)
+          ledger = json.loads(path.read_text())
           pending = [
               '20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql',
               '20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql',
               '20260719223200_muscle_intelligence_phase4c1_set_type_refresh.sql',
               '20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup.sql',
           ]
-          existing = {entry['localFile'] for entry in ledger['entries']}
-          if any(name in existing for name in pending):
-              raise SystemExit('A Phase 4C.1 migration is already classified; refusing duplicate patch.')
+          by_file = {entry['localFile']: entry for entry in ledger['entries']}
+          for local_file in pending:
+              entry = by_file.get(local_file)
+              if entry is None:
+                  ledger['entries'].append({
+                      'localFile': local_file,
+                      'state': 'pending',
+                      'note': 'Phase 4C.1 implementation migration. Not applied to production; explicit coordinated authorization is required before apply.'
+                  })
+              elif entry.get('state') != 'pending':
+                  raise SystemExit(f'{local_file} already has unexpected state {entry.get("state")}')
 
-          text = text.replace('"capturedAt": "2026-07-19T09:52:00Z"', '"capturedAt": "2026-07-19T21:15:00Z"')
-          if text.count('"pendingCount": 0') != 2 or text.count('"unresolvedCount": 0') != 2:
-              raise SystemExit('Unexpected ledger count shape.')
-          text = text.replace('"pendingCount": 0', '"pendingCount": 4')
-          text = text.replace('"unresolvedCount": 0', '"unresolvedCount": 4')
-          if text.count('"state": "reconciled"') != 1:
-              raise SystemExit('Unexpected reconciliation state shape.')
-          text = text.replace('"state": "reconciled"', '"state": "pending"', 1)
-          old_note = 'Production migration history is reconciled through 20260719094718 with all 53 repository migrations recorded exactly once. Do not replay any applied migration.'
-          new_note = 'Production migration history remains reconciled through 20260719094718 with all 53 applied migrations recorded exactly once. Four Phase 4C.1 repository migrations are pending and have not been applied. Do not replay any applied migration or apply pending files without explicit coordinated authorization.'
-          if old_note not in text:
-              raise SystemExit('Expected historyRepair note not found.')
-          text = text.replace(old_note, new_note, 1)
-
-          insertion = '''\n    { "localFile": "20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql", "state": "pending", "note": "Phase 4C.1 implementation migration. Not applied to production; explicit coordinated authorization is required before apply." },
-    { "localFile": "20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql", "state": "pending", "note": "Phase 4C.1 implementation migration. Not applied to production; explicit coordinated authorization is required before apply." },
-    { "localFile": "20260719223200_muscle_intelligence_phase4c1_set_type_refresh.sql", "state": "pending", "note": "Phase 4C.1 implementation migration. Not applied to production; explicit coordinated authorization is required before apply." },
-    { "localFile": "20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup.sql", "state": "pending", "note": "Phase 4C.1 implementation migration. Not applied to production; explicit coordinated authorization is required before apply." }'''
-          marker = '\n  ]\n}'
-          index = text.rfind(marker)
-          if index < 0:
-              raise SystemExit('Ledger entries closing marker not found.')
-          before = text[:index].rstrip()
-          if not before.endswith('}'):
-              raise SystemExit('Ledger does not end with an entry object.')
-          text = before + ',' + insertion + text[index:]
-          path.write_text(text)
-
-          check = json.loads(path.read_text())
-          assert sum(entry['state'] == 'pending' for entry in check['entries']) == 4
-          assert check['pendingCount'] == 4 and check['unresolvedCount'] == 4
-          assert check['historyRepair']['state'] == 'pending'
+          ledger['entries'].sort(key=lambda entry: entry['localFile'])
+          ledger['capturedAt'] = '2026-07-19T21:20:00Z'
+          ledger['pendingCount'] = 4
+          ledger['unresolvedCount'] = 4
+          ledger['historyRepair']['state'] = 'pending'
+          ledger['historyRepair']['pendingCount'] = 4
+          ledger['historyRepair']['unresolvedCount'] = 4
+          ledger['historyRepair']['note'] = (
+              'Production migration history remains reconciled through 20260719094718 with all 53 applied migrations recorded exactly once. '
+              'Four Phase 4C.1 repository migrations are pending and have not been applied. '
+              'Do not replay any applied migration or apply pending files without explicit coordinated authorization.'
+          )
+          path.write_text(json.dumps(ledger, indent=2) + '\n')
           PY
 
           git config user.name github-actions[bot]
