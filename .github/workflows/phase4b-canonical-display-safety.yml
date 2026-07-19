@@ -1,0 +1,33 @@
+name: Phase 4B Canonical Display Safety
+
+on:
+  push:
+    branches:
+      - fix/phase4b-exercise-display
+    paths:
+      - .github/workflows/phase4b-canonical-display-safety.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout correction branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/phase4b-exercise-display
+          fetch-depth: 0
+      - name: Apply canonical display safety correction
+        run: python scripts/apply-phase4b-canonical-display-safety.py
+      - name: Commit correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions-bot
+          git config user.email github-actions-bot@users.noreply.github.com
+          if git diff --quiet; then exit 0; fi
+          git add components/workouts/workout-plan-editor.tsx lib/train/exercise-display.test.ts
+          git commit -m "fix(train): preserve canonical exercise metadata in editor"
+          git push origin HEAD:fix/phase4b-exercise-display
