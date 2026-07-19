@@ -101,5 +101,6 @@ describe("member-facing exercise terminology", () => {
     expect(detail).toContain('formatExerciseDisplayList(exercise.target_muscle, language, "muscle")');
     expect(detail).toContain('formatExerciseDisplayList(exercise.equipment, language, "equipment")');
     expect(editor).toContain("source_workout_id: workout.id");
+    expect(editor.match(/readOnly=\{Boolean\(exercise\.source_workout_id \|\| exercise\.workout_id\)\}/g)).toHaveLength(2);
   });
 });
