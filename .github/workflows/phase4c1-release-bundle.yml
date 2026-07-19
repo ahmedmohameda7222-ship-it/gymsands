@@ -1,0 +1,32 @@
+name: Phase 4C1 Release Bundle
+
+on:
+  push:
+    branches:
+      - phase4c1-runtime-v2-cutover
+    paths:
+      - .github/workflows/phase4c1-release-bundle.yml
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Upload reviewed Phase 4C.1 migrations
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4c1-reviewed-migrations-${{ github.run_id }}
+          path: |
+            supabase/migrations/20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql
+            supabase/migrations/20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql
+            supabase/migrations/20260719223200_muscle_intelligence_phase4c1_set_type_refresh.sql
+            supabase/migrations/20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup.sql
+            supabase/verification/muscle-intelligence-phase4c1.sql
+          if-no-files-found: error
+          retention-days: 1
