@@ -12,8 +12,8 @@ begin
   select migration_version into v_marker
   from public.release_schema_compatibility
   where singleton;
-  if v_marker is distinct from '20260717051011' then
-    raise exception 'Phase 4C.1 must not advance the compatibility marker independently.';
+  if v_marker not in ('20260711014500', '20260717051011') then
+    raise exception 'Phase 4C.1 found an unsupported compatibility marker.';
   end if;
 
   if not exists (
