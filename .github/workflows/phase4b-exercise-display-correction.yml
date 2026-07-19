@@ -6,12 +6,18 @@ on:
       - fix/phase4b-exercise-display
     paths:
       - .github/workflows/phase4b-exercise-display-correction.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/phase4b-exercise-display-correction.yml
 
 permissions:
   contents: write
 
 jobs:
   apply:
+    if: github.event_name == 'push' || github.head_ref == 'fix/phase4b-exercise-display'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +42,6 @@ jobs:
                   raise SystemExit(f"Expected exactly one match in {path}, found {count}: {old[:100]!r}")
               file.write_text(text.replace(old, new, 1))
 
-          # Exercise Details
           path = "app/(private)/workouts/[id]/page.tsx"
           replace_one(path,
               'import { useTrainTranslation } from "@/lib/i18n/train";\n',
@@ -87,7 +92,6 @@ jobs:
               '                const metadata = metadataLine(item.target_muscle, item.equipment);',
               '                const metadata = metadataLine(formatExerciseDisplayList(item.target_muscle, language, "muscle"), formatExerciseDisplayList(item.equipment, language, "equipment"));')
 
-          # Exercise Library
           path = "components/workouts/workout-browser.tsx"
           replace_one(path,
               'import { useTrainTranslation } from "@/lib/i18n/train";\n',
@@ -114,7 +118,6 @@ jobs:
               'tr("secondaryMusclesNamed", { names: workout.secondary_muscles.join(", ") })',
               'tr("secondaryMusclesNamed", { names: formatExerciseDisplayList(workout.secondary_muscles, language, "muscle") })')
 
-          # Exercise Picker
           path = "components/workouts/exercise-picker-dialog.tsx"
           replace_one(path,
               'import { useTrainTranslation } from "@/lib/i18n/train";\n',
@@ -150,7 +153,6 @@ jobs:
               '{exercise.difficulty}</Badge>',
               '{formatExerciseDisplayValue(exercise.difficulty, language, "difficulty")}</Badge>')
 
-          # Plan Builder
           path = "components/workouts/workout-plan-builder.tsx"
           replace_one(path,
               'import { useTrainTranslation, type TrainKey } from "@/lib/i18n/train";\n',
@@ -159,7 +161,6 @@ jobs:
               '{exercise.target_muscle} · {exercise.equipment}',
               '{formatExerciseDisplayList(exercise.target_muscle, language, "muscle")} · {formatExerciseDisplayList(exercise.equipment, language, "equipment")}')
 
-          # Plan exercise details
           path = "app/(private)/my-workout/exercises/[exerciseId]/page.tsx"
           replace_one(path,
               'import { userSafeError } from "@/lib/error-formatting";\n',
@@ -174,7 +175,6 @@ jobs:
               '              <Badge variant="outline">{exercise.target_muscle}</Badge>\n              <Badge variant="outline">{exercise.equipment}</Badge>',
               '              <Badge variant="outline">{formatExerciseDisplayList(exercise.target_muscle, language, "muscle")}</Badge>\n              <Badge variant="outline">{formatExerciseDisplayList(exercise.equipment, language, "equipment")}</Badge>')
 
-          # Train overview preview
           path = "components/workouts/my-workout-plans.tsx"
           replace_one(path,
               'import { useTrainTranslation } from "@/lib/i18n/train";\n',
@@ -186,7 +186,6 @@ jobs:
               '{exercise.target_muscle ? ` · ${exercise.target_muscle}` : ""}',
               '{exercise.target_muscle ? ` · ${formatExerciseDisplayValue(exercise.target_muscle, language, "muscle")}` : ""}')
 
-          # Today workout legacy surface
           path = "components/workouts/todays-workout.tsx"
           replace_one(path,
               'import { useTranslation } from "@/lib/i18n/use-translation";\n',
@@ -198,7 +197,6 @@ jobs:
               '{exercise.muscle_category || exercise.target_muscle} | {exercise.equipment_required || exercise.equipment}',
               '{formatExerciseDisplayList(exercise.muscle_category || exercise.target_muscle, language, "muscle")} · {formatExerciseDisplayList(exercise.equipment_required || exercise.equipment, language, "equipment")}')
 
-          # Filter taxonomy presentation while preserving canonical values.
           path = "services/database/workout-library.ts"
           replace_one(path,
               'import type { ExerciseVideo, UserExerciseVideo, Workout } from "@/types";\n',
@@ -270,12 +268,10 @@ jobs:
               '    ? activityFilterOptions(response.data)',
               '    ? activityFilterOptions(response.data, locale)')
 
-          # Reconcile stale Phase 2 registry metadata now that V1 and V2 are published.
           replace_one("data/muscle-intelligence/v1/registry.json",
               '  "status": "approved_planning_input_not_implemented",',
               '  "status": "implemented_and_published",')
 
-          # Include the terminology regression suite in the Phase 4B command.
           replace_one("package.json",
               '"test:muscle-intelligence:phase4b": "vitest run --config vitest.unit.config.mjs lib/train/muscle-intelligence/advanced-mapping-registry.test.ts lib/train/muscle-intelligence/plan-advanced-analysis.test.ts lib/product/muscle-intelligence-phase4b.test.ts"',
               '"test:muscle-intelligence:phase4b": "vitest run --config vitest.unit.config.mjs lib/train/exercise-display.test.ts lib/train/muscle-intelligence/advanced-mapping-registry.test.ts lib/train/muscle-intelligence/plan-advanced-analysis.test.ts lib/product/muscle-intelligence-phase4b.test.ts"')
