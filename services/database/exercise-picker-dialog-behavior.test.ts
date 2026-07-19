@@ -119,13 +119,18 @@ const workout = (id: string, name: string, slug = id): Workout => ({
   category: "strength",
   target_muscle: "chest",
   equipment: "barbell",
+  difficulty: "intermediate",
+  sets: null,
+  reps: null,
+  rest_seconds: null,
   instructions: "Controlled repetition",
+  notes: null,
   catalog_slug: slug,
   catalog_source: "external",
-  difficulty: "intermediate",
   exercise_url: null,
   video_url: null,
-  custom_video_url: null
+  custom_video_url: null,
+  is_global: true
 });
 
 async function flush() {
