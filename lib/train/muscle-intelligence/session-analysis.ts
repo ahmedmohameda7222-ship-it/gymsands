@@ -41,7 +41,7 @@ export type SessionMuscleSnapshotEnvelope = {
   workload_model_version: string;
   completeness: "complete" | "partial" | "unavailable";
   reason_codes: string[];
-  source: "session_start" | "legacy_backfill";
+  source: "session_start" | "terminal_insert" | "legacy_backfill";
   frozen_at: string;
 };
 
@@ -69,6 +69,9 @@ export type SessionMuscleSnapshotItem = {
   actual_mapping_schema_version: string | null;
   actual_mapping_checksum: string | null;
   actual_custom_mapping_entries: unknown;
+  performed_total_sets: number | null;
+  performed_qualifying_sets: number | null;
+  performed_frozen_at: string | null;
 };
 
 export type FrozenGlobalMapping = {
@@ -271,6 +274,8 @@ export async function getWorkoutSessionMuscleAnalysis(
   if (snapshotResult.error) throw new SessionMuscleAnalysisError("snapshot_read_failed", "Historical muscle analysis could not be loaded.", 503);
   if (!snapshotResult.data) throw new SessionMuscleAnalysisError("snapshot_not_found", "No historical muscle snapshot exists for this workout.", 404);
 
+  const snapshot = snapshotResult.data as SessionMuscleSnapshotEnvelope;
+  const snapshotVersion = supportedSnapshotVersion(snapshot);
   const sessionResult = await supabase.from("workout_sessions").select("status").eq("id", sessionId).eq("user_id", userId).maybeSingle();
   if (sessionResult.error) throw new SessionMuscleAnalysisError("snapshot_read_failed", "Workout state could not be verified.", 503);
   if (mode === "completed" && !["completed", "skipped"].includes(sessionResult.data?.status ?? "")) {
@@ -279,8 +284,8 @@ export async function getWorkoutSessionMuscleAnalysis(
 
   const itemsResult = await supabase
     .from("workout_session_muscle_snapshot_items")
-    .select("id,source_plan_exercise_id,item_order,planned_target_type,planned_global_exercise_id,planned_custom_exercise_id,planned_mapping_set_id,planned_custom_mapping_set_id,planned_mapping_version,planned_mapping_schema_version,planned_mapping_checksum,planned_custom_mapping_entries,planned_sets,state,actual_target_type,actual_global_exercise_id,actual_custom_exercise_id,actual_mapping_set_id,actual_custom_mapping_set_id,actual_mapping_version,actual_mapping_schema_version,actual_mapping_checksum,actual_custom_mapping_entries")
-    .eq("snapshot_id", snapshotResult.data.id)
+    .select("id,source_plan_exercise_id,item_order,planned_target_type,planned_global_exercise_id,planned_custom_exercise_id,planned_mapping_set_id,planned_custom_mapping_set_id,planned_mapping_version,planned_mapping_schema_version,planned_mapping_checksum,planned_custom_mapping_entries,planned_sets,state,actual_target_type,actual_global_exercise_id,actual_custom_exercise_id,actual_mapping_set_id,actual_custom_mapping_set_id,actual_mapping_version,actual_mapping_schema_version,actual_mapping_checksum,actual_custom_mapping_entries,performed_total_sets,performed_qualifying_sets,performed_frozen_at")
+    .eq("snapshot_id", snapshot.id)
     .eq("user_id", userId)
     .order("item_order", { ascending: true });
   if (itemsResult.error) throw new SessionMuscleAnalysisError("snapshot_read_failed", "Historical snapshot items could not be loaded.", 503);
@@ -304,7 +309,7 @@ export async function getWorkoutSessionMuscleAnalysis(
   }
 
   let completedLogs: CompletedLog[] = [];
-  if (mode === "completed") {
+  if (mode === "completed" && snapshotVersion === "v1") {
     const logsResult = await supabase
       .from("exercise_logs")
       .select("plan_exercise_id,exercise_order,completed_at")
@@ -315,7 +320,7 @@ export async function getWorkoutSessionMuscleAnalysis(
 
   return buildVersionedSessionMuscleAnalysis({
     mode,
-    snapshot: snapshotResult.data as SessionMuscleSnapshotEnvelope,
+    snapshot,
     items,
     globalMappings,
     completedLogs
