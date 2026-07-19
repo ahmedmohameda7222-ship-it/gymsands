@@ -14,7 +14,7 @@ export function TrainPageContainer({
   return (
     <div
       className={cn(
-        "mx-auto w-full max-w-[1240px]",
+        "mx-auto w-full max-w-[1240px] max-[340px]:pb-[var(--active-workout-controller-height,0px)]",
         withGutters && "px-4 sm:px-5 md:px-6 lg:px-8 xl:px-10",
         className
       )}
