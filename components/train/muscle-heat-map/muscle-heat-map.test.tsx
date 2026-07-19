@@ -6,7 +6,11 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { calculateMuscleLoad } from "@/lib/train/muscle-intelligence/calculate-muscle-load";
 import { calculateAdvancedExposure, type AdvancedMuscleMappingReference } from "@/lib/train/muscle-intelligence/advanced-exposure";
-import { projectBroadMuscleCompatibility } from "@/lib/train/muscle-intelligence/compatibility-projection";
+import {
+  BROAD_COMPATIBILITY_COVERAGE,
+  projectBroadMuscleCompatibility,
+  type BroadCompatibilityResult
+} from "@/lib/train/muscle-intelligence/compatibility-projection";
 import { MuscleHeatMap } from "./muscle-heat-map";
 import type { MuscleHeatMapLabels } from "./details-panel";
 
@@ -17,6 +21,7 @@ const labels: MuscleHeatMapLabels = {
   unavailable: "Unavailable", error: "Could not show muscle detail", noSelection: "Select a muscle",
   close: "Close",
   detailedRegionalMappingUnavailable: "Detailed regional mapping is unavailable",
+  additionalBroadMappedContributionIncluded: "Additional broad-mapped contribution included; detailed regional data is unavailable",
   heat: { none: "None", light: "Light", moderate: "Moderate", high: "High" },
   previewRole: { primary: "Primary", co_primary: "Co-primary", secondary: "Secondary", stabilizer: "Stabilizer", none: "None" },
   targetName: (key) => key.split(".").slice(-2, -1)[0] ?? key,
@@ -43,6 +48,34 @@ const broadAnalysis = projectBroadMuscleCompatibility(calculateMuscleLoad({
     workload: { model: "resistance_sets_v1", qualifyingSets: 6 }
   }]
 }));
+
+function compatibilityWith(
+  targets: Array<{ broadMuscleId: "pectoralis_major" | "quadriceps"; heatLevel: "none" | "light" | "moderate" | "high" }>
+): BroadCompatibilityResult {
+  return {
+    kind: "broad_compatibility",
+    sourceSchemaVersion: broadAnalysis.sourceSchemaVersion,
+    detailMessageKey: broadAnalysis.detailMessageKey,
+    targets: targets.map(({ broadMuscleId, heatLevel }) => ({
+      targetId: `broad:${broadMuscleId}`,
+      broadMuscleId,
+      heatLevel,
+      visualCoverage: BROAD_COMPATIBILITY_COVERAGE[broadMuscleId],
+      detailAvailability: "broad_only"
+    }))
+  };
+}
+
+function advancedWith(
+  levels: Partial<Record<(typeof analysis.targets)[number]["targetId"], "none" | "light" | "moderate" | "high">>,
+  compatibility?: BroadCompatibilityResult
+) {
+  return {
+    ...analysis,
+    targets: analysis.targets.map((result) => ({ ...result, heatLevel: levels[result.targetId] ?? "none" })),
+    ...(compatibility ? { compatibility } : {})
+  };
+}
 
 async function render(props: Partial<Parameters<typeof MuscleHeatMap>[0]> = {}) {
   const container = document.createElement("div");
@@ -139,6 +172,71 @@ describe("MuscleHeatMap", () => {
     await act(async () => pointerTarget(runtime.container, "broad:pectoralis_major").dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(broadButtons[0]?.getAttribute("aria-pressed")).toBe("true");
     expect(runtime.container.textContent).toContain("Detailed regional mapping is unavailable");
+    await act(async () => runtime.root.unmount());
+  });
+
+  it("keeps disjoint advanced and broad ownership independently selectable", async () => {
+    const mixed = advancedWith(
+      { "pectoralis.upper": "moderate" },
+      compatibilityWith([{ broadMuscleId: "quadriceps", heatLevel: "high" }])
+    );
+    const runtime = await render({ analysis: mixed });
+    expect(target(runtime.container, "front", "pectoralis.upper").getAttribute("role")).toBe("button");
+    expect(target(runtime.container, "front", "pectoralis.upper").dataset.heatLevel).toBe("moderate");
+    expect(runtime.container.querySelectorAll('[role="button"][aria-label^="General quadriceps,"]')).toHaveLength(1);
+    expect(runtime.container.querySelector('[data-interactive-target-id="broad:quadriceps"]')).not.toBeNull();
+    await act(async () => pointerTarget(runtime.container, "pectoralis.upper").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(runtime.container.querySelector('[aria-live="polite"]')?.textContent).not.toContain("Additional broad-mapped");
+    await act(async () => runtime.root.unmount());
+  });
+
+  it("uses qualitative max heat while precise non-none ownership and details remain primary", async () => {
+    const mixed = advancedWith(
+      { "pectoralis.upper": "moderate" },
+      compatibilityWith([{ broadMuscleId: "pectoralis_major", heatLevel: "high" }])
+    );
+    const runtime = await render({ view: "front", analysis: mixed });
+    const precise = target(runtime.container, "front", "pectoralis.upper");
+    expect(precise.dataset.heatLevel).toBe("high");
+    expect(precise.getAttribute("role")).toBe("button");
+    expect(precise.getAttribute("aria-label")).toContain("Additional broad-mapped contribution included");
+    expect(runtime.container.querySelectorAll('[role="button"][aria-label^="General pectoralis_major,"]')).toHaveLength(1);
+    expect(pointerTarget(runtime.container, "pectoralis.upper").dataset.interactiveTargetId).toBe("pectoralis.upper");
+
+    await act(async () => pointerTarget(runtime.container, "pectoralis.upper").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const details = runtime.container.querySelector('[aria-live="polite"]')?.textContent ?? "";
+    expect(details).toContain("Moderate");
+    expect(details).toContain("Additional broad-mapped contribution included; detailed regional data is unavailable");
+    expect(details).not.toMatch(/raw|score|\d+(?:\.\d+)?/i);
+    await act(async () => runtime.root.unmount());
+  });
+
+  it("gives broad mapping ownership only where precise heat is none", async () => {
+    const mixed = advancedWith(
+      {},
+      compatibilityWith([
+        { broadMuscleId: "pectoralis_major", heatLevel: "none" },
+        { broadMuscleId: "quadriceps", heatLevel: "high" }
+      ])
+    );
+    const runtime = await render({ view: "front", analysis: mixed });
+    expect(target(runtime.container, "front", "pectoralis.upper").dataset.heatLevel).toBe("none");
+    expect(runtime.container.querySelector('[data-interactive-target-id="broad:pectoralis_major"]')).toBeNull();
+    expect(target(runtime.container, "front", "quadriceps.rectus_femoris").dataset.heatLevel).toBe("high");
+    expect(pointerTarget(runtime.container, "broad:quadriceps")).not.toBeNull();
+    await act(async () => runtime.root.unmount());
+  });
+
+  it("preserves precise high heat when an overlapping broad contribution is light", async () => {
+    const mixed = advancedWith(
+      { "pectoralis.upper": "high" },
+      compatibilityWith([{ broadMuscleId: "pectoralis_major", heatLevel: "light" }])
+    );
+    const runtime = await render({ view: "front", analysis: mixed });
+    const precise = target(runtime.container, "front", "pectoralis.upper");
+    expect(precise.dataset.heatLevel).toBe("high");
+    expect(precise.getAttribute("aria-label")).toContain("Additional broad-mapped contribution included");
+    expect(pointerTarget(runtime.container, "pectoralis.upper")).not.toBeNull();
     await act(async () => runtime.root.unmount());
   });
 

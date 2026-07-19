@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import sourceAssignments from "@/data/muscle-intelligence/advanced-visible-v1/source-path-assignments.json";
+import finalRegionManifest from "@/data/muscle-intelligence/advanced-visible-v1/final-region-manifest.json";
 import {
   ADVANCED_ATLAS_METADATA,
   ADVANCED_MUSCLE_TARGETS,
@@ -33,9 +33,9 @@ describe("advanced visible muscle atlas registry", () => {
     expect(getAdvancedMuscleTarget("brachioradialis").supportedViews).toEqual(["front", "back"]);
     expect(ADVANCED_MUSCLE_TARGETS.map((target) => target.displayOrder)).toEqual(Array.from({ length: 56 }, (_, index) => index + 1));
     for (const targetView of ADVANCED_MUSCLE_TARGET_VIEWS) {
-      const sourcePaths = sourceAssignments.views[targetView.view].paths.filter((path) => path.classification === "target" && path.canonicalId === targetView.canonicalId);
-      expect(targetView.bindings.map((binding) => binding.side).sort()).toEqual([...new Set(sourcePaths.map((path) => path.side))].sort());
-      expect(targetView.hitAreaIds).toEqual(sourceAssignments.hitAreas
+      const semanticPaths = finalRegionManifest.runtimePaths.filter((path) => path.view === targetView.view && path.canonicalId === targetView.canonicalId);
+      expect(targetView.bindings.map((binding) => binding.side).sort()).toEqual([...new Set(semanticPaths.map((path) => path.side))].sort());
+      expect(targetView.hitAreaIds).toEqual(finalRegionManifest.hitAreas
         .filter((area) => area.view === targetView.view && area.canonicalId === targetView.canonicalId)
         .map((area) => area.id).sort());
     }
@@ -49,7 +49,7 @@ describe("advanced visible muscle atlas registry", () => {
     }
   });
 
-  it("preserves approved source bytes and records every source path exactly once", () => {
+  it("preserves approved source bytes and records final-visible semantic regions", () => {
     const approved = JSON.parse(readFileSync(resolve(sourceRoot, "asset-manifest.json"), "utf8")) as {
       files: Array<{ name: string; sha256: string; bytes: number }>;
     };
@@ -57,15 +57,32 @@ describe("advanced visible muscle atlas registry", () => {
       expect(sha256(asset.name)).toBe(asset.sha256);
       expect(readFileSync(resolve(sourceRoot, asset.name))).toHaveLength(asset.bytes);
     }
-    const allPaths = [...sourceAssignments.views.front.paths, ...sourceAssignments.views.back.paths];
-    expect(allPaths).toHaveLength(220);
-    expect(new Set(allPaths.map((path) => path.sourcePathId)).size).toBe(220);
-    expect(allPaths.every((path) => path.classification === "target" || path.classification === "excluded")).toBe(true);
-    expect(allPaths.filter((path) => path.classification === "target")).toHaveLength(183);
-    expect(allPaths.filter((path) => path.classification === "excluded")).toHaveLength(37);
-    expect([...new Set(allPaths.flatMap((path) => path.classification === "target" && path.canonicalId ? [path.canonicalId] : []))].sort())
+    expect(finalRegionManifest.views.front.sourcePathCount + finalRegionManifest.views.back.sourcePathCount).toBe(220);
+    const allRegions = [...finalRegionManifest.views.front.regions, ...finalRegionManifest.views.back.regions];
+    expect(new Set(allRegions.map((region) => region.sourceComponentFingerprint)).size).toBe(allRegions.length);
+    expect(allRegions.every((region) => region.classification === "target" || region.classification === "excluded")).toBe(true);
+    expect([...new Set(allRegions.flatMap((region) => region.classification === "target" && region.canonicalId ? [region.canonicalId] : []))].sort())
       .toEqual(ADVANCED_MUSCLE_TARGETS.map((target) => target.id).sort());
-    expect(sourceAssignments.logicalCanvas.viewBox).toBe("0 0 1024 1536");
-    expect(sourceAssignments.hitAreas).toHaveLength(6);
+    expect(finalRegionManifest.runtimePaths).toHaveLength(118);
+    expect(finalRegionManifest.logicalCanvas.viewBox).toBe("0 0 1024 1536");
+    expect(finalRegionManifest.hitAreas).toHaveLength(6);
+  });
+
+  it("proves exact final-region coverage without overlap or neutral leakage", () => {
+    expect(finalRegionManifest.validation).toMatchObject({
+      antialiasTolerancePixels: 0,
+      crossTargetInteriorOverlapPixels: 0,
+      neutralLeakagePixels: 0,
+      unclassifiedClassifiedSourcePixels: 0,
+      unclassifiedPercent: 0,
+      minimumTargetViewIoU: 1,
+      views: {
+        front: { aggregateIoU: 1 },
+        back: { aggregateIoU: 1 }
+      }
+    });
+    expect(finalRegionManifest.validation.perTargetView).toHaveLength(58);
+    expect(finalRegionManifest.validation.perTargetView.every((entry) => entry.iou >= 0.99)).toBe(true);
+    expect(finalRegionManifest.runtimePaths.every((entry) => entry.pathData.startsWith("M") && entry.pathSha256.length === 64)).toBe(true);
   });
 });

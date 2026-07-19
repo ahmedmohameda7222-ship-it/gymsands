@@ -11,6 +11,7 @@ export type MuscleHeatMapLabels = {
   noSelection: string;
   close: string;
   detailedRegionalMappingUnavailable: string;
+  additionalBroadMappedContributionIncluded: string;
   heat: Record<AdvancedHeatLevel, string>;
   previewRole: Record<"primary" | "co_primary" | "secondary" | "stabilizer" | "none", string>;
   targetName: (translationKey: string) => string;
@@ -22,12 +23,12 @@ type DetailsPanelProps = {
   name: string | null;
   subtitle: string | null;
   status: string | null;
-  compatibility: boolean;
+  compatibilityDisclosure: string | null;
   onClose: () => void;
   labels: MuscleHeatMapLabels;
 };
 
-export function MuscleDetailsPanel({ name, subtitle, status, compatibility, onClose, labels }: DetailsPanelProps) {
+export function MuscleDetailsPanel({ name, subtitle, status, compatibilityDisclosure, onClose, labels }: DetailsPanelProps) {
   return (
     <div className="relative min-h-24 rounded-2xl border border-border/70 bg-card p-4 text-card-foreground" aria-live="polite">
       {name ? (
@@ -38,7 +39,7 @@ export function MuscleDetailsPanel({ name, subtitle, status, compatibility, onCl
           <p className="pe-20 font-semibold">{name}</p>
           {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
           {status ? <p className="mt-3 text-sm font-medium">{status}</p> : null}
-          {compatibility ? <p className="mt-2 text-sm text-muted-foreground">{labels.detailedRegionalMappingUnavailable}</p> : null}
+          {compatibilityDisclosure ? <p className="mt-2 text-sm text-muted-foreground">{compatibilityDisclosure}</p> : null}
         </>
       ) : <p className="text-sm text-muted-foreground">{labels.noSelection}</p>}
     </div>

@@ -1,13 +1,15 @@
-import sourcePathAssignments from "@/data/muscle-intelligence/advanced-visible-v1/source-path-assignments.json";
+import finalRegionManifestJson from "@/data/muscle-intelligence/advanced-visible-v1/final-region-manifest.json";
 import type { AdvancedMuscleSide, AdvancedMuscleTargetId, AdvancedMuscleView } from "@/lib/train/muscle-intelligence/advanced-atlas";
 
 export type RuntimeTargetPath = {
-  sourcePathId: string;
+  pathId: string;
   view: AdvancedMuscleView;
-  classification: "target";
   canonicalId: AdvancedMuscleTargetId;
   side: AdvancedMuscleSide;
-  normalizedPathData: string;
+  pathData: string;
+  pixelArea: number;
+  contourCount: number;
+  pathSha256: string;
 };
 
 export type RuntimeHitArea = {
@@ -21,9 +23,19 @@ export type RuntimeHitArea = {
   ry: number;
 };
 
+const finalRegionManifest = finalRegionManifestJson as unknown as {
+  runtimePaths: Array<Omit<RuntimeTargetPath, "pathId">>;
+  hitAreas: RuntimeHitArea[];
+};
+
+const runtimePaths = finalRegionManifest.runtimePaths.map((entry) => ({
+  ...entry,
+  pathId: `semantic-${entry.view}-${entry.canonicalId.replaceAll(".", "-").replaceAll("_", "-")}-${entry.side}`
+}));
+
 export const ADVANCED_ATLAS_PATHS = {
-  front: sourcePathAssignments.views.front.paths.filter((path) => path.classification === "target") as RuntimeTargetPath[],
-  back: sourcePathAssignments.views.back.paths.filter((path) => path.classification === "target") as RuntimeTargetPath[]
+  front: runtimePaths.filter((path) => path.view === "front"),
+  back: runtimePaths.filter((path) => path.view === "back")
 } as const;
 
-export const ADVANCED_ATLAS_HIT_AREAS = sourcePathAssignments.hitAreas as RuntimeHitArea[];
+export const ADVANCED_ATLAS_HIT_AREAS = finalRegionManifest.hitAreas;

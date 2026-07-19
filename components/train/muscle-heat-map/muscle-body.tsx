@@ -88,14 +88,14 @@ function MuscleBodySvg({
         aria-label={viewLabel}
       >
         <defs>
-          {paths.map((path) => <path key={path.sourcePathId} id={`${instanceId}-${path.sourcePathId}`} d={path.normalizedPathData} />)}
+          {paths.map((path) => <path key={path.pathId} id={`${instanceId}-${path.pathId}`} d={path.pathData} />)}
         </defs>
 
         <g aria-hidden="true" pointerEvents="none">
           {paths.map((path) => (
             <use
-              key={`visual-${path.sourcePathId}`}
-              href={`#${instanceId}-${path.sourcePathId}`}
+              key={`visual-${path.pathId}`}
+              href={`#${instanceId}-${path.pathId}`}
               fill={alignmentDebug ? "hsl(280 82% 54% / 0.58)" : HEAT_FILL[presentation.get(path.canonicalId)?.heatLevel ?? "none"]}
               opacity={alignmentDebug || selectedVisualTargets.size === 0 || selectedVisualTargets.has(path.canonicalId) ? 1 : 0.58}
               stroke={alignmentDebug ? "hsl(280 70% 28% / 0.9)" : undefined}
@@ -130,8 +130,8 @@ function MuscleBodySvg({
               const target = presentation.get(path.canonicalId);
               return target?.interactive ? (
                 <use
-                  key={`pointer-${path.sourcePathId}`}
-                  href={`#${instanceId}-${path.sourcePathId}`}
+                  key={`pointer-${path.pathId}`}
+                  href={`#${instanceId}-${path.pathId}`}
                   fill="transparent"
                   pointerEvents="visiblePainted"
                   data-interactive-target-id={target.interactiveTargetId}
@@ -147,8 +147,8 @@ function MuscleBodySvg({
         <g className="text-slate-700" aria-hidden="true" pointerEvents="none">
           {paths.filter((path) => selectedVisualTargets.has(path.canonicalId)).map((path) => (
             <use
-              key={`selected-${path.sourcePathId}`}
-              href={`#${instanceId}-${path.sourcePathId}`}
+              key={`selected-${path.pathId}`}
+              href={`#${instanceId}-${path.pathId}`}
               fill="none"
               stroke="currentColor"
               strokeWidth="3"
@@ -170,6 +170,7 @@ function MuscleBodySvg({
               id={`${instanceId}-target-${view}-${sanitized}`}
               data-canonical-id={target.id}
               data-view={view}
+              data-heat-level={targetPresentation?.heatLevel ?? "none"}
               className={targetInteractive
                 ? "cursor-pointer focus-visible:outline-none focus-visible:[&_use]:stroke-slate-700 focus-visible:[&_use]:[stroke-width:3px] focus-visible:[&_use]:[vector-effect:non-scaling-stroke]"
                 : undefined}
@@ -191,7 +192,7 @@ function MuscleBodySvg({
                 const sidePaths = targetPaths.filter((path) => path.side === side);
                 return sidePaths.length ? (
                   <g key={side} id={`${instanceId}-muscle-${view}-${sanitized}-${side}`} data-side={side} aria-hidden="true" pointerEvents="none">
-                    {sidePaths.map((path) => <use key={`semantic-${path.sourcePathId}`} href={`#${instanceId}-${path.sourcePathId}`} fill="transparent" />)}
+                    {sidePaths.map((path) => <use key={`semantic-${path.pathId}`} href={`#${instanceId}-${path.pathId}`} fill="transparent" />)}
                   </g>
                 ) : null;
               })}

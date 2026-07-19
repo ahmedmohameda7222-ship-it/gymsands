@@ -1,12 +1,13 @@
 {
-  "schemaVersion": "advanced_visible_v1_target_view_registry_v1",
+  "schemaVersion": "advanced_visible_v1_target_view_registry_v2",
   "targetViews": [
     {
       "canonicalId": "adductors.anterior_region",
       "view": "front",
       "sides": [
         "left",
-        "right"
+        "right",
+        "center"
       ],
       "hitAreaIds": []
     },
@@ -226,8 +227,8 @@
       "canonicalId": "rectus_abdominis.upper",
       "view": "front",
       "sides": [
-        "right",
-        "center"
+        "left",
+        "right"
       ],
       "hitAreaIds": []
     },
@@ -311,8 +312,8 @@
       "canonicalId": "deltoid.posterior",
       "view": "back",
       "sides": [
-        "right",
-        "center"
+        "left",
+        "right"
       ],
       "hitAreaIds": []
     },
@@ -347,6 +348,7 @@
       "canonicalId": "gluteus_maximus.middle",
       "view": "back",
       "sides": [
+        "left",
         "right"
       ],
       "hitAreaIds": []

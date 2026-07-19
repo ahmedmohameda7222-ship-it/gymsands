@@ -44,7 +44,7 @@ type TargetDetail = {
   name: string;
   subtitle: string | null;
   status: string;
-  compatibility: boolean;
+  compatibilityDisclosure: string | null;
 };
 
 const HEAT_RANK: Record<AdvancedHeatLevel, number> = { none: 0, light: 1, moderate: 2, high: 3 };
@@ -69,6 +69,7 @@ function buildPresentation(analysis: MuscleHeatMapProps["analysis"], labels: Mus
   }
   if (!analysis) return { presentation, details, visualTargets };
 
+  const advancedHeat = new Map<AdvancedMuscleTargetId, AdvancedHeatLevel>();
   if (analysis.kind === "advanced") {
     for (const targetResult of analysis.targets) {
       const target = getAdvancedMuscleTarget(targetResult.targetId);
@@ -85,35 +86,80 @@ function buildPresentation(analysis: MuscleHeatMapProps["analysis"], labels: Mus
         name,
         subtitle: labels.targetSubtitle(target.subtitleKey),
         status,
-        compatibility: false
+        compatibilityDisclosure: null
       });
+      advancedHeat.set(target.id, targetResult.heatLevel);
     }
-    return { presentation, details, visualTargets };
   }
 
-  const compatibilityRanks = new Map<AdvancedMuscleTargetId, number>();
-  for (const broadTarget of analysis.targets) {
+  const compatibility = analysis.kind === "advanced" ? analysis.compatibility : analysis;
+  if (!compatibility) return { presentation, details, visualTargets };
+
+  const broadOwner = new Map<AdvancedMuscleTargetId, { targetId: BroadCompatibilityTargetId; rank: number }>();
+  const broadById = new Map(compatibility.targets.map((target) => [target.targetId, target]));
+  const contributingBroad = new Set<AdvancedMuscleTargetId>();
+
+  for (const broadTarget of [...compatibility.targets].sort((left, right) => left.targetId.localeCompare(right.targetId))) {
+    if (broadTarget.heatLevel === "none") continue;
+    const broadRank = HEAT_RANK[broadTarget.heatLevel];
+    for (const targetId of broadTarget.visualCoverage) {
+      const preciseHeat = advancedHeat.get(targetId) ?? "none";
+      const precisePresentation = presentation.get(targetId);
+      if (precisePresentation && broadRank > HEAT_RANK[precisePresentation.heatLevel]) {
+        presentation.set(targetId, { ...precisePresentation, heatLevel: broadTarget.heatLevel });
+      }
+      if (analysis.kind === "advanced" && preciseHeat !== "none") {
+        contributingBroad.add(targetId);
+        continue;
+      }
+      const currentOwner = broadOwner.get(targetId);
+      if (!currentOwner || broadRank > currentOwner.rank) {
+        broadOwner.set(targetId, { targetId: broadTarget.targetId, rank: broadRank });
+      }
+    }
+  }
+
+  for (const targetId of contributingBroad) {
+    const target = getAdvancedMuscleTarget(targetId);
+    const name = labels.targetName(target.nameKey);
+    const currentPresentation = presentation.get(targetId);
+    const detail = details.get(targetId);
+    if (currentPresentation) {
+      presentation.set(targetId, {
+        ...currentPresentation,
+        ariaLabel: `${name}, ${labels.heat[currentPresentation.heatLevel]}, ${labels.additionalBroadMappedContributionIncluded}`
+      });
+    }
+    if (detail) details.set(targetId, { ...detail, compatibilityDisclosure: labels.additionalBroadMappedContributionIncluded });
+  }
+
+  const ownedByBroad = new Map<BroadCompatibilityTargetId, Set<AdvancedMuscleTargetId>>();
+  for (const [targetId, owner] of broadOwner) {
+    const ownedTargets = ownedByBroad.get(owner.targetId) ?? new Set<AdvancedMuscleTargetId>();
+    ownedTargets.add(targetId);
+    ownedByBroad.set(owner.targetId, ownedTargets);
+  }
+
+  for (const [broadTargetId, visualSet] of ownedByBroad) {
+    const broadTarget = broadById.get(broadTargetId);
+    if (!broadTarget) continue;
     const name = labels.broadTargetName(broadTarget.broadMuscleId);
-    const visualSet = new Set(broadTarget.visualCoverage);
     visualTargets.set(broadTarget.targetId, visualSet);
     details.set(broadTarget.targetId, {
       id: broadTarget.targetId,
       name,
       subtitle: null,
       status: labels.heat[broadTarget.heatLevel],
-      compatibility: true
+      compatibilityDisclosure: labels.detailedRegionalMappingUnavailable
     });
-    for (const targetId of broadTarget.visualCoverage) {
-      const currentRank = compatibilityRanks.get(targetId) ?? -1;
-      if (HEAT_RANK[broadTarget.heatLevel] > currentRank) {
-        presentation.set(targetId, {
-          heatLevel: broadTarget.heatLevel,
-          interactiveTargetId: broadTarget.targetId,
-          ariaLabel: `${name}, ${labels.heat[broadTarget.heatLevel]}, ${labels.detailedRegionalMappingUnavailable}`,
-          interactive: true
-        });
-        compatibilityRanks.set(targetId, HEAT_RANK[broadTarget.heatLevel]);
-      }
+    for (const targetId of visualSet) {
+      details.delete(targetId);
+      presentation.set(targetId, {
+        heatLevel: broadTarget.heatLevel,
+        interactiveTargetId: broadTarget.targetId,
+        ariaLabel: `${name}, ${labels.heat[broadTarget.heatLevel]}, ${labels.detailedRegionalMappingUnavailable}`,
+        interactive: true
+      });
     }
   }
   return { presentation, details, visualTargets };
@@ -243,7 +289,7 @@ export function MuscleHeatMap({
           name={detail?.name ?? null}
           subtitle={detail?.subtitle ?? null}
           status={detail?.status ?? null}
-          compatibility={detail?.compatibility ?? false}
+          compatibilityDisclosure={detail?.compatibilityDisclosure ?? null}
           onClose={clearSelection}
           labels={labels}
         />
