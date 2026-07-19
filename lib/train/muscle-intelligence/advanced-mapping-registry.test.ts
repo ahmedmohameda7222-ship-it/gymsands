@@ -4,6 +4,7 @@ import { calculateAdvancedMuscleMappingChecksum } from "./advanced-mapping-check
 import {
   REVIEWED_ADVANCED_EXERCISE_MAPPINGS,
   REVIEWED_ADVANCED_MAPPING_REGISTRY_MANIFEST,
+  REVIEWED_ADVANCED_VERIFIED_PROVIDER_IDENTITIES,
   getReviewedAdvancedMappingByExerciseId,
   resolveReviewedAdvancedMappingIdentity
 } from "./advanced-mapping-registry";
@@ -18,6 +19,7 @@ describe("Phase 4B reviewed advanced mapping registry", () => {
     expect(new Set(REVIEWED_ADVANCED_EXERCISE_MAPPINGS.map((mapping) => mapping.reference.targetId)).size).toBe(60);
     expect(new Set(REVIEWED_ADVANCED_EXERCISE_MAPPINGS.map((mapping) => mapping.reference.mappingSetId)).size).toBe(60);
     expect(REVIEWED_ADVANCED_EXERCISE_MAPPINGS.reduce((sum, mapping) => sum + mapping.reference.entries.length, 0)).toBe(453);
+    expect(REVIEWED_ADVANCED_VERIFIED_PROVIDER_IDENTITIES).toHaveLength(9);
   });
 
   it("uses deterministic V2 identities and byte-stable canonical checksums", () => {
@@ -35,13 +37,18 @@ describe("Phase 4B reviewed advanced mapping registry", () => {
     }
   });
 
-  it("resolves only explicit canonical identities and never display names", () => {
+  it("resolves only explicit canonical or verified provider identities and never display names", () => {
     const bench = REVIEWED_ADVANCED_EXERCISE_MAPPINGS.find((mapping) => mapping.slug === "barbell-bench-press")!;
+    const provider = REVIEWED_ADVANCED_VERIFIED_PROVIDER_IDENTITIES.find((identity) => identity.slug === "barbell-bench-press")!;
     expect(getReviewedAdvancedMappingByExerciseId(bench.reference.targetId)?.slug).toBe("barbell-bench-press");
     expect(resolveReviewedAdvancedMappingIdentity({ sourceWorkoutId: bench.reference.targetId })?.slug).toBe("barbell-bench-press");
     expect(resolveReviewedAdvancedMappingIdentity({ canonicalSourceId: bench.sourceId })?.slug).toBe("barbell-bench-press");
+    expect(resolveReviewedAdvancedMappingIdentity({ id: provider.providerActivityId })?.slug).toBe("barbell-bench-press");
+    expect(resolveReviewedAdvancedMappingIdentity({ provider_activity_id: provider.providerActivityId })?.slug).toBe("barbell-bench-press");
+    expect(resolveReviewedAdvancedMappingIdentity({ catalog_slug: provider.providerSlug })?.slug).toBe("barbell-bench-press");
     expect(resolveReviewedAdvancedMappingIdentity({ id: "Barbell Bench Press" })).toBeNull();
     expect(resolveReviewedAdvancedMappingIdentity({ canonicalSourceId: "barbell-bench-press" })).toBeNull();
+    expect(resolveReviewedAdvancedMappingIdentity({ catalog_slug: "barbell-bench-press" })).toBeNull();
     expect(resolveReviewedAdvancedMappingIdentity({})).toBeNull();
   });
 });
