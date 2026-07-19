@@ -5,9 +5,14 @@ const manifestPath = "data/muscle-intelligence/v2/registry.json";
 const partPaths = Array.from({ length: 6 }, (_, index) =>
   `data/muscle-intelligence/v2/registry.part-${String(index + 1).padStart(2, "0")}.json`
 );
-const migrationPaths = Array.from({ length: 6 }, (_, index) =>
-  `supabase/migrations/2026071921000${index + 1}_muscle_intelligence_phase4b_advanced_mappings_part_0${index + 1}.sql`
-);
+const migrationPaths = [
+  "supabase/migrations/20260719094159_muscle_intelligence_phase4b_advanced_mappings_part_01.sql",
+  "supabase/migrations/20260719094350_muscle_intelligence_phase4b_advanced_mappings_part_02.sql",
+  "supabase/migrations/20260719094445_muscle_intelligence_phase4b_advanced_mappings_part_03.sql",
+  "supabase/migrations/20260719094536_muscle_intelligence_phase4b_advanced_mappings_part_04.sql",
+  "supabase/migrations/20260719094623_muscle_intelligence_phase4b_advanced_mappings_part_05.sql",
+  "supabase/migrations/20260719094718_muscle_intelligence_phase4b_advanced_mappings_part_06.sql"
+];
 
 function text(path: string): string {
   return readFileSync(path, "utf8");
