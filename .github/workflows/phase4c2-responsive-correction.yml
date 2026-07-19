@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   correct:
-    if: github.event.pull_request.head.ref == 'phase4c2-active-workout-muscle-load' && github.actor != 'github-actions[bot]'
+    if: github.event.pull_request.head.ref == 'phase4c2-responsive-runner' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
