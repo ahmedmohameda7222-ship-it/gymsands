@@ -50,6 +50,35 @@ describe("advanced visible muscle atlas registry", () => {
     }
   });
 
+  it("classifies every target according to the approved surface-anatomy contract", () => {
+    const trainingRegions = new Set([
+      "pectoralis.upper", "pectoralis.middle", "pectoralis.lower", "pectoralis.outer",
+      "latissimus.upper", "latissimus.middle", "latissimus.lower", "latissimus.outer",
+      "rectus_abdominis.upper", "rectus_abdominis.middle", "rectus_abdominis.lower",
+      "oblique.external_upper", "oblique.external_lower", "spinal_erectors.upper", "spinal_erectors.lower",
+      "hip_flexors.anterior", "gluteus_maximus.upper", "gluteus_maximus.middle", "gluteus_maximus.lower",
+      "adductors.anterior_region", "adductors.posterior_region"
+    ]);
+    const anatomicalTargets = new Set([
+      "neck.sternocleidomastoid", "infraspinatus", "teres_minor", "teres_major", "serratus.anterior",
+      "brachialis", "brachioradialis", "forearm.pronator_teres", "forearm.flexor_mass", "forearm.extensor_mass",
+      "tensor_fasciae_latae", "gluteus.medius",
+      "quadriceps.rectus_femoris", "quadriceps.vastus_lateralis", "quadriceps.vastus_medialis",
+      "hamstrings.biceps_femoris_long_head", "hamstrings.biceps_femoris_short_head",
+      "hamstrings.semitendinosus", "hamstrings.semimembranosus",
+      "lower_leg.tibialis_anterior", "lower_leg.fibularis", "calf.soleus"
+    ]);
+
+    for (const target of ADVANCED_MUSCLE_TARGETS) {
+      const expected = trainingRegions.has(target.id)
+        ? "training_region"
+        : anatomicalTargets.has(target.id)
+          ? "anatomical"
+          : "anatomical_subdivision";
+      expect(target.regionType, target.id).toBe(expected);
+    }
+  });
+
   it("preserves approved source bytes and records grayscale-registered semantic regions", () => {
     const approved = JSON.parse(readFileSync(resolve(sourceRoot, "asset-manifest.json"), "utf8")) as {
       files: Array<{ name: string; sha256: string; bytes: number; role: string; used_for_generation?: boolean; used_at_runtime?: boolean }>;
