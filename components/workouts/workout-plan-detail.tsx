@@ -20,6 +20,7 @@ import { todayIso } from "@/lib/date-utils";
 import { resolveTodayWorkout, todayWorkoutActionHref, workoutSessionLocalDate } from "@/lib/dashboard/today-model";
 import { userSafeError } from "@/lib/error-formatting";
 import { useTrainTranslation } from "@/lib/i18n/train";
+import { formatExerciseDisplayList } from "@/lib/train/exercise-display";
 import { workoutPlanDetailActions } from "@/lib/workouts/train-overview-runtime";
 import { buildTrainWeek } from "@/lib/workouts/train-week";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
@@ -43,7 +44,7 @@ export function WorkoutPlanDetail() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { dialog, ask } = useConfirm();
-  const { dir, locale, tr } = useTrainTranslation();
+  const { language, dir, locale, tr } = useTrainTranslation();
   const { settings } = useUserSettings();
   const [plan, setPlan] = useState<UserWorkoutPlan | null>(null);
   const [activity, setActivity] = useState<WorkoutSession[]>([]);
@@ -212,7 +213,7 @@ export function WorkoutPlanDetail() {
             {exercises.map((exercise, index) => (
               <li key={exercise.id || `${exercise.name}-${index}`} className="grid min-h-16 grid-cols-[36px_minmax(0,1fr)] items-center gap-x-3 gap-y-2 p-4 sm:grid-cols-[36px_minmax(0,1fr)_auto_auto] sm:gap-x-4">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{index + 1}</span>
-                <div className="min-w-0"><p className="truncate font-semibold">{exercise.name}</p><p className="truncate text-sm text-muted-foreground">{exercise.target_muscle || tr("general")} · {exercise.equipment || tr("noEquipment")}</p></div>
+                <div className="min-w-0"><p className="truncate font-semibold">{exercise.name}</p><p className="truncate text-sm text-muted-foreground">{formatExerciseDisplayList(exercise.target_muscle, language, "muscle") || tr("general")} · {formatExerciseDisplayList(exercise.equipment, language, "equipment") || tr("noEquipment")}</p></div>
                 <div className="col-start-2 text-sm sm:col-start-auto sm:text-end"><p className="font-medium">{tr("setsReps", { sets: exercise.sets ?? 3, reps: exercise.reps || "8–12" })}</p>{exercise.rest_seconds !== null && exercise.rest_seconds !== undefined ? <p className="text-muted-foreground">{tr("secondsRest", { count: exercise.rest_seconds })}</p> : null}</div>
                 <Button asChild variant="ghost" className="col-start-2 min-h-11 justify-self-start px-2 sm:col-start-auto sm:justify-self-end"><Link href={`/my-workout/exercises/${exercise.plan_exercise_id ?? exercise.id}`}>{tr("details")}</Link></Button>
               </li>

@@ -29,7 +29,9 @@ const memberFacingFiles = [
   "components/workouts/my-workout-plans.tsx",
   "components/workouts/todays-workout.tsx",
   "components/workouts/workout-browser.tsx",
-  "components/workouts/workout-plan-builder.tsx"
+  "components/workouts/workout-plan-builder.tsx",
+  "components/workouts/workout-plan-editor.tsx",
+  "components/workouts/workout-plan-detail.tsx"
 ];
 
 describe("member-facing exercise terminology", () => {
