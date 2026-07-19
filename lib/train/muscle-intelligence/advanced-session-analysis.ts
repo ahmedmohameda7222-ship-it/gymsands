@@ -26,7 +26,7 @@ function compareText(left: string, right: string): number {
 
 function completedSetCount(item: SessionMuscleSnapshotItem, input: BuildSessionMuscleAnalysisInput): number {
   if (input.snapshot.snapshot_schema_version === ADVANCED_SESSION_MUSCLE_SNAPSHOT_SCHEMA_VERSION) {
-    if (item.performed_qualifying_sets === null || item.performed_frozen_at === null) {
+    if (item.performed_qualifying_sets == null || item.performed_frozen_at == null) {
       throw new SessionMuscleAnalysisError(
         "snapshot_workload_not_frozen",
         "Completed muscle workload was not frozen with this workout.",
