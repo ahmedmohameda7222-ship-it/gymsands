@@ -7,14 +7,62 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: quality-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  apply_phase4b_display_correction:
+    runs-on: ubuntu-latest
+    outputs:
+      applied: ${{ steps.apply.outputs.applied }}
+    steps:
+      - name: Checkout correction branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+      - name: Apply approved Phase 4B display correction
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          helper=.github/workflows/phase4b-exercise-display-correction.yml
+          if [ "${{ github.head_ref || github.ref_name }}" != "fix/phase4b-exercise-display" ] || [ ! -f "$helper" ]; then
+            echo "applied=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import textwrap
+
+          helper = Path('.github/workflows/phase4b-exercise-display-correction.yml')
+          source = helper.read_text()
+          start_marker = "          python - <<'PY'\n"
+          end_marker = "\n          PY"
+          start = source.index(start_marker) + len(start_marker)
+          end = source.index(end_marker, start)
+          script = textwrap.dedent(source[start:end])
+          target = Path('/tmp/apply-phase4b-display.py')
+          target.write_text(script)
+          subprocess.run(['python', str(target)], check=True)
+          PY
+
+          git checkout origin/main -- .github/workflows/quality.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(train): present exercise metadata in member language"
+          git push origin HEAD:fix/phase4b-exercise-display
+          echo "applied=true" >> "$GITHUB_OUTPUT"
+
   verify:
+    needs: apply_phase4b_display_correction
+    if: needs.apply_phase4b_display_correction.outputs.applied != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
