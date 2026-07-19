@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migrationPath = "supabase/migrations/20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql";
+const historyGuardMigrationPath = "supabase/migrations/20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql";
 
 function text(path: string): string {
   return readFileSync(path, "utf8");
@@ -42,10 +43,18 @@ describe("Muscle Intelligence Phase 4C.1 runtime cutover", () => {
     expect(migration).toContain("replacement_mapping_unavailable");
   });
 
+  it("protects the parent terminal session while retaining trusted privacy purge", () => {
+    const guardMigration = text(historyGuardMigrationPath);
+    expect(guardMigration).toContain("workout_sessions_terminal_delete_guard");
+    expect(guardMigration).toContain("old.status = 'started'");
+    expect(guardMigration).toContain("current_user in ('postgres', 'supabase_admin', 'service_role')");
+    expect(guardMigration).toContain("Delete the account through the privacy workflow instead");
+  });
+
   it("does not advance the coordinated compatibility marker", () => {
-    const migration = text(migrationPath);
-    expect(migration).toContain("Compatibility marker changed during Phase 4C.1 implementation");
-    expect(migration).not.toMatch(/update\s+public\.release_schema_compatibility/i);
+    const migrations = `${text(migrationPath)}\n${text(historyGuardMigrationPath)}`;
+    expect(migrations).toContain("Compatibility marker changed during Phase 4C.1 implementation");
+    expect(migrations).not.toMatch(/update\s+public\.release_schema_compatibility/i);
   });
 
   it("makes completed V2 analysis independent from mutable exercise logs", () => {
@@ -60,6 +69,7 @@ describe("Muscle Intelligence Phase 4C.1 runtime cutover", () => {
   it("ships an independent database verification contract", () => {
     const verification = text("supabase/verification/muscle-intelligence-phase4c1.sql");
     expect(verification).toContain("exercise_logs_terminal_immutable");
+    expect(verification).toContain("workout_sessions_terminal_delete_guard");
     expect(verification).toContain("terminal V2 session is missing immutable performed workload");
     expect(verification).toContain("Phase 4C.1 must not advance the compatibility marker independently");
   });
