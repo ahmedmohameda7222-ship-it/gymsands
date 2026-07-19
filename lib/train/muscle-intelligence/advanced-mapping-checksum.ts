@@ -1,5 +1,3 @@
-import "server-only";
-
 import { createHash } from "node:crypto";
 
 import { validateAdvancedMuscleMappingEntries, type AdvancedMuscleMappingEntry } from "./advanced-exposure";
