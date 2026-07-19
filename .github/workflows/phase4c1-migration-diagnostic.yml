@@ -1,0 +1,62 @@
+name: Phase 4C1 Migration Diagnostic
+
+on:
+  push:
+    branches:
+      - phase4c1-runtime-v2-cutover
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase4c1-migration-diagnostic
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Replay migrations with concise failure tail
+        shell: bash
+        run: |
+          set -uo pipefail
+          supabase db start > /tmp/phase4c1-start.log 2>&1
+          start_status=$?
+          if [ "$start_status" -ne 0 ]; then
+            echo "=== supabase db start failure ==="
+            tail -n 180 /tmp/phase4c1-start.log
+            exit "$start_status"
+          fi
+
+          supabase db reset --local --no-seed > /tmp/phase4c1-reset.log 2>&1
+          reset_status=$?
+          if [ "$reset_status" -ne 0 ]; then
+            echo "=== migration reset failure markers ==="
+            grep -nEi 'error|failed|fatal|panic|syntax|exception|migration' /tmp/phase4c1-reset.log | tail -n 120 || true
+            echo "=== migration reset final tail ==="
+            tail -n 220 /tmp/phase4c1-reset.log
+            exit "$reset_status"
+          fi
+
+          supabase db lint --local --schema public --level error --fail-on error > /tmp/phase4c1-lint.log 2>&1
+          lint_status=$?
+          if [ "$lint_status" -ne 0 ]; then
+            echo "=== database lint failure ==="
+            cat /tmp/phase4c1-lint.log
+            exit "$lint_status"
+          fi
+
+          echo "Phase 4C.1 migration replay and database lint passed."
