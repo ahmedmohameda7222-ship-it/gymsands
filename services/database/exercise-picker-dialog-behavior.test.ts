@@ -5,6 +5,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Workout } from "@/types";
 
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 const mocks = vi.hoisted(() => ({
   createGroup: vi.fn(),
   getFilters: vi.fn(),
@@ -128,7 +130,8 @@ const workout = (id: string, name: string, slug = id): Workout => ({
 
 async function flush() {
   await act(async () => {
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    await Promise.resolve();
+    await Promise.resolve();
   });
 }
 
@@ -153,6 +156,7 @@ describe("ExercisePickerDialog request generations", () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     container.remove();
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 
@@ -220,6 +224,7 @@ describe("ExercisePickerDialog request generations", () => {
     });
     await act(async () => { vi.advanceTimersByTime(180); });
     const input = container.querySelector('input[placeholder="searchExercises"]') as HTMLInputElement;
+    expect(input).toBeTruthy();
     await act(async () => {
       input.value = "fast";
       input.dispatchEvent(new Event("input", { bubbles: true }));
