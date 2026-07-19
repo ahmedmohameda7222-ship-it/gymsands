@@ -214,3 +214,166 @@ Authentication, ownership, RLS, grants, frozen-session integrity, and published-
 Remaining limitations are deliberate Phase 4A boundaries: no V2 mapping is published, no member-facing surface consumes the atlas, no Phase 4B authoring/population exists, and no Phase 4C product placement exists. Local Docker replay remains unavailable on this workstation, although exact-head GitHub Quality supplied a successful clean replay.
 
 Application rollback is a normal revert of the Phase 4A code/report commits. The applied database migration must never be rewritten or deleted; any database correction or rollback requires a new named forward-only migration. This Draft PR is not merged, no application was deployed, production data was not backfilled, the compatibility marker is unchanged, and no later phase has begun.
+
+# Phase 4A Required Corrections
+
+## Confirmed defects and root causes
+
+The required-corrections package was extracted outside the repository. Its SHA-256 is `85a2e08e9748d361832051f8055d21e82d5c84ba17b775403fdb5933a97fb7ff`, every included manifest hash matched, the complete correction prompt was read before editing, and all four included rendered-evidence images were inspected.
+
+Four defects were confirmed against the approved assets and the live branch:
+
+1. The production interaction layer reused overlapping source painter shapes instead of the final visible segmentation. A selected target could therefore include pixels owned by another final region, and several chest labels described the wrong visible regions.
+2. `MuscleHeatMap` returned after advanced rendering and dropped nested broad V1 compatibility data. Mixed advanced-plus-broad results could not show broad-only coverage or explain overlapping broad contribution.
+3. Draft global and custom mapping-set `schema_version` values could be changed after entries existed. Entry validation ran on entry mutation, so a direct mapping-set schema flip could bypass the intended taxonomy boundary.
+4. Published uniqueness, publication retirement, current-mapping resolution, and authoritative snapshot writers were not separated by mapping schema. A future V2 publication could retire or displace V1 and then be selected by a current V1 freeze path.
+
+The common root cause was treating source painter layers and implicit current-version defaults as semantic boundaries. The correction replaces both with explicit final-region and mapping-schema contracts.
+
+## Files changed
+
+The correction changes only the approved Phase 4A surface:
+
+- `scripts/build-muscle-atlas-paths.mjs`
+- `data/muscle-intelligence/advanced-visible-v1/final-region-manifest.json`
+- `data/muscle-intelligence/advanced-visible-v1/target-view-registry.json`
+- removal of obsolete `data/muscle-intelligence/advanced-visible-v1/source-path-assignments.json`
+- `components/train/muscle-heat-map/details-panel.tsx`
+- `components/train/muscle-heat-map/muscle-body.tsx`
+- `components/train/muscle-heat-map/muscle-heat-map.tsx`
+- `components/train/muscle-heat-map/path-data.ts`
+- Phase 4A component, atlas, and migration tests
+- exact development dependency `sharp@0.34.5` and lockfile update for deterministic raster classification
+- new forward-only migration `supabase/migrations/20260719000336_muscle_intelligence_phase4a_required_corrections.sql`
+- executable verification `supabase/verification/muscle-intelligence-phase4a-required-corrections.sql`
+- `supabase/migration-ledger.json`
+- this report section
+
+The already-applied migration `20260718214000_muscle_intelligence_phase4a_advanced_atlas_foundation.sql` was not modified. Its SHA-256 remains `9b0d14c6711b98deced194a7e2d7fd08979a34470ef3126f4912f1865918a630`.
+
+## Semantic extraction replacement
+
+The generator now verifies the approved PNG/SVG hashes, renders the SVG painter order into crisp categorical masks on the 1024 x 1536 logical canvas, classifies connected final-visible regions by stable source-layer and source-component fingerprints, traces the exact final contours, and emits one deterministic runtime path per canonical target/view/side. Runtime code imports those final semantic paths directly; it no longer uses compound source painter shapes as interactive geometry.
+
+The manifest explicitly classifies every final connected component as target or excluded. The pectoralis repair maps the approved visible bands as upper, middle, lower, and outer and excludes the tiny overwritten blue/gray residues. Rebuilding twice produced the same manifest SHA-256: `7bf5b5edbe04dbe26ecbf5bde6a6cc35c694754d8238068f77d4b1a5c38049cb`.
+
+## Mask, IoU, and overlap evidence
+
+| Measure | Result |
+| --- | ---: |
+| Runtime semantic paths | 118 |
+| Canonical target/view definitions | 58 |
+| Cross-target interior overlap pixels | 0 |
+| Neutral leakage pixels | 0 |
+| Unclassified classified-source pixels | 0 |
+| Unclassified percent | 0 |
+| Minimum per-target/view IoU | 1.0 |
+| Front aggregate IoU | 1.0 |
+| Back aggregate IoU | 1.0 |
+
+The validation uses zero antialias tolerance because the categorical masks are rendered without smoothing. Tests require all 58 target views to have IoU at least 0.99; the generated result is 1.0 for every target view.
+
+## Target-by-target rendered QA
+
+Every one of the 58 canonical target/view combinations was rendered at an exact 390 x 844 CSS viewport. Each target was found in the accessibility tree, exposed the expected selected state, and visibly highlighted only its final semantic anatomy. Corrected front and back contact sheets were inspected as a complete matrix. Evidence was kept outside the repository:
+
+- `C:/Users/Ahmee/AppData/Local/Temp/plaivra-phase4a-target-screens-corrected`
+- `C:/Users/Ahmee/AppData/Local/Temp/plaivra-phase4a-corrected-contact-sheet-front.png`
+- `C:/Users/Ahmee/AppData/Local/Temp/plaivra-phase4a-corrected-contact-sheet-back.png`
+- `C:/Users/Ahmee/AppData/Local/Temp/plaivra-phase4a-rendered-matrix-contact-sheet.png`
+- `C:/Users/Ahmee/AppData/Local/Temp/plaivra-phase4a-production-390x844.png`
+
+The required rendered matrix passed at exact CSS viewports 390 x 844, 430 x 932, 768 x 1024, 1280 x 800, and 1440 x 900 with no horizontal overflow. It covered light/dark, LTR/RTL, front-only/back-only/both, interactive/compact/exercise-preview, advanced-only/broad-only/mixed, partial/unavailable/error/loading/empty, pointer activation, keyboard activation, and Close dismissal. The atlas has no animation or transition declarations; a computed-style sweep found 0 moving elements across 332 atlas nodes. A production-build harness check at 390 x 844 had no development toolbar and was removed before the final 91-route build.
+
+## Mixed rendering correction
+
+Advanced and nested broad compatibility results are now composed instead of treated as mutually exclusive:
+
+- qualitative heat uses the maximum available level only;
+- no synthetic numeric contribution is created;
+- a non-`none` advanced leaf keeps interaction and precise details;
+- broad compatibility owns only advanced-`none` or otherwise uncovered visual leaves;
+- broad ownership uses deterministic highest-heat selection and stable ID tie-breaking;
+- overlapping precise leaves receive the explicit nonnumeric disclosure `Additional broad-mapped contribution included; detailed regional data is unavailable`;
+- broad-only parents remain one tab stop and do not create duplicate child detail controls.
+
+Component tests cover disjoint mixed coverage, moderate-plus-high visual maximum, advanced-none-plus-broad-high ownership, advanced-high-plus-broad-light ownership, deterministic broad ownership, explicit disclosure, and absence of synthetic percentages.
+
+## New forward migration
+
+The required database correction is the tracked forward-only migration:
+
+`supabase/migrations/20260719000336_muscle_intelligence_phase4a_required_corrections.sql`
+
+| Integrity measure | Value |
+| --- | --- |
+| Git blob in correction implementation commit | `28c8654f363d14c5b51ec85606127c88cafd3631` |
+| SHA-256 | `bde4d59ffadab98aebc5d61585257c5ca834135e079f70cbda6fb085741472d9` |
+| Original Phase 4A migration SHA-256 | `9b0d14c6711b98deced194a7e2d7fd08979a34470ef3126f4912f1865918a630` unchanged |
+
+The migration atomically replaces the published uniqueness indexes with `(exercise_id, schema_version)` and `(custom_exercise_id, schema_version)`, makes mapping-set schema version immutable after insert, retires only older published rows for the same target and schema, adds private schema-aware current global/custom resolvers, and makes every current authoritative freeze/start/replacement/reconciliation path explicitly request `exercise_muscle_mapping_v1`. The version-aware historical frozen-mapping reader remains capable of reading a valid versioned V2 snapshot; current production writers were not switched to V2.
+
+## Executable database proof
+
+The linked verification executes the real triggers and functions inside a transaction and then rolls back. It proves:
+
+- V1-with-broad-entry to V2 and V2-with-advanced-entry to V1 schema flips fail;
+- assigning the existing schema value remains valid;
+- unsupported schema resolver requests fail closed;
+- V1 and V2 mappings can be published concurrently for the same global or custom exercise;
+- publishing a newer V1 retires only the older V1 and leaves V2 published;
+- publishing a newer V2 retires only the older V2 and leaves V1 published;
+- plan-session freeze, direct-session start, custom mapping freeze, replacement, eligibility, and reconciliation select V1 explicitly;
+- all new synthetic snapshot envelopes and item mappings remain V1;
+- the historical V1 snapshot payload is unchanged inside the transaction;
+- all synthetic users, exercises, mappings, sessions, and snapshots disappear at rollback.
+
+The migration itself was also executed once against the linked schema under a forced rollback before application. Local Docker was unavailable; exact-head GitHub Quality independently completed the clean full migration replay and security verification.
+
+## Production application and counts
+
+The linked project identity was verified as `bkwezjxvapaeasfvlhvv`. Before application, migration history matched the repository through `20260718214000`, and the dry run listed only `20260719000336_muscle_intelligence_phase4a_required_corrections.sql`. The correction was applied once through `supabase db push`, then migration history showed both local and remote version `20260719000336`.
+
+Post-verification production state after transactional rollback:
+
+| Measure | Value |
+| --- | ---: |
+| Published/retired global V2 mappings | 0 |
+| Published/retired custom V2 mappings | 0 |
+| V2 snapshots | 0 |
+| Historical V1 snapshots | 9, unchanged |
+| Historical V1 snapshot digest | `dcdb2c71ef9466885adf2ee7ef1f29a4` |
+| Compatibility marker | `20260717051011`, unchanged |
+| Migration ledger | 47 applied, 0 pending, 0 unresolved, reconciled |
+
+Security advisors returned no error-level findings. The broader warning-level result contains the existing intentional authenticated `SECURITY DEFINER` RPC warnings and the existing leaked-password-protection setting; the correction introduced no new public/private ACL error.
+
+## Final tests and CI
+
+| Command/evidence | Result |
+| --- | --- |
+| `npm.cmd run lint` | Passed |
+| `npm.cmd run typecheck` | Passed |
+| `npm.cmd run test:muscle-intelligence:phase4a` | 6 files, 32 tests passed |
+| `npm.cmd run test:muscle-intelligence:phase3` | 3 files, 20 tests passed |
+| `npm.cmd run test:integration` | 10 passed, 38 skipped |
+| `npm.cmd run test:scripts` | 73 passed |
+| `npm.cmd run migration:ledger:check` | 47 applied, 0 pending, 0 unresolved; release ready |
+| `npm.cmd run build` | Passed; 91 routes; no temporary QA route |
+| `git diff --check` and staged diff check | Passed |
+| Linked transactional correction verification | Passed and rolled back |
+| Supabase security advisors, error level | No issues |
+| GitHub Phase A Diff Validation `29667904334` | Success on exact correction head |
+| GitHub Quality `29667904329` | Success on exact correction head, including clean migration replay, build, security contracts, and browser QA |
+
+The exact correction implementation-and-ledger head verified by both required CI workflows is `c392b179428778172aa69f86852f894fc719be91`. The correction implementation commit is `e39d9ef4b9745145091f10f16648e1b7456c5226`; the reconciliation commit is `c392b179428778172aa69f86852f894fc719be91`.
+
+## Bounded correction inspection record
+
+Beyond the correction package's must-read files, conditional inspection was limited to imported atlas component/domain files, the approved source manifest/assets, the existing Phase 4A and Phase 3 migrations needed to preserve function contracts, the migration ledger/checker, the existing implementation report, package/test configuration, and the PR/CI metadata required by the prompt. No Graphify, agent, Ruflo, unrelated product module, historical prompt, or later-phase implementation was used.
+
+## Remaining limitations and stop boundary
+
+No durable V2 mapping or V2 snapshot exists. V2 authoring/population, member-facing placement, and later product integration remain Phase 4B/4C work and were not started. The correction does not diagnose or prescribe, does not add client table access, and does not change authentication, RLS, ownership, privacy, export, or deletion boundaries.
+
+The branch remains `feat/train-muscle-intelligence-phase4a-atlas-foundation` and Draft PR #70 remains open. Nothing was merged or deployed, the compatibility marker was not changed, no applied migration was rewritten, and no Phase 4B, Phase 4C, or Phase 5 work began. Any future database change must be another named forward-only migration.
