@@ -13,7 +13,7 @@ export function TrainMuscleLoadEntry() {
   const text = getMuscleLoadVisibilityCopy(language);
 
   return (
-    <TrainPageContainer className="pt-0" dir={dir} data-muscle-load-overview-entry>
+    <TrainPageContainer className="mt-3" dir={dir} data-muscle-load-overview-entry>
       <Card className="overflow-hidden border-primary/20 bg-primary/5">
         <CardContent className="p-0">
           <Link
@@ -29,7 +29,7 @@ export function TrainMuscleLoadEntry() {
             </span>
             <span className="hidden items-center gap-1 text-sm font-semibold text-primary sm:inline-flex">
               {text.cardAction}
-              <ChevronRight className="h-4 w-4 transition group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5" aria-hidden="true" />
+              <ChevronRight className="h-4 w-4 transition group-hover:translate-x-0.5 rtl:rotate-180" aria-hidden="true" />
             </span>
           </Link>
         </CardContent>
