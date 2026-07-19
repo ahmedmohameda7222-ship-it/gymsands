@@ -92,4 +92,14 @@ describe("member-facing exercise terminology", () => {
       expect(source, path).not.toMatch(/>\s*\{(?:exercise|workout)\.(?:target_muscle|mechanics|force_type|difficulty|equipment)\}\s*</);
     }
   });
+
+  it("keeps plan review and plan editing metadata friendly without changing canonical identities", () => {
+    const editor = readFileSync("components/workouts/workout-plan-editor.tsx", "utf8");
+    const detail = readFileSync("components/workouts/workout-plan-detail.tsx", "utf8");
+    expect(editor).toContain('formatExerciseDisplayList(exercise.target_muscle, language, "muscle")');
+    expect(editor).toContain('formatExerciseDisplayList(exercise.equipment, language, "equipment")');
+    expect(detail).toContain('formatExerciseDisplayList(exercise.target_muscle, language, "muscle")');
+    expect(detail).toContain('formatExerciseDisplayList(exercise.equipment, language, "equipment")');
+    expect(editor).toContain("source_workout_id: workout.id");
+  });
 });
