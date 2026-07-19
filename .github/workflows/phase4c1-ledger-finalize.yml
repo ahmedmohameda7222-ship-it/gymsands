@@ -1,16 +1,16 @@
 name: Phase 4C1 Ledger Finalize
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
+      - phase4c1-runtime-v2-cutover
 
 permissions:
   contents: write
 
 jobs:
   finalize:
-    if: github.event.pull_request.number == 74 && github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Phase 4C.1 branch
