@@ -56,6 +56,11 @@ function frozenFields(item: SessionMuscleSnapshotItem, actual: boolean) {
   };
 }
 
+function hasFrozenReference(fields: ReturnType<typeof frozenFields>) {
+  return fields.globalMappingSetId !== null || fields.customMappingSetId !== null ||
+    fields.mappingVersion !== null || fields.schemaVersion !== null || fields.checksum !== null || fields.customEntries !== null;
+}
+
 function assertReferenceBase(fields: ReturnType<typeof frozenFields>) {
   if (!fields.mappingVersion || !fields.schemaVersion || !fields.checksum) {
     throw new SessionMuscleAnalysisError("snapshot_mapping_drift", "A frozen mapping reference is incomplete.", 409);
@@ -68,7 +73,7 @@ function mappingFor(
   mappings: Map<string, FrozenGlobalMapping>
 ): MuscleMappingReference | AdvancedMuscleMappingReference | null {
   const fields = frozenFields(item, actual);
-  if (!fields.targetType) return null;
+  if (!fields.targetType || !hasFrozenReference(fields)) return null;
   assertReferenceBase(fields);
   let targetId: string;
   let mappingSetId: string;
