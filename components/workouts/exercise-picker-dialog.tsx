@@ -1,8 +1,9 @@
 "use client";
 
-import { Check, Dumbbell, ExternalLink, Plus, Search, X } from "lucide-react";
+import { Check, Dumbbell, ExternalLink, Eye, Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { ExerciseMusclePreview } from "@/components/workouts/exercise-muscle-preview";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,6 +12,7 @@ import { Select } from "@/components/ui/select-field";
 import { CardGridSkeleton } from "@/components/ui/state-views";
 import { userSafeError } from "@/lib/error-formatting";
 import { useTrainTranslation } from "@/lib/i18n/train";
+import { getMuscleIntelligenceCopy } from "@/lib/train/muscle-intelligence/muscle-intelligence-ui-copy";
 import { createCatalogRequestGroupId } from "@/services/activity-catalog/client";
 import {
   emptyCanonicalWorkoutFilterOptions,
@@ -58,7 +60,8 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   maxSelection?: number;
 }) {
   const { user } = useAuth();
-  const { dir, locale, tr } = useTrainTranslation();
+  const { language, dir, locale, tr } = useTrainTranslation();
+  const muscleCopy = getMuscleIntelligenceCopy(language);
   const libraryLoadFailedMessage = tr("libraryLoadFailed");
   const replacementMode = maxSelection === 1;
   const [query, setQuery] = useState("");
@@ -73,6 +76,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   const [results, setResults] = useState<Workout[]>([]);
   const [filterOptions, setFilterOptions] = useState<CanonicalWorkoutFilterOptions>(() => emptyCanonicalWorkoutFilterOptions());
   const [selected, setSelected] = useState<Map<string, Workout>>(new Map());
+  const [focusedExercise, setFocusedExercise] = useState<Workout | null>(null);
   const [eligibility, setEligibility] = useState<Map<string, ReplacementEligibility>>(new Map());
   const [eligibilityLoading, setEligibilityLoading] = useState(false);
   const [eligibilityError, setEligibilityError] = useState("");
@@ -107,11 +111,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
     if (open || typeof document === "undefined") return;
     const captureReturnTarget = () => {
       const activeElement = document.activeElement;
-      if (
-        activeElement instanceof HTMLElement &&
-        activeElement !== document.body &&
-        !activeElement.closest("[data-train-exercise-picker]")
-      ) {
+      if (activeElement instanceof HTMLElement && activeElement !== document.body && !activeElement.closest("[data-train-exercise-picker]")) {
         returnFocusRef.current = activeElement;
       }
     };
@@ -163,11 +163,13 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
           if (controller.signal.aborted || generationRef.current !== generation) return;
           setResults(result.data);
           setPagination(result.pagination ?? emptyPagination);
+          setFocusedExercise((current) => current && result.data.some((workout) => exerciseKey(workout) === exerciseKey(current)) ? current : null);
           if (result.filterOptions) setFilterOptions((options) => mergeCanonicalWorkoutFilterOptions(options, result.filterOptions!));
         })
         .catch((loadError) => {
           if (controller.signal.aborted || generationRef.current !== generation || isAbortError(loadError)) return;
           setResults([]);
+          setFocusedExercise(null);
           setPagination(emptyPagination);
           setError(userSafeError(loadError, libraryLoadFailedMessage));
         })
@@ -208,8 +210,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
       user.id,
       results.map((workout) => ({ key: exerciseKey(workout), workout }))
     ).then((next) => {
-      if (eligibilityGenerationRef.current !== generation) return;
-      setEligibility(next);
+      if (eligibilityGenerationRef.current === generation) setEligibility(next);
     }).catch((loadError) => {
       if (eligibilityGenerationRef.current !== generation) return;
       setEligibility(new Map());
@@ -229,6 +230,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
     initialRequestGroupConsumedRef.current = null;
     activeGenerationGroupRef.current = null;
     setSelected(new Map());
+    setFocusedExercise(null);
     setResults([]);
     setEligibility(new Map());
     setEligibilityLoading(false);
@@ -278,8 +280,15 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
   }
 
   function clearFilters() {
-    setQuery(""); setMuscle(""); setEquipment(""); setDifficulty(""); setMuscleCategory("");
-    setSecondaryMuscle(""); setForceType(""); setExerciseType(""); setMechanics("");
+    setQuery("");
+    setMuscle("");
+    setEquipment("");
+    setDifficulty("");
+    setMuscleCategory("");
+    setSecondaryMuscle("");
+    setForceType("");
+    setExerciseType("");
+    setMechanics("");
   }
 
   async function loadMore() {
@@ -341,9 +350,7 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
         onOpenAutoFocus={() => {
           if (returnFocusRef.current?.isConnected) return;
           const activeElement = document.activeElement;
-          if (activeElement instanceof HTMLElement && !activeElement.closest("[data-train-exercise-picker]")) {
-            returnFocusRef.current = activeElement;
-          }
+          if (activeElement instanceof HTMLElement && !activeElement.closest("[data-train-exercise-picker]")) returnFocusRef.current = activeElement;
         }}
         onCloseAutoFocus={(event) => {
           const returnTarget = returnFocusRef.current;
@@ -362,95 +369,38 @@ export function ExercisePickerDialog({ open, onOpenChange, dayName, existingKeys
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-32 sm:px-5" data-picker-scroll-region>
           <div className="sticky -top-4 z-20 -mx-4 flex gap-2 overflow-x-auto border-b bg-background/95 px-4 py-3 backdrop-blur sm:-mx-5 sm:px-5 lg:grid lg:grid-cols-4 lg:gap-3 lg:overflow-visible" data-picker-filters>
-            <label className="relative min-w-[240px] shrink-0 lg:min-w-0">
-              <span className="sr-only">{tr("searchExercises")}</span>
-              <Search className="pointer-events-none absolute start-3 top-3.5 h-4 w-4 text-muted-foreground" />
-              <Input value={query} onChange={(event) => setQuery(event.target.value)} className="min-h-12 ps-10" placeholder={tr("searchExercises")} />
-            </label>
+            <label className="relative min-w-[240px] shrink-0 lg:min-w-0"><span className="sr-only">{tr("searchExercises")}</span><Search className="pointer-events-none absolute start-3 top-3.5 h-4 w-4 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} className="min-h-12 ps-10" placeholder={tr("searchExercises")} /></label>
             <div className="min-w-[180px] shrink-0 lg:min-w-0"><Select className="h-12 w-full rounded-full border border-input bg-card px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={tr("primaryMuscle")} value={muscle} onChange={setMuscle} placeholder={tr("primaryMuscle")} options={muscleOptions} /></div>
             <div className="min-w-[180px] shrink-0 lg:min-w-0"><Select className="h-12 w-full rounded-full border border-input bg-card px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={tr("equipment")} value={equipment} onChange={setEquipment} placeholder={tr("equipment")} options={equipmentOptions} /></div>
             <div className="min-w-[180px] shrink-0 lg:min-w-0"><Select className="h-12 w-full rounded-full border border-input bg-card px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={tr("difficulty")} value={difficulty} onChange={setDifficulty} placeholder={tr("difficulty")} options={difficultyOptions} /></div>
             {hasFilters ? <Button type="button" variant="ghost" className="min-h-11 justify-self-start px-2 sm:col-span-2 lg:col-span-4" onClick={clearFilters}>{tr("clear")}</Button> : null}
           </div>
+
           {activeFilterChips.length ? <div className="mt-3 flex gap-2 overflow-x-auto" aria-label={tr("filters")}>{activeFilterChips.map((chip) => <button key={chip.id} type="button" className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 text-sm font-medium" onClick={chip.clear}>{chip.label}<X className="h-4 w-4" aria-hidden="true" /></button>)}</div> : null}
 
-          {hasAdvancedOptions ? <details className="mt-3 rounded-2xl border border-border/70 bg-muted/20 px-3 py-2">
-            <summary className="min-h-11 cursor-pointer select-none content-center font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{tr("moreFilters")}</summary>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {muscleCategoryOptions.length ? <Select aria-label={tr("muscleCategory")} value={muscleCategory} onChange={setMuscleCategory} placeholder={tr("muscleCategory")} options={muscleCategoryOptions} /> : null}
-              {secondaryMuscleOptions.length ? <Select aria-label={tr("secondaryMuscle")} value={secondaryMuscle} onChange={setSecondaryMuscle} placeholder={tr("secondaryMuscle")} options={secondaryMuscleOptions} /> : null}
-              {forceTypeOptions.length ? <Select aria-label={tr("forceType")} value={forceType} onChange={setForceType} placeholder={tr("forceType")} options={forceTypeOptions} /> : null}
-              {exerciseTypeOptions.length ? <Select aria-label={tr("exerciseType")} value={exerciseType} onChange={setExerciseType} placeholder={tr("exerciseType")} options={exerciseTypeOptions} /> : null}
-              {mechanicsOptions.length ? <Select aria-label={tr("mechanics")} value={mechanics} onChange={setMechanics} placeholder={tr("mechanics")} options={mechanicsOptions} /> : null}
-            </div>
-          </details> : null}
+          {hasAdvancedOptions ? <details className="mt-3 rounded-2xl border border-border/70 bg-muted/20 px-3 py-2"><summary className="min-h-11 cursor-pointer select-none content-center font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{tr("moreFilters")}</summary><div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{muscleCategoryOptions.length ? <Select aria-label={tr("muscleCategory")} value={muscleCategory} onChange={setMuscleCategory} placeholder={tr("muscleCategory")} options={muscleCategoryOptions} /> : null}{secondaryMuscleOptions.length ? <Select aria-label={tr("secondaryMuscle")} value={secondaryMuscle} onChange={setSecondaryMuscle} placeholder={tr("secondaryMuscle")} options={secondaryMuscleOptions} /> : null}{forceTypeOptions.length ? <Select aria-label={tr("forceType")} value={forceType} onChange={setForceType} placeholder={tr("forceType")} options={forceTypeOptions} /> : null}{exerciseTypeOptions.length ? <Select aria-label={tr("exerciseType")} value={exerciseType} onChange={setExerciseType} placeholder={tr("exerciseType")} options={exerciseTypeOptions} /> : null}{mechanicsOptions.length ? <Select aria-label={tr("mechanics")} value={mechanics} onChange={setMechanics} placeholder={tr("mechanics")} options={mechanicsOptions} /> : null}</div></details> : null}
 
+          <div className="mt-4"><ExerciseMusclePreview exercise={focusedExercise} language={language} /></div>
           {loading ? <div className="mt-4"><CardGridSkeleton count={4} rows={3} /></div> : null}
           {error ? <div role="alert" className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm">{error}</div> : null}
-          {replacementMode && eligibilityError ? (
-            <div role="alert" className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
-              {eligibilityError}
-            </div>
-          ) : null}
+          {replacementMode && eligibilityError ? <div role="alert" className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm">{eligibilityError}</div> : null}
 
-          {!loading && !error ? (
-            <>
-              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2" data-picker-results>
-                {results.map((exercise) => {
-                  const key = exerciseKey(exercise);
-                  const duplicate = existing.has(key);
-                  const isSelected = selected.has(key);
-                  const candidateEligibility = eligibility.get(key);
-                  const candidatePending = replacementMode && eligibilityLoading;
-                  const ineligible = replacementMode && !candidatePending && candidateEligibility?.eligible !== true;
-                  const disabled = duplicate || candidatePending || ineligible || Boolean(replacementMode && eligibilityError);
-                  const guideUrl = exercise.custom_video_url || exercise.video_url || exercise.exercise_url;
-                  return (
-                    <article
-                      key={key}
-                      className={`relative flex min-h-[152px] flex-col rounded-2xl border p-4 ${disabled ? "border-border/60 bg-muted/30" : isSelected ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "bg-card"}`}
-                    >
-                      <button type="button" className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" disabled={disabled} aria-pressed={isSelected} onClick={() => toggle(exercise)}><span className="sr-only">{isSelected ? tr("deselect") : tr("select")}: {exercise.name}</span></button>
-                      <div className="pointer-events-none relative z-10 flex min-w-0 items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="break-words text-base font-semibold leading-6">{exercise.name}</h3>
-                          <p className="mt-1 break-words text-sm text-muted-foreground">{exercise.target_muscle} · {exercise.equipment}</p>
-                        </div>
-                        {exercise.difficulty ? <Badge variant="outline" className="shrink-0">{exercise.difficulty}</Badge> : null}
-                      </div>
-                      <p className="pointer-events-none relative z-10 mt-3 line-clamp-2 text-sm leading-5 text-muted-foreground">{exercise.instructions}</p>
-                      {replacementMode && candidatePending ? <p className="relative z-10 mt-2 text-xs text-muted-foreground">Verifying tracked replacement eligibility…</p> : null}
-                      {replacementMode && ineligible ? <p className="relative z-10 mt-2 text-xs text-muted-foreground">{replacementEligibilityMessage(candidateEligibility?.reason)}</p> : null}
-                      <div className={`relative z-10 mt-auto grid gap-2 pt-4 ${guideUrl ? "sm:grid-cols-2" : "grid-cols-1"}`}>
-                        <Button type="button" variant={isSelected ? "default" : "outline"} className="min-h-11 w-full" disabled={disabled} aria-pressed={isSelected} onClick={() => toggle(exercise)}>
-                          {duplicate || isSelected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                          {duplicate ? tr("alreadyAdded") : isSelected ? tr("deselect") : ineligible ? "Unavailable" : candidatePending ? "Checking…" : tr("select")}
-                        </Button>
-                        {guideUrl ? <Button asChild type="button" variant="ghost" className="min-h-11"><a href={guideUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}><ExternalLink className="h-4 w-4" />{tr("viewGuide")}</a></Button> : null}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-              {results.length && (pagination.hasMore || loadMoreError) ? <div className="mt-5 flex flex-col items-center gap-3" data-picker-load-more>
-                {loadMoreError ? <div role="alert" className="w-full rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm">{loadMoreError}</div> : null}
-                {pagination.hasMore ? <Button type="button" variant="outline" className="min-h-12 min-w-40" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? tr("loadingLabel") : tr("loadMore")}</Button> : null}
-              </div> : null}
-            </>
-          ) : null}
-
+          {!loading && !error ? <><div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2" data-picker-results>{results.map((exercise) => {
+            const key = exerciseKey(exercise);
+            const duplicate = existing.has(key);
+            const isSelected = selected.has(key);
+            const isFocused = focusedExercise ? exerciseKey(focusedExercise) === key : false;
+            const candidateEligibility = eligibility.get(key);
+            const candidatePending = replacementMode && eligibilityLoading;
+            const ineligible = replacementMode && !candidatePending && candidateEligibility?.eligible !== true;
+            const disabled = duplicate || candidatePending || ineligible || Boolean(replacementMode && eligibilityError);
+            const guideUrl = exercise.custom_video_url || exercise.video_url || exercise.exercise_url;
+            return <article key={key} className={`flex min-h-[170px] flex-col rounded-2xl border p-4 ${disabled ? "border-border/60 bg-muted/30" : isSelected ? "border-primary bg-primary/5 ring-1 ring-primary/20" : isFocused ? "border-primary/50 bg-card" : "bg-card"}`} data-picker-exercise-card><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words text-base font-semibold leading-6">{exercise.name}</h3><p className="mt-1 break-words text-sm text-muted-foreground">{exercise.target_muscle} · {exercise.equipment}</p></div>{exercise.difficulty ? <Badge variant="outline" className="shrink-0">{exercise.difficulty}</Badge> : null}</div><p className="mt-3 line-clamp-2 text-sm leading-5 text-muted-foreground">{exercise.instructions}</p>{replacementMode && candidatePending ? <p className="mt-2 text-xs text-muted-foreground">Verifying tracked replacement eligibility…</p> : null}{replacementMode && ineligible ? <p className="mt-2 text-xs text-muted-foreground">{replacementEligibilityMessage(candidateEligibility?.reason)}</p> : null}<div className="mt-auto grid gap-2 pt-4 sm:grid-cols-2"><Button type="button" variant={isSelected ? "default" : "outline"} className="min-h-11 w-full" disabled={disabled} aria-pressed={isSelected} onClick={() => toggle(exercise)}>{duplicate || isSelected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{duplicate ? tr("alreadyAdded") : isSelected ? tr("deselect") : ineligible ? "Unavailable" : candidatePending ? "Checking…" : tr("select")}</Button><Button type="button" variant={isFocused ? "default" : "outline"} className="min-h-11 w-full" aria-pressed={isFocused} onClick={() => setFocusedExercise(exercise)}><Eye className="h-4 w-4" />{muscleCopy.previewAction}</Button>{guideUrl ? <Button asChild type="button" variant="ghost" className="min-h-11 sm:col-span-2"><a href={guideUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" />{tr("viewGuide")}</a></Button> : null}</div></article>;
+          })}</div>{results.length && (pagination.hasMore || loadMoreError) ? <div className="mt-5 flex flex-col items-center gap-3" data-picker-load-more>{loadMoreError ? <div role="alert" className="w-full rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm">{loadMoreError}</div> : null}{pagination.hasMore ? <Button type="button" variant="outline" className="min-h-12 min-w-40" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? tr("loadingLabel") : tr("loadMore")}</Button> : null}</div> : null}</> : null}
           {!loading && !error && !results.length ? <div className="mt-4 grid min-h-40 place-items-center rounded-2xl border border-dashed text-center"><div><Dumbbell className="mx-auto mb-2 h-6 w-6 text-muted-foreground" /><p className="font-medium">{tr("noExercisesFound")}</p><p className="text-sm text-muted-foreground">{tr("broaderSearch")}</p></div></div> : null}
         </div>
 
-        <div className="absolute inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur sm:px-5" data-picker-footer>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-h-11 items-center gap-2">
-              <span className="text-sm font-semibold">{tr("selectedCount", { count: selected.size })}</span>
-              <Button type="button" variant="ghost" className="min-h-11" onClick={() => setSelected(new Map())} disabled={!selected.size}>{tr("clear")}</Button>
-            </div>
-            <Button type="button" className="min-h-[52px] w-full sm:w-auto sm:min-w-44" onClick={addSelected} disabled={!selected.size || (replacementMode && (eligibilityLoading || Boolean(eligibilityError)))}>{tr("addNExercises", { count: selected.size })}</Button>
-          </div>
-        </div>
+        <div className="absolute inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur sm:px-5" data-picker-footer><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-h-11 items-center gap-2"><span className="text-sm font-semibold">{tr("selectedCount", { count: selected.size })}</span><Button type="button" variant="ghost" className="min-h-11" onClick={() => setSelected(new Map())} disabled={!selected.size}>{tr("clear")}</Button></div><Button type="button" className="min-h-[52px] w-full sm:w-auto sm:min-w-44" onClick={addSelected} disabled={!selected.size || (replacementMode && (eligibilityLoading || Boolean(eligibilityError)))}>{tr("addNExercises", { count: selected.size })}</Button></div></div>
       </DialogContent>
     </Dialog>
   );
