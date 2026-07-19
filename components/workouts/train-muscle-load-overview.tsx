@@ -20,12 +20,14 @@ export function TrainMuscleLoadOverview() {
   const { user } = useAuth();
   const { language, dir } = useTrainTranslation();
   const text = getMuscleLoadVisibilityCopy(language);
+  const userId = user?.id;
+  const loadFailedDescription = text.loadFailedDescription;
   const [plans, setPlans] = useState<UserWorkoutPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    if (!user?.id) {
+    if (!userId) {
       setPlans([]);
       setLoading(false);
       return;
@@ -34,14 +36,14 @@ export function TrainMuscleLoadOverview() {
     setLoading(true);
     setError("");
     try {
-      setPlans(await getAllUserWorkoutPlans(user.id));
+      setPlans(await getAllUserWorkoutPlans(userId));
     } catch (reason) {
       setPlans([]);
-      setError(userSafeError(reason, text.loadFailedDescription));
+      setError(userSafeError(reason, loadFailedDescription));
     } finally {
       setLoading(false);
     }
-  }, [text.loadFailedDescription, user?.id]);
+  }, [loadFailedDescription, userId]);
 
   useEffect(() => {
     void load();
