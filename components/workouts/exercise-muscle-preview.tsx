@@ -22,8 +22,9 @@ export function ExerciseMusclePreview({
   language: SupportedLanguage;
 }) {
   const [mobileView, setMobileView] = useState<"front" | "back">("front");
-  const text = getMuscleIntelligenceCopy(language);
-  const labels = useMemo(() => getMuscleHeatMapLabels(language), [language]);
+  const resolvedLanguage = language ?? "en";
+  const text = getMuscleIntelligenceCopy(resolvedLanguage);
+  const labels = useMemo(() => getMuscleHeatMapLabels(resolvedLanguage), [resolvedLanguage]);
   const analysis = useMemo(() => {
     if (!exercise) return null;
     try {
