@@ -83,6 +83,7 @@ describe("Muscle Intelligence Phase 4B implementation boundary", () => {
     const editor = text("components/workouts/workout-plan-editor.tsx");
     const picker = text("components/workouts/exercise-picker-dialog.tsx");
     const detailsPage = text("app/(private)/my-workout/plans/[planId]/page.tsx");
+    const weeklyDetails = text("components/workouts/workout-plan-weekly-muscle-load.tsx");
     const planPanel = text("components/workouts/plan-muscle-load-panel.tsx");
     const preview = text("components/workouts/exercise-muscle-preview.tsx");
     const adapter = text("lib/train/muscle-intelligence/plan-advanced-analysis.ts");
@@ -94,6 +95,8 @@ describe("Muscle Intelligence Phase 4B implementation boundary", () => {
     expect(picker).toContain("ExerciseMusclePreview");
     expect(picker).not.toContain("<MuscleHeatMap");
     expect(detailsPage).toContain("WorkoutPlanWeeklyMuscleLoad");
+    expect(weeklyDetails).toContain("data-phase4b-plan-details-bottom-reserve");
+    expect(weeklyDetails).toContain("var(--active-workout-controller-height,0px)");
     expect(planPanel).toContain("variant === \"details\"");
     expect(planPanel).toContain("sm:hidden");
     expect(planPanel).toContain("view=\"both\"");
