@@ -14,7 +14,10 @@ import {
   projectBroadMuscleCompatibility,
   type BroadCompatibilityResult
 } from "@/lib/train/muscle-intelligence/compatibility-projection";
-import { getMuscleHeatMapLabels } from "@/lib/train/muscle-intelligence/muscle-intelligence-ui-copy";
+import {
+  getMuscleHeatMapLabels,
+  getMuscleIntelligenceCopy
+} from "@/lib/train/muscle-intelligence/muscle-intelligence-ui-copy";
 import type { Phase3SessionAnalysisContract } from "@/lib/train/muscle-intelligence/session-analysis-contract";
 import { cn } from "@/lib/utils";
 
@@ -83,6 +86,7 @@ export function SessionMuscleLoadPanel({
   const abortRef = useRef<AbortController | null>(null);
   const resultRef = useRef<Phase3SessionAnalysisContract | null>(null);
   const copy = getActiveSessionMuscleLoadCopy(language);
+  const interfaceCopy = useMemo(() => getMuscleIntelligenceCopy(language), [language]);
   const labels = useMemo(() => getMuscleHeatMapLabels(language), [language]);
 
   const load = useCallback(async () => {
@@ -171,7 +175,10 @@ export function SessionMuscleLoadPanel({
           </div>
         ) : null}
 
-        <div className="flex justify-center gap-2 sm:hidden" aria-label={`${labels.front} / ${labels.back}`}>
+        <div
+          className="flex justify-center gap-2 sm:hidden"
+          aria-label={`${interfaceCopy.front} / ${interfaceCopy.back}`}
+        >
           <Button
             type="button"
             size="sm"
@@ -179,7 +186,7 @@ export function SessionMuscleLoadPanel({
             aria-pressed={mobileView === "front"}
             onClick={() => setMobileView("front")}
           >
-            {labels.front}
+            {interfaceCopy.front}
           </Button>
           <Button
             type="button"
@@ -188,7 +195,7 @@ export function SessionMuscleLoadPanel({
             aria-pressed={mobileView === "back"}
             onClick={() => setMobileView("back")}
           >
-            {labels.back}
+            {interfaceCopy.back}
           </Button>
         </div>
 
