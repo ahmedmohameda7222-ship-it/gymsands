@@ -34,7 +34,12 @@ export function WorkoutPlanWeeklyMuscleLoad() {
   if (!plan) return null;
 
   return (
-    <TrainPageContainer className="pt-0" dir={dir} data-phase4b-plan-details-analysis>
+    <TrainPageContainer
+      className="pt-0 pb-[calc(var(--active-workout-controller-height,0px)+1rem)] lg:pb-0"
+      dir={dir}
+      data-phase4b-plan-details-analysis
+      data-phase4b-plan-details-bottom-reserve
+    >
       <PlanMuscleLoadPanel
         days={plan.days}
         defaultScope="entire_plan"
