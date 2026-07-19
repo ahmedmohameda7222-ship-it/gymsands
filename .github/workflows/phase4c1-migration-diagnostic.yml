@@ -1,6 +1,9 @@
 name: Phase 4C1 Migration Diagnostic
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - phase4c1-runtime-v2-cutover
@@ -9,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: phase4c1-migration-diagnostic
+  group: phase4c1-migration-diagnostic-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -20,7 +23,7 @@ jobs:
       - name: Checkout exact revision
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
       - name: Set up Supabase CLI
