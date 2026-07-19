@@ -61,4 +61,14 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 - Muscle Intelligence Phase 3 preserves immutable per-session muscle snapshots and hardened owner-scoped lifecycle authority.
 - Muscle Intelligence Phase 4A provides the approved advanced visible atlas and schema-isolated V2 publication foundation while retaining V1 runtime behavior.
 - Muscle Intelligence Phase 4B publishes 60 reviewed advanced V2 mappings with 453 regional entries and adds plan-building, plan-editing, exercise-preview, and weekly-plan visualization surfaces. It does not cut Active Workout, completion, history, or workout-session snapshots over to V2.
-- Production migration history is reconciled through `20260719094718`; the deployed compatibility marker intentionally remains `20260717051011` until a separately authorized coordinated release.
+- Phase 4C.1 is implemented on its Draft PR as a pending runtime cutover: existing V1 snapshots stay unchanged, new sessions use V2 after the migration is explicitly applied, and completed V2 workload is frozen independently from mutable set logs.
+- Production migration history remains reconciled through `20260719094718`; four Phase 4C.1 repository migrations are pending and have not been applied. The deployed compatibility marker intentionally remains `20260717051011` until a separately authorized coordinated release.
+
+## Pending Phase 4C.1 migrations
+
+- `20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql`
+- `20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql`
+- `20260719223200_muscle_intelligence_phase4c1_set_type_refresh.sql`
+- `20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup.sql`
+
+These files are classified as pending. They must not be applied, repaired as applied, merged, or deployed without explicit coordinated authorization. Do not replay any already-applied migration.
