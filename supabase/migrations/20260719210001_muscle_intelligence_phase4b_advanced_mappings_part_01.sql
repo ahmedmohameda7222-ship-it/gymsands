@@ -1,0 +1,140 @@
+begin;
+
+do $phase4b$
+declare
+  v_payload jsonb := $json${"part":1,"mappings":[{"slug":"45-degree-back-extension","exercise_id":"0c5729ae-d79f-5d65-b084-0230957e9959","mapping_set_id":"ef778ec9-fda2-5e5e-97be-619840b0aed5","checksum":"6ada0b2df9710af204819f4db3b412f81b9c5890dc1c8505f69c2b0ea8f8f863","entries":[["spinal_erectors.upper","secondary",0.5],["spinal_erectors.lower","primary",1],["gluteus_maximus.middle","primary",0.75],["gluteus_maximus.lower","secondary",0.5],["hamstrings.biceps_femoris_long_head","secondary",0.5],["hamstrings.semitendinosus","secondary",0.5],["hamstrings.semimembranosus","secondary",0.5]]},{"slug":"barbell-back-squat","exercise_id":"ead598db-a7db-5cdd-9b10-512f0d353fc7","mapping_set_id":"ff12eefe-c71e-5c75-b17a-fb969e161b32","checksum":"49c2eb19140d871e0b01c2a2d663f4dbef17e9ef2f5f6d024579912dbd2584e0","entries":[["spinal_erectors.lower","secondary",0.25],["gluteus.medius","stabilizer",0],["gluteus_maximus.upper","primary",0.75],["gluteus_maximus.middle","primary",0.75],["gluteus_maximus.lower","secondary",0.5],["quadriceps.rectus_femoris","secondary",0.5],["quadriceps.vastus_lateralis","primary",1],["quadriceps.vastus_medialis","primary",1],["adductors.anterior_region","secondary",0.25],["adductors.posterior_region","secondary",0.5]]},{"slug":"barbell-bench-press","exercise_id":"3eab8f04-2b5f-5c5e-9fed-41c63b90d45b","mapping_set_id":"a4187107-bef3-5473-a3e9-2e3f70600db1","checksum":"e7212bb206d76ab61f97bdcd4fb41fde25b231054e1fa6d5742827914f3cc8d3","entries":[["deltoid.anterior","secondary",0.5],["pectoralis.upper","primary",0.75],["pectoralis.middle","primary",1],["pectoralis.lower","primary",0.75],["pectoralis.outer","secondary",0.5],["triceps.long_head","secondary",0.5],["triceps.lateral_head","primary",0.75],["triceps.medial_head","primary",0.75]]},{"slug":"barbell-bent-over-row","exercise_id":"4faf6239-7de6-5902-93f5-a850a52ddd21","mapping_set_id":"211aa655-65fa-5094-9cb1-cad8629387e8","checksum":"7b5b312d559bb345763cc03c0abebfccc052900cc9d1ce451b2447e0b34d50fb","entries":[["trapezius.upper","secondary",0.25],["trapezius.middle","primary",1],["trapezius.lower","primary",0.75],["deltoid.posterior","secondary",0.5],["infraspinatus","secondary",0.25],["teres_minor","secondary",0.25],["teres_major","secondary",0.5],["latissimus.upper","secondary",0.5],["latissimus.middle","primary",0.75],["latissimus.lower","secondary",0.5],["latissimus.outer","primary",0.75],["biceps.long_head","secondary",0.5],["biceps.short_head","secondary",0.5],["brachialis","secondary",0.5],["brachioradialis","secondary",0.25],["forearm.flexor_mass","secondary",0.25],["forearm.extensor_mass","secondary",0.25],["spinal_erectors.upper","secondary",0.25],["spinal_erectors.lower","secondary",0.25]]},{"slug":"barbell-curl","exercise_id":"d15131f7-362e-5c9b-8b19-23de616919b1","mapping_set_id":"a673fbc5-570f-5a17-bb0e-c051f9a7c34c","checksum":"846afac13e4c7c661f37f7e1b38e791c8c77af64db839d353db000d1a7d7d039","entries":[["biceps.long_head","primary",1],["biceps.short_head","primary",1],["brachialis","secondary",0.5],["brachioradialis","secondary",0.25],["forearm.pronator_teres","secondary",0.25],["forearm.flexor_mass","secondary",0.5]]},{"slug":"barbell-front-squat","exercise_id":"3598f94b-d3ca-5b94-b24e-fd1ab17b799c","mapping_set_id":"4e71a4e4-7f49-539a-b06d-4a61a48c7d8d","checksum":"85ee267485f93e45dc0af30d903fab9b0e8d462211504a16fdd4db1f75f978e0","entries":[["spinal_erectors.upper","secondary",0.25],["spinal_erectors.lower","secondary",0.25],["tensor_fasciae_latae","stabilizer",0],["gluteus_maximus.upper","secondary",0.5],["gluteus_maximus.middle","secondary",0.5],["gluteus_maximus.lower","secondary",0.25],["quadriceps.rectus_femoris","primary",0.75],["quadriceps.vastus_lateralis","primary",1],["quadriceps.vastus_medialis","primary",1],["adductors.posterior_region","secondary",0.25]]},{"slug":"barbell-hip-thrust","exercise_id":"1c1c4539-3fdf-548d-aa6a-4492c59aab4c","mapping_set_id":"c4d6b4d5-7c85-5aa6-b4da-7e1ed94f47f4","checksum":"c4ba99cb47e4d1fa0ad11b17460fd3ba7dd3c7e11ab225029d8e239feef48623","entries":[["gluteus.medius","secondary",0.25],["gluteus_maximus.upper","primary",1],["gluteus_maximus.middle","primary",1],["gluteus_maximus.lower","primary",1],["quadriceps.rectus_femoris","secondary",0.25],["hamstrings.biceps_femoris_long_head","secondary",0.25],["hamstrings.semitendinosus","secondary",0.25],["hamstrings.semimembranosus","secondary",0.25]]},{"slug":"barbell-romanian-deadlift","exercise_id":"bc7e7c2d-6dc4-5900-bb59-0f588e0a643f","mapping_set_id":"5fe2cd4e-cb6a-55de-a318-31fb7f33f29f","checksum":"d8f176d172f00a9605ba6ac6ca27c70c3b4286408129bc003fc5adc5d3c73dcd","entries":[["forearm.flexor_mass","secondary",0.25],["forearm.extensor_mass","secondary",0.25],["spinal_erectors.upper","secondary",0.25],["spinal_erectors.lower","secondary",0.5],["gluteus_maximus.upper","primary",0.75],["gluteus_maximus.middle","primary",0.75],["gluteus_maximus.lower","primary",0.75],["hamstrings.biceps_femoris_long_head","primary",1],["hamstrings.biceps_femoris_short_head","secondary",0.25],["hamstrings.semitendinosus","primary",1],["hamstrings.semimembranosus","primary",1]]},{"slug":"barbell-shrug","exercise_id":"87eca600-a3e8-503e-ac30-f1f39e3386af","mapping_set_id":"b827cd7e-3b24-593f-bf1f-a155ebe541d1","checksum":"0b655eaa6993af5ead85783d5ce1120aad817428a68a175e525707a24a7c9137","entries":[["trapezius.upper","primary",1],["trapezius.middle","secondary",0.5],["brachioradialis","secondary",0.25],["forearm.flexor_mass","secondary",0.25],["forearm.extensor_mass","secondary",0.25]]},{"slug":"bulgarian-split-squat","exercise_id":"7fd38b77-4a88-5a6f-8a3b-a81bc7991f2c","mapping_set_id":"875d2177-36c2-500d-888c-ae7eb0cddacb","checksum":"03c26d94e1218f3fb511bf482887d0a4a18257ec4ca03037b2bd79cba6680265","entries":[["tensor_fasciae_latae","secondary",0.25],["gluteus.medius","secondary",0.5],["gluteus_maximus.upper","primary",0.75],["gluteus_maximus.middle","primary",0.75],["gluteus_maximus.lower","primary",0.75],["quadriceps.rectus_femoris","secondary",0.5],["quadriceps.vastus_lateralis","primary",0.75],["quadriceps.vastus_medialis","primary",0.75],["adductors.posterior_region","secondary",0.25],["hamstrings.biceps_femoris_long_head","secondary",0.25],["hamstrings.semitendinosus","secondary",0.25],["hamstrings.semimembranosus","secondary",0.25]]}]}$json$::jsonb;
+  v_mapping jsonb;
+  v_entry jsonb;
+  v_exercise_id uuid;
+  v_mapping_set_id uuid;
+  v_slug text;
+  v_checksum text;
+  v_entry_order integer;
+begin
+  if to_regclass('public.exercise_muscle_mapping_sets') is null
+     or to_regclass('public.exercise_muscle_mapping_entries') is null
+     or to_regprocedure('public.publish_exercise_muscle_mapping_set(uuid)') is null
+     or to_regprocedure('private.exercise_muscle_mapping_checksum(uuid)') is null
+     or to_regprocedure('private.advanced_muscle_taxonomy_display_order(text)') is null then
+    raise exception 'Muscle Intelligence Phase 4A must exist before Phase 4B advanced mapping population.';
+  end if;
+
+  if jsonb_array_length(v_payload -> 'mappings') <> 10 then
+    raise exception 'Phase 4B registry part 1 must contain exactly 10 mappings.';
+  end if;
+
+  for v_mapping in select value from jsonb_array_elements(v_payload -> 'mappings')
+  loop
+    v_slug := v_mapping ->> 'slug';
+    v_exercise_id := (v_mapping ->> 'exercise_id')::uuid;
+    v_mapping_set_id := (v_mapping ->> 'mapping_set_id')::uuid;
+    v_checksum := v_mapping ->> 'checksum';
+
+    if not exists (
+      select 1 from public.exercises exercise
+      where exercise.id = v_exercise_id
+        and exercise.slug = v_slug
+        and exercise.source = 'plaivra_curated'
+        and exercise.source_id = 'plaivra_curated:v1:' || v_slug
+        and exercise.is_global
+        and exercise.is_approved
+    ) then
+      raise exception 'Canonical curated exercise identity mismatch for %.', v_slug;
+    end if;
+
+    if not exists (
+      select 1 from public.exercise_muscle_mapping_sets mapping
+      where mapping.exercise_id = v_exercise_id
+        and mapping.schema_version = 'exercise_muscle_mapping_v1'
+        and mapping.mapping_version = 1
+        and mapping.status = 'published'
+    ) then
+      raise exception 'Published V1 mapping is required for %.', v_slug;
+    end if;
+
+    if exists (
+      select 1 from public.exercise_muscle_mapping_sets mapping
+      where mapping.id = v_mapping_set_id
+         or (mapping.exercise_id = v_exercise_id and mapping.mapping_version = 2)
+    ) then
+      raise exception 'Phase 4B mapping identity already exists for %.', v_slug;
+    end if;
+
+    insert into public.exercise_muscle_mapping_sets (
+      id, exercise_id, mapping_version, status, source, schema_version, checksum
+    ) values (
+      v_mapping_set_id, v_exercise_id, 2, 'draft', 'plaivra_reviewed_phase4b',
+      'exercise_muscle_mapping_v2', v_checksum
+    );
+
+    v_entry_order := 0;
+    for v_entry in select value from jsonb_array_elements(v_mapping -> 'entries')
+    loop
+      v_entry_order := v_entry_order + 1;
+      insert into public.exercise_muscle_mapping_entries (
+        mapping_set_id, muscle_id, role, contribution, side_scope, sort_order
+      ) values (
+        v_mapping_set_id,
+        v_entry ->> 0,
+        v_entry ->> 1,
+        (v_entry ->> 2)::numeric,
+        'bilateral',
+        v_entry_order
+      );
+    end loop;
+
+    if v_entry_order = 0 then
+      raise exception 'Phase 4B mapping has no entries for %.', v_slug;
+    end if;
+
+    if private.exercise_muscle_mapping_checksum(v_mapping_set_id) is distinct from v_checksum then
+      raise exception 'Phase 4B checksum mismatch for %.', v_slug;
+    end if;
+  end loop;
+
+  perform set_config('request.jwt.claim.role', 'service_role', true);
+
+  for v_mapping_set_id in
+    select (value ->> 'mapping_set_id')::uuid
+    from jsonb_array_elements(v_payload -> 'mappings')
+  loop
+    perform public.publish_exercise_muscle_mapping_set(v_mapping_set_id);
+  end loop;
+
+  if (
+    select count(*)
+    from public.exercise_muscle_mapping_sets mapping
+    where mapping.id in (
+      select (value ->> 'mapping_set_id')::uuid
+      from jsonb_array_elements(v_payload -> 'mappings')
+    )
+      and mapping.schema_version = 'exercise_muscle_mapping_v2'
+      and mapping.mapping_version = 2
+      and mapping.status = 'published'
+      and mapping.source = 'plaivra_reviewed_phase4b'
+  ) <> 10 then
+    raise exception 'Phase 4B registry part 1 did not publish exactly 10 V2 mappings.';
+  end if;
+
+  if (
+    select count(*)
+    from public.exercise_muscle_mapping_sets mapping
+    join public.exercises exercise on exercise.id = mapping.exercise_id
+    where exercise.source = 'plaivra_curated'
+      and mapping.schema_version = 'exercise_muscle_mapping_v1'
+      and mapping.mapping_version = 1
+      and mapping.status = 'published'
+  ) <> 60 then
+    raise exception 'Phase 4B must preserve all 60 published curated V1 mappings.';
+  end if;
+
+  if exists (
+    select 1 from public.workout_session_muscle_snapshots
+    where mapping_schema_version = 'exercise_muscle_mapping_v2'
+  ) then
+    raise exception 'Phase 4B must not create or cut over V2 workout-session snapshots.';
+  end if;
+end
+$phase4b$;
+
+commit;
