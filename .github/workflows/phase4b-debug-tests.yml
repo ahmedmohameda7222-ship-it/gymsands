@@ -1,0 +1,57 @@
+name: Phase 4B Debug Tests
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Capture exact related-test diagnostics
+        shell: bash
+        run: |
+          set +e
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          : > phase4b-test.log
+          mapfile -d '' test_files < <(git diff --diff-filter=ACMRT --name-only -z "${base_sha}...HEAD" | grep -zE '\.(test|spec)\.(ts|tsx|js|jsx)$' || true)
+          if [ "${#test_files[@]}" -gt 0 ]; then
+            echo "=== CHANGED TEST FILES ===" | tee -a phase4b-test.log
+            printf '%s\n' "${test_files[@]}" | tee -a phase4b-test.log
+            npx vitest run --config vitest.unit.config.mjs "${test_files[@]}" --reporter=verbose 2>&1 | tee -a phase4b-test.log
+            echo "changed_test_status=${PIPESTATUS[0]}" | tee -a phase4b-test.log
+          fi
+          mapfile -d '' source_files < <(git diff --diff-filter=ACMRT --name-only -z "${base_sha}...HEAD" | grep -zE '\.(ts|tsx|js|jsx)$' | grep -zEv '\.(test|spec)\.(ts|tsx|js|jsx)$' || true)
+          if [ "${#source_files[@]}" -gt 0 ]; then
+            echo "=== RELATED SOURCE TESTS ===" | tee -a phase4b-test.log
+            printf '%s\n' "${source_files[@]}" | tee -a phase4b-test.log
+            npx vitest related "${source_files[@]}" --run --config vitest.unit.config.mjs --passWithNoTests --reporter=verbose 2>&1 | tee -a phase4b-test.log
+            echo "related_test_status=${PIPESTATUS[0]}" | tee -a phase4b-test.log
+          fi
+          exit 0
+
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4b-test-diagnostics-${{ github.event.pull_request.head.sha }}
+          path: phase4b-test.log
+          if-no-files-found: error
+          retention-days: 1
