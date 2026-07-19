@@ -16,15 +16,25 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Upload reviewed Phase 4C.1 migrations
+      - name: Upload Phase 4C.1 review bundle
         uses: actions/upload-artifact@v4
         with:
-          name: phase4c1-reviewed-migrations-${{ github.run_id }}
+          name: phase4c1-review-bundle-${{ github.run_id }}
           path: |
             supabase/migrations/20260719223000_muscle_intelligence_phase4c1_runtime_v2_cutover.sql
+            supabase/migrations/20260719223010_muscle_intelligence_phase4c1_snapshot_support.sql
+            supabase/migrations/20260719223020_muscle_intelligence_phase4c1_v2_snapshot_freeze.sql
+            supabase/migrations/20260719223030_muscle_intelligence_phase4c1_direct_session_v2.sql
+            supabase/migrations/20260719223040_muscle_intelligence_phase4c1_replacement_v2.sql
+            supabase/migrations/20260719223050_muscle_intelligence_phase4c1_terminal_reconcile_v2.sql
             supabase/migrations/20260719223100_muscle_intelligence_phase4c1_terminal_history_guard.sql
             supabase/migrations/20260719223200_muscle_intelligence_phase4c1_set_type_refresh.sql
             supabase/migrations/20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup.sql
             supabase/verification/muscle-intelligence-phase4c1.sql
+            supabase/migration-ledger.json
+            README.md
+            docs/architecture/migration-ledger-reconciliation.md
+            lib/product/muscle-intelligence-phase4c1.test.ts
+            lib/product/muscle-intelligence-phase4c1-set-type.test.ts
           if-no-files-found: error
           retention-days: 1
