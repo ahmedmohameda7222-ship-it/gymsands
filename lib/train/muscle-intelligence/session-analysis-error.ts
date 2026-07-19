@@ -1,6 +1,7 @@
 export type SessionAnalysisReasonCode =
   | "snapshot_not_found"
   | "session_not_terminal"
+  | "session_not_active"
   | "unsupported_snapshot_version"
   | "snapshot_mapping_drift"
   | "snapshot_workload_not_frozen"

@@ -110,6 +110,15 @@ describe("versioned session muscle analysis", () => {
     }
   });
 
+  it("uses only persisted completed non-warmup logs for active V2 analysis", () => {
+    const result = buildVersionedSessionMuscleAnalysis({ ...v1Input, mode: "active", snapshot: v2Snapshot, items: [v2Item], globalMappings: [v2Mapping], completedLogs: [
+      { plan_exercise_id: null, exercise_order: 1, completed_at: "2026-07-19T10:00:00.000Z", set_type: "warmup" },
+      { plan_exercise_id: null, exercise_order: 1, completed_at: "2026-07-19T10:01:00.000Z", set_type: "working" },
+      { plan_exercise_id: null, exercise_order: 1, completed_at: null, set_type: "working" }
+    ] });
+    if (result.analysis && "kind" in result.analysis && result.analysis.kind === "advanced") expect(result.analysis.targets.find((target) => target.targetId === "pectoralis.upper")).toMatchObject({ rawExposure: 1, heatLevel: "light" });
+  });
+
   it("rejects completed V2 analysis when performed workload was not frozen", () => {
     expect(() => buildVersionedSessionMuscleAnalysis({
       ...v1Input,

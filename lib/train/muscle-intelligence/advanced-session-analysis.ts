@@ -24,8 +24,8 @@ function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function completedSetCount(item: SessionMuscleSnapshotItem, input: BuildSessionMuscleAnalysisInput): number {
-  if (input.snapshot.snapshot_schema_version === ADVANCED_SESSION_MUSCLE_SNAPSHOT_SCHEMA_VERSION) {
+function performedSetCount(item: SessionMuscleSnapshotItem, input: BuildSessionMuscleAnalysisInput): number {
+  if (input.mode === "completed" && input.snapshot.snapshot_schema_version === ADVANCED_SESSION_MUSCLE_SNAPSHOT_SCHEMA_VERSION) {
     if (item.performed_qualifying_sets == null || item.performed_frozen_at == null) {
       throw new SessionMuscleAnalysisError(
         "snapshot_workload_not_frozen",
@@ -35,7 +35,7 @@ function completedSetCount(item: SessionMuscleSnapshotItem, input: BuildSessionM
     }
     return item.performed_qualifying_sets;
   }
-  return input.completedLogs.filter((log) => Boolean(log.completed_at) && (
+  return input.completedLogs.filter((log) => Boolean(log.completed_at) && (input.mode !== "active" || log.set_type !== "warmup") && (
     item.source_plan_exercise_id
       ? log.plan_exercise_id === item.source_plan_exercise_id
       : log.plan_exercise_id === null && log.exercise_order === item.item_order
@@ -131,10 +131,10 @@ export function buildAdvancedSessionMuscleAnalysis(input: BuildSessionMuscleAnal
   const advancedItems: AdvancedMuscleWorkItem[] = [];
   const broadItems: MuscleLoadWorkItem[] = [];
   for (const item of [...input.items].sort((left, right) => left.item_order - right.item_order || compareText(left.id, right.id))) {
-    const useActual = input.mode === "completed" && item.actual_target_type !== null;
+    const useActual = input.mode !== "planned" && item.actual_target_type !== null;
     const mapping = mappingFor(item, useActual, mappings);
-    const completedSets = input.mode === "completed" ? completedSetCount(item, input) : 0;
-    const qualifyingSets = input.mode === "planned" ? item.planned_sets ?? 0 : item.state === "skipped" ? 0 : completedSets;
+    const performedSets = input.mode === "planned" ? 0 : performedSetCount(item, input);
+    const qualifyingSets = input.mode === "planned" ? item.planned_sets ?? 0 : item.state === "skipped" ? 0 : performedSets;
     if (!mapping || mapping.schemaVersion === ADVANCED_MUSCLE_MAPPING_SCHEMA_VERSION) {
       advancedItems.push({ itemId: item.id, mapping: mapping as AdvancedMuscleMappingReference | null, qualifyingSets });
     } else {
