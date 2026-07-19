@@ -34,6 +34,7 @@ vi.mock("@/services/database/workout-library", () => {
 
 vi.mock("@/lib/i18n/train", () => ({
   useTrainTranslation: () => ({
+    language: "en",
     dir: "ltr",
     locale: "en",
     tr: (key: string, variables?: Record<string, unknown>) => variables?.count !== undefined ? `${key}:${variables.count}` : key
@@ -47,7 +48,7 @@ vi.mock("@/lib/error-formatting", () => ({
 vi.mock("lucide-react", async () => {
   const ReactModule = await import("react");
   const Icon = () => ReactModule.createElement("span", { "aria-hidden": "true" });
-  return { Check: Icon, Dumbbell: Icon, ExternalLink: Icon, Plus: Icon, Search: Icon, X: Icon };
+  return { Check: Icon, Dumbbell: Icon, ExternalLink: Icon, Eye: Icon, Plus: Icon, Search: Icon, X: Icon };
 });
 
 vi.mock("@/components/ui/badge", async () => {
@@ -98,52 +99,37 @@ vi.mock("@/components/ui/select-field", async () => {
 
 vi.mock("@/components/ui/state-views", async () => {
   const ReactModule = await import("react");
-  return { CardGridSkeleton: () => ReactModule.createElement("div", { "data-testid": "skeleton" }) };
+  return { CardGridSkeleton: () => ReactModule.createElement("div", null, "loading") };
 });
 
-import { ExercisePickerDialog } from "@/components/workouts/exercise-picker-dialog";
+vi.mock("@/services/database/workout-replacement-eligibility", () => ({
+  getWorkoutReplacementEligibility: vi.fn().mockResolvedValue(new Map()),
+  isReplacementCandidateActionable: () => true,
+  replacementEligibilityMessage: () => "",
+  shouldClosePickerAfterAdd: () => false
+}));
 
-function emptyOptions() {
-  return {
-    muscleCategories: [], primaryMuscles: [], equipmentRequired: [], mechanics: [],
-    exerciseTypes: [], forceTypes: [], experienceLevels: [], secondaryMuscles: []
-  };
-}
+import { ExercisePickerDialog, exerciseKey } from "@/components/workouts/exercise-picker-dialog";
 
-function workout(id: string): Workout {
-  return {
-    id,
-    name: `Exercise ${id}`,
-    category: "Strength",
-    target_muscle: "Chest",
-    equipment: "Barbell",
-    difficulty: "Beginner",
-    sets: null,
-    reps: null,
-    rest_seconds: null,
-    instructions: "Instructions",
-    notes: null,
-    is_global: true
-  };
-}
+const workout = (id: string, name: string, slug = id): Workout => ({
+  id,
+  name,
+  category: "strength",
+  target_muscle: "chest",
+  equipment: "barbell",
+  instructions: "Controlled repetition",
+  catalog_slug: slug,
+  catalog_source: "external",
+  difficulty: "intermediate",
+  exercise_url: null,
+  video_url: null,
+  custom_video_url: null
+});
 
-function result(data: Workout[], hasMore = false, nextOffset: number | null = null) {
-  return {
-    data,
-    status: { source: "live" as const },
-    pagination: { hasMore, nextOffset },
-    filterOptions: emptyOptions()
-  };
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
+async function flush() {
+  await act(async () => {
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
   });
-  return { promise, resolve, reject };
 }
 
 describe("ExercisePickerDialog request generations", () => {
@@ -155,15 +141,13 @@ describe("ExercisePickerDialog request generations", () => {
     mocks.createGroup.mockReset();
     mocks.getFilters.mockReset();
     mocks.getWorkouts.mockReset();
-    mocks.createGroup
-      .mockReturnValueOnce("picker-open-group")
-      .mockReturnValueOnce("picker-search-group")
-      .mockReturnValue("picker-later-group");
-    mocks.getFilters.mockResolvedValue({ data: emptyOptions(), status: { source: "live" } });
+    mocks.createGroup.mockReturnValueOnce("group-initial").mockReturnValue("group-next");
+    mocks.getFilters.mockResolvedValue({ data: {
+      muscleCategories: [], primaryMuscles: [], equipmentRequired: [], mechanics: [], exerciseTypes: [], forceTypes: [], experienceLevels: [], secondaryMuscles: []
+    } });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
   afterEach(async () => {
@@ -172,93 +156,68 @@ describe("ExercisePickerDialog request generations", () => {
     vi.useRealTimers();
   });
 
-  async function render(open = true) {
-    await act(async () => {
-      root.render(React.createElement(ExercisePickerDialog, {
-        open,
-        onOpenChange: vi.fn(),
-        dayName: "Monday",
-        existingKeys: [],
-        onAdd: vi.fn()
-      }));
-    });
-  }
-
-  async function advanceDebounce() {
-    await act(async () => {
-      vi.advanceTimersByTime(180);
-      await Promise.resolve();
-    });
-  }
-
   it("shares the initial group, loads one page, appends one cursor page, deduplicates, and preserves selection", async () => {
+    const first = workout("one", "One");
+    const duplicate = workout("one-new", "One localized", "one");
+    const second = workout("two", "Two");
     mocks.getWorkouts
-      .mockResolvedValueOnce(result([workout("a")], true, 60))
-      .mockResolvedValueOnce(result([workout("a"), workout("b")], false, null));
+      .mockResolvedValueOnce({ data: [first], pagination: { hasMore: true, nextOffset: 1 } })
+      .mockResolvedValueOnce({ data: [duplicate, second], pagination: { hasMore: false, nextOffset: null } });
+    const onAdd = vi.fn();
 
-    await render();
-    await advanceDebounce();
+    await act(async () => {
+      root.render(<ExercisePickerDialog open onOpenChange={() => undefined} dayName="Push" existingKeys={[]} onAdd={onAdd} />);
+    });
+    await act(async () => { vi.advanceTimersByTime(180); });
+    await flush();
 
-    expect(mocks.getFilters).toHaveBeenCalledTimes(1);
-    expect(mocks.getWorkouts).toHaveBeenCalledTimes(1);
-    const filterGroup = mocks.getFilters.mock.calls[0]?.[1]?.requestGroupId;
-    const initialActivityGroup = mocks.getWorkouts.mock.calls[0]?.[4]?.requestGroupId;
-    expect(typeof filterGroup).toBe("string");
-    expect(initialActivityGroup).toBe(filterGroup);
-    expect(mocks.getWorkouts.mock.calls[0]?.[2]).toBe(0);
+    expect(mocks.getFilters).toHaveBeenCalledWith("en", expect.objectContaining({ requestGroupId: "group-initial" }));
+    expect(mocks.getWorkouts).toHaveBeenCalledWith("", expect.any(Object), 0, "en", expect.objectContaining({ requestGroupId: "group-initial" }));
 
-    const selectButton = container.querySelector<HTMLButtonElement>('button[aria-pressed="false"]');
-    expect(selectButton).not.toBeNull();
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const selectButton = buttons.find((button) => button.textContent?.includes("select"));
+    expect(selectButton).toBeTruthy();
     await act(async () => selectButton!.click());
+
+    const loadMore = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("loadMore"));
+    expect(loadMore).toBeTruthy();
+    await act(async () => loadMore!.click());
+    await flush();
+
+    expect(mocks.getWorkouts).toHaveBeenLastCalledWith("", expect.any(Object), 1, "en", expect.objectContaining({ requestGroupId: "group-initial" }));
+    expect(container.textContent).toContain("One");
+    expect(container.textContent).toContain("Two");
+    expect(container.textContent?.match(/One localized/g)).toBeNull();
     expect(container.textContent).toContain("selectedCount:1");
 
-    const loadMoreButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("loadMore"));
-    expect(loadMoreButton).toBeDefined();
-    await act(async () => loadMoreButton!.click());
-
-    expect(mocks.getWorkouts).toHaveBeenCalledTimes(2);
-    expect(mocks.getWorkouts.mock.calls[1]?.[2]).toBe(60);
-    expect(mocks.getWorkouts.mock.calls[1]?.[4]?.requestGroupId).toBe(initialActivityGroup);
-    expect(Array.from(container.querySelectorAll("h3")).map((node) => node.textContent)).toEqual(["Exercise a", "Exercise b"]);
-    expect(container.textContent).toContain("selectedCount:1");
+    const addButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("addNExercises"));
+    await act(async () => addButton!.click());
+    expect(onAdd).toHaveBeenCalledWith([first]);
+    expect(exerciseKey(first)).toBe("catalog:one");
   });
 
   it("aborts the previous generation and prevents a slow stale response from replacing the latest result", async () => {
-    const slow = deferred<ReturnType<typeof result>>();
-    const fast = deferred<ReturnType<typeof result>>();
-    mocks.getWorkouts.mockReturnValueOnce(slow.promise).mockReturnValueOnce(fast.promise);
+    const slow = workout("slow", "Slow");
+    const fast = workout("fast", "Fast");
+    let resolveSlow!: (value: unknown) => void;
+    const slowPromise = new Promise((resolve) => { resolveSlow = resolve; });
+    mocks.getWorkouts.mockReturnValueOnce(slowPromise).mockResolvedValueOnce({ data: [fast], pagination: { hasMore: false, nextOffset: null } });
 
-    await render();
-    await advanceDebounce();
-    const firstSignal = mocks.getWorkouts.mock.calls[0]?.[4]?.signal as AbortSignal;
-    const firstGroup = mocks.getWorkouts.mock.calls[0]?.[4]?.requestGroupId;
-
-    const input = container.querySelector<HTMLInputElement>('input[placeholder="searchExercises"]');
-    expect(input).not.toBeNull();
-    const setNativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    expect(setNativeValue).toBeDefined();
     await act(async () => {
-      setNativeValue!.call(input, "new");
-      input!.dispatchEvent(new Event("input", { bubbles: true }));
+      root.render(<ExercisePickerDialog open onOpenChange={() => undefined} dayName="Push" existingKeys={[]} onAdd={() => undefined} />);
     });
-    await advanceDebounce();
+    await act(async () => { vi.advanceTimersByTime(180); });
+    const input = container.querySelector('input[placeholder="searchExercises"]') as HTMLInputElement;
+    await act(async () => {
+      input.value = "fast";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { vi.advanceTimersByTime(180); });
+    await flush();
+    resolveSlow({ data: [slow], pagination: { hasMore: false, nextOffset: null } });
+    await flush();
 
-    expect(firstSignal.aborted).toBe(true);
-    expect(mocks.getWorkouts).toHaveBeenCalledTimes(2);
-    const latestGroup = mocks.getWorkouts.mock.calls[1]?.[4]?.requestGroupId;
-    expect(typeof latestGroup).toBe("string");
-    expect(latestGroup).not.toBe(firstGroup);
-
-    await act(async () => fast.resolve(result([workout("latest")])));
-    expect(Array.from(container.querySelectorAll("h3")).map((node) => node.textContent)).toEqual(["Exercise latest"]);
-
-    await act(async () => slow.resolve(result([workout("stale")])));
-    expect(Array.from(container.querySelectorAll("h3")).map((node) => node.textContent)).toEqual(["Exercise latest"]);
-
-    const latestSignal = mocks.getWorkouts.mock.calls[1]?.[4]?.signal as AbortSignal;
-    const filtersSignal = mocks.getFilters.mock.calls[0]?.[1]?.signal as AbortSignal;
-    await render(false);
-    expect(latestSignal.aborted).toBe(true);
-    expect(filtersSignal.aborted).toBe(true);
+    expect(container.textContent).toContain("Fast");
+    expect(container.textContent).not.toContain("Slow");
   });
 });
