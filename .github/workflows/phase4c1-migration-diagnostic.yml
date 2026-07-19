@@ -4,15 +4,14 @@ on:
   pull_request:
     branches:
       - main
-  push:
-    branches:
-      - phase4c1-runtime-v2-cutover
 
 permissions:
   contents: read
+  pull-requests: write
+  issues: write
 
 concurrency:
-  group: phase4c1-migration-diagnostic-${{ github.event.pull_request.number || github.ref }}
+  group: phase4c1-migration-diagnostic-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -23,7 +22,7 @@ jobs:
       - name: Checkout exact revision
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
 
       - name: Set up Supabase CLI
@@ -32,34 +31,55 @@ jobs:
           version: 2.109.1
           github-token: ${{ github.token }}
 
-      - name: Replay migrations with concise failure tail
+      - name: Replay migrations and post concise diagnostic
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
+          status=0
+          report=/tmp/phase4c1-report.md
+          : > "$report"
+
           supabase db start > /tmp/phase4c1-start.log 2>&1
-          start_status=$?
-          if [ "$start_status" -ne 0 ]; then
-            echo "=== supabase db start failure ==="
-            tail -n 180 /tmp/phase4c1-start.log
-            exit "$start_status"
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "<!-- phase4c1-migration-diagnostic -->"
+              echo "### Phase 4C.1 migration diagnostic"
+              echo '```text'
+              tail -n 140 /tmp/phase4c1-start.log
+              echo '```'
+            } > "$report"
+          else
+            supabase db reset --local --no-seed > /tmp/phase4c1-reset.log 2>&1
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              {
+                echo "<!-- phase4c1-migration-diagnostic -->"
+                echo "### Phase 4C.1 migration diagnostic"
+                echo '```text'
+                grep -nEi 'error|failed|fatal|panic|syntax|exception|migration' /tmp/phase4c1-reset.log | tail -n 70 || true
+                echo "--- final tail ---"
+                tail -n 120 /tmp/phase4c1-reset.log
+                echo '```'
+              } > "$report"
+            else
+              supabase db lint --local --schema public --level error --fail-on error > /tmp/phase4c1-lint.log 2>&1
+              status=$?
+              {
+                echo "<!-- phase4c1-migration-diagnostic -->"
+                echo "### Phase 4C.1 migration diagnostic"
+                echo '```text'
+                if [ "$status" -eq 0 ]; then
+                  echo "Migration replay and database lint passed."
+                else
+                  cat /tmp/phase4c1-lint.log
+                fi
+                echo '```'
+              } > "$report"
+            fi
           fi
 
-          supabase db reset --local --no-seed > /tmp/phase4c1-reset.log 2>&1
-          reset_status=$?
-          if [ "$reset_status" -ne 0 ]; then
-            echo "=== migration reset failure markers ==="
-            grep -nEi 'error|failed|fatal|panic|syntax|exception|migration' /tmp/phase4c1-reset.log | tail -n 120 || true
-            echo "=== migration reset final tail ==="
-            tail -n 220 /tmp/phase4c1-reset.log
-            exit "$reset_status"
-          fi
-
-          supabase db lint --local --schema public --level error --fail-on error > /tmp/phase4c1-lint.log 2>&1
-          lint_status=$?
-          if [ "$lint_status" -ne 0 ]; then
-            echo "=== database lint failure ==="
-            cat /tmp/phase4c1-lint.log
-            exit "$lint_status"
-          fi
-
-          echo "Phase 4C.1 migration replay and database lint passed."
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file "$report"
+          exit "$status"
