@@ -5,7 +5,7 @@ import path from "node:path";
 
 const baseUrl = process.env.QA_BASE_URL || "http://127.0.0.1:3000";
 const evidenceDir = path.resolve(process.env.QA_EVIDENCE_DIR || "quality-reports/aw1a");
-const mockUserId = "11111111-1111-4111-8111-111111111111";
+const mockUserId = "00000000-0000-4000-8000-000000000001";
 let storedSettings = null;
 
 await mkdir(evidenceDir, { recursive: true });
