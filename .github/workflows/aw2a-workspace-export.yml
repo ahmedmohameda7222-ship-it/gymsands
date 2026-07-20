@@ -6,7 +6,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   diagnose:
@@ -20,13 +20,10 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Record patch diagnostics once
+      - name: Generate patch diagnostics
         shell: bash
         run: |
           set -u
-          if [ -f .github/aw2a-apply-diagnostic.txt ]; then
-            exit 0
-          fi
           cat .github/aw2a-rawpatch/00 \
               .github/aw2a-rawpatch/01 \
               .github/aw2a-rawpatch/02 \
@@ -42,9 +39,13 @@ jobs:
             echo 'APPLY_CHECK:'
             git apply --check --verbose --exclude=.github/workflows/aw2a-workspace-export.yml /tmp/aw2a-reviewed.patch
             echo "APPLY_STATUS:$?"
-          } > .github/aw2a-apply-diagnostic.txt 2>&1
-          git add .github/aw2a-apply-diagnostic.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'chore: record AW-2A patch diagnostics'
-          git push origin HEAD:feat/active-workout-aw2a-persisted-execution-state
+          } > /tmp/aw2a-apply-diagnostic.txt 2>&1
+          exit 0
+
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw2a-patch-diagnostic-${{ github.event.pull_request.head.sha }}
+          path: /tmp/aw2a-apply-diagnostic.txt
+          if-no-files-found: error
+          retention-days: 1
