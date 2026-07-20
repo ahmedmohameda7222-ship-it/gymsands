@@ -1,21 +1,21 @@
 name: AW-1B Implementation
 
 on:
-  push:
+  pull_request:
     branches:
-      - feat/active-workout-aw1b-messages-locale-qa
+      - main
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: aw1b-implementation
+  group: aw1b-implementation-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   implement:
-    if: "!contains(github.event.head_commit.message, '[aw1b-applied]')"
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.ref == 'feat/active-workout-aw1b-messages-locale-qa' && !contains(github.event.pull_request.head.sha, '0000000'))
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -28,14 +28,14 @@ jobs:
       PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
       PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
       PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
-      PLAIVRA_COMMIT_SHA: ${{ github.sha }}
+      PLAIVRA_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       PLAIVRA_RELEASE_ENVIRONMENT: ci
       PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
 
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -61,11 +61,16 @@ jobs:
         run: npm run build
 
       - name: Commit implementation
+        if: github.event_name == 'pull_request'
         run: |
           rm -f scripts/.aw1b-apply-expanded.mjs
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "No implementation changes remain."
+            exit 0
+          fi
           git commit -m "feat(i18n): add active workout messages and locale QA [aw1b-applied]"
           git push origin HEAD:feat/active-workout-aw1b-messages-locale-qa
