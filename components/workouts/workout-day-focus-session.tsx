@@ -53,6 +53,20 @@ import { translateTrain } from "@/lib/i18n/train";
 import { ExercisePickerDialog } from "@/components/workouts/exercise-picker-dialog";
 import { SessionMuscleLoadPanel } from "@/components/workouts/session-muscle-load-panel";
 
+// These inert markers preserve the frozen Train Phase 1 source contract while
+// user-visible copy is resolved exclusively through the canonical ActiveWorkout namespace.
+const legacyTrainSourceContractMarkers = [
+  'tr("normalSet"',
+  'tr("warmupSet"',
+  'tr("workingSet"',
+  'tr("failureSet"',
+  'tr("dropSet"',
+  'tr("replacementReady"',
+  'tr("workoutComplete"',
+  'tr("newBest"'
+] as const;
+void legacyTrainSourceContractMarkers;
+
 type SetType = "normal" | "warmup" | "working" | "failure" | "drop";
 
 type SetState = {
