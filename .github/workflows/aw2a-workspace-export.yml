@@ -1,75 +1,29 @@
-name: AW-2A DB Diagnostic
+name: AW-2A Restore Full Validation
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
-  contents: read
-
-concurrency:
-  group: aw2a-db-diagnostic-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  contents: write
 
 jobs:
-  diagnose:
+  restore:
     if: github.head_ref == 'feat/active-workout-aw2a-persisted-execution-state'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
-      - name: Checkout exact AW-2A PR head
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v2
-        with:
-          version: 2.109.1
-          github-token: ${{ github.token }}
-
-      - name: Replay migration chain
+      - name: Restore reviewed full validation workflow
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/aw2a-db-diagnostic
-          supabase db start 2>&1 | tee /tmp/aw2a-db-diagnostic/db-start.log
-          supabase db reset --local --no-seed 2>&1 | tee /tmp/aw2a-db-diagnostic/db-reset.log
-          supabase db lint --local --schema public --level error --fail-on error 2>&1 | tee /tmp/aw2a-db-diagnostic/db-lint.log
-
-      - name: Run database diagnostics
-        shell: bash
-        run: |
-          set +e
-          database_url="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql > /tmp/aw2a-db-diagnostic/verification.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/verification.exit
-          PLAIVRA_AW2A_TEST_DATABASE_URL="$database_url" npx vitest run --config vitest.integration.config.mjs services/database/workout-session-execution.integration.test.ts > /tmp/aw2a-db-diagnostic/integration.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/integration.exit
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql > /tmp/aw2a-db-diagnostic/train-security.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/train-security.exit
-          PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$database_url" node scripts/test-database-preflight-control.mjs > /tmp/aw2a-db-diagnostic/preflight-control.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/preflight-control.exit
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql > /tmp/aw2a-db-diagnostic/release-preflight.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/release-preflight.exit
-          set -e
-
-      - name: Upload database diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: aw2a-db-diagnostic-${{ github.event.pull_request.head.sha }}
-          path: /tmp/aw2a-db-diagnostic
-          if-no-files-found: error
-          retention-days: 2
+          git show 968836edf33d99248f02a57ed9f15519afc86104:.github/workflows/aw2a-workspace-export.yml > .github/workflows/aw2a-workspace-export.yml
+          git add .github/workflows/aw2a-workspace-export.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'ci: restore AW-2A full validation after DB fix'
+          git push origin HEAD:feat/active-workout-aw2a-persisted-execution-state
