@@ -3,6 +3,18 @@ import { describe, expect, it } from "vitest";
 
 const text = (path: string) => readFileSync(path, "utf8");
 
+const messages = (locale: "en" | "de" | "ar") =>
+  JSON.parse(text(`messages/${locale}.json`)) as {
+    ActiveWorkout: {
+      heatMap: {
+        currentSessionHeat: string;
+        currentSessionDescription: string;
+        savedSetsOnly: string;
+        refreshFailedDescription: string;
+      };
+    };
+  };
+
 describe("Muscle Intelligence Phase 4C.2", () => {
   it("adds active persisted-set analysis while preserving frozen completion", () => {
     const contracts = text("lib/train/muscle-intelligence/contracts.ts");
@@ -26,12 +38,22 @@ describe("Muscle Intelligence Phase 4C.2", () => {
     expect(direct).not.toContain("SessionMuscleLoadPanel");
   });
 
-  it("includes EN DE AR copy and safe failure messaging", () => {
-    const copy = text("lib/train/muscle-intelligence/active-session-muscle-load-copy.ts");
-    expect(copy).toContain("Muscle Load So Far");
-    expect(copy).toContain("Muskelbelastung bisher");
-    expect(copy).toContain("حمل العضلات حتى الآن");
-    expect(copy).toContain("Your workout and saved sets are unaffected");
+  it("uses the canonical EN DE AR ActiveWorkout heat-map messages and safe failure copy", () => {
+    const adapter = text("lib/train/muscle-intelligence/active-session-muscle-load-copy.ts");
+    expect(adapter).toContain('enMessages.ActiveWorkout.heatMap');
+    expect(adapter).toContain('deMessages.ActiveWorkout.heatMap');
+    expect(adapter).toContain('arMessages.ActiveWorkout.heatMap');
+    expect(adapter).not.toContain("Muscle Load So Far");
+
+    for (const locale of ["en", "de", "ar"] as const) {
+      const copy = messages(locale).ActiveWorkout.heatMap;
+      expect(copy.currentSessionHeat.trim()).not.toBe("");
+      expect(copy.currentSessionDescription).toContain(
+        locale === "en" ? "saved completed sets" : locale === "de" ? "gespeicherten abgeschlossenen Sätzen" : "المجموعات المكتملة المحفوظة"
+      );
+      expect(copy.savedSetsOnly.trim()).not.toBe("");
+      expect(copy.refreshFailedDescription.trim()).not.toBe("");
+    }
   });
 
   it("keeps tiny-screen Train actions clear of the active workout controller", () => {
