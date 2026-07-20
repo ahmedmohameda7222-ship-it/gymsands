@@ -3,7 +3,7 @@ import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const baseUrl = process.env.QA_BASE_URL || "http://127.0.0.1:3000";
+const baseUrl = process.env.QA_BASE_URL || "http://localhost:3000";
 const evidenceDir = path.resolve(process.env.QA_EVIDENCE_DIR || "quality-reports/aw1a");
 const mockUserId = "00000000-0000-4000-8000-000000000001";
 let storedSettings = null;
@@ -79,7 +79,23 @@ page.on("request", (request) => {
 
 await page.goto(baseUrl + "/settings/preferences", { waitUntil: "networkidle", timeout: 30_000 });
 const languageSelect = page.locator('select:has(option[value="de"])');
-await languageSelect.waitFor({ state: "visible", timeout: 20_000 });
+try {
+  await languageSelect.waitFor({ state: "visible", timeout: 20_000 });
+} catch (error) {
+  const debug = {
+    url: page.url(),
+    title: await page.title(),
+    lang: await page.locator("html").getAttribute("lang"),
+    direction: await page.locator("html").getAttribute("dir"),
+    body: (await page.locator("body").innerText()).slice(0, 4000),
+    pageErrors,
+    storedSettings
+  };
+  await writeFile(path.join(evidenceDir, "rendered-browser-debug.json"), JSON.stringify(debug, null, 2) + "\n", "utf8");
+  await page.screenshot({ path: path.join(evidenceDir, "rendered-browser-debug.png"), fullPage: true });
+  console.error(JSON.stringify(debug, null, 2));
+  throw error;
+}
 await page.waitForFunction(() => document.documentElement.lang === "en");
 assert.ok(storedSettings, "Mock account settings should be initialized");
 
