@@ -91,6 +91,6 @@ describe("AW-1B Active Workout surface contract", () => {
     expect(qa).toContain("horizontalOverflowMatrix");
     expect(finalValidation).toContain("Upload final-head validation evidence");
     expect(finalValidation).toContain("aw1b-final-validation-${{ github.event.pull_request.head.sha }}");
-    expect(trainUi).toContain("max-[340px]:pb-[var(--active-workout-controller-height)]");
+    expect(trainUi).toContain("max-[340px]:pb-[calc(var(--active-workout-controller-height)+4rem)]");
   });
 });
