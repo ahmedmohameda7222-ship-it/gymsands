@@ -1,4 +1,4 @@
-name: AW-1B Locale QA
+name: AW-1B Final Validation
 
 on:
   pull_request:
@@ -9,20 +9,21 @@ permissions:
   contents: read
 
 concurrency:
-  group: aw1b-locale-qa-${{ github.event.pull_request.number }}
+  group: aw1b-final-validation-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  locale-qa:
+  validate:
     if: github.event.pull_request.head.ref == 'feat/active-workout-aw1b-messages-locale-qa'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 75
     env:
+      AW1B_STARTING_SHA: 1b7411604dcf3d9bdfcd0a2f4d70a172d677310e
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
       SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
       NEXT_PUBLIC_APP_URL: http://localhost:3000
-      NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+      NEXT_PUBLIC_USE_MOCK_AUTH: "false"
       PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
       PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
       PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
@@ -42,51 +43,94 @@ jobs:
           node-version: 24
           cache: npm
 
-      - run: npm ci
-
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Create focused locale QA runner
+      - name: Install dependencies
+        shell: bash
         run: |
-          node scripts/aw1b-locale-qa-temp.mjs
-          node scripts/aw1b-locale-qa-cookie-fix.mjs
+          mkdir -p quality-reports/aw1b-final
+          npm ci 2>&1 | tee quality-reports/aw1b-final/npm-ci.log
 
-      - name: Run focused EN DE AR and RTL QA
+      - name: Typecheck
+        shell: bash
+        run: npm run typecheck 2>&1 | tee quality-reports/aw1b-final/typecheck.log
+
+      - name: Lint
+        shell: bash
+        run: npm run lint 2>&1 | tee quality-reports/aw1b-final/lint.log
+
+      - name: Permanent i18n contract
+        shell: bash
+        run: npm run test:i18n 2>&1 | tee quality-reports/aw1b-final/test-i18n.log
+
+      - name: Exact targeted i18n tests
+        shell: bash
+        run: |
+          npx vitest run --config vitest.unit.config.mjs \
+            lib/i18n/message-shape.test.ts \
+            lib/i18n/active-workout-message-contract.test.ts \
+            lib/i18n/active-workout-formatters.test.ts \
+            2>&1 | tee quality-reports/aw1b-final/targeted-i18n.log
+
+      - name: Full unit tests with starting-main parity
+        id: unit
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p quality-reports/aw1b-locale-qa
-          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/aw1b-locale-qa/server.log 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
-            sleep 1
-          done
-          curl --fail --silent http://localhost:3000/ > /dev/null
-          QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=quality-reports/aw1b-locale-qa node scripts/.aw1b-locale-qa.mjs 2>&1 | tee quality-reports/aw1b-locale-qa/aw1b-locale-qa.log
+          set +e
+          npm run test:unit > quality-reports/aw1b-final/branch-unit.log 2>&1
+          branch_status=$?
+          set -e
 
-          copy_one() {
-            pattern="$1"
-            destination="$2"
-            source_file="$(find quality-reports/aw1b-locale-qa -maxdepth 1 -name "$pattern" | head -n 1)"
-            test -n "$source_file"
-            cp "$source_file" "quality-reports/aw1b-locale-qa/$destination"
-          }
-          copy_one '*-en-390x844-workouts-session-day-*.png' active-workout-en-390x844.png
-          copy_one '*-de-390x844-workouts-session-day-*.png' active-workout-de-390x844.png
-          copy_one '*-ar-390x844-workouts-session-day-*.png' active-workout-ar-390x844.png
-          copy_one '*-en-1440x900-workouts-session-day-*.png' active-workout-en-1440x900.png
-          copy_one '*-de-1440x900-workouts-session-day-*.png' active-workout-de-1440x900.png
-          copy_one '*-ar-1440x900-workouts-session-day-*.png' active-workout-ar-1440x900.png
-          copy_one '*-ar-390x844-my-workout-plans.png' active-workout-indicator-ar-390x844.png
+          git worktree add --detach /tmp/aw1b-main "$AW1B_STARTING_SHA"
+          ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/aw1b-main/node_modules
+          set +e
+          (cd /tmp/aw1b-main && npm run test:unit) > quality-reports/aw1b-final/main-unit.log 2>&1
+          main_status=$?
+          set -e
 
-      - name: Upload AW-1B locale QA evidence
+          sed -E 's/\x1B\[[0-9;]*[mK]//g' quality-reports/aw1b-final/branch-unit.log \
+            | grep -E '^ FAIL ' | sed -E 's/^[[:space:]]+//' | sort -u > quality-reports/aw1b-final/branch-unit-failures.txt || true
+          sed -E 's/\x1B\[[0-9;]*[mK]//g' quality-reports/aw1b-final/main-unit.log \
+            | grep -E '^ FAIL ' | sed -E 's/^[[:space:]]+//' | sort -u > quality-reports/aw1b-final/main-unit-failures.txt || true
+          diff -u quality-reports/aw1b-final/main-unit-failures.txt quality-reports/aw1b-final/branch-unit-failures.txt \
+            | tee quality-reports/aw1b-final/unit-failure-identity-diff.txt
+
+          echo "branch_status=$branch_status" | tee quality-reports/aw1b-final/unit-status.txt
+          echo "main_status=$main_status" | tee -a quality-reports/aw1b-final/unit-status.txt
+          if [ "$branch_status" -eq 0 ]; then
+            echo "result=pass" >> "$GITHUB_OUTPUT"
+          else
+            test "$main_status" -ne 0
+            echo "result=baseline-parity" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Script tests
+        shell: bash
+        run: npm run test:scripts 2>&1 | tee quality-reports/aw1b-final/script-tests.log
+
+      - name: Production dependency audit
+        shell: bash
+        run: npm audit --omit=dev --audit-level=moderate 2>&1 | tee quality-reports/aw1b-final/npm-audit.log
+
+      - name: Production build
+        shell: bash
+        run: |
+          export PLAIVRA_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npm run build 2>&1 | tee quality-reports/aw1b-final/build.log
+
+      - name: Record summary
+        shell: bash
+        run: |
+          {
+            echo "head_sha=${{ github.event.pull_request.head.sha }}"
+            echo "starting_sha=$AW1B_STARTING_SHA"
+            echo "unit_result=${{ steps.unit.outputs.result }}"
+          } > quality-reports/aw1b-final/summary.txt
+
+      - name: Upload validation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aw1b-locale-qa-${{ github.run_id }}
-          path: quality-reports/aw1b-locale-qa/
+          name: aw1b-final-validation-${{ github.run_id }}
+          path: quality-reports/aw1b-final/
           if-no-files-found: error
           retention-days: 14
