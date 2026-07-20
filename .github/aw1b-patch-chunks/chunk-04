@@ -1,0 +1,136 @@
+  expect(german.measurement(12, "reps")).toContain("Wdh.");
+-    expect(arabic.measurement(30, "seconds")).toContain("ثانية");
++    expect(german.measurement(12, "Wdh.")).toContain("Wdh.");
++    expect(arabic.measurement(30, "ثانية")).toContain("ثانية");
++  });
++
++  it("contains no secondary multilingual measurement-label store", () => {
++    const source = readFileSync("lib/i18n/active-workout-formatters.ts", "utf8");
++    expect(source).not.toContain("measurementLabels");
++    expect(source).not.toContain('de: { kg:');
++    expect(source).not.toContain('ar: { kg:');
++    expect(source).not.toContain("تكرارات");
+   });
+ });
+diff --git a/lib/i18n/active-workout-formatters.ts b/lib/i18n/active-workout-formatters.ts
+index 8fc76a3..eb761a8 100644
+--- a/lib/i18n/active-workout-formatters.ts
++++ b/lib/i18n/active-workout-formatters.ts
+@@ -1,23 +1,16 @@
+ import type { SupportedLanguage } from "@/lib/i18n/config";
+ import { getLocaleMetadata, isSupportedLanguage } from "@/lib/i18n/config";
+ 
+-export type ActiveWorkoutMeasurementUnit = "kg" | "reps" | "seconds" | "minutes";
+-
+-export type ActiveWorkoutFormatters = {
++export type ActiveWorkoutBaseFormatters = {
+   timer: (totalSeconds: number) => string;
+   integer: (value: number) => string;
+   decimal: (value: number, maximumFractionDigits?: number) => string;
++  ratio: (current: number, total: number) => string;
+   date: (value: Date | number | string, options?: Intl.DateTimeFormatOptions) => string;
+   time: (value: Date | number | string, options?: Intl.DateTimeFormatOptions) => string;
+   weekday: (value: Date | number | string) => string;
+   list: (values: readonly string[], options?: Intl.ListFormatOptions) => string;
+-  measurement: (value: number, unit: ActiveWorkoutMeasurementUnit, maximumFractionDigits?: number) => string;
+-};
+-
+-const measurementLabels: Record<"en" | "de" | "ar", Record<ActiveWorkoutMeasurementUnit, string>> = {
+-  en: { kg: "kg", reps: "reps", seconds: "sec", minutes: "min" },
+-  de: { kg: "kg", reps: "Wdh.", seconds: "Sek.", minutes: "Min." },
+-  ar: { kg: "kg", reps: "تكرارات", seconds: "ثانية", minutes: "دقيقة" }
++  measurement: (value: number, localizedUnitLabel: string, maximumFractionDigits?: number) => string;
+ };
+ 
+ function safeNumber(value: number): number {
+@@ -29,13 +22,6 @@ function safeDate(value: Date | number | string): Date {
+   return Number.isFinite(date.getTime()) ? date : new Date(0);
+ }
+ 
+-function languageFromIntlLocale(intlLocale: string): "en" | "de" | "ar" {
+-  const normalized = intlLocale.toLowerCase();
+-  if (normalized.startsWith("de")) return "de";
+-  if (normalized.startsWith("ar")) return "ar";
+-  return "en";
+-}
+-
+ export function formatActiveWorkoutTimer(totalSeconds: number): string {
+   const safeSeconds = Math.max(0, Math.floor(safeNumber(totalSeconds)));
+   const hours = Math.floor(safeSeconds / 3600);
+@@ -46,11 +32,10 @@ export function formatActiveWorkoutTimer(totalSeconds: number): string {
+     : `${minutes}:${String(seconds).padStart(2, "0")}`;
+ }
+ 
+-export function createActiveWorkoutFormatters(localeOrIntlLocale: SupportedLanguage | string): ActiveWorkoutFormatters {
++export function createActiveWorkoutFormatters(localeOrIntlLocale: SupportedLanguage | string): ActiveWorkoutBaseFormatters {
+   const intlLocale = isSupportedLanguage(localeOrIntlLocale)
+     ? getLocaleMetadata(localeOrIntlLocale).intlLocale
+     : localeOrIntlLocale;
+-  const language = languageFromIntlLocale(intlLocale);
+   const integerFormatter = new Intl.NumberFormat(intlLocale, {
+     maximumFractionDigits: 0
+   });
+@@ -66,6 +51,7 @@ export function createActiveWorkoutFormatters(localeOrIntlLocale: SupportedLangu
+     timer: formatActiveWorkoutTimer,
+     integer,
+     decimal,
++    ratio: (current, total) => `${integer(current)}/${integer(total)}`,
+     date: (value, options = {}) => {
+       const hasExplicitDateFields = Boolean(
+         options.dateStyle ||
+@@ -104,7 +90,7 @@ export function createActiveWorkoutFormatters(localeOrIntlLocale: SupportedLangu
+         type: "conjunction",
+         ...options
+       }).format(values),
+-    measurement: (value, unit, maximumFractionDigits = 2) =>
+-      `${decimal(value, maximumFractionDigits)} ${measurementLabels[language][unit]}`
++    measurement: (value, localizedUnitLabel, maximumFractionDigits = 2) =>
++      `${decimal(value, maximumFractionDigits)} ${localizedUnitLabel}`
+   };
+ }
+diff --git a/lib/i18n/active-workout-message-contract.test.ts b/lib/i18n/active-workout-message-contract.test.ts
+index 7bb5243..5fcb000 100644
+--- a/lib/i18n/active-workout-message-contract.test.ts
++++ b/lib/i18n/active-workout-message-contract.test.ts
+@@ -11,6 +11,7 @@ const requiredKeys = [
+   "common.back", "common.close", "common.cancel", "common.continue", "common.save", "common.saving",
+   "common.loading", "common.retry", "common.done", "common.optional", "common.more", "common.open",
+   "common.edit", "common.skip", "common.reset", "common.pause", "common.resume", "common.finish",
++  "units.kg", "units.reps", "units.seconds", "units.minutes",
+   "common.confirm", "common.remove", "common.add", "common.view", "common.hide",
+   "header.workoutDay", "header.exerciseProgress", "header.setProgress", "header.sessionTime",
+   "header.sessionProgress", "header.minimizeWorkout", "header.openSessionMenu",
+@@ -134,6 +135,18 @@ describe("ActiveWorkout message contract", () => {
+     }
+   });
+ 
++
++  it("keeps canonical unit labels and approved terminology exact", () => {
++    for (const messages of Object.values(locales)) {
++      for (const key of ["units.kg", "units.reps", "units.seconds", "units.minutes"]) {
++        expect(getPath(messages, key), key).toEqual(expect.any(String));
++      }
++    }
++    expect(getPath(locales.de, "common.optional")).toBe("Optional");
++    expect(getPath(locales.ar, "actions.useToday")).toBe("استخدامه اليوم");
++    expect(getPath(locales.ar, "chatGPT.ask")).toBe("اسأل ChatGPT");
++  });
++
+   it("contains only non-empty, safe ICU strings", () => {
+     for (const [locale, messages] of Object.entries(locales)) {
+       for (const [key, value] of Object.entries(flattenMessages(messages))) {
+diff --git a/lib/i18n/active-workout-surface-contract.test.ts b/lib/i18n/active-workout-surface-contract.test.ts
+index 1549548..8acdbaa 100644
+--- a/lib/i18n/active-workout-surface-contract.test.ts
++++ b/lib/i18n/active-workout-surface-contract.test.ts
+@@ -9,6 +9,7 @@ describe("AW-1B Active Workout surface contract", () => {
+     const localeMessages = (["en", "de", "ar"] as const).map((locale) =>
+       JSON.parse(source(`messages/${locale}.json`)) as {
+         ActiveWorkout: {
++          units: Record<string, string>;
+           set: Record<string, string>;
+           actions: Record<string, string>;
+           completion: Record<string, string>;
+@@ -25,6 +26,9 @@ describe("AW-1B Active Workout surface contract", () => {
+     for (const messages of localeMessages) {
+       expect(me
