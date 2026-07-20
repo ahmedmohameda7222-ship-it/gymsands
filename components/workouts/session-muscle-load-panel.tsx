@@ -6,18 +6,14 @@ import { RefreshCcw } from "lucide-react";
 import { MuscleHeatMap, type MuscleHeatMapState } from "@/components/train/muscle-heat-map/muscle-heat-map";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { SupportedLanguage } from "@/lib/i18n/types";
-import { getActiveSessionMuscleLoadCopy } from "@/lib/train/muscle-intelligence/active-session-muscle-load-copy";
+import { useActiveWorkoutTranslation } from "@/lib/i18n/active-workout";
 import type { AdvancedExposureResult } from "@/lib/train/muscle-intelligence/advanced-exposure";
 import type { MuscleLoadAnalysisResult } from "@/lib/train/muscle-intelligence/calculate-muscle-load";
 import {
   projectBroadMuscleCompatibility,
   type BroadCompatibilityResult
 } from "@/lib/train/muscle-intelligence/compatibility-projection";
-import {
-  getMuscleHeatMapLabels,
-  getMuscleIntelligenceCopy
-} from "@/lib/train/muscle-intelligence/muscle-intelligence-ui-copy";
+import { getMuscleHeatMapLabels } from "@/lib/train/muscle-intelligence/muscle-intelligence-ui-copy";
 import type { Phase3SessionAnalysisContract } from "@/lib/train/muscle-intelligence/session-analysis-contract";
 import { cn } from "@/lib/utils";
 
@@ -25,7 +21,6 @@ type HeatMapAnalysis = AdvancedExposureResult | BroadCompatibilityResult | null;
 
 type SessionMuscleLoadPanelProps = {
   sessionId: string;
-  language: SupportedLanguage;
   refreshRevision: number;
   className?: string;
 };
@@ -73,10 +68,10 @@ function responseError(value: unknown): string {
 
 export function SessionMuscleLoadPanel({
   sessionId,
-  language,
   refreshRevision,
   className
 }: SessionMuscleLoadPanelProps) {
+  const { t, locale } = useActiveWorkoutTranslation();
   const [result, setResult] = useState<Phase3SessionAnalysisContract | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -85,9 +80,32 @@ export function SessionMuscleLoadPanel({
   const requestGenerationRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const resultRef = useRef<Phase3SessionAnalysisContract | null>(null);
-  const copy = getActiveSessionMuscleLoadCopy(language);
-  const interfaceCopy = useMemo(() => getMuscleIntelligenceCopy(language), [language]);
-  const labels = useMemo(() => getMuscleHeatMapLabels(language), [language]);
+  const baseLabels = useMemo(() => getMuscleHeatMapLabels(locale), [locale]);
+  const labels = useMemo(() => ({
+    ...baseLabels,
+    frontView: t("heatMap.front"),
+    backView: t("heatMap.back"),
+    loading: t("common.loading"),
+    empty: t("heatMap.noSavedWorkingSets"),
+    partial: t("heatMap.partialMapping"),
+    unavailable: t("heatMap.unavailable"),
+    error: t("heatMap.couldNotRefresh"),
+    close: t("heatMap.closeFullMap")
+  }), [baseLabels, t]);
+
+  const copy = {
+    title: t("heatMap.currentSessionHeat"),
+    description: t("heatMap.currentSessionDescription"),
+    savedOnly: t("heatMap.savedSetsOnly"),
+    updating: t("heatMap.updating"),
+    noSavedSets: t("heatMap.noSavedWorkingSets"),
+    partial: t("heatMap.partialDescription"),
+    unavailable: t("heatMap.unavailableDescription"),
+    loadFailed: t("heatMap.refreshFailedDescription"),
+    retry: t("heatMap.retry"),
+    front: t("heatMap.front"),
+    back: t("heatMap.back")
+  };
 
   const load = useCallback(async () => {
     abortRef.current?.abort();
@@ -177,25 +195,27 @@ export function SessionMuscleLoadPanel({
 
         <div
           className="flex justify-center gap-2 sm:hidden"
-          aria-label={`${interfaceCopy.front} / ${interfaceCopy.back}`}
+          aria-label={`${copy.front} / ${copy.back}`}
         >
           <Button
             type="button"
             size="sm"
             variant={mobileView === "front" ? "default" : "outline"}
             aria-pressed={mobileView === "front"}
+            aria-label={t("accessibility.switchFront")}
             onClick={() => setMobileView("front")}
           >
-            {interfaceCopy.front}
+            {copy.front}
           </Button>
           <Button
             type="button"
             size="sm"
             variant={mobileView === "back" ? "default" : "outline"}
             aria-pressed={mobileView === "back"}
+            aria-label={t("accessibility.switchBack")}
             onClick={() => setMobileView("back")}
           >
-            {interfaceCopy.back}
+            {copy.back}
           </Button>
         </div>
 

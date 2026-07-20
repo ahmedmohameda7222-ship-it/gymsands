@@ -1,5 +1,5 @@
 import { chromium } from "@playwright/test";
-import { mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const baseUrl = process.env.QA_BASE_URL || "http://127.0.0.1:3000";
@@ -69,12 +69,34 @@ function intersects(a, b) {
 async function openScenario({ viewport, scenario, language = "en", route, step = null, theme = "light", catalogScenario = "success", zoom = 1, openPicker = false, keyboardCheck = false, mobileKeyboard = false, variant = "default" }) {
   const renderedViewport = zoom === 1 ? viewport : { ...viewport, width: Math.max(160, Math.floor(viewport.width / zoom)), height: Math.max(284, Math.floor(viewport.height / zoom)) };
   const context = await browser.newContext({ viewport: renderedViewport, reducedMotion: "reduce", colorScheme: theme });
+  await context.addCookies([{ name: "plaivra.language.v1", value: language, url: baseUrl, sameSite: "Lax" }]);
   await context.route("**/api/activity-catalog/**", async (requestRoute) => {
     const url = new URL(requestRoute.request().url());
     await requestRoute.fulfill({ status: 200, contentType: "application/json", headers: { "cache-control": "private, no-store", "x-plaivra-qa-fixture": catalogScenario }, body: JSON.stringify(catalogPayload(url, catalogScenario)) });
   });
   await context.route(/^https:\/\/[^/]+\.supabase\.co\//, async (requestRoute) => {
     const method = requestRoute.request().method();
+    const requestUrl = new URL(requestRoute.request().url());
+    if (requestUrl.pathname.includes("/rest/v1/user_app_settings") && (method === "GET" || method === "HEAD")) {
+      const wantsObject = (requestRoute.request().headers().accept || "").includes("application/vnd.pgrst.object");
+      const now = "2026-07-20T00:00:00.000Z";
+      const row = {
+        id: "22222222-2222-4222-8222-222222222222",
+        user_id: "00000000-0000-4000-8000-000000000001",
+        theme_id: "olive", theme: "light", accent_color: "olive", language,
+        weight_unit: "kg", height_unit: "cm", distance_unit: "km", liquid_unit: "ml",
+        energy_unit: "kcal", body_measurement_unit: "cm", week_starts_on: "monday",
+        default_start_page: "today", compact_mode: false, reduce_animations: true, large_text_mode: false,
+        quick_log_sections: ["workout"], created_at: now, updated_at: now
+      };
+      await requestRoute.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "content-range": "0-0/1", "x-plaivra-qa-fixture": "localized-settings" },
+        body: method === "HEAD" ? "" : JSON.stringify(wantsObject ? row : [row])
+      });
+      return;
+    }
     let body = {};
     if (method !== "GET" && method !== "HEAD") {
       try { body = requestRoute.request().postDataJSON(); } catch { body = {}; }
@@ -92,6 +114,7 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
   const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "domcontentloaded", timeout: 45_000 });
   const isSessionRoute = route.startsWith("/workouts/session");
   await page.waitForSelector(isSessionRoute ? "main#main-content" : "[data-app-shell]", { timeout: 20_000 });
+  await page.waitForFunction((expected) => document.documentElement.lang === expected, language, { timeout: 20_000 });
   // Next's development chrome is not application UI and can intercept
   // otherwise valid keyboard/pointer verification paths.
   await page.evaluate(() => document.querySelectorAll("nextjs-portal").forEach((element) => element.remove()));
@@ -271,6 +294,13 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
   return item;
 }
 
+async function captureNamedEvidence({ filename, ...scenario }) {
+  const item = await openScenario(scenario);
+  await copyFile(path.join(outputDir, item.artifact), path.join(outputDir, filename));
+  item.requiredArtifact = filename;
+  return item;
+}
+
 // Exercise the longest connected builder interaction first so a regression
 // fails quickly instead of after the full screenshot matrix.
 observations.push(await openScenario({ viewport: viewports[2], scenario: "scheduled", route: "/my-workout/plans/builder", step: 3 }));
@@ -347,6 +377,78 @@ for (const target of [
 ]) {
   observations.push(await openScenario({ viewport: viewports[2], scenario: "active", ...target, mobileKeyboard: true }));
 }
+const requiredRenderedEvidence = [];
+for (const language of ["en", "de", "ar"]) {
+  for (const viewport of [viewports.find((item) => item.name === "390x844"), viewports.find((item) => item.name === "1440x900")]) {
+    if (!viewport) throw new Error("Required Active Workout evidence viewport is missing.");
+    const filename = `active-workout-${language}-${viewport.name}.png`;
+    const item = await captureNamedEvidence({
+      filename,
+      viewport,
+      scenario: "active",
+      language,
+      route: `/workouts/session/day/${activeDayId}`
+    });
+    observations.push(item);
+    requiredRenderedEvidence.push({
+      filename,
+      language,
+      viewport: viewport.name,
+      route: item.route,
+      horizontalOverflowPx: item.horizontalOverflowPx,
+      direction: item.direction
+    });
+  }
+}
+{
+  const viewport = viewports.find((item) => item.name === "390x844");
+  if (!viewport) throw new Error("Required minimized-controller evidence viewport is missing.");
+  const filename = "active-workout-indicator-ar-390x844.png";
+  const item = await captureNamedEvidence({
+    filename,
+    viewport,
+    scenario: "active",
+    language: "ar",
+    route: "/my-workout/plans"
+  });
+  observations.push(item);
+  requiredRenderedEvidence.push({
+    filename,
+    language: "ar",
+    viewport: viewport.name,
+    route: item.route,
+    horizontalOverflowPx: item.horizontalOverflowPx,
+    direction: item.direction
+  });
+}
+
+const horizontalOverflowViewports = [
+  { name: "360x780", width: 360, height: 780 },
+  { name: "390x844", width: 390, height: 844 },
+  { name: "430x932", width: 430, height: 932 }
+];
+const horizontalOverflowMatrix = [];
+for (const language of ["en", "de", "ar"]) {
+  for (const viewport of horizontalOverflowViewports) {
+    const item = await openScenario({
+      viewport,
+      scenario: "active",
+      language,
+      route: `/workouts/session/day/${activeDayId}`
+    });
+    item.evidenceKind = "horizontal-overflow";
+    observations.push(item);
+    horizontalOverflowMatrix.push({
+      language,
+      viewport: viewport.name,
+      horizontalOverflowPx: item.horizontalOverflowPx,
+      passed: item.horizontalOverflowPx <= 1,
+      direction: item.direction,
+      artifact: item.artifact
+    });
+  }
+}
+
 await browser.close();
 
 const failures = observations.filter((item) => {
@@ -371,6 +473,8 @@ const report = {
   baseUrl,
   viewports,
   summary: { observations: observations.length, failures: failures.length, passed: failures.length === 0 },
+  requiredRenderedEvidence,
+  horizontalOverflowMatrix,
   failures,
   observations
 };

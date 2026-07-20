@@ -15,6 +15,14 @@ function describeShape(value: MessageNode): unknown {
   );
 }
 
+function assertStringLeaves(value: MessageNode, path: string): void {
+  if (typeof value === "string") {
+    expect(value.trim().length, path).toBeGreaterThan(0);
+    return;
+  }
+  Object.entries(value).forEach(([key, child]) => assertStringLeaves(child, `${path}.${key}`));
+}
+
 describe("foundation message files", () => {
   it("keeps EN, DE, and AR recursively shape-compatible", () => {
     const englishShape = describeShape(enMessages);
@@ -26,5 +34,14 @@ describe("foundation message files", () => {
     expect(enMessages.Common.skipToContent).toBe("Skip to content");
     expect(deMessages.Common.skipToContent).toBe("Zum Inhalt springen");
     expect(arMessages.Common.skipToContent).toBe("الانتقال إلى المحتوى");
+  });
+
+  it("contains non-empty ActiveWorkout namespaces with string leaves", () => {
+    expect(enMessages.ActiveWorkout).toBeTruthy();
+    expect(deMessages.ActiveWorkout).toBeTruthy();
+    expect(arMessages.ActiveWorkout).toBeTruthy();
+    assertStringLeaves(enMessages.ActiveWorkout, "en.ActiveWorkout");
+    assertStringLeaves(deMessages.ActiveWorkout, "de.ActiveWorkout");
+    assertStringLeaves(arMessages.ActiveWorkout, "ar.ActiveWorkout");
   });
 });
