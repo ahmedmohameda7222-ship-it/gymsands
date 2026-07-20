@@ -1,75 +1,65 @@
-name: AW-2A DB Diagnostic
+name: AW-2A Apply Integration Fixture Fix
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
-  contents: read
-
-concurrency:
-  group: aw2a-db-diagnostic-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  contents: write
 
 jobs:
-  diagnose:
+  apply:
     if: github.head_ref == 'feat/active-workout-aw2a-persisted-execution-state'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
-      - name: Checkout exact AW-2A PR head
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v2
-        with:
-          version: 2.109.1
-          github-token: ${{ github.token }}
-
-      - name: Replay migration chain and capture diagnostics
+      - name: Apply reviewed fixture correction and restore validation
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/aw2a-db-diagnostic
-          supabase db start > /tmp/aw2a-db-diagnostic/db-start.log 2>&1
-          supabase db reset --local --no-seed > /tmp/aw2a-db-diagnostic/db-reset.log 2>&1
-          supabase db lint --local --schema public --level error --fail-on error > /tmp/aw2a-db-diagnostic/db-lint.log 2>&1
-
-      - name: Run verification commands and capture every result
-        shell: bash
-        run: |
-          set +e
-          database_url="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql > /tmp/aw2a-db-diagnostic/verification.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/verification.exit
-          PLAIVRA_AW2A_TEST_DATABASE_URL="$database_url" npx vitest run --config vitest.integration.config.mjs services/database/workout-session-execution.integration.test.ts > /tmp/aw2a-db-diagnostic/integration.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/integration.exit
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql > /tmp/aw2a-db-diagnostic/train-security.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/train-security.exit
-          PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$database_url" node scripts/test-database-preflight-control.mjs > /tmp/aw2a-db-diagnostic/preflight-control.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/preflight-control.exit
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql > /tmp/aw2a-db-diagnostic/release-preflight.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/release-preflight.exit
-          set -e
-
-      - name: Upload database diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: aw2a-db-diagnostic-${{ github.event.pull_request.head.sha }}
-          path: /tmp/aw2a-db-diagnostic
-          if-no-files-found: error
-          retention-days: 2
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('supabase/verification/active-workout-aw2a-integration.sql')
+          text = path.read_text()
+          old = """-- Disposable owner fixtures.
+          insert into public.profiles (id, email, full_name, role, created_at, updated_at)
+          values
+            ('a2000000-0000-4000-8000-000000000001', 'aw2a-owner@example.test', 'AW2A Owner', 'member', now(), now()),
+            ('a2000000-0000-4000-8000-000000000002', 'aw2a-other@example.test', 'AW2A Other', 'member', now(), now()),
+            ('a2000000-0000-4000-8000-000000000003', 'aw2a-delete@example.test', 'AW2A Delete', 'member', now(), now());
+          """
+          new = """-- Disposable owner fixtures. Creating auth users exercises the real profile lifecycle.
+          insert into auth.users (
+            id, aud, role, email, encrypted_password,
+            raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+          ) values
+            ('a2000000-0000-4000-8000-000000000001', 'authenticated', 'authenticated', 'aw2a-owner@example.test', '',
+             '{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb, '{}'::jsonb, now(), now()),
+            ('a2000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated', 'aw2a-other@example.test', '',
+             '{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb, '{}'::jsonb, now(), now()),
+            ('a2000000-0000-4000-8000-000000000003', 'authenticated', 'authenticated', 'aw2a-delete@example.test', '',
+             '{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb, '{}'::jsonb, now(), now());
+          select pg_temp.assert_true(
+            (select count(*) from public.profiles where id in (
+              'a2000000-0000-4000-8000-000000000001'::uuid,
+              'a2000000-0000-4000-8000-000000000002'::uuid,
+              'a2000000-0000-4000-8000-000000000003'::uuid
+            )) = 3,
+            'Auth fixture creation did not create the expected profiles.'
+          );
+          """
+          if text.count(old) != 1:
+              raise SystemExit('Expected exactly one AW-2A profile fixture block.')
+          path.write_text(text.replace(old, new))
+          PY
+          git show d64271c4d4661e537ea9758d6ee4928b99c4e3e7:.github/workflows/aw2a-workspace-export.yml > .github/workflows/aw2a-workspace-export.yml
+          git add supabase/verification/active-workout-aw2a-integration.sql .github/workflows/aw2a-workspace-export.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'test(database): create AW-2A integration users through auth lifecycle'
+          git push origin HEAD:feat/active-workout-aw2a-persisted-execution-state
