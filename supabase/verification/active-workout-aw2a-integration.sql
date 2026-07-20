@@ -89,6 +89,7 @@ select pg_temp.assert_true(
 );
 
 -- Deterministic unfinished cursor: complete the first set, then prove initialization is idempotent.
+reset role;
 insert into public.exercise_logs (
   workout_session_id, plan_exercise_id, exercise_order, exercise_name,
   planned_sets, set_number, reps, completed_at, set_type, source
@@ -96,7 +97,6 @@ insert into public.exercise_logs (
   :'plan_session_id'::uuid, 'a2000000-0000-4000-8000-000000000012', 1,
   'AW-2A first', 3, 1, 8, clock_timestamp(), 'working', 'manual'
 );
-reset role;
 select private.initialize_workout_session_execution_state(:'plan_session_id'::uuid, 'session_start', clock_timestamp());
 set local role authenticated;
 select set_config('request.jwt.claim.sub', :'owner_id', true);
