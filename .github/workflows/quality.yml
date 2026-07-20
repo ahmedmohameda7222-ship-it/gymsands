@@ -66,6 +66,7 @@ jobs:
           environment=false
           ui=false
           train_ui=false
+          i18n=false
 
           if grep -Eq '\.(ts|tsx|js|jsx|mjs|cjs)$|^(package(-lock)?\.json|tsconfig\.json|vitest\..*\.mjs|eslint\.config\.)' <<< "$changed_files"; then
             code=true
@@ -81,8 +82,9 @@ jobs:
           if grep -Eq '^(services/database/|app/api/|supabase/migrations/|vitest\.integration\.config\.mjs)' <<< "$changed_files"; then integration=true; fi
           if grep -Eq '^scripts/' <<< "$changed_files"; then scripts=true; fi
           if grep -Eq '^(scripts/validate-production-env\.mjs|lib/integrations/env|next\.config\.|vercel\.json|package-lock\.json)' <<< "$changed_files"; then environment=true; fi
-          if grep -Eq '^(app/|components/|public/|styles/|lib/i18n/|next\.config\.|postcss\.config\.|tailwind\.config\.)' <<< "$changed_files"; then ui=true; fi
+          if grep -Eq '^(app/|components/|public/|styles/|lib/i18n/|messages/|next\.config\.|postcss\.config\.|tailwind\.config\.)' <<< "$changed_files"; then ui=true; fi
           if grep -Eq '^(app/.*/train/|components/train/|components/workouts/|lib/train/|services/activity-catalog/|app/api/activity-catalog/)' <<< "$changed_files"; then train_ui=true; fi
+          if grep -Eq '^(messages/|lib/i18n/|components/workouts/|lib/train/muscle-intelligence/active-session-muscle-load-copy\.ts|types/next-intl\.d\.ts|package\.json)' <<< "$changed_files"; then i18n=true; fi
 
           {
             echo "code=${code}"
@@ -94,17 +96,18 @@ jobs:
             echo "environment=${environment}"
             echo "ui=${ui}"
             echo "train_ui=${train_ui}"
+            echo "i18n=${i18n}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js
-        if: steps.scope.outputs.code == 'true' || steps.scope.outputs.dependencies == 'true'
+        if: steps.scope.outputs.code == 'true' || steps.scope.outputs.dependencies == 'true' || steps.scope.outputs.i18n == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
 
       - name: Install dependencies
-        if: steps.scope.outputs.code == 'true' || steps.scope.outputs.dependencies == 'true'
+        if: steps.scope.outputs.code == 'true' || steps.scope.outputs.dependencies == 'true' || steps.scope.outputs.i18n == 'true'
         run: npm ci
 
       - name: Lint changed source files
@@ -123,8 +126,12 @@ jobs:
           fi
 
       - name: Typecheck application
-        if: steps.scope.outputs.runtime == 'true' || steps.scope.outputs.dependencies == 'true'
+        if: steps.scope.outputs.runtime == 'true' || steps.scope.outputs.dependencies == 'true' || steps.scope.outputs.i18n == 'true'
         run: npm run typecheck
+
+      - name: Enforce i18n contract
+        if: steps.scope.outputs.i18n == 'true'
+        run: npm run test:i18n
 
       - name: Run tests related to changed code
         if: steps.scope.outputs.code == 'true'
@@ -204,7 +211,7 @@ jobs:
           npm run validate:env
 
       - name: Build production application
-        if: steps.scope.outputs.runtime == 'true' || steps.scope.outputs.dependencies == 'true'
+        if: steps.scope.outputs.runtime == 'true' || steps.scope.outputs.dependencies == 'true' || steps.scope.outputs.i18n == 'true'
         shell: bash
         run: |
           set -euo pipefail
