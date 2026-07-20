@@ -62,10 +62,10 @@ values ('a2000000-0000-4000-8000-000000000010', :'owner_id'::uuid, 'AW-2A plan',
 insert into public.user_workout_plan_days (id,plan_id,day_number,day_name,weekday,created_at,updated_at)
 values ('a2000000-0000-4000-8000-000000000011', 'a2000000-0000-4000-8000-000000000010', 1, 'AW-2A day', 'Monday', now(), now());
 insert into public.user_workout_plan_exercises
-  (id,plan_day_id,exercise_name,sets,reps,rest_seconds,sort_order,order_index,created_at,updated_at)
+  (id,plan_day_id,exercise_name,sets,reps,rest_seconds,sort_order,order_index,created_at)
 values
-  ('a2000000-0000-4000-8000-000000000012','a2000000-0000-4000-8000-000000000011','AW-2A first',3,'8',60,1,1,now(),now()),
-  ('a2000000-0000-4000-8000-000000000013','a2000000-0000-4000-8000-000000000011','AW-2A second',2,'10',90,2,2,now(),now());
+  ('a2000000-0000-4000-8000-000000000012','a2000000-0000-4000-8000-000000000011','AW-2A first',3,'8',60,1,1,now()),
+  ('a2000000-0000-4000-8000-000000000013','a2000000-0000-4000-8000-000000000011','AW-2A second',2,'10',90,2,2,now());
 insert into public.user_workout_sessions
   (id,user_id,user_workout_plan_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,created_at,updated_at)
 values ('a2000000-0000-4000-8000-000000000014', :'owner_id'::uuid, 'a2000000-0000-4000-8000-000000000010', 'a2000000-0000-4000-8000-000000000011', 1, 1, 1, current_date, 'AW-2A day', 'scheduled', now(), now());
