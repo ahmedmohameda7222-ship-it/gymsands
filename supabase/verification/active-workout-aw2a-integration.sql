@@ -272,8 +272,14 @@ select pg_temp.assert_true(
 );
 
 -- Trusted account-deletion path remains functional because it deletes workout_sessions first.
-insert into public.account_deletion_jobs (id,user_id,state,stage,created_at,updated_at)
-values ('a2000000-0000-4000-8000-000000000030', :'delete_member_id'::uuid, 'processing', 'deleting_database', now(), now());
+insert into public.account_deletion_jobs (
+  id,user_id,subject_hash,idempotency_key_hash,state,stage,attempt_count,locked_at,created_at,updated_at
+) values (
+  'a2000000-0000-4000-8000-000000000030', :'delete_member_id'::uuid,
+  'aw2a-subject-a2000000-0000-4000-8000-000000000003',
+  'aw2a-idempotency-a2000000-0000-4000-8000-000000000003',
+  'processing', 'deleting_database', 1, clock_timestamp(), now(), now()
+);
 insert into public.account_access_states (user_id,state,disabled_at,created_at,updated_at)
 values (:'delete_member_id'::uuid, 'deletion_processing', now(), now(), now())
 on conflict (user_id) do update set state='deletion_processing', disabled_at=excluded.disabled_at, updated_at=excluded.updated_at;
