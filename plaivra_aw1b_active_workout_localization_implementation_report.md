@@ -4,393 +4,212 @@
 
 ## Executive summary
 
-AW-1B was corrected on the existing branch and Draft PR #79 according to the approved QA/QC correction prompt. The `ActiveWorkout` JSON namespace is now the sole canonical source of EN/DE/AR user-visible Active Workout copy, including unit labels. The framework-independent formatter no longer contains a second multilingual measurement-label dictionary. Current Active Workout measurements, ratios, counts, timers, dynamic names, and displayed user-entered values are formatted or isolated at presentation time without changing canonical stored values, workout persistence, session behavior, Heat Map calculations, database contracts, or the approved UI structure.
+The final CI cleanup was applied on the existing branch and Draft PR #79. The temporary branch-specific workflow `.github/workflows/aw1b-final-validation.yml` was deleted before merge and was not replaced by another phase-specific workflow. The permanent `.github/workflows/quality.yml` remains authoritative and now uploads compact successful i18n rendered evidence for i18n-relevant pull requests only.
 
-The final implementation source revision also includes deterministic clearance on screens at or below 340 px using `calc(var(--active-workout-controller-height) + 4rem)`. This corrects the observed persistent-controller overlap without redesigning the page.
+The permanent Quality artifact contains exactly the seven required Active Workout screenshots, `train-layout-qa-results.json`, and generated exact-head workflow metadata. It does not upload the full Train screenshot matrix as successful evidence.
 
-At the final implementation source commit, Phase A, Quality, the dedicated AW-1B Final Validation workflow, typecheck, lint, i18n contracts, targeted tests, script tests, production dependency audit, production build, starting-main unit-failure parity, and full EN/DE/AR rendered QA all passed. The rendered suite recorded 181 observations and zero failures.
+No production application source, translation copy, formatter behavior, workout behavior, UI behavior, Supabase resource, database contract, migration, RLS policy, deployment configuration, or AW-2 implementation was changed during cleanup.
 
-## Repository and revision identity
+One narrow test-contract correction was required after the temporary workflow was deleted. `lib/i18n/active-workout-surface-contract.test.ts` still read and asserted the deleted temporary workflow, causing `npm run test:i18n` to fail at cleanup head `535c922dae9c485e5f5485133de505913151d1da`. The test was updated only to assert the equivalent permanent Quality evidence contract. The complete Quality rendered QA then passed.
+
+## Repository and pull request identity
 
 - Repository: `ahmedmohameda7222-ship-it/gymsands`
-- Actual starting `main` SHA: `1b7411604dcf3d9bdfcd0a2f4d70a172d677310e`
-- Starting commit subject: `Merge AW-1A language foundation`
 - Branch: `feat/active-workout-aw1b-messages-locale-qa`
-- Draft PR number: `#79`
-- Draft PR URL: `https://github.com/ahmedmohameda7222-ship-it/gymsands/pull/79`
-- Final implementation source commit SHA: `2707aa106769ccdd76a7b3670f637f75279460b9`
-- Final implementation source PR head SHA: `2707aa106769ccdd76a7b3670f637f75279460b9`
-- Report publication commit / final PR head SHA: the exact Git SHA is the commit containing this report and is recorded in the final Planner handoff and exact-head workflow metadata. A static file cannot contain the SHA of the Git commit whose tree includes that same file.
-- PR state at report publication: open, Draft, mergeable, unmerged.
+- Pull request: `#79`
+- PR state: open, Draft, unmerged
+- Starting cleanup head: `ca2e654d9bfd496d024ecf2c8d44a3ed861fabd1`
+- Validated cleanup implementation head: `3138934c50bd059800cbc4dd95f38ebfebd67d5f`
+- Report-publication head: the exact SHA is the Git commit containing this report and is recorded in the final handoff and the permanent Quality artifact generated on that exact head. A static file cannot contain the SHA and generated run/artifact identifiers of the same commit whose tree contains that file.
 
-## Intervening main changes inspected
+## Final cleanup changes
 
-The PR base remained `1b7411604dcf3d9bdfcd0a2f4d70a172d677310e`. No new `main` change required a rebase or reinterpretation of AW-1A. AW-1A decisions were not reopened.
-
-## CI run IDs and factual status
-
-### Final implementation source head `2707aa106769ccdd76a7b3670f637f75279460b9`
-
-- Phase A Diff Validation: run `29769960653` — **success**
-- Quality: run `29769961162` — **success**
-- AW-1B Final Validation: run `29769960679` — **success**
-- Final rendered/validation artifact ID: `8472535450`
-- Artifact name: `aw1b-final-validation-2707aa106769ccdd76a7b3670f637f75279460b9`
-- Artifact digest: `sha256:9b93d32cd87f7a93bec01a3aeeea751937ce5f1f01abae004ab4d8b98539b4fe`
-- Artifact metadata head SHA: `2707aa106769ccdd76a7b3670f637f75279460b9`
-- Workflow metadata run ID: `29769960679`
-- Workflow attempt: `1`
-
-The documentation-only report publication commit triggers a new exact-head Phase A, Quality, and AW-1B Final Validation set. Their exact IDs, final artifact ID, digest, and final PR head are recorded in the final Planner handoff after completion. This report does not represent a pending or failed check as passed.
-
-## Files created
+### Deleted
 
 - `.github/workflows/aw1b-final-validation.yml`
-- `lib/i18n/active-workout-formatters.test.ts`
-- `lib/i18n/active-workout-formatters.ts`
-- `lib/i18n/active-workout-message-contract.test.ts`
-- `lib/i18n/active-workout-surface-contract.test.ts`
-- `lib/i18n/active-workout.ts`
-- `plaivra_aw1b_active_workout_localization_implementation_report.md`
 
-## Files modified
+### Modified
 
 - `.github/workflows/quality.yml`
-- `components/workouts/active-workout-indicator.tsx`
-- `components/workouts/session-muscle-load-panel.tsx`
-- `components/workouts/train-ui.tsx`
-- `components/workouts/workout-day-focus-session.tsx`
-- `lib/i18n/message-shape.test.ts`
-- `lib/product/muscle-intelligence-phase4c2.test.ts`
-- `lib/train/muscle-intelligence/active-session-muscle-load-copy.ts`
-- `messages/ar.json`
-- `messages/de.json`
-- `messages/en.json`
-- `package.json`
-- `scripts/run-train-layout-qa.mjs`
+- `lib/i18n/active-workout-surface-contract.test.ts`
+- `plaivra_aw1b_active_workout_localization_implementation_report.md`
 
-Temporary source snapshots, payload chunks, diagnostic workflows, correction runners, and compatibility runners were removed and are not present in the final PR diff.
+No replacement AW-1B-named, branch-specific, PR-number-specific, or temporary workflow was added.
 
-## ActiveWorkout namespace structure
+## Direct reason for the test-contract correction
 
-The canonical namespace contains the following semantic sections in EN, DE, and AR:
+The first post-deletion Quality run was:
 
-- `common`
-- `units`
-- `header`
-- `exercise`
-- `set`
-- `rest`
-- `navigation`
-- `details`
-- `actions`
-- `chatGPT`
-- `heatMap`
-- `superset`
-- `minimized`
-- `review`
-- `completion`
-- `offline`
-- `multiDevice`
-- `validation`
-- `notifications`
-- `accessibility`
+- Head: `535c922dae9c485e5f5485133de505913151d1da`
+- Phase A Diff Validation run: `29772419677` — success
+- Quality run: `29772419686` — failed at `Enforce i18n contract`
 
-Canonical unit keys are defined only in locale JSON:
+The failing test still executed:
 
-- `ActiveWorkout.units.kg`
-- `ActiveWorkout.units.reps`
-- `ActiveWorkout.units.seconds`
-- `ActiveWorkout.units.minutes`
+```ts
+source(".github/workflows/aw1b-final-validation.yml")
+```
 
-No multilingual `measurementLabels` dictionary remains in TypeScript. The pure formatter imports no message JSON.
+That file had been correctly deleted by the cleanup prompt. The correction changed only the repository test contract so it now verifies:
 
-## Exact message leaf count by locale
+- the permanent Quality workflow;
+- the existing `i18n` scope gate;
+- successful compact i18n evidence upload;
+- exact-head artifact naming;
+- all seven required screenshots;
+- `train-layout-qa-results.json`;
+- generated metadata fields;
+- 14-day retention.
 
-- English: `315`
-- German: `315`
-- Arabic: `315`
+No production component, message, formatter, QA script, or application behavior was altered to fix this failure.
 
-Each locale has the same key inventory. Each locale contains 41 message leaves with ICU/placeholders and 54 total placeholder references.
+## Permanent Quality evidence behavior
 
-## Placeholder and ICU parity result
+The successful evidence steps run only for pull requests when both conditions are true:
 
-- EN/DE/AR key parity: **passed**
-- Unit-key parity: **passed**
-- ICU parsing: **passed**
-- Placeholder-name parity: **passed**
-- Empty-message rejection: **passed**
-- Placeholder-only message rejection: **passed**
-- Unsafe script, JavaScript URL, and inline event-handler rejection: **passed**
+```text
+github.event_name == pull_request
+steps.scope.outputs.i18n == true
+steps.scope.outputs.ui == true
+```
 
-## German terminology decisions
+They run after successful browser QA and use the generic artifact name:
 
-Required correction:
+```text
+i18n-rendered-evidence-<exact-head-sha>
+```
 
-- `ActiveWorkout.common.optional`: `Optional`
+The artifact uploads only:
 
-Canonical German unit labels:
+- `active-workout-en-390x844.png`
+- `active-workout-de-390x844.png`
+- `active-workout-ar-390x844.png`
+- `active-workout-en-1440x900.png`
+- `active-workout-de-1440x900.png`
+- `active-workout-ar-1440x900.png`
+- `active-workout-indicator-ar-390x844.png`
+- `train-layout-qa-results.json`
+- `i18n-rendered-evidence-metadata.json`
 
-- `kg`
-- `Wdh.`
-- `Sek.`
-- `Min.`
+Generated metadata contains:
 
-`Optional` is intentionally accepted as the natural form/UI label. Review remained limited to AW-1B and immediately adjacent copy.
+- exact head SHA;
+- workflow run ID;
+- workflow attempt;
+- repository;
+- pull-request number.
 
-## Arabic terminology decisions
+Artifact retention is 14 days. Existing Quality checks and failure-evidence behavior were preserved.
 
-Required corrections:
+## Validated cleanup implementation head
 
-- `ActiveWorkout.actions.useToday`: `استخدامه اليوم`
-- `ActiveWorkout.chatGPT.ask`: `اسأل ChatGPT`
+Head:
 
-Canonical Arabic unit labels:
+```text
+3138934c50bd059800cbc4dd95f38ebfebd67d5f
+```
 
-- `kg`
-- `تكرارات`
-- `ثانية`
-- `دقيقة`
+### Successful permanent workflow runs
 
-Arabic remains RTL. Timers and stable numeric ratio boundaries remain Latin/LTR. Catalog names, workout/day names, alternative names, and user-entered values are not translated.
+- Phase A Diff Validation run ID: `29772594102` — success
+- Quality run ID: `29772594150` — success
 
-## Legacy Train keys retained and exact reasons
+### Exact-head generic i18n evidence artifact
 
-The legacy Train dictionary remains available for untouched Train surfaces and backward compatibility. Deleting it would broaden AW-1B and could regress routes not migrated in this PR.
+- Artifact ID: `8473512712`
+- Artifact name: `i18n-rendered-evidence-3138934c50bd059800cbc4dd95f38ebfebd67d5f`
+- Artifact digest: `sha256:793d459cae66681db6e220e9894f55bc8bc3c18bb7e51f1f3fca7bff4bbf238c`
+- Artifact head SHA: `3138934c50bd059800cbc4dd95f38ebfebd67d5f`
+- Workflow run ID: `29772594150`
+- Workflow attempt: `1`
+- Repository metadata: `ahmedmohameda7222-ship-it/gymsands`
+- Pull-request metadata: `79`
 
-Touched Active Workout surfaces resolve user-visible AW-1B copy through `useActiveWorkoutTranslation`. Narrow inert source-contract markers remain solely to preserve the repository’s frozen Train Phase 1 source-text compatibility contract. They are not rendered, do not execute translations, and do not create a second localized message store.
+The downloaded artifact was inspected. It contains the seven named screenshots, the QA result JSON, and the metadata JSON. Metadata head equals the validated cleanup head.
 
-`translateTrain` remains only where an existing legacy compatibility label is still required, including the previously approved reopen-set compatibility path. No AW-1A decision was reopened.
+## Rendered QA result
 
-## Old feature-copy compatibility status
-
-- Existing legacy Train keys retained.
-- Touched Active Workout surfaces use `ActiveWorkout` as canonical copy.
-- Stable persistence values, set types, replacement identifiers, routes, exercise IDs, and database values remain unchanged.
-- No rejected future-state semantics were introduced.
-- Existing feature behavior remains compatible.
-
-## Formatter contract
-
-The pure formatter exposes:
-
-- `timer(totalSeconds)`
-- `integer(value)`
-- `decimal(value, maximumFractionDigits?)`
-- `ratio(current, total)`
-- `date(value, options?)`
-- `time(value, options?)`
-- `weekday(value)`
-- `list(values, options?)`
-- `measurement(value, localizedUnitLabel, maximumFractionDigits?)`
-
-A hook-level wrapper resolves `t("units.*")` and supplies the localized unit label to the pure formatter. The pure formatter remains independent of React, `next-intl`, and locale JSON.
-
-Formatting is presentation-only. Stored weights, reps, times, set numbers, identifiers, and session values are unchanged.
-
-## Bidi and RTL changes
-
-- Completed-exercise next-name interpolation uses `isolateBidiText(nextExercise.exercise.exercise_name)`.
-- Other dynamic exercise, workout/day, and alternative interpolations use local Unicode bidi isolation.
-- Dynamic names rendered as elements use `<bdi>` or `<bdi dir="auto">`.
-- Displayed user-entered notes/instructions use local `dir="auto"` boundaries where appropriate.
-- Finish-notes input uses `dir="auto"` locally.
-- Timers use `dir="ltr"` with tabular numerals.
-- Ratios use stable local LTR boundaries.
-- `dir="auto"` is not applied to an entire translated layout.
-- Anatomy graphics remain unmirrored.
-
-## Current components migrated
-
-- `components/workouts/workout-day-focus-session.tsx`
-- `components/workouts/active-workout-indicator.tsx`
-- `components/workouts/session-muscle-load-panel.tsx`
-- `lib/train/muscle-intelligence/active-session-muscle-load-copy.ts`
-
-Current session details, finish summary, set/exercise navigation, next-set labels, set markers, completed/total progress, next-exercise badges, carousel values, PR counts, volume, and duration use the formatter contract where applicable.
-
-## Explicit no behavior or layout redesign confirmation
-
-No workout execution behavior, persistence contract, set completion behavior, replacement behavior, Heat Map calculation, route contract, page structure, or approved UI composition was redesigned.
-
-The only spacing correction reserves deterministic vertical clearance below the persistent Active Workout controller on screens at or below 340 px. It does not change workflow behavior or information architecture.
-
-## Database and Supabase changes
-
-- Supabase changes: **none**
-- Database schema changes: **none**
-- Migrations: **none**
-- RLS changes: **none**
-- RPC changes: **none**
-- Storage policy changes: **none**
-- Generated database type changes: **none**
-- Migration-history changes: **none**
-
-Database and Supabase CI paths were correctly skipped by scope detection.
-
-## Security and privacy review
-
-- No secrets or credentials added.
-- No production user data added.
-- QA uses synthetic fixtures.
-- Dynamic values are not inserted through raw HTML.
-- Message tests reject common executable-content patterns.
-- Dynamic names and user-entered text use local bidi-safe boundaries.
-- Authentication, authorization, RLS, database, and privacy controls are unchanged.
-- No second TypeScript locale dictionary remains.
-
-## Tests added or extended
-
-- ActiveWorkout inventory and key-parity tests.
-- Canonical unit-key tests.
-- German and Arabic exact-copy tests.
-- ICU and placeholder parity tests.
-- Unsafe-message tests.
-- Pure formatter timer/integer/decimal/ratio/date/time/list/measurement tests.
-- Assertion that no `measurementLabels` multilingual store remains.
-- Completed-exercise next-name isolation assertion.
-- Workout/day/alternative/user-text boundary assertions.
-- Session-detail measurement and count formatter assertions.
-- Raw-number regression assertions.
-- Required screenshot and overflow-matrix contract assertions.
-- Tiny-screen controller-clearance assertions in both the AW-1B surface contract and Phase 4C.2 contract.
-
-No current test was weakened.
-
-## Commands run and exact results
-
-At source head `2707aa106769ccdd76a7b3670f637f75279460b9`:
-
-| Command / validation | Result |
-|---|---|
-| `npm ci` | Passed |
-| `npm run typecheck` | Passed |
-| `npm run lint` | Passed |
-| `npm run test:i18n` | Passed |
-| Targeted four-file Vitest command | Passed |
-| `npm run test:unit` | Non-zero only for the exact starting-main identities; parity passed |
-| `npm run test:scripts` | Passed |
-| `npm audit --omit=dev --audit-level=moderate` | Passed |
-| `npm run build` | Passed |
-| `npm run qa:train` | Passed — 181 observations, 0 failures |
-| Phase A Diff Validation | Passed |
-| Quality | Passed |
-| AW-1B Final Validation | Passed |
-
-## Starting-main unit-failure parity
-
-Starting-main SHA: `1b7411604dcf3d9bdfcd0a2f4d70a172d677310e`
-
-Current and starting-main status were both non-zero because of the same four pre-existing failure identities:
-
-1. `lib/product/muscle-intelligence-phase1-migration.test.ts` — authoritative Quality database-preflight contract.
-2. `lib/product/train-phase1-approved-ui.test.ts` — picker/pagination contract.
-3. `lib/product/train-phase1-approved-ui.test.ts` — detail/history/controller contract.
-4. `lib/product/train-phase2a-architecture.test.ts` — authoritative Quality gate contract.
-
-Result:
-
-- Introduced failure identities: `[]`
-- Parity passed: `true`
-- AW-1B introduced no new unit-test failure identity.
-
-## Rendered QA matrix
-
-The final implementation source artifact contains all required screenshots:
-
-| Locale | Viewport | Screenshot | Direction | Overflow |
-|---|---:|---|---|---:|
-| EN | 390 × 844 | `active-workout-en-390x844.png` | LTR | 0 px |
-| DE | 390 × 844 | `active-workout-de-390x844.png` | LTR | 0 px |
-| AR | 390 × 844 | `active-workout-ar-390x844.png` | RTL | 0 px |
-| EN | 1440 × 900 | `active-workout-en-1440x900.png` | LTR | 0 px |
-| DE | 1440 × 900 | `active-workout-de-1440x900.png` | LTR | 0 px |
-| AR | 1440 × 900 | `active-workout-ar-1440x900.png` | RTL | 0 px |
-| AR minimized controller | 390 × 844 | `active-workout-indicator-ar-390x844.png` | RTL | 0 px |
-
-Rendered summary:
+The permanent Quality workflow ran the complete Train rendered browser suite at the validated cleanup head.
 
 - Observations: `181`
 - Failures: `0`
 - Passed: `true`
 
-## Horizontal-overflow matrix
+Horizontal overflow was `0 px` for EN, DE, and AR at:
 
-| Locale | 360 × 780 | 390 × 844 | 430 × 932 |
-|---|---:|---:|---:|
-| EN | 0 px | 0 px | 0 px |
-| DE | 0 px | 0 px | 0 px |
-| AR | 0 px | 0 px | 0 px |
+- `360 × 780`
+- `390 × 844`
+- `430 × 932`
 
-All entries passed. Arabic entries reported `rtl`; English and German reported `ltr`.
+English and German reported `ltr`; Arabic reported `rtl`.
 
-## Screenshot and artifact paths
+## Validation results
 
-Within artifact `8472535450`:
+At cleanup implementation head `3138934c50bd059800cbc4dd95f38ebfebd67d5f`, the permanent Quality workflow verified:
 
-- `rendered/active-workout-en-390x844.png`
-- `rendered/active-workout-de-390x844.png`
-- `rendered/active-workout-ar-390x844.png`
-- `rendered/active-workout-en-1440x900.png`
-- `rendered/active-workout-de-1440x900.png`
-- `rendered/active-workout-ar-1440x900.png`
-- `rendered/active-workout-indicator-ar-390x844.png`
-- `rendered/train-layout-qa-results.json`
-- `workflow-metadata.json`
-- `unit-failure-parity.json`
-- `current-unit.log`
-- `starting-main-unit.log`
-- `qa-server.log`
+| Validation | Result |
+|---|---|
+| Exact-head checkout identity | Passed |
+| `npm ci` | Passed |
+| Changed-source ESLint validation | Passed |
+| `npm run typecheck` | Passed |
+| `npm run test:i18n` | Passed |
+| Related changed-code tests | Passed |
+| `npm run test:scripts` | Passed |
+| `npm run build` | Passed |
+| Playwright Chromium installation | Passed |
+| Complete `npm run qa:train` rendered QA | Passed |
+| Exact-head metadata generation | Passed |
+| Compact successful evidence upload | Passed |
+| Phase A `git diff --check` | Passed |
 
-## Additional files inspected and reasons
+The prior full-validation evidence at `ca2e654d9bfd496d024ecf2c8d44a3ed861fabd1` remains supporting evidence for the full lint command, full validation logs, starting-main unit-failure identity parity, and the previously reviewed application-source screenshots. No production application source changed after that head.
 
-- `.github/workflows/quality.yml` — permanent scope detection and validation gates.
-- `.github/workflows/aw1b-final-validation.yml` — exact-head full validation and artifact upload.
-- `scripts/run-train-layout-qa.mjs` — locale fixtures, required screenshots, direction checks, overflow matrix, and controller-overlap detection.
-- `components/workouts/train-ui.tsx` — deterministic tiny-screen controller clearance.
-- `components/workouts/workout-day-focus-session.tsx` — formatter and bidi boundaries.
-- `components/workouts/active-workout-indicator.tsx` — timer and mixed-direction rendering.
-- `lib/i18n/active-workout-formatters.ts` — pure formatter contract and absence of locale copy.
-- `lib/i18n/active-workout.ts` — hook-level localized unit wrapper.
-- EN/DE/AR message files — canonical key and copy parity.
-- Starting-main unit logs — exact failure-identity comparison.
+## Prior full-validation supporting evidence
 
-## Risks
+This evidence is retained only as supporting pre-cleanup evidence. It is not the authoritative final cleanup artifact.
 
-- Four unrelated unit-test failures remain on both starting `main` and the branch; parity proves AW-1B added no failure identity.
-- The legacy Train dictionary remains because removing it is outside AW-1B and could break untouched surfaces.
-- Locale formatting is intentionally presentation-only; canonical stored values remain locale-neutral.
+- Prior evidence head: `ca2e654d9bfd496d024ecf2c8d44a3ed861fabd1`
+- Phase A run ID: `29770691096` — success
+- Quality run ID: `29770691161` — success
+- Temporary full-validation run ID: `29770691084` — success
+- Supporting artifact ID: `8472817617`
+- Supporting artifact name: `aw1b-final-validation-ca2e654d9bfd496d024ecf2c8d44a3ed861fabd1`
+- Supporting artifact digest: `sha256:a2ad6422e84e89b1b68c16b5514b016b0829bceeb30f6c15deec11fcf59e9711`
+- Supporting artifact head SHA: `ca2e654d9bfd496d024ecf2c8d44a3ed861fabd1`
 
-## Limitations
+The temporary workflow that produced this older artifact is deleted from the final PR. The artifact remains historical evidence only.
 
-- AW-1B does not translate unrelated application surfaces.
-- Catalog and user-generated names are isolated, not translated.
-- The report cannot statically contain the SHA of its own Git commit; exact publication head and exact-head post-report runs are supplied in the final handoff and workflow metadata.
+## Exact post-`ca2e654...` changed-file list
 
-## Out-of-scope findings
+```text
+.github/workflows/aw1b-final-validation.yml                         deleted
+.github/workflows/quality.yml                                      modified
+lib/i18n/active-workout-surface-contract.test.ts                   modified
+plaivra_aw1b_active_workout_localization_implementation_report.md  modified
+```
 
-- No Supabase, schema, RLS, RPC, migration, storage, or generated-database-type work was required.
-- No deployment or production smoke test was authorized.
-- No AW-2 work was started.
-- No merge was authorized.
+The fourth file was added to the cleanup diff only because deleting the prohibited temporary workflow exposed a direct stale test-contract dependency. No application runtime source changed.
+
+## Supabase, database, deployment, and scope confirmation
+
+- Supabase modified: **No**
+- Database schema modified: **No**
+- Migrations created or changed: **No**
+- RLS modified: **No**
+- RPCs modified: **No**
+- Storage policies modified: **No**
+- Generated database types modified: **No**
+- Deployment started: **No**
+- Production modified: **No**
+- PR merged: **No**
+- AW-2 started: **No**
 
 ## Final git status
 
-Remote branch status at implementation-source validation:
-
 - Branch: `feat/active-workout-aw1b-messages-locale-qa`
-- Source head: `2707aa106769ccdd76a7b3670f637f75279460b9`
-- PR: open, Draft, mergeable, unmerged
-- Working-tree concept: all implemented changes are committed and pushed to the remote branch; no known local-only or uncommitted correction work remains.
-
-The report publication commit is pushed to the same branch and becomes the exact final PR head reported in the Planner handoff.
-
-## No merge, deployment, production, or AW-2 confirmation
-
-- PR merged: **No**
-- Deployment started: **No**
-- Production modified: **No**
-- Supabase modified: **No**
-- AW-2 started: **No**
-
-AW-1B is complete for final Planner QA/QC review after the report-publication exact-head workflows finish successfully.
+- PR: `#79`
+- State: open, Draft, unmerged
+- Validated cleanup implementation head: `3138934c50bd059800cbc4dd95f38ebfebd67d5f`
+- All cleanup changes are committed and pushed.
+- The report-publication commit triggers a final exact-head Phase A and Quality run. Their exact run IDs and exact-head generic artifact identity are supplied in the final implementation handoff after they complete.
