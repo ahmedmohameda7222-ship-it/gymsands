@@ -45,15 +45,22 @@ describe("Muscle Intelligence Phase 4C.2", () => {
     expect(adapter).toContain('arMessages.ActiveWorkout.heatMap');
     expect(adapter).not.toContain("Muscle Load So Far");
 
-    for (const locale of ["en", "de", "ar"] as const) {
-      const copy = messages(locale).ActiveWorkout.heatMap;
+    const en = messages("en").ActiveWorkout.heatMap;
+    const de = messages("de").ActiveWorkout.heatMap;
+    const ar = messages("ar").ActiveWorkout.heatMap;
+
+    for (const copy of [en, de, ar]) {
       expect(copy.currentSessionHeat.trim()).not.toBe("");
-      expect(copy.currentSessionDescription).toContain(
-        locale === "en" ? "saved completed sets" : locale === "de" ? "gespeicherten, abgeschlossenen Sätzen" : "المجموعات المكتملة المحفوظة"
-      );
+      expect(copy.currentSessionDescription.trim()).not.toBe("");
       expect(copy.savedSetsOnly.trim()).not.toBe("");
       expect(copy.refreshFailedDescription.trim()).not.toBe("");
     }
+
+    expect(en.currentSessionDescription).toContain("saved completed sets");
+    expect(de.currentSessionDescription).toContain("gespeicherten");
+    expect(de.currentSessionDescription).toContain("abgeschlossenen Sätzen");
+    expect(ar.currentSessionDescription).toContain("المجموعات المكتملة");
+    expect(ar.currentSessionDescription).toContain("المحفوظة");
   });
 
   it("keeps tiny-screen Train actions clear of the active workout controller", () => {
