@@ -80,7 +80,7 @@ describe("AW-1B Active Workout surface contract", () => {
 
   it("keeps rendered locale QA aligned with authoritative persistence, final-head evidence, and tiny-screen spacing", () => {
     const qa = source("scripts/run-train-layout-qa.mjs");
-    const quality = source(".github/workflows/quality.yml");
+    const finalValidation = source(".github/workflows/aw1b-final-validation.yml");
     const trainUi = source("components/workouts/train-ui.tsx");
 
     expect(qa).toContain('name: "plaivra.language.v1", value: language');
@@ -89,8 +89,8 @@ describe("AW-1B Active Workout surface contract", () => {
     expect(qa).toContain("active-workout-indicator-ar-390x844.png");
     expect(qa).toContain('{ name: "360x780", width: 360, height: 780 }');
     expect(qa).toContain("horizontalOverflowMatrix");
-    expect(quality).toContain("Upload AW-1B final-head rendered evidence");
-    expect(quality).toContain("aw1b-final-head-rendered-${{ github.event.pull_request.head.sha }}");
+    expect(finalValidation).toContain("Upload final-head validation evidence");
+    expect(finalValidation).toContain("aw1b-final-validation-${{ github.event.pull_request.head.sha }}");
     expect(trainUi).toContain("max-[340px]:pb-[var(--active-workout-controller-height)]");
   });
 });
