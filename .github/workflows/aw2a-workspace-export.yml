@@ -20,20 +20,18 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Apply reviewed AW-2A patch and restore full validation
+      - name: Apply reviewed AW-2A patch
         shell: bash
         run: |
-          set -euo pipefail
-          git show HEAD^:.github/workflows/aw2a-workspace-export.yml > /tmp/aw2a-full-validation.yml
-          sed -i '/^[[:space:]]*continue-on-error: true$/d' /tmp/aw2a-full-validation.yml
+          set -euxo pipefail
           cat .github/aw2a-rawpatch/00 \
               .github/aw2a-rawpatch/01 \
               .github/aw2a-rawpatch/02 \
               .github/aw2a-rawpatch/03 \
               .github/aw2a-rawpatch/04 > /tmp/aw2a-reviewed.patch
-          echo 'b36400477b4fe0e073b004827cd745c8b8eaa143553c110fe7ed5c7eeda28cf4  /tmp/aw2a-reviewed.patch' | sha256sum -c -
-          git apply --index --exclude=.github/workflows/aw2a-workspace-export.yml /tmp/aw2a-reviewed.patch
-          cp /tmp/aw2a-full-validation.yml .github/workflows/aw2a-workspace-export.yml
+          sha256sum /tmp/aw2a-reviewed.patch
+          git apply --check --exclude=.github/workflows/aw2a-workspace-export.yml /tmp/aw2a-reviewed.patch
+          git apply --exclude=.github/workflows/aw2a-workspace-export.yml /tmp/aw2a-reviewed.patch
           rm -rf .github/aw2a-rawpatch \
                  .github/aw2a-codefix \
                  .github/aw2a-final-fix \
