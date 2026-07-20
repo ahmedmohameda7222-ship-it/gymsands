@@ -33,12 +33,25 @@ $function$;
 grant execute on function pg_temp.assert_true(boolean,text) to public;
 grant execute on function pg_temp.assert_rejected(text,text[],text) to public;
 
--- Disposable owner fixtures.
-insert into public.profiles (id, email, full_name, role, created_at, updated_at)
-values
-  ('a2000000-0000-4000-8000-000000000001', 'aw2a-owner@example.test', 'AW2A Owner', 'member', now(), now()),
-  ('a2000000-0000-4000-8000-000000000002', 'aw2a-other@example.test', 'AW2A Other', 'member', now(), now()),
-  ('a2000000-0000-4000-8000-000000000003', 'aw2a-delete@example.test', 'AW2A Delete', 'member', now(), now());
+-- Disposable owner fixtures. Creating auth users exercises the real profile lifecycle.
+insert into auth.users (
+  id, aud, role, email, encrypted_password,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values
+  ('a2000000-0000-4000-8000-000000000001', 'authenticated', 'authenticated', 'aw2a-owner@example.test', '',
+   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
+  ('a2000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated', 'aw2a-other@example.test', '',
+   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
+  ('a2000000-0000-4000-8000-000000000003', 'authenticated', 'authenticated', 'aw2a-delete@example.test', '',
+   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now());
+select pg_temp.assert_true(
+  (select count(*) from public.profiles where id in (
+    'a2000000-0000-4000-8000-000000000001'::uuid,
+    'a2000000-0000-4000-8000-000000000002'::uuid,
+    'a2000000-0000-4000-8000-000000000003'::uuid
+  )) = 3,
+  'Auth fixture creation did not create the expected profiles.'
+);
 \set owner_id 'a2000000-0000-4000-8000-000000000001'
 \set other_member_id 'a2000000-0000-4000-8000-000000000002'
 \set delete_member_id 'a2000000-0000-4000-8000-000000000003'
