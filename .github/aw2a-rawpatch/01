@@ -1,0 +1,62 @@
+thoritativeState.active_item_order,
++              setNumber: authoritativeState.active_set_number,
+               controllerDeviceId: controllerDeviceIdRef.current
+             }
+           ));
+@@ -618,7 +620,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+       });
+ 
+     return () => { active = false; };
+-  }, [day, restTimerKey, toast, tr, user?.id, workoutTimerKey]);
++  }, [day, mirrorExecutionState, queueExecutionWrite, restTimerKey, toast, tr, user?.id, workoutTimerKey]);
+ 
+   useEffect(() => {
+     const tick = () => setElapsedSeconds(
+@@ -666,7 +668,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+     tick();
+     const interval = window.setInterval(tick, 1000);
+     return () => window.clearInterval(interval);
+-  }, [restTimerKey, session?.id, timerEndsAtMs, toast, tr, user?.id]);
++  }, [queueExecutionWrite, restTimerKey, session?.id, timerEndsAtMs, toast, tr, user?.id]);
+ 
+   useEffect(() => {
+     if (!executionHydratedRef.current || !user?.id || !session?.id || !executionState) return;
+@@ -696,7 +698,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+         setActiveSetIndex(previousCursor.setIndex);
+       }
+     );
+-  }, [activeExerciseIndex, activeSetIndex, day.exercises, executionCursorItems, executionState, session?.id, user?.id]);
++  }, [activeExerciseIndex, activeSetIndex, day.exercises, executionCursorItems, executionState, queueExecutionWrite, session?.id, user?.id]);
+ 
+   const activeExercise = exerciseStates[activeExerciseIndex];
+   const activeSet = activeExercise?.sets[activeSetIndex];
+diff --git a/components/workouts/workout-session-form.tsx b/components/workouts/workout-session-form.tsx
+index 6b4dd29..0e1e860 100644
+--- a/components/workouts/workout-session-form.tsx
++++ b/components/workouts/workout-session-form.tsx
+@@ -1,6 +1,6 @@
+ "use client";
+ 
+-import { useEffect, useMemo, useRef, useState } from "react";
++import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+ import { CheckCircle2, Clock, ExternalLink, Plus, Timer, TimerReset } from "lucide-react";
+ import { useRouter } from "next/navigation";
+ import { Button } from "@/components/ui/button";
+@@ -79,7 +79,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
+ 
+   const [previousSet, setPreviousSet] = useState<{ reps: number | null; weightKg: number | null; performedAt: string | null } | null>(null);
+ 
+-  function mirrorExecutionState(next: WorkoutSessionExecutionState) {
++  const mirrorExecutionState = useCallback((next: WorkoutSessionExecutionState) => {
+     setExecutionState(next);
+     const now = Date.now();
+     const derivedStartedAt = executionStartedAtMs(next, now);
+@@ -108,9 +108,9 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
+         controllerDeviceId: controllerDeviceIdRef.current
+       }, now));
+     }
+-  }
++  }, [restTimerKey, timerKey, user, workout.id, workout.name]);
+ 
+-  function queueExecutionWrite(write: () => Promise<WorkoutSessionExecutionState>, rollback?: () => void) {
++  const queueExecutionWrite = useCallback((write: () => Promise<WorkoutSessionExecu
