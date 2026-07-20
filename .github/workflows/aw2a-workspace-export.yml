@@ -1,4 +1,4 @@
-name: AW-2A Apply Reviewed Patch
+name: AW-2A Diagnose Reviewed Patch
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  apply:
+  diagnose:
     if: github.head_ref == 'feat/active-workout-aw2a-persisted-execution-state'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -20,31 +20,31 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Apply reviewed AW-2A patch
+      - name: Record patch diagnostics once
         shell: bash
         run: |
-          set -euxo pipefail
+          set -u
+          if [ -f .github/aw2a-apply-diagnostic.txt ]; then
+            exit 0
+          fi
           cat .github/aw2a-rawpatch/00 \
               .github/aw2a-rawpatch/01 \
               .github/aw2a-rawpatch/02 \
               .github/aw2a-rawpatch/03 \
               .github/aw2a-rawpatch/04 > /tmp/aw2a-reviewed.patch
-          sha256sum /tmp/aw2a-reviewed.patch
-          git apply --check --exclude=.github/workflows/aw2a-workspace-export.yml /tmp/aw2a-reviewed.patch
-          git apply --exclude=.github/workflows/aw2a-workspace-export.yml /tmp/aw2a-reviewed.patch
-          rm -rf .github/aw2a-rawpatch \
-                 .github/aw2a-codefix \
-                 .github/aw2a-final-fix \
-                 .github/aw2a-correction \
-                 .github/aw2a-correction-small \
-                 .github/aw2a-patch
-          rm -f .github/workflows/aw2a-fix-migration.yml \
-                .github/workflows/aw2a-apply-text-fixes.yml \
-                .github/workflows/aw2a-source-export.yml \
-                docs/.aw2a-pr-trigger
-          git add -A
-          git diff --cached --check
+          {
+            echo 'PATCH_SHA256:'
+            sha256sum /tmp/aw2a-reviewed.patch
+            echo 'PATCH_HEAD:'
+            sed -n '1,8p' /tmp/aw2a-reviewed.patch
+            echo 'PATCH_TAIL:'
+            tail -n 8 /tmp/aw2a-reviewed.patch
+            echo 'APPLY_CHECK:'
+            git apply --check --verbose --exclude=.github/workflows/aw2a-workspace-export.yml /tmp/aw2a-reviewed.patch
+            echo "APPLY_STATUS:$?"
+          } > .github/aw2a-apply-diagnostic.txt 2>&1
+          git add .github/aw2a-apply-diagnostic.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix(workouts): complete AW-2A validation corrections'
+          git commit -m 'chore: record AW-2A patch diagnostics'
           git push origin HEAD:feat/active-workout-aw2a-persisted-execution-state
