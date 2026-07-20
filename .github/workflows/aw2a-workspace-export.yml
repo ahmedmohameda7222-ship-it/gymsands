@@ -1,4 +1,4 @@
-name: AW-2A Reviewed Source Import
+name: AW-2A Full Validation
 
 on:
   pull_request:
@@ -6,107 +6,189 @@ on:
       - main
 
 permissions:
-  contents: write
-  pull-requests: read
+  contents: read
 
 concurrency:
-  group: aw2a-import-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  group: aw2a-full-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  import:
+  validate:
     if: github.head_ref == 'feat/active-workout-aw2a-persisted-execution-state'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 60
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+      PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+      PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+      PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+      PLAIVRA_RELEASE_ENVIRONMENT: ci
+      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+      PLAIVRA_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout reviewed starting main
+        uses: actions/checkout@v4
+        with:
+          ref: 6f381b760eb711c3eef4bb515365d4c675648ed3
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install starting-main dependencies
+        run: npm ci
+
+      - name: Record starting-main unit failure identities
+        shell: bash
+        run: |
+          set +e
+          npx vitest run --config vitest.unit.config.mjs --reporter=json --outputFile=/tmp/aw2a-baseline-unit.json
+          echo "$?" > /tmp/aw2a-baseline-unit.exit
+          set -e
+
+      - name: Checkout exact AW-2A PR head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Reconstruct reviewed AW-2A source patch
+      - name: Verify checkout identity
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+
+      - name: Install exact-head dependencies
+        run: npm ci
+
+      - name: Lint repository
+        run: npm run lint
+
+      - name: Typecheck application
+        run: npm run typecheck
+
+      - name: Validate i18n contracts
+        run: npm run test:i18n
+
+      - name: Record exact-head unit failures
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EXPECTED_SHA256: b0bcfc1171a3e1001ecbc1f920e1667f77ba3c42881ec5b154228641983a490d
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          set -euo pipefail
+          set +e
+          npx vitest run --config vitest.unit.config.mjs --reporter=json --outputFile=/tmp/aw2a-head-unit.json
+          echo "$?" > /tmp/aw2a-head-unit.exit
+          set -e
+
+      - name: Prove no new unit failure identity
+        shell: bash
+        run: |
           python - <<'PY'
-          import hashlib
           import json
-          import os
-          import re
-          import urllib.request
+          from pathlib import Path
 
-          repository = os.environ["GITHUB_REPOSITORY"]
-          pr_number = os.environ["PR_NUMBER"]
-          token = os.environ["GH_TOKEN"]
-          selected = {}
-          page = 1
-          while True:
-              request = urllib.request.Request(
-                  f"https://api.github.com/repos/{repository}/pulls/{pr_number}/reviews?per_page=100&page={page}",
-                  headers={
-                      "Authorization": f"Bearer {token}",
-                      "Accept": "application/vnd.github+json",
-                      "X-GitHub-Api-Version": "2022-11-28",
-                  },
-              )
-              with urllib.request.urlopen(request) as response:
-                  reviews = json.load(response)
-              if not reviews:
-                  break
-              for review in reviews:
-                  body = review.get("body") or ""
-                  match = re.match(r"^AW2A_IMPORT_(\d{2})\n", body)
-                  if not match:
-                      continue
-                  index = int(match.group(1))
-                  if index not in selected or int(review["id"]) > selected[index][0]:
-                      selected[index] = (int(review["id"]), body.split("\n", 1)[1])
-              if len(reviews) < 100:
-                  break
-              page += 1
+          def failed(path):
+              payload = json.loads(Path(path).read_text())
+              failures = set()
+              for suite in payload.get("testResults", []):
+                  for assertion in suite.get("assertionResults", []):
+                      if assertion.get("status") == "failed":
+                          failures.add(" > ".join(assertion.get("ancestorTitles", []) + [assertion.get("title", "")]))
+              return failures
 
-          expected = set(range(14))
-          if set(selected) != expected:
-              raise SystemExit(f"Expected reviewed chunks 00-13, found {sorted(selected)}")
-
-          text = "".join(selected[index][1] for index in range(14))
-          corrected = []
-          fixing_types = False
-          metadata_prefixes = (
-              "+diff --git ", "+new file mode ", "+deleted file mode ",
-              "+index ", "+--- a/", "+--- /dev/null", "++++ b/", "+@@ ",
-          )
-          for line in text.splitlines(keepends=True):
-              if line.startswith("+diff --git a/types/database.ts"):
-                  fixing_types = True
-              if fixing_types and line.startswith("+"):
-                  line = line[1:]
-              elif line.startswith(metadata_prefixes):
-                  line = line[1:]
-              corrected.append(line)
-          payload = "".join(corrected).encode()
-          digest = hashlib.sha256(payload).hexdigest()
-          if digest != os.environ["EXPECTED_SHA256"]:
-              raise SystemExit(f"Reviewed source patch checksum mismatch: {digest}")
-          with open("/tmp/aw2a-app.patch", "wb") as output:
-              output.write(payload)
-          print(f"Verified {len(payload)} bytes with SHA-256 {digest}")
+          baseline = failed("/tmp/aw2a-baseline-unit.json")
+          head = failed("/tmp/aw2a-head-unit.json")
+          print("starting-main failures:", sorted(baseline))
+          print("AW-2A head failures:", sorted(head))
+          new = sorted(head - baseline)
+          if new:
+              raise SystemExit("AW-2A introduced new unit failure identities: " + repr(new))
           PY
-          git apply --check /tmp/aw2a-app.patch
-          git apply /tmp/aw2a-app.patch
-          git diff --check
 
-      - name: Commit imported implementation
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Run script tests
+        run: npm run test:scripts
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Replay complete migration chain and lint database
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A
-          git commit -m "feat(workouts): persist active session execution state"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          supabase db start
+          supabase db reset --local --no-seed
+          supabase db lint --local --schema public --level error --fail-on error
+
+      - name: Run AW-2A database verification and PostgreSQL integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_url="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql
+          PLAIVRA_AW2A_TEST_DATABASE_URL="$database_url" npx vitest run --config vitest.integration.config.mjs services/database/workout-session-execution.integration.test.ts
+          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql
+          PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$database_url" node scripts/test-database-preflight-control.mjs
+          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
+
+      - name: Validate migration ledger and release manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run migration:ledger:check
+          PLAIVRA_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" npm run release:manifest -- --output /tmp/plaivra-aw2a-release-manifest.json
+
+      - name: Build production application
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PLAIVRA_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Train rendered QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p quality-reports
+          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/qa-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3000/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://localhost:3000/ >/dev/null
+          QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=quality-reports/train-qa-evidence npm run qa:train
+
+      - name: Check diff whitespace
+        run: git diff --check "${{ github.event.pull_request.base.sha }}...HEAD"
+
+      - name: Upload full validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw2a-full-validation-${{ github.event.pull_request.head.sha }}
+          path: |
+            /tmp/aw2a-baseline-unit.json
+            /tmp/aw2a-baseline-unit.exit
+            /tmp/aw2a-head-unit.json
+            /tmp/aw2a-head-unit.exit
+            /tmp/plaivra-aw2a-release-manifest.json
+            quality-reports/train-qa-evidence
+            quality-reports/qa-server.log
+          if-no-files-found: warn
+          retention-days: 7
