@@ -1,0 +1,45 @@
+name: AW-1B Source Snapshot
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    if: github.head_ref == 'feat/active-workout-aw1b-messages-locale-qa'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Collect AW-1B source snapshot
+        run: |
+          mkdir -p aw1b-source
+          cp --parents \
+            .github/workflows/quality.yml \
+            components/workouts/workout-day-focus-session.tsx \
+            components/workouts/active-workout-indicator.tsx \
+            components/workouts/session-muscle-load-panel.tsx \
+            components/workouts/train-ui.tsx \
+            lib/i18n/active-workout-formatters.ts \
+            lib/i18n/active-workout-formatters.test.ts \
+            lib/i18n/active-workout-message-contract.test.ts \
+            lib/i18n/active-workout-surface-contract.test.ts \
+            lib/i18n/active-workout.ts \
+            lib/i18n/message-shape.test.ts \
+            lib/product/muscle-intelligence-phase4c2.test.ts \
+            lib/train/muscle-intelligence/active-session-muscle-load-copy.ts \
+            messages/en.json messages/de.json messages/ar.json \
+            package.json package-lock.json \
+            scripts/run-train-layout-qa.mjs \
+            aw1b-source/
+          tar -czf aw1b-source.tgz -C aw1b-source .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aw1b-source-${{ github.event.pull_request.head.sha }}
+          path: aw1b-source.tgz
+          if-no-files-found: error
+          retention-days: 1
