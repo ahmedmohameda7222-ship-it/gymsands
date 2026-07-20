@@ -38,7 +38,7 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Verify branch and starting main
+      - name: Verify starting main
         shell: bash
         run: |
           set -euo pipefail
@@ -86,38 +86,28 @@ jobs:
 
       - name: Apply compatibility patch idempotently
         if: steps.install.outcome == 'success'
-        run: |
-          node scripts/aw1a-patch.mjs
-          rm -f aw1a-validation-diagnostics.md
+        run: node scripts/aw1a-patch.mjs
 
       - name: Typecheck
         id: typecheck
         if: steps.install.outcome == 'success'
         continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          npm run typecheck 2>&1 | tee quality-reports/aw1a/typecheck.log
+        run: npm run typecheck
 
       - name: Lint
         id: lint
         if: steps.install.outcome == 'success'
         continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          npm run lint 2>&1 | tee quality-reports/aw1a/lint.log
+        run: npm run lint
 
       - name: Run targeted AW-1A tests
         id: targeted
         if: steps.install.outcome == 'success'
         continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          npx vitest run --config vitest.unit.config.mjs \
-            lib/i18n/locale-resolution.test.ts \
-            lib/i18n/message-shape.test.ts 2>&1 | tee quality-reports/aw1a/targeted-tests.log
+        run: >-
+          npx vitest run --config vitest.unit.config.mjs
+          lib/i18n/locale-resolution.test.ts
+          lib/i18n/message-shape.test.ts
 
       - name: Run full unit tests
         id: unit
@@ -146,26 +136,19 @@ jobs:
             | grep -E '^ FAIL ' | sed -E 's/^[[:space:]]+//' | sort -u > quality-reports/aw1a/branch-unit-failures.txt
           sed -E 's/\x1B\[[0-9;]*[mK]//g' quality-reports/aw1a/main-unit-tests.log \
             | grep -E '^ FAIL ' | sed -E 's/^[[:space:]]+//' | sort -u > quality-reports/aw1a/main-unit-failures.txt
-          diff -u quality-reports/aw1a/main-unit-failures.txt quality-reports/aw1a/branch-unit-failures.txt \
-            | tee quality-reports/aw1a/unit-baseline-diff.txt
+          diff -u quality-reports/aw1a/main-unit-failures.txt quality-reports/aw1a/branch-unit-failures.txt
 
       - name: Run script tests
         id: scripts
         if: steps.install.outcome == 'success'
         continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          npm run test:scripts 2>&1 | tee quality-reports/aw1a/script-tests.log
+        run: npm run test:scripts
 
       - name: Audit production dependencies
         id: audit
         if: steps.install.outcome == 'success'
         continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          npm audit --omit=dev --audit-level=moderate 2>&1 | tee quality-reports/aw1a/npm-audit.log
+        run: npm audit --omit=dev --audit-level=moderate
 
       - name: Build production application
         id: build
@@ -173,9 +156,9 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           export PLAIVRA_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          npm run build 2>&1 | tee quality-reports/aw1a/build.log
+          npm run build
 
       - name: Validate raw production responses
         id: raw
@@ -184,7 +167,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm run start > quality-reports/aw1a/production-server.log 2>&1 &
+          PORT=3000 npm run start > quality-reports/aw1a/production-server.log 2>&1 &
           server_pid=$!
           trap 'pkill -P "$server_pid" 2>/dev/null || true; kill "$server_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 60); do
@@ -192,7 +175,7 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://localhost:3000/ > /dev/null
-          QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-raw-qa.mjs 2>&1 | tee quality-reports/aw1a/raw-qa.log
+          QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-raw-qa.mjs
 
       - name: Install Playwright Chromium
         id: playwright
@@ -215,7 +198,7 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://localhost:3100/ > /dev/null
-          QA_BASE_URL=http://localhost:3100 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-browser-qa.mjs 2>&1 | tee quality-reports/aw1a/browser-qa.log
+          QA_BASE_URL=http://localhost:3100 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-browser-qa.mjs
 
       - name: Check diff boundaries
         id: boundaries
@@ -228,7 +211,8 @@ jobs:
           test -z "$(git diff --name-only "$AW1A_STARTING_SHA" -- vercel.json)"
           test -z "$(git diff --name-only "$AW1A_STARTING_SHA" -- 'app/(private)/train' components/train components/workouts/session-muscle-load-panel.tsx)"
 
-      - name: Write validation summary
+      - name: Evaluate validation and write report
+        id: evaluate
         if: always()
         shell: bash
         env:
@@ -248,42 +232,13 @@ jobs:
         run: |
           set -euo pipefail
           pass=true
-          for value in "$INSTALL" "$TYPECHECK" "$LINT" "$TARGETED" "$UNIT" "$SCRIPTS" "$AUDIT" "$BUILD" "$RAW" "$PLAYWRIGHT" "$BROWSER" "$BOUNDARIES"; do
+          for value in "$INSTALL" "$TYPECHECK" "$LINT" "$TARGETED" "$SCRIPTS" "$AUDIT" "$BUILD" "$RAW" "$PLAYWRIGHT" "$BROWSER" "$BOUNDARIES"; do
             if [ "$value" != "success" ]; then pass=false; fi
           done
-          {
-            echo '# AW-1A Validation Diagnostics'
-            echo
-            echo "Run ID: $GITHUB_RUN_ID"
-            echo
-            echo '| Check | Outcome |'
-            echo '|---|---|'
-            echo "| npm ci | $INSTALL |"
-            echo "| typecheck | $TYPECHECK |"
-            echo "| lint | $LINT |"
-            echo "| targeted tests | $TARGETED |"
-            echo "| full unit tests | $UNIT |"
-            echo "| starting-main failure parity | $UNIT_BASELINE |"
-            echo "| script tests | $SCRIPTS |"
-            echo "| npm audit | $AUDIT |"
-            echo "| build | $BUILD |"
-            echo "| raw server QA | $RAW |"
-            echo "| Playwright install | $PLAYWRIGHT |"
-            echo "| rendered browser QA | $BROWSER |"
-            echo "| scope boundaries | $BOUNDARIES |"
-            echo
-            for file in quality-reports/aw1a/*.log quality-reports/aw1a/*failures.txt quality-reports/aw1a/unit-baseline-diff.txt quality-reports/aw1a/rendered-browser-debug.json; do
-              [ -f "$file" ] || continue
-              echo "## $(basename "$file") — final output"
-              echo '```text'
-              tail -n 80 "$file"
-              echo '```'
-              echo
-            done
-          } > aw1a-validation-diagnostics.md
-          echo "$pass" > quality-reports/aw1a/pass.txt
+          if [ "$UNIT" != "success" ] && [ "$UNIT_BASELINE" != "success" ]; then pass=false; fi
+          echo "pass=$pass" >> "$GITHUB_OUTPUT"
           if [ "$pass" = true ]; then
-            node scripts/aw1a-report.mjs
+            UNIT_STATUS="$UNIT" UNIT_BASELINE_STATUS="$UNIT_BASELINE" node scripts/aw1a-report.mjs
           fi
 
       - name: Upload validation evidence
@@ -295,30 +250,26 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Commit result to branch
-        if: always()
+      - name: Commit final AW-1A implementation
+        if: steps.evaluate.outputs.pass == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          pass=false
-          if [ -f quality-reports/aw1a/pass.txt ]; then pass="$(cat quality-reports/aw1a/pass.txt)"; fi
+          rm -f \
+            aw1a-validation-diagnostics.md \
+            scripts/aw1a-patch.mjs \
+            scripts/aw1a-raw-qa.mjs \
+            scripts/aw1a-browser-qa.mjs \
+            scripts/aw1a-report.mjs \
+            .github/workflows/aw1a-implementation.yml
+          rm -rf quality-reports/aw1a
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ "$pass" = true ]; then
-            rm -f \
-              aw1a-validation-diagnostics.md \
-              scripts/aw1a-patch.mjs \
-              scripts/aw1a-raw-qa.mjs \
-              scripts/aw1a-browser-qa.mjs \
-              scripts/aw1a-report.mjs \
-              .github/workflows/aw1a-implementation.yml
-            rm -rf quality-reports/aw1a
-            git add -A
-            git diff --cached --check
-            git commit -m "feat(i18n): establish multilingual request foundation"
-          else
-            git add aw1a-validation-diagnostics.md
-            git commit -m "chore(i18n): record AW-1A validation diagnostics"
-          fi
+          git add -A
+          git diff --cached --check
+          git commit -m "feat(i18n): establish multilingual request foundation"
           git push origin HEAD:feat/active-workout-aw1a-language-foundation
-          if [ "$pass" != true ]; then exit 1; fi
+
+      - name: Fail incomplete validation
+        if: steps.evaluate.outputs.pass != 'true'
+        run: exit 1
