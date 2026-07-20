@@ -52,23 +52,35 @@ jobs:
           node scripts/aw1b-apply.mjs 2>&1 | tee aw1b-apply.log
 
       - name: Typecheck
-        run: npm run typecheck
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee aw1b-typecheck.log
 
       - name: Lint
-        run: npm run lint
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee aw1b-lint.log
 
       - name: I18n contract
-        run: npm run test:i18n
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:i18n 2>&1 | tee aw1b-i18n.log
 
       - name: Build
-        run: npm run build
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee aw1b-build.log
 
       - name: Upload implementation diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: aw1b-implementation-${{ github.run_id }}
-          path: aw1b-apply.log
+          path: aw1b-*.log
           if-no-files-found: warn
           retention-days: 7
 
