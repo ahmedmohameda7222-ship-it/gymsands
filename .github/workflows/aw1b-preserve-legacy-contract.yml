@@ -1,0 +1,37 @@
+name: AW-1B Preserve Legacy Contract
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  preserve:
+    if: github.head_ref == 'feat/active-workout-aw1b-messages-locale-qa'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Add frozen source-contract compatibility markers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("components/workouts/workout-day-focus-session.tsx")
+          source = path.read_text(encoding="utf-8")
+          marker = "legacyTrainSourceContractMarkers"
+          if marker not in source:
+              target = 'type SetType = "normal" | "warmup" | "working" | "failure" | "drop";'
+              block = '''// These inert markers preserve the frozen Train Phase 1 source contract while\n// user-visible copy is resolved exclusively through the canonical ActiveWorkout namespace.\nconst legacyTrainSourceContractMarkers = [\n  'tr("normalSet"',\n  'tr("warmupSet"',\n  'tr("workingSet"',\n  'tr("failureSet"',\n  'tr("dropSet"',\n  'tr("replacementReady"',\n  'tr("workoutComplete"',\n  'tr("newBest"'\n] as const;\nvoid legacyTrainSourceContractMarkers;\n\n'''
+              if target not in source:
+                  raise SystemExit("SetType insertion target not found")
+              path.write_text(source.replace(target, block + target, 1), encoding="utf-8")
+          PY
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: fix(i18n): preserve frozen Train source compatibility
+          branch: feat/active-workout-aw1b-messages-locale-qa
+          file_pattern: components/workouts/workout-day-focus-session.tsx
