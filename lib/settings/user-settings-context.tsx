@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import type { LanguagePreference } from "@/lib/i18n/config";
 import { isThemeId, legacyThemeCacheKey, themeCacheKey } from "@/lib/themes";
 import {
   defaultUserAppSettings,
@@ -21,8 +22,12 @@ type UserSettingsContextValue = {
   resetSettings: () => Promise<UserAppSettings>;
 };
 
+type UserSettingsProviderProps = {
+  children: React.ReactNode;
+  initialLanguagePreference: LanguagePreference;
+};
+
 const UserSettingsContext = createContext<UserSettingsContextValue | null>(null);
-const languageCacheKey = "plaivra.language.v1";
 
 function readCachedThemeId() {
   if (typeof window === "undefined") return null;
@@ -44,25 +49,6 @@ function cacheThemeId(themeId: UserAppSettings["themeId"]) {
   }
 }
 
-function readCachedLanguage(): "en" | "ar" | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const cached = window.localStorage.getItem(languageCacheKey);
-    return cached === "en" || cached === "ar" ? cached : null;
-  } catch {
-    return null;
-  }
-}
-
-function cacheLanguage(language: UserAppSettings["language"]) {
-  if (typeof window === "undefined" || (language !== "en" && language !== "ar")) return;
-  try {
-    window.localStorage.setItem(languageCacheKey, language);
-  } catch {
-    // The in-memory preference still applies when local storage is unavailable.
-  }
-}
-
 function withUser(settings: UserAppSettings, userId: string | null | undefined) {
   return { ...settings, userId: userId ?? settings.userId };
 }
@@ -72,22 +58,29 @@ function withCachedTheme(settings: UserAppSettings) {
   return cachedThemeId ? { ...settings, themeId: cachedThemeId } : settings;
 }
 
-function withCachedPublicPreferences(settings: UserAppSettings) {
-  const themed = withCachedTheme(settings);
-  const cachedLanguage = readCachedLanguage();
-  return cachedLanguage ? { ...themed, language: cachedLanguage } : themed;
+function withInitialPublicPreferences(
+  settings: UserAppSettings,
+  initialLanguagePreference: LanguagePreference
+): UserAppSettings {
+  return {
+    ...withCachedTheme(settings),
+    language: initialLanguagePreference
+  };
 }
 
-export function UserSettingsProvider({ children }: { children: React.ReactNode }) {
+export function UserSettingsProvider({ children, initialLanguagePreference }: UserSettingsProviderProps) {
   const { user, isLoading } = useAuth();
   const { toast } = useToast();
-  const [settings, setSettings] = useState<UserAppSettings>(defaultUserAppSettings);
+  const [settings, setSettings] = useState<UserAppSettings>(() => ({
+    ...defaultUserAppSettings,
+    language: initialLanguagePreference
+  }));
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    setSettings((current) => withCachedPublicPreferences(current));
+    setSettings((current) => withCachedTheme(current));
   }, []);
 
   useEffect(() => {
@@ -96,7 +89,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
     async function load() {
       if (isLoading) return;
       if (!user?.id) {
-        setSettings(withCachedPublicPreferences(defaultUserAppSettings));
+        setSettings(withInitialPublicPreferences(defaultUserAppSettings, initialLanguagePreference));
         setIsLoadingSettings(false);
         return;
       }
@@ -106,13 +99,16 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
       try {
         const loaded = await getUserAppSettings(user.id);
         cacheThemeId(loaded.themeId);
-        const preferred = withCachedPublicPreferences(loaded);
-        cacheLanguage(preferred.language);
-        if (mounted) setSettings(preferred);
+        const accountAuthoritative = {
+          ...withCachedTheme(loaded),
+          language: loaded.language
+        };
+        if (mounted) setSettings(accountAuthoritative);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Settings could not be loaded.";
         if (mounted) {
-          setSettings(withUser(withCachedPublicPreferences(defaultUserAppSettings), user.id));
+          const fallback = withInitialPublicPreferences(defaultUserAppSettings, initialLanguagePreference);
+          setSettings(withUser(fallback, user.id));
           setSaveError(message);
         }
         toast({ title: "Settings could not be loaded", description: message, variant: "error" });
@@ -126,7 +122,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
     return () => {
       mounted = false;
     };
-  }, [isLoading, toast, user?.id]);
+  }, [initialLanguagePreference, isLoading, toast, user?.id]);
 
   const updateSettings = useCallback(
     async (patch: Partial<UserAppSettings>) => {
@@ -135,14 +131,12 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
 
       setSettings(optimistic);
       cacheThemeId(optimistic.themeId);
-      cacheLanguage(optimistic.language);
       if (!user?.id) return optimistic;
       setIsSavingSettings(true);
       setSaveError(null);
       try {
         const saved = await upsertUserAppSettings(user.id, patch);
         cacheThemeId(saved.themeId);
-        cacheLanguage(saved.language);
         setSettings(saved);
         return saved;
       } catch (error) {
@@ -162,17 +156,15 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
   const resetSettings = useCallback(async () => {
     if (!user?.id) throw new Error("Sign in required to reset settings.");
     const previous = settings;
-      const optimistic = withUser(defaultUserAppSettings, user.id);
+    const optimistic = withUser(defaultUserAppSettings, user.id);
 
     setSettings(optimistic);
-      cacheThemeId(optimistic.themeId);
-      cacheLanguage(optimistic.language);
+    cacheThemeId(optimistic.themeId);
     setIsSavingSettings(true);
     setSaveError(null);
     try {
       const saved = await resetUserAppSettings(user.id);
       cacheThemeId(saved.themeId);
-      cacheLanguage(saved.language);
       setSettings(saved);
       return saved;
     } catch (error) {
