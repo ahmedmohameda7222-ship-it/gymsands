@@ -88,13 +88,19 @@ select pg_temp.assert_true(
   'Owner cannot read the plan-day execution-state row.'
 );
 
--- Deterministic unfinished cursor: complete first set then refresh initialization idempotently.
-update public.exercise_logs
-set completed_at = clock_timestamp(), reps = 8
-where workout_session_id = :'plan_session_id'::uuid
-  and exercise_order = 1
-  and set_number = 1;
+-- Deterministic unfinished cursor: complete the first set, then prove initialization is idempotent.
+insert into public.exercise_logs (
+  workout_session_id, plan_exercise_id, exercise_order, exercise_name,
+  planned_sets, set_number, reps, completed_at, set_type, source
+) values (
+  :'plan_session_id'::uuid, 'a2000000-0000-4000-8000-000000000012', 1,
+  'AW-2A first', 3, 1, 8, clock_timestamp(), 'working', 'manual'
+);
+reset role;
 select private.initialize_workout_session_execution_state(:'plan_session_id'::uuid, 'session_start', clock_timestamp());
+set local role authenticated;
+select set_config('request.jwt.claim.sub', :'owner_id', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
 select pg_temp.assert_true(
   (select active_item_order = 1 and active_set_number = 1 from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid),
   'Idempotent initialization rewrote the existing cursor.'
@@ -216,10 +222,15 @@ select pg_temp.assert_rejected(
   array['23514'], 'Caller-controlled revision unexpectedly succeeded.'
 );
 
--- Complete all work then prove review initialization for a fresh legacy/open fixture.
-update public.exercise_logs
-set completed_at = clock_timestamp(), reps = coalesce(reps, 8)
-where workout_session_id = :'plan_session_id'::uuid;
+-- Complete all remaining work then prove review initialization for a fresh legacy/open fixture.
+insert into public.exercise_logs (
+  workout_session_id, plan_exercise_id, exercise_order, exercise_name,
+  planned_sets, set_number, reps, completed_at, set_type, source
+) values
+  (:'plan_session_id'::uuid, 'a2000000-0000-4000-8000-000000000012', 1, 'AW-2A first', 3, 2, 8, clock_timestamp(), 'working', 'manual'),
+  (:'plan_session_id'::uuid, 'a2000000-0000-4000-8000-000000000012', 1, 'AW-2A first', 3, 3, 8, clock_timestamp(), 'working', 'manual'),
+  (:'plan_session_id'::uuid, 'a2000000-0000-4000-8000-000000000013', 2, 'AW-2A second', 2, 1, 10, clock_timestamp(), 'working', 'manual'),
+  (:'plan_session_id'::uuid, 'a2000000-0000-4000-8000-000000000013', 2, 'AW-2A second', 2, 2, 10, clock_timestamp(), 'working', 'manual');
 delete from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid;
 select private.initialize_workout_session_execution_state(:'plan_session_id'::uuid, 'legacy_backfill', clock_timestamp());
 select pg_temp.assert_true(
