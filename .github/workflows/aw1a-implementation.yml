@@ -86,7 +86,9 @@ jobs:
 
       - name: Apply compatibility patch idempotently
         if: steps.install.outcome == 'success'
-        run: node scripts/aw1a-patch.mjs
+        run: |
+          node scripts/aw1a-patch.mjs
+          rm -f aw1a-validation-diagnostics.md
 
       - name: Typecheck
         id: typecheck
@@ -186,11 +188,11 @@ jobs:
           server_pid=$!
           trap 'pkill -P "$server_pid" 2>/dev/null || true; kill "$server_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:3000/ > /dev/null; then break; fi
+            if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
             sleep 1
           done
-          curl --fail --silent http://127.0.0.1:3000/ > /dev/null
-          QA_BASE_URL=http://127.0.0.1:3000 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-raw-qa.mjs 2>&1 | tee quality-reports/aw1a/raw-qa.log
+          curl --fail --silent http://localhost:3000/ > /dev/null
+          QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-raw-qa.mjs 2>&1 | tee quality-reports/aw1a/raw-qa.log
 
       - name: Install Playwright Chromium
         id: playwright
@@ -209,11 +211,11 @@ jobs:
           server_pid=$!
           trap 'pkill -P "$server_pid" 2>/dev/null || true; kill "$server_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:3100/ > /dev/null; then break; fi
+            if curl --fail --silent http://localhost:3100/ > /dev/null; then break; fi
             sleep 1
           done
-          curl --fail --silent http://127.0.0.1:3100/ > /dev/null
-          QA_BASE_URL=http://127.0.0.1:3100 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-browser-qa.mjs 2>&1 | tee quality-reports/aw1a/browser-qa.log
+          curl --fail --silent http://localhost:3100/ > /dev/null
+          QA_BASE_URL=http://localhost:3100 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-browser-qa.mjs 2>&1 | tee quality-reports/aw1a/browser-qa.log
 
       - name: Check diff boundaries
         id: boundaries
@@ -270,7 +272,7 @@ jobs:
             echo "| rendered browser QA | $BROWSER |"
             echo "| scope boundaries | $BOUNDARIES |"
             echo
-            for file in quality-reports/aw1a/*.log quality-reports/aw1a/*failures.txt quality-reports/aw1a/unit-baseline-diff.txt; do
+            for file in quality-reports/aw1a/*.log quality-reports/aw1a/*failures.txt quality-reports/aw1a/unit-baseline-diff.txt quality-reports/aw1a/rendered-browser-debug.json; do
               [ -f "$file" ] || continue
               echo "## $(basename "$file") — final output"
               echo '```text'
