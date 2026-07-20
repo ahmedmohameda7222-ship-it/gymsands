@@ -50,6 +50,7 @@ import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
 import { OpenAiBlossom } from "@/components/brand/openai-blossom";
 import { useTrainTranslation } from "@/lib/i18n/train";
 import { ExercisePickerDialog } from "@/components/workouts/exercise-picker-dialog";
+import { SessionMuscleLoadPanel } from "@/components/workouts/session-muscle-load-panel";
 
 type SetType = "normal" | "warmup" | "working" | "failure" | "drop";
 
@@ -377,7 +378,7 @@ function buildSummary(states: ExerciseState[], history: WorkoutSessionSummary[],
 export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { dir, locale, tr } = useTrainTranslation();
+  const { language, dir, locale, tr } = useTrainTranslation();
   const { celebrate } = useSuccessFeedback();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [startedAtMs, setStartedAtMs] = useState(() => Date.now());
@@ -403,6 +404,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const [setFeedback, setSetFeedback] = useState("");
   const [setFeedbackVariant, setSetFeedbackVariant] = useState<"info" | "error">("info");
   const [prFeedback, setPrFeedback] = useState("");
+  const [muscleLoadRevision, setMuscleLoadRevision] = useState(0);
   const workoutTimerKey = useMemo(() => workoutStorageKey(["workout-day-session", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const restTimerKey = useMemo(() => workoutStorageKey(["workout-day-rest-timer", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const [timerEndsAtMs, setTimerEndsAtMs] = useState<number | null>(null);
@@ -655,6 +657,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
     try {
       await persistProgress(nextStates);
+      setMuscleLoadRevision((current) => current + 1);
       setSetFeedbackVariant("info");
       setSetFeedback(tr("setSaved", { set: targetSet.setNumber, reps: targetSet.reps || "-", weight: targetSet.weightKg || "0" }));
       const currentWeight = toNumberOrNull(targetSet.weightKg) ?? 0;
@@ -688,6 +691,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     setExerciseStates(nextStates);
     try {
       await persistProgress(nextStates);
+      setMuscleLoadRevision((current) => current + 1);
       setSetFeedbackVariant("info");
       setSetFeedback(tr("setReopened"));
     } catch (error) {
@@ -734,6 +738,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     setIsSavingAlternative(true);
     try {
       await replaceWorkoutSessionExercise(user.id, session.id, activeExercise.exercise.id, replacement);
+      setMuscleLoadRevision((current) => current + 1);
       setExerciseStates((current) => current.map((item, index) => index === activeExerciseIndex
         ? { ...item, exercise: { ...item.exercise, exercise_name: replacement.name } }
         : item));
@@ -861,6 +866,8 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
           );
         })}
       </div>
+
+      {session ? <SessionMuscleLoadPanel sessionId={session.id} language={language} refreshRevision={muscleLoadRevision} /> : null}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="space-y-4">

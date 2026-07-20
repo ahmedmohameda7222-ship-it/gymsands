@@ -87,6 +87,7 @@ export type CompletedLog = {
   plan_exercise_id: string | null;
   exercise_order: number | null;
   completed_at: string | null;
+  set_type?: "normal" | "warmup" | "working" | "failure" | "drop" | null;
 };
 
 export type BuildSessionMuscleAnalysisInput = {
@@ -200,23 +201,35 @@ function completedSetCount(item: SessionMuscleSnapshotItem, logs: CompletedLog[]
   )).length;
 }
 
+function activeQualifyingSetCount(item: SessionMuscleSnapshotItem, logs: CompletedLog[]) {
+  return logs.filter((log) => Boolean(log.completed_at) && log.set_type !== "warmup" && (
+    item.source_plan_exercise_id
+      ? log.plan_exercise_id === item.source_plan_exercise_id
+      : log.plan_exercise_id === null && log.exercise_order === item.item_order
+  )).length;
+}
+
 function buildV1SessionMuscleAnalysis(input: BuildSessionMuscleAnalysisInput): SessionMuscleAnalysis {
   const mappings = new Map(input.globalMappings.map((mapping) => [mapping.id, mapping]));
   const workItems = [...input.items].sort((left, right) => left.item_order - right.item_order || compareText(left.id, right.id)).map((item) => {
-    const useActual = input.mode === "completed" && item.actual_target_type !== null;
+    const useActual = input.mode !== "planned" && item.actual_target_type !== null;
     const targetType = useActual ? item.actual_target_type : item.planned_target_type;
     const mapping = targetType === "global_exercise"
       ? globalMappingFor(item, useActual, mappings)
       : targetType === "custom_exercise"
         ? customMappingFor(item, useActual)
         : null;
-    const completedSets = input.mode === "completed" ? completedSetCount(item, input.completedLogs) : 0;
+    const performedSets = input.mode === "planned"
+      ? 0
+      : input.mode === "active"
+        ? activeQualifyingSetCount(item, input.completedLogs)
+        : completedSetCount(item, input.completedLogs);
     const hasSupportedSetWorkload = input.mode === "planned"
       ? item.planned_sets !== null
-      : item.state === "skipped" || item.planned_sets !== null || completedSets > 0;
+      : item.state === "skipped" || item.planned_sets !== null || performedSets > 0;
     const qualifyingSets = input.mode === "planned"
       ? item.planned_sets ?? 0
-      : item.state === "skipped" ? 0 : completedSets;
+      : item.state === "skipped" ? 0 : performedSets;
     return {
       itemId: item.id,
       mapping,
@@ -281,6 +294,9 @@ export async function getWorkoutSessionMuscleAnalysis(
   if (mode === "completed" && !["completed", "skipped"].includes(sessionResult.data?.status ?? "")) {
     throw new SessionMuscleAnalysisError("session_not_terminal", "Completed analysis is available after the workout is completed or skipped.", 409);
   }
+  if (mode === "active" && sessionResult.data?.status !== "started") {
+    throw new SessionMuscleAnalysisError("session_not_active", "Active muscle load is available only while the workout is in progress.", 409);
+  }
 
   const itemsResult = await supabase
     .from("workout_session_muscle_snapshot_items")
@@ -309,10 +325,10 @@ export async function getWorkoutSessionMuscleAnalysis(
   }
 
   let completedLogs: CompletedLog[] = [];
-  if (mode === "completed" && snapshotVersion === "v1") {
+  if (mode === "active" || (mode === "completed" && snapshotVersion === "v1")) {
     const logsResult = await supabase
       .from("exercise_logs")
-      .select("plan_exercise_id,exercise_order,completed_at")
+      .select("plan_exercise_id,exercise_order,completed_at,set_type")
       .eq("workout_session_id", sessionId);
     if (logsResult.error) throw new SessionMuscleAnalysisError("snapshot_read_failed", "Completed workout sets could not be loaded.", 503);
     completedLogs = (logsResult.data ?? []) as CompletedLog[];

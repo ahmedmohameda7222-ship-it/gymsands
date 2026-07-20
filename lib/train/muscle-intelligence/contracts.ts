@@ -4,7 +4,7 @@ import { MUSCLE_MAPPING_SCHEMA_VERSION, RESISTANCE_SETS_WORKLOAD_MODEL } from ".
 export const MUSCLE_ROLES = ["primary", "secondary", "stabilizer"] as const;
 export const MUSCLE_CONTRIBUTIONS = [1, 0.75, 0.5, 0.25, 0] as const;
 export const MUSCLE_SIDE_SCOPES = ["bilateral", "left", "right"] as const;
-export const MUSCLE_ANALYSIS_MODES = ["planned", "completed"] as const;
+export const MUSCLE_ANALYSIS_MODES = ["planned", "active", "completed"] as const;
 export const MUSCLE_ANALYSIS_COMPLETENESS = ["complete", "partial", "limited", "unavailable"] as const;
 export const MUSCLE_LOAD_LEVELS = ["inactive", "low", "medium", "high", "very_high"] as const;
 

@@ -13,8 +13,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const context = await requireUser(request);
   if (context instanceof NextResponse) return context;
   const mode = new URL(request.url).searchParams.get("mode") ?? "planned";
-  if (mode !== "planned" && mode !== "completed") {
-    return NextResponse.json({ error: "Analysis mode must be planned or completed.", code: "invalid_analysis_mode" }, { status: 400 });
+  if (mode !== "planned" && mode !== "active" && mode !== "completed") {
+    return NextResponse.json({ error: "Analysis mode must be planned, active, or completed.", code: "invalid_analysis_mode" }, { status: 400 });
   }
   const { id } = await params;
   if (!isUuid(id)) {
