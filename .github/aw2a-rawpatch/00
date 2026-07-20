@@ -1,0 +1,76 @@
+diff --git a/.github/workflows/aw2a-workspace-export.yml b/.github/workflows/aw2a-workspace-export.yml
+index 9f4e742..07fa241 100644
+--- a/.github/workflows/aw2a-workspace-export.yml
++++ b/.github/workflows/aw2a-workspace-export.yml
+@@ -84,7 +84,6 @@ jobs:
+           set -e
+ 
+       - name: Prove no new unit failure identity
+-        continue-on-error: true
+         shell: bash
+         run: |
+           python - <<'PY'
+diff --git a/components/workouts/workout-day-focus-session.tsx b/components/workouts/workout-day-focus-session.tsx
+index c44cc31..4fd4f06 100644
+--- a/components/workouts/workout-day-focus-session.tsx
++++ b/components/workouts/workout-day-focus-session.tsx
+@@ -1,6 +1,6 @@
+ "use client";
+ 
+-import { useEffect, useMemo, useRef, useState } from "react";
++import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+ import {
+   ArrowLeft,
+   Check,
+@@ -480,7 +480,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+   const executionWriteRef = useRef<Promise<unknown>>(Promise.resolve());
+   const controllerDeviceIdRef = useRef<string | null>(null);
+ 
+-  function mirrorExecutionState(next: WorkoutSessionExecutionState) {
++  const mirrorExecutionState = useCallback((next: WorkoutSessionExecutionState) => {
+     setExecutionState(next);
+     const now = Date.now();
+     const derivedStartedAt = executionStartedAtMs(next, now);
+@@ -510,12 +510,12 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+         controllerDeviceId: controllerDeviceIdRef.current
+       }, now));
+     }
+-  }
++  }, [day.day_name, day.id, restTimerKey, user, workoutTimerKey]);
+ 
+-  function queueExecutionWrite(
++  const queueExecutionWrite = useCallback((
+     write: () => Promise<WorkoutSessionExecutionState>,
+     rollback?: () => void
+-  ) {
++  ) => {
+     const operation = executionWriteRef.current.then(write);
+     executionWriteRef.current = operation.then(
+       (next) => { mirrorExecutionState(next); },
+@@ -527,7 +527,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+       }
+     );
+     return operation;
+-  }
++  }, [mirrorExecutionState, toast, tr]);
+ 
+   useEffect(() => {
+     let active = true;
+@@ -573,14 +573,16 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+           } catch (error) {
+             console.warn("Plaivra could not import the optional legacy workout timer cache.", error);
+           }
+-        } else if (controllerDeviceIdRef.current && persistedState.controller_device_id !== controllerDeviceIdRef.current) {
++        }
++
++        if (controllerDeviceIdRef.current && authoritativeState.controller_device_id !== controllerDeviceIdRef.current) {
+           authoritativeState = await queueExecutionWrite(() => persistWorkoutSessionCursor(
+             user.id,
+             nextSession.id,
+             {
+-              snapshotItemId: persistedState.active_snapshot_item_id,
+-              itemOrder: persistedState.active_item_order,
+-              setNumber: persistedState.active_set_number,
++              snapshotItemId: authoritativeState.active_snapshot_item_id,
++              itemOrder: authoritativeState.active_item_order,
++              setNumber: au
