@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: aw1a-implementation-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   implement-and-validate:
@@ -45,8 +45,6 @@ jobs:
           git fetch origin main:refs/remotes/origin/main
           test "$(git merge-base HEAD origin/main)" = "$AW1A_STARTING_SHA"
           test "$(git rev-parse origin/main)" = "$AW1A_STARTING_SHA"
-          git status --short
-          git rev-parse HEAD
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -54,7 +52,17 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Install locked dependencies
+        id: install
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p quality-reports/aw1a
+          npm ci 2>&1 | tee quality-reports/aw1a/npm-ci.log
+
       - name: Record required repository inspection
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
@@ -76,28 +84,32 @@ jobs:
             rg -n "middleware|proxy" --glob 'middleware.*' --glob 'proxy.*' . || true
           } | tee quality-reports/aw1a/required-inspection.txt
 
-      - name: Apply narrow legacy compatibility patches
+      - name: Apply compatibility patch idempotently
+        if: steps.install.outcome == 'success'
         run: node scripts/aw1a-patch.mjs
 
-      - name: Install next-intl only
-        shell: bash
-        run: |
-          set -o pipefail
-          npm install next-intl@4.13.2 --save 2>&1 | tee quality-reports/aw1a/npm-install.log
-
       - name: Typecheck
+        id: typecheck
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
           npm run typecheck 2>&1 | tee quality-reports/aw1a/typecheck.log
 
       - name: Lint
+        id: lint
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
           npm run lint 2>&1 | tee quality-reports/aw1a/lint.log
 
       - name: Run targeted AW-1A tests
+        id: targeted
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
@@ -106,24 +118,36 @@ jobs:
             lib/i18n/message-shape.test.ts 2>&1 | tee quality-reports/aw1a/targeted-tests.log
 
       - name: Run full unit tests
+        id: unit
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
           npm run test:unit 2>&1 | tee quality-reports/aw1a/unit-tests.log
 
       - name: Run script tests
+        id: scripts
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
           npm run test:scripts 2>&1 | tee quality-reports/aw1a/script-tests.log
 
       - name: Audit production dependencies
+        id: audit
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
           npm audit --omit=dev --audit-level=moderate 2>&1 | tee quality-reports/aw1a/npm-audit.log
 
       - name: Build production application
+        id: build
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
@@ -131,6 +155,9 @@ jobs:
           npm run build 2>&1 | tee quality-reports/aw1a/build.log
 
       - name: Validate raw production responses
+        id: raw
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -145,9 +172,15 @@ jobs:
           QA_BASE_URL=http://127.0.0.1:3000 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-raw-qa.mjs 2>&1 | tee quality-reports/aw1a/raw-qa.log
 
       - name: Install Playwright Chromium
+        id: playwright
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
         run: npx playwright install --with-deps chromium
 
       - name: Validate rendered reconciliation
+        id: browser
+        if: steps.build.outcome == 'success' && steps.playwright.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -161,7 +194,9 @@ jobs:
           curl --fail --silent http://127.0.0.1:3000/ > /dev/null
           QA_BASE_URL=http://127.0.0.1:3000 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-browser-qa.mjs 2>&1 | tee quality-reports/aw1a/browser-qa.log
 
-      - name: Check final diff integrity
+      - name: Check diff boundaries
+        id: boundaries
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -170,32 +205,95 @@ jobs:
           test -z "$(git diff --name-only "$AW1A_STARTING_SHA" -- vercel.json)"
           test -z "$(git diff --name-only "$AW1A_STARTING_SHA" -- 'app/(private)/train' components/train components/workouts/session-muscle-load-panel.tsx)"
 
-      - name: Generate implementation report
-        run: node scripts/aw1a-report.mjs
+      - name: Write validation summary
+        if: always()
+        shell: bash
+        env:
+          INSTALL: ${{ steps.install.outcome }}
+          TYPECHECK: ${{ steps.typecheck.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          TARGETED: ${{ steps.targeted.outcome }}
+          UNIT: ${{ steps.unit.outcome }}
+          SCRIPTS: ${{ steps.scripts.outcome }}
+          AUDIT: ${{ steps.audit.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          RAW: ${{ steps.raw.outcome }}
+          PLAYWRIGHT: ${{ steps.playwright.outcome }}
+          BROWSER: ${{ steps.browser.outcome }}
+          BOUNDARIES: ${{ steps.boundaries.outcome }}
+        run: |
+          set -euo pipefail
+          pass=true
+          for value in "$INSTALL" "$TYPECHECK" "$LINT" "$TARGETED" "$UNIT" "$SCRIPTS" "$AUDIT" "$BUILD" "$RAW" "$PLAYWRIGHT" "$BROWSER" "$BOUNDARIES"; do
+            if [ "$value" != "success" ]; then pass=false; fi
+          done
+          {
+            echo '# AW-1A Validation Diagnostics'
+            echo
+            echo "Run ID: $GITHUB_RUN_ID"
+            echo
+            echo '| Check | Outcome |'
+            echo '|---|---|'
+            echo "| npm ci | $INSTALL |"
+            echo "| typecheck | $TYPECHECK |"
+            echo "| lint | $LINT |"
+            echo "| targeted tests | $TARGETED |"
+            echo "| full unit tests | $UNIT |"
+            echo "| script tests | $SCRIPTS |"
+            echo "| npm audit | $AUDIT |"
+            echo "| build | $BUILD |"
+            echo "| raw server QA | $RAW |"
+            echo "| Playwright install | $PLAYWRIGHT |"
+            echo "| rendered browser QA | $BROWSER |"
+            echo "| scope boundaries | $BOUNDARIES |"
+            echo
+            for file in quality-reports/aw1a/*.log; do
+              [ -f "$file" ] || continue
+              echo "## $(basename "$file") — final output"
+              echo '```text'
+              tail -n 80 "$file"
+              echo '```'
+              echo
+            done
+          } > aw1a-validation-diagnostics.md
+          echo "$pass" > quality-reports/aw1a/pass.txt
+          if [ "$pass" = true ]; then
+            node scripts/aw1a-report.mjs
+          fi
 
       - name: Upload validation evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: aw1a-validation-${{ github.run_id }}
           path: quality-reports/aw1a/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
-      - name: Remove temporary execution files and commit implementation
+      - name: Commit result to branch
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
-          rm -f \
-            scripts/aw1a-patch.mjs \
-            scripts/aw1a-raw-qa.mjs \
-            scripts/aw1a-browser-qa.mjs \
-            scripts/aw1a-report.mjs \
-            .github/workflows/aw1a-implementation.yml
-          rm -rf quality-reports/aw1a
+          pass=false
+          if [ -f quality-reports/aw1a/pass.txt ]; then pass="$(cat quality-reports/aw1a/pass.txt)"; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          git commit -m "feat(i18n): establish multilingual request foundation"
+          if [ "$pass" = true ]; then
+            rm -f \
+              aw1a-validation-diagnostics.md \
+              scripts/aw1a-patch.mjs \
+              scripts/aw1a-raw-qa.mjs \
+              scripts/aw1a-browser-qa.mjs \
+              scripts/aw1a-report.mjs \
+              .github/workflows/aw1a-implementation.yml
+            rm -rf quality-reports/aw1a
+            git add -A
+            git diff --cached --check
+            git commit -m "feat(i18n): establish multilingual request foundation"
+          else
+            git add aw1a-validation-diagnostics.md
+            git commit -m "chore(i18n): record AW-1A validation diagnostics"
+          fi
           git push origin HEAD:feat/active-workout-aw1a-language-foundation
-          test -z "$(git status --porcelain)"
+          if [ "$pass" != true ]; then exit 1; fi
