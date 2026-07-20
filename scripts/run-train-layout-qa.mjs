@@ -69,12 +69,34 @@ function intersects(a, b) {
 async function openScenario({ viewport, scenario, language = "en", route, step = null, theme = "light", catalogScenario = "success", zoom = 1, openPicker = false, keyboardCheck = false, mobileKeyboard = false, variant = "default" }) {
   const renderedViewport = zoom === 1 ? viewport : { ...viewport, width: Math.max(160, Math.floor(viewport.width / zoom)), height: Math.max(284, Math.floor(viewport.height / zoom)) };
   const context = await browser.newContext({ viewport: renderedViewport, reducedMotion: "reduce", colorScheme: theme });
+  await context.addCookies([{ name: "plaivra.language.v1", value: language, url: baseUrl, sameSite: "Lax" }]);
   await context.route("**/api/activity-catalog/**", async (requestRoute) => {
     const url = new URL(requestRoute.request().url());
     await requestRoute.fulfill({ status: 200, contentType: "application/json", headers: { "cache-control": "private, no-store", "x-plaivra-qa-fixture": catalogScenario }, body: JSON.stringify(catalogPayload(url, catalogScenario)) });
   });
   await context.route(/^https:\/\/[^/]+\.supabase\.co\//, async (requestRoute) => {
     const method = requestRoute.request().method();
+    const requestUrl = new URL(requestRoute.request().url());
+    if (requestUrl.pathname.includes("/rest/v1/user_app_settings") && (method === "GET" || method === "HEAD")) {
+      const wantsObject = (requestRoute.request().headers().accept || "").includes("application/vnd.pgrst.object");
+      const now = "2026-07-20T00:00:00.000Z";
+      const row = {
+        id: "22222222-2222-4222-8222-222222222222",
+        user_id: "00000000-0000-4000-8000-000000000001",
+        theme_id: "olive", theme: "light", accent_color: "olive", language,
+        weight_unit: "kg", height_unit: "cm", distance_unit: "km", liquid_unit: "ml",
+        energy_unit: "kcal", body_measurement_unit: "cm", week_starts_on: "monday",
+        default_start_page: "today", compact_mode: false, reduce_animations: true, large_text_mode: false,
+        quick_log_sections: ["workout"], created_at: now, updated_at: now
+      };
+      await requestRoute.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "content-range": "0-0/1", "x-plaivra-qa-fixture": "localized-settings" },
+        body: method === "HEAD" ? "" : JSON.stringify(wantsObject ? row : [row])
+      });
+      return;
+    }
     let body = {};
     if (method !== "GET" && method !== "HEAD") {
       try { body = requestRoute.request().postDataJSON(); } catch { body = {}; }
@@ -92,6 +114,7 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
   const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "domcontentloaded", timeout: 45_000 });
   const isSessionRoute = route.startsWith("/workouts/session");
   await page.waitForSelector(isSessionRoute ? "main#main-content" : "[data-app-shell]", { timeout: 20_000 });
+  await page.waitForFunction((expected) => document.documentElement.lang === expected, language, { timeout: 20_000 });
   // Next's development chrome is not application UI and can intercept
   // otherwise valid keyboard/pointer verification paths.
   await page.evaluate(() => document.querySelectorAll("nextjs-portal").forEach((element) => element.remove()));

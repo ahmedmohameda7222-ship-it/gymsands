@@ -65,6 +65,6 @@ describe("Muscle Intelligence Phase 4C.2", () => {
 
   it("keeps tiny-screen Train actions clear of the active workout controller", () => {
     const trainUi = text("components/workouts/train-ui.tsx");
-    expect(trainUi).toContain("max-[340px]:pb-[var(--active-workout-controller-height,0px)]");
+    expect(trainUi).toContain("max-[340px]:pb-[var(--active-workout-controller-height)]");
   });
 });
