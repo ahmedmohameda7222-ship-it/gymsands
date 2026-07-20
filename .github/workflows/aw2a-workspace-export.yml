@@ -1,32 +1,60 @@
-name: AW-2A Apply Account Deletion Fixture Fix
+name: AW-2A DB Diagnostic
 
 on:
   pull_request:
     branches: [main]
-
 permissions:
-  contents: write
-
+  contents: read
+concurrency:
+  group: aw2a-db-diagnostic-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 jobs:
-  apply:
+  diagnose:
     if: github.head_ref == 'feat/active-workout-aw2a-persisted-execution-state'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-      - name: Apply reviewed account deletion fixture correction
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+      - name: Replay migration chain and capture diagnostics
         shell: bash
         run: |
           set -euo pipefail
-          python -c 'from pathlib import Path; p=Path("supabase/verification/active-workout-aw2a-integration.sql"); t=p.read_text(); old="insert into public.account_deletion_jobs (id,user_id,state,stage,created_at,updated_at)\nvalues (\x27a2000000-0000-4000-8000-000000000030\x27, :\x27delete_member_id\x27::uuid, \x27processing\x27, \x27deleting_database\x27, now(), now());"; new="insert into public.account_deletion_jobs (\n  id,user_id,subject_hash,idempotency_key_hash,state,stage,attempt_count,locked_at,created_at,updated_at\n) values (\n  \x27a2000000-0000-4000-8000-000000000030\x27, :\x27delete_member_id\x27::uuid,\n  \x27aw2a-subject-a2000000-0000-4000-8000-000000000003\x27,\n  \x27aw2a-idempotency-a2000000-0000-4000-8000-000000000003\x27,\n  \x27processing\x27, \x27deleting_database\x27, 1, clock_timestamp(), now(), now()\n);"; p.write_text(t.replace(old,new))'
-          if git diff --quiet -- supabase/verification/active-workout-aw2a-integration.sql; then
-            exit 0
-          fi
-          git add supabase/verification/active-workout-aw2a-integration.sql
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'test(database): align AW-2A account deletion fixture'
-          git push origin HEAD:feat/active-workout-aw2a-persisted-execution-state
+          mkdir -p /tmp/aw2a-db-diagnostic
+          supabase db start > /tmp/aw2a-db-diagnostic/db-start.log 2>&1
+          supabase db reset --local --no-seed > /tmp/aw2a-db-diagnostic/db-reset.log 2>&1
+          supabase db lint --local --schema public --level error --fail-on error > /tmp/aw2a-db-diagnostic/db-lint.log 2>&1
+      - name: Run verification commands and capture every result
+        shell: bash
+        run: |
+          set +e
+          database_url="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql > /tmp/aw2a-db-diagnostic/verification.log 2>&1
+          echo "$?" > /tmp/aw2a-db-diagnostic/verification.exit
+          PLAIVRA_AW2A_TEST_DATABASE_URL="$database_url" npx vitest run --config vitest.integration.config.mjs services/database/workout-session-execution.integration.test.ts > /tmp/aw2a-db-diagnostic/integration.log 2>&1
+          echo "$?" > /tmp/aw2a-db-diagnostic/integration.exit
+          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql > /tmp/aw2a-db-diagnostic/train-security.log 2>&1
+          echo "$?" > /tmp/aw2a-db-diagnostic/train-security.exit
+          PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$database_url" node scripts/test-database-preflight-control.mjs > /tmp/aw2a-db-diagnostic/preflight-control.log 2>&1
+          echo "$?" > /tmp/aw2a-db-diagnostic/preflight-control.exit
+          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql > /tmp/aw2a-db-diagnostic/release-preflight.log 2>&1
+          echo "$?" > /tmp/aw2a-db-diagnostic/release-preflight.exit
+          set -e
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw2a-db-diagnostic-${{ github.event.pull_request.head.sha }}
+          path: /tmp/aw2a-db-diagnostic
+          if-no-files-found: error
+          retention-days: 2
