@@ -26,14 +26,9 @@ jobs:
           from pathlib import Path
           path = Path('supabase/verification/active-workout-aw2a-integration.sql')
           text = path.read_text()
-          old = """-- Disposable owner fixtures.
-          insert into public.profiles (id, email, full_name, role, created_at, updated_at)
-          values
-            ('a2000000-0000-4000-8000-000000000001', 'aw2a-owner@example.test', 'AW2A Owner', 'member', now(), now()),
-            ('a2000000-0000-4000-8000-000000000002', 'aw2a-other@example.test', 'AW2A Other', 'member', now(), now()),
-            ('a2000000-0000-4000-8000-000000000003', 'aw2a-delete@example.test', 'AW2A Delete', 'member', now(), now());
-          """
-          new = """-- Disposable owner fixtures. Creating auth users exercises the real profile lifecycle.
+          start = text.index('-- Disposable owner fixtures.')
+          end = text.index("\\set owner_id", start)
+          replacement = """-- Disposable owner fixtures. Creating auth users exercises the real profile lifecycle.
           insert into auth.users (
             id, aud, role, email, encrypted_password,
             raw_app_meta_data, raw_user_meta_data, created_at, updated_at
@@ -53,9 +48,7 @@ jobs:
             'Auth fixture creation did not create the expected profiles.'
           );
           """
-          if text.count(old) != 1:
-              raise SystemExit('Expected exactly one AW-2A profile fixture block.')
-          path.write_text(text.replace(old, new))
+          path.write_text(text[:start] + replacement + text[end:])
           PY
           git show d64271c4d4661e537ea9758d6ee4928b99c4e3e7:.github/workflows/aw2a-workspace-export.yml > .github/workflows/aw2a-workspace-export.yml
           git add supabase/verification/active-workout-aw2a-integration.sql .github/workflows/aw2a-workspace-export.yml
