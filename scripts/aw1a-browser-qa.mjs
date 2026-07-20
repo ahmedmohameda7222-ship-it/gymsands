@@ -169,8 +169,13 @@ assert.equal(new URL(page.url()).pathname, "/settings/preferences");
 await page.screenshot({ path: path.join(evidenceDir, "settings-system-de-390x844.png"), fullPage: true });
 
 const themeBefore = await page.evaluate(() => document.documentElement.dataset.theme || "");
-await page.locator("button[aria-expanded]").first().click();
-const alternateTheme = page.locator('button[aria-pressed="false"]').first();
+const themeToggle = page.locator('main button[aria-expanded]').first();
+await themeToggle.waitFor({ state: "visible", timeout: 10_000 });
+await themeToggle.click();
+const alternateTheme = page
+  .locator('main button[aria-pressed="false"]')
+  .filter({ has: page.locator('span[style*="background-color"]') })
+  .first();
 await alternateTheme.waitFor({ state: "visible", timeout: 10_000 });
 await alternateTheme.click();
 await page.waitForFunction((before) => Boolean(document.documentElement.dataset.theme) && document.documentElement.dataset.theme !== before, themeBefore);
