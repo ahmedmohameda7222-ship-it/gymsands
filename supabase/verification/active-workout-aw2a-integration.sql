@@ -261,28 +261,51 @@ select pg_temp.assert_true(
 );
 
 -- Root deletion cascades execution state.
-insert into public.workout_sessions
-  (id,user_id,workout_name,started_at,status,source,created_at,updated_at)
-values ('a2000000-0000-4000-8000-000000000020', :'owner_id'::uuid, 'AW-2A cancel', clock_timestamp(), 'started', 'manual', now(), now());
-insert into public.workout_session_muscle_snapshots
-  (id,user_id,workout_session_id,snapshot_schema_version,taxonomy_version,mapping_schema_version,calculation_engine_version,threshold_profile_version,result_schema_version,workload_model_version,prescription_schema_version,custom_identity_schema_version,completeness,reason_codes,source,frozen_at,created_at)
-values ('a2000000-0000-4000-8000-000000000021', :'owner_id'::uuid, 'a2000000-0000-4000-8000-000000000020',
-  'workout_session_muscle_snapshot_v2','advanced_visible_v1','exercise_muscle_mapping_v2','muscle_load_resistance_sets_v2','advanced_exposure_v1','advanced_muscle_exposure_result_v1','resistance_sets_v1','planned_prescription_v1','custom_exercise_identity_snapshot_v1','unavailable',array['integration_fixture'],'legacy_backfill',clock_timestamp(),now());
-insert into public.workout_session_muscle_snapshot_items
-  (id,snapshot_id,user_id,item_order,activity_name_snapshot,planned_prescription,planned_sets,state,created_at,updated_at)
-values ('a2000000-0000-4000-8000-000000000022','a2000000-0000-4000-8000-000000000021',:'owner_id'::uuid,1,'AW-2A cancel item','{"sets":1}'::jsonb,1,'planned',now(),now());
+set local role authenticated;
+select set_config('request.jwt.claim.sub', :'owner_id', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select (public.start_or_resume_direct_workout_session_atomic(
+  :'owner_id'::uuid,
+  'provider_activity',
+  'aw2a-cancel-activity',
+  'plaivra_activity_catalog',
+  'AW-2A cancel',
+  'Strength',
+  '{"sets":1,"reps":"8"}'::jsonb,
+  null
+)->'session'->>'id') as cancel_session_id \gset
 set constraints all immediate;
+reset role;
 select pg_temp.assert_true(
-  exists (select 1 from public.workout_session_execution_states where workout_session_id = 'a2000000-0000-4000-8000-000000000020'),
+  exists (select 1 from public.workout_session_execution_states where workout_session_id = :'cancel_session_id'::uuid),
   'Cancel fixture did not receive execution state.'
 );
-delete from public.workout_sessions where id = 'a2000000-0000-4000-8000-000000000020';
+delete from public.workout_sessions where id = :'cancel_session_id'::uuid;
 select pg_temp.assert_true(
-  not exists (select 1 from public.workout_session_execution_states where workout_session_id = 'a2000000-0000-4000-8000-000000000020'),
+  not exists (select 1 from public.workout_session_execution_states where workout_session_id = :'cancel_session_id'::uuid),
   'Deleting the open root did not cascade execution state.'
 );
 
 -- Trusted account-deletion path remains functional because it deletes workout_sessions first.
+set local role authenticated;
+select set_config('request.jwt.claim.sub', :'delete_member_id', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select (public.start_or_resume_direct_workout_session_atomic(
+  :'delete_member_id'::uuid,
+  'provider_activity',
+  'aw2a-delete-activity',
+  'plaivra_activity_catalog',
+  'AW-2A delete',
+  'Strength',
+  '{"sets":1,"reps":"8"}'::jsonb,
+  null
+)->'session'->>'id') as delete_session_id \gset
+set constraints all immediate;
+reset role;
+select pg_temp.assert_true(
+  exists (select 1 from public.workout_session_execution_states where workout_session_id = :'delete_session_id'::uuid),
+  'Account-deletion fixture did not receive execution state.'
+);
 insert into public.account_deletion_jobs (
   id,user_id,subject_hash,idempotency_key_hash,state,stage,attempt_count,locked_at,created_at,updated_at
 ) values (
@@ -291,25 +314,12 @@ insert into public.account_deletion_jobs (
   'aw2a-idempotency-a2000000-0000-4000-8000-000000000003',
   'processing', 'deleting_database', 1, clock_timestamp(), now(), now()
 );
-insert into public.account_access_states (user_id,state,disabled_at,created_at,updated_at)
-values (:'delete_member_id'::uuid, 'deletion_processing', now(), now(), now())
-on conflict (user_id) do update set state='deletion_processing', disabled_at=excluded.disabled_at, updated_at=excluded.updated_at;
-insert into public.workout_sessions
-  (id,user_id,workout_name,started_at,status,source,created_at,updated_at)
-values ('a2000000-0000-4000-8000-000000000031', :'delete_member_id'::uuid, 'AW-2A delete', clock_timestamp(), 'started', 'manual', now(), now());
-insert into public.workout_session_muscle_snapshots
-  (id,user_id,workout_session_id,snapshot_schema_version,taxonomy_version,mapping_schema_version,calculation_engine_version,threshold_profile_version,result_schema_version,workload_model_version,prescription_schema_version,custom_identity_schema_version,completeness,reason_codes,source,frozen_at,created_at)
-values ('a2000000-0000-4000-8000-000000000032', :'delete_member_id'::uuid, 'a2000000-0000-4000-8000-000000000031',
-  'workout_session_muscle_snapshot_v2','advanced_visible_v1','exercise_muscle_mapping_v2','muscle_load_resistance_sets_v2','advanced_exposure_v1','advanced_muscle_exposure_result_v1','resistance_sets_v1','planned_prescription_v1','custom_exercise_identity_snapshot_v1','unavailable',array['integration_fixture'],'legacy_backfill',clock_timestamp(),now());
-insert into public.workout_session_muscle_snapshot_items
-  (id,snapshot_id,user_id,item_order,activity_name_snapshot,planned_prescription,planned_sets,state,created_at,updated_at)
-values ('a2000000-0000-4000-8000-000000000033','a2000000-0000-4000-8000-000000000032',:'delete_member_id'::uuid,1,'AW-2A delete item','{"sets":1}'::jsonb,1,'planned',now(),now());
-set constraints all immediate;
-select pg_temp.assert_true(
-  exists (select 1 from public.workout_session_execution_states where workout_session_id = 'a2000000-0000-4000-8000-000000000031'),
-  'Account-deletion fixture did not receive execution state.'
-);
+update public.account_access_states
+set state = 'deletion_processing', reason_code = 'aw2a_integration', disabled_at = clock_timestamp(), updated_at = clock_timestamp()
+where user_id = :'delete_member_id'::uuid;
+set local role service_role;
 select public.purge_account_application_data_atomic(:'delete_member_id'::uuid);
+reset role;
 select pg_temp.assert_true(
   not exists (select 1 from public.workout_session_execution_states where user_id = :'delete_member_id'::uuid)
   and not exists (select 1 from public.workout_sessions where user_id = :'delete_member_id'::uuid)
