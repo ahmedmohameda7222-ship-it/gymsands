@@ -126,6 +126,27 @@ jobs:
           set -o pipefail
           npm run test:unit 2>&1 | tee quality-reports/aw1a/unit-tests.log
 
+      - name: Compare full-unit failures with starting main
+        id: unit_baseline
+        if: steps.unit.outcome == 'failure'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/aw1a-main "$AW1A_STARTING_SHA"
+          ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/aw1a-main/node_modules
+          set +e
+          (cd /tmp/aw1a-main && npm run test:unit) > quality-reports/aw1a/main-unit-tests.log 2>&1
+          baseline_status=$?
+          set -e
+          test "$baseline_status" -ne 0
+          sed -E 's/\x1B\[[0-9;]*[mK]//g' quality-reports/aw1a/unit-tests.log \
+            | grep -E '^ FAIL ' | sed -E 's/^[[:space:]]+//' | sort -u > quality-reports/aw1a/branch-unit-failures.txt
+          sed -E 's/\x1B\[[0-9;]*[mK]//g' quality-reports/aw1a/main-unit-tests.log \
+            | grep -E '^ FAIL ' | sed -E 's/^[[:space:]]+//' | sort -u > quality-reports/aw1a/main-unit-failures.txt
+          diff -u quality-reports/aw1a/main-unit-failures.txt quality-reports/aw1a/branch-unit-failures.txt \
+            | tee quality-reports/aw1a/unit-baseline-diff.txt
+
       - name: Run script tests
         id: scripts
         if: steps.install.outcome == 'success'
@@ -163,7 +184,7 @@ jobs:
           set -euo pipefail
           npm run start > quality-reports/aw1a/production-server.log 2>&1 &
           server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          trap 'pkill -P "$server_pid" 2>/dev/null || true; kill "$server_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 60); do
             if curl --fail --silent http://127.0.0.1:3000/ > /dev/null; then break; fi
             sleep 1
@@ -184,15 +205,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/aw1a/development-server.log 2>&1 &
+          PORT=3100 NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/aw1a/development-server.log 2>&1 &
           server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          trap 'pkill -P "$server_pid" 2>/dev/null || true; kill "$server_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:3000/ > /dev/null; then break; fi
+            if curl --fail --silent http://127.0.0.1:3100/ > /dev/null; then break; fi
             sleep 1
           done
-          curl --fail --silent http://127.0.0.1:3000/ > /dev/null
-          QA_BASE_URL=http://127.0.0.1:3000 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-browser-qa.mjs 2>&1 | tee quality-reports/aw1a/browser-qa.log
+          curl --fail --silent http://127.0.0.1:3100/ > /dev/null
+          QA_BASE_URL=http://127.0.0.1:3100 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-browser-qa.mjs 2>&1 | tee quality-reports/aw1a/browser-qa.log
 
       - name: Check diff boundaries
         id: boundaries
@@ -214,6 +235,7 @@ jobs:
           LINT: ${{ steps.lint.outcome }}
           TARGETED: ${{ steps.targeted.outcome }}
           UNIT: ${{ steps.unit.outcome }}
+          UNIT_BASELINE: ${{ steps.unit_baseline.outcome }}
           SCRIPTS: ${{ steps.scripts.outcome }}
           AUDIT: ${{ steps.audit.outcome }}
           BUILD: ${{ steps.build.outcome }}
@@ -239,6 +261,7 @@ jobs:
             echo "| lint | $LINT |"
             echo "| targeted tests | $TARGETED |"
             echo "| full unit tests | $UNIT |"
+            echo "| starting-main failure parity | $UNIT_BASELINE |"
             echo "| script tests | $SCRIPTS |"
             echo "| npm audit | $AUDIT |"
             echo "| build | $BUILD |"
@@ -247,7 +270,7 @@ jobs:
             echo "| rendered browser QA | $BROWSER |"
             echo "| scope boundaries | $BOUNDARIES |"
             echo
-            for file in quality-reports/aw1a/*.log; do
+            for file in quality-reports/aw1a/*.log quality-reports/aw1a/*failures.txt quality-reports/aw1a/unit-baseline-diff.txt; do
               [ -f "$file" ] || continue
               echo "## $(basename "$file") — final output"
               echo '```text'
