@@ -14,6 +14,10 @@ source = source.replace(
   'workout = replaceExact(workout, \'{tr("superset.label")} {supersetLabel(activeExercise.exercise)}\', \'{tr("superset.label", { label: supersetLabel(activeExercise.exercise) ?? "" })}\', "superset full message");',
   'workout = replaceExact(workout, \'{tr("superset")} {supersetLabel(activeExercise.exercise)}\', \'{tr("superset.label", { label: supersetLabel(activeExercise.exercise) ?? "" })}\', "superset full message");'
 );
+source = source.replace(
+  'formatters.integer(activeProgressionTarget.next_target_reps)',
+  'formatters.integer(Number(activeProgressionTarget.next_target_reps))'
+);
 const expandedPath = path.resolve("scripts/.aw1b-apply-expanded.mjs");
 await writeFile(expandedPath, source, "utf8");
 await import(pathToFileURL(expandedPath).href);
