@@ -1,5 +1,5 @@
 import { chromium } from "@playwright/test";
-import { mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const baseUrl = process.env.QA_BASE_URL || "http://127.0.0.1:3000";
@@ -294,6 +294,13 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
   return item;
 }
 
+async function captureNamedEvidence({ filename, ...scenario }) {
+  const item = await openScenario(scenario);
+  await copyFile(path.join(outputDir, item.artifact), path.join(outputDir, filename));
+  item.requiredArtifact = filename;
+  return item;
+}
+
 // Exercise the longest connected builder interaction first so a regression
 // fails quickly instead of after the full screenshot matrix.
 observations.push(await openScenario({ viewport: viewports[2], scenario: "scheduled", route: "/my-workout/plans/builder", step: 3 }));
@@ -370,6 +377,78 @@ for (const target of [
 ]) {
   observations.push(await openScenario({ viewport: viewports[2], scenario: "active", ...target, mobileKeyboard: true }));
 }
+const requiredRenderedEvidence = [];
+for (const language of ["en", "de", "ar"]) {
+  for (const viewport of [viewports.find((item) => item.name === "390x844"), viewports.find((item) => item.name === "1440x900")]) {
+    if (!viewport) throw new Error("Required Active Workout evidence viewport is missing.");
+    const filename = `active-workout-${language}-${viewport.name}.png`;
+    const item = await captureNamedEvidence({
+      filename,
+      viewport,
+      scenario: "active",
+      language,
+      route: `/workouts/session/day/${activeDayId}`
+    });
+    observations.push(item);
+    requiredRenderedEvidence.push({
+      filename,
+      language,
+      viewport: viewport.name,
+      route: item.route,
+      horizontalOverflowPx: item.horizontalOverflowPx,
+      direction: item.direction
+    });
+  }
+}
+{
+  const viewport = viewports.find((item) => item.name === "390x844");
+  if (!viewport) throw new Error("Required minimized-controller evidence viewport is missing.");
+  const filename = "active-workout-indicator-ar-390x844.png";
+  const item = await captureNamedEvidence({
+    filename,
+    viewport,
+    scenario: "active",
+    language: "ar",
+    route: "/my-workout/plans"
+  });
+  observations.push(item);
+  requiredRenderedEvidence.push({
+    filename,
+    language: "ar",
+    viewport: viewport.name,
+    route: item.route,
+    horizontalOverflowPx: item.horizontalOverflowPx,
+    direction: item.direction
+  });
+}
+
+const horizontalOverflowViewports = [
+  { name: "360x780", width: 360, height: 780 },
+  { name: "390x844", width: 390, height: 844 },
+  { name: "430x932", width: 430, height: 932 }
+];
+const horizontalOverflowMatrix = [];
+for (const language of ["en", "de", "ar"]) {
+  for (const viewport of horizontalOverflowViewports) {
+    const item = await openScenario({
+      viewport,
+      scenario: "active",
+      language,
+      route: `/workouts/session/day/${activeDayId}`
+    });
+    item.evidenceKind = "horizontal-overflow";
+    observations.push(item);
+    horizontalOverflowMatrix.push({
+      language,
+      viewport: viewport.name,
+      horizontalOverflowPx: item.horizontalOverflowPx,
+      passed: item.horizontalOverflowPx <= 1,
+      direction: item.direction,
+      artifact: item.artifact
+    });
+  }
+}
+
 await browser.close();
 
 const failures = observations.filter((item) => {
@@ -394,6 +473,8 @@ const report = {
   baseUrl,
   viewports,
   summary: { observations: observations.length, failures: failures.length, passed: failures.length === 0 },
+  requiredRenderedEvidence,
+  horizontalOverflowMatrix,
   failures,
   observations
 };

@@ -32,6 +32,12 @@
       "noData": "لا توجد بيانات",
       "customValue": "مخصص"
     },
+    "units": {
+      "kg": "kg",
+      "reps": "تكرارات",
+      "seconds": "ثانية",
+      "minutes": "دقيقة"
+    },
     "header": {
       "workoutDay": "يوم التمرين",
       "exerciseProgress": "التمرين {current} من {total}",
@@ -186,7 +192,7 @@
       "cancelReplacement": "إلغاء الاستبدال",
       "replaceToday": "استبدال لليوم",
       "replaceTodayDescription": "استخدم بديلًا الآن. لن تتغير خطتك المحفوظة.",
-      "useToday": "استخدام اليوم",
+      "useToday": "استخدامه اليوم",
       "timerControls": "عناصر تحكم المؤقت",
       "timerControlsDescription": "عدّل وقت الراحة أو أعد ضبط مؤقت التمرين.",
       "sessionDetails": "تفاصيل الجلسة",
@@ -207,7 +213,7 @@
       "noChangeUntilConfirm": "لن يحدث أي تغيير حتى تؤكد.",
       "actionsTitle": "إجراءات ChatGPT للتمرين",
       "actionsDescription": "استخدم ChatGPT مع سياق التمرين الحالي. أكّد كل تغيير قبل تطبيقه.",
-      "ask": "سؤال ChatGPT",
+      "ask": "اسأل ChatGPT",
       "replaceDescription": "اطلب من ChatGPT بديلًا مناسبًا وفق السبب المحدد والتمرين الحالي.",
       "coach": "مدرب ChatGPT",
       "coachDescription": "راجع التمرين أو اجعله أخف اليوم أو خطط للخطوة التالية."

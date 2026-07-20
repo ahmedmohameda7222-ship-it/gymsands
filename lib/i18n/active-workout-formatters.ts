@@ -1,23 +1,16 @@
 import type { SupportedLanguage } from "@/lib/i18n/config";
 import { getLocaleMetadata, isSupportedLanguage } from "@/lib/i18n/config";
 
-export type ActiveWorkoutMeasurementUnit = "kg" | "reps" | "seconds" | "minutes";
-
-export type ActiveWorkoutFormatters = {
+export type ActiveWorkoutBaseFormatters = {
   timer: (totalSeconds: number) => string;
   integer: (value: number) => string;
   decimal: (value: number, maximumFractionDigits?: number) => string;
+  ratio: (current: number, total: number) => string;
   date: (value: Date | number | string, options?: Intl.DateTimeFormatOptions) => string;
   time: (value: Date | number | string, options?: Intl.DateTimeFormatOptions) => string;
   weekday: (value: Date | number | string) => string;
   list: (values: readonly string[], options?: Intl.ListFormatOptions) => string;
-  measurement: (value: number, unit: ActiveWorkoutMeasurementUnit, maximumFractionDigits?: number) => string;
-};
-
-const measurementLabels: Record<"en" | "de" | "ar", Record<ActiveWorkoutMeasurementUnit, string>> = {
-  en: { kg: "kg", reps: "reps", seconds: "sec", minutes: "min" },
-  de: { kg: "kg", reps: "Wdh.", seconds: "Sek.", minutes: "Min." },
-  ar: { kg: "kg", reps: "تكرارات", seconds: "ثانية", minutes: "دقيقة" }
+  measurement: (value: number, localizedUnitLabel: string, maximumFractionDigits?: number) => string;
 };
 
 function safeNumber(value: number): number {
@@ -27,13 +20,6 @@ function safeNumber(value: number): number {
 function safeDate(value: Date | number | string): Date {
   const date = value instanceof Date ? value : new Date(value);
   return Number.isFinite(date.getTime()) ? date : new Date(0);
-}
-
-function languageFromIntlLocale(intlLocale: string): "en" | "de" | "ar" {
-  const normalized = intlLocale.toLowerCase();
-  if (normalized.startsWith("de")) return "de";
-  if (normalized.startsWith("ar")) return "ar";
-  return "en";
 }
 
 export function formatActiveWorkoutTimer(totalSeconds: number): string {
@@ -46,11 +32,10 @@ export function formatActiveWorkoutTimer(totalSeconds: number): string {
     : `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-export function createActiveWorkoutFormatters(localeOrIntlLocale: SupportedLanguage | string): ActiveWorkoutFormatters {
+export function createActiveWorkoutFormatters(localeOrIntlLocale: SupportedLanguage | string): ActiveWorkoutBaseFormatters {
   const intlLocale = isSupportedLanguage(localeOrIntlLocale)
     ? getLocaleMetadata(localeOrIntlLocale).intlLocale
     : localeOrIntlLocale;
-  const language = languageFromIntlLocale(intlLocale);
   const integerFormatter = new Intl.NumberFormat(intlLocale, {
     maximumFractionDigits: 0
   });
@@ -66,6 +51,7 @@ export function createActiveWorkoutFormatters(localeOrIntlLocale: SupportedLangu
     timer: formatActiveWorkoutTimer,
     integer,
     decimal,
+    ratio: (current, total) => `${integer(current)}/${integer(total)}`,
     date: (value, options = {}) => {
       const hasExplicitDateFields = Boolean(
         options.dateStyle ||
@@ -104,7 +90,7 @@ export function createActiveWorkoutFormatters(localeOrIntlLocale: SupportedLangu
         type: "conjunction",
         ...options
       }).format(values),
-    measurement: (value, unit, maximumFractionDigits = 2) =>
-      `${decimal(value, maximumFractionDigits)} ${measurementLabels[language][unit]}`
+    measurement: (value, localizedUnitLabel, maximumFractionDigits = 2) =>
+      `${decimal(value, maximumFractionDigits)} ${localizedUnitLabel}`
   };
 }

@@ -13,7 +13,7 @@
       "loading": "Wird geladen…",
       "retry": "Erneut versuchen",
       "done": "Fertig",
-      "optional": "Freiwillig",
+      "optional": "Optional",
       "more": "Mehr",
       "open": "Öffnen",
       "edit": "Bearbeiten",
@@ -31,6 +31,12 @@
       "paused": "Pausiert",
       "noData": "Keine Daten",
       "customValue": "Individuell"
+    },
+    "units": {
+      "kg": "kg",
+      "reps": "Wdh.",
+      "seconds": "Sek.",
+      "minutes": "Min."
     },
     "header": {
       "workoutDay": "Trainingstag",

@@ -34,7 +34,7 @@
     "synthetic:uptime": "node scripts/uptime-synthetic.mjs",
     "qa:rendered": "node scripts/run-rendered-qa.mjs",
     "qa:train": "node scripts/run-train-layout-qa.mjs",
-    "test:i18n": "vitest run --config vitest.unit.config.mjs lib/i18n/message-shape.test.ts lib/i18n/active-workout-message-contract.test.ts lib/i18n/active-workout-formatters.test.ts"
+    "test:i18n": "vitest run --config vitest.unit.config.mjs lib/i18n/message-shape.test.ts lib/i18n/active-workout-message-contract.test.ts lib/i18n/active-workout-formatters.test.ts lib/i18n/active-workout-surface-contract.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

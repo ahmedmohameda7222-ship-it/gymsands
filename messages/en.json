@@ -32,6 +32,12 @@
       "noData": "No data",
       "customValue": "Custom"
     },
+    "units": {
+      "kg": "kg",
+      "reps": "reps",
+      "seconds": "sec",
+      "minutes": "min"
+    },
     "header": {
       "workoutDay": "Workout day",
       "exerciseProgress": "Exercise {current} of {total}",

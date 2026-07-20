@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -26,7 +27,7 @@ describe("Active Workout formatters", () => {
     expect(arabic.timer(3661)).toMatch(/^[0-9]+:[0-9]{2}:[0-9]{2}$/);
   });
 
-  it("uses locale-aware decimal and integer display", () => {
+  it("uses locale-aware decimal, integer, and ratio display", () => {
     const english = createActiveWorkoutFormatters("en");
     const german = createActiveWorkoutFormatters("de");
     const arabic = createActiveWorkoutFormatters("ar");
@@ -43,6 +44,8 @@ describe("Active Workout formatters", () => {
     expect(english.integer(1234)).toBe(new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(1234));
     expect(german.integer(1234)).toBe(new Intl.NumberFormat("de-DE", { maximumFractionDigits: 0 }).format(1234));
     expect(arabic.integer(1234)).toBe(new Intl.NumberFormat("ar", { maximumFractionDigits: 0 }).format(1234));
+    expect(german.ratio(3, 12)).toBe(`${german.integer(3)}/${german.integer(12)}`);
+    expect(arabic.ratio(3, 12)).toBe(`${arabic.integer(3)}/${arabic.integer(12)}`);
     expect(english.decimal(1234.5)).not.toBe(german.decimal(1234.5));
   });
 
@@ -74,13 +77,21 @@ describe("Active Workout formatters", () => {
     expect(english.time(fixed, { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" })).toMatch(/13[:.]45/);
   });
 
-  it("combines localized values with supported measurement labels", () => {
+  it("combines localized values with caller-supplied canonical unit labels", () => {
     const english = createActiveWorkoutFormatters("en");
     const german = createActiveWorkoutFormatters("de");
     const arabic = createActiveWorkoutFormatters("ar");
 
     expect(english.measurement(82.5, "kg")).toContain("kg");
-    expect(german.measurement(12, "reps")).toContain("Wdh.");
-    expect(arabic.measurement(30, "seconds")).toContain("ثانية");
+    expect(german.measurement(12, "Wdh.")).toContain("Wdh.");
+    expect(arabic.measurement(30, "ثانية")).toContain("ثانية");
+  });
+
+  it("contains no secondary multilingual measurement-label store", () => {
+    const source = readFileSync("lib/i18n/active-workout-formatters.ts", "utf8");
+    expect(source).not.toContain("measurementLabels");
+    expect(source).not.toContain('de: { kg:');
+    expect(source).not.toContain('ar: { kg:');
+    expect(source).not.toContain("تكرارات");
   });
 });

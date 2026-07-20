@@ -11,6 +11,7 @@ const requiredKeys = [
   "common.back", "common.close", "common.cancel", "common.continue", "common.save", "common.saving",
   "common.loading", "common.retry", "common.done", "common.optional", "common.more", "common.open",
   "common.edit", "common.skip", "common.reset", "common.pause", "common.resume", "common.finish",
+  "units.kg", "units.reps", "units.seconds", "units.minutes",
   "common.confirm", "common.remove", "common.add", "common.view", "common.hide",
   "header.workoutDay", "header.exerciseProgress", "header.setProgress", "header.sessionTime",
   "header.sessionProgress", "header.minimizeWorkout", "header.openSessionMenu",
@@ -132,6 +133,18 @@ describe("ActiveWorkout message contract", () => {
         expect(getPath(messages, key), `${locale}: ${key}`).toEqual(expect.any(String));
       }
     }
+  });
+
+
+  it("keeps canonical unit labels and approved terminology exact", () => {
+    for (const messages of Object.values(locales)) {
+      for (const key of ["units.kg", "units.reps", "units.seconds", "units.minutes"]) {
+        expect(getPath(messages, key), key).toEqual(expect.any(String));
+      }
+    }
+    expect(getPath(locales.de, "common.optional")).toBe("Optional");
+    expect(getPath(locales.ar, "actions.useToday")).toBe("استخدامه اليوم");
+    expect(getPath(locales.ar, "chatGPT.ask")).toBe("اسأل ChatGPT");
   });
 
   it("contains only non-empty, safe ICU strings", () => {

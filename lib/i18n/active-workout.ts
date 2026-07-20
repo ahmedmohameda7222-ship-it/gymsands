@@ -12,8 +12,14 @@ import {
 } from "@/lib/i18n/config";
 import {
   createActiveWorkoutFormatters,
-  type ActiveWorkoutFormatters
+  type ActiveWorkoutBaseFormatters
 } from "@/lib/i18n/active-workout-formatters";
+
+export type ActiveWorkoutMeasurementUnit = "kg" | "reps" | "seconds" | "minutes";
+
+export type ActiveWorkoutFormatters = Omit<ActiveWorkoutBaseFormatters, "measurement"> & {
+  measurement: (value: number, unit: ActiveWorkoutMeasurementUnit, maximumFractionDigits?: number) => string;
+};
 
 export function isolateBidiText(value: string): string {
   return `\u2068${value}\u2069`;
@@ -24,10 +30,30 @@ export function useActiveWorkoutTranslation() {
   const locale: SupportedLanguage = isSupportedLanguage(requestedLocale) ? requestedLocale : defaultLocale;
   const metadata = getLocaleMetadata(locale);
   const t = useTranslations("ActiveWorkout");
-  const formatters = useMemo(
+  const baseFormatters = useMemo(
     () => createActiveWorkoutFormatters(metadata.intlLocale),
     [metadata.intlLocale]
   );
+  const formatters = useMemo<ActiveWorkoutFormatters>(() => {
+    const localizedUnitLabel = (unit: ActiveWorkoutMeasurementUnit): string => {
+      switch (unit) {
+        case "kg":
+          return t("units.kg");
+        case "reps":
+          return t("units.reps");
+        case "seconds":
+          return t("units.seconds");
+        case "minutes":
+          return t("units.minutes");
+      }
+    };
+
+    return {
+      ...baseFormatters,
+      measurement: (value, unit, maximumFractionDigits) =>
+        baseFormatters.measurement(value, localizedUnitLabel(unit), maximumFractionDigits)
+    };
+  }, [baseFormatters, t]);
 
   return {
     t,
@@ -40,4 +66,3 @@ export function useActiveWorkoutTranslation() {
 
 export type ActiveWorkoutTranslation = ReturnType<typeof useActiveWorkoutTranslation>;
 export type ActiveWorkoutTranslator = ActiveWorkoutTranslation["t"];
-export type { ActiveWorkoutFormatters };
