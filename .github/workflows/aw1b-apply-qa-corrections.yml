@@ -22,23 +22,27 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          cat .github/aw1b-patch-chunks/chunk-* > /tmp/aw1b-qa.patch
-          sed -i 's/@@ -925,,7 /@@ -925,7 /' /tmp/aw1b-qa.patch
-          sha256sum /tmp/aw1b-qa.patch | tee /tmp/patch-sha256.txt
-          git apply --check /tmp/aw1b-qa.patch > /tmp/apply.log 2>&1
-          status=$?
-          cat /tmp/apply.log
-          if [ "$status" -ne 0 ]; then exit "$status"; fi
-          git apply /tmp/aw1b-qa.patch
-          rm -f .github/workflows/aw1b-source-snapshot.yml
-          rm -f .github/workflows/aw1b-apply-qa-corrections.yml
-          rm -f .github/aw1b-correction.tar.gz.b64
-          rm -rf .github/aw1b-patch-chunks .github/aw1b-correction-chunks
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "fix(i18n): apply AW-1B QA corrections"
-          git push origin HEAD:feat/active-workout-aw1b-messages-locale-qa
+          status=0
+          {
+            set -x
+            cat .github/aw1b-patch-chunks/chunk-* > /tmp/aw1b-qa.patch
+            sed -i 's/@@ -925,,7 /@@ -925,7 /' /tmp/aw1b-qa.patch
+            sha256sum /tmp/aw1b-qa.patch | tee /tmp/patch-sha256.txt
+            git apply --check /tmp/aw1b-qa.patch
+            git apply /tmp/aw1b-qa.patch
+            rm -f .github/workflows/aw1b-source-snapshot.yml
+            rm -f .github/workflows/aw1b-apply-qa-corrections.yml
+            rm -f .github/aw1b-correction.tar.gz.b64
+            rm -rf .github/aw1b-patch-chunks .github/aw1b-correction-chunks
+            git status --short
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "fix(i18n): apply AW-1B QA corrections"
+            git push origin HEAD:feat/active-workout-aw1b-messages-locale-qa
+          } > /tmp/commands.log 2>&1 || status=$?
+          cat /tmp/commands.log
+          exit "$status"
       - name: Upload patch diagnostic
         if: always()
         uses: actions/upload-artifact@v4
@@ -46,7 +50,7 @@ jobs:
           name: aw1b-patch-diagnostic-${{ github.event.pull_request.head.sha }}
           path: |
             /tmp/aw1b-qa.patch
-            /tmp/apply.log
+            /tmp/commands.log
             /tmp/patch-sha256.txt
           if-no-files-found: warn
           retention-days: 1
