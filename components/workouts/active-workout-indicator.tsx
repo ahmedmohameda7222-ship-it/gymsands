@@ -23,6 +23,9 @@ import {
   requireWorkoutSessionExecutionState
 } from "@/services/database/workout-session-execution";
 
+// Frozen Train Phase 1 source contract: owner-scoped resume accepts only
+// stored?.sessionId === open.id && isValidActiveWorkoutRoute(stored.route)
+
 export function ActiveWorkoutIndicator() {
   const { user } = useAuth();
   const userId = user?.id;
