@@ -28,6 +28,7 @@ declare
   v_actual_columns text[];
   v_integrity_definition text;
   v_initializer_definition text;
+  v_cleanup_definition text;
   v_marker text;
 begin
   if to_regclass('public.workout_session_execution_states') is null then
@@ -99,10 +100,6 @@ begin
      or has_table_privilege('anon', 'public.workout_session_execution_states', 'INSERT')
      or has_table_privilege('anon', 'public.workout_session_execution_states', 'UPDATE')
      or has_table_privilege('anon', 'public.workout_session_execution_states', 'DELETE')
-     or has_table_privilege('public', 'public.workout_session_execution_states', 'SELECT')
-     or has_table_privilege('public', 'public.workout_session_execution_states', 'INSERT')
-     or has_table_privilege('public', 'public.workout_session_execution_states', 'UPDATE')
-     or has_table_privilege('public', 'public.workout_session_execution_states', 'DELETE')
      or has_table_privilege('authenticated', 'public.workout_session_execution_states', 'INSERT')
      or has_table_privilege('authenticated', 'public.workout_session_execution_states', 'DELETE')
      or not has_table_privilege('authenticated', 'public.workout_session_execution_states', 'SELECT')
@@ -112,6 +109,16 @@ begin
      or not has_table_privilege('service_role', 'public.workout_session_execution_states', 'UPDATE')
      or not has_table_privilege('service_role', 'public.workout_session_execution_states', 'DELETE') then
     raise exception 'AW-2A table grants are not least-privilege.';
+  end if;
+
+  if exists (
+    select 1
+    from pg_class relation
+    cross join lateral aclexplode(coalesce(relation.relacl, acldefault('r', relation.relowner))) grant_acl
+    where relation.oid = 'public.workout_session_execution_states'::regclass
+      and grant_acl.grantee = 0
+  ) then
+    raise exception 'PUBLIC retains AW-2A execution-state table privileges.';
   end if;
 
   if not exists (
@@ -137,16 +144,34 @@ begin
     into v_integrity_definition;
   select lower(pg_get_functiondef('private.initialize_workout_session_execution_state(uuid,text,timestamp with time zone)'::regprocedure))
     into v_initializer_definition;
+  select lower(pg_get_functiondef('private.cleanup_workout_session_execution_state()'::regprocedure))
+    into v_cleanup_definition;
 
   if v_integrity_definition !~ 'revision is distinct from old.revision'
-     or v_integrity_definition !~ 'old.revision \+ 1'
-     or v_integrity_definition !~ 'active execution cursor must reference the same user and workout session'
-     or v_integrity_definition !~ 'rest execution state requires one valid timestamp-based rest tuple'
-     or v_initializer_definition ~ 'exercise_name'
+     or v_integrity_definition !~ 'old.revision \+ 1' then
+    raise exception 'Revision guard source contract is missing.';
+  end if;
+
+  if v_integrity_definition !~ 'old.bootstrap_source = ''legacy_backfill'''
+     or v_integrity_definition !~ 'new.bootstrap_source = ''client_cache_import''' then
+    raise exception 'Bootstrap-source transition guard source contract is missing.';
+  end if;
+
+  if v_integrity_definition !~ 'active execution cursor must reference the same user and workout session'
+     or v_integrity_definition !~ 'rest execution state requires one valid timestamp-based rest tuple' then
+    raise exception 'Execution-state integrity source contract is missing.';
+  end if;
+
+  if v_initializer_definition ~ 'exercise_name'
      or v_initializer_definition !~ 'source_plan_activity_id'
      or v_initializer_definition !~ 'source_plan_exercise_id'
      or v_initializer_definition !~ 'exercise_order = item.item_order' then
-    raise exception 'AW-2A revision, timer, or stable-cursor enforcement definition drifted.';
+    raise exception 'Snapshot initializer source contract is missing.';
+  end if;
+
+  if v_cleanup_definition !~ 'delete from public.workout_session_execution_states'
+     or v_cleanup_definition !~ 'workout_session_id = new.id' then
+    raise exception 'Terminal cleanup source contract is missing.';
   end if;
 
   select migration_version into strict v_marker
@@ -170,7 +195,7 @@ begin
     group by session.id
     having count(state.workout_session_id) <> 1
   ) then
-    raise exception 'An open workout session does not have exactly one AW-2A execution row.';
+    raise exception 'Open workout session is missing exactly one execution-state row.';
   end if;
 
   if exists (
@@ -179,7 +204,7 @@ begin
     join public.workout_sessions session on session.id = state.workout_session_id
     where session.status <> 'started'
   ) then
-    raise exception 'A terminal workout session retains AW-2A execution state.';
+    raise exception 'Terminal workout session retains execution state.';
   end if;
 
   if exists (
@@ -188,7 +213,7 @@ begin
     join public.workout_sessions session on session.id = state.workout_session_id
     where state.user_id <> session.user_id
   ) then
-    raise exception 'An AW-2A execution-state owner differs from the root-session owner.';
+    raise exception 'Execution-state owner differs from root-session owner.';
   end if;
 
   if exists (
