@@ -35,6 +35,7 @@ describe("AW-1B Active Workout surface contract", () => {
   it("localizes the persistent controller and keeps mixed-direction values isolated", () => {
     const indicator = source("components/workouts/active-workout-indicator.tsx");
     expect(indicator).toContain("useActiveWorkoutTranslation");
+    expect(indicator).not.toContain("useTrainTranslation");
     expect(indicator).toContain('t("minimized.finishQuestion")');
     expect(indicator).toContain('t("minimized.cancelQuestion")');
     expect(indicator).toContain("<bdi>{state?.label");
