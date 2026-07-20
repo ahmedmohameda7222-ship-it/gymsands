@@ -149,3 +149,6 @@ The difference is intentional. The marker may advance only in a separately autho
 - `supabase/migration-ledger.json`
 
 Phase 4C.1 migration apply, PR merge, deployment, compatibility-marker advancement, Phase 4C.2, and Phase 4C.3 remain separate decisions.
+
+
+AW-2A pending forward migration: `20260720213000_active_workout_aw2a_execution_state.sql`. It must be applied once only after local replay and verification; do not replay applied migrations.

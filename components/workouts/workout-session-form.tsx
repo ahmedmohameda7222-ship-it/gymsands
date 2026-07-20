@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Clock, ExternalLink, Plus, Timer, TimerReset } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -12,14 +12,25 @@ import { useToast } from "@/components/ui/toaster";
 import { useAuth } from "@/components/auth/auth-provider";
 import { logRecoverableError, userSafeError } from "@/lib/error-formatting";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
-import { clearActiveWorkoutState, isValidActiveWorkoutRoute, readActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
+import { activeWorkoutCacheFromExecution, clearActiveWorkoutState, isValidActiveWorkoutRoute, readActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
 import { getOrStartWorkoutSession } from "@/services/database/direct-workout-sessions";
 import { completeWorkoutSession, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
-import type { Workout, WorkoutSession, WorkoutSessionSummary } from "@/types";
+import type { Workout, WorkoutSession, WorkoutSessionExecutionState, WorkoutSessionSummary } from "@/types";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 import { useTrainTranslation } from "@/lib/i18n/train";
 import { findPreviousWorkoutSet } from "@/lib/workouts/workout-session-history";
+import { getActiveWorkoutDeviceId } from "@/lib/workouts/active-workout-device";
+import { executionElapsedSeconds, executionRestSecondsLeft, executionStartedAtMs } from "@/lib/workouts/workout-session-execution";
+import {
+  clearWorkoutSessionRestTimer,
+  getWorkoutSessionExecutionCursorItems,
+  importLegacyWorkoutExecutionCache,
+  persistWorkoutSessionCursor,
+  persistWorkoutSessionRestTimer,
+  persistWorkoutSessionTimerReset,
+  requireWorkoutSessionExecutionState
+} from "@/services/database/workout-session-execution";
 
 type SetLog = {
   reps: number;
@@ -57,12 +68,61 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [timerEndsAtMs, setTimerEndsAtMs] = useState<number | null>(null);
   const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
+  const [executionState, setExecutionState] = useState<WorkoutSessionExecutionState | null>(null);
+  const executionWriteRef = useRef<Promise<unknown>>(Promise.resolve());
+  const executionHydratedRef = useRef(false);
+  const controllerDeviceIdRef = useRef<string | null>(null);
   const timerKey = useMemo(() => workoutStorageKey(["single-workout-session", user?.id ?? "anonymous", workout.id]), [user?.id, workout.id]);
   const restTimerKey = useMemo(() => workoutStorageKey(["single-workout-rest", user?.id ?? "anonymous", workout.id]), [user?.id, workout.id]);
   const guideUrl = workout.exercise_url || (isLink(workout.notes) ? workout.notes : null);
   const customVideoUrl = workout.custom_video_url || null;
 
   const [previousSet, setPreviousSet] = useState<{ reps: number | null; weightKg: number | null; performedAt: string | null } | null>(null);
+
+  function mirrorExecutionState(next: WorkoutSessionExecutionState) {
+    setExecutionState(next);
+    const now = Date.now();
+    const derivedStartedAt = executionStartedAtMs(next, now);
+    setStartedAtMs(derivedStartedAt);
+    setElapsedSeconds(executionElapsedSeconds(next, now));
+    setDuration(Math.max(1, Math.ceil(executionElapsedSeconds(next, now) / 60)));
+    storeTimestamp(timerKey, derivedStartedAt);
+    const restLeft = executionRestSecondsLeft(next, now);
+    const restEndsAt = next.rest_ends_at ? Date.parse(next.rest_ends_at) : Number.NaN;
+    if (next.view_state === "rest" && restLeft > 0 && Number.isFinite(restEndsAt)) {
+      setTimerSeconds(next.rest_duration_seconds ?? restLeft);
+      setTimerLeft(restLeft);
+      setTimerEndsAtMs(restEndsAt);
+      setIsTimerRunning(true);
+      storeTimestamp(restTimerKey, restEndsAt);
+    } else {
+      setTimerLeft(0);
+      setTimerEndsAtMs(null);
+      setIsTimerRunning(false);
+      clearStoredValue(restTimerKey);
+    }
+    if (user?.id) {
+      writeActiveWorkoutState(user.id, activeWorkoutCacheFromExecution(next, {
+        route: `/workouts/session/${workout.id}`,
+        label: workout.name,
+        controllerDeviceId: controllerDeviceIdRef.current
+      }, now));
+    }
+  }
+
+  function queueExecutionWrite(write: () => Promise<WorkoutSessionExecutionState>, rollback?: () => void) {
+    const operation = executionWriteRef.current.then(write);
+    executionWriteRef.current = operation.then(
+      (next) => { mirrorExecutionState(next); },
+      (error) => {
+        rollback?.();
+        const message = userSafeError(error, tr("setEntriesPreserved"));
+        setSessionError(message);
+        toast({ title: tr("couldNotSaveWorkout"), description: message });
+      }
+    );
+    return operation;
+  }
 
   useEffect(() => {
     setPreviousSet(findPreviousWorkoutSet(history, workout));
@@ -76,7 +136,9 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   }, [user?.id]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    let active = true;
+    executionHydratedRef.current = false;
+    if (!user?.id) return () => { active = false; };
     const sessionRoute = `/workouts/session/${workout.id}`;
     const storedActiveWorkout = readActiveWorkoutState(user.id);
     const candidateSessionId = storedActiveWorkout
@@ -84,51 +146,83 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
       && isValidActiveWorkoutRoute(storedActiveWorkout.route)
       ? storedActiveWorkout.sessionId
       : null;
+
     getOrStartWorkoutSession(user.id, workout, candidateSessionId)
-      .then((nextSession) => {
+      .then(async (nextSession) => {
+        if (!active) return;
         setSession(nextSession);
         setSessionError(null);
-        const parsedStartedAt = Date.parse(nextSession.started_at);
+        controllerDeviceIdRef.current = getActiveWorkoutDeviceId();
         const storedStartedAt = readStoredTimestamp(timerKey);
-        const nextStartedAt = storedStartedAt ?? (Number.isFinite(parsedStartedAt) ? parsedStartedAt : Date.now());
-        setStartedAtMs(nextStartedAt);
-        storeTimestamp(timerKey, nextStartedAt);
-        writeActiveWorkoutState(user.id, {
-          sessionId: nextSession.id,
-          route: sessionRoute,
-          label: workout.name,
-          startedAtMs: nextStartedAt,
-          elapsedSeconds: Math.max(0, Number(nextSession.duration_minutes ?? 0) * 60),
-          paused: false
-        });
+        const storedRestEndsAt = readStoredTimestamp(restTimerKey);
+        const [persistedState, cursorItems] = await Promise.all([
+          requireWorkoutSessionExecutionState(user.id, nextSession.id),
+          getWorkoutSessionExecutionCursorItems(user.id, nextSession.id)
+        ]);
+        let authoritativeState = persistedState;
+        if (persistedState.bootstrap_source === "legacy_backfill" && persistedState.revision === 0) {
+          try {
+            const imported = await importLegacyWorkoutExecutionCache(
+              user.id,
+              nextSession.id,
+              persistedState,
+              storedStartedAt,
+              controllerDeviceIdRef.current,
+              new Date(),
+              { endsAtMs: storedRestEndsAt, durationSeconds: workout.rest_seconds ?? 60 }
+            );
+            authoritativeState = imported.state;
+          } catch (error) {
+            console.warn("Plaivra could not import the optional legacy direct-workout timer cache.", error);
+          }
+        }
+        if (authoritativeState.view_state === "rest" && executionRestSecondsLeft(authoritativeState) <= 0) {
+          authoritativeState = await clearWorkoutSessionRestTimer(
+            user.id,
+            nextSession.id,
+            "set_entry",
+            controllerDeviceIdRef.current
+          );
+        }
+        const cursorItem = cursorItems.find((item) => item.id === authoritativeState.active_snapshot_item_id)
+          ?? cursorItems.find((item) => item.itemOrder === authoritativeState.active_item_order)
+          ?? cursorItems[0]
+          ?? null;
+        if (authoritativeState.controller_device_id !== controllerDeviceIdRef.current
+            || authoritativeState.active_snapshot_item_id !== (cursorItem?.id ?? null)) {
+          authoritativeState = await persistWorkoutSessionCursor(user.id, nextSession.id, {
+            snapshotItemId: cursorItem?.id ?? null,
+            itemOrder: cursorItem?.itemOrder ?? 1,
+            setNumber: Math.max(1, authoritativeState.active_set_number),
+            controllerDeviceId: controllerDeviceIdRef.current
+          });
+        }
+        if (!active) return;
+        mirrorExecutionState(authoritativeState);
+        executionHydratedRef.current = true;
       })
       .catch((error) => {
         logRecoverableError("workout-session.start", error);
         const message = userSafeError(error, tr("sessionConnectFailed"));
         setSessionError(message);
-        toast({
-          title: tr("sessionConnectFailed"),
-          description: message
-        });
+        toast({ title: tr("sessionConnectFailed"), description: message });
       });
-  }, [timerKey, toast, tr, user?.id, workout]);
+
+    return () => { active = false; };
+  }, [restTimerKey, timerKey, toast, tr, user?.id, workout]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => {
-      const seconds = Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000));
+    const tick = () => {
+      const seconds = executionState
+        ? executionElapsedSeconds(executionState)
+        : Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000));
       setElapsedSeconds(seconds);
       setDuration(Math.max(1, Math.ceil(seconds / 60)));
-    }, 1000);
+    };
+    tick();
+    const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
-  }, [startedAtMs]);
-
-  useEffect(() => {
-    const storedRestDeadline = readStoredTimestamp(restTimerKey);
-    if (!storedRestDeadline || storedRestDeadline <= Date.now()) return;
-    setTimerEndsAtMs(storedRestDeadline);
-    setTimerLeft(Math.max(0, Math.ceil((storedRestDeadline - Date.now()) / 1000)));
-    setIsTimerRunning(true);
-  }, [restTimerKey]);
+  }, [executionState, startedAtMs]);
 
   useEffect(() => {
     if (!timerEndsAtMs) return;
@@ -139,23 +233,45 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         setTimerEndsAtMs(null);
         setIsTimerRunning(false);
         clearStoredValue(restTimerKey);
+        if (user?.id && session?.id && executionHydratedRef.current) {
+          void queueExecutionWrite(() => clearWorkoutSessionRestTimer(
+            user.id,
+            session.id,
+            "set_entry",
+            controllerDeviceIdRef.current
+          ));
+        }
         toast({ title: tr("restFinished"), description: tr("nextSetReady") });
       }
     };
     tick();
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
-  }, [restTimerKey, timerEndsAtMs, toast, tr]);
+  }, [restTimerKey, session?.id, timerEndsAtMs, toast, tr, user?.id]);
 
   function startRestTimer(seconds: number) {
     const safeSeconds = Math.max(0, seconds);
     if (!safeSeconds) return;
+    const previous = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
     const deadline = Date.now() + safeSeconds * 1000;
     setTimerSeconds(safeSeconds);
     setTimerLeft(safeSeconds);
     setTimerEndsAtMs(deadline);
     setIsTimerRunning(true);
     storeTimestamp(restTimerKey, deadline);
+    if (user?.id && session?.id && executionHydratedRef.current) {
+      void queueExecutionWrite(
+        () => persistWorkoutSessionRestTimer(user.id, session.id, safeSeconds, controllerDeviceIdRef.current),
+        () => {
+          setTimerSeconds(previous.timerSeconds);
+          setTimerLeft(previous.timerLeft);
+          setTimerEndsAtMs(previous.timerEndsAtMs);
+          setIsTimerRunning(previous.isTimerRunning);
+          if (previous.timerEndsAtMs) storeTimestamp(restTimerKey, previous.timerEndsAtMs);
+          else clearStoredValue(restTimerKey);
+        }
+      );
+    }
   }
 
   async function complete() {
@@ -216,11 +332,25 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   }
 
   function resetWorkoutTimer() {
+    const previousStartedAt = startedAtMs;
+    const previousElapsed = elapsedSeconds;
+    const previousDuration = duration;
     const nextStartedAt = Date.now();
     setStartedAtMs(nextStartedAt);
     setElapsedSeconds(0);
     setDuration(1);
     storeTimestamp(timerKey, nextStartedAt);
+    if (user?.id && session?.id && executionHydratedRef.current) {
+      void queueExecutionWrite(
+        () => persistWorkoutSessionTimerReset(user.id, session.id, controllerDeviceIdRef.current),
+        () => {
+          setStartedAtMs(previousStartedAt);
+          setElapsedSeconds(previousElapsed);
+          setDuration(previousDuration);
+          storeTimestamp(timerKey, previousStartedAt);
+        }
+      );
+    }
   }
 
   return (

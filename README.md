@@ -77,3 +77,6 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 - `20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup.sql`
 
 These nine files match the production migration identities and were applied exactly once in order. Do not replay or modify them.
+
+
+AW-2A pending forward migration: `20260720213000_active_workout_aw2a_execution_state.sql`. It must be applied once only after local replay and verification; do not replay applied migrations.

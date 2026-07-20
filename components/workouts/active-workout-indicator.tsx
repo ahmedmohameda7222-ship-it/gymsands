@@ -8,12 +8,20 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toaster";
-import { activeWorkoutElapsed, activeWorkoutEvent, clearActiveWorkoutState, isValidActiveWorkoutRoute, readActiveWorkoutState, resolveActiveWorkoutRoute, writeActiveWorkoutState, type ActiveWorkoutState } from "@/lib/active-workout";
+import { activeWorkoutCacheFromExecution, activeWorkoutElapsed, activeWorkoutEvent, clearActiveWorkoutState, isValidActiveWorkoutRoute, readActiveWorkoutState, resolveActiveWorkoutRoute, writeActiveWorkoutState, type ActiveWorkoutState } from "@/lib/active-workout";
 import { cancelWorkoutSession, completeWorkoutSession, getOpenWorkoutSessionWithStatus, updateWorkoutSessionDuration } from "@/services/database/workout-sessions";
-import type { WorkoutSession } from "@/types";
+import type { WorkoutSession, WorkoutSessionExecutionState } from "@/types";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 import { userSafeError } from "@/lib/error-formatting";
 import { useActiveWorkoutTranslation } from "@/lib/i18n/active-workout";
+import { getActiveWorkoutDeviceId } from "@/lib/workouts/active-workout-device";
+import { executionElapsedSeconds } from "@/lib/workouts/workout-session-execution";
+import {
+  persistWorkoutSessionCursor,
+  persistWorkoutSessionPause,
+  persistWorkoutSessionResume,
+  requireWorkoutSessionExecutionState
+} from "@/services/database/workout-session-execution";
 
 export function ActiveWorkoutIndicator() {
   const { user } = useAuth();
@@ -25,47 +33,69 @@ export function ActiveWorkoutIndicator() {
   const { t, formatters } = useActiveWorkoutTranslation();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [state, setState] = useState<ActiveWorkoutState | null>(null);
+  const [executionState, setExecutionState] = useState<WorkoutSessionExecutionState | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [actionPending, setActionPending] = useState<"pause" | "finish" | "cancel" | null>(null);
   const [actionError, setActionError] = useState("");
   const [loadError, setLoadError] = useState("");
   const controllerRef = useRef<HTMLDivElement>(null);
+  const controllerDeviceIdRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
     const stored = readActiveWorkoutState(userId);
     const candidateSessionId = stored && isValidActiveWorkoutRoute(stored.route) ? stored.sessionId : null;
     const { session: open, error } = await getOpenWorkoutSessionWithStatus(userId, null, candidateSessionId);
-    setLoadError(error ? t("minimized.loadFailed") : "");
-    if (error) return;
+    if (error) {
+      setLoadError(t("minimized.loadFailed"));
+      return;
+    }
     setSession(open);
     if (!open) {
       clearActiveWorkoutState(userId);
       setState(null);
+      setExecutionState(null);
+      setLoadError("");
       return;
     }
-    const route = resolveActiveWorkoutRoute(open, stored);
-    const next = stored?.sessionId === open.id && isValidActiveWorkoutRoute(stored.route) ? stored : {
-      sessionId: open.id,
-      route,
-      label: open.workout_name,
-      startedAtMs: Date.parse(open.started_at) || Date.now(),
-      elapsedSeconds: Math.max(0, Number(open.duration_minutes ?? 0) * 60),
-      paused: false
-    };
-    writeActiveWorkoutState(userId, next);
-    setState(next);
+    try {
+      controllerDeviceIdRef.current = getActiveWorkoutDeviceId();
+      let persisted = await requireWorkoutSessionExecutionState(userId, open.id);
+      if (controllerDeviceIdRef.current && persisted.controller_device_id !== controllerDeviceIdRef.current) {
+        persisted = await persistWorkoutSessionCursor(userId, open.id, {
+          snapshotItemId: persisted.active_snapshot_item_id,
+          itemOrder: persisted.active_item_order,
+          setNumber: persisted.active_set_number,
+          controllerDeviceId: controllerDeviceIdRef.current
+        });
+      }
+      const route = resolveActiveWorkoutRoute(open, stored);
+      const next = activeWorkoutCacheFromExecution(persisted, {
+        route,
+        label: open.workout_name,
+        controllerDeviceId: controllerDeviceIdRef.current
+      });
+      writeActiveWorkoutState(userId, next);
+      setExecutionState(persisted);
+      setState(next);
+      setLoadError("");
+    } catch (executionError) {
+      setExecutionState(null);
+      setState(null);
+      setLoadError(userSafeError(executionError, t("minimized.loadFailed")));
+    }
   }, [t, userId]);
 
   useEffect(() => { void load(); }, [load, pathname]);
 
   useEffect(() => {
     if (!userId) return;
-    const sync = () => setState(readActiveWorkoutState(userId));
-    window.addEventListener(activeWorkoutEvent, sync);
-    window.addEventListener("focus", sync);
-    return () => { window.removeEventListener(activeWorkoutEvent, sync); window.removeEventListener("focus", sync); };
-  }, [userId]);
+    const syncCache = () => setState(readActiveWorkoutState(userId));
+    const reload = () => { void load(); };
+    window.addEventListener(activeWorkoutEvent, syncCache);
+    window.addEventListener("focus", reload);
+    return () => { window.removeEventListener(activeWorkoutEvent, syncCache); window.removeEventListener("focus", reload); };
+  }, [load, userId]);
 
   useEffect(() => {
     if (!state) return;
@@ -105,21 +135,41 @@ export function ActiveWorkoutIndicator() {
   }, [actionError, controllerVisible, loadError, pathname, state?.label, state?.paused]);
 
   async function togglePause() {
-    if (!userId || !state || !session) return;
-    const seconds = activeWorkoutElapsed(state);
-    const previous = state;
-    const next = state.paused
-      ? { ...state, paused: false, startedAtMs: Date.now() - seconds * 1000 }
-      : { ...state, paused: true, elapsedSeconds: seconds };
+    if (!userId || !state || !session || !executionState || executionState.session_state === "review") return;
+    const previousCache = state;
+    const previousExecution = executionState;
+    const now = new Date();
+    const seconds = executionElapsedSeconds(executionState, now);
+    const optimisticExecution: WorkoutSessionExecutionState = executionState.session_state === "paused"
+      ? { ...executionState, session_state: "active", session_running_since: now.toISOString() }
+      : { ...executionState, session_state: "paused", session_elapsed_seconds: seconds, session_running_since: null };
+    const optimisticCache = activeWorkoutCacheFromExecution(optimisticExecution, {
+      route: state.route,
+      label: state.label,
+      controllerDeviceId: controllerDeviceIdRef.current
+    }, now.getTime());
     try {
       setActionPending("pause");
       setActionError("");
-      writeActiveWorkoutState(userId, next);
-      setState(next);
+      writeActiveWorkoutState(userId, optimisticCache);
+      setState(optimisticCache);
+      setExecutionState(optimisticExecution);
+      const persisted = previousExecution.session_state === "paused"
+        ? await persistWorkoutSessionResume(userId, session.id, previousExecution, controllerDeviceIdRef.current, now)
+        : await persistWorkoutSessionPause(userId, session.id, previousExecution, controllerDeviceIdRef.current, now);
+      const persistedCache = activeWorkoutCacheFromExecution(persisted, {
+        route: state.route,
+        label: state.label,
+        controllerDeviceId: controllerDeviceIdRef.current
+      }, now.getTime());
+      setExecutionState(persisted);
+      setState(persistedCache);
+      writeActiveWorkoutState(userId, persistedCache);
       await updateWorkoutSessionDuration(session.id, Math.max(1, Math.ceil(seconds / 60)));
     } catch (error) {
-      writeActiveWorkoutState(userId, previous);
-      setState(previous);
+      writeActiveWorkoutState(userId, previousCache);
+      setState(previousCache);
+      setExecutionState(previousExecution);
       setActionError(userSafeError(error, t("minimized.pauseRestore")));
     } finally {
       setActionPending(null);
@@ -190,7 +240,7 @@ export function ActiveWorkoutIndicator() {
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {state ? <Button asChild className="min-h-12"><Link href={state.route} aria-label={t("accessibility.openWorkout")}>{state.paused ? <CirclePlay className="h-4 w-4" /> : null}{t("minimized.openWorkout")}</Link></Button> : null}
-            {state ? <Button type="button" variant="outline" className="min-h-12" aria-label={state.paused ? t("accessibility.resumeWorkout") : t("accessibility.pauseWorkout")} onClick={() => { void togglePause(); }} disabled={Boolean(actionPending)}>{state.paused ? <CirclePlay className="h-4 w-4" /> : <CirclePause className="h-4 w-4" />}{actionPending === "pause" ? t("common.saving") : state.paused ? t("common.resume") : t("common.pause")}</Button> : null}
+            {state ? <Button type="button" variant="outline" className="min-h-12" aria-label={state.paused ? t("accessibility.resumeWorkout") : t("accessibility.pauseWorkout")} onClick={() => { void togglePause(); }} disabled={Boolean(actionPending) || executionState?.session_state === "review"}>{state.paused ? <CirclePlay className="h-4 w-4" /> : <CirclePause className="h-4 w-4" />}{actionPending === "pause" ? t("common.saving") : state.paused ? t("common.resume") : t("common.pause")}</Button> : null}
             {state ? <Button type="button" variant="outline" className="min-h-12" aria-label={t("accessibility.finishWorkout")} disabled={Boolean(actionPending)} onClick={() => ask({ title: t("minimized.finishQuestion"), description: t("minimized.finishDescription"), confirmLabel: t("minimized.finishWorkout"), onConfirm: () => { void finish(); } })}><Flag className="h-4 w-4" />{actionPending === "finish" ? t("minimized.finishing") : t("common.finish")}</Button> : null}
             {state ? <Button type="button" variant="ghost" className="min-h-12 text-destructive hover:text-destructive" aria-label={t("accessibility.cancelWorkout")} disabled={Boolean(actionPending)} onClick={() => ask({ title: t("minimized.cancelQuestion"), description: t("minimized.cancelDescription"), confirmLabel: t("minimized.cancelWorkout"), variant: "destructive", onConfirm: () => { void cancel(); } })}><X className="h-4 w-4" />{actionPending === "cancel" ? t("minimized.cancelling") : t("common.cancel")}</Button> : null}
           </div>

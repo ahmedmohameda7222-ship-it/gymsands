@@ -49,6 +49,7 @@ function exportSupabaseMock() {
       if (table === "user_workout_plan_phases") return { data: [{ id: "phase-a", plan_session_id: "plan-session-a" }], error: null };
       if (table === "user_workout_plan_activities") return { data: [{ id: "activity-a", plan_phase_id: "phase-a" }], error: null };
       if (table === "workout_sessions") return { data: [{ id: "session-a", user_id: userA }], error: null };
+      if (table === "workout_session_execution_states") return { data: [{ workout_session_id: "session-a", user_id: userA, revision: 0 }], error: null };
       if (table === "workout_session_muscle_snapshots") return { data: [{ id: "snapshot-a", user_id: userA, workout_session_id: "session-a" }], error: null };
       if (table === "workout_session_muscle_snapshot_items") return { data: [{ id: "snapshot-item-a", snapshot_id: "snapshot-a", user_id: userA }], error: null };
       if (table === "user_workout_sessions") return { data: [{ id: "scheduled-a", user_id: userA }], error: null };
@@ -83,7 +84,7 @@ describe("current-user privacy export", () => {
 
     const directlyOwnedTables = [
       "onboarding_answers", "user_app_settings", "user_ai_permission_settings", "user_consents",
-      "privacy_requests", "user_workout_plans", "workout_sessions", "user_workout_sessions",
+      "privacy_requests", "user_workout_plans", "workout_sessions", "workout_session_execution_states", "user_workout_sessions",
       "workout_session_muscle_snapshots",
       "user_custom_exercise_mapping_sets",
       "food_logs", "calorie_targets", "user_food_items", "user_meal_plan_items", "meals",
@@ -111,6 +112,7 @@ describe("current-user privacy export", () => {
       program_sessions: [{ id: "plan-session-a", week_template_id: "template-a" }],
       program_phases: [{ id: "phase-a", plan_session_id: "plan-session-a" }],
       planned_activities: [{ id: "activity-a", plan_phase_id: "phase-a" }],
+      active_execution_states: [{ workout_session_id: "session-a", user_id: userA, revision: 0 }],
       muscle_analysis_snapshots: [{ id: "snapshot-a", user_id: userA, workout_session_id: "session-a" }],
       muscle_analysis_snapshot_items: [{ id: "snapshot-item-a", snapshot_id: "snapshot-a", user_id: userA }],
       custom_exercise_mapping_sets: [{ id: "custom-mapping-a", user_id: userA, custom_exercise_id: "user_custom_exercises-a" }],

@@ -292,6 +292,56 @@ export type WorkoutSession = {
   status: WorkoutSessionStatus;
 };
 
+export type WorkoutSessionExecutionSessionState = "active" | "paused" | "review";
+
+export type WorkoutSessionExecutionViewState =
+  | "set_entry"
+  | "rest"
+  | "exercise_complete"
+  | "session_review";
+
+export type WorkoutSessionExecutionBootstrapSource =
+  | "session_start"
+  | "legacy_backfill"
+  | "client_cache_import";
+
+export type WorkoutSessionExecutionState = {
+  workout_session_id: string;
+  user_id: string;
+  state_version: 1;
+  revision: number;
+  session_state: WorkoutSessionExecutionSessionState;
+  view_state: WorkoutSessionExecutionViewState;
+  active_snapshot_item_id: string | null;
+  active_item_order: number;
+  active_set_number: number;
+  session_elapsed_seconds: number;
+  session_running_since: string | null;
+  rest_started_at: string | null;
+  rest_duration_seconds: number | null;
+  rest_ends_at: string | null;
+  controller_device_id: string | null;
+  bootstrap_source: WorkoutSessionExecutionBootstrapSource;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkoutSessionExecutionStatePatch = Partial<Pick<
+  WorkoutSessionExecutionState,
+  | "session_state"
+  | "view_state"
+  | "active_snapshot_item_id"
+  | "active_item_order"
+  | "active_set_number"
+  | "session_elapsed_seconds"
+  | "session_running_since"
+  | "rest_started_at"
+  | "rest_duration_seconds"
+  | "rest_ends_at"
+  | "controller_device_id"
+  | "bootstrap_source"
+>>;
+
 export type Weekday = "Sunday" | "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday";
 
 export type ExerciseLog = {

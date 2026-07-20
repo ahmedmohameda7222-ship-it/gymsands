@@ -5,14 +5,14 @@
   "auditedRepositoryCommit": "d1485062b09a83c4202c1d4154e78b3512cfd621",
   "productionMigrationCount": 62,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 0,
-  "unresolvedCount": 0,
+  "pendingCount": 1,
+  "unresolvedCount": 1,
   "historyRepair": {
-    "state": "reconciled",
+    "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 0,
-    "unresolvedCount": 0,
-    "note": "Production migration history is reconciled through 20260719223300 with all 62 repository migrations recorded exactly once. Do not replay any applied migration."
+    "pendingCount": 1,
+    "unresolvedCount": 1,
+    "note": "Production migration history is reconciled through 20260719223300. AW-2A has one reviewed pending forward migration; Do not replay any applied migration."
   },
   "entries": [
     {
@@ -411,6 +411,11 @@
       "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
       "productionVersion": "20260719223300",
       "productionName": "muscle_intelligence_phase4c1_trusted_log_cleanup"
+    },
+    {
+      "localFile": "20260720213000_active_workout_aw2a_execution_state.sql",
+      "state": "pending",
+      "note": "AW-2A forward migration is pending local replay, database lint, integration verification, and one supported production application. Do not replay any already applied migration."
     }
   ]
 }
