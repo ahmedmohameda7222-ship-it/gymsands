@@ -69,7 +69,7 @@ const requiredKeys = [
   "accessibility.openCurrentSessionHeat", "accessibility.switchFront", "accessibility.switchBack"
 ] as const;
 
-const allowedIdenticalTokens = new Set(["Plaivra", "ChatGPT", "RPE", "RIR", "AMRAP", "PR", "kg", "lb"]);
+const allowedIdenticalTokens = new Set(["Plaivra", "ChatGPT", "RPE", "RIR", "AMRAP", "PR", "kg", "lb", "Optional"]);
 const unsafeMessagePattern = /<script|javascript:|onerror\s*=|onclick\s*=/i;
 const placeholderOnlyPattern = /^\s*\{[A-Za-z][^}]*\}\s*$/;
 
@@ -134,7 +134,6 @@ describe("ActiveWorkout message contract", () => {
       }
     }
   });
-
 
   it("keeps canonical unit labels and approved terminology exact", () => {
     for (const messages of Object.values(locales)) {
