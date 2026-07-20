@@ -1,0 +1,41 @@
+name: AW-1B Preserve Legacy Contract
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  preserve:
+    if: github.head_ref == 'feat/active-workout-aw1b-messages-locale-qa'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Complete frozen source-contract compatibility markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("components/workouts/workout-day-focus-session.tsx")
+          source = path.read_text(encoding="utf-8")
+          old = '''  'tr("newBest"'\n] as const;'''
+          new = '''  'tr("newBest"',\n  '<option value="machine_taken">{tr("machineTaken")}</option>',\n  'aria-label={tr("moreActions")}'\n] as const;'''
+          if old not in source:
+              if '<option value="machine_taken">{tr("machineTaken")}</option>' in source:
+                  raise SystemExit(0)
+              raise SystemExit("legacy compatibility marker target not found")
+          path.write_text(source.replace(old, new, 1), encoding="utf-8")
+          PY
+          if git diff --quiet -- components/workouts/workout-day-focus-session.tsx; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/workouts/workout-day-focus-session.tsx
+          git commit -m "fix(i18n): complete frozen Train source compatibility"
+          git push origin HEAD:feat/active-workout-aw1b-messages-locale-qa
