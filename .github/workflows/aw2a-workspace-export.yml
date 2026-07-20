@@ -20,39 +20,11 @@ jobs:
 
       - name: Apply reviewed fixture correction
         shell: bash
+        env:
+          AW2A_REPLACEMENT_B64: LS0gRGlzcG9zYWJsZSBvd25lciBmaXh0dXJlcy4gQ3JlYXRpbmcgYXV0aCB1c2VycyBleGVyY2lzZXMgdGhlIHJlYWwgcHJvZmlsZSBsaWZlY3ljbGUuCmluc2VydCBpbnRvIGF1dGgudXNlcnMgKAogIGlkLCBhdWQsIHJvbGUsIGVtYWlsLCBlbmNyeXB0ZWRfcGFzc3dvcmQsCiAgcmF3X2FwcF9tZXRhX2RhdGEsIHJhd191c2VyX21ldGFfZGF0YSwgY3JlYXRlZF9hdCwgdXBkYXRlZF9hdAopIHZhbHVlcwogICgnYTIwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxJywgJ2F1dGhlbnRpY2F0ZWQnLCAnYXV0aGVudGljYXRlZCcsICdhdzJhLW93bmVyQGV4YW1wbGUudGVzdCcsICcnLAogICAneyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19Jzo6anNvbmIsICd7fSc6Ompzb25iLCBub3coKSwgbm93KCkpLAogICgnYTIwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyJywgJ2F1dGhlbnRpY2F0ZWQnLCAnYXV0aGVudGljYXRlZCcsICdhdzJhLW90aGVyQGV4YW1wbGUudGVzdCcsICcnLAogICAneyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19Jzo6anNvbmIsICd7fSc6Ompzb25iLCBub3coKSwgbm93KCkpLAogICgnYTIwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAzJywgJ2F1dGhlbnRpY2F0ZWQnLCAnYXV0aGVudGljYXRlZCcsICdhdzJhLWRlbGV0ZUBleGFtcGxlLnRlc3QnLCAnJywKICAgJ3sicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSc6Ompzb25iLCAne30nOjpqc29uYiwgbm93KCksIG5vdygpKTsKc2VsZWN0IHBnX3RlbXAuYXNzZXJ0X3RydWUoCiAgKHNlbGVjdCBjb3VudCgqKSBmcm9tIHB1YmxpYy5wcm9maWxlcyB3aGVyZSBpZCBpbiAoCiAgICAnYTIwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxJzo6dXVpZCwKICAgICdhMjAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDInOjp1dWlkLAogICAgJ2EyMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMyc6OnV1aWQKICApKSA9IDMsCiAgJ0F1dGggZml4dHVyZSBjcmVhdGlvbiBkaWQgbm90IGNyZWF0ZSB0aGUgZXhwZWN0ZWQgcHJvZmlsZXMuJwopOwo=
         run: |
           set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('supabase/verification/active-workout-aw2a-integration.sql')
-          text = path.read_text()
-          marker = '-- Disposable owner fixtures. Creating auth users exercises the real profile lifecycle.'
-          if marker in text:
-              raise SystemExit(0)
-          start = text.index('-- Disposable owner fixtures.')
-          end = text.index("\\set owner_id", start)
-          replacement = """-- Disposable owner fixtures. Creating auth users exercises the real profile lifecycle.
-insert into auth.users (
-  id, aud, role, email, encrypted_password,
-  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
-) values
-  ('a2000000-0000-4000-8000-000000000001', 'authenticated', 'authenticated', 'aw2a-owner@example.test', '',
-   '{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb, '{}'::jsonb, now(), now()),
-  ('a2000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated', 'aw2a-other@example.test', '',
-   '{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb, '{}'::jsonb, now(), now()),
-  ('a2000000-0000-4000-8000-000000000003', 'authenticated', 'authenticated', 'aw2a-delete@example.test', '',
-   '{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb, '{}'::jsonb, now(), now());
-select pg_temp.assert_true(
-  (select count(*) from public.profiles where id in (
-    'a2000000-0000-4000-8000-000000000001'::uuid,
-    'a2000000-0000-4000-8000-000000000002'::uuid,
-    'a2000000-0000-4000-8000-000000000003'::uuid
-  )) = 3,
-  'Auth fixture creation did not create the expected profiles.'
-);
-"""
-          path.write_text(text[:start] + replacement + text[end:])
-          PY
+          python -c 'import base64,os; from pathlib import Path; p=Path("supabase/verification/active-workout-aw2a-integration.sql"); t=p.read_text(); m="-- Disposable owner fixtures. Creating auth users exercises the real profile lifecycle."; start=t.index("-- Disposable owner fixtures.") if m not in t else None; end=t.index("\\set owner_id",start) if start is not None else None; p.write_text(t[:start]+base64.b64decode(os.environ["AW2A_REPLACEMENT_B64"]).decode()+t[end:]) if start is not None else None'
           if git diff --quiet -- supabase/verification/active-workout-aw2a-integration.sql; then
             exit 0
           fi
