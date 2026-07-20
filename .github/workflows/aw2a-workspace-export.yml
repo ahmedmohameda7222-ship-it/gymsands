@@ -23,6 +23,7 @@ jobs:
       - name: Generate patch diagnostics
         shell: bash
         run: |
+          set +e
           set -u
           cat .github/aw2a-rawpatch/00 \
               .github/aw2a-rawpatch/01 \
