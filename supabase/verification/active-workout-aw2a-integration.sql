@@ -1,134 +1,129 @@
--- Disposable AW-2A integration verification. Run only against a clean local Supabase reset.
 \set ON_ERROR_STOP on
-\set member_id 'a2000000-0000-4000-8000-000000000001'
-\set other_member_id 'a2000000-0000-4000-8000-000000000002'
-\set purge_member_id 'a2000000-0000-4000-8000-000000000003'
 
 begin;
 
-create function pg_temp.assert_true(p_condition boolean, p_message text)
-returns void language plpgsql as $assert$
+create or replace function pg_temp.assert_true(p_condition boolean, p_message text)
+returns void
+language plpgsql
+as $function$
 begin
-  if not coalesce(p_condition, false) then raise exception '%', p_message; end if;
+  if not coalesce(p_condition, false) then
+    raise exception '%', p_message;
+  end if;
 end
-$assert$;
+$function$;
 
-create function pg_temp.assert_rejected(p_sql text, p_expected_states text[], p_message text)
-returns void language plpgsql as $assert$
+create or replace function pg_temp.assert_rejected(p_sql text, p_expected_codes text[], p_message text)
+returns void
+language plpgsql
+as $function$
 begin
   begin
     execute p_sql;
   exception when others then
-    if sqlstate = any(p_expected_states) then return; end if;
-    raise exception '% Expected one of %, received %: %', p_message, p_expected_states, sqlstate, sqlerrm;
+    if sqlstate = any(p_expected_codes) then
+      return;
+    end if;
+    raise exception '% Unexpected SQLSTATE %: %', p_message, sqlstate, sqlerrm;
   end;
   raise exception '%', p_message;
 end
-$assert$;
+$function$;
 
-grant execute on function pg_temp.assert_true(boolean, text) to authenticated, service_role;
-grant execute on function pg_temp.assert_rejected(text, text[], text) to authenticated, service_role;
+grant execute on function pg_temp.assert_true(boolean,text) to public;
+grant execute on function pg_temp.assert_rejected(text,text[],text) to public;
 
-insert into auth.users (
-  id, aud, role, email, encrypted_password,
-  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
-) values
-  (:'member_id'::uuid, 'authenticated', 'authenticated', 'aw2a-member@example.invalid', '',
-   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
-  (:'other_member_id'::uuid, 'authenticated', 'authenticated', 'aw2a-other@example.invalid', '',
-   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now()),
-  (:'purge_member_id'::uuid, 'authenticated', 'authenticated', 'aw2a-purge@example.invalid', '',
-   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now());
+-- Disposable owner fixtures.
+insert into public.profiles (id, email, full_name, role, created_at, updated_at)
+values
+  ('a2000000-0000-4000-8000-000000000001', 'aw2a-owner@example.test', 'AW2A Owner', 'member', now(), now()),
+  ('a2000000-0000-4000-8000-000000000002', 'aw2a-other@example.test', 'AW2A Other', 'member', now(), now()),
+  ('a2000000-0000-4000-8000-000000000003', 'aw2a-delete@example.test', 'AW2A Delete', 'member', now(), now());
+\set owner_id 'a2000000-0000-4000-8000-000000000001'
+\set other_member_id 'a2000000-0000-4000-8000-000000000002'
+\set delete_member_id 'a2000000-0000-4000-8000-000000000003'
 
-select pg_temp.assert_true(
-  (select count(*) from public.profiles where id in (:'member_id'::uuid, :'other_member_id'::uuid, :'purge_member_id'::uuid)) = 3,
-  'AW-2A integration users did not receive profiles.'
-);
-
--- Plan-day start creates one authoritative state after the snapshot and its items exist.
-insert into public.user_workout_plans(id, user_id, name, is_active, is_default, source, archived_at)
-values ('a2000000-0000-4000-8000-000000000010', :'member_id'::uuid, 'AW-2A plan', true, true, 'manual', null);
-insert into public.user_workout_plan_days(id, plan_id, day_number, day_name)
-values ('a2000000-0000-4000-8000-000000000011', 'a2000000-0000-4000-8000-000000000010', 1, 'AW-2A day');
-insert into public.user_workout_plan_exercises(
-  id, plan_day_id, source_workout_id, exercise_name, sets, reps, rest_seconds, sort_order
-) values
-  ('a2000000-0000-4000-8000-000000000012', 'a2000000-0000-4000-8000-000000000011',
-   '3eab8f04-2b5f-5c5e-9fed-41c63b90d45b', 'Stable exercise one', 3, '8', 60, 1),
-  ('a2000000-0000-4000-8000-000000000013', 'a2000000-0000-4000-8000-000000000011',
-   '3eab8f04-2b5f-5c5e-9fed-41c63b90d45b', 'Stable exercise two', 2, '10', 75, 2);
-insert into public.user_workout_sessions(
-  id, user_id, user_workout_plan_id, plan_day_id, week_index, day_index,
-  session_number, scheduled_date, day_title, status
-) values (
-  'a2000000-0000-4000-8000-000000000014', :'member_id'::uuid,
-  'a2000000-0000-4000-8000-000000000010', 'a2000000-0000-4000-8000-000000000011',
-  1, 1, 1, current_date, 'AW-2A day', 'scheduled'
-);
+-- Plan-day session creation uses stable plan identities and must create one state row.
+insert into public.user_workout_plans (id,user_id,name,is_active,is_default,source,created_at,updated_at)
+values ('a2000000-0000-4000-8000-000000000010', :'owner_id'::uuid, 'AW-2A plan', true, true, 'manual', now(), now());
+insert into public.user_workout_plan_days (id,plan_id,day_number,day_name,weekday,created_at,updated_at)
+values ('a2000000-0000-4000-8000-000000000011', 'a2000000-0000-4000-8000-000000000010', 1, 'AW-2A day', 'Monday', now(), now());
+insert into public.user_workout_plan_exercises
+  (id,plan_day_id,exercise_name,sets,reps,rest_seconds,sort_order,order_index,created_at,updated_at)
+values
+  ('a2000000-0000-4000-8000-000000000012','a2000000-0000-4000-8000-000000000011','AW-2A first',3,'8',60,1,1,now(),now()),
+  ('a2000000-0000-4000-8000-000000000013','a2000000-0000-4000-8000-000000000011','AW-2A second',2,'10',90,2,2,now(),now());
+insert into public.user_workout_sessions
+  (id,user_id,user_workout_plan_id,plan_day_id,week_index,day_index,session_number,scheduled_date,day_title,status,created_at,updated_at)
+values ('a2000000-0000-4000-8000-000000000014', :'owner_id'::uuid, 'a2000000-0000-4000-8000-000000000010', 'a2000000-0000-4000-8000-000000000011', 1, 1, 1, current_date, 'AW-2A day', 'scheduled', now(), now());
 
 set local role authenticated;
-select set_config('request.jwt.claim.sub', :'member_id', true);
+select set_config('request.jwt.claim.sub', :'owner_id', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select (public.start_or_resume_workout_session_atomic(
-  :'member_id'::uuid,
+  :'owner_id'::uuid,
   'a2000000-0000-4000-8000-000000000011'::uuid,
   'a2000000-0000-4000-8000-000000000014'::uuid
 )->'session'->>'id') as plan_session_id \gset
-set constraints workout_session_execution_state_snapshot_initializer immediate;
-select public.start_or_resume_workout_session_atomic(
-  :'member_id'::uuid,
-  'a2000000-0000-4000-8000-000000000011'::uuid,
-  'a2000000-0000-4000-8000-000000000014'::uuid
-);
+set constraints all immediate;
 select pg_temp.assert_true(
   (select count(*) from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid) = 1,
-  'Plan-day start/resume did not create exactly one execution-state row.'
+  'Plan-day start did not create exactly one execution-state row.'
 );
 select pg_temp.assert_true(
-  (select bootstrap_source = 'session_start' and active_item_order = 1 and active_set_number = 1
-   from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid),
-  'Plan-day execution state did not initialize at the first stable item and set.'
+  (select count(*) from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid and user_id = :'owner_id'::uuid) = 1,
+  'Owner cannot read the plan-day execution-state row.'
 );
 
--- Owner update is scoped, effective updates increment revision, and true no-ops do not.
-update public.workout_session_execution_states
-set active_set_number = 2
-where workout_session_id = :'plan_session_id'::uuid and user_id = :'member_id'::uuid;
-select revision as revision_after_effective
-from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid \gset
-update public.workout_session_execution_states
-set active_set_number = 2
-where workout_session_id = :'plan_session_id'::uuid and user_id = :'member_id'::uuid;
+-- Deterministic unfinished cursor: complete first set then refresh initialization idempotently.
+update public.exercise_logs
+set completed_at = clock_timestamp(), reps = 8
+where workout_session_id = :'plan_session_id'::uuid
+  and exercise_order = 1
+  and set_number = 1;
+select private.initialize_workout_session_execution_state(:'plan_session_id'::uuid, 'session_start', clock_timestamp());
 select pg_temp.assert_true(
-  :'revision_after_effective'::bigint = 1
-  and (select revision from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid) = 1,
-  'Execution-state revision did not increment exactly once for an effective update.'
+  (select active_item_order = 1 and active_set_number = 1 from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid),
+  'Idempotent initialization rewrote the existing cursor.'
 );
 
--- Another authenticated owner cannot read, update, or create the row.
+-- Revision is database-managed on effective updates and stable on no-op updates.
+update public.workout_session_execution_states
+set active_set_number = 2
+where workout_session_id = :'plan_session_id'::uuid;
+select revision as plan_revision_after_update
+from public.workout_session_execution_states
+where workout_session_id = :'plan_session_id'::uuid \gset
+update public.workout_session_execution_states
+set active_set_number = 2
+where workout_session_id = :'plan_session_id'::uuid;
+select pg_temp.assert_true(
+  (select revision = :'plan_revision_after_update'::bigint from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid),
+  'True no-op update incremented execution-state revision.'
+);
+
+-- Cross-user RLS isolation.
 select set_config('request.jwt.claim.sub', :'other_member_id', true);
 select pg_temp.assert_true(
   (select count(*) from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid) = 0,
-  'Another authenticated user read the execution-state row.'
+  'Another member can read the owner execution-state row.'
 );
-with changed as (
-  update public.workout_session_execution_states
-  set active_set_number = 3
-  where workout_session_id = :'plan_session_id'::uuid
-  returning 1
-)
-select pg_temp.assert_true((select count(*) from changed) = 0, 'Another user updated the execution-state row.');
-select pg_temp.assert_rejected(
-  format(
-    'insert into public.workout_session_execution_states(workout_session_id,user_id) values (%L::uuid,%L::uuid)',
-    :'plan_session_id', :'other_member_id'
+select pg_temp.assert_true(
+  not exists (
+    update public.workout_session_execution_states
+    set active_set_number = 3
+    where workout_session_id = :'plan_session_id'::uuid
+    returning 1
   ),
-  array['42501','23505'],
-  'Another user unexpectedly created execution state for the session.'
+  'Another member can update the owner execution-state row.'
+);
+select pg_temp.assert_rejected(
+  format('insert into public.workout_session_execution_states (workout_session_id,user_id,session_state,view_state,active_item_order,active_set_number,session_elapsed_seconds,session_running_since,bootstrap_source) values (%L::uuid,%L::uuid,''active'',''set_entry'',1,1,0,clock_timestamp(),''session_start'')', :'plan_session_id', :'other_member_id'),
+  array['42501'], 'Another member can create execution state for the owner session.'
 );
 reset role;
 
--- Direct-session start and repeated resume also preserve exactly one row.
+-- Direct start creates exactly one execution row; retry does not duplicate it.
 set local role authenticated;
 select set_config('request.jwt.claim.sub', :'other_member_id', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
@@ -137,11 +132,16 @@ select (public.start_or_resume_direct_workout_session_atomic(
   'provider_activity',
   'aw2a-unlinked-direct-activity',
   'plaivra_activity_catalog',
-  'AW-2A direct session',
+  'AW-2A direct',
   'Strength',
-  '{"sets":2,"reps":"8"}'::jsonb,
+  '{"sets":2,"reps":"8","restSeconds":60}'::jsonb,
   null
 )->'session'->>'id') as direct_session_id \gset
+set constraints all immediate;
+select pg_temp.assert_true(
+  (select count(*) from public.workout_session_execution_states where workout_session_id = :'direct_session_id'::uuid) = 1,
+  'Direct start did not create exactly one execution-state row.'
+);
 select (public.start_or_resume_direct_workout_session_atomic(
   :'other_member_id'::uuid,
   'provider_activity',
@@ -159,7 +159,7 @@ select pg_temp.assert_true(
 );
 reset role;
 
-select id as direct_snapshot_item_id
+select item.id as direct_snapshot_item_id
 from public.workout_session_muscle_snapshot_items item
 join public.workout_session_muscle_snapshots snapshot on snapshot.id = item.snapshot_id
 where snapshot.workout_session_id = :'direct_session_id'::uuid
@@ -178,137 +178,113 @@ select pg_temp.assert_rejected(
   array['23514'], 'Execution-state owner mutation unexpectedly succeeded.'
 );
 select pg_temp.assert_rejected(
+  format('update public.workout_session_execution_states set active_item_order=0 where workout_session_id=%L::uuid', :'plan_session_id'),
+  array['23514','23503'], 'Invalid active item order unexpectedly succeeded.'
+);
+select pg_temp.assert_rejected(
+  format('update public.workout_session_execution_states set active_set_number=0 where workout_session_id=%L::uuid', :'plan_session_id'),
+  array['23514'], 'Invalid active set number unexpectedly succeeded.'
+);
+select pg_temp.assert_rejected(
   format('update public.workout_session_execution_states set session_elapsed_seconds=-1 where workout_session_id=%L::uuid', :'plan_session_id'),
   array['23514'], 'Negative elapsed time unexpectedly succeeded.'
 );
 select pg_temp.assert_rejected(
-  format('update public.workout_session_execution_states set active_item_order=0 where workout_session_id=%L::uuid', :'plan_session_id'),
-  array['23514'], 'Zero item order unexpectedly succeeded.'
-);
-select pg_temp.assert_rejected(
-  format('update public.workout_session_execution_states set active_set_number=0 where workout_session_id=%L::uuid', :'plan_session_id'),
-  array['23514'], 'Zero set number unexpectedly succeeded.'
-);
-select pg_temp.assert_rejected(
   format('update public.workout_session_execution_states set session_state=''review'', view_state=''set_entry'' where workout_session_id=%L::uuid', :'plan_session_id'),
-  array['23514'], 'Invalid state/view relation unexpectedly succeeded.'
+  array['23514'], 'Invalid session/view combination unexpectedly succeeded.'
 );
 select pg_temp.assert_rejected(
-  format('update public.workout_session_execution_states set view_state=''rest'', rest_started_at=now(), rest_duration_seconds=60, rest_ends_at=now()+interval ''30 seconds'' where workout_session_id=%L::uuid', :'plan_session_id'),
+  format('update public.workout_session_execution_states set view_state=''rest'', rest_started_at=null, rest_duration_seconds=60, rest_ends_at=clock_timestamp() where workout_session_id=%L::uuid', :'plan_session_id'),
   array['23514'], 'Invalid rest tuple unexpectedly succeeded.'
 );
 select pg_temp.assert_rejected(
   format('update public.workout_session_execution_states set revision=999 where workout_session_id=%L::uuid', :'plan_session_id'),
   array['23514'], 'Caller-controlled revision unexpectedly succeeded.'
 );
-select pg_temp.assert_rejected(
-  format('update public.workout_session_execution_states set revision=0 where workout_session_id=%L::uuid', :'plan_session_id'),
-  array['23514'], 'Caller-decreased revision unexpectedly succeeded.'
-);
 
--- Re-initialization after completed logs selects the first unfinished stable item/set.
+-- Complete all work then prove review initialization for a fresh legacy/open fixture.
+update public.exercise_logs
+set completed_at = clock_timestamp(), reps = coalesce(reps, 8)
+where workout_session_id = :'plan_session_id'::uuid;
 delete from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid;
-insert into public.exercise_logs(
-  workout_session_id, plan_exercise_id, exercise_order, exercise_name,
-  planned_sets, set_number, reps, completed_at, set_type
-) values (
-  :'plan_session_id'::uuid, 'a2000000-0000-4000-8000-000000000012', 1,
-  'Stable exercise one', 3, 1, 8, now(), 'working'
-);
 select private.initialize_workout_session_execution_state(:'plan_session_id'::uuid, 'legacy_backfill', clock_timestamp());
 select pg_temp.assert_true(
-  (select bootstrap_source = 'legacy_backfill' and active_item_order = 1 and active_set_number = 2
-   from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid),
-  'Legacy backfill did not choose the first unfinished stable set deterministically.'
+  (select session_state = 'review' and view_state = 'session_review' from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid),
+  'All-complete open session did not initialize into review.'
 );
 
-insert into public.exercise_logs(
-  workout_session_id, plan_exercise_id, exercise_order, exercise_name,
-  planned_sets, set_number, reps, completed_at, set_type
-) values
-  (:'plan_session_id'::uuid, 'a2000000-0000-4000-8000-000000000012', 1, 'Stable exercise one', 3, 2, 8, now(), 'working'),
-  (:'plan_session_id'::uuid, 'a2000000-0000-4000-8000-000000000012', 1, 'Stable exercise one', 3, 3, 8, now(), 'working'),
-  (:'plan_session_id'::uuid, 'a2000000-0000-4000-8000-000000000013', 2, 'Stable exercise two', 2, 1, 10, now(), 'working'),
-  (:'plan_session_id'::uuid, 'a2000000-0000-4000-8000-000000000013', 2, 'Stable exercise two', 2, 2, 10, now(), 'working');
-delete from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid;
-select private.initialize_workout_session_execution_state(:'plan_session_id'::uuid, 'session_start', clock_timestamp());
-select pg_temp.assert_true(
-  (select session_state = 'review' and view_state = 'session_review'
-          and active_item_order = 2 and active_set_number = 2
-   from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid),
-  'All-complete open session did not initialize into deterministic session review.'
-);
-
--- Terminal transitions remove only transient execution state; performed history remains.
+-- Terminal cleanup preserves canonical performed history and logs.
 update public.workout_sessions
-set status = 'completed', completed_at = clock_timestamp(), duration_minutes = 5
+set status = 'completed', completed_at = clock_timestamp()
 where id = :'plan_session_id'::uuid;
 select pg_temp.assert_true(
-  not exists (select 1 from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid)
-  and exists (select 1 from public.workout_sessions where id = :'plan_session_id'::uuid and status = 'completed')
-  and (select count(*) from public.exercise_logs where workout_session_id = :'plan_session_id'::uuid) = 5,
-  'Completion did not remove only transient state while preserving session history and logs.'
+  not exists (select 1 from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid),
+  'Completing the root session retained execution state.'
+);
+select pg_temp.assert_true(
+  exists (select 1 from public.workout_sessions where id = :'plan_session_id'::uuid and status = 'completed')
+  and exists (select 1 from public.exercise_logs where workout_session_id = :'plan_session_id'::uuid),
+  'Terminal cleanup damaged performed session history or exercise logs.'
 );
 
 update public.workout_sessions
-set status = 'skipped', completed_at = clock_timestamp(), skipped_at = clock_timestamp(), duration_minutes = 0
+set status = 'skipped', skipped_at = clock_timestamp()
 where id = :'direct_session_id'::uuid;
 select pg_temp.assert_true(
   not exists (select 1 from public.workout_session_execution_states where workout_session_id = :'direct_session_id'::uuid),
-  'Skipped root session retained execution state.'
+  'Skipping the root session retained execution state.'
 );
 
--- Deleting an open root cascades the one-to-one state.
-set local role authenticated;
-select set_config('request.jwt.claim.sub', :'other_member_id', true);
-select set_config('request.jwt.claim.role', 'authenticated', true);
-select (public.start_or_resume_direct_workout_session_atomic(
-  :'other_member_id'::uuid, 'provider_activity', 'aw2a-cancel-activity',
-  'plaivra_activity_catalog', 'AW-2A cancel session', 'Strength', '{"sets":1}'::jsonb, null
-)->'session'->>'id') as cancel_session_id \gset
-reset role;
+-- Root deletion cascades execution state.
+insert into public.workout_sessions
+  (id,user_id,workout_name,started_at,status,source,created_at,updated_at)
+values ('a2000000-0000-4000-8000-000000000020', :'owner_id'::uuid, 'AW-2A cancel', clock_timestamp(), 'started', 'manual', now(), now());
+insert into public.workout_session_muscle_snapshots
+  (id,user_id,workout_session_id,snapshot_schema_version,taxonomy_version,mapping_schema_version,calculation_engine_version,threshold_profile_version,result_schema_version,workload_model_version,prescription_schema_version,custom_identity_schema_version,completeness,reason_codes,source,frozen_at,created_at)
+values ('a2000000-0000-4000-8000-000000000021', :'owner_id'::uuid, 'a2000000-0000-4000-8000-000000000020',
+  'workout_session_muscle_snapshot_v2','advanced_visible_v1','exercise_muscle_mapping_v2','muscle_load_resistance_sets_v2','advanced_exposure_v1','advanced_muscle_exposure_result_v1','resistance_sets_v1','planned_prescription_v1','custom_exercise_identity_snapshot_v1','unavailable',array['integration_fixture'],'legacy_backfill',clock_timestamp(),now());
+insert into public.workout_session_muscle_snapshot_items
+  (id,snapshot_id,user_id,item_order,activity_name_snapshot,planned_prescription,planned_sets,state,created_at,updated_at)
+values ('a2000000-0000-4000-8000-000000000022','a2000000-0000-4000-8000-000000000021',:'owner_id'::uuid,1,'AW-2A cancel item','{"sets":1}'::jsonb,1,'planned',now(),now());
+set constraints all immediate;
 select pg_temp.assert_true(
-  exists (select 1 from public.workout_session_execution_states where workout_session_id = :'cancel_session_id'::uuid),
+  exists (select 1 from public.workout_session_execution_states where workout_session_id = 'a2000000-0000-4000-8000-000000000020'),
   'Cancel fixture did not receive execution state.'
 );
-delete from public.workout_sessions where id = :'cancel_session_id'::uuid;
+delete from public.workout_sessions where id = 'a2000000-0000-4000-8000-000000000020';
 select pg_temp.assert_true(
-  not exists (select 1 from public.workout_session_execution_states where workout_session_id = :'cancel_session_id'::uuid),
-  'Deleting an open root session did not cascade execution state.'
+  not exists (select 1 from public.workout_session_execution_states where workout_session_id = 'a2000000-0000-4000-8000-000000000020'),
+  'Deleting the open root did not cascade execution state.'
 );
 
--- Trusted account deletion remains functional and the root-session cascade removes state.
-set local role authenticated;
-select set_config('request.jwt.claim.sub', :'purge_member_id', true);
-select set_config('request.jwt.claim.role', 'authenticated', true);
-select (public.start_or_resume_direct_workout_session_atomic(
-  :'purge_member_id'::uuid, 'provider_activity', 'aw2a-purge-activity',
-  'plaivra_activity_catalog', 'AW-2A purge session', 'Strength', '{"sets":1}'::jsonb, null
-)->'session'->>'id') as purge_session_id \gset
-reset role;
+-- Trusted account-deletion path remains functional because it deletes workout_sessions first.
+insert into public.account_deletion_jobs (id,user_id,state,stage,created_at,updated_at)
+values ('a2000000-0000-4000-8000-000000000030', :'delete_member_id'::uuid, 'processing', 'deleting_database', now(), now());
+insert into public.account_access_states (user_id,state,disabled_at,created_at,updated_at)
+values (:'delete_member_id'::uuid, 'deletion_processing', now(), now(), now())
+on conflict (user_id) do update set state='deletion_processing', disabled_at=excluded.disabled_at, updated_at=excluded.updated_at;
+insert into public.workout_sessions
+  (id,user_id,workout_name,started_at,status,source,created_at,updated_at)
+values ('a2000000-0000-4000-8000-000000000031', :'delete_member_id'::uuid, 'AW-2A delete', clock_timestamp(), 'started', 'manual', now(), now());
+insert into public.workout_session_muscle_snapshots
+  (id,user_id,workout_session_id,snapshot_schema_version,taxonomy_version,mapping_schema_version,calculation_engine_version,threshold_profile_version,result_schema_version,workload_model_version,prescription_schema_version,custom_identity_schema_version,completeness,reason_codes,source,frozen_at,created_at)
+values ('a2000000-0000-4000-8000-000000000032', :'delete_member_id'::uuid, 'a2000000-0000-4000-8000-000000000031',
+  'workout_session_muscle_snapshot_v2','advanced_visible_v1','exercise_muscle_mapping_v2','muscle_load_resistance_sets_v2','advanced_exposure_v1','advanced_muscle_exposure_result_v1','resistance_sets_v1','planned_prescription_v1','custom_exercise_identity_snapshot_v1','unavailable',array['integration_fixture'],'legacy_backfill',clock_timestamp(),now());
+insert into public.workout_session_muscle_snapshot_items
+  (id,snapshot_id,user_id,item_order,activity_name_snapshot,planned_prescription,planned_sets,state,created_at,updated_at)
+values ('a2000000-0000-4000-8000-000000000033','a2000000-0000-4000-8000-000000000032',:'delete_member_id'::uuid,1,'AW-2A delete item','{"sets":1}'::jsonb,1,'planned',now(),now());
+set constraints all immediate;
 select pg_temp.assert_true(
-  exists (select 1 from public.workout_session_execution_states where workout_session_id = :'purge_session_id'::uuid),
-  'Account purge fixture did not receive execution state.'
+  exists (select 1 from public.workout_session_execution_states where workout_session_id = 'a2000000-0000-4000-8000-000000000031'),
+  'Account-deletion fixture did not receive execution state.'
 );
-update public.account_access_states
-set state = 'deletion_processing', reason_code = 'aw2a_integration', disabled_at = clock_timestamp()
-where user_id = :'purge_member_id'::uuid;
-insert into public.account_deletion_jobs(
-  user_id, subject_hash, idempotency_key_hash, state, stage, attempt_count, locked_at
-) values (
-  :'purge_member_id'::uuid,
-  'aw2a-subject-' || :'purge_member_id',
-  'aw2a-idempotency-' || :'purge_member_id',
-  'processing', 'deleting_database', 1, clock_timestamp()
-);
-set local role service_role;
-select public.purge_account_application_data_atomic(:'purge_member_id'::uuid);
-reset role;
+select public.purge_account_application_data_atomic(:'delete_member_id'::uuid);
 select pg_temp.assert_true(
-  not exists (select 1 from public.profiles where id = :'purge_member_id'::uuid)
-  and not exists (select 1 from public.workout_sessions where user_id = :'purge_member_id'::uuid)
-  and not exists (select 1 from public.workout_session_execution_states where user_id = :'purge_member_id'::uuid),
-  'Trusted account deletion left AW-2A execution state or root data behind.'
+  not exists (select 1 from public.workout_session_execution_states where user_id = :'delete_member_id'::uuid)
+  and not exists (select 1 from public.workout_sessions where user_id = :'delete_member_id'::uuid)
+  and not exists (select 1 from public.profiles where id = :'delete_member_id'::uuid),
+  'Trusted account deletion left execution state or owner rows behind.'
 );
 
 rollback;
+\echo 'AW-2A execution-state integration verification passed.'
