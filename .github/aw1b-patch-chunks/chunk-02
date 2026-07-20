@@ -1,0 +1,68 @@
+,7 +940,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+             <MotionCard className="rounded-[28px] border border-border/70 bg-card p-5 shadow-sm sm:p-6">
+               <div className="mb-4 flex items-start justify-between gap-3">
+                 <div>
+-                  <h3 className="text-lg font-semibold">{tr("set.label", { count: activeSet.setNumber })}</h3>
++                  <h3 className="text-lg font-semibold">{tr("set.label", { count: formatters.integer(activeSet.setNumber) })}</h3>
+                   <p className="text-sm text-muted-foreground">{setTypeLabels[activeSet.setType]}</p>
+                 </div>
+                 <Badge variant="outline" className="rounded-full">{tr("set.setsLeft", { count: Math.max(0, activeExercise.sets.length - activeSetIndex - 1) })}</Badge>
+@@ -956,7 +971,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+ 
+               <Button className="mt-4 min-h-[56px] w-full rounded-[18px] text-base font-semibold" onClick={() => finishSet(activeExerciseIndex, activeSetIndex)} disabled={Boolean(activeSet.completedAt) || isSaving || isStarting}>
+                 <CheckCircle2 className="mr-2 h-5 w-5" />
+-                {isStarting ? tr("common.loading") : isSaving ? tr("common.saving") : tr("set.finishNumbered", { count: activeSet.setNumber })}
++                {isStarting ? tr("common.loading") : isSaving ? tr("common.saving") : tr("set.finishNumbered", { count: formatters.integer(activeSet.setNumber) })}
+               </Button>
+ 
+               <div className="mt-3 grid grid-cols-2 gap-2">
+@@ -977,7 +992,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+               <p className="mt-1 text-sm text-muted-foreground"><bdi>{activeExercise.exercise.exercise_name}</bdi> · {tr("set.setsLogged", { count: activeExercise.sets.length })}</p>
+               {nextExercise ? (
+                 <Button className="mt-4 min-h-12 rounded-[18px]" onClick={() => { setActiveExerciseIndex(activeExerciseIndex + 1); setActiveSetIndex(0); setTimerSeconds(nextExercise.exercise.rest_seconds ?? 75); }}>
+-                  {tr("exercise.nextExercise", { name: nextExercise.exercise.exercise_name })}
++                  {tr("exercise.nextExercise", { name: isolateBidiText(nextExercise.exercise.exercise_name) })}
+                 </Button>
+               ) : (
+                 <Button className="mt-4 min-h-[52px] rounded-[18px]" onClick={() => setFinishOpen(true)}><Save className="me-2 h-4 w-4" /> {tr("common.finish")}</Button>
+@@ -992,7 +1007,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+                   <p className="text-sm font-semibold"><bdi>{activeExercise.exercise.exercise_name}</bdi></p>
+                   <p className="text-xs text-muted-foreground">{tr("set.path")}</p>
+                 </div>
+-                <p className="text-xs text-muted-foreground">{activeExercise.sets.filter((set) => set.completedAt).length}/{activeExercise.sets.length}</p>
++                <p dir="ltr" className="text-xs tabular-nums text-muted-foreground">{formatters.ratio(activeExercise.sets.filter((set) => set.completedAt).length, activeExercise.sets.length)}</p>
+               </div>
+               <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${activeExercise.sets.length}, minmax(0, 1fr))` }}>
+                 {activeExercise.sets.map((set, setIndex) => {
+@@ -1004,9 +1019,9 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+                       type="button"
+                       onClick={() => setActiveSetIndex(setIndex)}
+                       className={`flex h-12 items-center justify-center rounded-[14px] border text-sm font-bold transition-colors ${isCompleted ? "border-success/30 bg-success/10 text-success" : isActive ? "border-primary/50 bg-primary/10 text-primary" : "border-border bg-muted/40 text-muted-foreground"}`}
+-                      aria-label={isCompleted ? tr("accessibility.completedSet", { number: set.setNumber }) : isActive ? tr("accessibility.currentSet", { number: set.setNumber }) : tr("accessibility.plannedSet", { number: set.setNumber })}
++                      aria-label={isCompleted ? tr("accessibility.completedSet", { number: formatters.integer(set.setNumber) }) : isActive ? tr("accessibility.currentSet", { number: formatters.integer(set.setNumber) }) : tr("accessibility.plannedSet", { number: formatters.integer(set.setNumber) })}
+                     >
+-                      {isCompleted ? <Check className="h-4 w-4" /> : set.setNumber}
++                      {isCompleted ? <Check className="h-4 w-4" /> : <span dir="ltr" className="tabular-nums">{formatters.integer(set.setNumber)}</span>}
+                     </button>
+                   );
+                 })}
+@@ -1021,7 +1036,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+                   <p className="text-xs text-muted-foreground">{tr("exercise.nextWorkout")}</p>
+                   <p className="text-sm font-semibold"><bdi>{nextExercise.exercise.exercise_name}</bdi></p>
+                 </div>
+-                <Badge variant="outline" className="rounded-full">{nextExercise.exercise.sets ?? nextExercise.sets.length} × {nextExercise.exercise.reps ?? tr("common.customValue")}</Badge>
++                <Badge variant="outline" className="rounded-full"><span dir="ltr" className="tabular-nums">{formatters.integer(nextExercise.exercise.sets ?? nextExercise.sets.length)} × {formatPlannedReps(nextExercise.exercise.reps, formatters, tr("common.customValue"))}</span></Badge>
+               </CardContent>
+             </Card>
+           ) : null}
+@@ -1050,10 +1065,10 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+             <CardContent className="space-y-3 p-4">
+               <p className="text-sm font-semibold">{tr("actions.sessionDetails")}</p>
+               <div className="grid grid-cols-2 gap-2 text-sm">
+-                <InfoStat label={tr("review.volume")} value={`${totalVolume} kg`} />
+-                <InfoStat label={tr("set.labelPlural")} value={`${completedSets}/${totalSets}`} />
+-                <InfoStat label={tr("navigation.exercisesCount", { count: exerciseStates.filter((item) => item.sets.some((set) => set.completedAt)).length })} value={`${exerciseStates.filter((item) => item.sets.some((set) => set.completedAt)).length}/${exerciseStates.length}`} />
+-                <InfoStat label={tr("review.personalRecords")} value={String(previewPrs.length)} />
++                <InfoStat label={tr("review.volume")} value={formatters.measurement(totalVolume, "kg")} />
++                <InfoStat label={tr("set.labelPlural")} value={formatters.ratio(completedSets, totalSets)} valueDirection="ltr" />
++                <InfoStat label={tr("navigation.exercisesCount", { count: exerciseStates.filter((item) => item.sets.so
