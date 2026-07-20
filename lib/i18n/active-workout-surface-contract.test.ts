@@ -41,4 +41,13 @@ describe("AW-1B Active Workout surface contract", () => {
     expect(indicator).toContain("<bdi>{state?.label");
     expect(indicator).toContain('<span dir="ltr" className="tabular-nums">{formatters.timer(elapsed)}</span>');
   });
+
+  it("keeps rendered locale QA aligned with authoritative language persistence and tiny-screen spacing", () => {
+    const qa = source("scripts/run-train-layout-qa.mjs");
+    const trainUi = source("components/workouts/train-ui.tsx");
+    expect(qa).toContain('name: "plaivra.language.v1", value: language');
+    expect(qa).toContain('x-plaivra-qa-fixture": "localized-settings"');
+    expect(qa).toContain("document.documentElement.lang === expected");
+    expect(trainUi).toContain("max-[340px]:pb-[var(--active-workout-controller-height)]");
+  });
 });
