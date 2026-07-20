@@ -1,0 +1,89 @@
+name: AW-2A Fix Migration
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  fix:
+    if: github.head_ref == 'feat/active-workout-aw2a-persisted-execution-state'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('supabase/migrations/20260720213000_active_workout_aw2a_execution_state.sql')
+          text = path.read_text()
+          changes = [
+          ("""    if new.created_at is distinct from old.created_at then
+      raise exception 'Execution-state creation time is immutable.' using errcode = '23514';
+    end if;
+    if new.revision is distinct from old.revision then""",
+           """    if new.created_at is distinct from old.created_at then
+      raise exception 'Execution-state creation time is immutable.' using errcode = '23514';
+    end if;
+    if new.bootstrap_source is distinct from old.bootstrap_source
+       and not (old.bootstrap_source = 'legacy_backfill' and new.bootstrap_source = 'client_cache_import') then
+      raise exception 'Execution-state bootstrap source may change only for one validated legacy cache import.' using errcode = '23514';
+    end if;
+    if new.revision is distinct from old.revision then"""),
+          ("""  if coalesce((select array_to_string(proconfig, ',') from pg_proc where oid = v_integrity), '') not like '%search_path=%'""",
+           """  if (select pg_get_userbyid(proowner) from pg_proc where oid = v_integrity) not in ('postgres', 'supabase_admin')
+     or (select pg_get_userbyid(proowner) from pg_proc where oid = v_initializer) not in ('postgres', 'supabase_admin')
+     or (select pg_get_userbyid(proowner) from pg_proc where oid = v_cleanup) not in ('postgres', 'supabase_admin') then
+    raise exception 'AW-2A trusted lifecycle functions are not owned by a trusted database role.';
+  end if;
+  if coalesce((select array_to_string(proconfig, ',') from pg_proc where oid = v_integrity), '') not like '%search_path=%'"""),
+          ("""  if exists (
+    select 1
+    from pg_proc routine
+    cross join lateral aclexplode(coalesce(routine.proacl, acldefault('f', routine.proowner))) grant_acl
+    where routine.oid in (v_integrity, v_cleanup)
+      and grant_acl.grantee = 0
+      and grant_acl.privilege_type = 'EXECUTE'
+  ) then
+    raise exception 'PUBLIC can execute an AW-2A trigger function.';
+  end if;
+
+  select migration_version into strict v_marker""",
+           """  if exists (
+    select 1
+    from pg_proc routine
+    cross join lateral aclexplode(coalesce(routine.proacl, acldefault('f', routine.proowner))) grant_acl
+    where routine.oid in (v_integrity, v_cleanup)
+      and grant_acl.grantee = 0
+      and grant_acl.privilege_type = 'EXECUTE'
+  ) then
+    raise exception 'PUBLIC can execute an AW-2A trigger function.';
+  end if;
+
+  if exists (
+    select 1
+    from pg_class relation
+    cross join lateral aclexplode(coalesce(relation.relacl, acldefault('r', relation.relowner))) grant_acl
+    where relation.oid = 'public.workout_session_execution_states'::regclass
+      and grant_acl.grantee = 0
+  ) then
+    raise exception 'PUBLIC retains privileges on the AW-2A execution-state table.';
+  end if;
+
+  select migration_version into strict v_marker""")]
+          for old, new in changes:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected one migration match, found {count}')
+              text = text.replace(old, new)
+          path.write_text(text)
+          PY
+          rm -f .github/workflows/aw2a-fix-migration.yml
+          git add -A
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(database): harden AW-2A execution-state migration'
+          git push origin HEAD:feat/active-workout-aw2a-persisted-execution-state
