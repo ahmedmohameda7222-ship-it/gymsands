@@ -8,3 +8,4 @@ if (!source.includes(original)) throw new Error("Locale QA context creation targ
 source = source.replace(original, replacement);
 await writeFile(target, source, "utf8");
 console.log("Locale cookie seeding added to focused QA runner.");
+await import("./aw1b-locale-qa-settings-fix.mjs");
