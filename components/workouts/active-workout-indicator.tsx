@@ -13,14 +13,7 @@ import { cancelWorkoutSession, completeWorkoutSession, getOpenWorkoutSessionWith
 import type { WorkoutSession } from "@/types";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 import { userSafeError } from "@/lib/error-formatting";
-import { useTrainTranslation } from "@/lib/i18n/train";
-
-function formatTime(totalSeconds: number) {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}` : `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
+import { useActiveWorkoutTranslation } from "@/lib/i18n/active-workout";
 
 export function ActiveWorkoutIndicator() {
   const { user } = useAuth();
@@ -29,7 +22,7 @@ export function ActiveWorkoutIndicator() {
   const { toast } = useToast();
   const { celebrate } = useSuccessFeedback();
   const { dialog, ask } = useConfirm();
-  const { tr } = useTrainTranslation();
+  const { t, formatters } = useActiveWorkoutTranslation();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [state, setState] = useState<ActiveWorkoutState | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -43,7 +36,7 @@ export function ActiveWorkoutIndicator() {
     const stored = readActiveWorkoutState(userId);
     const candidateSessionId = stored && isValidActiveWorkoutRoute(stored.route) ? stored.sessionId : null;
     const { session: open, error } = await getOpenWorkoutSessionWithStatus(userId, null, candidateSessionId);
-    setLoadError(error ? tr("activeWorkoutLoadFailed") : "");
+    setLoadError(error ? t("minimized.loadFailed") : "");
     if (error) return;
     setSession(open);
     if (!open) {
@@ -62,7 +55,7 @@ export function ActiveWorkoutIndicator() {
     };
     writeActiveWorkoutState(userId, next);
     setState(next);
-  }, [tr, userId]);
+  }, [t, userId]);
 
   useEffect(() => { void load(); }, [load, pathname]);
 
@@ -127,7 +120,7 @@ export function ActiveWorkoutIndicator() {
     } catch (error) {
       writeActiveWorkoutState(userId, previous);
       setState(previous);
-      setActionError(userSafeError(error, tr("pauseStateRestoreMessage")));
+      setActionError(userSafeError(error, t("minimized.pauseRestore")));
     } finally {
       setActionPending(null);
     }
@@ -139,16 +132,16 @@ export function ActiveWorkoutIndicator() {
       setActionPending("finish");
       setActionError("");
       const seconds = activeWorkoutElapsed(state);
-      await completeWorkoutSession(session.id, tr("finishedFromIndicator"), Math.max(1, Math.ceil(seconds / 60)));
+      await completeWorkoutSession(session.id, t("minimized.finishedFromIndicator"), Math.max(1, Math.ceil(seconds / 60)));
       clearActiveWorkoutState(userId);
       setSession(null);
       setState(null);
-      toast({ title: tr("workoutFinished"), description: tr("workoutFinishedDescription") });
-      celebrate(tr("workoutComplete"));
+      toast({ title: t("minimized.finishedTitle"), description: t("minimized.finishedDescription") });
+      celebrate(t("completion.title"));
     } catch (error) {
-      const message = userSafeError(error, tr("workoutFinishFailedMessage"));
+      const message = userSafeError(error, t("minimized.finishFailedDescription"));
       setActionError(message);
-      toast({ title: tr("workoutNotFinished"), description: message });
+      toast({ title: t("minimized.finishFailedTitle"), description: message });
     } finally {
       setActionPending(null);
     }
@@ -163,11 +156,11 @@ export function ActiveWorkoutIndicator() {
       clearActiveWorkoutState(userId);
       setSession(null);
       setState(null);
-      toast({ title: tr("workoutCancelled"), description: tr("workoutCancelledDescription") });
+      toast({ title: t("minimized.cancelledTitle"), description: t("minimized.cancelledDescription") });
     } catch (error) {
-      const message = userSafeError(error, tr("workoutCancelFailedMessage"));
+      const message = userSafeError(error, t("minimized.cancelFailedDescription"));
       setActionError(message);
-      toast({ title: tr("workoutNotCancelled"), description: message });
+      toast({ title: t("minimized.cancelFailedTitle"), description: message });
     } finally {
       setActionPending(null);
     }
@@ -183,16 +176,23 @@ export function ActiveWorkoutIndicator() {
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground"><Dumbbell className="h-5 w-5" /></span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">{state?.label ?? tr("activeWorkoutInProgress")}</p>
-              <p className="text-xs text-muted-foreground">{loadError || `${state?.paused ? tr("paused") : tr("active")} · ${formatTime(elapsed)}`}</p>
+              <p className="truncate text-sm font-semibold"><bdi>{state?.label ?? t("minimized.activeWorkout")}</bdi></p>
+              <p className="text-xs text-muted-foreground">
+                {loadError || (
+                  <>
+                    {state?.paused ? t("common.paused") : t("common.active")} ·{" "}
+                    <span dir="ltr" className="tabular-nums">{formatters.timer(elapsed)}</span>
+                  </>
+                )}
+              </p>
               {actionError ? <p className="mt-1 text-xs leading-5 text-destructive">{actionError}</p> : null}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            {state ? <Button asChild className="min-h-12"><Link href={state.route}>{state.paused ? <CirclePlay className="h-4 w-4" /> : null}{tr("returnToWorkout")}</Link></Button> : null}
-            {state ? <Button type="button" variant="outline" className="min-h-12" onClick={() => { void togglePause(); }} disabled={Boolean(actionPending)}>{state.paused ? <CirclePlay className="h-4 w-4" /> : <CirclePause className="h-4 w-4" />}{actionPending === "pause" ? tr("saving") : state.paused ? tr("resume") : tr("pause")}</Button> : null}
-            {state ? <Button type="button" variant="outline" className="min-h-12" disabled={Boolean(actionPending)} onClick={() => ask({ title: tr("finishActiveWorkoutQuestion"), description: tr("finishActiveWorkoutDescription"), confirmLabel: tr("finishWorkout"), onConfirm: () => { void finish(); } })}><Flag className="h-4 w-4" />{actionPending === "finish" ? tr("finishing") : tr("finish")}</Button> : null}
-            {state ? <Button type="button" variant="ghost" className="min-h-12 text-destructive hover:text-destructive" disabled={Boolean(actionPending)} onClick={() => ask({ title: tr("cancelActiveWorkoutQuestion"), description: tr("cancelActiveWorkoutDescription"), confirmLabel: tr("cancelWorkout"), variant: "destructive", onConfirm: () => { void cancel(); } })}><X className="h-4 w-4" />{actionPending === "cancel" ? tr("cancelling") : tr("cancel")}</Button> : null}
+            {state ? <Button asChild className="min-h-12"><Link href={state.route} aria-label={t("accessibility.openWorkout")}>{state.paused ? <CirclePlay className="h-4 w-4" /> : null}{t("minimized.openWorkout")}</Link></Button> : null}
+            {state ? <Button type="button" variant="outline" className="min-h-12" aria-label={state.paused ? t("accessibility.resumeWorkout") : t("accessibility.pauseWorkout")} onClick={() => { void togglePause(); }} disabled={Boolean(actionPending)}>{state.paused ? <CirclePlay className="h-4 w-4" /> : <CirclePause className="h-4 w-4" />}{actionPending === "pause" ? t("common.saving") : state.paused ? t("common.resume") : t("common.pause")}</Button> : null}
+            {state ? <Button type="button" variant="outline" className="min-h-12" aria-label={t("accessibility.finishWorkout")} disabled={Boolean(actionPending)} onClick={() => ask({ title: t("minimized.finishQuestion"), description: t("minimized.finishDescription"), confirmLabel: t("minimized.finishWorkout"), onConfirm: () => { void finish(); } })}><Flag className="h-4 w-4" />{actionPending === "finish" ? t("minimized.finishing") : t("common.finish")}</Button> : null}
+            {state ? <Button type="button" variant="ghost" className="min-h-12 text-destructive hover:text-destructive" aria-label={t("accessibility.cancelWorkout")} disabled={Boolean(actionPending)} onClick={() => ask({ title: t("minimized.cancelQuestion"), description: t("minimized.cancelDescription"), confirmLabel: t("minimized.cancelWorkout"), variant: "destructive", onConfirm: () => { void cancel(); } })}><X className="h-4 w-4" />{actionPending === "cancel" ? t("minimized.cancelling") : t("common.cancel")}</Button> : null}
           </div>
         </div>
       </div>
