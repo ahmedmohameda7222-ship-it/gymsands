@@ -136,6 +136,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Rendered browser QA
+        id: browser
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -151,6 +153,7 @@ jobs:
             2>&1 | tee quality-reports/aw1a/browser-qa.log
 
       - name: Scope and diff checks
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
@@ -160,12 +163,14 @@ jobs:
           test -z "$(git diff --name-only "$AW1A_STARTING_SHA" -- 'app/(private)/train' components/train components/workouts/session-muscle-load-panel.tsx)"
 
       - name: Generate implementation report
+        if: steps.browser.outcome == 'success'
         env:
           UNIT_STATUS: ${{ steps.unit.outputs.status }}
           UNIT_BASELINE_STATUS: ${{ steps.unit.outputs.baseline }}
         run: node scripts/aw1a-report.mjs
 
       - name: Upload validation evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: aw1a-validation-${{ github.run_id }}
@@ -174,6 +179,7 @@ jobs:
           retention-days: 14
 
       - name: Commit final implementation and remove temporary helpers
+        if: steps.browser.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -192,3 +198,7 @@ jobs:
           git diff --cached --check
           git commit -m "feat(i18n): establish multilingual request foundation"
           git push origin HEAD:feat/active-workout-aw1a-language-foundation
+
+      - name: Fail incomplete browser validation
+        if: steps.browser.outcome != 'success'
+        run: exit 1
