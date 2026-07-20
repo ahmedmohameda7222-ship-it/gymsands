@@ -1,4 +1,4 @@
-name: AW-2A Full Validation
+name: AW-2A Apply Reviewed Patch
 
 on:
   pull_request:
@@ -6,190 +6,47 @@ on:
       - main
 
 permissions:
-  contents: read
-
-concurrency:
-  group: aw2a-full-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  contents: write
 
 jobs:
-  validate:
+  apply:
     if: github.head_ref == 'feat/active-workout-aw2a-persisted-execution-state'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env:
-      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
-      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
-      NEXT_PUBLIC_USE_MOCK_AUTH: "true"
-      PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
-      PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
-      PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
-      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
-      PLAIVRA_RELEASE_ENVIRONMENT: ci
-      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
-      PLAIVRA_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+    timeout-minutes: 10
     steps:
-      - name: Checkout reviewed starting main
-        uses: actions/checkout@v4
-        with:
-          ref: 6f381b760eb711c3eef4bb515365d4c675648ed3
-          fetch-depth: 0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install starting-main dependencies
-        run: npm ci
-
-      - name: Record starting-main unit failure identities
-        shell: bash
-        run: |
-          set +e
-          npx vitest run --config vitest.unit.config.mjs --reporter=json --outputFile=/tmp/aw2a-baseline-unit.json
-          echo "$?" > /tmp/aw2a-baseline-unit.exit
-          set -e
-
-      - name: Checkout exact AW-2A PR head
+      - name: Checkout exact PR head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Verify checkout identity
-        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
-
-      - name: Install exact-head dependencies
-        run: npm ci
-
-      - name: Lint repository
-        run: npm run lint
-
-      - name: Typecheck application
-        run: npm run typecheck
-
-      - name: Validate i18n contracts
-        run: npm run test:i18n
-
-      - name: Record exact-head unit failures
-        shell: bash
-        run: |
-          set +e
-          npx vitest run --config vitest.unit.config.mjs --reporter=json --outputFile=/tmp/aw2a-head-unit.json
-          echo "$?" > /tmp/aw2a-head-unit.exit
-          set -e
-
-      - name: Prove no new unit failure identity
-        continue-on-error: true
-        shell: bash
-        run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          def failed(path):
-              payload = json.loads(Path(path).read_text())
-              failures = set()
-              for suite in payload.get("testResults", []):
-                  for assertion in suite.get("assertionResults", []):
-                      if assertion.get("status") == "failed":
-                          failures.add(" > ".join(assertion.get("ancestorTitles", []) + [assertion.get("title", "")]))
-              return failures
-
-          baseline = failed("/tmp/aw2a-baseline-unit.json")
-          head = failed("/tmp/aw2a-head-unit.json")
-          print("starting-main failures:", sorted(baseline))
-          print("AW-2A head failures:", sorted(head))
-          new = sorted(head - baseline)
-          if new:
-              raise SystemExit("AW-2A introduced new unit failure identities: " + repr(new))
-          PY
-
-      - name: Run integration tests
-        run: npm run test:integration
-
-      - name: Run script tests
-        run: npm run test:scripts
-
-      - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=moderate
-
-      - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v2
-        with:
-          version: 2.109.1
-          github-token: ${{ github.token }}
-
-      - name: Replay complete migration chain and lint database
+      - name: Apply reviewed AW-2A patch and restore full validation
         shell: bash
         run: |
           set -euo pipefail
-          supabase db start
-          supabase db reset --local --no-seed
-          supabase db lint --local --schema public --level error --fail-on error
-
-      - name: Run AW-2A database verification and PostgreSQL integration
-        shell: bash
-        run: |
-          set -euo pipefail
-          database_url="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql
-          PLAIVRA_AW2A_TEST_DATABASE_URL="$database_url" npx vitest run --config vitest.integration.config.mjs services/database/workout-session-execution.integration.test.ts
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql
-          PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$database_url" node scripts/test-database-preflight-control.mjs
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
-
-      - name: Validate migration ledger and release manifest
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm run migration:ledger:check
-          PLAIVRA_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" npm run release:manifest -- --output /tmp/plaivra-aw2a-release-manifest.json
-
-      - name: Build production application
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PLAIVRA_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build
-
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Run Train rendered QA
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p quality-reports
-          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/qa-server.log 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent http://localhost:3000/ >/dev/null; then break; fi
-            sleep 1
-          done
-          curl --fail --silent http://localhost:3000/ >/dev/null
-          QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=quality-reports/train-qa-evidence npm run qa:train
-
-      - name: Check diff whitespace
-        run: git diff --check "${{ github.event.pull_request.base.sha }}...HEAD"
-
-      - name: Upload full validation evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: aw2a-full-validation-${{ github.event.pull_request.head.sha }}
-          path: |
-            /tmp/aw2a-baseline-unit.json
-            /tmp/aw2a-baseline-unit.exit
-            /tmp/aw2a-head-unit.json
-            /tmp/aw2a-head-unit.exit
-            /tmp/plaivra-aw2a-release-manifest.json
-            quality-reports/train-qa-evidence
-            quality-reports/qa-server.log
-          if-no-files-found: warn
-          retention-days: 7
+          git show HEAD^:.github/workflows/aw2a-workspace-export.yml > /tmp/aw2a-full-validation.yml
+          sed -i '/^[[:space:]]*continue-on-error: true$/d' /tmp/aw2a-full-validation.yml
+          cat .github/aw2a-rawpatch/00 \
+              .github/aw2a-rawpatch/01 \
+              .github/aw2a-rawpatch/02 \
+              .github/aw2a-rawpatch/03 \
+              .github/aw2a-rawpatch/04 > /tmp/aw2a-reviewed.patch
+          echo 'b36400477b4fe0e073b004827cd745c8b8eaa143553c110fe7ed5c7eeda28cf4  /tmp/aw2a-reviewed.patch' | sha256sum -c -
+          git apply --index --exclude=.github/workflows/aw2a-workspace-export.yml /tmp/aw2a-reviewed.patch
+          cp /tmp/aw2a-full-validation.yml .github/workflows/aw2a-workspace-export.yml
+          rm -rf .github/aw2a-rawpatch \
+                 .github/aw2a-codefix \
+                 .github/aw2a-final-fix \
+                 .github/aw2a-correction \
+                 .github/aw2a-correction-small \
+                 .github/aw2a-patch
+          rm -f .github/workflows/aw2a-fix-migration.yml \
+                .github/workflows/aw2a-apply-text-fixes.yml \
+                .github/workflows/aw2a-source-export.yml \
+                docs/.aw2a-pr-trigger
+          git add -A
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(workouts): complete AW-2A validation corrections'
+          git push origin HEAD:feat/active-workout-aw2a-persisted-execution-state
