@@ -243,6 +243,48 @@ jobs:
             QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/rendered-qa-evidence npm run qa:rendered
           fi
 
+      - name: Record i18n evidence metadata
+        if: github.event_name == 'pull_request' && steps.scope.outputs.i18n == 'true' && steps.scope.outputs.ui == 'true'
+        shell: bash
+        env:
+          PLAIVRA_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          metadata = {
+              "headSha": os.environ["PLAIVRA_COMMIT_SHA"],
+              "workflowRunId": os.environ["GITHUB_RUN_ID"],
+              "workflowRunAttempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "pullRequestNumber": int(os.environ["PLAIVRA_PULL_REQUEST_NUMBER"]),
+          }
+          output = Path("quality-reports/i18n-rendered-evidence-metadata.json")
+          output.parent.mkdir(parents=True, exist_ok=True)
+          output.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Upload successful i18n rendered evidence
+        if: github.event_name == 'pull_request' && steps.scope.outputs.i18n == 'true' && steps.scope.outputs.ui == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: i18n-rendered-evidence-${{ github.event.pull_request.head.sha }}
+          path: |
+            quality-reports/train-qa-evidence/active-workout-en-390x844.png
+            quality-reports/train-qa-evidence/active-workout-de-390x844.png
+            quality-reports/train-qa-evidence/active-workout-ar-390x844.png
+            quality-reports/train-qa-evidence/active-workout-en-1440x900.png
+            quality-reports/train-qa-evidence/active-workout-de-1440x900.png
+            quality-reports/train-qa-evidence/active-workout-ar-1440x900.png
+            quality-reports/train-qa-evidence/active-workout-indicator-ar-390x844.png
+            quality-reports/train-qa-evidence/train-layout-qa-results.json
+            quality-reports/i18n-rendered-evidence-metadata.json
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload browser evidence on failure
         if: failure() && steps.scope.outputs.ui == 'true'
         uses: actions/upload-artifact@v4
