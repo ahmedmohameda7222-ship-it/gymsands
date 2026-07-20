@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: aw1b-implementation-${{ github.event.pull_request.number || github.ref }}
@@ -75,13 +75,11 @@ jobs:
           set -o pipefail
           npm run build 2>&1 | tee aw1b-build.log
 
-      - name: Package validated implementation
+      - name: Export validated implementation
         if: success()
         run: |
           tar -czf aw1b-validated-files.tar.gz \
-            messages/en.json \
-            messages/de.json \
-            messages/ar.json \
+            messages/en.json messages/de.json messages/ar.json \
             lib/i18n/active-workout.ts \
             lib/i18n/active-workout-formatters.ts \
             lib/i18n/active-workout-message-contract.test.ts \
@@ -91,9 +89,30 @@ jobs:
             components/workouts/active-workout-indicator.tsx \
             components/workouts/session-muscle-load-panel.tsx \
             components/workouts/workout-day-focus-session.tsx \
-            package.json \
-            .github/workflows/quality.yml
+            package.json .github/workflows/quality.yml
           git diff --binary > aw1b-validated.patch
+
+      - name: Commit validated implementation except Quality workflow
+        if: github.event_name == 'pull_request' && success()
+        run: |
+          rm -f scripts/.aw1b-apply-expanded.mjs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            messages/en.json messages/de.json messages/ar.json \
+            lib/i18n/active-workout.ts \
+            lib/i18n/active-workout-formatters.ts \
+            lib/i18n/active-workout-message-contract.test.ts \
+            lib/i18n/active-workout-formatters.test.ts \
+            lib/i18n/message-shape.test.ts \
+            lib/train/muscle-intelligence/active-session-muscle-load-copy.ts \
+            components/workouts/active-workout-indicator.tsx \
+            components/workouts/session-muscle-load-panel.tsx \
+            components/workouts/workout-day-focus-session.tsx \
+            package.json
+          git diff --cached --check
+          git commit -m "feat(i18n): add active workout messages and locale QA"
+          git push origin HEAD:feat/active-workout-aw1b-messages-locale-qa
 
       - name: Upload validated implementation and diagnostics
         if: always()
