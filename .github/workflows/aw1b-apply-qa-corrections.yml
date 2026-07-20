@@ -23,6 +23,7 @@ jobs:
         run: |
           set -uo pipefail
           cat .github/aw1b-patch-chunks/chunk-* > /tmp/aw1b-qa.patch
+          sed -i 's/@@ -925,,7 /@@ -925,7 /' /tmp/aw1b-qa.patch
           sha256sum /tmp/aw1b-qa.patch | tee /tmp/patch-sha256.txt
           git apply --check /tmp/aw1b-qa.patch > /tmp/apply.log 2>&1
           status=$?
