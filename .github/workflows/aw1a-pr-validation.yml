@@ -1,0 +1,194 @@
+name: AW-1A PR Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aw1a-pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: github.event.pull_request.head.ref == 'feat/active-workout-aw1a-language-foundation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      AW1A_STARTING_SHA: 604e6210b368a9bbee9305ef365a0beeb5817cba
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_USE_MOCK_AUTH: "false"
+      PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+      PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+      PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+      PLAIVRA_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+      PLAIVRA_RELEASE_ENVIRONMENT: ci
+      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Verify base and head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          test "$(git rev-parse origin/main)" = "$AW1A_STARTING_SHA"
+          test "$(git merge-base HEAD origin/main)" = "$AW1A_STARTING_SHA"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          mkdir -p quality-reports/aw1a
+          npm ci 2>&1 | tee quality-reports/aw1a/npm-ci.log
+
+      - name: Apply idempotent compatibility patch
+        run: node scripts/aw1a-patch.mjs
+
+      - name: Typecheck
+        run: npm run typecheck 2>&1 | tee quality-reports/aw1a/typecheck.log
+
+      - name: Lint
+        run: npm run lint 2>&1 | tee quality-reports/aw1a/lint.log
+
+      - name: Targeted AW-1A tests
+        run: |
+          npx vitest run --config vitest.unit.config.mjs \
+            lib/i18n/locale-resolution.test.ts \
+            lib/i18n/message-shape.test.ts 2>&1 | tee quality-reports/aw1a/targeted-tests.log
+
+      - name: Full unit tests with starting-main parity
+        id: unit
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          npm run test:unit > quality-reports/aw1a/unit-tests.log 2>&1
+          branch_status=$?
+          set -e
+          if [ "$branch_status" -eq 0 ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+            echo "baseline=not-needed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git worktree add --detach /tmp/aw1a-main "$AW1A_STARTING_SHA"
+          ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/aw1a-main/node_modules
+          set +e
+          (cd /tmp/aw1a-main && npm run test:unit) > quality-reports/aw1a/main-unit-tests.log 2>&1
+          main_status=$?
+          set -e
+          test "$main_status" -ne 0
+          sed -E 's/\x1B\[[0-9;]*[mK]//g' quality-reports/aw1a/unit-tests.log \
+            | grep -E '^ FAIL ' | sed -E 's/^[[:space:]]+//' | sort -u > quality-reports/aw1a/branch-unit-failures.txt
+          sed -E 's/\x1B\[[0-9;]*[mK]//g' quality-reports/aw1a/main-unit-tests.log \
+            | grep -E '^ FAIL ' | sed -E 's/^[[:space:]]+//' | sort -u > quality-reports/aw1a/main-unit-failures.txt
+          diff -u quality-reports/aw1a/main-unit-failures.txt quality-reports/aw1a/branch-unit-failures.txt \
+            | tee quality-reports/aw1a/unit-baseline-diff.txt
+          echo "status=failure" >> "$GITHUB_OUTPUT"
+          echo "baseline=success" >> "$GITHUB_OUTPUT"
+
+      - name: Script tests
+        run: npm run test:scripts 2>&1 | tee quality-reports/aw1a/script-tests.log
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=moderate 2>&1 | tee quality-reports/aw1a/npm-audit.log
+
+      - name: Production build
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PLAIVRA_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npm run build 2>&1 | tee quality-reports/aw1a/build.log
+
+      - name: Raw server-render QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=3000 npm run start > quality-reports/aw1a/production-server.log 2>&1 &
+          server_pid=$!
+          trap 'pkill -P "$server_pid" 2>/dev/null || true; kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://localhost:3000/ > /dev/null
+          QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-raw-qa.mjs \
+            2>&1 | tee quality-reports/aw1a/raw-qa.log
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Rendered browser QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=3100 NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/aw1a/development-server.log 2>&1 &
+          server_pid=$!
+          trap 'pkill -P "$server_pid" 2>/dev/null || true; kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3100/ > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://localhost:3100/ > /dev/null
+          QA_BASE_URL=http://localhost:3100 QA_EVIDENCE_DIR=quality-reports/aw1a node scripts/aw1a-browser-qa.mjs \
+            2>&1 | tee quality-reports/aw1a/browser-qa.log
+
+      - name: Scope and diff checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          test -z "$(git diff --name-only "$AW1A_STARTING_SHA" -- supabase)"
+          test -z "$(git diff --name-only "$AW1A_STARTING_SHA" -- vercel.json)"
+          test -z "$(git diff --name-only "$AW1A_STARTING_SHA" -- 'app/(private)/train' components/train components/workouts/session-muscle-load-panel.tsx)"
+
+      - name: Generate implementation report
+        env:
+          UNIT_STATUS: ${{ steps.unit.outputs.status }}
+          UNIT_BASELINE_STATUS: ${{ steps.unit.outputs.baseline }}
+        run: node scripts/aw1a-report.mjs
+
+      - name: Upload validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw1a-validation-${{ github.run_id }}
+          path: quality-reports/aw1a/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Commit final implementation and remove temporary helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f \
+            aw1a-validation-diagnostics.md \
+            scripts/aw1a-patch.mjs \
+            scripts/aw1a-raw-qa.mjs \
+            scripts/aw1a-browser-qa.mjs \
+            scripts/aw1a-report.mjs \
+            .github/workflows/aw1a-implementation.yml \
+            .github/workflows/aw1a-pr-validation.yml
+          rm -rf quality-reports/aw1a
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat(i18n): establish multilingual request foundation"
+          git push origin HEAD:feat/active-workout-aw1a-language-foundation
