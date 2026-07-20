@@ -1,0 +1,99 @@
+yml
+@@ -243,6 +243,17 @@ jobs:
+             QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/rendered-qa-evidence npm run qa:rendered
+           fi
+ 
++      - name: Upload AW-1B final-head rendered evidence
++        if: success() && steps.scope.outputs.train_ui == 'true' && github.head_ref == 'feat/active-workout-aw1b-messages-locale-qa'
++        uses: actions/upload-artifact@v4
++        with:
++          name: aw1b-final-head-rendered-${{ github.event.pull_request.head.sha }}
++          path: |
++            quality-reports/train-qa-evidence/
++            quality-reports/qa-server.log
++          if-no-files-found: error
++          retention-days: 14
++
+       - name: Upload browser evidence on failure
+         if: failure() && steps.scope.outputs.ui == 'true'
+         uses: actions/upload-artifact@v4
+diff --git a/components/workouts/workout-day-focus-session.tsx b/components/workouts/workout-day-focus-session.tsx
+index 9115223..0b2aba1 100644
+--- a/components/workouts/workout-day-focus-session.tsx
++++ b/components/workouts/workout-day-focus-session.tsx
+@@ -164,6 +164,21 @@ function toNumberOrNull(value: string) {
+   return Number.isFinite(next) ? next : null;
+ }
+ 
++function formatPlannedReps(
++  value: string | number | null | undefined,
++  formatters: ActiveWorkoutFormatters,
++  fallback: string
++) {
++  const raw = String(value ?? "").trim();
++  if (!raw) return fallback;
++  return raw.replace(/\d+(?:[.,]\d+)?/g, (token) => {
++    const normalized = Number(token.replace(",", "."));
++    if (!Number.isFinite(normalized)) return token;
++    const decimals = token.includes(".") || token.includes(",") ? token.split(/[.,]/)[1]?.length ?? 0 : 0;
++    return decimals > 0 ? formatters.decimal(normalized, decimals) : formatters.integer(normalized);
++  });
++}
++
+ function normalizeExerciseName(value: string) {
+   return value.toLowerCase().replace(/^[a-z]\d\s*[:.)-]\s*/i, "").replace(/[^a-z0-9]+/g, " ").trim();
+ }
+@@ -544,7 +559,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+   const nextExercise = exerciseStates[activeExerciseIndex + 1];
+   const activeExerciseCompleted = activeExercise?.sets.every((set) => set.completedAt) ?? false;
+   const nextSetLabel = activeExercise && !activeExerciseCompleted && activeSet
+-    ? `${tr("set.label", { count: activeSet.setNumber })} / ${activeExercise.sets.length}`
++    ? `${tr("set.label", { count: formatters.integer(activeSet.setNumber) })} / ${formatters.integer(activeExercise.sets.length)}`
+     : nextExercise
+       ? tr("exercise.nextExercise", { name: isolateBidiText(nextExercise.exercise.exercise_name) })
+       : tr("navigation.allDone");
+@@ -677,7 +692,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+       await persistProgress(nextStates);
+       setMuscleLoadRevision((current) => current + 1);
+       setSetFeedbackVariant("info");
+-      setSetFeedback(tr("set.savedDetails", { set: targetSet.setNumber, reps: targetSet.reps || "-", weight: formatters.measurement(toNumberOrNull(targetSet.weightKg) ?? 0, "kg") }));
++      setSetFeedback(tr("set.savedDetails", { set: formatters.integer(targetSet.setNumber), reps: formatPlannedReps(targetSet.reps, formatters, "-"), weight: formatters.measurement(toNumberOrNull(targetSet.weightKg) ?? 0, "kg") }));
+       const currentWeight = toNumberOrNull(targetSet.weightKg) ?? 0;
+       const currentReps = toNumberOrNull(targetSet.reps) ?? 0;
+       const exercise = exerciseStates[exerciseIndex];
+@@ -844,8 +859,8 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+           </div>
+         </div>
+         <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+-          <span>{formatters.integer(completedSets)}/{formatters.integer(totalSets)} {tr("set.labelPlural")}</span>
+-          <span>{formatters.integer(progress)}%</span>
++          <span><span dir="ltr" className="tabular-nums">{formatters.ratio(completedSets, totalSets)}</span> {tr("set.labelPlural")}</span>
++          <span dir="ltr" className="tabular-nums">{formatters.integer(progress)}%</span>
+         </div>
+         <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+           <div className="h-full rounded-full bg-primary motion-safe:transition-all motion-safe:duration-500" style={{ width: `${progress}%` }} />
+@@ -876,10 +891,10 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+               }`}
+             >
+               <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${allDone ? "bg-success text-success-foreground" : active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+-                {allDone ? <Check className="h-3 w-3" /> : index + 1}
++                {allDone ? <Check className="h-3 w-3" /> : <span dir="ltr" className="tabular-nums">{formatters.integer(index + 1)}</span>}
+               </span>
+               <span className="max-w-[140px] truncate text-xs font-medium"><bdi>{item.exercise.exercise_name}</bdi></span>
+-              <span className="text-[10px] text-muted-foreground">{done}/{item.sets.length}</span>
++              <span dir="ltr" className="text-[10px] tabular-nums text-muted-foreground">{formatters.ratio(done, item.sets.length)}</span>
+             </button>
+           );
+         })}
+@@ -899,8 +914,8 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession })
+                   <h2 className="text-2xl font-semibold leading-[1.05] tracking-[-0.04em] sm:text-3xl"><bdi>{activeExercise.exercise.exercise_name}</bdi></h2>
+                   <div className="mt-3 flex flex-wrap gap-2">
+                     <Badge variant="outline" className="rounded-full font-normal">{tr("exercise.setsCount", { count: activeExercise.exercise.sets ?? activeExercise.sets.length })}</Badge>
+-                    <Badge variant="outline" className="rounded-full font-normal">{tr("exercise.repsDisplay", { reps: activeExercise.exercise.reps ?? tr("common.customValue") })}</Badge>
+-                    <Badge variant="outline" className="rounded-full font-normal">{tr("exercise.restSeconds", { count: activeExercise.exercise.rest_seconds ?? timerSeconds })}</Badge>
++                    <Badge variant="outline" className="rounded-full font-normal">{tr("exercise.repsDisplay", { reps: formatPlannedReps(activeExercise.exercise.reps, formatters, tr("common.customValue")) })}</Badge>
++                    <Badge variant="outline" className="rounded-full font-normal">{tr("exercise.restSeconds", { count: formatters.integer(activeExercise.exercise.rest_seconds ?? timerSeconds) })}</Badge>
+                     {supersetLabel(activeExercise.exercise) ? <Badge className="rounded-full text-[10px]">{tr("superset.label", { label: supersetLabel(activeExercise.exercise) ?? "" })}</Badge> : null}
+                   </div>
+                 </div>
+@@ -925,
