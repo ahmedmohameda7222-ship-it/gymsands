@@ -1,0 +1,71 @@
+name: AW-1B Implementation
+
+on:
+  push:
+    branches:
+      - feat/active-workout-aw1b-messages-locale-qa
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aw1b-implementation
+  cancel-in-progress: true
+
+jobs:
+  implement:
+    if: "!contains(github.event.head_commit.message, '[aw1b-applied]')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+      PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+      PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+      PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+      PLAIVRA_COMMIT_SHA: ${{ github.sha }}
+      PLAIVRA_RELEASE_ENVIRONMENT: ci
+      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Apply AW-1B implementation
+        run: node scripts/aw1b-apply.mjs
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: I18n contract
+        run: npm run test:i18n
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit implementation
+        run: |
+          rm -f scripts/.aw1b-apply-expanded.mjs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat(i18n): add active workout messages and locale QA [aw1b-applied]"
+          git push origin HEAD:feat/active-workout-aw1b-messages-locale-qa
