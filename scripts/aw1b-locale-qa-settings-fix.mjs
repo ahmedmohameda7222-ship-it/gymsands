@@ -2,11 +2,9 @@ import { readFile, writeFile } from "node:fs/promises";
 
 const target = "scripts/.aw1b-locale-qa.mjs";
 let source = await readFile(target, "utf8");
-const original = `  await context.route(/^https:\/\/[^/]+\\.supabase\\.co\//, async (requestRoute) => {
-    const method = requestRoute.request().method();
+const marker = `    const method = requestRoute.request().method();
     let body = {};`;
-const replacement = `  await context.route(/^https:\/\/[^/]+\\.supabase\\.co\//, async (requestRoute) => {
-    const method = requestRoute.request().method();
+const replacement = `    const method = requestRoute.request().method();
     const requestUrl = new URL(requestRoute.request().url());
     if (requestUrl.pathname.includes("/rest/v1/user_app_settings") && (method === "GET" || method === "HEAD")) {
       const wantsObject = (requestRoute.request().headers().accept || "").includes("application/vnd.pgrst.object");
@@ -42,7 +40,7 @@ const replacement = `  await context.route(/^https:\/\/[^/]+\\.supabase\\.co\//,
       return;
     }
     let body = {};`;
-if (!source.includes(original)) throw new Error("Supabase route target not found in focused QA runner");
-source = source.replace(original, replacement);
+if (!source.includes(marker)) throw new Error("Supabase method marker not found in focused QA runner");
+source = source.replace(marker, replacement);
 await writeFile(target, source, "utf8");
 console.log("Localized account settings fixture added to focused QA runner.");
