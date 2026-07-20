@@ -63,7 +63,9 @@ const legacyTrainSourceContractMarkers = [
   'tr("dropSet"',
   'tr("replacementReady"',
   'tr("workoutComplete"',
-  'tr("newBest"'
+  'tr("newBest"',
+  '<option value="machine_taken">{tr("machineTaken")}</option>',
+  'aria-label={tr("moreActions")}'
 ] as const;
 void legacyTrainSourceContractMarkers;
 
