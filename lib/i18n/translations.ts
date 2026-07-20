@@ -1,3 +1,4 @@
+import { resolveLocale } from "@/lib/i18n/locale-resolution";
 import type { SupportedLanguage, TranslationKey } from "@/lib/i18n/types";
 
 export const translations: Record<SupportedLanguage, Record<TranslationKey, string>> = {
@@ -691,11 +692,13 @@ export const translations: Record<SupportedLanguage, Record<TranslationKey, stri
 };
 
 export function resolveLanguagePreference(language: string): SupportedLanguage {
-  if (language === "de" || language === "ar" || language === "en") return language;
-  if (typeof navigator !== "undefined") {
-    const browserLanguage = navigator.language.toLowerCase();
-    if (browserLanguage.startsWith("de")) return "de";
-    if (browserLanguage.startsWith("ar")) return "ar";
-  }
-  return "en";
+  const browserLanguages = typeof navigator !== "undefined"
+    ? navigator.languages?.length
+      ? navigator.languages
+      : [navigator.language]
+    : [];
+  return resolveLocale({
+    preference: language,
+    acceptLanguage: browserLanguages.filter(Boolean).join(",")
+  });
 }

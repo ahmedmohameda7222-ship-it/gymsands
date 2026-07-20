@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import createNextIntlPlugin from "next-intl/plugin";
 
 /** @type {import('next').NextConfig} */
 const contentSecurityPolicy = [
@@ -91,5 +92,7 @@ const nextConfig = {
   }
 };
 
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
+
 export { contentSecurityPolicy, releaseMetadata, securityHeaders };
-export default nextConfig;
+export default withNextIntl(nextConfig);

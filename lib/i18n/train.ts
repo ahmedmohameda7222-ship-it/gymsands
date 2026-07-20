@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { getLocaleMetadata } from "@/lib/i18n/config";
 import { useTranslation } from "@/lib/i18n/use-translation";
 import type { SupportedLanguage } from "@/lib/i18n/types";
 
@@ -138,9 +139,10 @@ export function translateTrain(language: SupportedLanguage, key: TrainKey, value
 }
 
 export function getTrainLocaleMetadata(language: SupportedLanguage) {
+  const metadata = getLocaleMetadata(language);
   return {
-    dir: (language === "ar" ? "rtl" : "ltr") as "ltr" | "rtl",
-    locale: language === "de" ? "de-DE" : language === "ar" ? "ar" : "en-US"
+    dir: metadata.direction,
+    locale: metadata.intlLocale
   };
 }
 

@@ -1,5 +1,4 @@
-export type SupportedLanguage = "en" | "de" | "ar";
-export type LanguagePreference = SupportedLanguage | "system";
+export type { LanguagePreference, SupportedLanguage } from "@/lib/i18n/config";
 
 export type TranslationKey =
   | "common.back"
