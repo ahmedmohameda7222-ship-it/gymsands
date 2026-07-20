@@ -72,5 +72,4 @@ index c44cc31..4fd4f06 100644
 -              itemOrder: persistedState.active_item_order,
 -              setNumber: persistedState.active_set_number,
 +              snapshotItemId: authoritativeState.active_snapshot_item_id,
-+              itemOrder: authoritativeState.active_item_order,
-+              setNumber: au
++              itemOrder: au
