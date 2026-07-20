@@ -108,13 +108,14 @@ select pg_temp.assert_true(
   (select count(*) from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid) = 0,
   'Another member can read the owner execution-state row.'
 );
+with changed as (
+  update public.workout_session_execution_states
+  set active_set_number = 3
+  where workout_session_id = :'plan_session_id'::uuid
+  returning 1
+)
 select pg_temp.assert_true(
-  not exists (
-    update public.workout_session_execution_states
-    set active_set_number = 3
-    where workout_session_id = :'plan_session_id'::uuid
-    returning 1
-  ),
+  (select count(*) from changed) = 0,
   'Another member can update the owner execution-state row.'
 );
 select pg_temp.assert_rejected(
