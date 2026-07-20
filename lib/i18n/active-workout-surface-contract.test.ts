@@ -78,9 +78,9 @@ describe("AW-1B Active Workout surface contract", () => {
     expect(indicator).toContain('<span dir="ltr" className="tabular-nums">{formatters.timer(elapsed)}</span>');
   });
 
-  it("keeps rendered locale QA aligned with authoritative persistence, final-head evidence, and tiny-screen spacing", () => {
+  it("keeps rendered locale QA aligned with authoritative persistence, permanent exact-head evidence, and tiny-screen spacing", () => {
     const qa = source("scripts/run-train-layout-qa.mjs");
-    const finalValidation = source(".github/workflows/aw1b-final-validation.yml");
+    const qualityWorkflow = source(".github/workflows/quality.yml");
     const trainUi = source("components/workouts/train-ui.tsx");
 
     expect(qa).toContain('name: "plaivra.language.v1", value: language');
@@ -89,8 +89,27 @@ describe("AW-1B Active Workout surface contract", () => {
     expect(qa).toContain("active-workout-indicator-ar-390x844.png");
     expect(qa).toContain('{ name: "360x780", width: 360, height: 780 }');
     expect(qa).toContain("horizontalOverflowMatrix");
-    expect(finalValidation).toContain("Upload final-head validation evidence");
-    expect(finalValidation).toContain("aw1b-final-validation-${{ github.event.pull_request.head.sha }}");
+    expect(qualityWorkflow).toContain("Record i18n evidence metadata");
+    expect(qualityWorkflow).toContain("Upload successful i18n rendered evidence");
+    expect(qualityWorkflow).toContain("steps.scope.outputs.i18n == 'true'");
+    expect(qualityWorkflow).toContain("i18n-rendered-evidence-${{ github.event.pull_request.head.sha }}");
+    for (const filename of [
+      "active-workout-en-390x844.png",
+      "active-workout-de-390x844.png",
+      "active-workout-ar-390x844.png",
+      "active-workout-en-1440x900.png",
+      "active-workout-de-1440x900.png",
+      "active-workout-ar-1440x900.png",
+      "active-workout-indicator-ar-390x844.png",
+      "train-layout-qa-results.json",
+      "i18n-rendered-evidence-metadata.json",
+    ]) {
+      expect(qualityWorkflow).toContain(filename);
+    }
+    for (const metadataKey of ["headSha", "workflowRunId", "workflowRunAttempt", "repository", "pullRequestNumber"]) {
+      expect(qualityWorkflow).toContain(`"${metadataKey}"`);
+    }
+    expect(qualityWorkflow).toContain("retention-days: 14");
     expect(trainUi).toContain("max-[340px]:pb-[calc(var(--active-workout-controller-height)+4rem)]");
   });
 });
