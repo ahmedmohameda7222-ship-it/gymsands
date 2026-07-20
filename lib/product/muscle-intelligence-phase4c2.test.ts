@@ -49,7 +49,7 @@ describe("Muscle Intelligence Phase 4C.2", () => {
       const copy = messages(locale).ActiveWorkout.heatMap;
       expect(copy.currentSessionHeat.trim()).not.toBe("");
       expect(copy.currentSessionDescription).toContain(
-        locale === "en" ? "saved completed sets" : locale === "de" ? "gespeicherten abgeschlossenen Sätzen" : "المجموعات المكتملة المحفوظة"
+        locale === "en" ? "saved completed sets" : locale === "de" ? "gespeicherten, abgeschlossenen Sätzen" : "المجموعات المكتملة المحفوظة"
       );
       expect(copy.savedSetsOnly.trim()).not.toBe("");
       expect(copy.refreshFailedDescription.trim()).not.toBe("");
