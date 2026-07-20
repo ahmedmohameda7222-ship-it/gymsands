@@ -38,6 +38,7 @@ import {
   clearWorkoutSessionRestTimer,
   getWorkoutSessionExecutionState,
   importLegacyWorkoutExecutionCache,
+  persistWorkoutSessionCursor,
   persistWorkoutSessionPause,
   persistWorkoutSessionRestTimer,
   persistWorkoutSessionResume,
@@ -102,6 +103,17 @@ describe("workout session execution database service", () => {
       ["user_id", userId]
     ]);
     expect(result.revision).toBe(1);
+
+    await persistWorkoutSessionCursor(userId, sessionId, {
+      snapshotItemId: null,
+      itemOrder: 1,
+      setNumber: 2
+    });
+    expect(mocks.state.update).toEqual({
+      active_snapshot_item_id: null,
+      active_item_order: 1,
+      active_set_number: 2
+    });
   });
 
   it("persists pause and resume with timestamp-based elapsed math", async () => {
@@ -135,7 +147,7 @@ describe("workout session execution database service", () => {
     });
 
     await clearWorkoutSessionRestTimer(userId, sessionId);
-    expect(mocks.state.update).toMatchObject({ view_state: "set_entry", rest_started_at: null, rest_duration_seconds: null, rest_ends_at: null });
+    expect(mocks.state.update).toEqual({ view_state: "set_entry", rest_started_at: null, rest_duration_seconds: null, rest_ends_at: null });
   });
 
   it("imports only a plausible same-user/session initial legacy cache that increases elapsed time", async () => {

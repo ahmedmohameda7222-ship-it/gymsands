@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
@@ -480,7 +480,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const executionWriteRef = useRef<Promise<unknown>>(Promise.resolve());
   const controllerDeviceIdRef = useRef<string | null>(null);
 
-  function mirrorExecutionState(next: WorkoutSessionExecutionState) {
+  const mirrorExecutionState = useCallback((next: WorkoutSessionExecutionState) => {
     setExecutionState(next);
     const now = Date.now();
     const derivedStartedAt = executionStartedAtMs(next, now);
@@ -510,12 +510,12 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         controllerDeviceId: controllerDeviceIdRef.current
       }, now));
     }
-  }
+  }, [day.day_name, day.id, restTimerKey, user, workoutTimerKey]);
 
-  function queueExecutionWrite(
+  const queueExecutionWrite = useCallback((
     write: () => Promise<WorkoutSessionExecutionState>,
     rollback?: () => void
-  ) {
+  ) => {
     const operation = executionWriteRef.current.then(write);
     executionWriteRef.current = operation.then(
       (next) => { mirrorExecutionState(next); },
@@ -527,7 +527,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       }
     );
     return operation;
-  }
+  }, [mirrorExecutionState, toast, tr]);
 
   useEffect(() => {
     let active = true;
@@ -573,14 +573,16 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
           } catch (error) {
             console.warn("Plaivra could not import the optional legacy workout timer cache.", error);
           }
-        } else if (controllerDeviceIdRef.current && persistedState.controller_device_id !== controllerDeviceIdRef.current) {
+        }
+
+        if (controllerDeviceIdRef.current && authoritativeState.controller_device_id !== controllerDeviceIdRef.current) {
           authoritativeState = await queueExecutionWrite(() => persistWorkoutSessionCursor(
             user.id,
             nextSession.id,
             {
-              snapshotItemId: persistedState.active_snapshot_item_id,
-              itemOrder: persistedState.active_item_order,
-              setNumber: persistedState.active_set_number,
+              snapshotItemId: authoritativeState.active_snapshot_item_id,
+              itemOrder: authoritativeState.active_item_order,
+              setNumber: authoritativeState.active_set_number,
               controllerDeviceId: controllerDeviceIdRef.current
             }
           ));
@@ -618,7 +620,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       });
 
     return () => { active = false; };
-  }, [day, restTimerKey, toast, tr, user?.id, workoutTimerKey]);
+  }, [day, mirrorExecutionState, queueExecutionWrite, restTimerKey, toast, tr, user?.id, workoutTimerKey]);
 
   useEffect(() => {
     const tick = () => setElapsedSeconds(
@@ -666,7 +668,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     tick();
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
-  }, [restTimerKey, session?.id, timerEndsAtMs, toast, tr, user?.id]);
+  }, [queueExecutionWrite, restTimerKey, session?.id, timerEndsAtMs, toast, tr, user?.id]);
 
   useEffect(() => {
     if (!executionHydratedRef.current || !user?.id || !session?.id || !executionState) return;
@@ -696,7 +698,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         setActiveSetIndex(previousCursor.setIndex);
       }
     );
-  }, [activeExerciseIndex, activeSetIndex, day.exercises, executionCursorItems, executionState, session?.id, user?.id]);
+  }, [activeExerciseIndex, activeSetIndex, day.exercises, executionCursorItems, executionState, queueExecutionWrite, session?.id, user?.id]);
 
   const activeExercise = exerciseStates[activeExerciseIndex];
   const activeSet = activeExercise?.sets[activeSetIndex];

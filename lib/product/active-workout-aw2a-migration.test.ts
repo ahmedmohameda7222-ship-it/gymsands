@@ -44,6 +44,7 @@ describe("AW-2A persisted execution-state migration contract", () => {
       "workout_session_execution_state_terminal_cleanup",
       "active execution cursor must reference the same user and workout session",
       "new.revision := old.revision + 1",
+      "old.bootstrap_source = 'legacy_backfill' and new.bootstrap_source = 'client_cache_import'",
       "log.completed_at is not null",
       "item.source_plan_activity_id",
       "item.source_plan_exercise_id",

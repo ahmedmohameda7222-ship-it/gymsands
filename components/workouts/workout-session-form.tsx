@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Clock, ExternalLink, Plus, Timer, TimerReset } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -79,7 +79,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
 
   const [previousSet, setPreviousSet] = useState<{ reps: number | null; weightKg: number | null; performedAt: string | null } | null>(null);
 
-  function mirrorExecutionState(next: WorkoutSessionExecutionState) {
+  const mirrorExecutionState = useCallback((next: WorkoutSessionExecutionState) => {
     setExecutionState(next);
     const now = Date.now();
     const derivedStartedAt = executionStartedAtMs(next, now);
@@ -108,9 +108,9 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         controllerDeviceId: controllerDeviceIdRef.current
       }, now));
     }
-  }
+  }, [restTimerKey, timerKey, user, workout.id, workout.name]);
 
-  function queueExecutionWrite(write: () => Promise<WorkoutSessionExecutionState>, rollback?: () => void) {
+  const queueExecutionWrite = useCallback((write: () => Promise<WorkoutSessionExecutionState>, rollback?: () => void) => {
     const operation = executionWriteRef.current.then(write);
     executionWriteRef.current = operation.then(
       (next) => { mirrorExecutionState(next); },
@@ -122,7 +122,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
       }
     );
     return operation;
-  }
+  }, [mirrorExecutionState, toast, tr]);
 
   useEffect(() => {
     setPreviousSet(findPreviousWorkoutSet(history, workout));
@@ -176,6 +176,14 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
             console.warn("Plaivra could not import the optional legacy direct-workout timer cache.", error);
           }
         }
+        if (controllerDeviceIdRef.current && authoritativeState.controller_device_id !== controllerDeviceIdRef.current) {
+          authoritativeState = await persistWorkoutSessionCursor(user.id, nextSession.id, {
+            snapshotItemId: authoritativeState.active_snapshot_item_id,
+            itemOrder: authoritativeState.active_item_order,
+            setNumber: authoritativeState.active_set_number,
+            controllerDeviceId: controllerDeviceIdRef.current
+          });
+        }
         if (authoritativeState.view_state === "rest" && executionRestSecondsLeft(authoritativeState) <= 0) {
           authoritativeState = await clearWorkoutSessionRestTimer(
             user.id,
@@ -209,7 +217,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
       });
 
     return () => { active = false; };
-  }, [restTimerKey, timerKey, toast, tr, user?.id, workout]);
+  }, [mirrorExecutionState, restTimerKey, timerKey, toast, tr, user?.id, workout]);
 
   useEffect(() => {
     const tick = () => {
@@ -247,7 +255,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
     tick();
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
-  }, [restTimerKey, session?.id, timerEndsAtMs, toast, tr, user?.id]);
+  }, [queueExecutionWrite, restTimerKey, session?.id, timerEndsAtMs, toast, tr, user?.id]);
 
   function startRestTimer(seconds: number) {
     const safeSeconds = Math.max(0, seconds);

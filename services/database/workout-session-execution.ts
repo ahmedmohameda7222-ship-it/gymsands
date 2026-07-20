@@ -209,9 +209,11 @@ export async function persistWorkoutSessionCursor(
   const patch: WorkoutSessionExecutionStatePatch = {
     active_snapshot_item_id: input.snapshotItemId,
     active_item_order: Math.max(1, Math.floor(input.itemOrder)),
-    active_set_number: Math.max(1, Math.floor(input.setNumber)),
-    controller_device_id: input.controllerDeviceId ?? null
+    active_set_number: Math.max(1, Math.floor(input.setNumber))
   };
+  if (input.controllerDeviceId !== undefined) {
+    patch.controller_device_id = input.controllerDeviceId;
+  }
   if (input.viewState) {
     patch.view_state = input.viewState;
     const current = input.currentState ?? null;
@@ -256,15 +258,15 @@ export async function clearWorkoutSessionRestTimer(
   userId: string,
   sessionId: string,
   viewState: Exclude<WorkoutSessionExecutionViewState, "rest"> = "set_entry",
-  controllerDeviceId: string | null = null
+  controllerDeviceId?: string | null
 ) {
   const patch: WorkoutSessionExecutionStatePatch = {
     view_state: viewState,
     rest_started_at: null,
     rest_duration_seconds: null,
-    rest_ends_at: null,
-    controller_device_id: controllerDeviceId
+    rest_ends_at: null
   };
+  if (controllerDeviceId !== undefined) patch.controller_device_id = controllerDeviceId;
   if (viewState === "session_review") patch.session_state = "review";
   return updateWorkoutSessionExecutionState(userId, sessionId, patch);
 }
