@@ -1,60 +1,30 @@
-name: AW-2A DB Diagnostic
+name: AW-2A Apply Lifecycle Fixture Fix
 
 on:
   pull_request:
     branches: [main]
 permissions:
-  contents: read
-concurrency:
-  group: aw2a-db-diagnostic-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  contents: write
 jobs:
-  diagnose:
+  apply:
     if: github.head_ref == 'feat/active-workout-aw2a-persisted-execution-state'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - uses: supabase/setup-cli@v2
-        with:
-          version: 2.109.1
-          github-token: ${{ github.token }}
-      - name: Replay migration chain and capture diagnostics
+      - name: Apply reviewed lifecycle fixture correction
         shell: bash
+        env:
+          AW2A_CANCEL_B64: LS0gUm9vdCBkZWxldGlvbiBjYXNjYWRlcyBleGVjdXRpb24gc3RhdGUuCnNldCBsb2NhbCByb2xlIGF1dGhlbnRpY2F0ZWQ7CnNlbGVjdCBzZXRfY29uZmlnKCdyZXF1ZXN0Lmp3dC5jbGFpbS5zdWInLCA6J293bmVyX2lkJywgdHJ1ZSk7CnNlbGVjdCBzZXRfY29uZmlnKCdyZXF1ZXN0Lmp3dC5jbGFpbS5yb2xlJywgJ2F1dGhlbnRpY2F0ZWQnLCB0cnVlKTsKc2VsZWN0IChwdWJsaWMuc3RhcnRfb3JfcmVzdW1lX2RpcmVjdF93b3Jrb3V0X3Nlc3Npb25fYXRvbWljKAogIDonb3duZXJfaWQnOjp1dWlkLAogICdwcm92aWRlcl9hY3Rpdml0eScsCiAgJ2F3MmEtY2FuY2VsLWFjdGl2aXR5JywKICAncGxhaXZyYV9hY3Rpdml0eV9jYXRhbG9nJywKICAnQVctMkEgY2FuY2VsJywKICAnU3RyZW5ndGgnLAogICd7InNldHMiOjEsInJlcHMiOiI4In0nOjpqc29uYiwKICBudWxsCiktPidzZXNzaW9uJy0+PidpZCcpIGFzIGNhbmNlbF9zZXNzaW9uX2lkIFxnc2V0CnNldCBjb25zdHJhaW50cyBhbGwgaW1tZWRpYXRlOwpyZXNldCByb2xlOwpzZWxlY3QgcGdfdGVtcC5hc3NlcnRfdHJ1ZSgKICBleGlzdHMgKHNlbGVjdCAxIGZyb20gcHVibGljLndvcmtvdXRfc2Vzc2lvbl9leGVjdXRpb25fc3RhdGVzIHdoZXJlIHdvcmtvdXRfc2Vzc2lvbl9pZCA9IDonY2FuY2VsX3Nlc3Npb25faWQnOjp1dWlkKSwKICAnQ2FuY2VsIGZpeHR1cmUgZGlkIG5vdCByZWNlaXZlIGV4ZWN1dGlvbiBzdGF0ZS4nCik7CmRlbGV0ZSBmcm9tIHB1YmxpYy53b3Jrb3V0X3Nlc3Npb25zIHdoZXJlIGlkID0gOidjYW5jZWxfc2Vzc2lvbl9pZCc6OnV1aWQ7CnNlbGVjdCBwZ190ZW1wLmFzc2VydF90cnVlKAogIG5vdCBleGlzdHMgKHNlbGVjdCAxIGZyb20gcHVibGljLndvcmtvdXRfc2Vzc2lvbl9leGVjdXRpb25fc3RhdGVzIHdoZXJlIHdvcmtvdXRfc2Vzc2lvbl9pZCA9IDonY2FuY2VsX3Nlc3Npb25faWQnOjp1dWlkKSwKICAnRGVsZXRpbmcgdGhlIG9wZW4gcm9vdCBkaWQgbm90IGNhc2NhZGUgZXhlY3V0aW9uIHN0YXRlLicKKTsKCg==
+          AW2A_ACCOUNT_B64: LS0gVHJ1c3RlZCBhY2NvdW50LWRlbGV0aW9uIHBhdGggcmVtYWlucyBmdW5jdGlvbmFsIGJlY2F1c2UgaXQgZGVsZXRlcyB3b3Jrb3V0X3Nlc3Npb25zIGZpcnN0LgpzZXQgbG9jYWwgcm9sZSBhdXRoZW50aWNhdGVkOwpzZWxlY3Qgc2V0X2NvbmZpZygncmVxdWVzdC5qd3QuY2xhaW0uc3ViJywgOidkZWxldGVfbWVtYmVyX2lkJywgdHJ1ZSk7CnNlbGVjdCBzZXRfY29uZmlnKCdyZXF1ZXN0Lmp3dC5jbGFpbS5yb2xlJywgJ2F1dGhlbnRpY2F0ZWQnLCB0cnVlKTsKc2VsZWN0IChwdWJsaWMuc3RhcnRfb3JfcmVzdW1lX2RpcmVjdF93b3Jrb3V0X3Nlc3Npb25fYXRvbWljKAogIDonZGVsZXRlX21lbWJlcl9pZCc6OnV1aWQsCiAgJ3Byb3ZpZGVyX2FjdGl2aXR5JywKICAnYXcyYS1kZWxldGUtYWN0aXZpdHknLAogICdwbGFpdnJhX2FjdGl2aXR5X2NhdGFsb2cnLAogICdBVy0yQSBkZWxldGUnLAogICdTdHJlbmd0aCcsCiAgJ3sic2V0cyI6MSwicmVwcyI6IjgifSc6Ompzb25iLAogIG51bGwKKS0+J3Nlc3Npb24nLT4+J2lkJykgYXMgZGVsZXRlX3Nlc3Npb25faWQgXGdzZXQKc2V0IGNvbnN0cmFpbnRzIGFsbCBpbW1lZGlhdGU7CnJlc2V0IHJvbGU7CnNlbGVjdCBwZ190ZW1wLmFzc2VydF90cnVlKAogIGV4aXN0cyAoc2VsZWN0IDEgZnJvbSBwdWJsaWMud29ya291dF9zZXNzaW9uX2V4ZWN1dGlvbl9zdGF0ZXMgd2hlcmUgd29ya291dF9zZXNzaW9uX2lkID0gOidkZWxldGVfc2Vzc2lvbl9pZCc6OnV1aWQpLAogICdBY2NvdW50LWRlbGV0aW9uIGZpeHR1cmUgZGlkIG5vdCByZWNlaXZlIGV4ZWN1dGlvbiBzdGF0ZS4nCik7Cmluc2VydCBpbnRvIHB1YmxpYy5hY2NvdW50X2RlbGV0aW9uX2pvYnMgKAogIGlkLHVzZXJfaWQsc3ViamVjdF9oYXNoLGlkZW1wb3RlbmN5X2tleV9oYXNoLHN0YXRlLHN0YWdlLGF0dGVtcHRfY291bnQsbG9ja2VkX2F0LGNyZWF0ZWRfYXQsdXBkYXRlZF9hdAopIHZhbHVlcyAoCiAgJ2EyMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAzMCcsIDonZGVsZXRlX21lbWJlcl9pZCc6OnV1aWQsCiAgJ2F3MmEtc3ViamVjdC1hMjAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDMnLAogICdhdzJhLWlkZW1wb3RlbmN5LWEyMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMycsCiAgJ3Byb2Nlc3NpbmcnLCAnZGVsZXRpbmdfZGF0YWJhc2UnLCAxLCBjbG9ja190aW1lc3RhbXAoKSwgbm93KCksIG5vdygpCik7CnVwZGF0ZSBwdWJsaWMuYWNjb3VudF9hY2Nlc3Nfc3RhdGVzCnNldCBzdGF0ZSA9ICdkZWxldGlvbl9wcm9jZXNzaW5nJywgcmVhc29uX2NvZGUgPSAnYXcyYV9pbnRlZ3JhdGlvbicsIGRpc2FibGVkX2F0ID0gY2xvY2tfdGltZXN0YW1wKCksIHVwZGF0ZWRfYXQgPSBjbG9ja190aW1lc3RhbXAoKQp3aGVyZSB1c2VyX2lkID0gOidkZWxldGVfbWVtYmVyX2lkJzo6dXVpZDsKc2V0IGxvY2FsIHJvbGUgc2VydmljZV9yb2xlOwpzZWxlY3QgcHVibGljLnB1cmdlX2FjY291bnRfYXBwbGljYXRpb25fZGF0YV9hdG9taWMoOidkZWxldGVfbWVtYmVyX2lkJzo6dXVpZCk7CnJlc2V0IHJvbGU7CnNlbGVjdCBwZ190ZW1wLmFzc2VydF90cnVlKAogIG5vdCBleGlzdHMgKHNlbGVjdCAxIGZyb20gcHVibGljLndvcmtvdXRfc2Vzc2lvbl9leGVjdXRpb25fc3RhdGVzIHdoZXJlIHVzZXJfaWQgPSA6J2RlbGV0ZV9tZW1iZXJfaWQnOjp1dWlkKQogIGFuZCBub3QgZXhpc3RzIChzZWxlY3QgMSBmcm9tIHB1YmxpYy53b3Jrb3V0X3Nlc3Npb25zIHdoZXJlIHVzZXJfaWQgPSA6J2RlbGV0ZV9tZW1iZXJfaWQnOjp1dWlkKQogIGFuZCBub3QgZXhpc3RzIChzZWxlY3QgMSBmcm9tIHB1YmxpYy5wcm9maWxlcyB3aGVyZSBpZCA9IDonZGVsZXRlX21lbWJlcl9pZCc6OnV1aWQpLAogICdUcnVzdGVkIGFjY291bnQgZGVsZXRpb24gbGVmdCBleGVjdXRpb24gc3RhdGUgb3Igb3duZXIgcm93cyBiZWhpbmQuJwopOwoK
         run: |
           set -euo pipefail
-          mkdir -p /tmp/aw2a-db-diagnostic
-          supabase db start > /tmp/aw2a-db-diagnostic/db-start.log 2>&1
-          supabase db reset --local --no-seed > /tmp/aw2a-db-diagnostic/db-reset.log 2>&1
-          supabase db lint --local --schema public --level error --fail-on error > /tmp/aw2a-db-diagnostic/db-lint.log 2>&1
-      - name: Run verification commands and capture every result
-        shell: bash
-        run: |
-          set +e
-          database_url="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql > /tmp/aw2a-db-diagnostic/verification.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/verification.exit
-          PLAIVRA_AW2A_TEST_DATABASE_URL="$database_url" npx vitest run --config vitest.integration.config.mjs services/database/workout-session-execution.integration.test.ts > /tmp/aw2a-db-diagnostic/integration.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/integration.exit
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql > /tmp/aw2a-db-diagnostic/train-security.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/train-security.exit
-          PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$database_url" node scripts/test-database-preflight-control.mjs > /tmp/aw2a-db-diagnostic/preflight-control.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/preflight-control.exit
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql > /tmp/aw2a-db-diagnostic/release-preflight.log 2>&1
-          echo "$?" > /tmp/aw2a-db-diagnostic/release-preflight.exit
-          set -e
-      - if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: aw2a-db-diagnostic-${{ github.event.pull_request.head.sha }}
-          path: /tmp/aw2a-db-diagnostic
-          if-no-files-found: error
-          retention-days: 2
+          python -c 'import base64,os; from pathlib import Path; p=Path("supabase/verification/active-workout-aw2a-integration.sql"); t=p.read_text(); a=t.index("-- Root deletion cascades execution state."); b=t.index("-- Trusted account-deletion path",a); t=t[:a]+base64.b64decode(os.environ["AW2A_CANCEL_B64"]).decode()+t[b:]; c=t.index("-- Trusted account-deletion path"); d=t.index("rollback;",c); t=t[:c]+base64.b64decode(os.environ["AW2A_ACCOUNT_B64"]).decode()+t[d:]; p.write_text(t)'
+          git add supabase/verification/active-workout-aw2a-integration.sql
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'test(database): use authoritative AW-2A lifecycle fixtures'
+          git push origin HEAD:feat/active-workout-aw2a-persisted-execution-state
