@@ -1,0 +1,18 @@
+ion,
++      artifact: item.artifact
++    });
++  }
++}
++
+ await browser.close();
+ 
+ const failures = observations.filter((item) => {
+@@ -394,6 +473,8 @@ const report = {
+   baseUrl,
+   viewports,
+   summary: { observations: observations.length, failures: failures.length, passed: failures.length === 0 },
++  requiredRenderedEvidence,
++  horizontalOverflowMatrix,
+   failures,
+   observations
+ };
