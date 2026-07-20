@@ -56,15 +56,32 @@ describe("approved Train Phase 1 UI contracts", () => {
     expect(picker).not.toContain("slice(0, 60)");
   });
 
-  it("localizes the day-focus session while preserving stable set and replacement identifiers", () => {
+  it("localizes the day-focus session through ActiveWorkout while preserving stable set and replacement identifiers", () => {
     const session = source("components/workouts/workout-day-focus-session.tsx");
-    const translations = source("lib/i18n/train.ts");
-    for (const key of ["normalSet", "warmupSet", "workingSet", "failureSet", "dropSet", "replacementReady", "workoutComplete", "newBest"]) {
-      expect(translations.match(new RegExp(`${key}:`, "g"))?.length).toBe(3);
-      expect(session).toContain(`tr("${key}"`);
+    const localeMessages = (["en", "de", "ar"] as const).map((locale) =>
+      JSON.parse(source(`messages/${locale}.json`)) as {
+        ActiveWorkout: {
+          set: Record<string, string>;
+          actions: Record<string, string>;
+          completion: Record<string, string>;
+        };
+      }
+    );
+
+    expect(session).toContain("useActiveWorkoutTranslation");
+    expect(session).not.toContain("useTrainTranslation");
+    for (const key of ["normal", "warmup", "working", "failure", "drop", "newBest"] as const) {
+      for (const messages of localeMessages) expect(messages.ActiveWorkout.set[key]?.trim()).not.toBe("");
+      expect(session).toContain(`tr("set.${key}"`);
     }
-    expect(session).toContain('<option value="machine_taken">{tr("machineTaken")}</option>');
-    expect(session).toContain('aria-label={tr("moreActions")}');
+    for (const messages of localeMessages) {
+      expect(messages.ActiveWorkout.actions.machineOccupied.trim()).not.toBe("");
+      expect(messages.ActiveWorkout.completion.title.trim()).not.toBe("");
+    }
+    expect(session).toContain('<option value="machine_taken">{tr("actions.machineOccupied")}</option>');
+    expect(session).toContain('aria-label={tr("accessibility.openSessionMenu")}');
+    expect(session).toContain("legacyReopenSetLabel");
+    expect(session).toContain("restartSet(activeExerciseIndex, activeSetIndex)");
     expect(session).not.toContain('<option value="normal">Normal</option>');
     expect(session).not.toContain('onClick={() => setActionsOpen(false)}><X');
   });
