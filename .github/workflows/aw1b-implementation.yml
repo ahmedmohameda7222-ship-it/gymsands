@@ -48,7 +48,9 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Create focused locale QA runner
-        run: node scripts/aw1b-locale-qa-temp.mjs
+        run: |
+          node scripts/aw1b-locale-qa-temp.mjs
+          node scripts/aw1b-locale-qa-cookie-fix.mjs
 
       - name: Run focused EN DE AR and RTL QA
         shell: bash
