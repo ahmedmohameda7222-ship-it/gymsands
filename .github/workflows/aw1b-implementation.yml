@@ -46,7 +46,10 @@ jobs:
       - run: npm ci
 
       - name: Apply AW-1B implementation
-        run: node scripts/aw1b-apply.mjs
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/aw1b-apply.mjs 2>&1 | tee aw1b-apply.log
 
       - name: Typecheck
         run: npm run typecheck
@@ -60,8 +63,17 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Upload implementation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw1b-implementation-${{ github.run_id }}
+          path: aw1b-apply.log
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Commit implementation
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && success()
         run: |
           rm -f scripts/.aw1b-apply-expanded.mjs
           git config user.name "github-actions[bot]"
