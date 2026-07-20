@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
+import { readStoredLanguagePreference } from "@/lib/i18n/client-language-preference";
 import type { LanguagePreference } from "@/lib/i18n/config";
 import { isThemeId, legacyThemeCacheKey, themeCacheKey } from "@/lib/themes";
 import {
@@ -58,13 +59,13 @@ function withCachedTheme(settings: UserAppSettings) {
   return cachedThemeId ? { ...settings, themeId: cachedThemeId } : settings;
 }
 
-function withInitialPublicPreferences(
+function withDevicePublicPreferences(
   settings: UserAppSettings,
   initialLanguagePreference: LanguagePreference
 ): UserAppSettings {
   return {
     ...withCachedTheme(settings),
-    language: initialLanguagePreference
+    language: readStoredLanguagePreference() ?? initialLanguagePreference
   };
 }
 
@@ -89,7 +90,7 @@ export function UserSettingsProvider({ children, initialLanguagePreference }: Us
     async function load() {
       if (isLoading) return;
       if (!user?.id) {
-        setSettings(withInitialPublicPreferences(defaultUserAppSettings, initialLanguagePreference));
+        setSettings(withDevicePublicPreferences(defaultUserAppSettings, initialLanguagePreference));
         setIsLoadingSettings(false);
         return;
       }
@@ -107,7 +108,7 @@ export function UserSettingsProvider({ children, initialLanguagePreference }: Us
       } catch (error) {
         const message = error instanceof Error ? error.message : "Settings could not be loaded.";
         if (mounted) {
-          const fallback = withInitialPublicPreferences(defaultUserAppSettings, initialLanguagePreference);
+          const fallback = withDevicePublicPreferences(defaultUserAppSettings, initialLanguagePreference);
           setSettings(withUser(fallback, user.id));
           setSaveError(message);
         }
