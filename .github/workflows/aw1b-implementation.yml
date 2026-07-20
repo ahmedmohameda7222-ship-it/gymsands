@@ -1,4 +1,4 @@
-name: AW-1B Implementation
+name: AW-1B Locale QA
 
 on:
   pull_request:
@@ -7,17 +7,17 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: aw1b-implementation-${{ github.event.pull_request.number || github.ref }}
+  group: aw1b-locale-qa-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  implement:
+  locale-qa:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref == 'feat/active-workout-aw1b-messages-locale-qa'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
@@ -45,83 +45,98 @@ jobs:
 
       - run: npm ci
 
-      - name: Apply AW-1B implementation
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build focused AW-1B locale QA runner
+        run: |
+          node <<'NODE'
+          const { readFileSync, writeFileSync } = require("node:fs");
+          let source = readFileSync("scripts/run-train-layout-qa.mjs", "utf8");
+          source = source.replace(
+            '{ name: "360x800", width: 360, height: 800 },',
+            '{ name: "360x780", width: 360, height: 780 },'
+          );
+          source = source.replace(
+            '  await page.waitForSelector(isSessionRoute ? "main#main-content" : "[data-app-shell]", { timeout: 20_000 });',
+            '  await page.waitForSelector(isSessionRoute ? "main#main-content" : "[data-app-shell]", { timeout: 20_000 });\n  await page.waitForFunction((expected) => document.documentElement.lang === expected, language, { timeout: 20_000 });'
+          );
+          source = source.replace(
+            '  const item = {',
+            `  const bodyText = await page.locator("body").innerText();
+  const expectedSessionAction = language === "de" ? "abschließen" : language === "ar" ? "إنهاء المجموعة" : "Finish set";
+  const localizedSessionActionVisible = !isSessionRoute || bodyText.includes(expectedSessionAction);
+  const oldEnglishActiveCopyVisible = language === "en" || !isSessionRoute ? false : ["Finish set", "Session details", "Finish workout", "Workout complete"].some((value) => bodyText.includes(value));
+  const numericInputs = page.locator('input[inputmode="numeric"]');
+  const numericInputsReadable = !isSessionRoute || ((await numericInputs.count()) > 0 && await numericInputs.evaluateAll((elements) => elements.every((element) => {
+    const style = getComputedStyle(element);
+    return style.direction === "ltr" && element.scrollWidth <= element.clientWidth + 2;
+  })));
+  const dynamicExerciseBidiIsolated = !isSessionRoute || (await page.locator("main h2 bdi, main [data-active-session-muscle-load] bdi").count()) > 0;
+  const heatMapNotMirrored = !isSessionRoute || await page.locator('[data-muscle-heat-map-mode]').evaluateAll((elements) => elements.every((element) => {
+    const transform = getComputedStyle(element).transform;
+    return !transform.includes("-1") && !transform.includes("matrix(-1");
+  }));
+  const item = {`
+          );
+          source = source.replace(
+            '    pageErrors,\n    keyboard,',
+            '    pageErrors,\n    htmlLang: await page.locator("html").getAttribute("lang"),\n    htmlDirection: await page.locator("html").getAttribute("dir"),\n    localizedSessionActionVisible,\n    oldEnglishActiveCopyVisible,\n    numericInputsReadable,\n    dynamicExerciseBidiIsolated,\n    heatMapNotMirrored,\n    keyboard,'
+          );
+          source = source.replace(
+            '    || item.horizontalOverflowPx > 1',
+            '    || item.horizontalOverflowPx > 1\n    || item.htmlLang !== item.language\n    || item.htmlDirection !== (item.language === "ar" ? "rtl" : "ltr")\n    || !item.localizedSessionActionVisible\n    || item.oldEnglishActiveCopyVisible\n    || !item.numericInputsReadable\n    || !item.dynamicExerciseBidiIsolated\n    || !item.heatMapNotMirrored'
+          );
+          const start = source.indexOf("// Exercise the longest connected builder interaction first");
+          const end = source.indexOf("await browser.close();", start);
+          if (start < 0 || end < 0) throw new Error("Could not locate Train QA matrix boundaries");
+          const matrix = `const requiredLocaleViewports = viewports.filter((item) => ["360x780", "390x844", "430x932", "1440x900"].includes(item.name));
+for (const language of ["en", "de", "ar"]) {
+  for (const viewport of requiredLocaleViewports) {
+    observations.push(await openScenario({ viewport, scenario: "active", language, route: \`/workouts/session/day/\${activeDayId}\` }));
+  }
+}
+observations.push(await openScenario({ viewport: viewports.find((item) => item.name === "390x844"), scenario: "active", language: "ar", route: "/my-workout/plans" }));
+`;
+          source = source.slice(0, start) + matrix + source.slice(end);
+          writeFileSync("scripts/.aw1b-locale-qa.mjs", source, "utf8");
+          NODE
+
+      - name: Run focused EN DE AR and RTL QA
         shell: bash
         run: |
-          set -o pipefail
-          node scripts/aw1b-apply.mjs 2>&1 | tee aw1b-apply.log
+          set -euo pipefail
+          mkdir -p quality-reports/aw1b-locale-qa
+          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/aw1b-locale-qa/server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://localhost:3000/ > /dev/null
+          QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=quality-reports/aw1b-locale-qa node scripts/.aw1b-locale-qa.mjs 2>&1 | tee quality-reports/aw1b-locale-qa/aw1b-locale-qa.log
 
-      - name: Typecheck
-        shell: bash
-        run: |
-          set -o pipefail
-          npm run typecheck 2>&1 | tee aw1b-typecheck.log
+          copy_one() {
+            pattern="$1"
+            destination="$2"
+            source_file="$(find quality-reports/aw1b-locale-qa -maxdepth 1 -name "$pattern" | head -n 1)"
+            test -n "$source_file"
+            cp "$source_file" "quality-reports/aw1b-locale-qa/$destination"
+          }
+          copy_one '*-en-390x844-workouts-session-day-*.png' active-workout-en-390x844.png
+          copy_one '*-de-390x844-workouts-session-day-*.png' active-workout-de-390x844.png
+          copy_one '*-ar-390x844-workouts-session-day-*.png' active-workout-ar-390x844.png
+          copy_one '*-en-1440x900-workouts-session-day-*.png' active-workout-en-1440x900.png
+          copy_one '*-de-1440x900-workouts-session-day-*.png' active-workout-de-1440x900.png
+          copy_one '*-ar-1440x900-workouts-session-day-*.png' active-workout-ar-1440x900.png
+          copy_one '*-ar-390x844-my-workout-plans.png' active-workout-indicator-ar-390x844.png
 
-      - name: Lint
-        shell: bash
-        run: |
-          set -o pipefail
-          npm run lint 2>&1 | tee aw1b-lint.log
-
-      - name: I18n contract
-        shell: bash
-        run: |
-          set -o pipefail
-          npm run test:i18n 2>&1 | tee aw1b-i18n.log
-
-      - name: Build
-        shell: bash
-        run: |
-          set -o pipefail
-          npm run build 2>&1 | tee aw1b-build.log
-
-      - name: Export validated implementation
-        if: success()
-        run: |
-          tar -czf aw1b-validated-files.tar.gz \
-            messages/en.json messages/de.json messages/ar.json \
-            lib/i18n/active-workout.ts \
-            lib/i18n/active-workout-formatters.ts \
-            lib/i18n/active-workout-message-contract.test.ts \
-            lib/i18n/active-workout-formatters.test.ts \
-            lib/i18n/message-shape.test.ts \
-            lib/train/muscle-intelligence/active-session-muscle-load-copy.ts \
-            components/workouts/active-workout-indicator.tsx \
-            components/workouts/session-muscle-load-panel.tsx \
-            components/workouts/workout-day-focus-session.tsx \
-            package.json .github/workflows/quality.yml
-          git diff --binary > aw1b-validated.patch
-
-      - name: Commit validated implementation except Quality workflow
-        if: github.event_name == 'pull_request' && success()
-        run: |
-          rm -f scripts/.aw1b-apply-expanded.mjs
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            messages/en.json messages/de.json messages/ar.json \
-            lib/i18n/active-workout.ts \
-            lib/i18n/active-workout-formatters.ts \
-            lib/i18n/active-workout-message-contract.test.ts \
-            lib/i18n/active-workout-formatters.test.ts \
-            lib/i18n/message-shape.test.ts \
-            lib/train/muscle-intelligence/active-session-muscle-load-copy.ts \
-            components/workouts/active-workout-indicator.tsx \
-            components/workouts/session-muscle-load-panel.tsx \
-            components/workouts/workout-day-focus-session.tsx \
-            package.json
-          git diff --cached --check
-          git commit -m "feat(i18n): add active workout messages and locale QA"
-          git push origin HEAD:feat/active-workout-aw1b-messages-locale-qa
-
-      - name: Upload validated implementation and diagnostics
+      - name: Upload AW-1B locale QA evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aw1b-implementation-${{ github.run_id }}
-          path: |
-            aw1b-*.log
-            aw1b-validated-files.tar.gz
-            aw1b-validated.patch
-          if-no-files-found: warn
+          name: aw1b-locale-qa-${{ github.run_id }}
+          path: quality-reports/aw1b-locale-qa/
+          if-no-files-found: error
           retention-days: 14
