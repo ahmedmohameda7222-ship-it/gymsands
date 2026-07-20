@@ -42,6 +42,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git fetch origin main:refs/remotes/origin/main
           test "$(git merge-base HEAD origin/main)" = "$AW1A_STARTING_SHA"
           test "$(git rev-parse origin/main)" = "$AW1A_STARTING_SHA"
           git status --short
@@ -80,15 +81,21 @@ jobs:
 
       - name: Install next-intl only
         shell: bash
-        run: npm install next-intl@4.13.2 --save 2>&1 | tee quality-reports/aw1a/npm-install.log
+        run: |
+          set -o pipefail
+          npm install next-intl@4.13.2 --save 2>&1 | tee quality-reports/aw1a/npm-install.log
 
       - name: Typecheck
         shell: bash
-        run: npm run typecheck 2>&1 | tee quality-reports/aw1a/typecheck.log
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee quality-reports/aw1a/typecheck.log
 
       - name: Lint
         shell: bash
-        run: npm run lint 2>&1 | tee quality-reports/aw1a/lint.log
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee quality-reports/aw1a/lint.log
 
       - name: Run targeted AW-1A tests
         shell: bash
@@ -100,15 +107,21 @@ jobs:
 
       - name: Run full unit tests
         shell: bash
-        run: npm run test:unit 2>&1 | tee quality-reports/aw1a/unit-tests.log
+        run: |
+          set -o pipefail
+          npm run test:unit 2>&1 | tee quality-reports/aw1a/unit-tests.log
 
       - name: Run script tests
         shell: bash
-        run: npm run test:scripts 2>&1 | tee quality-reports/aw1a/script-tests.log
+        run: |
+          set -o pipefail
+          npm run test:scripts 2>&1 | tee quality-reports/aw1a/script-tests.log
 
       - name: Audit production dependencies
         shell: bash
-        run: npm audit --omit=dev --audit-level=moderate 2>&1 | tee quality-reports/aw1a/npm-audit.log
+        run: |
+          set -o pipefail
+          npm audit --omit=dev --audit-level=moderate 2>&1 | tee quality-reports/aw1a/npm-audit.log
 
       - name: Build production application
         shell: bash
