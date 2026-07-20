@@ -1,0 +1,189 @@
+diff --git a/.github/workflows/aw1b-final-validation.yml b/.github/workflows/aw1b-final-validation.yml
+new file mode 100644
+index 0000000..86e260e
+--- /dev/null
++++ b/.github/workflows/aw1b-final-validation.yml
+@@ -0,0 +1,179 @@
++name: AW-1B Final Validation
++
++on:
++  pull_request:
++    branches:
++      - main
++
++permissions:
++  contents: read
++
++concurrency:
++  group: aw1b-final-${{ github.event.pull_request.number }}
++  cancel-in-progress: true
++
++jobs:
++  validate:
++    if: github.head_ref == 'feat/active-workout-aw1b-messages-locale-qa'
++    runs-on: ubuntu-24.04
++    timeout-minutes: 45
++    env:
++      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
++      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
++      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
++      NEXT_PUBLIC_APP_URL: http://localhost:3000
++      NEXT_PUBLIC_USE_MOCK_AUTH: "true"
++      PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
++      PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
++      PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
++      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
++      PLAIVRA_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
++      PLAIVRA_RELEASE_ENVIRONMENT: ci
++      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
++
++    steps:
++      - name: Checkout exact PR head
++        uses: actions/checkout@v4
++        with:
++          ref: ${{ github.event.pull_request.head.sha }}
++          fetch-depth: 0
++
++      - name: Verify checkout identity
++        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
++
++      - uses: actions/setup-node@v4
++        with:
++          node-version: 24
++          cache: npm
++
++      - name: Install dependencies
++        run: npm ci
++
++      - name: Typecheck
++        run: npm run typecheck
++
++      - name: Lint
++        run: npm run lint
++
++      - name: Permanent i18n contract
++        run: npm run test:i18n
++
++      - name: Exact targeted i18n tests
++        run: |
++          npx vitest run --config vitest.unit.config.mjs \
++            lib/i18n/message-shape.test.ts \
++            lib/i18n/active-workout-message-contract.test.ts \
++            lib/i18n/active-workout-formatters.test.ts \
++            lib/i18n/active-workout-surface-contract.test.ts
++
++      - name: Full unit tests with starting-main failure parity
++        shell: bash
++        run: |
++          set -euo pipefail
++          mkdir -p aw1b-validation
++          set +e
++          npm run test:unit > aw1b-validation/current-unit.log 2>&1
++          current_status=$?
++          set -e
++
++          git worktree add /tmp/aw1b-starting-main 1b7411604dcf3d9bdfcd0a2f4d70a172d677310e
++          (
++            cd /tmp/aw1b-starting-main
++            npm ci
++            set +e
++            npm run test:unit > "$GITHUB_WORKSPACE/aw1b-validation/starting-main-unit.log" 2>&1
++            echo $? > "$GITHUB_WORKSPACE/aw1b-validation/starting-main-unit.status"
++          )
++          echo "$current_status" > aw1b-validation/current-unit.status
++
++          python - <<'PY'
++          import json
++          import re
++          from pathlib import Path
++
++          root = Path("aw1b-validation")
++          ansi = re.compile(r"\x1b\[[0-9;]*m")
++
++          def identities(path):
++              values = set()
++              for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
++                  clean = ansi.sub("", line).strip()
++                  if clean.startswith("FAIL "):
++                      values.add(clean[5:].strip())
++              return sorted(values)
++
++          current = identities(root / "current-unit.log")
++          baseline = identities(root / "starting-main-unit.log")
++          current_status = int((root / "current-unit.status").read_text().strip())
++          baseline_status = int((root / "starting-main-unit.status").read_text().strip())
++          introduced = sorted(set(current) - set(baseline))
++          result = {
++              "startingMainSha": "1b7411604dcf3d9bdfcd0a2f4d70a172d677310e",
++              "currentStatus": current_status,
++              "startingMainStatus": baseline_status,
++              "currentFailureIdentities": current,
++              "startingMainFailureIdentities": baseline,
++              "introducedFailureIdentities": introduced,
++              "passed": not introduced and (current_status == 0 or bool(current))
++          }
++          (root / "unit-failure-parity.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
++          if not result["passed"]:
++              raise SystemExit(f"Unit failure parity failed: {result}")
++          PY
++
++      - name: Script tests
++        run: npm run test:scripts
++
++      - name: Production dependency audit
++        run: npm audit --omit=dev --audit-level=moderate
++
++      - name: Production build
++        run: npm run build
++
++      - name: Install Playwright Chromium
++        run: npx playwright install --with-deps chromium
++
++      - name: Full EN/DE/AR rendered QA
++        shell: bash
++        run: |
++          set -euo pipefail
++          mkdir -p aw1b-validation/rendered
++          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > aw1b-validation/qa-server.log 2>&1 &
++          server_pid=$!
++          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
++          for attempt in $(seq 1 60); do
++            if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
++            sleep 1
++          done
++          curl --fail --silent http://localhost:3000/ > /dev/null
++          QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=aw1b-validation/rendered npm run qa:train
++
++      - name: Record validation metadata
++        if: always()
++        shell: bash
++        run: |
++          python - <<'PY'
++          import json
++          import os
++          from pathlib import Path
++
++          root = Path("aw1b-validation")
++          root.mkdir(exist_ok=True)
++          metadata = {
++              "headSha": os.environ["PLAIVRA_COMMIT_SHA"],
++              "workflowRunId": os.environ["GITHUB_RUN_ID"],
++              "workflowRunAttempt": os.environ["GITHUB_RUN_ATTEMPT"],
++              "repository": os.environ["GITHUB_REPOSITORY"],
++              "ref": os.environ["GITHUB_REF"],
++          }
++          (root / "workflow-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
++          PY
++
++      - name: Upload final-head validation evidence
++        if: always()
++        uses: actions/upload-artifact@v4
++        with:
++          name: aw1b-final-validation-${{ github.event.pull_request.head.sha }}
++          path: aw1b-validation/
++          if-no-files-found: error
++          retention-days: 14
+diff --git a/.github/workflows/quality.yml b/.github/workflows/quality.yml
+index ae9ee68..d17e5d0 100644
+--- a/.github/workflows/quality.yml
++++ b/.github/workflows/quality.
