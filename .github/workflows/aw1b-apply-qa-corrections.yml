@@ -1,0 +1,35 @@
+name: AW-1B Apply QA Corrections
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'feat/active-workout-aw1b-messages-locale-qa'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Apply exact QA correction patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/aw1b-patch-chunks/chunk-* > /tmp/aw1b-qa.patch
+          git apply --check /tmp/aw1b-qa.patch
+          git apply /tmp/aw1b-qa.patch
+          rm -f .github/workflows/aw1b-source-snapshot.yml
+          rm -f .github/workflows/aw1b-apply-qa-corrections.yml
+          rm -f .github/aw1b-correction.tar.gz.b64
+          rm -rf .github/aw1b-patch-chunks .github/aw1b-correction-chunks
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(i18n): apply AW-1B QA corrections"
+          git push origin HEAD:feat/active-workout-aw1b-messages-locale-qa
