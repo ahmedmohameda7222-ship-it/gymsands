@@ -33,10 +33,6 @@ jobs:
           {
             echo 'PATCH_SHA256:'
             sha256sum /tmp/aw2a-reviewed.patch
-            echo 'PATCH_HEAD:'
-            sed -n '1,8p' /tmp/aw2a-reviewed.patch
-            echo 'PATCH_TAIL:'
-            tail -n 8 /tmp/aw2a-reviewed.patch
             echo 'APPLY_CHECK:'
             git apply --check --verbose --exclude=.github/workflows/aw2a-workspace-export.yml /tmp/aw2a-reviewed.patch
             echo "APPLY_STATUS:$?"
@@ -47,6 +43,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: aw2a-patch-diagnostic-${{ github.event.pull_request.head.sha }}
-          path: /tmp/aw2a-apply-diagnostic.txt
+          path: |
+            /tmp/aw2a-apply-diagnostic.txt
+            /tmp/aw2a-reviewed.patch
           if-no-files-found: error
           retention-days: 1
