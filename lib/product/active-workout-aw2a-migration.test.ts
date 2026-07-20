@@ -77,7 +77,8 @@ describe("AW-2A persisted execution-state migration contract", () => {
   });
 
   it("ships permanent transactional verification for the production contract", () => {
-    expect(verification.trimStart().startsWith("begin;")).toBe(true);
+    expect(verification.trimStart().startsWith("\\set on_error_stop on")).toBe(true);
+    expect(verification).toMatch(/\nbegin;\n/);
     expect(verification.trimEnd().endsWith("rollback;")).toBe(true);
     for (const proof of [
       "open workout session is missing exactly one execution-state row",
