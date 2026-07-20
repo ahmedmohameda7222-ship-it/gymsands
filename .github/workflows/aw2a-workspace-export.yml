@@ -1,4 +1,4 @@
-name: AW-2A Apply Plan Exercise Fixture Fix
+name: AW-2A Apply Account Deletion Fixture Fix
 
 on:
   pull_request:
@@ -17,16 +17,16 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-      - name: Apply reviewed plan exercise fixture correction
+      - name: Apply reviewed account deletion fixture correction
         shell: bash
         run: |
           set -euo pipefail
-          python -c 'from pathlib import Path; p=Path("supabase/verification/active-workout-aw2a-integration.sql"); t=p.read_text(); t=t.replace("(id,plan_day_id,exercise_name,sets,reps,rest_seconds,sort_order,order_index,created_at,updated_at)","(id,plan_day_id,exercise_name,sets,reps,rest_seconds,sort_order,order_index,created_at)"); t=t.replace("3,\x278\x27,60,1,1,now(),now()),","3,\x278\x27,60,1,1,now()),"); t=t.replace("2,\x2710\x27,90,2,2,now(),now());","2,\x2710\x27,90,2,2,now());"); p.write_text(t)'
+          python -c 'from pathlib import Path; p=Path("supabase/verification/active-workout-aw2a-integration.sql"); t=p.read_text(); old="insert into public.account_deletion_jobs (id,user_id,state,stage,created_at,updated_at)\nvalues (\x27a2000000-0000-4000-8000-000000000030\x27, :\x27delete_member_id\x27::uuid, \x27processing\x27, \x27deleting_database\x27, now(), now());"; new="insert into public.account_deletion_jobs (\n  id,user_id,subject_hash,idempotency_key_hash,state,stage,attempt_count,locked_at,created_at,updated_at\n) values (\n  \x27a2000000-0000-4000-8000-000000000030\x27, :\x27delete_member_id\x27::uuid,\n  \x27aw2a-subject-a2000000-0000-4000-8000-000000000003\x27,\n  \x27aw2a-idempotency-a2000000-0000-4000-8000-000000000003\x27,\n  \x27processing\x27, \x27deleting_database\x27, 1, clock_timestamp(), now(), now()\n);"; p.write_text(t.replace(old,new))'
           if git diff --quiet -- supabase/verification/active-workout-aw2a-integration.sql; then
             exit 0
           fi
           git add supabase/verification/active-workout-aw2a-integration.sql
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'test(database): align AW-2A plan exercise fixture columns'
+          git commit -m 'test(database): align AW-2A account deletion fixture'
           git push origin HEAD:feat/active-workout-aw2a-persisted-execution-state
