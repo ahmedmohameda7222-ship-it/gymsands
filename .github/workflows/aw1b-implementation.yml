@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: aw1b-implementation-${{ github.event.pull_request.number || github.ref }}
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   implement:
-    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.ref == 'feat/active-workout-aw1b-messages-locale-qa' && !contains(github.event.pull_request.head.sha, '0000000'))
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref == 'feat/active-workout-aw1b-messages-locale-qa'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -75,26 +75,34 @@ jobs:
           set -o pipefail
           npm run build 2>&1 | tee aw1b-build.log
 
-      - name: Upload implementation diagnostics
+      - name: Package validated implementation
+        if: success()
+        run: |
+          tar -czf aw1b-validated-files.tar.gz \
+            messages/en.json \
+            messages/de.json \
+            messages/ar.json \
+            lib/i18n/active-workout.ts \
+            lib/i18n/active-workout-formatters.ts \
+            lib/i18n/active-workout-message-contract.test.ts \
+            lib/i18n/active-workout-formatters.test.ts \
+            lib/i18n/message-shape.test.ts \
+            lib/train/muscle-intelligence/active-session-muscle-load-copy.ts \
+            components/workouts/active-workout-indicator.tsx \
+            components/workouts/session-muscle-load-panel.tsx \
+            components/workouts/workout-day-focus-session.tsx \
+            package.json \
+            .github/workflows/quality.yml
+          git diff --binary > aw1b-validated.patch
+
+      - name: Upload validated implementation and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: aw1b-implementation-${{ github.run_id }}
-          path: aw1b-*.log
+          path: |
+            aw1b-*.log
+            aw1b-validated-files.tar.gz
+            aw1b-validated.patch
           if-no-files-found: warn
-          retention-days: 7
-
-      - name: Commit implementation
-        if: github.event_name == 'pull_request' && success()
-        run: |
-          rm -f scripts/.aw1b-apply-expanded.mjs
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          if git diff --cached --quiet; then
-            echo "No implementation changes remain."
-            exit 0
-          fi
-          git commit -m "feat(i18n): add active workout messages and locale QA [aw1b-applied]"
-          git push origin HEAD:feat/active-workout-aw1b-messages-locale-qa
+          retention-days: 14
