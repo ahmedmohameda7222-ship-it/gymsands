@@ -1,5 +1,6 @@
 "use client";
 
+import { getLocaleMetadata } from "@/lib/i18n/config";
 import { translations, resolveLanguagePreference } from "@/lib/i18n/translations";
 import type { TranslationKey } from "@/lib/i18n/types";
 import { useUserSettings } from "@/lib/settings/user-settings-context";
@@ -8,7 +9,7 @@ export function useTranslation() {
   const { settings } = useUserSettings();
   const language = resolveLanguagePreference(settings.language);
   const dictionary = translations[language];
-  const dir: "ltr" | "rtl" = language === "ar" ? "rtl" : "ltr";
+  const dir = getLocaleMetadata(language).direction;
 
   return {
     language,
