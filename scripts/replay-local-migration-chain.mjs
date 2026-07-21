@@ -3,6 +3,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   appendFileSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -11,7 +12,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
+import { mkdtempSync } from "node:fs";
 
 export const ORIGINAL_AW2A_VERSION = "20260720213000";
 export const CORRECTION_AW2A_VERSION = "20260721012814";
@@ -311,6 +314,7 @@ async function main() {
   const context = { repositoryRoot, logPath };
   const initialStatus = workingTreeStatus(repositoryRoot);
   let syntheticPath = null;
+  let bootstrapRoot = null;
 
   mkdirSync(dirname(logPath), { recursive: true });
   writeFileSync(logPath, "", "utf8");
@@ -318,7 +322,21 @@ async function main() {
   try {
     assertLocalOnly(repositoryRoot);
     verifyRequiredFiles(repositoryRoot);
-    runCommand("supabase", ["db", "start"], context);
+
+    bootstrapRoot = mkdtempSync(join(tmpdir(), "plaivra-supabase-bootstrap-"));
+    const bootstrapSupabaseDirectory = join(bootstrapRoot, "supabase");
+    mkdirSync(bootstrapSupabaseDirectory, { recursive: true });
+    copyFileSync(
+      join(repositoryRoot, "supabase", "config.toml"),
+      join(bootstrapSupabaseDirectory, "config.toml"),
+    );
+    runCommand(
+      "supabase",
+      ["db", "start"],
+      { ...context, repositoryRoot: bootstrapRoot },
+    );
+    rmSync(bootstrapRoot, { recursive: true, force: true });
+    bootstrapRoot = null;
 
     const repositoryMigrations = listRepositoryMigrations(repositoryRoot);
     const original = repositoryMigrations.find((migration) => migration.version === ORIGINAL_AW2A_VERSION);
@@ -358,6 +376,7 @@ async function main() {
     appendLog(logPath, "Chronological local migration replay passed.");
   } finally {
     if (syntheticPath) rmSync(syntheticPath, { force: true });
+    if (bootstrapRoot) rmSync(bootstrapRoot, { recursive: true, force: true });
     const finalStatus = workingTreeStatus(repositoryRoot);
     if (finalStatus !== initialStatus) {
       throw new Error(
