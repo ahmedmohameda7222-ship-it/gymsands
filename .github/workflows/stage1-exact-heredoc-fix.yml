@@ -1,0 +1,51 @@
+name: Stage 1 Exact Workflow Heredoc Fix
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
+    paths:
+      - .github/workflows/stage1-exact-heredoc-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    if: github.event.pull_request.head.ref == 'fix/aw2a-post-merge-release-closure'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/aw2a-post-merge-release-closure
+          fetch-depth: 0
+      - name: Stage corrected exact workflow blob
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p stage1-workflow-blobs
+          cp .github/workflows/exact-release-quality-validation.yml stage1-workflow-blobs/exact-release-quality-validation-fixed.yml
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('stage1-workflow-blobs/exact-release-quality-validation-fixed.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '''          expected_migration="$(
+            node --input-type=module - <<'NODE'
+            import { readFileSync } from "node:fs";
+            import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs";
+            process.stdout.write(deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8"))).expectedMigration);
+            NODE
+          )"'''
+          new = '''          expected_migration="$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs"; process.stdout.write(deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8"))).expectedMigration);')"'''
+          if old not in text:
+              raise SystemExit('exact workflow migration heredoc block not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          grep -F 'expected_migration="$(node --input-type=module -e' stage1-workflow-blobs/exact-release-quality-validation-fixed.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add stage1-workflow-blobs/exact-release-quality-validation-fixed.yml
+          git commit -m "chore(ci): stage exact workflow heredoc correction"
+          git push origin HEAD:fix/aw2a-post-merge-release-closure
