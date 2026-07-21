@@ -10,7 +10,7 @@ on:
       - .github/workflows/stage1-final-qa-corrections-apply.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   apply:
@@ -24,20 +24,15 @@ jobs:
           ref: fix/aw2a-post-merge-release-closure
           fetch-depth: 0
 
-      - name: Apply and validate final Planner corrections
-        id: validation
+      - name: Apply final Planner corrections
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           cat .stage1-correction/part* \
             | base64 -d \
             | python -c 'import pathlib,sys,zlib; pathlib.Path("/tmp/apply-stage1-final-qa.py").write_bytes(zlib.decompress(sys.stdin.buffer.read()))'
-
-          set +e
-          python /tmp/apply-stage1-final-qa.py > /tmp/stage1-apply.log 2>&1
-          apply_status=$?
-          if [ "$apply_status" -eq 0 ]; then
-            python - <<'PY' > /tmp/stage1-postfix.log 2>&1
+          python /tmp/apply-stage1-final-qa.py
+          python - <<'PY'
           from pathlib import Path
 
           quality = Path('.github/workflows/quality.yml')
@@ -67,71 +62,30 @@ jobs:
               raise SystemExit('obsolete Stage-1 assertion not found')
           stage1.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
-            postfix_status=$?
-          else
-            postfix_status=1
-          fi
 
-          validation_status=1
-          if [ "$apply_status" -eq 0 ] && [ "$postfix_status" -eq 0 ]; then
-            node --test \
-              scripts/release-preflight.test.mjs \
-              scripts/promote-release-schema-compatibility.test.mjs \
-              scripts/release-closure-stage1.test.mjs \
-              scripts/release-closure-final-qa.test.mjs \
-              scripts/run-quality-gate.test.mjs \
-              scripts/permanent-quality-replay.test.mjs \
-              > /tmp/stage1-validation.log 2>&1
-            validation_status=$?
-          fi
-          set -e
-
-          mkdir -p .stage1-correction
-          cp /tmp/stage1-apply.log .stage1-correction/apply.log
-          test ! -f /tmp/stage1-postfix.log || cp /tmp/stage1-postfix.log .stage1-correction/postfix.log
-          test ! -f /tmp/stage1-validation.log || cp /tmp/stage1-validation.log .stage1-correction/validation.log
-          git status --porcelain > .stage1-correction/worktree-status.txt
-          git diff --check > .stage1-correction/diff-check.log 2>&1
-          diff_status=$?
-          printf 'apply_status=%s\npostfix_status=%s\nvalidation_status=%s\ndiff_status=%s\n' "$apply_status" "$postfix_status" "$validation_status" "$diff_status" > .stage1-correction/status.txt
-          echo "apply_status=$apply_status" >> "$GITHUB_OUTPUT"
-          echo "postfix_status=$postfix_status" >> "$GITHUB_OUTPUT"
-          echo "validation_status=$validation_status" >> "$GITHUB_OUTPUT"
-          echo "diff_status=$diff_status" >> "$GITHUB_OUTPUT"
-
-          if [ "$apply_status" -eq 0 ] && [ "$postfix_status" -eq 0 ] && [ "$validation_status" -eq 0 ] && [ "$diff_status" -eq 0 ]; then
-            tar -czf /tmp/stage1-final-files.tar.gz \
-              .github/workflows/exact-release-quality-validation.yml \
-              .github/workflows/quality.yml \
-              .github/workflows/release-preflight.yml \
-              plaivra_aw2a_post_merge_release_closure_implementation_report.md \
-              release/release-manifest.template.json \
-              scripts/create-release-manifest.mjs \
-              scripts/permanent-quality-replay.test.mjs \
-              scripts/promote-release-schema-compatibility.mjs \
-              scripts/promote-release-schema-compatibility.test.mjs \
-              scripts/quality-evidence-contract.mjs \
-              scripts/release-closure-stage1.test.mjs \
-              scripts/release-preflight.mjs \
-              scripts/run-quality-gate.mjs \
-              scripts/run-quality-gate.test.mjs \
-              scripts/release-identity-contract.mjs \
-              scripts/release-closure-final-qa.test.mjs
-            cp /tmp/stage1-final-files.tar.gz .stage1-correction/stage1-final-files.tar.gz
-          fi
-          exit 0
-
-      - name: Upload validated correction bundle
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: stage1-final-qa-correction-bundle-${{ github.run_id }}
-          path: .stage1-correction
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 3
-
-      - name: Fail when correction validation failed
-        if: steps.validation.outputs.apply_status != '0' || steps.validation.outputs.postfix_status != '0' || steps.validation.outputs.validation_status != '0' || steps.validation.outputs.diff_status != '0'
+      - name: Validate focused correction contract
         shell: bash
-        run: exit 1
+        run: |
+          set -euo pipefail
+          node --test \
+            scripts/release-preflight.test.mjs \
+            scripts/promote-release-schema-compatibility.test.mjs \
+            scripts/release-closure-stage1.test.mjs \
+            scripts/release-closure-final-qa.test.mjs \
+            scripts/run-quality-gate.test.mjs \
+            scripts/permanent-quality-replay.test.mjs
+          git diff --check
+          test -z "$(git status --porcelain | grep -E 'supabase/migrations/|^(.. )?(app|components|lib|services)/' || true)"
+
+      - name: Commit corrected Stage 1 implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .stage1-correction
+          rm -f .github/workflows/stage1-final-qa-corrections-apply.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(release): bind Stage 1 release identities"
+          git push origin HEAD:fix/aw2a-post-merge-release-closure
