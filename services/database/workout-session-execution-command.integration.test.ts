@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -80,10 +80,6 @@ beforeAll(() => {
     commit;`);
   sessionId = result.split(/\r?\n/).find((line) => /^[0-9a-f-]{36}$/i.test(line.trim()))?.trim() ?? "";
   if (!sessionId) throw new Error(`Concurrency fixture session was not created: ${result}`);
-});
-
-afterAll(() => {
-  if (disposableDatabaseUrl) sql(`delete from auth.users where id='${ownerId}'::uuid;`);
 });
 
 databaseDescribe("AW-2B PostgreSQL command concurrency", () => {
