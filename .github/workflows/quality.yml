@@ -1,4 +1,5 @@
 name: Quality
+run-name: Quality / ${{ inputs.validation_request_id || format('pr-{0}-{1}-{2}-{3}', github.event.pull_request.number, github.run_id, github.run_attempt, github.event.pull_request.head.sha) }}
 
 on:
   pull_request:
@@ -12,6 +13,10 @@ on:
         type: string
       comparison_base:
         description: Exact 40-character Git SHA used for unit-failure identity parity
+        required: true
+        type: string
+      validation_request_id:
+        description: Unique safe request identity bound to the orchestration
         required: true
         type: string
 
@@ -38,11 +43,6 @@ jobs:
       PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
       PLAIVRA_RELEASE_ENVIRONMENT: ci
       PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
-      PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: "20260721012814"
-      PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE: reconciled
-      PLAIVRA_PENDING_MIGRATION_COUNT: "0"
-      PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: "0"
-      PLAIVRA_UNRESOLVED_MIGRATION_COUNT: "0"
       PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
 
     steps:
@@ -58,6 +58,8 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           MANUAL_REVIEWED_COMMIT: ${{ inputs.reviewed_commit }}
           MANUAL_COMPARISON_BASE: ${{ inputs.comparison_base }}
+          MANUAL_VALIDATION_REQUEST_ID: ${{ inputs.validation_request_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
@@ -65,23 +67,28 @@ jobs:
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             reviewed_commit="$MANUAL_REVIEWED_COMMIT"
             comparison_base="$MANUAL_COMPARISON_BASE"
+            validation_request_id="$MANUAL_VALIDATION_REQUEST_ID"
           else
             reviewed_commit="$PR_HEAD_SHA"
             comparison_base="$PR_BASE_SHA"
+            validation_request_id="pr-${PR_NUMBER}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${reviewed_commit}"
           fi
           [[ "$reviewed_commit" =~ ^[0-9a-fA-F]{40}$ ]]
           [[ "$comparison_base" =~ ^[0-9a-fA-F]{40}$ ]]
+          [[ "$validation_request_id" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{7,127}$ ]]
           reviewed_commit="${reviewed_commit,,}"
           comparison_base="${comparison_base,,}"
           quality_build_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')"
           {
             echo "reviewed_commit=$reviewed_commit"
             echo "comparison_base=$comparison_base"
+            echo "validation_request_id=$validation_request_id"
             echo "quality_build_timestamp=$quality_build_timestamp"
           } >> "$GITHUB_OUTPUT"
           {
             echo "PLAIVRA_COMMIT_SHA=$reviewed_commit"
             echo "PLAIVRA_COMPARISON_BASE=$comparison_base"
+            echo "PLAIVRA_VALIDATION_REQUEST_ID=$validation_request_id"
             echo "PLAIVRA_QUALITY_BUILD_TIMESTAMP=$quality_build_timestamp"
             echo "PLAIVRA_BUILD_TIMESTAMP=$quality_build_timestamp"
           } >> "$GITHUB_ENV"
@@ -91,6 +98,40 @@ jobs:
         with:
           ref: ${{ steps.identity.outputs.reviewed_commit }}
           fetch-depth: 0
+
+      - name: Derive release target from exact reconciled ledger
+        id: release_target
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import { readFileSync } from "node:fs";
+          import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs";
+          const target = deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")));
+          const values = {
+            PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: target.expectedMigration,
+            PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE: target.reconciliationState,
+            PLAIVRA_PENDING_MIGRATION_COUNT: String(target.pendingCount),
+            PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: String(target.schemaAppliedUntrackedCount),
+            PLAIVRA_UNRESOLVED_MIGRATION_COUNT: String(target.unresolvedCount),
+          };
+          for (const [key, value] of Object.entries(values)) {
+            process.stdout.write(`${key}=${value}\n`);
+          }
+          NODE
+          node --input-type=module - <<'NODE' >> "$GITHUB_ENV"
+          import { readFileSync } from "node:fs";
+          import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs";
+          const target = deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")));
+          console.log(`PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION=${target.expectedMigration}`);
+          console.log(`PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE=${target.reconciliationState}`);
+          console.log(`PLAIVRA_PENDING_MIGRATION_COUNT=${target.pendingCount}`);
+          console.log(`PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT=${target.schemaAppliedUntrackedCount}`);
+          console.log(`PLAIVRA_UNRESOLVED_MIGRATION_COUNT=${target.unresolvedCount}`);
+          NODE
+          expected_migration="$(grep '^PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION=' "$GITHUB_ENV" | tail -n 1 | cut -d= -f2-)"
+          [[ "$expected_migration" =~ ^[0-9]{12,14}$ ]]
+          echo "expected_migration=$expected_migration" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -269,7 +310,7 @@ jobs:
           --commit "$PLAIVRA_COMMIT_SHA"
           --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
           --environment ci
-          --expected-migration "20260721012814"
+          --expected-migration "$PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION"
 
       - name: Gate — rendered browser QA
         run: >-
@@ -351,6 +392,8 @@ jobs:
           REVIEWED_COMMIT: ${{ steps.identity.outputs.reviewed_commit }}
           COMPARISON_BASE: ${{ steps.identity.outputs.comparison_base }}
           QUALITY_BUILD_TIMESTAMP: ${{ steps.identity.outputs.quality_build_timestamp }}
+          VALIDATION_REQUEST_ID: ${{ steps.identity.outputs.validation_request_id }}
+          EXPECTED_MIGRATION: ${{ steps.release_target.outputs.expected_migration }}
         run: |
           set -euo pipefail
           node - <<'NODE'
@@ -363,6 +406,8 @@ jobs:
             workflowRunAttempt: process.env.GITHUB_RUN_ATTEMPT,
             reviewedCommit: process.env.REVIEWED_COMMIT,
             comparisonBase: process.env.COMPARISON_BASE,
+            validationRequestId: process.env.VALIDATION_REQUEST_ID,
+            expectedDatabaseMigrationVersion: process.env.EXPECTED_MIGRATION,
             eventType: process.env.GITHUB_EVENT_NAME,
             qualityBuildTimestamp: process.env.QUALITY_BUILD_TIMESTAMP,
             capturedAt: new Date().toISOString(),
@@ -378,7 +423,7 @@ jobs:
           --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
           --environment ci
           --schema-compatibility 2
-          --expected-migration 20260721012814
+          --expected-migration "$PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION"
           --quality-reports quality-reports
           --output quality-reports/release-manifest.json
 

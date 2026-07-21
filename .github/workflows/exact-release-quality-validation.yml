@@ -173,7 +173,7 @@ jobs:
             -f validation_request_id="$VALIDATION_REQUEST_ID" \
             -f preflight_request_id="$PREFLIGHT_REQUEST_ID" \
             -f expected_migration="$EXPECTED_MIGRATION" \
-            -f validation_context=stage1-infrastructure-validation
+            -f validation_context=stage1-infrastructure-validation \
 
           preflight_run_id=""
           expected_title="Release preflight / $PREFLIGHT_REQUEST_ID"
