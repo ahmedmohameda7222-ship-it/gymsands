@@ -57,29 +57,26 @@ jobs:
             scripts/permanent-quality-replay.test.mjs
           git diff --check
 
-      - name: Capture commit and push diagnostics
+      - name: Commit non-workflow correction files
         shell: bash
         run: |
-          set +e
-          mkdir -p stage1-commit-diagnostics
-          {
-            rm -rf .stage1-correction
-            rm -f .github/workflows/stage1-final-qa-corrections-apply.yml
-            git config user.name github-actions[bot]
-            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add -A
-            git diff --cached --check
-            git status --short
-            git commit -m "fix(release): bind Stage 1 release identities"
-            git push --verbose origin HEAD:fix/aw2a-post-merge-release-closure
-          } > stage1-commit-diagnostics/commit.log 2>&1
-          echo "$?" > stage1-commit-diagnostics/status.txt
-          exit 0
-
-      - name: Upload commit diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: stage1-commit-diagnostics-${{ github.run_id }}
-          path: stage1-commit-diagnostics
-          if-no-files-found: error
-          retention-days: 3
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            plaivra_aw2a_post_merge_release_closure_implementation_report.md \
+            release/release-manifest.template.json \
+            scripts/create-release-manifest.mjs \
+            scripts/permanent-quality-replay.test.mjs \
+            scripts/promote-release-schema-compatibility.mjs \
+            scripts/promote-release-schema-compatibility.test.mjs \
+            scripts/quality-evidence-contract.mjs \
+            scripts/release-closure-final-qa.test.mjs \
+            scripts/release-closure-stage1.test.mjs \
+            scripts/release-identity-contract.mjs \
+            scripts/release-preflight.mjs \
+            scripts/run-quality-gate.mjs \
+            scripts/run-quality-gate.test.mjs
+          git diff --cached --check
+          git commit -m "fix(release): bind Stage 1 release identities"
+          git push origin HEAD:fix/aw2a-post-merge-release-closure
