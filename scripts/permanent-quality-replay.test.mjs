@@ -32,6 +32,7 @@ test("Quality delegates chronological replay to the permanent helper", () => {
     /\["db", "reset", "--local", "--no-seed", "--version", ORIGINAL_AW2A_VERSION\]/,
   );
   assert.match(helper, /\["migration", "up", "--local", "--include-all"\]/);
+  assert.match(helper, /\["start", "--exclude", DATABASE_ONLY_EXCLUDES\]/);
   assert.doesNotMatch(quality, /restore_correction|temporary_correction|cp "\$correction_migration"|rm "\$correction_migration"/);
   assert.doesNotMatch(helper, /migration", "repair|db", "push|--linked/);
 });
@@ -46,7 +47,7 @@ test("synthetic future migration version sorts after the complete repository cha
   assert.ok(ORIGINAL_AW2A_VERSION < CORRECTION_AW2A_VERSION);
   assert.ok(CORRECTION_AW2A_VERSION < version);
   assert.match(helper, /synthetic future-migration chronological replay proof/);
-  assert.match(helper, /assertSyntheticOrder\(recorded, syntheticVersion\)/);
+  assert.match(helper, /assertSyntheticOrder\(versions, syntheticVersion\)/);
   assert.match(helper, /final repository migration replay/);
 });
 
