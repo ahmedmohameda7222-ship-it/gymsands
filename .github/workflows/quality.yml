@@ -17,40 +17,75 @@ jobs:
     if: github.head_ref == 'feat/active-workout-aw2a-persisted-execution-state'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      TARGET_BRANCH: ${{ github.head_ref }}
+      STAGING_SHA: ${{ github.event.pull_request.head.sha }}
+      ORIGINAL_HEAD: 9aba336504882deda050f935c9d285cc85e75f1b
     steps:
       - name: Checkout exact correction staging revision
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 2
+          fetch-depth: 0
 
-      - name: Finalize recovered AW-2A correction source
+      - name: Verify correction staging revision
         shell: bash
-        env:
-          TARGET_BRANCH: ${{ github.head_ref }}
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          test "$(git rev-parse HEAD)" = "${STAGING_SHA}"
           test -d .aw2a-correction
 
+      - name: Reconstruct recovered patches
+        shell: bash
+        run: |
+          set -euo pipefail
           cat .aw2a-correction/component.*.b64 | tr -d '\n' | base64 --decode > /tmp/aw2a-component.patch
           cat .aw2a-correction/ledger.*.b64 | tr -d '\n' | base64 --decode > /tmp/aw2a-ledger.patch
+          test -s /tmp/aw2a-component.patch
+          test -s /tmp/aw2a-ledger.patch
+
+      - name: Apply recovered component correction
+        shell: bash
+        run: |
+          set -euo pipefail
           git apply --check /tmp/aw2a-component.patch
-          git apply --check /tmp/aw2a-ledger.patch
           git apply /tmp/aw2a-component.patch
+
+      - name: Apply recovered ledger correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check /tmp/aw2a-ledger.patch
           git apply /tmp/aw2a-ledger.patch
 
+      - name: Verify recovered correction identities
+        shell: bash
+        run: |
+          set -euo pipefail
           test "$(git hash-object components/workouts/workout-day-focus-session.tsx)" = "8c9928a33a43fbaa69e760dab71886d6d32d62cb"
           test "$(git hash-object supabase/migration-ledger.json)" = "b20ea3743ef1412e4d9ef05f39b050fd9bf5e224"
           test "$(sha256sum supabase/migrations/20260721012814_active_workout_aw2a_execution_state_corrections.sql | awk '{print $1}')" = "b79920d0f9155b0c076d602b10924846409efdac54a485333242a03bbd5e5e18"
 
+      - name: Restore permanent Quality workflow
+        shell: bash
+        run: |
+          set -euo pipefail
           rm -rf .aw2a-correction
-          git show HEAD^:.github/workflows/quality.yml > .github/workflows/quality.yml
+          git show "${ORIGINAL_HEAD}:.github/workflows/quality.yml" > .github/workflows/quality.yml
           test "$(git hash-object .github/workflows/quality.yml)" = "5f6569308282f9e82660fff479a46e05ad6f1f40"
 
+      - name: Commit finalized AW-2A correction
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name "Plaivra Implementation"
           git config user.email "implementation@plaivra.local"
           git add -A
           git diff --cached --check
           git commit -m "fix(train): finalize AW-2A QA corrections"
+
+      - name: Push finalized AW-2A correction
+        shell: bash
+        run: |
+          set -euo pipefail
           git push origin "HEAD:${TARGET_BRANCH}"
