@@ -595,6 +595,7 @@ begin
             v_target_rest_started_at := v_cached_rest_ends_at - make_interval(secs => v_cached_rest_duration);
           end if;
         end if;
+      end if;
   end case;
 
   -- Commands that are explicitly no-ops must not advance revision through
