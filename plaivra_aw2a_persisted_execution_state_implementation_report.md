@@ -38,8 +38,13 @@ The synthetic migration is removed reliably before the helper exits and never be
 - Last Planner-reviewed final head: `240106da957ff510a3e68062107b30cd5c54e13f`
 - Validated AW-2A application head: `b7ef75583489b7ace32ba6628105969b958b9aa8`
 - Validated permanent-CI implementation head before this report-only commit: `cf42654a62eea8a9a22250c5861b7ca841aa4139`
+- Final report commit and final PR head: `6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`
+- Final Phase A Diff Validation: run `29842265095` — `completed/success`.
+- Final Quality: run `29842265966` — `completed/success`.
+- Final generic artifact: `database-validation-6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`.
+- Final generic artifact ID: `8500152895`.
+- Final generic artifact digest: `sha256:e5ffcf32709c38f075808a2ba911d1bb3c951f2fa19c09c7b7425da9157e1256`.
 - PR state: open, Draft, unmerged.
-- The exact report-only commit cannot self-embed its own future workflow run IDs. Exact final report-head run IDs and artifact identity are recorded in the final Planner handoff.
 
 ## AW-2A delivered application behavior
 
@@ -147,13 +152,13 @@ Therefore workflow dispatch never passes an empty pull-request base SHA to the p
 
 ## Permanent-CI changed-file delta after `240106...`
 
-Relative to `240106da957ff510a3e68062107b30cd5c54e13f`, the permanent-CI implementation head changes only:
+Relative to `240106da957ff510a3e68062107b30cd5c54e13f`, the permanent-CI correction changes only:
 
 1. `.github/workflows/quality.yml`
 2. `scripts/check-unit-failure-parity.mjs` — rename/generalization of the old AW-2A parity script
 3. `scripts/permanent-quality-replay.test.mjs`
 4. `scripts/replay-local-migration-chain.mjs`
-5. `plaivra_aw2a_persisted_execution_state_implementation_report.md` — this report-only finalization
+5. `plaivra_aw2a_persisted_execution_state_implementation_report.md`
 
 No application source file and no migration file changed in this correction.
 
@@ -174,27 +179,27 @@ No application source file and no migration file changed in this correction.
 - AW-2A verification SQL and PostgreSQL integration remain enforced;
 - both applied migration SHA-256 checksums remain immutable.
 
-## Exact successful validation before report-only finalization
+## Final exact-head validation
 
-Permanent-CI implementation head:
+Final head:
 
 ```text
-cf42654a62eea8a9a22250c5861b7ca841aa4139
+6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66
 ```
 
 Exact-head workflows:
 
-- Phase A Diff Validation: run `29841259528` — `completed/success`.
-- Quality: run `29841258529` — `completed/success`.
+- Phase A Diff Validation: run `29842265095` — `completed/success`.
+- Quality: run `29842265966` — `completed/success`.
 
 Generic exact-head evidence artifact:
 
-- Name: `database-validation-cf42654a62eea8a9a22250c5861b7ca841aa4139`
-- Artifact ID: `8499726524`
-- Digest: `sha256:62b67bac954fa82285bc722d55c3db9eb6eaca95f42f37b9a7b0ccc7f28de182`
-- Artifact head: `cf42654a62eea8a9a22250c5861b7ca841aa4139`
+- Name: `database-validation-6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`
+- Artifact ID: `8500152895`
+- Digest: `sha256:e5ffcf32709c38f075808a2ba911d1bb3c951f2fa19c09c7b7425da9157e1256`
+- Artifact head: `6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`
 
-The successful Quality job passed:
+The successful final Quality job passed:
 
 - exact checkout verification;
 - changed-source lint;
@@ -220,7 +225,7 @@ The successful Quality job passed:
 
 ## Migration replay evidence
 
-The generic validation log proves:
+The final generic validation log proves:
 
 ```text
 synthetic replay:
@@ -252,8 +257,9 @@ expected_database_migration=20260721012814
 
 ## Unit-failure parity
 
-Generic parity evidence for `cf42654a62eea8a9a22250c5861b7ca841aa4139`:
+Generic final-head parity evidence:
 
+- Head SHA: `6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`.
 - Base SHA: `6f381b760eb711c3eef4bb515365d4c675648ed3`.
 - Head tests: `1249`.
 - Base tests: `1205`.
@@ -331,6 +337,7 @@ No Supabase write action was executed during this permanent-CI correction. The p
 - Temporary synthetic migrations are removed by the helper and do not appear in the committed tree.
 - No temporary workflow, patch fragment, workspace archive, base64 transfer file, or recovery helper is part of the final correction.
 - PR #80 remains open, Draft, and unmerged.
+- Final remote head is `6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`.
 
 ## Squash-merge requirement
 
