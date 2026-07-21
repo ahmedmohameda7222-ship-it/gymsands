@@ -64,6 +64,7 @@ jobs:
         with:
           name: stage1-final-qa-correction-diagnostics-${{ github.run_id }}
           path: .stage1-correction
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 3
 
