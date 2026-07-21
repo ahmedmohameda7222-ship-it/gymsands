@@ -12,8 +12,8 @@ function functionBody(source: string, name: string, nextName: string) {
   return source.slice(start, end);
 }
 
-describe("AW-2A final correction source contracts", () => {
-  it("routes set completion through canonical-log-first sequencing", () => {
+describe("AW-2A lifecycle preserved under AW-2B command authority", () => {
+  it("retains canonical-log-first set completion sequencing", () => {
     const finishSet = functionBody(component, "finishSet", "restartSet");
     expect(finishSet).toContain("persistCanonicalSetThenExecution");
     expect(finishSet.indexOf("saveWorkoutSetLogs")).toBeLessThan(finishSet.indexOf("persistWorkoutSessionAfterSetCompletion"));
@@ -21,34 +21,33 @@ describe("AW-2A final correction source contracts", () => {
     expect(finishSet).not.toContain("moveToNextSet(");
   });
 
-  it("uses one typed post-set execution update containing cursor, view, rest, and controller fields", () => {
+  it("maps post-set execution to the finite complete_set_transition command", () => {
     const start = service.indexOf("export async function persistWorkoutSessionAfterSetCompletion");
     const end = service.indexOf("\nexport async function persistWorkoutSessionRestTimer", start);
     const operation = service.slice(start, end);
-    expect(operation.match(/updateWorkoutSessionExecutionState\(/g)).toHaveLength(1);
+    expect(operation).toContain('executeLatestCommand(userId, sessionId, "complete_set_transition"');
     for (const field of [
       "active_snapshot_item_id",
       "active_item_order",
       "active_set_number",
       "view_state",
-      "rest_started_at",
       "rest_duration_seconds",
-      "rest_ends_at",
       "controller_device_id"
     ]) expect(operation).toContain(field);
+    expect(operation).not.toContain("rest_started_at:");
+    expect(operation).not.toContain("rest_ends_at:");
   });
 
-  it("projects the compatibility heartbeat from authoritative execution elapsed time", () => {
+  it("removes normal authenticated direct state UPDATE code", () => {
+    expect(service).not.toContain('.from("workout_session_execution_states")\n    .update(');
+    expect(service).toContain('.rpc("apply_workout_session_execution_command_atomic"');
+  });
+
+  it("keeps the authoritative elapsed-time heartbeat and queue", () => {
     const heartbeat = component.match(/useEffect\(\(\) => \{\n    if \(!session\) return;[\s\S]*?\n  \}, \[session\]\);/)?.[0] ?? "";
     expect(heartbeat).toContain("executionDurationMinutes(authoritativeState)");
     expect(heartbeat).toContain("executionWriteQueueRef.current.current()");
-    expect(heartbeat).not.toContain("Date.now() - startedAtMs");
-  });
-
-  it("does not retain the old rendered-snapshot promise queue", () => {
     expect(component).toContain("createWorkoutSessionExecutionWriteQueue");
     expect(component).not.toContain("executionWriteRef");
-    expect(component).not.toContain("currentState: executionState");
-    expect(component).not.toContain('executionState?.session_state !== "review"');
   });
 });
