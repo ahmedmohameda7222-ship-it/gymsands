@@ -25,7 +25,7 @@ Stage 1 performs no Supabase write, no marker promotion, no merge, and no deploy
 - Branch: `fix/aw2a-post-merge-release-closure`
 - Draft PR: `#81`
 - Draft PR URL: `https://github.com/ahmedmohameda7222-ship-it/gymsands/pull/81`
-- Final implementation candidate head: `TO_BE_REPLACED_AFTER_REMOTE_VALIDATION`
+- Validated implementation candidate head before this report update: `34b8ea48cda856c0d3c3caf459b3509985cc63d8`
 - PR state required at handoff: open, Draft, unmerged
 
 A Git commit cannot contain its own content-derived SHA or workflow run IDs allocated only after that commit exists. The committed report therefore records the latest validated implementation candidate and the contract for exact final-head evidence. The exact report-head Phase A, PR Quality, manual Quality, canonical artifact, and Release preflight identities are emitted by `Exact Release Quality Validation`, retained as GitHub artifacts, recorded in the PR validation comment, and repeated in the Planner handoff.
@@ -278,7 +278,7 @@ Stage 1 runs mock-based local tests only. It does not invoke Production dry-run 
 Local dependency-free focused suite:
 
 ```text
-47 tests passed
+34 focused Stage-1 tests passed
 0 failed
 ```
 
@@ -385,13 +385,54 @@ No application component, route behavior, workout service, message, translation,
 The following fields are populated by the exact remote validation cycle and repeated in the PR exact-validation comment and Planner handoff:
 
 ```text
-Phase A run: TO_BE_REPLACED
-PR Quality run: TO_BE_REPLACED
-manual exact-head full Quality run: TO_BE_REPLACED
-canonical artifact ID/name/digest: TO_BE_REPLACED
-Stage-1 Release preflight run: TO_BE_REPLACED
-final exact PR head: TO_BE_REPLACED
+Validated candidate head: 34b8ea48cda856c0d3c3caf459b3509985cc63d8
+Phase A run: 29855528252 — completed/success
+PR Quality run: 29855528260 — completed/success
+Exact Release Quality Validation run: 29855528272 — completed/success
+manual exact-head full Quality run: 29855536992 — completed/success
+canonical artifact: quality-reports-29855536992
+canonical artifact ID: 8505474606
+canonical artifact digest: sha256:a6b995e07e7c9c2d19d242fab2f72c86735db4f73a1228a815081e41b3f7d6e1
+Stage-1 Release preflight run: 29856503679 — completed/success
+final exact report-head evidence: emitted after this report commit by the permanent exact-validation workflow
 ```
+
+
+## Validated candidate manifest summary
+
+The successful manual exact-commit Quality artifact for candidate `34b8ea48cda856c0d3c3caf459b3509985cc63d8` contains manifest schema version 2 with:
+
+```text
+release.commitSha: 34b8ea48cda856c0d3c3caf459b3509985cc63d8
+release.buildTimestamp: 2026-07-21T18:02:56.000Z
+release.environment: ci
+release.schemaCompatibilityVersion: 2
+release.expectedDatabaseMigrationVersion: 20260721012814
+release.migrationLedgerReconciliationState: reconciled
+release.pendingMigrationCount: 0
+release.schemaAppliedUntrackedCount: 0
+release.unresolvedMigrationCount: 0
+qualityArtifact.workflowRunId: 29855536992
+qualityArtifact.comparisonBase: 93f6aaad5d170bf5cfe304597317c7ffa3016e2a
+qualityArtifact.fullReleaseQuality: true
+all 16 required release gates: passed
+all retained gate exit codes: 0
+all retained evidence stale flags: false
+```
+
+Known-failure identity parity on the same manual run:
+
+```text
+head total tests: 1249
+comparison-base total tests: 1249
+head failed tests: 4
+comparison-base failed tests: 4
+introduced failure identities: 0
+removed failure identities: 0
+parity: passed
+```
+
+The Stage-1 Release preflight consumed that exact artifact and validated repository, run ID, commit, expected migration, ledger reconciliation, zero pending/untracked/unresolved counts, every retained evidence file, every zero exit code, timestamps, sizes, and SHA-256 digests. It recorded `productionPromotionAuthorized=false`, `productionMutationPerformed=false`, and `deploymentPerformed=false`.
 
 ## Final boundaries
 
