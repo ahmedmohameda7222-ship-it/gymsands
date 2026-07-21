@@ -38,6 +38,7 @@ import {
   clearWorkoutSessionRestTimer,
   getWorkoutSessionExecutionState,
   importLegacyWorkoutExecutionCache,
+  persistWorkoutSessionAfterSetCompletion,
   persistWorkoutSessionCursor,
   persistWorkoutSessionPause,
   persistWorkoutSessionRestTimer,
@@ -114,6 +115,45 @@ describe("workout session execution database service", () => {
       active_item_order: 1,
       active_set_number: 2
     });
+  });
+
+  it("persists the post-set cursor and rest tuple in exactly one update", async () => {
+    const result = await persistWorkoutSessionAfterSetCompletion(userId, sessionId, {
+      activeSnapshotItemId: "33333333-3333-4333-8333-333333333333",
+      activeItemOrder: 1,
+      activeSetNumber: 2,
+      viewState: "rest",
+      restStartedAt: "2026-07-20T20:03:00.000Z",
+      restDurationSeconds: 90,
+      restEndsAt: "2026-07-20T20:04:30.000Z",
+      controllerDeviceId: "44444444-4444-4444-8444-444444444444"
+    });
+    expect(mocks.from).toHaveBeenCalledTimes(1);
+    expect(mocks.state.update).toEqual({
+      active_snapshot_item_id: "33333333-3333-4333-8333-333333333333",
+      active_item_order: 1,
+      active_set_number: 2,
+      view_state: "rest",
+      rest_started_at: "2026-07-20T20:03:00.000Z",
+      rest_duration_seconds: 90,
+      rest_ends_at: "2026-07-20T20:04:30.000Z",
+      controller_device_id: "44444444-4444-4444-8444-444444444444"
+    });
+    expect(result.revision).toBe(1);
+  });
+
+  it("rejects an incomplete post-set rest tuple before writing", async () => {
+    await expect(persistWorkoutSessionAfterSetCompletion(userId, sessionId, {
+      activeSnapshotItemId: null,
+      activeItemOrder: 1,
+      activeSetNumber: 2,
+      viewState: "rest",
+      restStartedAt: null,
+      restDurationSeconds: 90,
+      restEndsAt: "2026-07-20T20:04:30.000Z",
+      controllerDeviceId: null
+    })).rejects.toThrow(/rest state is inconsistent/i);
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 
   it("persists pause and resume with timestamp-based elapsed math", async () => {

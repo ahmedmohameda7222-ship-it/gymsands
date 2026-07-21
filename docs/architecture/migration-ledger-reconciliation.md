@@ -6,14 +6,16 @@
 
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 
-**Status:** **Fully reconciled through production record `20260721000544`; no pending repository migration remains**
+**Status:** **Fully reconciled through production record `20260721012814`; no pending repository migration remains**
 
 This document records verified production migration history. It is not authorization to replay migrations, deploy, promote, change compatibility markers, or merge. Applied migration files and production identities are immutable.
 
 ## Current production and ledger state
 
-- Applied production migrations: 63
-- Latest production migration: `20260721000544_active_workout_aw2a_execution_state` (repository file `20260720213000_active_workout_aw2a_execution_state.sql`)
+- Actual production migration records: 64
+- Ledger exact-applied rows (`state = applied`): 63
+- Ledger version-alias rows (`state = applied_version_alias`): 1
+- Latest production migration: `20260721012814_active_workout_aw2a_execution_state_corrections` (repository file `20260721012814_active_workout_aw2a_execution_state_corrections.sql`)
 - `pendingCount = 0`
 - `schemaAppliedUntrackedCount = 0`
 - `unresolvedCount = 0`
@@ -123,7 +125,7 @@ The existing owner, privacy, lifecycle, snapshot, and RPC security contracts rem
 Physical production migration head:
 
 ```text
-20260721000544
+20260721012814
 ```
 
 Deployed compatibility marker:
@@ -148,13 +150,38 @@ The difference is intentional. The marker may advance only in a separately autho
 - exact-head production build
 - `supabase/migration-ledger.json`
 
-Phase 4C.1 migration apply, PR merge, deployment, compatibility-marker advancement, Phase 4C.2, and Phase 4C.3 remain separate decisions.
+PR merge, deployment, compatibility-marker advancement, AW-2B, and later phases remain separate decisions.
 
 
-## Applied AW-2A execution-state migration
+## Applied AW-2A execution-state migrations
+
+### Immutable base migration
 
 - Repository file: `20260720213000_active_workout_aw2a_execution_state.sql`
+- Repository SHA-256: `c8f21655226d51a2157fa1b8c272edc5fac1f84f0a2214376a16e225a1f04f2e`
 - Production record: `20260721000544_active_workout_aw2a_execution_state`
+- Ledger state: `applied_version_alias`; the repository version differs from the generated production timestamp while the reviewed SQL remains immutable.
 - Applied exactly once to Plaivra Database through the supported migration authority.
 - Backfilled the one existing open workout session, left terminal sessions without execution state, and preserved compatibility marker `20260717051011`.
-- Do not replay or modify either immutable identity.
+- Do not replay, rename, or modify either immutable identity.
+
+### Forward-only correction migration
+
+- Repository file and production record: `20260721012814_active_workout_aw2a_execution_state_corrections.sql`
+- SHA-256: `b79920d0f9155b0c076d602b10924846409efdac54a485333242a03bbd5e5e18`
+- Ledger state: exact `applied`.
+- Applied exactly once to Plaivra Database.
+- Adds the partial covering index `workout_session_execution_states_active_snapshot_item_idx` on non-null `active_snapshot_item_id` values.
+- Leaves the compatibility marker at `20260717051011` and preserves all workout sessions, logs, snapshots, and execution-state rows.
+- The Supabase performance advisor no longer reports `workout_session_execution_states_active_snapshot_item_id_fkey` as unindexed. Unrelated pre-existing advisor findings remain outside AW-2A scope.
+- Do not replay or modify the applied correction migration.
+
+## Production-count interpretation
+
+The physical production history contains **64 records**. The machine ledger intentionally reports `productionMigrationCount = 63` because that field counts only exact `state = applied` rows. The remaining production record is the immutable AW-2A base migration represented as one `applied_version_alias`. Therefore:
+
+```text
+63 exact-applied + 1 version-alias = 64 actual production records
+```
+
+This is deliberate reconciliation behavior, not drift. `scripts/check-migration-ledger.mjs` remains strict and unchanged.

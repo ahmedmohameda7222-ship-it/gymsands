@@ -69,6 +69,20 @@ begin
     raise exception 'AW-2A root or snapshot-item foreign key is incorrect.';
   end if;
 
+  if not exists (
+    select 1
+    from pg_index index_row
+    where index_row.indexrelid = 'public.workout_session_execution_states_active_snapshot_item_idx'::regclass
+      and index_row.indrelid = 'public.workout_session_execution_states'::regclass
+      and index_row.indisvalid
+      and index_row.indisready
+      and not index_row.indisunique
+      and pg_get_indexdef(index_row.indexrelid) ~ '\(active_snapshot_item_id\)'
+      and pg_get_expr(index_row.indpred, index_row.indrelid) ~ 'active_snapshot_item_id IS NOT NULL'
+  ) then
+    raise exception 'AW-2A active snapshot-item FK covering index is missing or incorrect.';
+  end if;
+
   if not (select relrowsecurity from pg_class where oid = 'public.workout_session_execution_states'::regclass) then
     raise exception 'AW-2A row-level security is not enabled.';
   end if;

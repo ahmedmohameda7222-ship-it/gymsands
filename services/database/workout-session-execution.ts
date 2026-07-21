@@ -235,6 +235,44 @@ export async function persistWorkoutSessionCursor(
   return updateWorkoutSessionExecutionState(userId, sessionId, patch);
 }
 
+export async function persistWorkoutSessionAfterSetCompletion(
+  userId: string,
+  sessionId: string,
+  input: {
+    activeSnapshotItemId: string | null;
+    activeItemOrder: number;
+    activeSetNumber: number;
+    viewState: Exclude<WorkoutSessionExecutionViewState, "session_review">;
+    restStartedAt: string | null;
+    restDurationSeconds: number | null;
+    restEndsAt: string | null;
+    controllerDeviceId: string | null;
+  }
+) {
+  const activeItemOrder = Math.max(1, Math.floor(input.activeItemOrder));
+  const activeSetNumber = Math.max(1, Math.floor(input.activeSetNumber));
+  const isRest = input.viewState === "rest";
+  const hasCompleteRestTuple = input.restStartedAt !== null
+    && input.restDurationSeconds !== null
+    && input.restEndsAt !== null;
+  if (isRest !== hasCompleteRestTuple) {
+    throw new Error("Workout set completion rest state is inconsistent.");
+  }
+  const restDurationSeconds = input.restDurationSeconds === null
+    ? null
+    : Math.min(86400, Math.max(0, Math.floor(input.restDurationSeconds)));
+  return updateWorkoutSessionExecutionState(userId, sessionId, {
+    active_snapshot_item_id: input.activeSnapshotItemId,
+    active_item_order: activeItemOrder,
+    active_set_number: activeSetNumber,
+    view_state: input.viewState,
+    rest_started_at: input.restStartedAt,
+    rest_duration_seconds: restDurationSeconds,
+    rest_ends_at: input.restEndsAt,
+    controller_device_id: input.controllerDeviceId
+  });
+}
+
 export async function persistWorkoutSessionRestTimer(
   userId: string,
   sessionId: string,

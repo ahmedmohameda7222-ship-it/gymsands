@@ -1,10 +1,19 @@
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const migrationFile = "20260720213000_active_workout_aw2a_execution_state.sql";
-const migration = readFileSync(`supabase/migrations/${migrationFile}`, "utf8").replaceAll("\r\n", "\n").toLowerCase();
+const originalMigrationFile = "20260720213000_active_workout_aw2a_execution_state.sql";
+const originalMigrationBytes = readFileSync(`supabase/migrations/${originalMigrationFile}`);
+const originalMigration = originalMigrationBytes.toString("utf8").replaceAll("\r\n", "\n").toLowerCase();
+const originalMigrationSha256 = createHash("sha256").update(originalMigrationBytes).digest("hex");
+const migrationFiles = readdirSync("supabase/migrations")
+  .filter((file) => file.includes("active_workout_aw2a_execution_state"))
+  .sort();
+const correctionMigrationFile = migrationFiles.find((file) => file.endsWith("_active_workout_aw2a_execution_state_corrections.sql"));
+const correctionMigration = correctionMigrationFile
+  ? readFileSync(`supabase/migrations/${correctionMigrationFile}`, "utf8").replaceAll("\r\n", "\n").toLowerCase()
+  : "";
 const verification = readFileSync("supabase/verification/active-workout-aw2a-execution-state.sql", "utf8").replaceAll("\r\n", "\n").toLowerCase();
-const migrationFiles = readdirSync("supabase/migrations").filter((file) => file.includes("active_workout_aw2a_execution_state"));
 const repositoryText = [
   readFileSync("services/database/workout-session-execution.ts", "utf8"),
   readFileSync("lib/workouts/workout-session-execution.ts", "utf8"),
@@ -19,21 +28,25 @@ const requiredColumns = [
 ];
 
 describe("AW-2A persisted execution-state migration contract", () => {
-  it("ships exactly one append-only forward transaction under the canonical root", () => {
-    expect(migrationFiles).toEqual([migrationFile]);
-    expect(migration.trimStart().startsWith("begin;")).toBe(true);
-    expect(migration.trimEnd().endsWith("commit;")).toBe(true);
-    expect(migration).toContain("create table public.workout_session_execution_states");
-    expect(migration).not.toMatch(/create table public\.(?:workout_sessions|exercise_logs|user_workout_sessions)/);
-    expect(migration).not.toMatch(/drop\s+(?:table|column|schema)/);
+  it("keeps the applied migration byte-immutable and adds one forward-only correction", () => {
+    expect(originalMigrationSha256).toBe("c8f21655226d51a2157fa1b8c272edc5fac1f84f0a2214376a16e225a1f04f2e");
+    expect(migrationFiles).toHaveLength(2);
+    expect(migrationFiles[0]).toBe(originalMigrationFile);
+    expect(correctionMigrationFile).toBeTruthy();
+    expect(originalMigration.trimStart().startsWith("begin;")).toBe(true);
+    expect(originalMigration.trimEnd().endsWith("commit;")).toBe(true);
+    expect(correctionMigration.trimStart().startsWith("begin;")).toBe(true);
+    expect(correctionMigration.trimEnd().endsWith("commit;")).toBe(true);
+    expect(correctionMigration).not.toMatch(/drop\s+(?:table|column|schema|index)/);
+    expect(correctionMigration).not.toMatch(/alter\s+table/);
   });
 
   it("contains the exact typed one-to-one state contract and no arbitrary state blob", () => {
-    for (const column of requiredColumns) expect(migration).toContain(column);
-    expect(migration).toContain("workout_session_id uuid primary key");
-    expect(migration).toContain("references public.workout_sessions(id) on delete cascade");
-    expect(migration).toContain("references public.workout_session_muscle_snapshot_items(id) on delete set null");
-    expect(migration).not.toMatch(/\bstate_json\b|\bpayload\s+jsonb\b|\bexecution_data\b/);
+    for (const column of requiredColumns) expect(originalMigration).toContain(column);
+    expect(originalMigration).toContain("workout_session_id uuid primary key");
+    expect(originalMigration).toContain("references public.workout_sessions(id) on delete cascade");
+    expect(originalMigration).toContain("references public.workout_session_muscle_snapshot_items(id) on delete set null");
+    expect(originalMigration).not.toMatch(/\bstate_json\b|\bpayload\s+jsonb\b|\bexecution_data\b/);
   });
 
   it("enforces ownership, revision, lifecycle, timers, and stable snapshot cursor", () => {
@@ -49,31 +62,41 @@ describe("AW-2A persisted execution-state migration contract", () => {
       "item.source_plan_activity_id",
       "item.source_plan_exercise_id",
       "rest_ends_at = rest_started_at + make_interval"
-    ]) expect(migration).toContain(contract);
-    expect(migration).not.toMatch(/lower\([^\n]*exercise_name|exercise_name\s*=/);
+    ]) expect(originalMigration).toContain(contract);
+    expect(originalMigration).not.toMatch(/lower\([^\n]*exercise_name|exercise_name\s*=/);
+  });
+
+  it("adds a compact partial covering index for the active snapshot-item FK", () => {
+    expect(correctionMigration).toContain("create index workout_session_execution_states_active_snapshot_item_idx");
+    expect(correctionMigration).toContain("on public.workout_session_execution_states(active_snapshot_item_id)");
+    expect(correctionMigration).toContain("where active_snapshot_item_id is not null");
+    expect(correctionMigration).toContain("workout_session_execution_states_active_snapshot_item_id_fkey");
+    expect(verification).toContain("aw-2a active snapshot-item fk covering index is missing or incorrect");
   });
 
   it("uses owner-scoped RLS and least-privilege grants", () => {
-    expect(migration).toContain("enable row level security");
-    expect(migration).toContain("workout_session_execution_states_member_select");
-    expect(migration).toContain("workout_session_execution_states_member_update");
-    expect(migration).toContain("grant select, update on table public.workout_session_execution_states\n  to authenticated");
-    expect(migration).not.toContain("grant insert on table public.workout_session_execution_states\n  to authenticated");
-    expect(migration).toContain("security definer\nset search_path = ''");
+    expect(originalMigration).toContain("enable row level security");
+    expect(originalMigration).toContain("workout_session_execution_states_member_select");
+    expect(originalMigration).toContain("workout_session_execution_states_member_update");
+    expect(originalMigration).toContain("grant select, update on table public.workout_session_execution_states\n  to authenticated");
+    expect(originalMigration).not.toContain("grant insert on table public.workout_session_execution_states\n  to authenticated");
+    expect(originalMigration).toContain("security definer\nset search_path = ''");
   });
 
   it("does not introduce AW-2B command, idempotency, timeline, or event models", () => {
-    expect(migration).not.toMatch(/create table public\.[^\s]*(?:command|operation|event|timeline)/);
-    expect(migration).not.toContain("operation_id");
-    expect(migration).not.toContain("expected_revision");
+    expect(`${originalMigration}\n${correctionMigration}`).not.toMatch(/create table public\.[^\s]*(?:command|operation|event|timeline)/);
+    expect(`${originalMigration}\n${correctionMigration}`).not.toContain("operation_id");
+    expect(`${originalMigration}\n${correctionMigration}`).not.toContain("expected_revision");
     expect(repositoryText).not.toContain("browser fingerprint");
     expect(repositoryText).not.toContain("useragent");
   });
 
   it("preserves the release compatibility marker and Activity Catalog boundary", () => {
-    expect(migration).not.toMatch(/update\s+public\.release_schema_compatibility/);
-    expect(migration).toContain("aw-2a changed the release compatibility marker");
-    expect(migration).not.toContain("khlcctuefiuhunqymkbp");
+    expect(originalMigration).not.toMatch(/update\s+public\.release_schema_compatibility/);
+    expect(correctionMigration).not.toMatch(/update\s+public\.release_schema_compatibility/);
+    expect(originalMigration).toContain("aw-2a changed the release compatibility marker");
+    expect(correctionMigration).toContain("aw-2a correction changed the release compatibility marker");
+    expect(`${originalMigration}\n${correctionMigration}`).not.toContain("khlcctuefiuhunqymkbp");
     expect(repositoryText).not.toContain("khlcctuefiuhunqymkbp");
   });
 
@@ -87,7 +110,8 @@ describe("AW-2A persisted execution-state migration contract", () => {
       "execution-state owner differs from root-session owner",
       "revision guard source contract is missing",
       "snapshot initializer source contract is missing",
-      "terminal cleanup source contract is missing"
+      "terminal cleanup source contract is missing",
+      "active snapshot-item fk covering index is missing or incorrect"
     ]) expect(verification).toContain(proof);
   });
 });
