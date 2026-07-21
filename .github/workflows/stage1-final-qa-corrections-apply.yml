@@ -24,10 +24,28 @@ jobs:
           ref: fix/aw2a-post-merge-release-closure
           fetch-depth: 0
 
-      - name: Apply final Planner corrections
+      - name: Reconstruct Planner baseline and apply final corrections
         shell: bash
         run: |
           set -euo pipefail
+          planner_head=3d50008140fc026b313052aaf7df199fd4bcbbb7
+          git checkout "$planner_head" -- \
+            .github/workflows/exact-release-quality-validation.yml \
+            .github/workflows/quality.yml \
+            .github/workflows/release-preflight.yml \
+            plaivra_aw2a_post_merge_release_closure_implementation_report.md \
+            release/release-manifest.template.json \
+            scripts/create-release-manifest.mjs \
+            scripts/permanent-quality-replay.test.mjs \
+            scripts/promote-release-schema-compatibility.mjs \
+            scripts/promote-release-schema-compatibility.test.mjs \
+            scripts/quality-evidence-contract.mjs \
+            scripts/release-closure-stage1.test.mjs \
+            scripts/release-preflight.mjs \
+            scripts/run-quality-gate.mjs \
+            scripts/run-quality-gate.test.mjs
+          rm -f scripts/release-identity-contract.mjs scripts/release-closure-final-qa.test.mjs
+
           cat .stage1-correction/part* \
             | base64 -d \
             | python -c 'import pathlib,sys,zlib; pathlib.Path("/tmp/apply-stage1-final-qa.py").write_bytes(zlib.decompress(sys.stdin.buffer.read()))'
@@ -85,7 +103,7 @@ jobs:
           cp .github/workflows/exact-release-quality-validation.yml stage1-workflow-blobs/exact-release-quality-validation.yml
           cp .github/workflows/quality.yml stage1-workflow-blobs/quality.yml
           cp .github/workflows/release-preflight.yml stage1-workflow-blobs/release-preflight.yml
-          git checkout -- \
+          git checkout HEAD -- \
             .github/workflows/exact-release-quality-validation.yml \
             .github/workflows/quality.yml \
             .github/workflows/release-preflight.yml \
