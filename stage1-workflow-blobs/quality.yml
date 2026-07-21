@@ -1,0 +1,473 @@
+name: Quality
+run-name: Quality / ${{ inputs.validation_request_id || format('pr-{0}-{1}-{2}-{3}', github.event.pull_request.number, github.run_id, github.run_attempt, github.event.pull_request.head.sha) }}
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      reviewed_commit:
+        description: Exact 40-character Git SHA to validate
+        required: true
+        type: string
+      comparison_base:
+        description: Exact 40-character Git SHA used for unit-failure identity parity
+        required: true
+        type: string
+      validation_request_id:
+        description: Unique safe request identity bound to the orchestration
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.reviewed_commit || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+      PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+      PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+      PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+      PLAIVRA_RELEASE_ENVIRONMENT: ci
+      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+
+    steps:
+      - name: Declare full release scope
+        id: scope
+        shell: bash
+        run: echo "i18n=true" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve exact run identity
+        id: identity
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_REVIEWED_COMMIT: ${{ inputs.reviewed_commit }}
+          MANUAL_COMPARISON_BASE: ${{ inputs.comparison_base }}
+          MANUAL_VALIDATION_REQUEST_ID: ${{ inputs.validation_request_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            reviewed_commit="$MANUAL_REVIEWED_COMMIT"
+            comparison_base="$MANUAL_COMPARISON_BASE"
+            validation_request_id="$MANUAL_VALIDATION_REQUEST_ID"
+          else
+            reviewed_commit="$PR_HEAD_SHA"
+            comparison_base="$PR_BASE_SHA"
+            validation_request_id="pr-${PR_NUMBER}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${reviewed_commit}"
+          fi
+          [[ "$reviewed_commit" =~ ^[0-9a-fA-F]{40}$ ]]
+          [[ "$comparison_base" =~ ^[0-9a-fA-F]{40}$ ]]
+          [[ "$validation_request_id" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{7,127}$ ]]
+          reviewed_commit="${reviewed_commit,,}"
+          comparison_base="${comparison_base,,}"
+          quality_build_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')"
+          {
+            echo "reviewed_commit=$reviewed_commit"
+            echo "comparison_base=$comparison_base"
+            echo "validation_request_id=$validation_request_id"
+            echo "quality_build_timestamp=$quality_build_timestamp"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "PLAIVRA_COMMIT_SHA=$reviewed_commit"
+            echo "PLAIVRA_COMPARISON_BASE=$comparison_base"
+            echo "PLAIVRA_VALIDATION_REQUEST_ID=$validation_request_id"
+            echo "PLAIVRA_QUALITY_BUILD_TIMESTAMP=$quality_build_timestamp"
+            echo "PLAIVRA_BUILD_TIMESTAMP=$quality_build_timestamp"
+          } >> "$GITHUB_ENV"
+
+      - name: Checkout exact reviewed commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.identity.outputs.reviewed_commit }}
+          fetch-depth: 0
+
+      - name: Derive release target from exact reconciled ledger
+        id: release_target
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import { readFileSync } from "node:fs";
+          import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs";
+          const target = deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")));
+          const values = {
+            PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: target.expectedMigration,
+            PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE: target.reconciliationState,
+            PLAIVRA_PENDING_MIGRATION_COUNT: String(target.pendingCount),
+            PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: String(target.schemaAppliedUntrackedCount),
+            PLAIVRA_UNRESOLVED_MIGRATION_COUNT: String(target.unresolvedCount),
+          };
+          for (const [key, value] of Object.entries(values)) {
+            process.stdout.write(`${key}=${value}\n`);
+          }
+          NODE
+          node --input-type=module - <<'NODE' >> "$GITHUB_ENV"
+          import { readFileSync } from "node:fs";
+          import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs";
+          const target = deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")));
+          console.log(`PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION=${target.expectedMigration}`);
+          console.log(`PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE=${target.reconciliationState}`);
+          console.log(`PLAIVRA_PENDING_MIGRATION_COUNT=${target.pendingCount}`);
+          console.log(`PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT=${target.schemaAppliedUntrackedCount}`);
+          console.log(`PLAIVRA_UNRESOLVED_MIGRATION_COUNT=${target.unresolvedCount}`);
+          NODE
+          expected_migration="$(grep '^PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION=' "$GITHUB_ENV" | tail -n 1 | cut -d= -f2-)"
+          [[ "$expected_migration" =~ ^[0-9]{12,14}$ ]]
+          echo "expected_migration=$expected_migration" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Gate — repository integrity
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name integrity
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- bash -lc 'set -euo pipefail;
+          test "$GITHUB_REPOSITORY" = "ahmedmohameda7222-ship-it/gymsands";
+          test "$(git rev-parse HEAD)" = "$PLAIVRA_COMMIT_SHA";
+          test "$(git rev-parse "$PLAIVRA_COMPARISON_BASE^{commit}")" = "$PLAIVRA_COMPARISON_BASE";
+          git diff --check;
+          test -z "$(git status --porcelain --untracked-files=no)"'
+
+      - name: Gate — full chronological migration chain
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name full-migration-chain
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- node scripts/replay-local-migration-chain.mjs
+          --log quality-reports/database-validation.log
+          --prove-future-order
+
+      - name: Gate — database lint
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name database-lint
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- supabase db lint --local --schema public --level error --fail-on error
+
+      - name: Gate — database preflight and verification SQL
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name database-preflight
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- bash -lc 'set -euo pipefail;
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql;
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-integration.sql;
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql;
+          PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$PLAIVRA_LOCAL_DATABASE_URL" node scripts/test-database-preflight-control.mjs;
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql'
+
+      - name: Gate — migration ledger
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name migration-ledger
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- npm run migration:ledger:check
+
+      - name: Gate — dependency audit
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name dependency-audit
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- npm audit --omit=dev --audit-level=moderate
+
+      - name: Gate — lint
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name lint
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- npm run lint
+
+      - name: Gate — typecheck
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name typecheck
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- npm run typecheck
+
+      - name: Gate — full unit failure parity
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name unit
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- node scripts/check-unit-failure-parity.mjs
+          --base "$PLAIVRA_COMPARISON_BASE"
+          --output-dir quality-reports
+
+      - name: Gate — integration tests
+        env:
+          PLAIVRA_AW2A_TEST_DATABASE_URL: ${{ env.PLAIVRA_LOCAL_DATABASE_URL }}
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name integration
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- npm run test:integration
+
+      - name: Gate — script and i18n tests
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name script-tests
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- bash -lc 'set -euo pipefail; npm run test:i18n; npm run test:scripts'
+
+      - name: Gate — telemetry tests
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name telemetry-tests
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- npm run test:telemetry
+
+      - name: Gate — production environment contract
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name environment-validation
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- bash -lc 'set -euo pipefail;
+          export PLAIVRA_VALIDATE_PRODUCTION_ENV=true;
+          export PLAIVRA_RELEASE_ENVIRONMENT=production;
+          export NEXT_PUBLIC_APP_URL=https://app.plaivra.com;
+          export NEXT_PUBLIC_USE_MOCK_AUTH=false;
+          export PLAIVRA_MCP_BASE_URL=https://app.plaivra.com/api/mcp;
+          export PLAIVRA_OAUTH_ISSUER=https://app.plaivra.com;
+          export PLAIVRA_CIMD_ALLOWED_ORIGINS=https://chatgpt.com;
+          export CRON_SECRET=ci-placeholder-cron-secret-that-is-long-enough;
+          npm run validate:env'
+
+      - name: Gate — production build
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name build
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- bash -lc 'set -euo pipefail; NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build'
+
+      - name: Gate — built release metadata
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name release-metadata
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- npm run release:verify-built-metadata --
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          --environment ci
+          --expected-migration "$PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION"
+
+      - name: Gate — rendered browser QA
+        run: >-
+          node scripts/run-quality-gate.mjs
+          --name rendered-qa
+          --reports-dir quality-reports
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          -- bash -lc 'set -euo pipefail;
+          npx playwright install --with-deps chromium;
+          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/qa-server.log 2>&1 &
+          server_pid=$!;
+          trap '\''kill "$server_pid" 2>/dev/null || true'\'' EXIT;
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi;
+            sleep 1;
+          done;
+          curl --fail --silent http://localhost:3000/ > /dev/null;
+          QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/rendered-qa-evidence npm run qa:rendered;
+          QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=quality-reports/train-qa-evidence npm run qa:train'
+
+      - name: Record i18n evidence metadata
+        if: github.event_name == 'pull_request' && steps.scope.outputs.i18n == 'true'
+        shell: bash
+        env:
+          PLAIVRA_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          metadata = {
+              "headSha": os.environ["PLAIVRA_COMMIT_SHA"],
+              "workflowRunId": os.environ["GITHUB_RUN_ID"],
+              "workflowRunAttempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "pullRequestNumber": int(os.environ["PLAIVRA_PULL_REQUEST_NUMBER"]),
+          }
+          output = Path("quality-reports/i18n-rendered-evidence-metadata.json")
+          output.parent.mkdir(parents=True, exist_ok=True)
+          output.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Upload successful i18n rendered evidence
+        if: github.event_name == 'pull_request' && steps.scope.outputs.i18n == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: i18n-rendered-evidence-${{ github.event.pull_request.head.sha }}
+          path: |
+            quality-reports/train-qa-evidence/active-workout-en-390x844.png
+            quality-reports/train-qa-evidence/active-workout-de-390x844.png
+            quality-reports/train-qa-evidence/active-workout-ar-390x844.png
+            quality-reports/train-qa-evidence/active-workout-en-1440x900.png
+            quality-reports/train-qa-evidence/active-workout-de-1440x900.png
+            quality-reports/train-qa-evidence/active-workout-ar-1440x900.png
+            quality-reports/train-qa-evidence/active-workout-indicator-ar-390x844.png
+            quality-reports/train-qa-evidence/train-layout-qa-results.json
+            quality-reports/i18n-rendered-evidence-metadata.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Assemble canonical database validation log
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            quality-reports/full-migration-chain.log \
+            quality-reports/database-lint.log \
+            quality-reports/database-preflight.log \
+            quality-reports/migration-ledger.log \
+            quality-reports/integration.log \
+            > quality-reports/database-validation.log
+
+      - name: Record canonical artifact metadata
+        shell: bash
+        env:
+          REVIEWED_COMMIT: ${{ steps.identity.outputs.reviewed_commit }}
+          COMPARISON_BASE: ${{ steps.identity.outputs.comparison_base }}
+          QUALITY_BUILD_TIMESTAMP: ${{ steps.identity.outputs.quality_build_timestamp }}
+          VALIDATION_REQUEST_ID: ${{ steps.identity.outputs.validation_request_id }}
+          EXPECTED_MIGRATION: ${{ steps.release_target.outputs.expected_migration }}
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('node:fs');
+          fs.mkdirSync('quality-reports', { recursive: true });
+          const metadata = {
+            schemaVersion: 1,
+            repository: process.env.GITHUB_REPOSITORY,
+            workflowRunId: process.env.GITHUB_RUN_ID,
+            workflowRunAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            reviewedCommit: process.env.REVIEWED_COMMIT,
+            comparisonBase: process.env.COMPARISON_BASE,
+            validationRequestId: process.env.VALIDATION_REQUEST_ID,
+            expectedDatabaseMigrationVersion: process.env.EXPECTED_MIGRATION,
+            eventType: process.env.GITHUB_EVENT_NAME,
+            qualityBuildTimestamp: process.env.QUALITY_BUILD_TIMESTAMP,
+            capturedAt: new Date().toISOString(),
+            fullReleaseQuality: true,
+          };
+          fs.writeFileSync('quality-reports/artifact-metadata.json', JSON.stringify(metadata, null, 2) + '\n');
+          NODE
+
+      - name: Generate authoritative release manifest last
+        run: >-
+          npm run release:manifest --
+          --commit "$PLAIVRA_COMMIT_SHA"
+          --build-timestamp "$PLAIVRA_QUALITY_BUILD_TIMESTAMP"
+          --environment ci
+          --schema-compatibility 2
+          --expected-migration "$PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION"
+          --quality-reports quality-reports
+          --output quality-reports/release-manifest.json
+
+      - name: Verify canonical artifact is complete
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f quality-reports/release-manifest.json
+          test -f quality-reports/evidence-index.json
+          test -f quality-reports/artifact-metadata.json
+          test -f quality-reports/unit-failure-parity.json
+          test -f quality-reports/database-validation.log
+          for evidence in \
+            integrity full-migration-chain database-lint database-preflight migration-ledger \
+            dependency-audit lint typecheck unit integration script-tests telemetry-tests \
+            environment-validation release-metadata build rendered-qa; do
+            test -f "quality-reports/${evidence}.log"
+            test -f "quality-reports/${evidence}.exit"
+            test "$(tr -d '[:space:]' < "quality-reports/${evidence}.exit")" = "0"
+          done
+
+      - name: Upload canonical exact-run Quality evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-reports-${{ github.run_id }}
+          path: quality-reports/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload database validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-validation-${{ steps.identity.outputs.reviewed_commit }}
+          path: |
+            quality-reports/database-validation.log
+            quality-reports/unit-failure-parity.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload diagnostic evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-failure-evidence-${{ github.run_id }}
+          path: quality-reports/
+          if-no-files-found: ignore
+          retention-days: 14
