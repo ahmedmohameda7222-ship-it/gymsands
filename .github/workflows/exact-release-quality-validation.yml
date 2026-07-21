@@ -11,20 +11,21 @@ on:
       - release/release-manifest.template.json
       - scripts/create-release-manifest.mjs
       - scripts/quality-evidence-contract.mjs
+      - scripts/release-identity-contract.mjs
       - scripts/release-preflight.mjs
       - scripts/run-quality-gate.mjs
       - scripts/promote-release-schema-compatibility.mjs
       - scripts/permanent-quality-replay.test.mjs
       - scripts/release-closure-stage1.test.mjs
+      - scripts/release-closure-final-qa.test.mjs
       - scripts/run-quality-gate.test.mjs
       - scripts/promote-release-schema-compatibility.test.mjs
       - plaivra_aw2a_post_merge_release_closure_implementation_report.md
 
 permissions:
-  actions: write
-  contents: read
-  issues: write
-  pull-requests: write
+  actions: write # dispatch and inspect exact workflow runs/artifacts
+  contents: read # checkout exact PR head and ledger
+  issues: write # update the PR conversation evidence comment
 
 concurrency:
   group: exact-release-quality-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
@@ -33,7 +34,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 180
     env:
       GH_TOKEN: ${{ github.token }}
       REVIEWED_COMMIT: ${{ github.event.pull_request.head.sha }}
@@ -41,49 +42,62 @@ jobs:
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
       PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
     steps:
-      - name: Validate exact orchestration identity
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Resolve immutable orchestration identity
+        id: identity
         shell: bash
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = "ahmedmohameda7222-ship-it/gymsands"
+          test "$(git rev-parse HEAD)" = "$REVIEWED_COMMIT"
           [[ "$REVIEWED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$COMPARISON_BASE" =~ ^[0-9a-f]{40}$ ]]
-          test -n "$HEAD_REF"
+          quality_request_id="stage1-q-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${REVIEWED_COMMIT}"
+          preflight_request_id="stage1-p-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${REVIEWED_COMMIT}"
+          expected_migration="$(
+            node --input-type=module - <<'NODE'
+            import { readFileSync } from "node:fs";
+            import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs";
+            process.stdout.write(deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8"))).expectedMigration);
+            NODE
+          )"
+          {
+            echo "quality_request_id=$quality_request_id"
+            echo "preflight_request_id=$preflight_request_id"
+            echo "expected_migration=$expected_migration"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Dispatch exact-commit full Quality
+      - name: Dispatch request-bound exact-commit full Quality
         id: quality
         shell: bash
+        env:
+          VALIDATION_REQUEST_ID: ${{ steps.identity.outputs.quality_request_id }}
         run: |
           set -euo pipefail
-          previous_run_id="$(
-            gh run list \
-              --repo "$GITHUB_REPOSITORY" \
-              --workflow quality.yml \
-              --branch "$HEAD_REF" \
-              --event workflow_dispatch \
-              --limit 100 \
-              --json databaseId \
-              --jq '[.[].databaseId] | max // 0'
-          )"
-          [[ "$previous_run_id" =~ ^[0-9]+$ ]]
-
           gh workflow run quality.yml \
             --repo "$GITHUB_REPOSITORY" \
             --ref "$HEAD_REF" \
             -f reviewed_commit="$REVIEWED_COMMIT" \
-            -f comparison_base="$COMPARISON_BASE"
+            -f comparison_base="$COMPARISON_BASE" \
+            -f validation_request_id="$VALIDATION_REQUEST_ID"
 
           quality_run_id=""
-          for attempt in $(seq 1 90); do
+          expected_title="Quality / $VALIDATION_REQUEST_ID"
+          for attempt in $(seq 1 120); do
             quality_run_id="$(
-              PREVIOUS_RUN_ID="$previous_run_id" gh run list \
+              EXPECTED_TITLE="$expected_title" gh run list \
                 --repo "$GITHUB_REPOSITORY" \
                 --workflow quality.yml \
                 --branch "$HEAD_REF" \
                 --event workflow_dispatch \
                 --limit 100 \
-                --json databaseId,headSha \
-                --jq '[.[] | select(.headSha == env.REVIEWED_COMMIT) | select(.databaseId > (env.PREVIOUS_RUN_ID | tonumber)) | .databaseId] | max // empty'
+                --json databaseId,headSha,displayTitle \
+                --jq '[.[] | select(.headSha == env.REVIEWED_COMMIT and .displayTitle == env.EXPECTED_TITLE) | .databaseId] | if length == 1 then .[0] else empty end'
             )"
             if [[ "$quality_run_id" =~ ^[0-9]+$ ]]; then break; fi
             sleep 2
@@ -92,67 +106,87 @@ jobs:
           echo "run_id=$quality_run_id" >> "$GITHUB_OUTPUT"
           gh run watch "$quality_run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 10
 
-      - name: Verify canonical Quality artifact
+      - name: Download and independently verify canonical Quality evidence
         id: quality_artifact
         shell: bash
         env:
           QUALITY_RUN_ID: ${{ steps.quality.outputs.run_id }}
+          VALIDATION_REQUEST_ID: ${{ steps.identity.outputs.quality_request_id }}
+          EXPECTED_MIGRATION: ${{ steps.identity.outputs.expected_migration }}
         run: |
           set -euo pipefail
-          artifact_json="$(
-            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALITY_RUN_ID/artifacts" \
-              --jq '[.artifacts[] | select(.name == "quality-reports-'"$QUALITY_RUN_ID"'")] | if length == 1 then .[0] else empty end'
-          )"
+          mkdir -p exact-quality
+          gh run download "$QUALITY_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "quality-reports-$QUALITY_RUN_ID" --dir exact-quality
+          node --input-type=module - <<'NODE'
+          import { readFileSync } from "node:fs";
+          const metadata = JSON.parse(readFileSync("exact-quality/artifact-metadata.json", "utf8"));
+          const index = JSON.parse(readFileSync("exact-quality/evidence-index.json", "utf8"));
+          const manifest = JSON.parse(readFileSync("exact-quality/release-manifest.json", "utf8"));
+          const expected = {
+            repository: process.env.GITHUB_REPOSITORY,
+            reviewedCommit: process.env.REVIEWED_COMMIT,
+            comparisonBase: process.env.COMPARISON_BASE,
+            validationRequestId: process.env.VALIDATION_REQUEST_ID,
+            workflowRunId: process.env.QUALITY_RUN_ID,
+            expectedMigration: process.env.EXPECTED_MIGRATION,
+          };
+          for (const document of [metadata, index]) {
+            if (document.repository !== expected.repository) throw new Error("Artifact repository mismatch.");
+            if (document.reviewedCommit !== expected.reviewedCommit) throw new Error("Artifact commit mismatch.");
+            if (document.comparisonBase !== expected.comparisonBase) throw new Error("Artifact comparison base mismatch.");
+            if (document.validationRequestId !== expected.validationRequestId) throw new Error("Artifact validation request mismatch.");
+            if (String(document.workflowRunId) !== expected.workflowRunId) throw new Error("Artifact workflow run mismatch.");
+            if (document.expectedDatabaseMigrationVersion !== expected.expectedMigration) throw new Error("Artifact migration mismatch.");
+          }
+          if (manifest.release.commitSha !== expected.reviewedCommit) throw new Error("Manifest commit mismatch.");
+          if (manifest.release.expectedDatabaseMigrationVersion !== expected.expectedMigration) throw new Error("Manifest migration mismatch.");
+          if (manifest.qualityArtifact.comparisonBase !== expected.comparisonBase) throw new Error("Manifest comparison base mismatch.");
+          if (manifest.qualityArtifact.validationRequestId !== expected.validationRequestId) throw new Error("Manifest validation request mismatch.");
+          if (String(manifest.qualityArtifact.workflowRunId) !== expected.workflowRunId) throw new Error("Manifest run mismatch.");
+          NODE
+          artifact_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALITY_RUN_ID/artifacts" \
+            --jq '[.artifacts[] | select(.name == "quality-reports-'"$QUALITY_RUN_ID"'")] | if length == 1 then .[0] else empty end')"
           test -n "$artifact_json"
-          artifact_id="$(jq -r '.id' <<< "$artifact_json")"
-          artifact_name="$(jq -r '.name' <<< "$artifact_json")"
-          artifact_digest="$(jq -r '.digest // ""' <<< "$artifact_json")"
-          [[ "$artifact_id" =~ ^[0-9]+$ ]]
-          test "$artifact_name" = "quality-reports-$QUALITY_RUN_ID"
-          [[ "$artifact_digest" == sha256:* ]]
           {
-            echo "id=$artifact_id"
-            echo "name=$artifact_name"
-            echo "digest=$artifact_digest"
+            echo "id=$(jq -r '.id' <<< "$artifact_json")"
+            echo "name=$(jq -r '.name' <<< "$artifact_json")"
+            echo "digest=$(jq -r '.digest' <<< "$artifact_json")"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Dispatch exact-artifact Release preflight
+      - name: Dispatch request-bound Stage-1 Release preflight
         id: preflight
         shell: bash
         env:
           QUALITY_RUN_ID: ${{ steps.quality.outputs.run_id }}
+          VALIDATION_REQUEST_ID: ${{ steps.identity.outputs.quality_request_id }}
+          PREFLIGHT_REQUEST_ID: ${{ steps.identity.outputs.preflight_request_id }}
+          EXPECTED_MIGRATION: ${{ steps.identity.outputs.expected_migration }}
         run: |
           set -euo pipefail
-          previous_run_id="$(
-            gh run list \
-              --repo "$GITHUB_REPOSITORY" \
-              --workflow release-preflight.yml \
-              --branch "$HEAD_REF" \
-              --event workflow_dispatch \
-              --limit 100 \
-              --json databaseId \
-              --jq '[.[].databaseId] | max // 0'
-          )"
-          [[ "$previous_run_id" =~ ^[0-9]+$ ]]
-
           gh workflow run release-preflight.yml \
             --repo "$GITHUB_REPOSITORY" \
             --ref "$HEAD_REF" \
             -f reviewed_commit="$REVIEWED_COMMIT" \
+            -f comparison_base="$COMPARISON_BASE" \
             -f quality_run_id="$QUALITY_RUN_ID" \
+            -f validation_request_id="$VALIDATION_REQUEST_ID" \
+            -f preflight_request_id="$PREFLIGHT_REQUEST_ID" \
+            -f expected_migration="$EXPECTED_MIGRATION" \
             -f validation_context=stage1-infrastructure-validation
 
           preflight_run_id=""
-          for attempt in $(seq 1 90); do
+          expected_title="Release preflight / $PREFLIGHT_REQUEST_ID"
+          for attempt in $(seq 1 120); do
             preflight_run_id="$(
-              PREVIOUS_RUN_ID="$previous_run_id" gh run list \
+              EXPECTED_TITLE="$expected_title" gh run list \
                 --repo "$GITHUB_REPOSITORY" \
                 --workflow release-preflight.yml \
                 --branch "$HEAD_REF" \
                 --event workflow_dispatch \
                 --limit 100 \
-                --json databaseId,headSha \
-                --jq '[.[] | select(.headSha == env.REVIEWED_COMMIT) | select(.databaseId > (env.PREVIOUS_RUN_ID | tonumber)) | .databaseId] | max // empty'
+                --json databaseId,headSha,displayTitle \
+                --jq '[.[] | select(.headSha == env.REVIEWED_COMMIT and .displayTitle == env.EXPECTED_TITLE) | .databaseId] | if length == 1 then .[0] else empty end'
             )"
             if [[ "$preflight_run_id" =~ ^[0-9]+$ ]]; then break; fi
             sleep 2
@@ -161,7 +195,42 @@ jobs:
           echo "run_id=$preflight_run_id" >> "$GITHUB_OUTPUT"
           gh run watch "$preflight_run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 10
 
-      - name: Record Stage-1 exact validation evidence
+      - name: Download and independently verify preflight evidence
+        shell: bash
+        env:
+          QUALITY_RUN_ID: ${{ steps.quality.outputs.run_id }}
+          PREFLIGHT_RUN_ID: ${{ steps.preflight.outputs.run_id }}
+          VALIDATION_REQUEST_ID: ${{ steps.identity.outputs.quality_request_id }}
+          PREFLIGHT_REQUEST_ID: ${{ steps.identity.outputs.preflight_request_id }}
+          EXPECTED_MIGRATION: ${{ steps.identity.outputs.expected_migration }}
+        run: |
+          set -euo pipefail
+          mkdir -p exact-preflight
+          gh run download "$PREFLIGHT_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "release-preflight-$PREFLIGHT_REQUEST_ID" --dir exact-preflight
+          node --input-type=module - <<'NODE'
+          import { readFileSync } from "node:fs";
+          const evidence = JSON.parse(readFileSync("exact-preflight/release-preflight.json", "utf8"));
+          const expected = {
+            expectedCommit: process.env.REVIEWED_COMMIT,
+            comparisonBase: process.env.COMPARISON_BASE,
+            qualityRunId: process.env.QUALITY_RUN_ID,
+            validationRequestId: process.env.VALIDATION_REQUEST_ID,
+            preflightRequestId: process.env.PREFLIGHT_REQUEST_ID,
+            expectedDatabaseMigrationVersion: process.env.EXPECTED_MIGRATION,
+            validationContext: "stage1-infrastructure-validation",
+          };
+          for (const [key, value] of Object.entries(expected)) {
+            if (String(evidence[key]) !== value) throw new Error(`Preflight ${key} mismatch.`);
+          }
+          if (evidence.ready !== true || evidence.qualityArtifactValid !== true) throw new Error("Preflight not ready.");
+          if (evidence.productionPromotionAuthorized !== false) throw new Error("Stage-1 preflight authorized promotion.");
+          if (evidence.productionMutationPerformed !== false || evidence.deploymentPerformed !== false) {
+            throw new Error("Stage-1 preflight was not read-only.");
+          }
+          NODE
+
+      - name: Record exact Stage-1 validation evidence
         shell: bash
         env:
           QUALITY_RUN_ID: ${{ steps.quality.outputs.run_id }}
@@ -169,40 +238,37 @@ jobs:
           QUALITY_ARTIFACT_NAME: ${{ steps.quality_artifact.outputs.name }}
           QUALITY_ARTIFACT_DIGEST: ${{ steps.quality_artifact.outputs.digest }}
           PREFLIGHT_RUN_ID: ${{ steps.preflight.outputs.run_id }}
+          VALIDATION_REQUEST_ID: ${{ steps.identity.outputs.quality_request_id }}
+          PREFLIGHT_REQUEST_ID: ${{ steps.identity.outputs.preflight_request_id }}
+          EXPECTED_MIGRATION: ${{ steps.identity.outputs.expected_migration }}
         run: |
           set -euo pipefail
           mkdir -p stage1-validation
-          captured_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           jq -n \
             --arg repository "$GITHUB_REPOSITORY" \
             --arg reviewedCommit "$REVIEWED_COMMIT" \
             --arg comparisonBase "$COMPARISON_BASE" \
+            --arg validationRequestId "$VALIDATION_REQUEST_ID" \
+            --arg preflightRequestId "$PREFLIGHT_REQUEST_ID" \
+            --arg expectedMigration "$EXPECTED_MIGRATION" \
             --arg qualityRunId "$QUALITY_RUN_ID" \
             --arg qualityArtifactId "$QUALITY_ARTIFACT_ID" \
             --arg qualityArtifactName "$QUALITY_ARTIFACT_NAME" \
             --arg qualityArtifactDigest "$QUALITY_ARTIFACT_DIGEST" \
             --arg preflightRunId "$PREFLIGHT_RUN_ID" \
-            --arg capturedAt "$captured_at" \
             '{
-              schemaVersion: 1,
+              schemaVersion: 2,
               repository: $repository,
               reviewedCommit: $reviewedCommit,
               comparisonBase: $comparisonBase,
+              validationRequestId: $validationRequestId,
+              preflightRequestId: $preflightRequestId,
+              expectedDatabaseMigrationVersion: $expectedMigration,
               manualQuality: { runId: $qualityRunId, status: "success" },
-              canonicalArtifact: {
-                id: $qualityArtifactId,
-                name: $qualityArtifactName,
-                digest: $qualityArtifactDigest
-              },
-              releasePreflight: {
-                runId: $preflightRunId,
-                status: "success",
-                context: "stage1-infrastructure-validation",
-                productionAuthorization: false
-              },
+              canonicalArtifact: { id: $qualityArtifactId, name: $qualityArtifactName, digest: $qualityArtifactDigest },
+              releasePreflight: { runId: $preflightRunId, status: "success", context: "stage1-infrastructure-validation", productionAuthorization: false },
               productionWritePerformed: false,
-              deploymentPerformed: false,
-              capturedAt: $capturedAt
+              deploymentPerformed: false
             }' > stage1-validation/exact-release-validation.json
 
           marker='<!-- plaivra-stage1-exact-release-validation -->'
@@ -212,10 +278,13 @@ jobs:
 
           - Reviewed commit: \`$REVIEWED_COMMIT\`
           - Comparison base: \`$COMPARISON_BASE\`
+          - Validation request ID: \`$VALIDATION_REQUEST_ID\`
+          - Expected migration from ledger: \`$EXPECTED_MIGRATION\`
           - Manual full Quality run: \`$QUALITY_RUN_ID\` — success
           - Canonical artifact: \`$QUALITY_ARTIFACT_NAME\`
           - Artifact ID: \`$QUALITY_ARTIFACT_ID\`
           - Artifact digest: \`$QUALITY_ARTIFACT_DIGEST\`
+          - Preflight request ID: \`$PREFLIGHT_REQUEST_ID\`
           - Release preflight run: \`$PREFLIGHT_RUN_ID\` — success
           - Context: Stage-1 infrastructure validation only
           - Production authorization: no
@@ -223,10 +292,8 @@ jobs:
           - Deployment: no
           BODY
           )"
-          comment_id="$(
-            gh api "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/comments" --paginate \
-              --jq '.[] | select(.body | contains("'"$marker"'")) | .id' | tail -n 1
-          )"
+          comment_id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/comments" --paginate \
+            --jq '.[] | select(.body | contains("'"$marker"'")) | .id' | tail -n 1)"
           if [[ "$comment_id" =~ ^[0-9]+$ ]]; then
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" -f body="$body" >/dev/null
           else
