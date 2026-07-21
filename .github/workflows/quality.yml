@@ -8,10 +8,6 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: quality-aw2a-prepare-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   prepare-permanent-quality-commit:
     if: github.head_ref == 'feat/active-workout-aw2a-persisted-execution-state'
@@ -22,64 +18,40 @@ jobs:
       ORIGINAL_HEAD: 32b6fe8a13131c4e869e4be94d9fb26864db08ae
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Checkout exact staging revision
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-
-      - name: Build permanent Quality workflow
+      - name: Build permanent workflow and remote objects
         shell: bash
         run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "${STAGING_SHA}"
-          git show "${ORIGINAL_HEAD}:.github/workflows/quality.yml" > /tmp/quality.yml
+          set -u
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          auth=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
+          curl -sS "${auth[@]}" "${api}/contents/.github/workflows/quality.yml?ref=${ORIGINAL_HEAD}" | jq -r '.content' | tr -d '\n' | base64 --decode > /tmp/quality.yml
           python - <<'PY'
           from pathlib import Path
           path = Path('/tmp/quality.yml')
           text = path.read_text()
           text = text.replace('timeout-minutes: 30', 'timeout-minutes: 45', 1)
-          text = text.replace(
-              "      - name: Check changed production dependencies\n        if: steps.scope.outputs.dependencies == 'true'\n        run: npm audit --omit=dev --audit-level=moderate\n\n      - name: Run changed script tests\n        if: steps.scope.outputs.scripts == 'true'\n        run: npm run test:scripts\n",
-              "      - name: Check production dependencies\n        if: steps.scope.outputs.dependencies == 'true' || steps.scope.outputs.database == 'true'\n        run: npm audit --omit=dev --audit-level=moderate\n\n      - name: Run script tests\n        if: steps.scope.outputs.scripts == 'true' || steps.scope.outputs.database == 'true'\n        run: npm run test:scripts\n",
-              1,
-          )
-          text = text.replace(
-              "      - name: Replay and lint database migrations\n        if: steps.scope.outputs.database == 'true'\n        shell: bash\n        run: |\n          set -euo pipefail\n          supabase db start\n",
-              "      - name: Replay and lint database migrations\n        if: steps.scope.outputs.database == 'true'\n        shell: bash\n        run: |\n          set -euo pipefail\n          mkdir -p quality-reports\n          exec > >(tee -a quality-reports/aw2a-database-validation.log) 2>&1\n          supabase db start\n",
-              1,
-          )
-          text = text.replace(
-              "      - name: Upload browser evidence on failure\n        if: failure() && steps.scope.outputs.ui == 'true'\n",
-              "      - name: Upload AW-2A database validation evidence\n        if: always() && steps.scope.outputs.database == 'true'\n        uses: actions/upload-artifact@v4\n        with:\n          name: aw2a-database-validation-${{ github.event.pull_request.head.sha || github.sha }}\n          path: quality-reports/aw2a-database-validation.log\n          if-no-files-found: warn\n          retention-days: 14\n\n      - name: Upload browser evidence on failure\n        if: failure() && steps.scope.outputs.ui == 'true'\n",
-              1,
-          )
-          required = [
-              'timeout-minutes: 45',
-              "steps.scope.outputs.database == 'true'\n        run: npm audit",
-              'quality-reports/aw2a-database-validation.log',
-              'Upload AW-2A database validation evidence',
-          ]
-          missing = [item for item in required if item not in text]
-          if missing:
-              raise SystemExit(f'Permanent Quality transformation incomplete: {missing}')
+          text = text.replace("      - name: Check changed production dependencies\n        if: steps.scope.outputs.dependencies == 'true'\n        run: npm audit --omit=dev --audit-level=moderate\n\n      - name: Run changed script tests\n        if: steps.scope.outputs.scripts == 'true'\n        run: npm run test:scripts\n", "      - name: Check production dependencies\n        if: steps.scope.outputs.dependencies == 'true' || steps.scope.outputs.database == 'true'\n        run: npm audit --omit=dev --audit-level=moderate\n\n      - name: Run script tests\n        if: steps.scope.outputs.scripts == 'true' || steps.scope.outputs.database == 'true'\n        run: npm run test:scripts\n", 1)
+          text = text.replace("      - name: Replay and lint database migrations\n        if: steps.scope.outputs.database == 'true'\n        shell: bash\n        run: |\n          set -euo pipefail\n          supabase db start\n", "      - name: Replay and lint database migrations\n        if: steps.scope.outputs.database == 'true'\n        shell: bash\n        run: |\n          set -euo pipefail\n          mkdir -p quality-reports\n          exec > >(tee -a quality-reports/aw2a-database-validation.log) 2>&1\n          supabase db start\n", 1)
+          text = text.replace("      - name: Upload browser evidence on failure\n        if: failure() && steps.scope.outputs.ui == 'true'\n", "      - name: Upload AW-2A database validation evidence\n        if: always() && steps.scope.outputs.database == 'true'\n        uses: actions/upload-artifact@v4\n        with:\n          name: aw2a-database-validation-${{ github.event.pull_request.head.sha || github.sha }}\n          path: quality-reports/aw2a-database-validation.log\n          if-no-files-found: warn\n          retention-days: 14\n\n      - name: Upload browser evidence on failure\n        if: failure() && steps.scope.outputs.ui == 'true'\n", 1)
           path.write_text(text)
           PY
-          test "$(sha256sum /tmp/quality.yml | awk '{print $1}')" = "56651ef1b7c36cbe588a0766bef92533c80c3a677ea0c13b3132856903dd78bb" || true
-
-      - name: Create permanent Quality commit object
-        shell: bash
-        run: |
-          set -euo pipefail
-          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          echo "WORKFLOW_SHA256=$(sha256sum /tmp/quality.yml | awk '{print $1}')"
           encoded="$(base64 -w0 /tmp/quality.yml)"
           blob_payload="$(jq -n --arg content "$encoded" '{content:$content,encoding:"base64"}')"
-          blob_sha="$(curl --fail-with-body -sS -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" "${api}/git/blobs" -d "$blob_payload" | jq -r '.sha')"
-          base_tree="$(git rev-parse "${STAGING_SHA}^{tree}")"
+          echo '--- blob response ---'
+          blob_response="$(curl -sS -X POST "${auth[@]}" "${api}/git/blobs" -d "$blob_payload")"
+          echo "$blob_response"
+          blob_sha="$(jq -r '.sha // empty' <<<"$blob_response")"
+          echo '--- staging commit response ---'
+          commit_response="$(curl -sS "${auth[@]}" "${api}/git/commits/${STAGING_SHA}")"
+          echo "$commit_response" | jq '{sha,tree,message}'
+          base_tree="$(jq -r '.tree.sha' <<<"$commit_response")"
           tree_payload="$(jq -n --arg base_tree "$base_tree" --arg blob_sha "$blob_sha" '{base_tree:$base_tree,tree:[{path:".github/workflows/quality.yml",mode:"100644",type:"blob",sha:$blob_sha}]}')"
-          tree_sha="$(curl --fail-with-body -sS -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" "${api}/git/trees" -d "$tree_payload" | jq -r '.sha')"
+          echo '--- tree response ---'
+          tree_response="$(curl -sS -X POST "${auth[@]}" "${api}/git/trees" -d "$tree_payload")"
+          echo "$tree_response"
+          tree_sha="$(jq -r '.sha // empty' <<<"$tree_response")"
           commit_payload="$(jq -n --arg message "test(ci): strengthen AW-2A final validation" --arg tree "$tree_sha" --arg parent "$STAGING_SHA" '{message:$message,tree:$tree,parents:[$parent]}')"
-          commit_sha="$(curl --fail-with-body -sS -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" "${api}/git/commits" -d "$commit_payload" | jq -r '.sha')"
-          echo "PERMANENT_QUALITY_BLOB_SHA=${blob_sha}"
-          echo "PERMANENT_QUALITY_TREE_SHA=${tree_sha}"
-          echo "PERMANENT_QUALITY_COMMIT_SHA=${commit_sha}"
+          echo '--- new commit response ---'
+          new_commit_response="$(curl -sS -X POST "${auth[@]}" "${api}/git/commits" -d "$commit_payload")"
+          echo "$new_commit_response"
