@@ -59,7 +59,7 @@ jobs:
           [[ "$COMPARISON_BASE" =~ ^[0-9a-f]{40}$ ]]
           quality_request_id="stage1-q-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${REVIEWED_COMMIT}"
           preflight_request_id="stage1-p-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${REVIEWED_COMMIT}"
-          expected_migration="$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs"; process.stdout.write(deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8"))).expectedMigration);')"
+          expected_migration="$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs"; process.stdout.write(deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8"))).expectedMigration);' stage1-ledger-derive)"
           {
             echo "quality_request_id=$quality_request_id"
             echo "preflight_request_id=$preflight_request_id"
