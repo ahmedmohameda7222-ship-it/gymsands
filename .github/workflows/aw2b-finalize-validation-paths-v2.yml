@@ -1,4 +1,4 @@
-name: AW-2B Finalize Validation Paths V2
+name: AW-2B Generate Validation Files
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  finalize:
+  generate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -17,7 +17,7 @@ jobs:
         with:
           ref: feat/active-workout-aw2b-command-authority
           fetch-depth: 0
-      - name: Patch permanent validation files
+      - name: Generate permanent validation files for connector promotion
         shell: bash
         run: |
           set -euo pipefail
@@ -25,22 +25,23 @@ jobs:
           from pathlib import Path
           import json
 
-          q = Path('.github/workflows/quality.yml')
-          s = q.read_text()
+          output = Path('tmp-aw2b-generated')
+          output.mkdir(exist_ok=True)
+
+          q = Path('.github/workflows/quality.yml').read_text()
           anchor = '          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-integration.sql;\n'
           addition = (
               anchor
               + '          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2b-command-authority.sql;\n'
               + '          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2b-integration.sql;\n'
           )
-          if 'active-workout-aw2b-integration.sql' not in s:
-              if anchor not in s:
+          if 'active-workout-aw2b-integration.sql' not in q:
+              if anchor not in q:
                   raise SystemExit('missing Quality AW-2A anchor')
-              s = s.replace(anchor, addition, 1)
-              q.write_text(s)
+              q = q.replace(anchor, addition, 1)
+          (output / 'quality.yml').write_text(q)
 
-          e = Path('.github/workflows/exact-release-quality-validation.yml')
-          s = e.read_text()
+          e = Path('.github/workflows/exact-release-quality-validation.yml').read_text()
           anchor = '      - plaivra_aw2a_post_merge_release_closure_implementation_report.md\n'
           additions = anchor + '''      - plaivra_aw2b_command_authority_implementation_report.md
       - supabase/migration-ledger.json
@@ -56,11 +57,11 @@ jobs:
       - package.json
       - package-lock.json
 '''
-          if 'plaivra_aw2b_command_authority_implementation_report.md' not in s:
-              if anchor not in s:
+          if 'plaivra_aw2b_command_authority_implementation_report.md' not in e:
+              if anchor not in e:
                   raise SystemExit('missing Exact validation anchor')
-              s = s.replace(anchor, additions, 1)
-              e.write_text(s)
+              e = e.replace(anchor, additions, 1)
+          (output / 'exact-release-quality-validation.yml').write_text(e)
 
           ledger = Path('supabase/migration-ledger.json')
           ledger.write_text(json.dumps(json.loads(ledger.read_text()), indent=2) + '\n')
@@ -68,9 +69,9 @@ jobs:
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/quality.yml .github/workflows/exact-release-quality-validation.yml supabase/migration-ledger.json
+          git add tmp-aw2b-generated supabase/migration-ledger.json
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m "ci(workouts): bind AW-2B release-quality validation"
+          git commit -m "chore(workouts): generate AW-2B validation files"
           git push origin HEAD:feat/active-workout-aw2b-command-authority
