@@ -22,8 +22,30 @@ begin
 end
 $function$;
 
+create or replace function pg_temp.command_receipt_summary(
+  p_workout_session_id uuid,
+  p_command_id uuid,
+  p_user_id uuid
+)
+returns jsonb
+language sql
+security definer
+set search_path = ''
+as $function$
+  select jsonb_build_object(
+    'count', count(*),
+    'validHash', coalesce(bool_and(receipt.request_hash ~ '^[0-9a-f]{64}$'), false),
+    'ownerMatch', coalesce(bool_and(receipt.user_id = p_user_id), false),
+    'outcome', min(receipt.outcome)
+  )
+  from public.workout_session_execution_commands receipt
+  where receipt.workout_session_id = p_workout_session_id
+    and receipt.command_id = p_command_id
+$function$;
+
 grant execute on function pg_temp.assert_true(boolean,text) to public;
 grant execute on function pg_temp.assert_rejected(text,text[],text) to public;
+grant execute on function pg_temp.command_receipt_summary(uuid,uuid,uuid) to public;
 
 insert into auth.users (
   id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at
@@ -87,9 +109,21 @@ select public.apply_workout_session_execution_command_atomic(
 select pg_temp.assert_true((:'applied_response'::jsonb->>'outcome')='applied','AW-2B command did not apply.');
 select pg_temp.assert_true((:'applied_response'::jsonb->>'revisionAfter')::bigint=1,'Applied command did not increment revision exactly once.');
 select pg_temp.assert_true(
-  (select count(*)=1 and bool_and(request_hash~'^[0-9a-f]{64}$') and bool_and(user_id=:'owner_id'::uuid)
-   from public.workout_session_execution_commands
-   where workout_session_id=:'session_id'::uuid and command_id='a2b00000-0000-4000-8000-000000000101'::uuid),
+  (pg_temp.command_receipt_summary(
+    :'session_id'::uuid,
+    'a2b00000-0000-4000-8000-000000000101'::uuid,
+    :'owner_id'::uuid
+  )->>'count')::integer=1
+  and (pg_temp.command_receipt_summary(
+    :'session_id'::uuid,
+    'a2b00000-0000-4000-8000-000000000101'::uuid,
+    :'owner_id'::uuid
+  )->>'validHash')::boolean
+  and (pg_temp.command_receipt_summary(
+    :'session_id'::uuid,
+    'a2b00000-0000-4000-8000-000000000101'::uuid,
+    :'owner_id'::uuid
+  )->>'ownerMatch')::boolean,
   'Applied command receipt is missing or invalid.');
 select pg_temp.assert_true(
   (select to_jsonb(state)=(:'applied_response'::jsonb->'state') from public.workout_session_execution_states state where workout_session_id=:'session_id'::uuid),
@@ -102,7 +136,11 @@ select public.apply_workout_session_execution_command_atomic(
 select pg_temp.assert_true(
   (:'replay_response'::jsonb->>'replayed')::boolean
   and (:'replay_response'::jsonb->>'revisionAfter')::bigint=1
-  and (select count(*)=1 from public.workout_session_execution_commands where workout_session_id=:'session_id'::uuid and command_id='a2b00000-0000-4000-8000-000000000101'::uuid),
+  and (pg_temp.command_receipt_summary(
+    :'session_id'::uuid,
+    'a2b00000-0000-4000-8000-000000000101'::uuid,
+    :'owner_id'::uuid
+  )->>'count')::integer=1,
   'Exact replay mutated state or duplicated the receipt.');
 
 select public.apply_workout_session_execution_command_atomic(
@@ -112,7 +150,11 @@ select public.apply_workout_session_execution_command_atomic(
 select pg_temp.assert_true(
   (:'idempotency_response'::jsonb->>'outcome')='idempotency_conflict'
   and (select revision=1 and active_set_number=2 from public.workout_session_execution_states where workout_session_id=:'session_id'::uuid)
-  and (select count(*)=1 from public.workout_session_execution_commands where workout_session_id=:'session_id'::uuid and command_id='a2b00000-0000-4000-8000-000000000101'::uuid),
+  and (pg_temp.command_receipt_summary(
+    :'session_id'::uuid,
+    'a2b00000-0000-4000-8000-000000000101'::uuid,
+    :'owner_id'::uuid
+  )->>'count')::integer=1,
   'Command-ID conflict altered the first receipt or state.');
 
 select public.apply_workout_session_execution_command_atomic(
@@ -123,7 +165,16 @@ select pg_temp.assert_true(
   (:'stale_response'::jsonb->>'outcome')='revision_conflict'
   and (:'stale_response'::jsonb->>'revisionAfter')::bigint=1
   and (select revision=1 from public.workout_session_execution_states where workout_session_id=:'session_id'::uuid)
-  and (select count(*)=1 and min(outcome)='revision_conflict' from public.workout_session_execution_commands where workout_session_id=:'session_id'::uuid and command_id='a2b00000-0000-4000-8000-000000000102'::uuid),
+  and (pg_temp.command_receipt_summary(
+    :'session_id'::uuid,
+    'a2b00000-0000-4000-8000-000000000102'::uuid,
+    :'owner_id'::uuid
+  )->>'count')::integer=1
+  and (pg_temp.command_receipt_summary(
+    :'session_id'::uuid,
+    'a2b00000-0000-4000-8000-000000000102'::uuid,
+    :'owner_id'::uuid
+  )->>'outcome')='revision_conflict',
   'Revision conflict mutated state or failed to persist one receipt.');
 select public.apply_workout_session_execution_command_atomic(
   :'owner_id'::uuid,:'session_id'::uuid,'a2b00000-0000-4000-8000-000000000102'::uuid,0,
