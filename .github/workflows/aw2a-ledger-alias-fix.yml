@@ -1,0 +1,55 @@
+name: AW-2A Ledger Alias Fix
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.head_ref == 'feat/active-workout-aw2a-persisted-execution-state'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Record supported production version alias
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('supabase/migration-ledger.json')
+          ledger = json.loads(path.read_text())
+          ledger['productionMigrationCount'] = 62
+          for entry in ledger['entries']:
+              if entry.get('localFile') == '20260720213000_active_workout_aw2a_execution_state.sql':
+                  entry['state'] = 'applied_version_alias'
+                  entry['productionVersion'] = '20260721000544'
+                  entry['productionName'] = 'active_workout_aw2a_execution_state'
+                  entry['note'] = (
+                      'Applied exactly once to Plaivra Database on 2026-07-21 through the supported Supabase migration authority. '
+                      'The generated production version 20260721000544 differs from immutable repository version 20260720213000; '
+                      'this applied_version_alias preserves both identities without renaming or replaying the reviewed SQL. '
+                      'Local Git blob caa286b2ad287f042d2cf7691ec7774a9db7a50d and SHA-256 '
+                      'c8f21655226d51a2157fa1b8c272edc5fac1f84f0a2214376a16e225a1f04f2e. '
+                      'Production verification confirmed one legacy open-session backfill, complete open-session coverage, zero terminal rows, '
+                      'zero owner mismatch, hardened RLS/functions, and unchanged compatibility marker 20260717051011. Do not replay.'
+                  )
+                  break
+          else:
+              raise SystemExit('AW-2A ledger entry missing')
+          path.write_text(json.dumps(ledger, indent=2) + '\n')
+          PY
+          git rm .github/workflows/aw2a-ledger-alias-fix.yml
+          git add supabase/migration-ledger.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs: record AW-2A production version alias'
+          git push origin HEAD:feat/active-workout-aw2a-persisted-execution-state
