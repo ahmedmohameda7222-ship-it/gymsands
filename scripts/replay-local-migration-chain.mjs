@@ -24,7 +24,7 @@ export const LOCAL_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432
 
 const ORIGINAL_FILE = `${ORIGINAL_AW2A_VERSION}_active_workout_aw2a_execution_state.sql`;
 const CORRECTION_FILE = `${CORRECTION_AW2A_VERSION}_active_workout_aw2a_execution_state_corrections.sql`;
-const MIGRATION_PATTERN = /^(\d{14})_[A-Za-z0-9][A-Za-z0-9_-]*\.sql$/;
+const MIGRATION_PATTERN = /^(\d{12,14})_[A-Za-z0-9][A-Za-z0-9_-]*\.sql$/;
 const DATABASE_ONLY_EXCLUDES = [
   "gotrue",
   "realtime",
