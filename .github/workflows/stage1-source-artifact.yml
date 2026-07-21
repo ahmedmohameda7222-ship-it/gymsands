@@ -1,35 +1,34 @@
 name: Stage 1 Source Artifact
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/aw2a-post-merge-release-closure
+      - main
 
 permissions:
   contents: read
 
 jobs:
   package-source:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout exact revision
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - name: Verify checkout identity
-        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
 
       - name: Package source
-        run: git archive --format=zip --output=stage1-source-${GITHUB_SHA}.zip HEAD
+        run: git archive --format=zip --output=stage1-source-${{ github.event.pull_request.head.sha }}.zip HEAD
 
       - name: Upload source
         uses: actions/upload-artifact@v4
         with:
-          name: stage1-source-${{ github.sha }}
-          path: stage1-source-${{ github.sha }}.zip
+          name: stage1-source-${{ github.event.pull_request.head.sha }}
+          path: stage1-source-${{ github.event.pull_request.head.sha }}.zip
           if-no-files-found: error
           retention-days: 1
