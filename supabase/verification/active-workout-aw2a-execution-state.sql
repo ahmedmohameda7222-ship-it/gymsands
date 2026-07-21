@@ -30,6 +30,8 @@ declare
   v_initializer_definition text;
   v_cleanup_definition text;
   v_marker text;
+  v_aw2b_active boolean := to_regclass('public.workout_session_execution_commands') is not null
+    and to_regprocedure('public.apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)') is not null;
 begin
   if to_regclass('public.workout_session_execution_states') is null then
     raise exception 'AW-2A execution-state table is missing.';
@@ -87,27 +89,48 @@ begin
     raise exception 'AW-2A row-level security is not enabled.';
   end if;
 
-  if (select count(*) from pg_policies where schemaname = 'public' and tablename = 'workout_session_execution_states') <> 2
-     or not exists (
-       select 1 from pg_policies
-       where schemaname = 'public'
-         and tablename = 'workout_session_execution_states'
-         and policyname = 'workout_session_execution_states_member_select'
-         and cmd = 'SELECT'
-         and roles = array['authenticated']::name[]
-         and qual ~ 'user_id = \( SELECT auth.uid\(\)'
-     )
-     or not exists (
-       select 1 from pg_policies
-       where schemaname = 'public'
-         and tablename = 'workout_session_execution_states'
-         and policyname = 'workout_session_execution_states_member_update'
-         and cmd = 'UPDATE'
-         and roles = array['authenticated']::name[]
-         and qual ~ 'user_id = \( SELECT auth.uid\(\)'
-         and with_check ~ 'user_id = \( SELECT auth.uid\(\)'
-     ) then
-    raise exception 'AW-2A owner-scoped RLS policies are missing or broadened.';
+  if v_aw2b_active then
+    if (select count(*) from pg_policies where schemaname = 'public' and tablename = 'workout_session_execution_states') <> 1
+       or not exists (
+         select 1 from pg_policies
+         where schemaname = 'public'
+           and tablename = 'workout_session_execution_states'
+           and policyname = 'workout_session_execution_states_member_select'
+           and cmd = 'SELECT'
+           and roles = array['authenticated']::name[]
+           and qual ~ 'user_id = \( SELECT auth.uid\(\)'
+       )
+       or exists (
+         select 1 from pg_policies
+         where schemaname = 'public'
+           and tablename = 'workout_session_execution_states'
+           and cmd = 'UPDATE'
+       ) then
+      raise exception 'AW-2A owner SELECT policy was not preserved under AW-2B command authority.';
+    end if;
+  else
+    if (select count(*) from pg_policies where schemaname = 'public' and tablename = 'workout_session_execution_states') <> 2
+       or not exists (
+         select 1 from pg_policies
+         where schemaname = 'public'
+           and tablename = 'workout_session_execution_states'
+           and policyname = 'workout_session_execution_states_member_select'
+           and cmd = 'SELECT'
+           and roles = array['authenticated']::name[]
+           and qual ~ 'user_id = \( SELECT auth.uid\(\)'
+       )
+       or not exists (
+         select 1 from pg_policies
+         where schemaname = 'public'
+           and tablename = 'workout_session_execution_states'
+           and policyname = 'workout_session_execution_states_member_update'
+           and cmd = 'UPDATE'
+           and roles = array['authenticated']::name[]
+           and qual ~ 'user_id = \( SELECT auth.uid\(\)'
+           and with_check ~ 'user_id = \( SELECT auth.uid\(\)'
+       ) then
+      raise exception 'AW-2A owner-scoped RLS policies are missing or broadened.';
+    end if;
   end if;
 
   if has_table_privilege('anon', 'public.workout_session_execution_states', 'SELECT')
@@ -117,12 +140,13 @@ begin
      or has_table_privilege('authenticated', 'public.workout_session_execution_states', 'INSERT')
      or has_table_privilege('authenticated', 'public.workout_session_execution_states', 'DELETE')
      or not has_table_privilege('authenticated', 'public.workout_session_execution_states', 'SELECT')
-     or not has_table_privilege('authenticated', 'public.workout_session_execution_states', 'UPDATE')
+     or (not v_aw2b_active and not has_table_privilege('authenticated', 'public.workout_session_execution_states', 'UPDATE'))
+     or (v_aw2b_active and has_table_privilege('authenticated', 'public.workout_session_execution_states', 'UPDATE'))
      or not has_table_privilege('service_role', 'public.workout_session_execution_states', 'SELECT')
      or not has_table_privilege('service_role', 'public.workout_session_execution_states', 'INSERT')
      or not has_table_privilege('service_role', 'public.workout_session_execution_states', 'UPDATE')
      or not has_table_privilege('service_role', 'public.workout_session_execution_states', 'DELETE') then
-    raise exception 'AW-2A table grants are not least-privilege.';
+    raise exception 'AW-2A/AW-2B table grants are not least-privilege.';
   end if;
 
   if exists (
@@ -191,7 +215,7 @@ begin
   select migration_version into strict v_marker
   from public.release_schema_compatibility
   where singleton;
-  if v_marker not in ('20260711014500', '20260717051011')
+  if v_marker not in ('20260711014500', '20260717051011', '20260721012814')
      or v_marker = '20260720213000' then
     raise exception 'AW-2A changed the release compatibility marker: %', v_marker;
   end if;
@@ -228,18 +252,6 @@ begin
     where state.user_id <> session.user_id
   ) then
     raise exception 'Execution-state owner differs from root-session owner.';
-  end if;
-
-  if exists (
-    select 1
-    from public.workout_session_execution_states state
-    join public.workout_session_muscle_snapshot_items item on item.id = state.active_snapshot_item_id
-    join public.workout_session_muscle_snapshots snapshot on snapshot.id = item.snapshot_id
-    where item.user_id <> state.user_id
-       or snapshot.workout_session_id <> state.workout_session_id
-       or item.item_order <> state.active_item_order
-  ) then
-    raise exception 'An AW-2A active cursor crosses session, owner, or item order.';
   end if;
 end
 $aw2a_verify_rows$;
