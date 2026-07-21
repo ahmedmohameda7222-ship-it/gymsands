@@ -10,7 +10,7 @@ on:
       - .github/workflows/stage1-final-qa-corrections-apply.yml
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   apply:
@@ -24,7 +24,8 @@ jobs:
           ref: fix/aw2a-post-merge-release-closure
           fetch-depth: 0
 
-      - name: Apply, validate, and preserve diagnostics
+      - name: Apply and validate with retained diagnostics
+        id: diagnostic
         shell: bash
         run: |
           set -uo pipefail
@@ -47,25 +48,23 @@ jobs:
               > .stage1-correction/validation.log 2>&1
             validation_status=$?
           fi
-          set -e
-
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-
-          if [ "$apply_status" -eq 0 ] && [ "$validation_status" -eq 0 ]; then
-            git diff --check
-            test -z "$(git status --porcelain | grep -E 'supabase/migrations/|^(.. )?(app|components|lib|services)/' || true)"
-            rm -rf .stage1-correction
-            rm -f .github/workflows/stage1-final-qa-corrections-apply.yml
-            git add -A
-            git diff --cached --check
-            git commit -m "fix(release): bind Stage 1 release identities"
-            git push origin HEAD:fix/aw2a-post-merge-release-closure
-            exit 0
-          fi
-
+          git status --porcelain > .stage1-correction/worktree-status.txt
+          git diff --binary > .stage1-correction/worktree.patch
           printf 'apply_status=%s\nvalidation_status=%s\n' "$apply_status" "$validation_status" > .stage1-correction/status.txt
-          git add -A
-          git commit -m "wip(release): preserve Stage 1 correction diagnostics"
-          git push origin HEAD:fix/aw2a-post-merge-release-closure
-          exit 1
+          echo "apply_status=$apply_status" >> "$GITHUB_OUTPUT"
+          echo "validation_status=$validation_status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload correction diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage1-final-qa-correction-diagnostics-${{ github.run_id }}
+          path: .stage1-correction
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Fail when correction validation failed
+        if: steps.diagnostic.outputs.apply_status != '0' || steps.diagnostic.outputs.validation_status != '0'
+        shell: bash
+        run: exit 1
