@@ -87,7 +87,7 @@ select public.apply_workout_session_execution_command_atomic(
 select pg_temp.assert_true((:'applied_response'::jsonb->>'outcome')='applied','AW-2B command did not apply.');
 select pg_temp.assert_true((:'applied_response'::jsonb->>'revisionAfter')::bigint=1,'Applied command did not increment revision exactly once.');
 select pg_temp.assert_true(
-  (select count(*)=1 and min(request_hash)~'^[0-9a-f]{64}$' and min(user_id)=:'owner_id'::uuid
+  (select count(*)=1 and bool_and(request_hash~'^[0-9a-f]{64}$') and bool_and(user_id=:'owner_id'::uuid)
    from public.workout_session_execution_commands
    where workout_session_id=:'session_id'::uuid and command_id='a2b00000-0000-4000-8000-000000000101'::uuid),
   'Applied command receipt is missing or invalid.');
