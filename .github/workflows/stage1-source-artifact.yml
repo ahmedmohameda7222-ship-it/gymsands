@@ -19,7 +19,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Assemble verified Stage-1 implementation
+      - name: Assemble verified non-workflow Stage-1 implementation
         shell: bash
         run: |
           set -euo pipefail
@@ -49,8 +49,9 @@ jobs:
             test "$(git hash-object "$path")" = "${expected[$path]}"
           done
 
+          git restore --source=HEAD -- .github/workflows/quality.yml .github/workflows/release-preflight.yml
+          rm -f .github/workflows/exact-release-quality-validation.yml
           rm -rf .stage1-upload
-          rm -f .github/workflows/stage1-source-artifact.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
