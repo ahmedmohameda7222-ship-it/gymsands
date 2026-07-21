@@ -19,7 +19,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Assemble verified non-workflow Stage-1 implementation
+      - name: Verify and extract archive
         shell: bash
         run: |
           set -euo pipefail
@@ -29,6 +29,10 @@ jobs:
           echo "89cbe28bfce4fe3916ba80e2a699b54aea9c34b7ff23842e88b6acae34986db4  /tmp/stage1-files.tar.gz" | sha256sum --check
           tar -xzf /tmp/stage1-files.tar.gz
 
+      - name: Verify extracted file identities
+        shell: bash
+        run: |
+          set -euo pipefail
           declare -A expected=(
             [".github/workflows/quality.yml"]="da794b9c3da0c19cbddb2a2dd49336f8226d5a63"
             [".github/workflows/release-preflight.yml"]="33e855df417c6a74b6e73c8b7014adf31e15281a"
@@ -46,15 +50,29 @@ jobs:
             ["plaivra_aw2a_post_merge_release_closure_implementation_report.md"]="91f53a9dee4aabe6075016774944da6ea7b2ad57"
           )
           for path in "${!expected[@]}"; do
-            test "$(git hash-object "$path")" = "${expected[$path]}"
+            actual="$(git hash-object "$path")"
+            echo "$path $actual"
+            test "$actual" = "${expected[$path]}"
           done
 
+      - name: Prepare non-workflow changes
+        shell: bash
+        run: |
+          set -euo pipefail
           git restore --source=HEAD -- .github/workflows/quality.yml .github/workflows/release-preflight.yml
           rm -f .github/workflows/exact-release-quality-validation.yml
           rm -rf .stage1-upload
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git diff --cached --check
+          git status --short
+
+      - name: Commit non-workflow assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "fix(release): add Stage 1 release closure infrastructure"
-          git push origin HEAD:fix/aw2a-post-merge-release-closure
+
+      - name: Push non-workflow assets
+        run: git push origin HEAD:fix/aw2a-post-merge-release-closure
