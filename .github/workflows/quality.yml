@@ -17,95 +17,18 @@ jobs:
       SOURCE_HEAD: 8ddfff10830bc910b09618390a7a3cdc52987c57
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Checkout exact staging revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
       - name: Create final permanent Quality blob
-        shell: bash
-        run: |
-          set -euo pipefail
-          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
-          auth=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
-          curl --fail-with-body -sS "${auth[@]}" "${api}/contents/.github/workflows/quality.yml?ref=${SOURCE_HEAD}" | jq -r '.content' | tr -d '\n' | base64 --decode > /tmp/quality.yml
-          python - <<'PY'
-          from pathlib import Path
+        run: node scripts/prepare-aw2a-final-quality-blob.mjs
 
-          path = Path('/tmp/quality.yml')
-          text = path.read_text()
-
-          dependency_marker = "      - name: Check production dependencies\n"
-          expression = '${' + '{ github.event.pull_request.base.sha }}'
-          parity_step = (
-              "      - name: Verify full unit failure parity\n"
-              "        if: steps.scope.outputs.database == 'true'\n"
-              "        run: node scripts/check-aw2a-unit-failure-parity.mjs --base \""
-              + expression
-              + "\" --output-dir quality-reports\n\n"
-          )
-          if dependency_marker not in text:
-              raise SystemExit('dependency marker missing')
-          text = text.replace(dependency_marker, parity_step + dependency_marker, 1)
-
-          old_replay = (
-              "          supabase db start\n"
-              "          supabase db reset --local --no-seed\n"
-              "          supabase db lint --local --schema public --level error --fail-on error\n"
-              "          database_url=\"postgresql://postgres:postgres@127.0.0.1:54322/postgres\"\n"
-          )
-          new_replay = (
-              "          supabase db start\n"
-              "          supabase db reset --local --no-seed --version 20260720213000\n"
-              "          database_url=\"postgresql://postgres:postgres@127.0.0.1:54322/postgres\"\n"
-              "          marker_before=\"$(PGPASSWORD=postgres psql \"$database_url\" -X -A -t -v ON_ERROR_STOP=1 -c \"select migration_version from public.release_schema_compatibility where singleton\")\"\n"
-              "          test \"$marker_before\" = \"20260711014500\"\n"
-              "          PGPASSWORD=postgres psql \"$database_url\" -X -v ON_ERROR_STOP=1 -c \"update public.release_schema_compatibility set migration_version = '20260717051011' where singleton\"\n"
-              "          supabase migration up --local\n"
-              "          marker_after=\"$(PGPASSWORD=postgres psql \"$database_url\" -X -A -t -v ON_ERROR_STOP=1 -c \"select migration_version from public.release_schema_compatibility where singleton\")\"\n"
-              "          test \"$marker_after\" = \"20260717051011\"\n"
-              "          supabase db lint --local --schema public --level error --fail-on error\n"
-          )
-          if old_replay not in text:
-              raise SystemExit('database replay marker missing')
-          text = text.replace(old_replay, new_replay, 1)
-
-          old_upload = (
-              "      - name: Upload AW-2A database validation evidence\n"
-              "        if: always() && steps.scope.outputs.database == 'true'\n"
-              "        uses: actions/upload-artifact@v4\n"
-              "        with:\n"
-              "          name: aw2a-database-validation-46571eee8fa13cc22b4190668678abae03cc643a\n"
-              "          path: quality-reports/aw2a-database-validation.log\n"
-              "          if-no-files-found: warn\n"
-              "          retention-days: 14\n"
-          )
-          artifact_expression = '${' + '{ github.event.pull_request.head.sha || github.sha }}'
-          new_upload = (
-              "      - name: Upload AW-2A validation evidence\n"
-              "        if: always() && steps.scope.outputs.database == 'true'\n"
-              "        uses: actions/upload-artifact@v4\n"
-              "        with:\n"
-              "          name: aw2a-validation-" + artifact_expression + "\n"
-              "          path: |\n"
-              "            quality-reports/aw2a-database-validation.log\n"
-              "            quality-reports/aw2a-unit-failure-parity.json\n"
-              "          if-no-files-found: warn\n"
-              "          retention-days: 14\n"
-          )
-          if old_upload not in text:
-              raise SystemExit('AW-2A upload marker missing')
-          text = text.replace(old_upload, new_upload, 1)
-
-          required = [
-              'check-aw2a-unit-failure-parity.mjs',
-              'supabase db reset --local --no-seed --version 20260720213000',
-              'supabase migration up --local',
-              'quality-reports/aw2a-unit-failure-parity.json',
-          ]
-          missing = [item for item in required if item not in text]
-          if missing:
-              raise SystemExit(f'final Quality workflow incomplete: {missing}')
-          path.write_text(text)
-          PY
-          echo "FINAL_QUALITY_SHA256=$(sha256sum /tmp/quality.yml | awk '{print $1}')"
-          encoded="$(base64 -w0 /tmp/quality.yml)"
-          payload="$(jq -n --arg content "$encoded" '{content:$content,encoding:"base64"}')"
-          response="$(curl --fail-with-body -sS -X POST "${auth[@]}" "${api}/git/blobs" -d "$payload")"
-          echo "$response"
-          echo "FINAL_QUALITY_BLOB_SHA=$(jq -r '.sha' <<<"$response")"
+      - name: Upload final Quality blob identity
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-quality-blob-${{ github.event.pull_request.head.sha }}
+          path: quality-reports/final-quality-blob.json
+          if-no-files-found: error
+          retention-days: 1
