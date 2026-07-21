@@ -4,60 +4,24 @@
 
 ## Executive summary
 
-AW-2A is complete on the existing Draft PR #80. The application implementation, applied migrations, production schema, and production verification remain unchanged. This final correction changes only the permanent Quality migration-replay architecture and its generic validation assets.
+AW-2A remains complete on the existing Draft PR #80. The application implementation, applied migrations, production schema, and production verification were not changed by this final correction. The correction is limited to the permanent Quality migration-replay architecture, generic validation assets, their deterministic tests, and this report.
 
-The permanent Quality workflow no longer copies, hides, removes, or restores the AW-2A correction migration. It now delegates migration replay to a reusable local-only helper that:
-
-1. starts a disposable database-only Supabase stack without repository migrations;
-2. resets the real repository chain through `20260720213000_active_workout_aw2a_execution_state`;
-3. verifies the historical local compatibility marker is exactly `20260711014500`;
-4. updates that marker only in the disposable local database to `20260717051011`;
-5. applies the AW-2A correction and every later missing migration with `supabase migration up --local --include-all`;
-6. verifies every repository migration is recorded exactly once;
-7. verifies the final marker remains `20260717051011`;
-8. leaves the repository working tree unchanged.
-
-The workflow additionally proves future ordering with a synthetic migration created only during CI after the current repository chain. The proof verifies the order:
-
-```text
-original AW-2A
-→ local-only compatibility bridge
-→ AW-2A correction
-→ synthetic future migration
-```
-
-The synthetic migration is removed reliably before the helper exits and never becomes a committed migration or repository artifact.
+The permanent Quality workflow no longer copies, hides, removes, or restores the AW-2A correction migration. A reusable local-only helper now performs chronological replay through the original AW-2A migration, applies the explicit local compatibility bridge, and then applies the correction plus every later missing migration with `--include-all`.
 
 ## Repository identity
 
 - Repository: `ahmedmohameda7222-ship-it/gymsands`
-- Starting/reviewed main SHA: `6f381b760eb711c3eef4bb515365d4c675648ed3`
+- Starting main: `6f381b760eb711c3eef4bb515365d4c675648ed3`
 - Branch: `feat/active-workout-aw2a-persisted-execution-state`
 - Draft PR: `#80`
 - PR URL: `https://github.com/ahmedmohameda7222-ship-it/gymsands/pull/80`
-- Last Planner-reviewed final head: `240106da957ff510a3e68062107b30cd5c54e13f`
-- Validated AW-2A application head: `b7ef75583489b7ace32ba6628105969b958b9aa8`
-- Validated permanent-CI implementation head before this report-only commit: `cf42654a62eea8a9a22250c5861b7ca841aa4139`
-- Final report commit and final PR head: `6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`
-- Final Phase A Diff Validation: run `29842265095` — `completed/success`.
-- Final Quality: run `29842265966` — `completed/success`.
-- Final generic artifact: `database-validation-6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`.
-- Final generic artifact ID: `8500152895`.
-- Final generic artifact digest: `sha256:e5ffcf32709c38f075808a2ba911d1bb3c951f2fa19c09c7b7425da9157e1256`.
+- Last Planner-reviewed head before this correction: `240106da957ff510a3e68062107b30cd5c54e13f`
+- Validated application head: `b7ef75583489b7ace32ba6628105969b958b9aa8`
+- Validated permanent-CI implementation head: `cf42654a62eea8a9a22250c5861b7ca841aa4139`
+- Validated report candidate head: `6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`
 - PR state: open, Draft, unmerged.
 
-## AW-2A delivered application behavior
-
-The approved application behavior remains unchanged:
-
-- set-log persistence completes before cursor/rest advancement is accepted;
-- a failed set-log write does not advance the cursor or leave a new rest state;
-- a successful set-log write followed by execution-state synchronization failure is reported as partial success rather than a failed log write;
-- paused duration uses accumulated elapsed seconds without wall-clock projection;
-- the serialized execution-state queue/ref tracks the latest accepted server state;
-- tests cover ordering, rollback boundaries, partial success, paused projection, and latest-state behavior.
-
-No application component, service, helper, type, privacy export, or AW-2A application test behavior was changed by the permanent-CI correction.
+A Git commit cannot contain its own SHA or workflow runs that are created only after that commit exists. Therefore the exact final report-only head SHA, final Phase A run, final Quality run, and final exact-head artifact are recorded in the final Planner handoff. The report records the exact successful predecessor evidence and all permanent implementation facts.
 
 ## Final permanent replay architecture
 
@@ -67,60 +31,68 @@ Permanent helper:
 scripts/replay-local-migration-chain.mjs
 ```
 
-Safety properties:
-
-- refuses a repository containing a linked Supabase project reference;
-- uses the fixed local database URL `postgresql://postgres:postgres@127.0.0.1:54322/postgres`;
-- starts only a disposable local database stack;
-- requires both immutable AW-2A migration files;
-- rejects invalid or duplicate repository migration versions;
-- requires the pre-bridge marker to equal `20260711014500`;
-- permits the marker update only through local `psql` against `127.0.0.1`;
-- applies missing migrations with `--local --include-all`;
-- requires the final marker to equal `20260717051011`;
-- requires every repository migration to appear exactly once in local history;
-- rejects missing, duplicate, or unexpected local migration records;
-- does not invoke `migration repair`, `db push`, or `--linked`;
-- writes `quality-reports/database-validation.log`;
-- fails if the working tree differs after replay.
-
-## Chronological replay sequence
-
-The exact permanent sequence is:
+Chronological sequence:
 
 ```text
-supabase start --exclude <all non-database services>
-supabase db reset --local --no-seed --version 20260720213000
-verify marker = 20260711014500
-update local marker = 20260717051011
-supabase migration up --local --include-all
-verify marker = 20260717051011
-verify repository migration history exactly once
+1. Start a disposable database-only Supabase stack without repository migrations.
+2. supabase db reset --local --no-seed --version 20260720213000
+3. Verify local compatibility marker = 20260711014500.
+4. Update the disposable local marker to 20260717051011.
+5. supabase migration up --local --include-all
+6. Verify every repository migration is recorded exactly once.
+7. Verify final compatibility marker = 20260717051011.
+8. Verify the repository working tree is unchanged.
 ```
 
-The database-only bootstrap is executed from a temporary directory containing only the repository `supabase/config.toml`. This starts the local database without applying the repository migration chain prematurely. No migration is copied, renamed, hidden, or removed.
+The database-only bootstrap runs from a temporary directory containing only the repository `supabase/config.toml`. It starts the local database without prematurely applying the repository migration chain. No migration file is copied, renamed, hidden, removed, or restored.
+
+## Replay-helper safety
+
+The helper:
+
+- refuses a repository with a linked Supabase project reference;
+- uses only `postgresql://postgres:postgres@127.0.0.1:54322/postgres`;
+- requires both immutable AW-2A migration files;
+- validates legacy 12-digit and current 14-digit repository migration versions;
+- rejects duplicate repository versions;
+- requires the exact pre-bridge and post-replay markers;
+- applies only local migrations with `--local --include-all`;
+- rejects missing, duplicate, or unexpected local migration-history records;
+- does not use `migration repair`, `db push`, or `--linked`;
+- requires no secret or production connection;
+- writes `quality-reports/database-validation.log`;
+- fails if the working tree changes.
 
 ## Future-migration proof
 
-The helper calculates a temporary timestamp after the latest current repository migration and creates a synthetic SQL migration in the CI working tree. Its SQL requires:
-
-- the original AW-2A execution-state table to exist;
-- the correction index to exist;
-- the compatibility marker to equal `20260717051011`.
-
-The helper then performs the full chronological replay and confirms that local history orders:
+Quality invokes:
 
 ```text
-20260720213000
-< 20260721012814
-< synthetic future version
+node scripts/replay-local-migration-chain.mjs \
+  --log quality-reports/database-validation.log \
+  --prove-future-order
 ```
 
-After that proof, the temporary migration is removed and a second replay validates the unmodified repository chain. The successful Quality evidence log records both passes.
+The helper creates a temporary synthetic migration with a version after the latest repository migration. The synthetic SQL requires:
+
+- the original AW-2A execution-state table;
+- the AW-2A correction index;
+- compatibility marker `20260717051011`.
+
+The successful evidence proves:
+
+```text
+original AW-2A
+→ local-only marker bridge
+→ AW-2A correction
+→ synthetic future migration
+```
+
+The synthetic file is removed reliably. The helper then performs a second replay of the unmodified repository chain. The synthetic migration is never committed and is not included as a repository migration artifact.
 
 ## Generic permanent validation assets
 
-The cross-phase validation assets are now generic:
+Permanent cross-phase names are now:
 
 ```text
 scripts/check-unit-failure-parity.mjs
@@ -129,30 +101,23 @@ quality-reports/unit-failure-parity.json
 database-validation-<exact-head-sha>
 ```
 
-Removed permanent AW-2A-specific script name:
+The old permanent script was removed:
 
 ```text
 scripts/check-aw2a-unit-failure-parity.mjs
 ```
 
-AW-2A-specific SQL verification filenames remain unchanged because they verify the delivered AW-2A database contract.
+AW-2A-specific SQL verification filenames remain AW-2A-specific because they validate the delivered AW-2A contract.
 
 ## workflow_dispatch parity handling
 
-For pull-request runs, unit-failure parity compares against the exact `${{ github.event.pull_request.base.sha }}`.
+- Pull-request runs compare unit-failure identities against the exact PR base SHA.
+- `workflow_dispatch` explicitly skips PR-base parity and records a generic JSON skip reason.
+- No workflow-dispatch path can pass an empty `${{ github.event.pull_request.base.sha }}` to the parity script.
 
-For `workflow_dispatch`, the PR-base parity step is explicitly skipped and a generic JSON record is written with:
+## Changed-file delta after `240106...`
 
-```text
-skipped = true
-reason = workflow_dispatch has no pull-request base SHA
-```
-
-Therefore workflow dispatch never passes an empty pull-request base SHA to the parity script.
-
-## Permanent-CI changed-file delta after `240106...`
-
-Relative to `240106da957ff510a3e68062107b30cd5c54e13f`, the permanent-CI correction changes only:
+The permanent-CI correction changes only:
 
 1. `.github/workflows/quality.yml`
 2. `scripts/check-unit-failure-parity.mjs` — rename/generalization of the old AW-2A parity script
@@ -162,88 +127,89 @@ Relative to `240106da957ff510a3e68062107b30cd5c54e13f`, the permanent-CI correct
 
 No application source file and no migration file changed in this correction.
 
-## Permanent source-contract tests
+## Permanent tests
 
 `scripts/permanent-quality-replay.test.mjs` verifies:
 
-- Quality delegates to the permanent replay helper;
-- replay uses `db reset --version 20260720213000`;
-- replay uses `migration up --local --include-all`;
-- no single-file remove/restore workaround remains;
-- synthetic future version ordering;
+- reset through `20260720213000`;
+- `migration up --local --include-all`;
+- absence of the single-file remove/restore workaround;
+- synthetic future ordering;
 - linked-project refusal;
-- exact-once migration-history validation;
+- exact-once local migration history;
 - local-only compatibility bridge;
 - safe workflow-dispatch parity handling;
-- generic log, parity, and artifact names;
-- AW-2A verification SQL and PostgreSQL integration remain enforced;
-- both applied migration SHA-256 checksums remain immutable.
+- generic parity/log/artifact names;
+- continued AW-2A SQL and PostgreSQL verification;
+- immutable applied-migration checksums.
 
-## Final exact-head validation
+## Successful permanent-CI evidence
 
-Final head:
+Validated permanent-CI implementation head:
+
+```text
+cf42654a62eea8a9a22250c5861b7ca841aa4139
+```
+
+- Phase A Diff Validation: run `29841259528` — `completed/success`.
+- Quality: run `29841258529` — `completed/success`.
+- Generic artifact: `database-validation-cf42654a62eea8a9a22250c5861b7ca841aa4139`.
+- Artifact ID: `8499726524`.
+- Artifact digest: `sha256:62b67bac954fa82285bc722d55c3db9eb6eaca95f42f37b9a7b0ccc7f28de182`.
+
+Validated report candidate head:
 
 ```text
 6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66
 ```
 
-Exact-head workflows:
-
 - Phase A Diff Validation: run `29842265095` — `completed/success`.
 - Quality: run `29842265966` — `completed/success`.
+- Generic artifact: `database-validation-6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`.
+- Artifact ID: `8500152895`.
+- Artifact digest: `sha256:e5ffcf32709c38f075808a2ba911d1bb3c951f2fa19c09c7b7425da9157e1256`.
 
-Generic exact-head evidence artifact:
-
-- Name: `database-validation-6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`
-- Artifact ID: `8500152895`
-- Digest: `sha256:e5ffcf32709c38f075808a2ba911d1bb3c951f2fa19c09c7b7425da9157e1256`
-- Artifact head: `6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`
-
-The successful final Quality job passed:
+Both successful Quality runs passed:
 
 - exact checkout verification;
-- changed-source lint;
-- TypeScript typecheck;
-- i18n contract;
+- lint;
+- typecheck;
+- i18n;
 - related tests;
 - full unit-failure parity;
-- production dependency audit;
+- dependency audit;
 - script tests;
 - integration tests;
 - database-only local bootstrap;
-- synthetic future-migration chronological replay proof;
-- final repository chronological replay;
+- synthetic chronological future-migration proof;
+- final chronological repository replay;
 - DB lint;
 - AW-2A verification SQL;
 - PostgreSQL AW-2A integration verification;
 - migration ledger check;
-- release manifest generation;
+- release manifest;
 - production-safe local Train/security/preflight verification;
 - production build;
 - Train browser QA;
-- generic database artifact upload.
+- generic database evidence upload.
 
-## Migration replay evidence
+## Replay evidence
 
-The final generic validation log proves:
+The successful generic logs show, for both synthetic and final repository replay:
 
 ```text
-synthetic replay:
-  reset through 20260720213000
-  marker before bridge = 20260711014500
-  marker after bridge = 20260717051011
-  correction 20260721012814 applied
-  synthetic later migration applied
+reset through 20260720213000
+marker before bridge = 20260711014500
+local marker bridge = 20260717051011
+correction 20260721012814 applied with --include-all
+final marker = 20260717051011
+all expected repository migrations present exactly once
+```
 
-final repository replay:
-  reset through 20260720213000
-  marker before bridge = 20260711014500
-  marker after bridge = 20260717051011
-  correction 20260721012814 applied
-  all repository migrations recorded once
+Final log result:
 
-result:
-  Chronological local migration replay passed.
+```text
+Chronological local migration replay passed.
 ```
 
 Migration ledger result:
@@ -257,7 +223,7 @@ expected_database_migration=20260721012814
 
 ## Unit-failure parity
 
-Generic final-head parity evidence:
+Exact parity evidence on the validated report candidate:
 
 - Head SHA: `6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`.
 - Base SHA: `6f381b760eb711c3eef4bb515365d4c675648ed3`.
@@ -269,46 +235,38 @@ Generic final-head parity evidence:
 - Removed failure identities: `0`.
 - Result: passed.
 
-The four unchanged failure identities are:
-
-1. `Muscle Intelligence Phase 1 migration contract executes the disposable Phase 1 verification in the authoritative Quality database preflight`
-2. `Train Phase 2A architecture contract enforces privacy, ownership, JSON shape, and verification in the authoritative quality gate`
-3. `approved Train Phase 1 UI contracts keeps picker selection, duplicates, keyboard selection, focus return, request grouping, cancellation, and explicit pagination`
-4. `approved Train Phase 1 UI contracts localizes detail, history filters, direct-session failures, and the active workout controller`
+The same four pre-existing failure identities remain on both heads.
 
 ## Immutable migration identities
 
 ### Original AW-2A migration
 
-- Repository file: `supabase/migrations/20260720213000_active_workout_aw2a_execution_state.sql`
-- Repository identity: `20260720213000_active_workout_aw2a_execution_state`
+- Repository: `20260720213000_active_workout_aw2a_execution_state`
 - Production alias: `20260721000544_active_workout_aw2a_execution_state`
 - Git blob SHA: `caa286b2ad287f042d2cf7691ec7774a9db7a50d`
 - SHA-256: `c8f21655226d51a2157fa1b8c272edc5fac1f84f0a2214376a16e225a1f04f2e`
-- Production record count: `1`.
+- Production count: `1`.
 
-### Forward-only correction migration
+### Correction migration
 
-- Repository file: `supabase/migrations/20260721012814_active_workout_aw2a_execution_state_corrections.sql`
 - Identity: `20260721012814_active_workout_aw2a_execution_state_corrections`
 - Git blob SHA: `aca8a238ed98f35eabffee7011dbbbd83475350e`
 - SHA-256: `b79920d0f9155b0c076d602b10924846409efdac54a485333242a03bbd5e5e18`
 - Index: `workout_session_execution_states_active_snapshot_item_idx`
-- Production record count: `1`.
+- Production count: `1`.
 
-Neither applied migration was edited, renamed, deleted, reapplied, or otherwise changed by this correction.
+Neither applied migration was edited, renamed, deleted, reapplied, or otherwise changed.
 
 ## Production state unchanged
 
-No Supabase write action was executed during this permanent-CI correction. The previously approved read-only production state remains the applicable baseline:
+No Supabase action was invoked during this permanent-CI correction. No production write occurred. The approved production baseline remains:
 
-- production migration records: `64`;
-- ledger: `63` exact-applied and `1` version-alias;
+- migration records: `64`;
+- ledger: `63` exact-applied, `1` version-alias;
 - compatibility marker: `20260717051011`;
-- original AW-2A production record count: `1`;
-- correction production record count: `1`;
-- execution-state table present;
-- correction index present;
+- original AW-2A record count: `1`;
+- correction record count: `1`;
+- execution-state table and correction index present;
 - workout sessions: `10`;
 - open sessions: `1`;
 - execution-state rows: `1`;
@@ -316,29 +274,27 @@ No Supabase write action was executed during this permanent-CI correction. The p
 - terminal sessions with state: `0`;
 - owner mismatches: `0`.
 
-## Scope and boundary confirmations
+## Boundary confirmations
 
-- No application-code change in the permanent-CI correction.
+- No application-code change.
 - No migration-file content change.
-- No migration application or replay against Supabase production.
 - No Supabase write.
-- No Activity Catalog repository or database change.
-- No single migration file was hidden, removed, renamed, or restored during replay.
+- No Activity Catalog change.
+- No single-file migration hiding.
 - No new workflow file.
-- No branch-name, PR-number, or AW-2A-branch condition was added to Quality.
+- No branch-name, PR-number, or AW-2A-branch condition in Quality.
 - No merge.
 - No deployment.
-- AW-2B was not started.
+- AW-2B not started.
 
 ## Final repository status
 
-- All permanent-CI assets and this report are committed on the existing AW-2A branch.
+- All permanent-CI assets and this report are committed on the existing branch.
 - The remote branch is the authoritative workspace.
-- Temporary synthetic migrations are removed by the helper and do not appear in the committed tree.
-- No temporary workflow, patch fragment, workspace archive, base64 transfer file, or recovery helper is part of the final correction.
-- PR #80 remains open, Draft, and unmerged.
-- Final remote head is `6cb21ac5abd8ed2cde2c878fce8e4a0d2367fa66`.
+- Temporary synthetic migrations are absent from the committed tree.
+- No temporary workflow, patch fragment, base64 transfer file, workspace archive, or recovery asset is part of the final correction.
+- PR #80 remains Draft, open, and unmerged.
 
 ## Squash-merge requirement
 
-After final Planner approval, PR #80 must be merged using **Squash and merge**. Normal merge is not authorized because the PR contains the full iterative implementation and CI-correction commit history. Until that approval, the PR must remain Draft and unmerged.
+After final Planner approval, PR #80 must use **Squash and merge**. Normal merge is not authorized. Until approval, the PR remains Draft and unmerged.
