@@ -3,7 +3,7 @@
   "projectRef": "bkwezjxvapaeasfvlhvv",
   "capturedAt": "2026-07-21T00:05:44Z",
   "auditedRepositoryCommit": "56d17feadc6e2af668455bbe5ed1aa61230890ff",
-  "productionMigrationCount": 63,
+  "productionMigrationCount": 62,
   "schemaVerifiedUntrackedCount": 0,
   "pendingCount": 0,
   "unresolvedCount": 0,
@@ -414,8 +414,8 @@
     },
     {
       "localFile": "20260720213000_active_workout_aw2a_execution_state.sql",
-      "state": "applied",
-      "note": "Applied exactly once to Plaivra Database on 2026-07-21 through the supported Supabase migration authority. Production recorded version 20260721000544 under name active_workout_aw2a_execution_state. Local Git blob caa286b2ad287f042d2cf7691ec7774a9db7a50d and SHA-256 c8f21655226d51a2157fa1b8c272edc5fac1f84f0a2214376a16e225a1f04f2e. Production verification confirmed one legacy open-session backfill, complete open-session coverage, zero terminal rows, zero owner mismatch, hardened RLS/functions, and unchanged compatibility marker 20260717051011. Do not replay.",
+      "state": "applied_version_alias",
+      "note": "Applied exactly once to Plaivra Database on 2026-07-21 through the supported Supabase migration authority. The generated production version 20260721000544 differs from immutable repository version 20260720213000; this applied_version_alias preserves both identities without renaming or replaying the reviewed SQL. Local Git blob caa286b2ad287f042d2cf7691ec7774a9db7a50d and SHA-256 c8f21655226d51a2157fa1b8c272edc5fac1f84f0a2214376a16e225a1f04f2e. Production verification confirmed one legacy open-session backfill, complete open-session coverage, zero terminal rows, zero owner mismatch, hardened RLS/functions, and unchanged compatibility marker 20260717051011. Do not replay.",
       "productionVersion": "20260721000544",
       "productionName": "active_workout_aw2a_execution_state"
     }
