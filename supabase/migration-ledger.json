@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-19T22:26:41.487894Z",
-  "auditedRepositoryCommit": "d1485062b09a83c4202c1d4154e78b3512cfd621",
-  "productionMigrationCount": 62,
+  "capturedAt": "2026-07-21T01:28:14Z",
+  "auditedRepositoryCommit": "9aba336504882deda050f935c9d285cc85e75f1b",
+  "productionMigrationCount": 63,
   "schemaVerifiedUntrackedCount": 0,
   "pendingCount": 0,
   "unresolvedCount": 0,
@@ -12,7 +12,7 @@
     "schemaAppliedUntrackedCount": 0,
     "pendingCount": 0,
     "unresolvedCount": 0,
-    "note": "Production migration history is reconciled through 20260719223300 with all 62 repository migrations recorded exactly once. Do not replay any applied migration."
+    "note": "Production migration history is reconciled through production record 20260721012814. The ledger contains 63 exact state=applied rows plus 1 applied_version_alias row, matching 64 actual production records. The supported Supabase migration authority applied the immutable AW-2A base migration exactly once under production alias 20260721000544 and the forward-only AW-2A correction migration exactly once as 20260721012814. Do not replay any applied migration."
   },
   "entries": [
     {
@@ -411,6 +411,20 @@
       "note": "Applied exactly once to production on 2026-07-19 through the supported Supabase migration authority. Production history was reconciled to this reviewed repository identity without replaying SQL. Post-apply verification preserved every historical V1 snapshot, created no migration-time V2 snapshot, kept compatibility marker 20260717051011, and passed ACL and immutability contracts. Do not replay.",
       "productionVersion": "20260719223300",
       "productionName": "muscle_intelligence_phase4c1_trusted_log_cleanup"
+    },
+    {
+      "localFile": "20260720213000_active_workout_aw2a_execution_state.sql",
+      "state": "applied_version_alias",
+      "note": "Applied exactly once to Plaivra Database on 2026-07-21 through the supported Supabase migration authority. The generated production version 20260721000544 differs from immutable repository version 20260720213000; this applied_version_alias preserves both identities without renaming or replaying the reviewed SQL. Local Git blob caa286b2ad287f042d2cf7691ec7774a9db7a50d and SHA-256 c8f21655226d51a2157fa1b8c272edc5fac1f84f0a2214376a16e225a1f04f2e. Production verification confirmed one legacy open-session backfill, complete open-session coverage, zero terminal rows, zero owner mismatch, hardened RLS/functions, and unchanged compatibility marker 20260717051011. Do not replay.",
+      "productionVersion": "20260721000544",
+      "productionName": "active_workout_aw2a_execution_state"
+    },
+    {
+      "localFile": "20260721012814_active_workout_aw2a_execution_state_corrections.sql",
+      "state": "applied",
+      "note": "Applied exactly once to Plaivra Database on 2026-07-21 through the supported Supabase migration authority. This forward-only correction adds the partial covering index workout_session_execution_states_active_snapshot_item_idx for active_snapshot_item_id, preserves immutable repository migration 20260720213000 byte-for-byte, leaves compatibility marker 20260717051011 unchanged, and removes only the AW-2A unindexed-FK advisor notice. SHA-256 b79920d0f9155b0c076d602b10924846409efdac54a485333242a03bbd5e5e18. Do not replay.",
+      "productionVersion": "20260721012814",
+      "productionName": "active_workout_aw2a_execution_state_corrections"
     }
   ]
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
@@ -31,7 +31,7 @@ import { useToast } from "@/components/ui/toaster";
 import { InlineFeedback, MotionCard } from "@/components/motion";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
-import { clearActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
+import { activeWorkoutCacheFromExecution, clearActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
 import { userSafeError } from "@/lib/error-formatting";
 import {
   completeWorkoutSession,
@@ -43,7 +43,7 @@ import {
   updateWorkoutSessionDuration
 } from "@/services/database/workout-sessions";
 import { createExerciseAlternative, getExerciseAlternatives, getProgressionTargets } from "@/services/database/execution-layer";
-import type { ExerciseLog, UserWorkoutPlanExercise, Workout, WorkoutPlanDaySession, WorkoutSession, WorkoutSessionSummary } from "@/types";
+import type { ExerciseLog, UserWorkoutPlanExercise, Workout, WorkoutPlanDaySession, WorkoutSession, WorkoutSessionExecutionState, WorkoutSessionSummary } from "@/types";
 import type { ExerciseAlternativeReason, UserExerciseAlternative, UserProgressionTarget } from "@/types";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
@@ -52,6 +52,29 @@ import { isolateBidiText, useActiveWorkoutTranslation, type ActiveWorkoutFormatt
 import { translateTrain } from "@/lib/i18n/train";
 import { ExercisePickerDialog } from "@/components/workouts/exercise-picker-dialog";
 import { SessionMuscleLoadPanel } from "@/components/workouts/session-muscle-load-panel";
+import { getActiveWorkoutDeviceId } from "@/lib/workouts/active-workout-device";
+import {
+  createWorkoutSessionExecutionWriteQueue,
+  executionCursorToIndexes,
+  executionDurationMinutes,
+  executionElapsedSeconds,
+  executionRestSecondsLeft,
+  executionStartedAtMs,
+  persistCanonicalSetThenExecution,
+  planWorkoutSessionAfterSetCompletion,
+  WorkoutSessionExecutionSyncError
+} from "@/lib/workouts/workout-session-execution";
+import {
+  clearWorkoutSessionRestTimer,
+  getWorkoutSessionExecutionCursorItems,
+  importLegacyWorkoutExecutionCache,
+  persistWorkoutSessionAfterSetCompletion,
+  persistWorkoutSessionCursor,
+  persistWorkoutSessionRestTimer,
+  persistWorkoutSessionTimerReset,
+  requireWorkoutSessionExecutionState,
+  type WorkoutSessionExecutionCursorRow
+} from "@/services/database/workout-session-execution";
 
 // These inert markers preserve the frozen Train Phase 1 source contract while
 // user-visible copy is resolved exclusively through the canonical ActiveWorkout namespace.
@@ -457,84 +480,188 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const workoutTimerKey = useMemo(() => workoutStorageKey(["workout-day-session", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const restTimerKey = useMemo(() => workoutStorageKey(["workout-day-rest-timer", user?.id ?? "anonymous", day.id]), [day.id, user?.id]);
   const [timerEndsAtMs, setTimerEndsAtMs] = useState<number | null>(null);
+  const [executionState, setExecutionState] = useState<WorkoutSessionExecutionState | null>(null);
+  const [executionCursorItems, setExecutionCursorItems] = useState<WorkoutSessionExecutionCursorRow[]>([]);
+  const executionHydratedRef = useRef(false);
+  const executionWriteQueueRef = useRef(createWorkoutSessionExecutionWriteQueue());
+  const controllerDeviceIdRef = useRef<string | null>(null);
+
+  const mirrorExecutionState = useCallback((next: WorkoutSessionExecutionState) => {
+    executionWriteQueueRef.current.replace(next);
+    setExecutionState(next);
+    const now = Date.now();
+    const derivedStartedAt = executionStartedAtMs(next, now);
+    setStartedAtMs(derivedStartedAt);
+    setElapsedSeconds(executionElapsedSeconds(next, now));
+    storeTimestamp(workoutTimerKey, derivedStartedAt);
+
+    const restLeft = executionRestSecondsLeft(next, now);
+    const parsedRestEndsAt = next.rest_ends_at ? Date.parse(next.rest_ends_at) : Number.NaN;
+    if (next.view_state === "rest" && restLeft > 0 && Number.isFinite(parsedRestEndsAt)) {
+      setTimerSeconds(next.rest_duration_seconds ?? restLeft);
+      setTimerLeft(restLeft);
+      setTimerEndsAtMs(parsedRestEndsAt);
+      setIsTimerRunning(true);
+      storeTimestamp(restTimerKey, parsedRestEndsAt);
+    } else {
+      setTimerLeft(0);
+      setTimerEndsAtMs(null);
+      setIsTimerRunning(false);
+      clearStoredValue(restTimerKey);
+    }
+
+    if (user?.id) {
+      writeActiveWorkoutState(user.id, activeWorkoutCacheFromExecution(next, {
+        route: `/workouts/session/day/${day.id}`,
+        label: day.day_name,
+        controllerDeviceId: controllerDeviceIdRef.current
+      }, now));
+    }
+  }, [day.day_name, day.id, restTimerKey, user, workoutTimerKey]);
+
+  const queueExecutionWrite = useCallback((
+    write: (currentServerState: WorkoutSessionExecutionState) => Promise<WorkoutSessionExecutionState>,
+    options: {
+      rollback?: (currentServerState: WorkoutSessionExecutionState | null) => void;
+      reportFailure?: boolean;
+    } = {}
+  ) => {
+    let attemptedState: WorkoutSessionExecutionState | null = null;
+    const operation = executionWriteQueueRef.current.enqueue((currentServerState) => {
+      attemptedState = currentServerState;
+      return write(currentServerState);
+    });
+    void operation.then(
+      (next) => { mirrorExecutionState(next); },
+      (error) => {
+        options.rollback?.(attemptedState);
+        if (options.reportFailure === false) return;
+        setSetFeedbackVariant("error");
+        setSetFeedback(tr("offline.setSaveCombined"));
+        toast({ title: tr("completion.saveFailedTitle"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
+      }
+    );
+    return operation;
+  }, [mirrorExecutionState, toast, tr]);
 
   useEffect(() => {
     let active = true;
+    executionHydratedRef.current = false;
     if (!user?.id) {
       setIsStarting(false);
       toast({ title: tr("header.signInRequired"), description: tr("header.signInBeforeSaving") });
-      return () => {
-        active = false;
-      };
+      return () => { active = false; };
     }
 
     getOrStartWorkoutDaySession(user.id, day)
       .then(async (nextSession) => {
         if (!active) return;
         setSession(nextSession);
-        const parsedStartedAt = Date.parse(nextSession.started_at);
-        const storedStartedAt = readStoredTimestamp(workoutTimerKey);
-        const nextStartedAt = storedStartedAt ?? (Number.isFinite(parsedStartedAt) ? parsedStartedAt : Date.now());
-        setStartedAtMs(nextStartedAt);
-        storeTimestamp(workoutTimerKey, nextStartedAt);
-        writeActiveWorkoutState(user.id, {
-          sessionId: nextSession.id,
-          route: `/workouts/session/day/${day.id}`,
-          label: day.day_name,
-          startedAtMs: nextStartedAt,
-          elapsedSeconds: Math.max(0, Number(nextSession.duration_minutes ?? 0) * 60),
-          paused: false
-        });
         setSessionNotes(nextSession.notes ?? "");
+        controllerDeviceIdRef.current = getActiveWorkoutDeviceId();
+
+        const storedStartedAt = readStoredTimestamp(workoutTimerKey);
+        const storedRestEndsAt = readStoredTimestamp(restTimerKey);
         const exerciseIds = day.exercises.map((exercise) => exercise.id);
-        const [existingLogs, workoutHistory, targets, savedAlternatives] = await Promise.all([
+        const [persistedState, cursorItems, existingLogs, workoutHistory, targets, savedAlternatives] = await Promise.all([
+          requireWorkoutSessionExecutionState(user.id, nextSession.id),
+          getWorkoutSessionExecutionCursorItems(user.id, nextSession.id),
           getWorkoutSessionLogs(nextSession.id),
           getWorkoutHistoryDetailed(user.id, 100),
           getProgressionTargets(user.id, exerciseIds).catch(() => []),
           getExerciseAlternatives(user.id).catch(() => [])
         ]);
-        if (active) {
-          setExerciseStates((current) => hydrateStates(current, existingLogs));
-          setHistory(workoutHistory.filter((item) => item.id !== nextSession.id));
-          setProgressionTargets(targets);
-          setAlternatives(savedAlternatives.filter((item) => exerciseIds.includes(item.plan_exercise_id)));
+
+        let authoritativeState = persistedState;
+        executionWriteQueueRef.current.replace(authoritativeState);
+        if (persistedState.bootstrap_source === "legacy_backfill" && persistedState.revision === 0) {
+          try {
+            const imported = await importLegacyWorkoutExecutionCache(
+              user.id,
+              nextSession.id,
+              persistedState,
+              storedStartedAt,
+              controllerDeviceIdRef.current,
+              new Date(),
+              { endsAtMs: storedRestEndsAt, durationSeconds: day.exercises[0]?.rest_seconds ?? 75 }
+            );
+            authoritativeState = imported.state;
+            executionWriteQueueRef.current.replace(authoritativeState);
+          } catch (error) {
+            console.warn("Plaivra could not import the optional legacy workout timer cache.", error);
+          }
         }
+
+        if (controllerDeviceIdRef.current && authoritativeState.controller_device_id !== controllerDeviceIdRef.current) {
+          authoritativeState = await queueExecutionWrite((currentServerState) => persistWorkoutSessionCursor(
+            user.id,
+            nextSession.id,
+            {
+              snapshotItemId: currentServerState.active_snapshot_item_id,
+              itemOrder: currentServerState.active_item_order,
+              setNumber: currentServerState.active_set_number,
+              controllerDeviceId: controllerDeviceIdRef.current
+            }
+          ));
+        }
+
+        if (authoritativeState.view_state === "rest" && executionRestSecondsLeft(authoritativeState) <= 0) {
+          authoritativeState = await queueExecutionWrite(() => clearWorkoutSessionRestTimer(
+            user.id,
+            nextSession.id,
+            "set_entry",
+            controllerDeviceIdRef.current
+          ));
+        }
+
+        if (!active) return;
+        setExecutionCursorItems(cursorItems);
+        const hydratedStates = hydrateStates(day.exercises.map(makeExerciseState), existingLogs);
+        setExerciseStates(hydratedStates);
+        const cursor = executionCursorToIndexes(authoritativeState, cursorItems, day.exercises);
+        const exerciseIndex = Math.min(Math.max(0, cursor.exerciseIndex), Math.max(0, hydratedStates.length - 1));
+        const setCount = hydratedStates[exerciseIndex]?.sets.length ?? 1;
+        setActiveExerciseIndex(exerciseIndex);
+        setActiveSetIndex(Math.min(Math.max(0, cursor.setIndex), Math.max(0, setCount - 1)));
+        mirrorExecutionState(authoritativeState);
+        setHistory(workoutHistory.filter((item) => item.id !== nextSession.id));
+        setProgressionTargets(targets);
+        setAlternatives(savedAlternatives.filter((item) => exerciseIds.includes(item.plan_exercise_id)));
+        executionHydratedRef.current = true;
       })
       .catch((error) => {
-      toast({ title: tr("header.loadFailedTitle"), description: userSafeError(error, tr("header.loadFailedDescription")) });
+        toast({ title: tr("header.loadFailedTitle"), description: userSafeError(error, tr("header.loadFailedDescription")) });
       })
       .finally(() => {
         if (active) setIsStarting(false);
       });
 
-    return () => {
-      active = false;
-    };
-  }, [day, toast, tr, user?.id, workoutTimerKey]);
+    return () => { active = false; };
+  }, [day, mirrorExecutionState, queueExecutionWrite, restTimerKey, toast, tr, user?.id, workoutTimerKey]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => {
-      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
-    }, 1000);
+    const tick = () => setElapsedSeconds(
+      executionState
+        ? executionElapsedSeconds(executionState)
+        : Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000))
+    );
+    tick();
+    const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
-  }, [startedAtMs]);
+  }, [executionState, startedAtMs]);
 
   useEffect(() => {
     if (!session) return;
     const interval = window.setInterval(() => {
-      const durationMinutes = Math.max(1, Math.ceil((Date.now() - startedAtMs) / 60000));
-      updateWorkoutSessionDuration(session.id, durationMinutes).catch(() => undefined);
+      const authoritativeState = executionWriteQueueRef.current.current();
+      if (!authoritativeState) return;
+      updateWorkoutSessionDuration(
+        session.id,
+        executionDurationMinutes(authoritativeState)
+      ).catch(() => undefined);
     }, 20000);
     return () => window.clearInterval(interval);
-  }, [session, startedAtMs]);
-
-  useEffect(() => {
-    const storedRestDeadline = readStoredTimestamp(restTimerKey);
-    if (!storedRestDeadline || storedRestDeadline <= Date.now()) return;
-    setTimerEndsAtMs(storedRestDeadline);
-    setTimerLeft(Math.max(0, Math.ceil((storedRestDeadline - Date.now()) / 1000)));
-    setIsTimerRunning(true);
-  }, [restTimerKey]);
+  }, [session]);
 
   useEffect(() => {
     if (!timerEndsAtMs) return;
@@ -545,6 +672,14 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         setTimerEndsAtMs(null);
         setIsTimerRunning(false);
         clearStoredValue(restTimerKey);
+        if (user?.id && session?.id && executionHydratedRef.current) {
+          void queueExecutionWrite(() => clearWorkoutSessionRestTimer(
+            user.id,
+            session.id,
+            "set_entry",
+            controllerDeviceIdRef.current
+          ));
+        }
         toast({ title: tr("notifications.restFinished"), description: tr("notifications.nextSetReady") });
         if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
           new Notification(tr("notifications.restFinished"), { body: tr("notifications.nextSetReady") });
@@ -554,7 +689,40 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     tick();
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
-  }, [restTimerKey, timerEndsAtMs, toast, tr]);
+  }, [queueExecutionWrite, restTimerKey, session?.id, timerEndsAtMs, toast, tr, user?.id]);
+
+  useEffect(() => {
+    if (!executionHydratedRef.current || !user?.id || !session?.id || !executionState) return;
+    const exercise = day.exercises[activeExerciseIndex];
+    const cursorItem = executionCursorItems.find((item) => item.sourcePlanExerciseId === exercise?.id)
+      ?? executionCursorItems.find((item) => item.itemOrder === activeExerciseIndex + 1)
+      ?? null;
+    const itemOrder = cursorItem?.itemOrder ?? activeExerciseIndex + 1;
+    const setNumber = activeSetIndex + 1;
+    if (
+      executionState.active_snapshot_item_id === (cursorItem?.id ?? null)
+      && executionState.active_item_order === itemOrder
+      && executionState.active_set_number === setNumber
+      && executionState.controller_device_id === controllerDeviceIdRef.current
+    ) return;
+
+    void queueExecutionWrite(
+      () => persistWorkoutSessionCursor(user.id, session.id, {
+        snapshotItemId: cursorItem?.id ?? null,
+        itemOrder,
+        setNumber,
+        controllerDeviceId: controllerDeviceIdRef.current
+      }),
+      {
+        rollback: (currentServerState) => {
+          if (!currentServerState) return;
+          const previousCursor = executionCursorToIndexes(currentServerState, executionCursorItems, day.exercises);
+          setActiveExerciseIndex(previousCursor.exerciseIndex);
+          setActiveSetIndex(previousCursor.setIndex);
+        }
+      }
+    );
+  }, [activeExerciseIndex, activeSetIndex, day.exercises, executionCursorItems, executionState, queueExecutionWrite, session?.id, user?.id]);
 
   const activeExercise = exerciseStates[activeExerciseIndex];
   const activeSet = activeExercise?.sets[activeSetIndex];
@@ -638,21 +806,6 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     );
   }
 
-  function moveToNextSet(states = exerciseStates, fromExerciseIndex = activeExerciseIndex, fromSetIndex = activeSetIndex) {
-    const currentExercise = states[fromExerciseIndex];
-    if (!currentExercise) return;
-    if (fromSetIndex + 1 < currentExercise.sets.length) {
-      setActiveExerciseIndex(fromExerciseIndex);
-      setActiveSetIndex(fromSetIndex + 1);
-      return;
-    }
-    if (fromExerciseIndex + 1 < states.length) {
-      const next = states[fromExerciseIndex + 1];
-      setActiveExerciseIndex(fromExerciseIndex + 1);
-      setActiveSetIndex(0);
-      setTimerSeconds(next.exercise.rest_seconds ?? 75);
-    }
-  }
 
   async function persistProgress(states = exerciseStates) {
     if (!session) return;
@@ -663,19 +816,33 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   function startRestTimer(seconds: number) {
     const safeSeconds = Math.max(0, seconds);
     if (!safeSeconds) return;
+    const previous = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
     const deadline = restDeadline(safeSeconds);
     setTimerSeconds(safeSeconds);
     setTimerLeft(safeSeconds);
     setTimerEndsAtMs(deadline);
     setIsTimerRunning(true);
     storeTimestamp(restTimerKey, deadline);
+    if (user?.id && session?.id && executionHydratedRef.current) {
+      void queueExecutionWrite(
+        () => persistWorkoutSessionRestTimer(user.id, session.id, safeSeconds, controllerDeviceIdRef.current),
+        { rollback: () => restoreRestTimer(previous) }
+      );
+    }
   }
 
   function stopRestTimer() {
+    const previous = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
     setTimerLeft(0);
     setTimerEndsAtMs(null);
     setIsTimerRunning(false);
     clearStoredValue(restTimerKey);
+    if (user?.id && session?.id && executionHydratedRef.current) {
+      void queueExecutionWrite(
+        () => clearWorkoutSessionRestTimer(user.id, session.id, "set_entry", controllerDeviceIdRef.current),
+        { rollback: () => restoreRestTimer(previous) }
+      );
+    }
   }
 
   function restoreRestTimer(snapshot: { timerSeconds: number; timerLeft: number; timerEndsAtMs: number | null; isTimerRunning: boolean }) {
@@ -687,6 +854,22 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     else clearStoredValue(restTimerKey);
   }
 
+  async function reconcileSavedSetAfterExecutionFailure(savedStates: ExerciseState[]) {
+    if (!user?.id || !session?.id) return;
+    const [authoritativeState, authoritativeLogs] = await Promise.all([
+      requireWorkoutSessionExecutionState(user.id, session.id),
+      getWorkoutSessionLogs(session.id)
+    ]);
+    const reconciledStates = hydrateStates(savedStates, authoritativeLogs);
+    const cursor = executionCursorToIndexes(authoritativeState, executionCursorItems, day.exercises);
+    const exerciseIndex = Math.min(Math.max(0, cursor.exerciseIndex), Math.max(0, reconciledStates.length - 1));
+    const setCount = reconciledStates[exerciseIndex]?.sets.length ?? 1;
+    setExerciseStates(reconciledStates);
+    setActiveExerciseIndex(exerciseIndex);
+    setActiveSetIndex(Math.min(Math.max(0, cursor.setIndex), Math.max(0, setCount - 1)));
+    mirrorExecutionState(authoritativeState);
+  }
+
   async function finishSet(exerciseIndex: number, setIndex: number) {
     const targetSet = exerciseStates[exerciseIndex]?.sets[setIndex];
     if (!targetSet || targetSet.completedAt || isSaving) return;
@@ -695,17 +878,65 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     const previousActiveExerciseIndex = activeExerciseIndex;
     const previousActiveSetIndex = activeSetIndex;
     const previousTimer = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
+    const completedAt = new Date();
+    const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: completedAt.toISOString() });
+    const transition = planWorkoutSessionAfterSetCompletion({
+      exerciseIndex,
+      setIndex,
+      exerciseSetCounts: nextStates.map((item) => item.sets.length),
+      orderedSnapshotItems: executionCursorItems,
+      dayExercises: day.exercises,
+      restDurationSeconds: exerciseStates[exerciseIndex]?.exercise.rest_seconds ?? timerSeconds,
+      controllerDeviceId: controllerDeviceIdRef.current,
+      now: completedAt
+    });
+
     setIsSaving(true);
-    const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: new Date().toISOString() });
     setExerciseStates(nextStates);
-    const hasNextSet = completedSets + 1 < totalSets;
-    if (hasNextSet) {
-      startRestTimer(exerciseStates[exerciseIndex]?.exercise.rest_seconds ?? timerSeconds);
-      moveToNextSet(nextStates, exerciseIndex, setIndex);
-    }
 
     try {
-      await persistProgress(nextStates);
+      await persistCanonicalSetThenExecution({
+        saveCanonicalSet: async () => {
+          if (!session?.id) throw new Error("The workout session is unavailable.");
+          await saveWorkoutSetLogs(session.id, buildLogRows(nextStates));
+        },
+        persistExecutionState: async () => {
+          if (!user?.id || !session?.id || !executionHydratedRef.current) {
+            throw new Error("The workout execution state is unavailable.");
+          }
+          return queueExecutionWrite(
+            () => persistWorkoutSessionAfterSetCompletion(user.id, session.id, {
+              activeSnapshotItemId: transition.patch.active_snapshot_item_id,
+              activeItemOrder: transition.patch.active_item_order,
+              activeSetNumber: transition.patch.active_set_number,
+              viewState: transition.patch.view_state,
+              restStartedAt: transition.patch.rest_started_at,
+              restDurationSeconds: transition.patch.rest_duration_seconds,
+              restEndsAt: transition.patch.rest_ends_at,
+              controllerDeviceId: transition.patch.controller_device_id
+            }),
+            { reportFailure: false }
+          );
+        }
+      });
+
+      setActiveExerciseIndex(transition.nextExerciseIndex);
+      setActiveSetIndex(transition.nextSetIndex);
+      if (!transition.hasNextSet || transition.patch.view_state !== "rest") {
+        setTimerLeft(0);
+        setTimerEndsAtMs(null);
+        setIsTimerRunning(false);
+        clearStoredValue(restTimerKey);
+      }
+      if (transition.nextExerciseIndex !== exerciseIndex && transition.patch.view_state !== "rest") {
+        setTimerSeconds(nextStates[transition.nextExerciseIndex]?.exercise.rest_seconds ?? 75);
+      }
+      if (session?.id) {
+        const authoritativeState = executionWriteQueueRef.current.current();
+        if (authoritativeState) {
+          void updateWorkoutSessionDuration(session.id, executionDurationMinutes(authoritativeState)).catch(() => undefined);
+        }
+      }
       setMuscleLoadRevision((current) => current + 1);
       setSetFeedbackVariant("info");
       setSetFeedback(tr("set.savedDetails", { set: formatters.integer(targetSet.setNumber), reps: formatPlannedReps(targetSet.reps, formatters, "-"), weight: formatters.measurement(toNumberOrNull(targetSet.weightKg) ?? 0, "kg") }));
@@ -720,13 +951,31 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         }
       }
     } catch (error) {
-      setExerciseStates(previousStates);
-      setActiveExerciseIndex(previousActiveExerciseIndex);
-      setActiveSetIndex(previousActiveSetIndex);
-      restoreRestTimer(previousTimer);
-      setSetFeedbackVariant("error");
-      setSetFeedback(tr("offline.setSaveCombined"));
-      toast({ title: tr("completion.saveFailedTitle"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
+      if (error instanceof WorkoutSessionExecutionSyncError) {
+        setExerciseStates(nextStates);
+        setSetFeedbackVariant("error");
+        setSetFeedback(`${tr("set.saved")} ${tr("offline.keepOpenRetry")}`);
+        toast({ title: tr("set.saved"), description: userSafeError(error.cause, tr("offline.keepOpenRetry")) });
+        if (session?.id) {
+          const authoritativeState = executionWriteQueueRef.current.current();
+          if (authoritativeState) {
+            void updateWorkoutSessionDuration(session.id, executionDurationMinutes(authoritativeState)).catch(() => undefined);
+          }
+        }
+        try {
+          await reconcileSavedSetAfterExecutionFailure(nextStates);
+        } catch (reconcileError) {
+          console.warn("Plaivra saved the completed set but could not reconcile the workout position.", reconcileError);
+        }
+      } else {
+        setExerciseStates(previousStates);
+        setActiveExerciseIndex(previousActiveExerciseIndex);
+        setActiveSetIndex(previousActiveSetIndex);
+        restoreRestTimer(previousTimer);
+        setSetFeedbackVariant("error");
+        setSetFeedback(tr("offline.setSaveCombined"));
+        toast({ title: tr("completion.saveFailedTitle"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -753,6 +1002,46 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     }
   }
 
+  function executionCursorFor(exerciseIndex: number, setIndex: number) {
+    const exercise = day.exercises[exerciseIndex];
+    const item = executionCursorItems.find((candidate) => candidate.sourcePlanExerciseId === exercise?.id)
+      ?? executionCursorItems.find((candidate) => candidate.itemOrder === exerciseIndex + 1)
+      ?? null;
+    return {
+      snapshotItemId: item?.id ?? null,
+      itemOrder: item?.itemOrder ?? exerciseIndex + 1,
+      setNumber: setIndex + 1
+    };
+  }
+
+  function openSessionReview() {
+    setFinishOpen(true);
+    if (!user?.id || !session?.id || !executionHydratedRef.current) return;
+    const cursor = executionCursorFor(activeExerciseIndex, activeSetIndex);
+    void queueExecutionWrite((currentServerState) => persistWorkoutSessionCursor(user.id, session.id, {
+      ...cursor,
+      viewState: "session_review",
+      controllerDeviceId: controllerDeviceIdRef.current,
+      currentState: currentServerState
+    }));
+  }
+
+  function handleSessionReviewOpenChange(open: boolean) {
+    if (open) {
+      openSessionReview();
+      return;
+    }
+    setFinishOpen(false);
+    if (!user?.id || !session?.id || !executionHydratedRef.current) return;
+    const cursor = executionCursorFor(activeExerciseIndex, activeSetIndex);
+    void queueExecutionWrite((currentServerState) => persistWorkoutSessionCursor(user.id, session.id, {
+      ...cursor,
+      viewState: isFinished ? "exercise_complete" : "set_entry",
+      controllerDeviceId: controllerDeviceIdRef.current,
+      currentState: currentServerState
+    }));
+  }
+
   async function completeSession() {
     if (!session || isSaving) return;
     try {
@@ -774,10 +1063,24 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   }
 
   function resetWorkoutTimer() {
+    const previousStartedAt = startedAtMs;
+    const previousElapsed = elapsedSeconds;
     const nextStartedAt = Date.now();
     setStartedAtMs(nextStartedAt);
     setElapsedSeconds(0);
     storeTimestamp(workoutTimerKey, nextStartedAt);
+    if (user?.id && session?.id && executionHydratedRef.current) {
+      void queueExecutionWrite(
+        () => persistWorkoutSessionTimerReset(user.id, session.id, controllerDeviceIdRef.current),
+        {
+          rollback: () => {
+            setStartedAtMs(previousStartedAt);
+            setElapsedSeconds(previousElapsed);
+            storeTimestamp(workoutTimerKey, previousStartedAt);
+          }
+        }
+      );
+    }
     if (session) updateWorkoutSessionDuration(session.id, 1).catch(() => undefined);
   }
 
@@ -994,7 +1297,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                 <Button type="button" variant="outline" className="min-h-12 rounded-[16px]" onClick={() => setActionsOpen(true)}>
                   <MoreHorizontal className="mr-2 h-4 w-4" /> {tr("common.more")}
                 </Button>
-                <Button type="button" variant="outline" className="min-h-12 rounded-[16px]" onClick={() => setFinishOpen(true)}>
+                <Button type="button" variant="outline" className="min-h-12 rounded-[16px]" onClick={openSessionReview}>
                   <Save className="mr-2 h-4 w-4" /> {tr("common.finish")}
                 </Button>
               </div>
@@ -1011,7 +1314,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                   {tr("exercise.nextExercise", { name: isolateBidiText(nextExercise.exercise.exercise_name) })}
                 </Button>
               ) : (
-                <Button className="mt-4 min-h-[52px] rounded-[18px]" onClick={() => setFinishOpen(true)}><Save className="me-2 h-4 w-4" /> {tr("common.finish")}</Button>
+                <Button className="mt-4 min-h-[52px] rounded-[18px]" onClick={openSessionReview}><Save className="me-2 h-4 w-4" /> {tr("common.finish")}</Button>
               )}
             </MotionCard>
           )}
@@ -1086,7 +1389,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                 <InfoStat label={tr("navigation.exercisesCount", { count: exerciseStates.filter((item) => item.sets.some((set) => set.completedAt)).length })} value={formatters.ratio(exerciseStates.filter((item) => item.sets.some((set) => set.completedAt)).length, exerciseStates.length)} valueDirection="ltr" />
                 <InfoStat label={tr("review.personalRecords")} value={formatters.integer(previewPrs.length)} />
               </div>
-              <Button className="min-h-12 w-full rounded-[18px]" onClick={() => setFinishOpen(true)} disabled={!session || isSaving}>
+              <Button className="min-h-12 w-full rounded-[18px]" onClick={openSessionReview} disabled={!session || isSaving}>
                 <Save className="mr-2 h-4 w-4" /> {isFinished ? tr("common.finish") : tr("review.partialFinish")}
               </Button>
             </CardContent>
@@ -1187,7 +1490,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         }}
       />
 
-      <Dialog open={finishOpen} onOpenChange={setFinishOpen}>
+      <Dialog open={finishOpen} onOpenChange={handleSessionReviewOpenChange}>
           <DialogContent layout="responsive-drawer" className="p-5 lg:max-w-lg lg:rounded-[28px]">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
@@ -1209,7 +1512,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
             <Button className="mt-4 min-h-[52px] w-full rounded-[18px]" onClick={completeSession} disabled={isSaving || !session}>
               <Save className="me-2 h-4 w-4" /> {isSaving ? tr("common.saving") : isFinished ? tr("common.save") : tr("common.save")}
             </Button>
-            <Button className="mt-2 min-h-[52px] w-full rounded-[18px]" variant="outline" onClick={() => setFinishOpen(false)}>{tr("review.continueWorkout")}</Button>
+            <Button className="mt-2 min-h-[52px] w-full rounded-[18px]" variant="outline" onClick={() => handleSessionReviewOpenChange(false)}>{tr("review.continueWorkout")}</Button>
           </DialogContent>
       </Dialog>
 
@@ -1232,7 +1535,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                 <p className="font-semibold text-foreground">{tr("completion.title")}</p>
                 <p className="truncate text-xs text-muted-foreground"><span dir="ltr" className="tabular-nums">{formatters.timer(elapsedSeconds)}</span> · {formatters.integer(completedSets)} {tr("set.labelPlural")}</p>
               </div>
-              <Button className="min-h-[52px] flex-1 text-base" onClick={() => setFinishOpen(true)} disabled={isSaving || !session}>
+              <Button className="min-h-[52px] flex-1 text-base" onClick={openSessionReview} disabled={isSaving || !session}>
                 <Save className="me-2 h-5 w-5" /> {tr("common.finish")}
               </Button>
             </>

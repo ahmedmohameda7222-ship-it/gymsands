@@ -145,13 +145,14 @@ describe("Muscle Intelligence Phase 3 migration contract", () => {
     });
     const pendingCorrectionCount = correctionEntries.filter((entry) => entry.state === "pending").length;
     const appliedCorrectionCount = correctionEntries.filter((entry) => entry.state === "applied").length;
+    const totalPendingCount = ledger.entries.filter((entry) => entry.state === "pending").length;
 
     expect(ledger.productionMigrationCount).toBe(ledger.entries.filter((entry) => entry.state === "applied").length);
-    expect(ledger.pendingCount).toBe(pendingCorrectionCount);
-    expect(ledger.unresolvedCount).toBe(pendingCorrectionCount);
-    expect(ledger.historyRepair.pendingCount).toBe(pendingCorrectionCount);
-    expect(ledger.historyRepair.unresolvedCount).toBe(pendingCorrectionCount);
-    expect(ledger.historyRepair.state).toBe(pendingCorrectionCount > 0 ? "pending" : "reconciled");
+    expect(ledger.pendingCount).toBe(totalPendingCount);
+    expect(ledger.unresolvedCount).toBe(totalPendingCount);
+    expect(ledger.historyRepair.pendingCount).toBe(totalPendingCount);
+    expect(ledger.historyRepair.unresolvedCount).toBe(totalPendingCount);
+    expect(ledger.historyRepair.state).toBe(totalPendingCount > 0 ? "pending" : "reconciled");
     expect(pendingCorrectionCount + appliedCorrectionCount).toBe(expectedCorrectionEntries.length);
 
     expect(verificationEntrypoint.trimEnd().endsWith("rollback;")).toBe(true);
