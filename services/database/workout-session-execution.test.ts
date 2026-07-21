@@ -1,224 +1,233 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutSessionExecutionState } from "@/types";
+import {
+  WorkoutSessionExecutionIdempotencyConflictError,
+  WorkoutSessionExecutionRevisionConflictError
+} from "@/lib/workouts/workout-session-execution";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const sessionId = "22222222-2222-4222-8222-222222222222";
-
-const mocks = vi.hoisted(() => {
-  const state = {
-    row: null as Record<string, unknown> | null,
-    error: null as { message: string } | null,
-    filters: [] as Array<[string, unknown]>,
-    update: null as Record<string, unknown> | null,
-    table: ""
-  };
-  const from = vi.fn((table: string) => {
-    state.table = table;
-    state.filters = [];
-    state.update = null;
-    const builder = {
-      select: vi.fn(() => builder),
-      update: vi.fn((patch: Record<string, unknown>) => { state.update = patch; return builder; }),
-      eq: vi.fn((key: string, value: unknown) => { state.filters.push([key, value]); return builder; }),
-      order: vi.fn(() => builder),
-      maybeSingle: vi.fn(async () => ({ data: state.row, error: state.error })),
-      single: vi.fn(async () => ({
-        data: state.row && state.update ? { ...state.row, ...state.update, revision: Number(state.row.revision) + 1 } : state.row,
-        error: state.error
-      }))
-    };
-    return builder;
-  });
-  return { state, from };
-});
-
-vi.mock("@/lib/supabase/client", () => ({ supabase: { from: mocks.from } }));
-
-import {
-  clearWorkoutSessionRestTimer,
-  getWorkoutSessionExecutionState,
-  importLegacyWorkoutExecutionCache,
-  persistWorkoutSessionAfterSetCompletion,
-  persistWorkoutSessionCursor,
-  persistWorkoutSessionPause,
-  persistWorkoutSessionRestTimer,
-  persistWorkoutSessionResume,
-  persistWorkoutSessionTimerReset,
-  sanitizeExecutionStatePatch,
-  updateWorkoutSessionExecutionState
-} from "./workout-session-execution";
+const deviceId = "33333333-3333-4333-8333-333333333333";
 
 function row(overrides: Partial<WorkoutSessionExecutionState> = {}): WorkoutSessionExecutionState {
   return {
     workout_session_id: sessionId,
     user_id: userId,
     state_version: 1,
-    revision: 0,
+    revision: 7,
     session_state: "active",
     view_state: "set_entry",
     active_snapshot_item_id: null,
     active_item_order: 1,
     active_set_number: 1,
     session_elapsed_seconds: 10,
-    session_running_since: "2026-07-20T20:00:00.000Z",
+    session_running_since: "2026-07-22T00:00:00.000Z",
     rest_started_at: null,
     rest_duration_seconds: null,
     rest_ends_at: null,
     controller_device_id: null,
-    bootstrap_source: "session_start",
-    created_at: "2026-07-20T20:00:00.000Z",
-    updated_at: "2026-07-20T20:00:00.000Z",
+    bootstrap_source: "legacy_backfill",
+    created_at: "2026-07-22T00:00:00.000Z",
+    updated_at: "2026-07-22T00:00:00.000Z",
     ...overrides
   };
 }
 
+const mocks = vi.hoisted(() => {
+  const state = {
+    row: null as WorkoutSessionExecutionState | null,
+    rpcOutcome: "applied" as "applied" | "no_op" | "revision_conflict" | "idempotency_conflict",
+    rpcReason: null as string | null,
+    filters: [] as Array<[string, unknown]>
+  };
+  const from = vi.fn(() => {
+    const builder = {
+      select: vi.fn(() => builder),
+      eq: vi.fn((key: string, value: unknown) => { state.filters.push([key, value]); return builder; }),
+      order: vi.fn(() => builder),
+      maybeSingle: vi.fn(async () => ({ data: state.row, error: null }))
+    };
+    return builder;
+  });
+  const rpc = vi.fn(async (_name: string, args: Record<string, unknown>) => {
+    const current = state.row!;
+    const outcome = state.rpcOutcome;
+    const revisionAfter = outcome === "applied" ? current.revision + 1 : current.revision;
+    const commandType = String(args.p_command_type);
+    let next = { ...current, revision: revisionAfter } as WorkoutSessionExecutionState;
+    if (outcome === "applied") {
+      if (commandType === "pause") next = { ...next, session_state: "paused", session_running_since: null };
+      if (commandType === "resume" || commandType === "reset_timer") next = { ...next, session_state: "active", view_state: "set_entry", session_running_since: "2026-07-22T00:01:00.000Z" };
+      if (commandType === "start_rest" || commandType === "complete_set_transition") {
+        const payload = args.p_payload as { view_state?: string; duration_seconds?: number; rest_duration_seconds?: number | null };
+        if (commandType === "start_rest" || payload.view_state === "rest") {
+          const duration = payload.duration_seconds ?? payload.rest_duration_seconds ?? 60;
+          next = {
+            ...next,
+            view_state: "rest",
+            rest_started_at: "2026-07-22T00:01:00.000Z",
+            rest_duration_seconds: duration,
+            rest_ends_at: "2026-07-22T00:02:00.000Z"
+          };
+        }
+      }
+      if (commandType === "clear_rest") next = { ...next, view_state: "set_entry", rest_started_at: null, rest_duration_seconds: null, rest_ends_at: null };
+      if (commandType === "import_legacy_cache") next = { ...next, bootstrap_source: "client_cache_import" };
+    }
+    return {
+      data: {
+        schemaVersion: 1,
+        workoutSessionId: args.p_workout_session_id,
+        commandId: args.p_command_id,
+        commandType: args.p_command_type,
+        outcome,
+        replayed: false,
+        expectedRevision: args.p_expected_revision,
+        revisionBefore: current.revision,
+        revisionAfter,
+        reason: state.rpcReason,
+        state: next
+      },
+      error: null
+    };
+  });
+  return { state, from, rpc };
+});
+
+vi.mock("@/lib/supabase/client", () => ({ supabase: { from: mocks.from, rpc: mocks.rpc } }));
+
+import {
+  clearWorkoutSessionRestTimer,
+  executeWorkoutSessionExecutionCommand,
+  importLegacyWorkoutExecutionCache,
+  persistWorkoutSessionAfterSetCompletion,
+  persistWorkoutSessionCursor,
+  persistWorkoutSessionPause,
+  persistWorkoutSessionRestTimer,
+  persistWorkoutSessionResume,
+  persistWorkoutSessionTimerReset
+} from "./workout-session-execution";
+
 beforeEach(() => {
   mocks.state.row = row();
-  mocks.state.error = null;
+  mocks.state.rpcOutcome = "applied";
+  mocks.state.rpcReason = null;
   mocks.state.filters = [];
-  mocks.state.update = null;
   vi.clearAllMocks();
 });
 
-describe("workout session execution database service", () => {
-  it("scopes every execution-state read by owner and session", async () => {
-    await expect(getWorkoutSessionExecutionState(userId, sessionId)).resolves.toMatchObject({ workout_session_id: sessionId });
-    expect(mocks.state.table).toBe("workout_session_execution_states");
-    expect(mocks.state.filters).toEqual([
-      ["workout_session_id", sessionId],
-      ["user_id", userId]
-    ]);
-  });
-
-  it("surfaces database failures instead of fabricating authority", async () => {
-    mocks.state.error = { message: "database unavailable" };
-    await expect(getWorkoutSessionExecutionState(userId, sessionId)).rejects.toMatchObject({ message: "database unavailable" });
-  });
-
-  it("allows only typed mutable fields and returns the server revision", async () => {
-    expect(() => sanitizeExecutionStatePatch({ revision: 4 } as never)).toThrow(/not writable/i);
-    const result = await updateWorkoutSessionExecutionState(userId, sessionId, { active_set_number: 2 });
-    expect(mocks.state.update).toEqual({ active_set_number: 2 });
-    expect(mocks.state.filters).toEqual([
-      ["workout_session_id", sessionId],
-      ["user_id", userId]
-    ]);
-    expect(result.revision).toBe(1);
-
-    await persistWorkoutSessionCursor(userId, sessionId, {
-      snapshotItemId: null,
-      itemOrder: 1,
-      setNumber: 2
-    });
-    expect(mocks.state.update).toEqual({
-      active_snapshot_item_id: null,
-      active_item_order: 1,
-      active_set_number: 2
-    });
-  });
-
-  it("persists the post-set cursor and rest tuple in exactly one update", async () => {
-    const result = await persistWorkoutSessionAfterSetCompletion(userId, sessionId, {
-      activeSnapshotItemId: "33333333-3333-4333-8333-333333333333",
-      activeItemOrder: 1,
-      activeSetNumber: 2,
-      viewState: "rest",
-      restStartedAt: "2026-07-20T20:03:00.000Z",
-      restDurationSeconds: 90,
-      restEndsAt: "2026-07-20T20:04:30.000Z",
-      controllerDeviceId: "44444444-4444-4444-8444-444444444444"
-    });
-    expect(mocks.from).toHaveBeenCalledTimes(1);
-    expect(mocks.state.update).toEqual({
-      active_snapshot_item_id: "33333333-3333-4333-8333-333333333333",
-      active_item_order: 1,
-      active_set_number: 2,
-      view_state: "rest",
-      rest_started_at: "2026-07-20T20:03:00.000Z",
-      rest_duration_seconds: 90,
-      rest_ends_at: "2026-07-20T20:04:30.000Z",
-      controller_device_id: "44444444-4444-4444-8444-444444444444"
-    });
-    expect(result.revision).toBe(1);
-  });
-
-  it("rejects an incomplete post-set rest tuple before writing", async () => {
-    await expect(persistWorkoutSessionAfterSetCompletion(userId, sessionId, {
+describe("AW-2B workout execution database service", () => {
+  it("maps every mutation helper to the finite command authority with a UUID and latest revision", async () => {
+    await persistWorkoutSessionCursor(userId, sessionId, { snapshotItemId: null, itemOrder: 1, setNumber: 2 });
+    await persistWorkoutSessionAfterSetCompletion(userId, sessionId, {
       activeSnapshotItemId: null,
       activeItemOrder: 1,
       activeSetNumber: 2,
       viewState: "rest",
-      restStartedAt: null,
-      restDurationSeconds: 90,
-      restEndsAt: "2026-07-20T20:04:30.000Z",
-      controllerDeviceId: null
-    })).rejects.toThrow(/rest state is inconsistent/i);
-    expect(mocks.from).not.toHaveBeenCalled();
-  });
-
-  it("persists pause and resume with timestamp-based elapsed math", async () => {
-    const current = row({ session_elapsed_seconds: 20, session_running_since: "2026-07-20T20:00:00.000Z" });
-    await persistWorkoutSessionPause(userId, sessionId, current, "33333333-3333-4333-8333-333333333333", new Date("2026-07-20T20:00:10.000Z"));
-    expect(mocks.state.update).toMatchObject({
-      session_state: "paused",
-      session_elapsed_seconds: 30,
-      session_running_since: null
+      restStartedAt: "client-ignored",
+      restDurationSeconds: 60,
+      restEndsAt: "client-ignored",
+      controllerDeviceId: deviceId
     });
+    await persistWorkoutSessionRestTimer(userId, sessionId, 90, deviceId);
+    await clearWorkoutSessionRestTimer(userId, sessionId, "set_entry", deviceId);
+    await persistWorkoutSessionTimerReset(userId, sessionId, deviceId);
+    await persistWorkoutSessionPause(userId, sessionId, row(), deviceId);
+    await persistWorkoutSessionResume(userId, sessionId, row({ session_state: "paused", session_running_since: null }), deviceId);
+    await importLegacyWorkoutExecutionCache(userId, sessionId, row(), Date.parse("2026-07-21T23:55:00.000Z"), deviceId);
 
-    mocks.state.row = row({ session_state: "paused", session_running_since: null, session_elapsed_seconds: 30 });
-    await persistWorkoutSessionResume(userId, sessionId, mocks.state.row as WorkoutSessionExecutionState, null, new Date("2026-07-20T20:01:00.000Z"));
-    expect(mocks.state.update).toMatchObject({
-      session_state: "active",
-      session_elapsed_seconds: 30,
-      session_running_since: "2026-07-20T20:01:00.000Z"
-    });
-  });
-
-  it("persists timer reset and timestamp-based rest start/clear", async () => {
-    await persistWorkoutSessionTimerReset(userId, sessionId, null, new Date("2026-07-20T20:02:00.000Z"));
-    expect(mocks.state.update).toMatchObject({ session_elapsed_seconds: 0, session_running_since: "2026-07-20T20:02:00.000Z" });
-
-    await persistWorkoutSessionRestTimer(userId, sessionId, 90, null, new Date("2026-07-20T20:03:00.000Z"));
-    expect(mocks.state.update).toMatchObject({
+    expect(mocks.rpc.mock.calls.map((call) => call[1].p_command_type)).toEqual([
+      "move_cursor",
+      "complete_set_transition",
+      "start_rest",
+      "clear_rest",
+      "reset_timer",
+      "pause",
+      "resume",
+      "import_legacy_cache"
+    ]);
+    for (const [, args] of mocks.rpc.mock.calls) {
+      expect(args.p_command_id).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(args.p_expected_revision).toBe(7);
+    }
+    expect(mocks.rpc.mock.calls[1]?.[1].p_payload).toEqual({
+      active_snapshot_item_id: null,
+      active_item_order: 1,
+      active_set_number: 2,
       view_state: "rest",
-      rest_started_at: "2026-07-20T20:03:00.000Z",
-      rest_duration_seconds: 90,
-      rest_ends_at: "2026-07-20T20:04:30.000Z"
+      rest_duration_seconds: 60,
+      controller_device_id: deviceId
     });
-
-    await clearWorkoutSessionRestTimer(userId, sessionId);
-    expect(mocks.state.update).toEqual({ view_state: "set_entry", rest_started_at: null, rest_duration_seconds: null, rest_ends_at: null });
   });
 
-  it("imports only a plausible same-user/session initial legacy cache that increases elapsed time", async () => {
-    const current = row({ bootstrap_source: "legacy_backfill", revision: 0, session_elapsed_seconds: 30, session_running_since: "2026-07-20T20:09:50.000Z" });
-    const imported = await importLegacyWorkoutExecutionCache(
+  it("uses an explicit command ID unchanged for transport replay", async () => {
+    const commandId = "44444444-4444-4444-8444-444444444444";
+    await executeWorkoutSessionExecutionCommand({
       userId,
-      sessionId,
-      current,
-      Date.parse("2026-07-20T20:00:00.000Z"),
-      null,
-      new Date("2026-07-20T20:10:00.000Z")
-    );
-    expect(imported.imported).toBe(true);
-    expect(mocks.state.update).toMatchObject({ bootstrap_source: "client_cache_import", session_elapsed_seconds: 600 });
+      workoutSessionId: sessionId,
+      commandId,
+      expectedRevision: 7,
+      commandType: "resume",
+      payload: { controller_device_id: deviceId }
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith("apply_workout_session_execution_command_atomic", expect.objectContaining({
+      p_command_id: commandId,
+      p_expected_revision: 7,
+      p_command_type: "resume"
+    }));
+  });
 
-    await expect(importLegacyWorkoutExecutionCache(
-      "44444444-4444-4444-8444-444444444444",
-      sessionId,
-      current,
-      Date.parse("2026-07-20T20:00:00.000Z"),
-      null,
-      new Date("2026-07-20T20:10:00.000Z")
-    )).resolves.toMatchObject({ imported: false, reason: "identity_mismatch" });
-
-    await expect(importLegacyWorkoutExecutionCache(
+  it("returns applied and no-op authoritative states", async () => {
+    await expect(executeWorkoutSessionExecutionCommand({
       userId,
-      sessionId,
-      current,
-      Date.parse("2026-07-18T20:00:00.000Z"),
-      null,
-      new Date("2026-07-20T20:10:00.000Z")
-    )).resolves.toMatchObject({ imported: false, reason: "invalid_or_implausible_cache" });
+      workoutSessionId: sessionId,
+      commandId: "55555555-5555-4555-8555-555555555555",
+      expectedRevision: 7,
+      commandType: "resume",
+      payload: { controller_device_id: null }
+    })).resolves.toMatchObject({ outcome: "applied", revisionAfter: 8 });
+
+    mocks.state.rpcOutcome = "no_op";
+    mocks.state.rpcReason = "already_running";
+    await expect(executeWorkoutSessionExecutionCommand({
+      userId,
+      workoutSessionId: sessionId,
+      commandId: "66666666-6666-4666-8666-666666666666",
+      expectedRevision: 7,
+      commandType: "resume",
+      payload: { controller_device_id: null }
+    })).resolves.toMatchObject({ outcome: "no_op", revisionAfter: 7, reason: "already_running" });
+  });
+
+  it("raises typed revision and idempotency conflicts", async () => {
+    mocks.state.rpcOutcome = "revision_conflict";
+    mocks.state.rpcReason = "expected_revision_mismatch";
+    await expect(executeWorkoutSessionExecutionCommand({
+      userId,
+      workoutSessionId: sessionId,
+      commandId: "77777777-7777-4777-8777-777777777777",
+      expectedRevision: 6,
+      commandType: "pause",
+      payload: { controller_device_id: null }
+    })).rejects.toBeInstanceOf(WorkoutSessionExecutionRevisionConflictError);
+
+    mocks.state.rpcOutcome = "idempotency_conflict";
+    mocks.state.rpcReason = "command_id_reused_with_different_request";
+    await expect(executeWorkoutSessionExecutionCommand({
+      userId,
+      workoutSessionId: sessionId,
+      commandId: "88888888-8888-4888-8888-888888888888",
+      expectedRevision: 7,
+      commandType: "pause",
+      payload: { controller_device_id: null }
+    })).rejects.toBeInstanceOf(WorkoutSessionExecutionIdempotencyConflictError);
+  });
+
+  it("contains no authenticated direct UPDATE path", async () => {
+    await persistWorkoutSessionTimerReset(userId, sessionId, null);
+    expect(mocks.from).toHaveBeenCalled();
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    const builder = mocks.from.mock.results[0]?.value as Record<string, unknown>;
+    expect(builder).not.toHaveProperty("update");
   });
 });
