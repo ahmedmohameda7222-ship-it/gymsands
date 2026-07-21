@@ -76,14 +76,14 @@ jobs:
           quality_run_id=""
           for attempt in $(seq 1 90); do
             quality_run_id="$(
-              gh run list \
+              PREVIOUS_RUN_ID="$previous_run_id" gh run list \
                 --repo "$GITHUB_REPOSITORY" \
                 --workflow quality.yml \
                 --branch "$HEAD_REF" \
                 --event workflow_dispatch \
                 --limit 100 \
                 --json databaseId,headSha \
-                --jq '[.[] | select(.headSha == "'"$REVIEWED_COMMIT"'" and .databaseId > '"$previous_run_id"') | .databaseId] | max // empty'
+                --jq '[.[] | select(.headSha == env.REVIEWED_COMMIT and .databaseId > (env.PREVIOUS_RUN_ID | tonumber)) | .databaseId] | max // empty'
             )"
             if [[ "$quality_run_id" =~ ^[0-9]+$ ]]; then break; fi
             sleep 2
@@ -145,14 +145,14 @@ jobs:
           preflight_run_id=""
           for attempt in $(seq 1 90); do
             preflight_run_id="$(
-              gh run list \
+              PREVIOUS_RUN_ID="$previous_run_id" gh run list \
                 --repo "$GITHUB_REPOSITORY" \
                 --workflow release-preflight.yml \
                 --branch "$HEAD_REF" \
                 --event workflow_dispatch \
                 --limit 100 \
                 --json databaseId,headSha \
-                --jq '[.[] | select(.headSha == "'"$REVIEWED_COMMIT"'" and .databaseId > '"$previous_run_id"') | .databaseId] | max // empty'
+                --jq '[.[] | select(.headSha == env.REVIEWED_COMMIT and .databaseId > (env.PREVIOUS_RUN_ID | tonumber)) | .databaseId] | max // empty'
             )"
             if [[ "$preflight_run_id" =~ ^[0-9]+$ ]]; then break; fi
             sleep 2
