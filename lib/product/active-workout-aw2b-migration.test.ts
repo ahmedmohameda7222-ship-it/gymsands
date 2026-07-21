@@ -7,7 +7,9 @@ const migration = readFileSync(migrationPath, "utf8").replaceAll("\r\n", "\n");
 const service = readFileSync("services/database/workout-session-execution.ts", "utf8").replaceAll("\r\n", "\n");
 const contract = readFileSync("lib/workouts/workout-session-execution.ts", "utf8").replaceAll("\r\n", "\n");
 const privacy = readFileSync("docs/privacy/active-workout-command-receipts.md", "utf8").replaceAll("\r\n", "\n");
-const ledger = readFileSync("supabase/migration-ledger.json", "utf8").replaceAll("\r\n", "\n");
+const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
+  entries: Array<{ localFile: string; state: string; productionVersion?: string }>;
+};
 
 function sha256(path: string) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -81,7 +83,10 @@ describe("AW-2B command authority migration contract", () => {
   it("documents the short-lived privacy export exclusion and reconciles the migration ledger", () => {
     expect(privacy).toContain("excludes `workout_session_execution_commands` from the user data export");
     expect(privacy).toContain("cascades when its transient");
-    expect(ledger).toContain('"localFile": "20260722013000_active_workout_aw2b_command_authority.sql"');
-    expect(ledger).toContain('"state": "applied"');
+    expect(ledger.entries).toContainEqual(expect.objectContaining({
+      localFile: "20260722013000_active_workout_aw2b_command_authority.sql",
+      state: "applied_version_alias",
+      productionVersion: "20260721224813"
+    }));
   });
 });
