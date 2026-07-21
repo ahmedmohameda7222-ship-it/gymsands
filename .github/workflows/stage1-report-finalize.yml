@@ -1,0 +1,141 @@
+name: Stage 1 Finalize Implementation Report
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
+    paths:
+      - .github/workflows/stage1-report-finalize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.event.pull_request.head.ref == 'fix/aw2a-post-merge-release-closure'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/aw2a-post-merge-release-closure
+          fetch-depth: 0
+      - name: Append validated correction evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          report=plaivra_aw2a_post_merge_release_closure_implementation_report.md
+          cat >> "$report" <<'REPORT'
+
+---
+
+# Final corrected candidate evidence
+
+This section supersedes the earlier pre-correction Stage-2 handoff and the earlier candidate run identities. Stage 2 was not executable end-to-end before the Final Planner QA/QC correction because Production authorization, database-target identity, ledger-derived migration targeting, comparison-base identity, and orchestration request identity were not all bound by the permanent workflow chain.
+
+## Corrected candidate identity
+
+```text
+correction starting head: 3d50008140fc026b313052aaf7df199fd4bcbbb7
+validated corrected candidate head: 6beb21c34836303d5d993cf2f3df8eb65eb08fa2
+comparison base: 93f6aaad5d170bf5cfe304597317c7ffa3016e2a
+derived expected migration: 20260721012814
+```
+
+## Candidate exact-head validation
+
+```text
+Phase A Diff Validation: 29866221693 — completed/success
+PR Quality: 29866221512 — completed/success
+Exact Release Quality Validation: 29866221706 — completed/success
+manual exact-head full Quality: 29866229805 — completed/success
+validation request ID: stage1-q-29866221706-1-6beb21c34836303d5d993cf2f3df8eb65eb08fa2
+preflight request ID: stage1-p-29866221706-1-6beb21c34836303d5d993cf2f3df8eb65eb08fa2
+Stage-1 Release preflight: 29867254970 — completed/success
+```
+
+Canonical Quality artifact:
+
+```text
+name: quality-reports-29866229805
+artifact ID: 8509678793
+digest: sha256:b306fb0abaf422de5c6d15bad479e5c37fa5d724b82bf262d36f5ba9ab64cbdd
+reviewed commit: 6beb21c34836303d5d993cf2f3df8eb65eb08fa2
+comparison base: 93f6aaad5d170bf5cfe304597317c7ffa3016e2a
+validation request ID: stage1-q-29866221706-1-6beb21c34836303d5d993cf2f3df8eb65eb08fa2
+expected migration: 20260721012814
+full release quality: true
+all 16 required gates: passed
+all gate exit codes: 0
+all stale flags: false
+```
+
+Known unit-failure parity:
+
+```text
+head tests: 1249
+base tests: 1249
+head failures: 4
+base failures: 4
+introduced failure identities: 0
+removed failure identities: 0
+parity: passed
+```
+
+Stage-1 preflight evidence:
+
+```text
+schemaVersion: 2
+ready: true
+qualityArtifactValid: true
+validationContext: stage1-infrastructure-validation
+productionPromotionAuthorized: false
+deploymentPerformed: false
+productionMutationPerformed: false
+failures: []
+```
+
+## Final corrected contracts
+
+- Stage-1 preflight remains read-only and cannot authorize promotion.
+- Production marker-promotion authorization remains read-only but requires the exact deliberate token `AUTHORIZE_PRODUCTION_MARKER_PROMOTION_<reviewed_commit>_<quality_run_id>_<expected_migration>`.
+- The token, reviewed commit, comparison base, Quality run, validation request, preflight request, and expected migration are bound end-to-end.
+- Quality and preflight derive the expected migration from the exact reconciled ledger; no generic permanent hardcoded AW-2A target remains.
+- Manifest generation rejects requested-target and ledger-head mismatch.
+- Synthetic future-ledger coverage proves a later reconciled migration advances the target without source edits.
+- Direct Production URL acceptance requires `db.bkwezjxvapaeasfvlhvv.supabase.co` with user `postgres`.
+- Pooler acceptance requires a recognized `*.pooler.supabase.com` endpoint with user `postgres.bkwezjxvapaeasfvlhvv`.
+- Activity Catalog direct and pooler identities, other projects, generic PostgreSQL, localhost, malformed/insecure URLs, and project-ref mismatches are rejected before adapter construction or database reads.
+- Exact orchestration discovers request-bound run names and independently verifies downloaded Quality and preflight evidence.
+- Exact validation permissions are limited to `actions: write`, `contents: read`, and `issues: write`; `pull-requests: write` and `pull_request_target` are absent.
+
+## Final corrected changed-file scope
+
+1. `.github/workflows/exact-release-quality-validation.yml`
+2. `.github/workflows/quality.yml`
+3. `.github/workflows/release-preflight.yml`
+4. `plaivra_aw2a_post_merge_release_closure_implementation_report.md`
+5. `release/release-manifest.template.json`
+6. `scripts/create-release-manifest.mjs`
+7. `scripts/permanent-quality-replay.test.mjs`
+8. `scripts/promote-release-schema-compatibility.mjs`
+9. `scripts/promote-release-schema-compatibility.test.mjs`
+10. `scripts/quality-evidence-contract.mjs`
+11. `scripts/release-closure-final-qa.test.mjs`
+12. `scripts/release-closure-stage1.test.mjs`
+13. `scripts/release-identity-contract.mjs`
+14. `scripts/release-preflight.mjs`
+15. `scripts/run-quality-gate.mjs`
+16. `scripts/run-quality-gate.test.mjs`
+
+No application path or migration path is changed. No Production write, marker promotion, Activity Catalog operation, merge, deployment, or AW-2B work occurred.
+
+The report-only commit that contains this section cannot contain its own content-derived SHA. The permanent exact-validation workflow must therefore emit and retain the exact report-head run identities after this commit, and the Planner handoff must use those final report-head identities rather than the candidate identities above.
+REPORT
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$report"
+          git commit -m "docs(release): record final Stage 1 correction evidence"
+          git push origin HEAD:fix/aw2a-post-merge-release-closure
