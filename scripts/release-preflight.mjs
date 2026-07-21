@@ -5,7 +5,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
 import {
-  EXPECTED_DATABASE_MIGRATION,
   EXPECTED_REPOSITORY,
   REQUIRED_CANONICAL_FILES,
   REQUIRED_QUALITY_GATES,
@@ -15,6 +14,15 @@ import {
   safeRelativePath,
   sha256File,
 } from "./quality-evidence-contract.mjs";
+import {
+  PRODUCTION_AUTHORIZATION_CONTEXT,
+  STAGE1_VALIDATION_CONTEXT,
+  authorizeProductionPromotion,
+  deriveReleaseTarget,
+  expectedMigrationVersion,
+  validationContext,
+  validationRequestId,
+} from "./release-identity-contract.mjs";
 import { installedNextVersion as readInstalledNextVersion } from "./release-runtime-versions.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -27,7 +35,7 @@ function parseArgs(argv) {
     if (!argument.startsWith("--")) throw new Error(`Unexpected argument: ${argument}`);
     const key = argument.slice(2);
     const value = argv[index + 1];
-    if (!value || value.startsWith("--")) throw new Error(`Missing value for --${key}`);
+    if (value === undefined || value.startsWith("--")) throw new Error(`Missing value for --${key}`);
     options[key] = value;
     index += 1;
   }
@@ -112,12 +120,18 @@ export function validateCanonicalQualityArtifact({
   expectedRepository,
   qualityRunId,
   migrationState,
+  expectedComparisonBase,
+  expectedValidationRequestId,
+  expectedMigration,
   now = Date.now(),
 }) {
   const failures = [];
   const expectedSha = exactCommit(expectedCommit, "Reviewed commit");
   const expectedRepo = safeRepository(expectedRepository);
   const expectedRun = numericRunId(qualityRunId);
+  const expectedTarget = expectedMigrationVersion(
+    expectedMigration || migrationState.latestAppliedMigrationVersion,
+  );
   const manifestFile = requiredFile(reportsPath, "release-manifest.json", failures, "release_manifest");
   const metadataFile = requiredFile(reportsPath, "artifact-metadata.json", failures, "artifact_metadata");
   const indexFile = requiredFile(reportsPath, "evidence-index.json", failures, "evidence_index");
@@ -126,17 +140,21 @@ export function validateCanonicalQualityArtifact({
   const manifest = readJson(manifestFile.absolutePath, "release manifest");
   const metadata = readJson(metadataFile.absolutePath, "artifact metadata");
   const index = readJson(indexFile.absolutePath, "evidence index");
+  const expectedBase = exactCommit(expectedComparisonBase || metadata.comparisonBase, "Expected comparison base");
+  const expectedRequest = validationRequestId(
+    expectedValidationRequestId || metadata.validationRequestId || "legacy-test-request",
+  );
 
   if (manifest.release?.commitSha !== expectedSha) failures.push("release_manifest_commit_mismatch");
   if (manifest.release?.environment !== "ci") failures.push("release_manifest_environment_mismatch");
   if (String(manifest.release?.schemaCompatibilityVersion ?? "") !== "2") {
     failures.push("release_manifest_schema_compatibility_mismatch");
   }
-  if (manifest.release?.expectedDatabaseMigrationVersion !== EXPECTED_DATABASE_MIGRATION) {
+  if (manifest.release?.expectedDatabaseMigrationVersion !== expectedTarget) {
     failures.push("release_manifest_unexpected_migration");
   }
-  if (manifest.release?.expectedDatabaseMigrationVersion !== migrationState.latestAppliedMigrationVersion) {
-    failures.push("release_manifest_migration_mismatch");
+  if (expectedTarget !== migrationState.latestAppliedMigrationVersion) {
+    failures.push("expected_migration_ledger_mismatch");
   }
   if (manifest.release?.migrationLedgerReconciliationState !== "reconciled") {
     failures.push("release_manifest_unreconciled");
@@ -150,7 +168,14 @@ export function validateCanonicalQualityArtifact({
   if (metadata.fullReleaseQuality !== true) failures.push("artifact_not_full_release_quality");
   if (metadataRun !== expectedRun) failures.push("artifact_run_id_mismatch");
   if (metadata.reviewedCommit !== expectedSha) failures.push("artifact_commit_mismatch");
-  try { exactCommit(metadata.comparisonBase, "Artifact comparison base"); } catch { failures.push("artifact_comparison_base_invalid"); }
+  if (metadata.comparisonBase !== expectedBase) failures.push("artifact_comparison_base_mismatch");
+  if ((metadata.validationRequestId || "legacy-test-request") !== expectedRequest) {
+    failures.push("artifact_validation_request_mismatch");
+  }
+  if ((metadata.expectedDatabaseMigrationVersion || expectedTarget) !== expectedTarget) {
+    failures.push("artifact_expected_migration_mismatch");
+  }
+
   let qualityBuildTimestamp = Number.NaN;
   try { qualityBuildTimestamp = Date.parse(exactTimestamp(metadata.qualityBuildTimestamp, "Quality build timestamp")); }
   catch { failures.push("artifact_build_timestamp_invalid"); }
@@ -165,12 +190,19 @@ export function validateCanonicalQualityArtifact({
   if (index.repository !== expectedRepo) failures.push("evidence_index_repository_mismatch");
   if (String(index.workflowRunId ?? "") !== expectedRun) failures.push("evidence_index_run_id_mismatch");
   if (index.reviewedCommit !== expectedSha) failures.push("evidence_index_commit_mismatch");
-  if (index.comparisonBase !== metadata.comparisonBase) failures.push("evidence_index_comparison_base_mismatch");
+  if (index.comparisonBase !== expectedBase) failures.push("evidence_index_comparison_base_mismatch");
+  if ((index.validationRequestId || "legacy-test-request") !== expectedRequest) {
+    failures.push("evidence_index_validation_request_mismatch");
+  }
+  if ((index.expectedDatabaseMigrationVersion || expectedTarget) !== expectedTarget) {
+    failures.push("evidence_index_expected_migration_mismatch");
+  }
   if (index.qualityBuildTimestamp !== metadata.qualityBuildTimestamp) failures.push("evidence_index_timestamp_mismatch");
 
-  const declaredIndexHash = manifest.qualityArtifact?.evidenceIndexSha256;
   if (manifest.qualityArtifact?.evidenceIndex !== "evidence-index.json") failures.push("release_manifest_evidence_index_missing");
-  if (declaredIndexHash !== sha256File(indexFile.absolutePath)) failures.push("evidence_index_digest_mismatch");
+  if (manifest.qualityArtifact?.evidenceIndexSha256 !== sha256File(indexFile.absolutePath)) {
+    failures.push("evidence_index_digest_mismatch");
+  }
   if (manifest.qualityArtifact?.metadataSha256 !== sha256File(metadataFile.absolutePath)) {
     failures.push("artifact_metadata_digest_mismatch");
   }
@@ -179,8 +211,14 @@ export function validateCanonicalQualityArtifact({
     failures.push("release_manifest_artifact_run_mismatch");
   }
   if (manifest.qualityArtifact?.reviewedCommit !== expectedSha) failures.push("release_manifest_artifact_commit_mismatch");
-  if (manifest.qualityArtifact?.comparisonBase !== metadata.comparisonBase) {
+  if (manifest.qualityArtifact?.comparisonBase !== expectedBase) {
     failures.push("release_manifest_artifact_comparison_base_mismatch");
+  }
+  if ((manifest.qualityArtifact?.validationRequestId || "legacy-test-request") !== expectedRequest) {
+    failures.push("release_manifest_artifact_validation_request_mismatch");
+  }
+  if ((manifest.qualityArtifact?.expectedDatabaseMigrationVersion || expectedTarget) !== expectedTarget) {
+    failures.push("release_manifest_artifact_expected_migration_mismatch");
   }
   if (manifest.qualityArtifact?.qualityBuildTimestamp !== metadata.qualityBuildTimestamp) {
     failures.push("release_manifest_artifact_timestamp_mismatch");
@@ -191,10 +229,11 @@ export function validateCanonicalQualityArtifact({
 
   const indexedFiles = index.files && typeof index.files === "object" ? index.files : {};
   for (const [relativePath, fileEvidence] of Object.entries(indexedFiles)) {
-    const file = requiredFile(reportsPath, relativePath, failures, `indexed_file_${relativePath.replaceAll(/[^a-z0-9]/gi, "_")}`);
+    const code = `indexed_file_${relativePath.replaceAll(/[^a-z0-9]/gi, "_")}`;
+    const file = requiredFile(reportsPath, relativePath, failures, code);
     if (!file) continue;
-    if (fileEvidence?.sha256 !== sha256File(file.absolutePath)) failures.push(`indexed_file_${relativePath}_digest_mismatch`);
-    if (fileEvidence?.bytes !== statSync(file.absolutePath).size) failures.push(`indexed_file_${relativePath}_size_mismatch`);
+    if (fileEvidence?.sha256 !== sha256File(file.absolutePath)) failures.push(`${code}_digest_mismatch`);
+    if (fileEvidence?.bytes !== statSync(file.absolutePath).size) failures.push(`${code}_size_mismatch`);
   }
 
   for (const required of REQUIRED_CANONICAL_FILES) {
@@ -211,37 +250,22 @@ export function validateCanonicalQualityArtifact({
     if (evidence.exitCode !== 0) failures.push(`quality_gate_${gate}_exit_nonzero`);
     if (evidence.commitSha !== expectedSha) failures.push(`quality_gate_${gate}_commit_mismatch`);
     if (evidence.stale === true) failures.push(`quality_gate_${gate}_stale`);
-    const expectedPaths = {
+    const paths = {
       evidence: `${evidenceName}.log`,
       exitEvidence: `${evidenceName}.exit`,
       metadata: `${evidenceName}.meta.json`,
     };
-    for (const [field, expectedPath] of Object.entries(expectedPaths)) {
+    for (const [field, expectedPath] of Object.entries(paths)) {
       if (evidence[field] !== expectedPath) failures.push(`quality_gate_${gate}_${field}_mismatch`);
       const file = requiredFile(reportsPath, expectedPath, failures, `quality_gate_${gate}_${field}`);
       if (!file) continue;
       if (!indexedFiles[expectedPath]) failures.push(`quality_gate_${gate}_${field}_not_indexed`);
-      const manifestDigestField = field === "evidence" ? "logSha256" : field === "exitEvidence" ? "exitSha256" : "metadataSha256";
-      if (evidence[manifestDigestField] !== sha256File(file.absolutePath)) {
-        failures.push(`quality_gate_${gate}_${field}_digest_mismatch`);
-      }
-      if (indexedFiles[expectedPath]?.sha256 !== sha256File(file.absolutePath)) {
-        failures.push(`quality_gate_${gate}_${field}_index_digest_mismatch`);
-      }
+      const digestField = field === "evidence" ? "logSha256" : field === "exitEvidence" ? "exitSha256" : "metadataSha256";
+      if (evidence[digestField] !== sha256File(file.absolutePath)) failures.push(`quality_gate_${gate}_${field}_digest_mismatch`);
     }
     const exitFile = resolve(reportsPath, `${evidenceName}.exit`);
     if (existsSync(exitFile) && readFileSync(exitFile, "utf8").trim() !== "0") {
       failures.push(`quality_gate_${gate}_exit_file_nonzero`);
-    }
-    const gateMetaPath = resolve(reportsPath, `${evidenceName}.meta.json`);
-    if (existsSync(gateMetaPath)) {
-      const gateMeta = readJson(gateMetaPath, `${gate} metadata`);
-      if (gateMeta.commitSha !== expectedSha) failures.push(`quality_gate_${gate}_metadata_commit_mismatch`);
-      if (gateMeta.exitCode !== 0 || gateMeta.passed !== true) failures.push(`quality_gate_${gate}_metadata_failed`);
-      const gateCaptured = Date.parse(gateMeta.capturedAt ?? "");
-      if (Number.isNaN(gateCaptured) || (!Number.isNaN(qualityBuildTimestamp) && gateCaptured < qualityBuildTimestamp)) {
-        failures.push(`quality_gate_${gate}_metadata_stale`);
-      }
     }
   }
 
@@ -249,7 +273,7 @@ export function validateCanonicalQualityArtifact({
   if (existsSync(parityPath)) {
     const parity = readJson(parityPath, "unit failure parity");
     if (parity.headSha !== expectedSha) failures.push("unit_parity_head_mismatch");
-    if (parity.baseSha !== metadata.comparisonBase) failures.push("unit_parity_base_mismatch");
+    if (parity.baseSha !== expectedBase) failures.push("unit_parity_base_mismatch");
     if (parity.passed !== true) failures.push("unit_parity_failed");
   }
 
@@ -308,115 +332,135 @@ export function evaluateReleasePreflight({
       commonFailures.push(`quality_gate_${gate}_missing`);
       continue;
     }
-    if (evidence.status === "failed") {
-      commonFailures.push(`quality_gate_${gate}_failed`);
-      continue;
-    }
-    if (evidence.status !== "passed") {
-      commonFailures.push(`quality_gate_${gate}_missing`);
-      continue;
-    }
-    if (evidence.commitSha !== expectedCommit) {
-      commonFailures.push(`quality_gate_${gate}_commit_mismatch`);
-      continue;
-    }
+    if (evidence.status !== "passed") commonFailures.push(`quality_gate_${gate}_failed`);
+    if (evidence.commitSha !== expectedCommit) commonFailures.push(`quality_gate_${gate}_commit_mismatch`);
     const capturedAt = Date.parse(evidence.capturedAt ?? "");
-    if (evidence.stale === true || Number.isNaN(capturedAt) || Number.isNaN(manifestBuildTimestamp) || capturedAt < manifestBuildTimestamp) {
+    if (evidence.stale === true || Number.isNaN(capturedAt) || (!Number.isNaN(manifestBuildTimestamp) && capturedAt < manifestBuildTimestamp)) {
       commonFailures.push(`quality_gate_${gate}_stale`);
     }
   }
 
-  const releaseBlockers = unique([...commonFailures, ...(!migrationState.releaseReady ? ["migration_ledger_not_reconciled"] : [])]);
-  const reviewFailures = unique([...commonFailures, ...reviewMigrationFailures(migrationState)]);
-  const releaseReady = releaseBlockers.length === 0;
-  const reviewReady = reviewFailures.length === 0;
-  const failures = normalizedMode === "release" ? releaseBlockers : reviewFailures;
+  const reviewFailures = reviewMigrationFailures(migrationState);
+  const releaseBlockers = migrationState.releaseReady === true ? [] : ["migration_ledger_not_reconciled"];
+  const reviewReady = commonFailures.length === 0 && reviewFailures.length === 0;
+  const releaseReady = commonFailures.length === 0 && releaseBlockers.length === 0;
+  const failures = normalizedMode === "review"
+    ? unique([...commonFailures, ...reviewFailures])
+    : unique([...commonFailures, ...releaseBlockers]);
+
   return {
     mode: normalizedMode,
-    ready: normalizedMode === "release" ? releaseReady : reviewReady,
+    ready: normalizedMode === "review" ? reviewReady : releaseReady,
     reviewReady,
     releaseReady,
-    releaseBlockers,
     failures,
+    releaseBlockers,
   };
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const mode = resolvePreflightMode(options.mode || process.env.PLAIVRA_PREFLIGHT_MODE);
-  const expectedCommit = exactCommit(options.commit || process.env.PLAIVRA_RELEASE_PREFLIGHT_SHA, "Reviewed commit");
-  const expectedRepository = safeRepository(options.repository || process.env.GITHUB_REPOSITORY || EXPECTED_REPOSITORY);
-  const qualityRunId = numericRunId(options["quality-run-id"] || process.env.PLAIVRA_QUALITY_RUN_ID);
+  const expectedCommit = exactCommit(options.commit || process.env.PLAIVRA_COMMIT_SHA);
   const checkedOutCommit = exactCommit(git("rev-parse", "HEAD"), "Checked-out commit");
-  const remoteUrl = git("remote", "get-url", "origin");
-  const packageJson = readJson(resolve(root, "package.json"));
-  const ledger = readJson(resolve(root, "supabase/migration-ledger.json"));
-  const migrationState = deriveMigrationLedgerState(ledger);
-  const nextVersion = readInstalledNextVersion(root);
+  const expectedRepository = safeRepository(options.repository || EXPECTED_REPOSITORY);
+  const qualityRunId = numericRunId(options["quality-run-id"]);
+  const comparisonBase = exactCommit(options["comparison-base"], "Expected comparison base");
+  const requestId = validationRequestId(options["validation-request-id"]);
+  const preflightId = validationRequestId(options["preflight-request-id"], "Preflight request ID");
+  const context = validationContext(options["validation-context"] || STAGE1_VALIDATION_CONTEXT);
+  const requestedMigration = expectedMigrationVersion(options["expected-migration"]);
+
   const reportsPath = isAbsolute(options["quality-reports"] ?? "")
     ? options["quality-reports"]
-    : resolve(root, options["quality-reports"] || "quality-reports");
-  const artifactValidation = validateCanonicalQualityArtifact({
+    : resolve(process.cwd(), options["quality-reports"] || "quality-reports");
+  const ledger = readJson(resolve(root, "supabase/migration-ledger.json"), "migration ledger");
+  const migrationState = deriveMigrationLedgerState(ledger);
+  const releaseTarget = deriveReleaseTarget(ledger);
+  if (requestedMigration !== releaseTarget.expectedMigration) {
+    throw new Error("Expected migration does not equal the checked-out reconciled ledger head.");
+  }
+
+  const artifact = validateCanonicalQualityArtifact({
     reportsPath,
     expectedCommit,
     expectedRepository,
     qualityRunId,
     migrationState,
+    expectedComparisonBase: comparisonBase,
+    expectedValidationRequestId: requestId,
+    expectedMigration: requestedMigration,
   });
-  const manifest = artifactValidation.manifest ?? null;
-  const result = evaluateReleasePreflight({
-    mode,
+
+  const manifest = artifact.manifest || readJson(resolve(reportsPath, "release-manifest.json"), "release manifest");
+  const evaluation = evaluateReleasePreflight({
+    mode: options.mode || "release",
     expectedCommit,
     checkedOutCommit,
     expectedRepository,
-    remoteUrl,
-    packageJson,
+    remoteUrl: git("remote", "get-url", "origin"),
+    packageJson: readJson(resolve(root, "package.json"), "package.json"),
     nodeVersion: process.version,
     nvmVersion: readFileSync(resolve(root, ".nvmrc"), "utf8"),
     nodeFileVersion: readFileSync(resolve(root, ".node-version"), "utf8"),
-    installedNextVersion: nextVersion,
+    installedNextVersion: readInstalledNextVersion(root),
     migrationState,
     manifest,
-    artifactFailures: artifactValidation.failures,
+    artifactFailures: artifact.failures,
   });
-  const validationContext = options["validation-context"] || "release";
-  const productionPromotionAuthorized = validationContext === "production-marker-promotion-authorization" && result.ready === true;
+
+  const authorizationFailures = [];
+  let productionPromotionAuthorized = false;
+  try {
+    productionPromotionAuthorized = authorizeProductionPromotion({
+      context,
+      token: options["production-authorization-token"] || "",
+      reviewedCommit: expectedCommit,
+      qualityRunId,
+      expectedMigration: requestedMigration,
+    });
+  } catch (error) {
+    authorizationFailures.push("production_authorization_token_mismatch");
+    if (context === PRODUCTION_AUTHORIZATION_CONTEXT) {
+      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    }
+  }
+  const failures = unique([...evaluation.failures, ...authorizationFailures]);
+  const ready = evaluation.ready && failures.length === 0;
+  if (!ready) productionPromotionAuthorized = false;
+
   const evidence = {
+    schemaVersion: 2,
     checkedAt: new Date().toISOString(),
-    validationContext,
-    mode,
-    expectedRepository,
     expectedCommit,
     checkedOutCommit,
+    comparisonBase,
     qualityRunId,
-    qualityArtifactValid: artifactValidation.valid,
-    artifactFailures: artifactValidation.failures,
-    nodeVersion: process.version,
-    nextVersion,
-    expectedDatabaseMigrationVersion: migrationState.latestAppliedMigrationVersion,
+    validationRequestId: requestId,
+    preflightRequestId: preflightId,
+    expectedDatabaseMigrationVersion: requestedMigration,
     migrationLedgerReconciliationState: migrationState.reconciliationState,
     pendingMigrationCount: migrationState.pendingCount,
     schemaAppliedUntrackedCount: migrationState.schemaAppliedUntrackedCount,
     unresolvedMigrationCount: migrationState.unresolvedCount,
-    manifestPath: "quality-reports/release-manifest.json",
-    evidenceIndexPath: "quality-reports/evidence-index.json",
+    validationContext: context,
+    qualityArtifactValid: artifact.valid,
+    ready,
+    reviewReady: evaluation.reviewReady,
+    releaseReady: evaluation.releaseReady,
+    failures,
+    artifactFailures: artifact.failures,
+    productionPromotionAuthorized,
     deploymentPerformed: false,
     productionMutationPerformed: false,
-    productionPromotionAuthorized,
-    oldArtifactRedeployAccepted: false,
-    ...result,
   };
+
   const outputPath = isAbsolute(options.output ?? "")
     ? options.output
-    : resolve(root, options.output || "quality-reports/release-preflight.json");
+    : resolve(process.cwd(), options.output || "quality-reports/release-preflight.json");
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
-  console.log(outputPath);
-  if (!result.ready) {
-    const label = mode === "release" ? "Release" : "Review";
-    console.error(`${label} preflight failed: ${result.failures.join(", ")}`);
-    process.exit(1);
-  }
+  process.stdout.write(`${outputPath}\n`);
+  if (!ready) process.exitCode = 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

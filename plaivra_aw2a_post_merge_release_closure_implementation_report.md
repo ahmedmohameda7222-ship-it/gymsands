@@ -466,3 +466,111 @@ Stage 2 requires separate Planner authorization and must:
 ## Final repository status
 
 At Stage-1 handoff, all release/CI infrastructure, tests, and this report must be committed on the existing Stage-1 branch. The PR must remain Draft and unmerged. The remote branch is the authoritative workspace; no temporary transfer workflow, upload fragment, archive, or uncommitted change may remain in the final PR diff.
+
+
+---
+
+# Final Planner QA/QC correction
+
+## Correction starting identity
+
+```text
+correction starting head: 3d50008140fc026b313052aaf7df199fd4bcbbb7
+approved starting main: 93f6aaad5d170bf5cfe304597317c7ffa3016e2a
+branch: fix/aw2a-post-merge-release-closure
+Draft PR: #81
+```
+
+The final corrected implementation head is content-derived after this report update. The permanent exact-validation workflow records that exact head, run IDs, request identities, artifact identity, and preflight identity in the PR evidence comment and immutable Stage-1 artifact.
+
+## Corrected Stage-2 authorization path
+
+`Release preflight` now has two strict read-only choice modes:
+
+```text
+stage1-infrastructure-validation
+production-marker-promotion-authorization
+```
+
+Stage-1 mode can never authorize marker promotion. Production-authorization mode remains non-mutating and non-deploying and requires this exact token contract:
+
+```text
+AUTHORIZE_PRODUCTION_MARKER_PROMOTION_<reviewed_commit>_<quality_run_id>_<expected_migration>
+```
+
+The token is rejected when any commit, Quality run, migration, context, or purpose component differs. Stage-1 exact validation always dispatches the Stage-1 context with an empty authorization token.
+
+## Derived migration target contract
+
+Generic Quality and Release preflight no longer contain a pinned AW-2A migration target. The exact checked-out `supabase/migration-ledger.json` is required to be release-ready and reconciled with zero pending, schema-applied-untracked, and unresolved entries. Its latest applied migration becomes the single expected target used by:
+
+- build environment metadata;
+- built release-metadata verification;
+- artifact metadata;
+- evidence index;
+- authoritative release manifest;
+- Release preflight;
+- exact orchestration evidence.
+
+Manifest generation rejects any requested expected migration that differs from the ledger head. A synthetic later reconciled ledger test proves the target advances automatically.
+
+## End-to-end release identity
+
+The permanent chain binds:
+
+```text
+reviewed commit
+comparison base
+Quality workflow run ID
+validation request ID
+expected migration
+preflight request ID
+validation context
+```
+
+Manual Quality requires `validation_request_id` and includes it in the deterministic run name, artifact metadata, evidence index, and manifest. Exact orchestration discovers Quality and preflight runs by their unique request-bound run names rather than same-head recency. It downloads both artifacts and independently verifies all identity fields before reporting success.
+
+## Database URL and Plaivra project binding
+
+Before any Production database adapter is constructed or any compatibility row is read, the promotion entry point validates the database URL against Plaivra project:
+
+```text
+bkwezjxvapaeasfvlhvv
+```
+
+Accepted forms:
+
+```text
+direct:
+host = db.bkwezjxvapaeasfvlhvv.supabase.co
+user = postgres
+
+recognized Supabase pooler:
+host matches a concrete *.pooler.supabase.com endpoint
+user = postgres.bkwezjxvapaeasfvlhvv
+```
+
+Rejected targets include Activity Catalog direct/pooler identities, other Supabase projects, generic PostgreSQL hosts, localhost, malformed URLs, incomplete credentials, insecure TLS modes, and project-ref/URL mismatches. Evidence exposes only project ref, connection kind, and redacted host.
+
+## Least-privilege workflow permissions
+
+Exact validation retains only:
+
+```text
+actions: write
+contents: read
+issues: write
+```
+
+`actions: write` dispatches and inspects exact runs. `contents: read` checks out the exact PR head and ledger. `issues: write` updates the PR conversation evidence comment. `pull-requests: write` was removed. `pull_request_target` is not used.
+
+## Immutable boundaries
+
+- no application behavior changed;
+- no migration changed or added;
+- no Supabase write;
+- no Production compatibility-marker promotion;
+- no Activity Catalog operation;
+- no merge;
+- no deployment;
+- AW-2B not started.

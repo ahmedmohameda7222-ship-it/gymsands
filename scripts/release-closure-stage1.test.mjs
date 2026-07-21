@@ -17,6 +17,7 @@ const comparisonBase = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const buildTimestamp = "2026-07-21T16:00:00.000Z";
 const capturedAt = "2026-07-21T16:01:00.000Z";
 const runId = "123456";
+const validationRequest = "stage1-test-request-123";
 
 function source(path) {
   return readFileSync(new URL(path, root), "utf8");
@@ -75,6 +76,8 @@ function createReports({ failedGate = null, staleGate = null } = {}) {
     workflowRunAttempt: "1",
     reviewedCommit,
     comparisonBase,
+    validationRequestId: validationRequest,
+    expectedDatabaseMigrationVersion: EXPECTED_DATABASE_MIGRATION,
     eventType: "workflow_dispatch",
     qualityBuildTimestamp: buildTimestamp,
     capturedAt,
@@ -220,20 +223,26 @@ test("preflight rejects unexpected migration and unreconciled ledger", () => {
 });
 
 
-test("exact release validation orchestrates manual Quality and Stage-1 preflight on the PR head", () => {
+test("exact release validation binds Quality and preflight to unique request identities", () => {
   const workflow = source(".github/workflows/exact-release-quality-validation.yml");
-  assert.match(workflow, /gh workflow run quality\.yml[\s\S]*-f reviewed_commit="\$REVIEWED_COMMIT"[\s\S]*-f comparison_base="\$COMPARISON_BASE"/);
-  assert.match(workflow, /--event workflow_dispatch[\s\S]*select\(\.headSha == env\.REVIEWED_COMMIT\)/);
-  assert.match(workflow, /quality-reports-'"\$QUALITY_RUN_ID"'/);
-  assert.match(workflow, /gh workflow run release-preflight\.yml[\s\S]*validation_context=stage1-infrastructure-validation/);
-  assert.match(workflow, /productionAuthorization: false/);
+  assert.match(workflow, /validation_request_id="\$VALIDATION_REQUEST_ID"/);
+  assert.match(workflow, /displayTitle == env\.EXPECTED_TITLE/);
+  assert.match(workflow, /Download and independently verify canonical Quality evidence/);
+  assert.match(workflow, /Download and independently verify preflight evidence/);
+  assert.match(workflow, /comparison_base="\$COMPARISON_BASE"/);
+  assert.match(workflow, /expected_migration="\$EXPECTED_MIGRATION"/);
+  assert.match(workflow, /validation_context=stage1-infrastructure-validation/);
+  assert.doesNotMatch(workflow, /pull_request_target|pull-requests:\s*write/);
   assert.doesNotMatch(workflow, /supabase db push|apply_migration|deploy_to_vercel/i);
 });
 
 test("Stage-1 preflight cannot authorize marker promotion", () => {
   const workflow = source(".github/workflows/release-preflight.yml");
   const promotion = source("scripts/promote-release-schema-compatibility.mjs");
-  assert.match(workflow, /productionPromotionAuthorized !== false/);
+  assert.match(workflow, /type: choice/);
+assert.match(workflow, /stage1-infrastructure-validation/);
+assert.match(workflow, /production-marker-promotion-authorization/);
+assert.match(workflow, /production_authorization_token/);
   assert.match(promotion, /requireProductionAuthorization: mode === "apply"/);
   assert.match(promotion, /explicit Production marker-promotion authorization evidence/);
 });

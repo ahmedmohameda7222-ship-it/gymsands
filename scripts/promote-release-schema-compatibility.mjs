@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
 import { exactCommit, exactTimestamp } from "./quality-evidence-contract.mjs";
+import { validateSupabaseProductionTarget } from "./release-identity-contract.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const PLAIVRA_PROJECT_REF = "bkwezjxvapaeasfvlhvv";
@@ -227,7 +228,10 @@ function psqlJson(sql, env) {
   return JSON.parse(output);
 }
 
-function productionAdapter(databaseUrl) {
+function productionAdapter(databaseUrl, targetIdentity) {
+  if (!targetIdentity || targetIdentity.projectRef !== PLAIVRA_PROJECT_REF) {
+    throw new Error("Validated Plaivra database target identity is required.");
+  }
   const env = postgresEnvironment(databaseUrl);
   return {
     async readCompatibility() {
@@ -288,6 +292,7 @@ async function main() {
   const preflightEvidence = readJson(preflightPath, "release preflight evidence");
   const databaseUrl = process.env.PLAIVRA_RELEASE_DATABASE_URL;
   if (!databaseUrl) throw new Error("PLAIVRA_RELEASE_DATABASE_URL is required for trusted server-side verification.");
+  const targetIdentity = validateSupabaseProductionTarget(databaseUrl, options["project-ref"]);
   const evidence = await executeCompatibilityPromotion({
     mode: options.mode,
     projectRef: options["project-ref"],
@@ -297,8 +302,9 @@ async function main() {
     ledger,
     preflightEvidence,
     confirmation: options.confirmation,
-    adapter: productionAdapter(databaseUrl),
+    adapter: productionAdapter(databaseUrl, targetIdentity),
   });
+  evidence.databaseTarget = targetIdentity;
   const outputPath = isAbsolute(options.output ?? "")
     ? options.output
     : resolve(root, options.output || "quality-reports/compatibility-marker-promotion.json");

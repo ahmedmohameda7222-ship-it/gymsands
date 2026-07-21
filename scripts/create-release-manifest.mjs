@@ -23,6 +23,7 @@ import {
   sha256File,
 } from "./quality-evidence-contract.mjs";
 import { installedNextVersion } from "./release-runtime-versions.mjs";
+import { deriveReleaseTarget, validationRequestId } from "./release-identity-contract.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templatePath = resolve(root, "release/release-manifest.template.json");
@@ -102,6 +103,8 @@ function readArtifactMetadata(reportsPath) {
     workflowRunAttempt: numericRunId(metadata.workflowRunAttempt, "Workflow run attempt"),
     reviewedCommit: exactCommit(metadata.reviewedCommit, "Artifact reviewed commit"),
     comparisonBase: exactCommit(metadata.comparisonBase, "Artifact comparison base"),
+    validationRequestId: validationRequestId(metadata.validationRequestId),
+    expectedDatabaseMigrationVersion: String(metadata.expectedDatabaseMigrationVersion ?? ""),
     eventType: requiredIdentifier("Artifact event type", metadata.eventType),
     qualityBuildTimestamp: exactTimestamp(metadata.qualityBuildTimestamp, "Quality build timestamp"),
     capturedAt: exactTimestamp(metadata.capturedAt, "Artifact captured timestamp"),
@@ -177,6 +180,8 @@ export function createEvidenceIndex(reportsPath, metadata) {
     workflowRunAttempt: metadata.workflowRunAttempt,
     reviewedCommit: metadata.reviewedCommit,
     comparisonBase: metadata.comparisonBase,
+    validationRequestId: metadata.validationRequestId,
+    expectedDatabaseMigrationVersion: metadata.expectedDatabaseMigrationVersion,
     eventType: metadata.eventType,
     qualityBuildTimestamp: metadata.qualityBuildTimestamp,
     generatedAt: new Date().toISOString(),
@@ -195,6 +200,9 @@ export function applyQualityEvidence(manifest, reportsDirectory) {
   const metadata = readArtifactMetadata(reportsPath);
   if (metadata.repository !== EXPECTED_REPOSITORY) throw new Error("Artifact repository mismatch.");
   if (metadata.reviewedCommit !== manifest.release.commitSha) throw new Error("Artifact reviewed commit mismatch.");
+  if (metadata.expectedDatabaseMigrationVersion !== manifest.release.expectedDatabaseMigrationVersion) {
+    throw new Error("Artifact expected migration mismatch.");
+  }
   if (!metadata.fullReleaseQuality) throw new Error("Artifact is not a full release-quality run.");
 
   const provenance = {
@@ -227,6 +235,8 @@ export function applyQualityEvidence(manifest, reportsDirectory) {
     workflowRunAttempt: metadata.workflowRunAttempt,
     reviewedCommit: metadata.reviewedCommit,
     comparisonBase: metadata.comparisonBase,
+    validationRequestId: metadata.validationRequestId,
+    expectedDatabaseMigrationVersion: metadata.expectedDatabaseMigrationVersion,
     eventType: metadata.eventType,
     qualityBuildTimestamp: metadata.qualityBuildTimestamp,
     capturedAt: metadata.capturedAt,
@@ -246,6 +256,14 @@ async function main() {
   const packageLock = JSON.parse(readFileSync(packageLockPath, "utf8"));
   const migrationLedger = JSON.parse(readFileSync(resolve(root, "supabase/migration-ledger.json"), "utf8"));
   const migrationState = deriveMigrationLedgerState(migrationLedger);
+  const releaseTarget = deriveReleaseTarget(migrationLedger);
+  const requestedExpectedMigration = requiredIdentifier(
+    "Expected database migration version",
+    options["expected-migration"] || releaseTarget.expectedMigration,
+  );
+  if (requestedExpectedMigration !== releaseTarget.expectedMigration) {
+    throw new Error("Requested expected migration does not equal the reconciled ledger head.");
+  }
   const commitSha = exactCommit(
     options.commit || process.env.PLAIVRA_COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || currentCommit(),
   );
@@ -265,10 +283,7 @@ async function main() {
       "Schema compatibility version",
       options["schema-compatibility"] || process.env.PLAIVRA_SCHEMA_COMPATIBILITY_VERSION || "2",
     ),
-    expectedDatabaseMigrationVersion: requiredIdentifier(
-      "Expected database migration version",
-      options["expected-migration"] || migrationState.latestAppliedMigrationVersion,
-    ),
+    expectedDatabaseMigrationVersion: releaseTarget.expectedMigration,
     migrationLedgerReconciliationState: migrationState.reconciliationState,
     pendingMigrationCount: migrationState.pendingCount,
     schemaAppliedUntrackedCount: migrationState.schemaAppliedUntrackedCount,
