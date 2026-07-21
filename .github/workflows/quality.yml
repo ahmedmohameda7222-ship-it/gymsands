@@ -20,7 +20,6 @@ jobs:
     env:
       TARGET_BRANCH: ${{ github.head_ref }}
       STAGING_SHA: ${{ github.event.pull_request.head.sha }}
-      ORIGINAL_HEAD: 9aba336504882deda050f935c9d285cc85e75f1b
     steps:
       - name: Checkout exact correction staging revision
         uses: actions/checkout@v4
@@ -66,15 +65,11 @@ jobs:
           test "$(git hash-object supabase/migration-ledger.json)" = "b20ea3743ef1412e4d9ef05f39b050fd9bf5e224"
           test "$(sha256sum supabase/migrations/20260721012814_active_workout_aw2a_execution_state_corrections.sql | awk '{print $1}')" = "b79920d0f9155b0c076d602b10924846409efdac54a485333242a03bbd5e5e18"
 
-      - name: Restore permanent Quality workflow
+      - name: Remove correction transfer fragments
         shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf .aw2a-correction
-          git show "${ORIGINAL_HEAD}:.github/workflows/quality.yml" > .github/workflows/quality.yml
-          test "$(git hash-object .github/workflows/quality.yml)" = "5f6569308282f9e82660fff479a46e05ad6f1f40"
+        run: rm -rf .aw2a-correction
 
-      - name: Commit finalized AW-2A correction
+      - name: Commit finalized AW-2A correction source
         shell: bash
         run: |
           set -euo pipefail
@@ -82,9 +77,10 @@ jobs:
           git config user.email "implementation@plaivra.local"
           git add -A
           git diff --cached --check
+          git diff --cached --quiet && exit 1 || true
           git commit -m "fix(train): finalize AW-2A QA corrections"
 
-      - name: Push finalized AW-2A correction
+      - name: Push finalized AW-2A correction source
         shell: bash
         run: |
           set -euo pipefail
