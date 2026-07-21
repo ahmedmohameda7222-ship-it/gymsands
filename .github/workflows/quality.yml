@@ -78,7 +78,7 @@ jobs:
           fi
 
           if grep -Eq '^package-lock\.json$' <<< "$changed_files"; then dependencies=true; fi
-          if grep -Eq '^(supabase/migrations/|supabase/migration-ledger\.json|scripts/(check-migration-ledger|test-database-preflight-control)|services/database/|types/database\.ts)' <<< "$changed_files"; then database=true; fi
+          if grep -Eq '^(supabase/migrations/|supabase/migration-ledger\.json|scripts/(check-migration-ledger|test-database-preflight-control|replay-local-migration-chain|check-unit-failure-parity)|services/database/|types/database\.ts)' <<< "$changed_files"; then database=true; fi
           if grep -Eq '^(services/database/|app/api/|supabase/migrations/|vitest\.integration\.config\.mjs)' <<< "$changed_files"; then integration=true; fi
           if grep -Eq '^scripts/' <<< "$changed_files"; then scripts=true; fi
           if grep -Eq '^(scripts/validate-production-env\.mjs|lib/integrations/env|next\.config\.|vercel\.json|package-lock\.json)' <<< "$changed_files"; then environment=true; fi
@@ -157,8 +157,23 @@ jobs:
           fi
 
       - name: Verify full unit failure parity
-        if: steps.scope.outputs.database == 'true'
-        run: node scripts/check-aw2a-unit-failure-parity.mjs --base "${{ github.event.pull_request.base.sha }}" --output-dir quality-reports
+        if: github.event_name == 'pull_request' && steps.scope.outputs.database == 'true'
+        run: node scripts/check-unit-failure-parity.mjs --base "${{ github.event.pull_request.base.sha }}" --output-dir quality-reports
+
+      - name: Record workflow-dispatch parity skip
+        if: github.event_name == 'workflow_dispatch' && steps.scope.outputs.database == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p quality-reports
+          node - <<'NODE'
+          const fs = require('node:fs');
+          fs.writeFileSync(
+            'quality-reports/unit-failure-parity.json',
+            JSON.stringify({ skipped: true, reason: 'workflow_dispatch has no pull-request base SHA' }, null, 2) + '\n',
+          );
+          NODE
+
       - name: Check production dependencies
         if: steps.scope.outputs.dependencies == 'true' || steps.scope.outputs.database == 'true'
         run: npm audit --omit=dev --audit-level=moderate
@@ -184,29 +199,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p quality-reports
-          exec > >(tee -a quality-reports/aw2a-database-validation.log) 2>&1
-          correction_migration="supabase/migrations/20260721012814_active_workout_aw2a_execution_state_corrections.sql"
-          temporary_correction="$(mktemp)"
-          cp "$correction_migration" "$temporary_correction"
-          rm "$correction_migration"
-          restore_correction() { cp "$temporary_correction" "$correction_migration"; }
-          trap restore_correction EXIT
-          supabase db start
-          supabase db reset --local --no-seed
-          restore_correction
-          trap - EXIT
+          node scripts/replay-local-migration-chain.mjs --log quality-reports/database-validation.log --prove-future-order
           database_url="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-          marker_before="$(PGPASSWORD=postgres psql "$database_url" -X -A -t -v ON_ERROR_STOP=1 -c "select migration_version from public.release_schema_compatibility where singleton")"
-          test "$marker_before" = "20260711014500"
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -c "update public.release_schema_compatibility set migration_version = '20260717051011' where singleton"
-          supabase migration up --local
-          marker_after="$(PGPASSWORD=postgres psql "$database_url" -X -A -t -v ON_ERROR_STOP=1 -c "select migration_version from public.release_schema_compatibility where singleton")"
-          test "$marker_after" = "20260717051011"
-          supabase db lint --local --schema public --level error --fail-on error
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql
-          PLAIVRA_AW2A_TEST_DATABASE_URL="$database_url" npx vitest run --config vitest.integration.config.mjs services/database/workout-session-execution.integration.test.ts
-          npm run migration:ledger:check
-          PLAIVRA_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" npm run release:manifest -- --output /tmp/plaivra-aw2a-release-manifest.json
+          {
+            supabase db lint --local --schema public --level error --fail-on error
+            PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql
+            PLAIVRA_AW2A_TEST_DATABASE_URL="$database_url" npx vitest run --config vitest.integration.config.mjs services/database/workout-session-execution.integration.test.ts
+            npm run migration:ledger:check
+            PLAIVRA_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" npm run release:manifest -- --output /tmp/plaivra-release-manifest.json
+          } 2>&1 | tee -a quality-reports/database-validation.log
 
       - name: Verify production database security contracts
         if: steps.scope.outputs.database == 'true'
@@ -308,15 +309,15 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload AW-2A validation evidence
+      - name: Upload database validation evidence
         if: always() && steps.scope.outputs.database == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: aw2a-validation-${{ github.event.pull_request.head.sha || github.sha }}
+          name: database-validation-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
-            quality-reports/aw2a-database-validation.log
-            quality-reports/aw2a-unit-failure-parity.json
-          if-no-files-found: warn
+            quality-reports/database-validation.log
+            quality-reports/unit-failure-parity.json
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload browser evidence on failure
