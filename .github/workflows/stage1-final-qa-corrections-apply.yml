@@ -34,8 +34,10 @@ jobs:
             | python -c 'import pathlib,sys,zlib; pathlib.Path("/tmp/apply-stage1-final-qa.py").write_bytes(zlib.decompress(sys.stdin.buffer.read()))'
 
           set +e
-          python /tmp/apply-stage1-final-qa.py > .stage1-correction/apply.log 2>&1
+          python /tmp/apply-stage1-final-qa.py > /tmp/stage1-apply.log 2>&1
           apply_status=$?
+          mkdir -p .stage1-correction
+          cp /tmp/stage1-apply.log .stage1-correction/apply.log
           validation_status=1
           if [ "$apply_status" -eq 0 ]; then
             node --test \
@@ -45,8 +47,9 @@ jobs:
               scripts/release-closure-final-qa.test.mjs \
               scripts/run-quality-gate.test.mjs \
               scripts/permanent-quality-replay.test.mjs \
-              > .stage1-correction/validation.log 2>&1
+              > /tmp/stage1-validation.log 2>&1
             validation_status=$?
+            cp /tmp/stage1-validation.log .stage1-correction/validation.log
           fi
           git status --porcelain > .stage1-correction/worktree-status.txt
           git diff --binary > .stage1-correction/worktree.patch
