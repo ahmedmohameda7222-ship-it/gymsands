@@ -79,4 +79,4 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 These nine files match the production migration identities and were applied exactly once in order. Do not replay or modify them.
 
 
-AW-2A persisted execution state is applied exactly once to Plaivra Database as production record `20260721000544_active_workout_aw2a_execution_state`, mapped to immutable repository migration `20260720213000_active_workout_aw2a_execution_state.sql`. Do not replay or modify it.
+AW-2A persisted execution state is applied exactly once to Plaivra Database as production record `20260721000544_active_workout_aw2a_execution_state`, mapped to immutable repository migration `20260720213000_active_workout_aw2a_execution_state.sql`. The migration ledger records this as an `applied_version_alias` because the supported production authority generated a different timestamp while preserving the exact reviewed SQL. Do not replay or modify either identity.
