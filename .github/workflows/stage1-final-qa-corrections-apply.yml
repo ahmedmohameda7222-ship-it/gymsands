@@ -24,33 +24,48 @@ jobs:
           ref: fix/aw2a-post-merge-release-closure
           fetch-depth: 0
 
-      - name: Apply and validate final Planner corrections
+      - name: Apply, validate, and preserve diagnostics
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           cat .stage1-correction/part* \
             | base64 -d \
             | python -c 'import pathlib,sys,zlib; pathlib.Path("/tmp/apply-stage1-final-qa.py").write_bytes(zlib.decompress(sys.stdin.buffer.read()))'
-          python /tmp/apply-stage1-final-qa.py
-          node --test \
-            scripts/release-preflight.test.mjs \
-            scripts/promote-release-schema-compatibility.test.mjs \
-            scripts/release-closure-stage1.test.mjs \
-            scripts/release-closure-final-qa.test.mjs \
-            scripts/run-quality-gate.test.mjs \
-            scripts/permanent-quality-replay.test.mjs
-          git diff --check
-          test -z "$(git status --porcelain | grep -E 'supabase/migrations/|^(.. )?(app|components|lib|services)/' || true)"
 
-      - name: Commit corrected Stage 1 implementation
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf .stage1-correction
-          rm -f .github/workflows/stage1-final-qa-corrections-apply.yml
+          set +e
+          python /tmp/apply-stage1-final-qa.py > .stage1-correction/apply.log 2>&1
+          apply_status=$?
+          validation_status=1
+          if [ "$apply_status" -eq 0 ]; then
+            node --test \
+              scripts/release-preflight.test.mjs \
+              scripts/promote-release-schema-compatibility.test.mjs \
+              scripts/release-closure-stage1.test.mjs \
+              scripts/release-closure-final-qa.test.mjs \
+              scripts/run-quality-gate.test.mjs \
+              scripts/permanent-quality-replay.test.mjs \
+              > .stage1-correction/validation.log 2>&1
+            validation_status=$?
+          fi
+          set -e
+
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+
+          if [ "$apply_status" -eq 0 ] && [ "$validation_status" -eq 0 ]; then
+            git diff --check
+            test -z "$(git status --porcelain | grep -E 'supabase/migrations/|^(.. )?(app|components|lib|services)/' || true)"
+            rm -rf .stage1-correction
+            rm -f .github/workflows/stage1-final-qa-corrections-apply.yml
+            git add -A
+            git diff --cached --check
+            git commit -m "fix(release): bind Stage 1 release identities"
+            git push origin HEAD:fix/aw2a-post-merge-release-closure
+            exit 0
+          fi
+
+          printf 'apply_status=%s\nvalidation_status=%s\n' "$apply_status" "$validation_status" > .stage1-correction/status.txt
           git add -A
-          git diff --cached --check
-          git commit -m "fix(release): bind Stage 1 release identities"
+          git commit -m "wip(release): preserve Stage 1 correction diagnostics"
           git push origin HEAD:fix/aw2a-post-merge-release-closure
+          exit 1
