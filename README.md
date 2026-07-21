@@ -62,7 +62,7 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 - Muscle Intelligence Phase 4A provides the approved advanced visible atlas and schema-isolated V2 publication foundation while retaining V1 runtime behavior.
 - Muscle Intelligence Phase 4B publishes 60 reviewed advanced V2 mappings with 453 regional entries and adds plan-building, plan-editing, exercise-preview, and weekly-plan visualization surfaces. It does not cut Active Workout, completion, history, or workout-session snapshots over to V2.
 - Phase 4C.1 runtime cutover is applied in production: existing V1 snapshots remain unchanged, new sessions use V2, and completed V2 workload is frozen independently from mutable set logs.
-- Production migration history is reconciled through `20260719223300` with 62 migrations recorded exactly once. The deployed compatibility marker intentionally remains `20260717051011` until a separately authorized coordinated release.
+- Production migration history contains 63 records and is reconciled through the AW-2A production record `20260721000544_active_workout_aw2a_execution_state`, mapped to repository migration `20260720213000_active_workout_aw2a_execution_state.sql`. The deployed compatibility marker intentionally remains `20260717051011` until a separately authorized coordinated release.
 
 ## Applied Phase 4C.1 migrations
 
@@ -79,4 +79,4 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 These nine files match the production migration identities and were applied exactly once in order. Do not replay or modify them.
 
 
-AW-2A pending forward migration: `20260720213000_active_workout_aw2a_execution_state.sql`. It must be applied once only after local replay and verification; do not replay applied migrations.
+AW-2A persisted execution state is applied exactly once to Plaivra Database as production record `20260721000544_active_workout_aw2a_execution_state`, mapped to immutable repository migration `20260720213000_active_workout_aw2a_execution_state.sql`. Do not replay or modify it.

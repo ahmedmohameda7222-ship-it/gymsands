@@ -2,18 +2,18 @@
 
 **Project:** `bkwezjxvapaeasfvlhvv`
 
-**Verified production state:** 2026-07-19
+**Verified production state:** 2026-07-21
 
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 
-**Status:** **Fully reconciled through `20260719223300`; no pending repository migration remains**
+**Status:** **Fully reconciled through production record `20260721000544`; no pending repository migration remains**
 
 This document records verified production migration history. It is not authorization to replay migrations, deploy, promote, change compatibility markers, or merge. Applied migration files and production identities are immutable.
 
 ## Current production and ledger state
 
-- Applied production migrations: 62
-- Latest production migration: `20260719223300_muscle_intelligence_phase4c1_trusted_log_cleanup`
+- Applied production migrations: 63
+- Latest production migration: `20260721000544_active_workout_aw2a_execution_state` (repository file `20260720213000_active_workout_aw2a_execution_state.sql`)
 - `pendingCount = 0`
 - `schemaAppliedUntrackedCount = 0`
 - `unresolvedCount = 0`
@@ -123,7 +123,7 @@ The existing owner, privacy, lifecycle, snapshot, and RPC security contracts rem
 Physical production migration head:
 
 ```text
-20260719094718
+20260721000544
 ```
 
 Deployed compatibility marker:
@@ -151,4 +151,10 @@ The difference is intentional. The marker may advance only in a separately autho
 Phase 4C.1 migration apply, PR merge, deployment, compatibility-marker advancement, Phase 4C.2, and Phase 4C.3 remain separate decisions.
 
 
-AW-2A pending forward migration: `20260720213000_active_workout_aw2a_execution_state.sql`. It must be applied once only after local replay and verification; do not replay applied migrations.
+## Applied AW-2A execution-state migration
+
+- Repository file: `20260720213000_active_workout_aw2a_execution_state.sql`
+- Production record: `20260721000544_active_workout_aw2a_execution_state`
+- Applied exactly once to Plaivra Database through the supported migration authority.
+- Backfilled the one existing open workout session, left terminal sessions without execution state, and preserved compatibility marker `20260717051011`.
+- Do not replay or modify either immutable identity.
