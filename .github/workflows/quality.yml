@@ -26,120 +26,74 @@ jobs:
           curl --fail-with-body -sS "${auth[@]}" "${api}/contents/.github/workflows/quality.yml?ref=${SOURCE_HEAD}" | jq -r '.content' | tr -d '\n' | base64 --decode > /tmp/quality.yml
           python - <<'PY'
           from pathlib import Path
+
           path = Path('/tmp/quality.yml')
           text = path.read_text()
-          related_marker = "      - name: Check production dependencies\n"
-          parity = r'''      - name: Verify full unit failure parity
-        if: steps.scope.outputs.database == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p quality-reports
-          base_sha="${{ github.event.pull_request.base.sha }}"
-          head_report="$GITHUB_WORKSPACE/quality-reports/aw2a-head-unit.json"
-          base_report="$GITHUB_WORKSPACE/quality-reports/aw2a-base-unit.json"
 
-          set +e
-          npx vitest run --config vitest.unit.config.mjs --reporter=json --outputFile="$head_report"
-          head_status=$?
-          set -e
+          dependency_marker = "      - name: Check production dependencies\n"
+          expression = '${' + '{ github.event.pull_request.base.sha }}'
+          parity_step = (
+              "      - name: Verify full unit failure parity\n"
+              "        if: steps.scope.outputs.database == 'true'\n"
+              "        run: node scripts/check-aw2a-unit-failure-parity.mjs --base \""
+              + expression
+              + "\" --output-dir quality-reports\n\n"
+          )
+          if dependency_marker not in text:
+              raise SystemExit('dependency marker missing')
+          text = text.replace(dependency_marker, parity_step + dependency_marker, 1)
 
-          base_worktree="$(mktemp -d)/base"
-          git worktree add --detach "$base_worktree" "$base_sha"
-          ln -s "$GITHUB_WORKSPACE/node_modules" "$base_worktree/node_modules"
-          pushd "$base_worktree" >/dev/null
-          set +e
-          npx vitest run --config vitest.unit.config.mjs --reporter=json --outputFile="$base_report"
-          base_status=$?
-          set -e
-          popd >/dev/null
-
-          HEAD_STATUS="$head_status" BASE_STATUS="$base_status" node - <<'NODE'
-          const fs = require('node:fs');
-          function load(file) {
-            if (!fs.existsSync(file)) throw new Error(`Missing Vitest JSON report: ${file}`);
-            return JSON.parse(fs.readFileSync(file, 'utf8'));
-          }
-          function failedIdentities(report) {
-            const identities = [];
-            for (const file of report.testResults ?? []) {
-              for (const assertion of file.assertionResults ?? []) {
-                if (assertion.status !== 'failed') continue;
-                identities.push(assertion.fullName ?? [...(assertion.ancestorTitles ?? []), assertion.title].filter(Boolean).join(' > '));
-              }
-            }
-            return [...new Set(identities)].sort();
-          }
-          const headFailures = failedIdentities(load('quality-reports/aw2a-head-unit.json'));
-          const baseFailures = failedIdentities(load('quality-reports/aw2a-base-unit.json'));
-          const introduced = headFailures.filter((identity) => !baseFailures.includes(identity));
-          const removed = baseFailures.filter((identity) => !headFailures.includes(identity));
-          const summary = {
-            headSha: process.env.PLAIVRA_COMMIT_SHA,
-            baseSha: '${{ github.event.pull_request.base.sha }}',
-            headExitStatus: Number(process.env.HEAD_STATUS),
-            baseExitStatus: Number(process.env.BASE_STATUS),
-            headFailureIdentities: headFailures,
-            baseFailureIdentities: baseFailures,
-            introducedFailureIdentities: introduced,
-            removedFailureIdentities: removed,
-            passed: introduced.length === 0 && removed.length === 0,
-          };
-          fs.writeFileSync('quality-reports/aw2a-unit-failure-parity.json', JSON.stringify(summary, null, 2) + '\n');
-          console.log(JSON.stringify(summary, null, 2));
-          if (!summary.passed) process.exit(1);
-          NODE
-
-'''
-          if 'Verify full unit failure parity' not in text:
-              if related_marker not in text:
-                  raise SystemExit('dependency marker missing')
-              text = text.replace(related_marker, parity + related_marker, 1)
-          old_replay = '''          supabase db start
-          supabase db reset --local --no-seed
-          supabase db lint --local --schema public --level error --fail-on error
-          database_url="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-'''
-          new_replay = '''          supabase db start
-          supabase db reset --local --no-seed --version 20260720213000
-          database_url="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-          marker_before="$(PGPASSWORD=postgres psql "$database_url" -X -A -t -v ON_ERROR_STOP=1 -c "select migration_version from public.release_schema_compatibility where singleton")"
-          test "$marker_before" = "20260711014500"
-          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -c "update public.release_schema_compatibility set migration_version = '20260717051011' where singleton"
-          supabase migration up --local
-          marker_after="$(PGPASSWORD=postgres psql "$database_url" -X -A -t -v ON_ERROR_STOP=1 -c "select migration_version from public.release_schema_compatibility where singleton")"
-          test "$marker_after" = "20260717051011"
-          supabase db lint --local --schema public --level error --fail-on error
-'''
+          old_replay = (
+              "          supabase db start\n"
+              "          supabase db reset --local --no-seed\n"
+              "          supabase db lint --local --schema public --level error --fail-on error\n"
+              "          database_url=\"postgresql://postgres:postgres@127.0.0.1:54322/postgres\"\n"
+          )
+          new_replay = (
+              "          supabase db start\n"
+              "          supabase db reset --local --no-seed --version 20260720213000\n"
+              "          database_url=\"postgresql://postgres:postgres@127.0.0.1:54322/postgres\"\n"
+              "          marker_before=\"$(PGPASSWORD=postgres psql \"$database_url\" -X -A -t -v ON_ERROR_STOP=1 -c \"select migration_version from public.release_schema_compatibility where singleton\")\"\n"
+              "          test \"$marker_before\" = \"20260711014500\"\n"
+              "          PGPASSWORD=postgres psql \"$database_url\" -X -v ON_ERROR_STOP=1 -c \"update public.release_schema_compatibility set migration_version = '20260717051011' where singleton\"\n"
+              "          supabase migration up --local\n"
+              "          marker_after=\"$(PGPASSWORD=postgres psql \"$database_url\" -X -A -t -v ON_ERROR_STOP=1 -c \"select migration_version from public.release_schema_compatibility where singleton\")\"\n"
+              "          test \"$marker_after\" = \"20260717051011\"\n"
+              "          supabase db lint --local --schema public --level error --fail-on error\n"
+          )
           if old_replay not in text:
               raise SystemExit('database replay marker missing')
           text = text.replace(old_replay, new_replay, 1)
-          old_upload = '''      - name: Upload AW-2A database validation evidence
-        if: always() && steps.scope.outputs.database == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: aw2a-database-validation-46571eee8fa13cc22b4190668678abae03cc643a
-          path: quality-reports/aw2a-database-validation.log
-          if-no-files-found: warn
-          retention-days: 14
-'''
-          dynamic = '${' + '{ github.event.pull_request.head.sha || github.sha }}'
-          new_upload = f'''      - name: Upload AW-2A validation evidence
-        if: always() && steps.scope.outputs.database == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: aw2a-validation-{dynamic}
-          path: |
-            quality-reports/aw2a-database-validation.log
-            quality-reports/aw2a-unit-failure-parity.json
-          if-no-files-found: warn
-          retention-days: 14
-'''
+
+          old_upload = (
+              "      - name: Upload AW-2A database validation evidence\n"
+              "        if: always() && steps.scope.outputs.database == 'true'\n"
+              "        uses: actions/upload-artifact@v4\n"
+              "        with:\n"
+              "          name: aw2a-database-validation-46571eee8fa13cc22b4190668678abae03cc643a\n"
+              "          path: quality-reports/aw2a-database-validation.log\n"
+              "          if-no-files-found: warn\n"
+              "          retention-days: 14\n"
+          )
+          artifact_expression = '${' + '{ github.event.pull_request.head.sha || github.sha }}'
+          new_upload = (
+              "      - name: Upload AW-2A validation evidence\n"
+              "        if: always() && steps.scope.outputs.database == 'true'\n"
+              "        uses: actions/upload-artifact@v4\n"
+              "        with:\n"
+              "          name: aw2a-validation-" + artifact_expression + "\n"
+              "          path: |\n"
+              "            quality-reports/aw2a-database-validation.log\n"
+              "            quality-reports/aw2a-unit-failure-parity.json\n"
+              "          if-no-files-found: warn\n"
+              "          retention-days: 14\n"
+          )
           if old_upload not in text:
               raise SystemExit('AW-2A upload marker missing')
           text = text.replace(old_upload, new_upload, 1)
+
           required = [
-              'Verify full unit failure parity',
+              'check-aw2a-unit-failure-parity.mjs',
               'supabase db reset --local --no-seed --version 20260720213000',
               'supabase migration up --local',
               'quality-reports/aw2a-unit-failure-parity.json',
