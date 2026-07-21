@@ -83,7 +83,7 @@ jobs:
                 --event workflow_dispatch \
                 --limit 100 \
                 --json databaseId,headSha \
-                --jq '[.[] | select(.headSha == env.REVIEWED_COMMIT and .databaseId > (env.PREVIOUS_RUN_ID | tonumber)) | .databaseId] | max // empty'
+                --jq '[.[] | select(.headSha == env.REVIEWED_COMMIT) | select(.databaseId > (env.PREVIOUS_RUN_ID | tonumber)) | .databaseId] | max // empty'
             )"
             if [[ "$quality_run_id" =~ ^[0-9]+$ ]]; then break; fi
             sleep 2
@@ -152,7 +152,7 @@ jobs:
                 --event workflow_dispatch \
                 --limit 100 \
                 --json databaseId,headSha \
-                --jq '[.[] | select(.headSha == env.REVIEWED_COMMIT and .databaseId > (env.PREVIOUS_RUN_ID | tonumber)) | .databaseId] | max // empty'
+                --jq '[.[] | select(.headSha == env.REVIEWED_COMMIT) | select(.databaseId > (env.PREVIOUS_RUN_ID | tonumber)) | .databaseId] | max // empty'
             )"
             if [[ "$preflight_run_id" =~ ^[0-9]+$ ]]; then break; fi
             sleep 2
