@@ -11,19 +11,24 @@ on:
         description: GitHub Actions run ID containing quality-reports-<run id>
         required: true
         type: string
+      validation_context:
+        description: Non-mutating validation context label
+        required: true
+        default: stage1-infrastructure-validation
+        type: string
 
 permissions:
   actions: read
   contents: read
 
 concurrency:
-  group: release-preflight-${{ inputs.reviewed_commit }}
+  group: release-preflight-${{ inputs.reviewed_commit }}-${{ inputs.quality_run_id }}
   cancel-in-progress: false
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Validate exact inputs
         shell: bash
@@ -31,6 +36,7 @@ jobs:
           set -euo pipefail
           [[ "${{ inputs.reviewed_commit }}" =~ ^[0-9a-fA-F]{40}$ ]]
           [[ "${{ inputs.quality_run_id }}" =~ ^[0-9]+$ ]]
+          [[ "${{ inputs.validation_context }}" =~ ^[a-zA-Z0-9._-]{1,64}$ ]]
 
       - name: Checkout reviewed commit
         uses: actions/checkout@v4
@@ -54,7 +60,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download exact quality evidence
+      - name: Download exact canonical Quality artifact
         uses: actions/download-artifact@v4
         with:
           name: quality-reports-${{ inputs.quality_run_id }}
@@ -62,34 +68,42 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ inputs.quality_run_id }}
 
-      - name: Verify manifest belongs to reviewed commit
-        shell: bash
-        run: |
-          set -euo pipefail
-          node -e '
-            const fs = require("node:fs");
-            const manifest = JSON.parse(fs.readFileSync("quality-reports/release-manifest.json", "utf8"));
-            if (manifest.release?.commitSha !== process.argv[1]) throw new Error("Quality manifest commit mismatch.");
-          ' "${{ inputs.reviewed_commit }}"
-
       - name: Validate migration ledger
         run: npm run migration:ledger:check
 
-      - name: Run non-deploying release preflight
+      - name: Run strict non-deploying release preflight
         run: >-
           npm run release:preflight --
           --commit "${{ inputs.reviewed_commit }}"
+          --quality-run-id "${{ inputs.quality_run_id }}"
           --repository "${{ github.repository }}"
+          --validation-context "${{ inputs.validation_context }}"
           --quality-reports quality-reports
           --output quality-reports/release-preflight.json
 
-      - name: Upload preflight evidence
+      - name: Assert Stage-1 preflight is read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const evidence = JSON.parse(fs.readFileSync('quality-reports/release-preflight.json', 'utf8'));
+          if (evidence.ready !== true || evidence.qualityArtifactValid !== true) throw new Error('Release preflight was not successful.');
+          if (evidence.deploymentPerformed !== false) throw new Error('Release preflight attempted deployment.');
+          if (evidence.productionMutationPerformed !== false) throw new Error('Release preflight attempted a Production mutation.');
+          if (evidence.validationContext !== 'stage1-infrastructure-validation') throw new Error('Unexpected Stage-1 validation context.');
+          if (evidence.productionPromotionAuthorized !== false) throw new Error('Stage-1 evidence must not authorize Production promotion.');
+          NODE
+
+      - name: Upload immutable preflight evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-preflight-${{ inputs.reviewed_commit }}
+          name: release-preflight-${{ inputs.reviewed_commit }}-${{ inputs.quality_run_id }}
           path: |
             quality-reports/release-preflight.json
             quality-reports/release-manifest.json
+            quality-reports/evidence-index.json
+            quality-reports/artifact-metadata.json
           if-no-files-found: error
           retention-days: 30
