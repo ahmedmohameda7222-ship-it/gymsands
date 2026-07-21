@@ -1,13 +1,23 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
+import {
+  EXPECTED_DATABASE_MIGRATION,
+  EXPECTED_REPOSITORY,
+  REQUIRED_CANONICAL_FILES,
+  REQUIRED_QUALITY_GATES,
+  exactCommit,
+  exactTimestamp,
+  numericRunId,
+  safeRelativePath,
+  sha256File,
+} from "./quality-evidence-contract.mjs";
 import { installedNextVersion as readInstalledNextVersion } from "./release-runtime-versions.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const EXACT_SHA = /^[a-f0-9]{40}$/i;
 const PREFLIGHT_MODES = new Set(["release", "review"]);
 
 function parseArgs(argv) {
@@ -28,12 +38,6 @@ function git(...args) {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 }
 
-function exactSha(value, label = "Commit SHA") {
-  const normalized = value?.trim().toLowerCase();
-  if (!normalized || !EXACT_SHA.test(normalized)) throw new Error(`${label} must be an exact 40-character Git SHA.`);
-  return normalized;
-}
-
 function safeRepository(value) {
   const normalized = value?.trim();
   if (!normalized || !/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i.test(normalized)) {
@@ -42,8 +46,12 @@ function safeRepository(value) {
   return normalized;
 }
 
-function readJson(path) {
-  return JSON.parse(readFileSync(path, "utf8"));
+function readJson(path, label = path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    throw new Error(`Unable to read ${label}: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 function normalizePreflightMode(value) {
@@ -66,29 +74,192 @@ function reviewMigrationFailures(migrationState) {
   const failures = [];
   if (migrationState.releaseReady) {
     if (
-      migrationState.reconciliationState !== "reconciled" ||
-      migrationState.pendingCount !== 0 ||
-      migrationState.schemaAppliedUntrackedCount !== 0 ||
-      migrationState.unresolvedCount !== 0
-    ) {
-      failures.push("migration_ledger_inconsistent");
-    }
+      migrationState.reconciliationState !== "reconciled"
+      || migrationState.pendingCount !== 0
+      || migrationState.schemaAppliedUntrackedCount !== 0
+      || migrationState.unresolvedCount !== 0
+    ) failures.push("migration_ledger_inconsistent");
     return failures;
   }
-
-  if (migrationState.reconciliationState !== "pending") {
-    failures.push("migration_ledger_not_reviewable");
-  }
+  if (migrationState.reconciliationState !== "pending") failures.push("migration_ledger_not_reviewable");
   if (!Number.isInteger(migrationState.pendingCount) || migrationState.pendingCount <= 0) {
     failures.push("migration_pending_count_invalid");
   }
-  if (migrationState.schemaAppliedUntrackedCount !== 0) {
-    failures.push("migration_schema_applied_untracked");
-  }
-  if (migrationState.unresolvedCount !== migrationState.pendingCount) {
-    failures.push("migration_unresolved_count_mismatch");
-  }
+  if (migrationState.schemaAppliedUntrackedCount !== 0) failures.push("migration_schema_applied_untracked");
+  if (migrationState.unresolvedCount !== migrationState.pendingCount) failures.push("migration_unresolved_count_mismatch");
   return failures;
+}
+
+function requiredFile(reportsPath, relativePath, failures, code) {
+  let safePath;
+  try {
+    safePath = safeRelativePath(relativePath);
+  } catch {
+    failures.push(`${code}_path_invalid`);
+    return null;
+  }
+  const absolutePath = resolve(reportsPath, safePath);
+  if (!existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
+    failures.push(`${code}_missing`);
+    return null;
+  }
+  return { safePath, absolutePath };
+}
+
+export function validateCanonicalQualityArtifact({
+  reportsPath,
+  expectedCommit,
+  expectedRepository,
+  qualityRunId,
+  migrationState,
+  now = Date.now(),
+}) {
+  const failures = [];
+  const expectedSha = exactCommit(expectedCommit, "Reviewed commit");
+  const expectedRepo = safeRepository(expectedRepository);
+  const expectedRun = numericRunId(qualityRunId);
+  const manifestFile = requiredFile(reportsPath, "release-manifest.json", failures, "release_manifest");
+  const metadataFile = requiredFile(reportsPath, "artifact-metadata.json", failures, "artifact_metadata");
+  const indexFile = requiredFile(reportsPath, "evidence-index.json", failures, "evidence_index");
+  if (!manifestFile || !metadataFile || !indexFile) return { valid: false, failures: unique(failures) };
+
+  const manifest = readJson(manifestFile.absolutePath, "release manifest");
+  const metadata = readJson(metadataFile.absolutePath, "artifact metadata");
+  const index = readJson(indexFile.absolutePath, "evidence index");
+
+  if (manifest.release?.commitSha !== expectedSha) failures.push("release_manifest_commit_mismatch");
+  if (manifest.release?.environment !== "ci") failures.push("release_manifest_environment_mismatch");
+  if (String(manifest.release?.schemaCompatibilityVersion ?? "") !== "2") {
+    failures.push("release_manifest_schema_compatibility_mismatch");
+  }
+  if (manifest.release?.expectedDatabaseMigrationVersion !== EXPECTED_DATABASE_MIGRATION) {
+    failures.push("release_manifest_unexpected_migration");
+  }
+  if (manifest.release?.expectedDatabaseMigrationVersion !== migrationState.latestAppliedMigrationVersion) {
+    failures.push("release_manifest_migration_mismatch");
+  }
+  if (manifest.release?.migrationLedgerReconciliationState !== "reconciled") {
+    failures.push("release_manifest_unreconciled");
+  }
+  if (manifest.release?.pendingMigrationCount !== 0) failures.push("release_manifest_pending_count_mismatch");
+  if (manifest.release?.schemaAppliedUntrackedCount !== 0) failures.push("release_manifest_untracked_count_mismatch");
+  if (manifest.release?.unresolvedMigrationCount !== 0) failures.push("release_manifest_unresolved_count_mismatch");
+
+  const metadataRun = String(metadata.workflowRunId ?? "");
+  if (metadata.repository !== expectedRepo) failures.push("artifact_repository_mismatch");
+  if (metadata.fullReleaseQuality !== true) failures.push("artifact_not_full_release_quality");
+  if (metadataRun !== expectedRun) failures.push("artifact_run_id_mismatch");
+  if (metadata.reviewedCommit !== expectedSha) failures.push("artifact_commit_mismatch");
+  try { exactCommit(metadata.comparisonBase, "Artifact comparison base"); } catch { failures.push("artifact_comparison_base_invalid"); }
+  let qualityBuildTimestamp = Number.NaN;
+  try { qualityBuildTimestamp = Date.parse(exactTimestamp(metadata.qualityBuildTimestamp, "Quality build timestamp")); }
+  catch { failures.push("artifact_build_timestamp_invalid"); }
+  let capturedAt = Number.NaN;
+  try { capturedAt = Date.parse(exactTimestamp(metadata.capturedAt, "Artifact captured timestamp")); }
+  catch { failures.push("artifact_captured_timestamp_invalid"); }
+  if (!Number.isNaN(capturedAt) && capturedAt > now + 5 * 60_000) failures.push("artifact_timestamp_future");
+  if (!Number.isNaN(qualityBuildTimestamp) && !Number.isNaN(capturedAt) && capturedAt < qualityBuildTimestamp) {
+    failures.push("artifact_timestamp_stale");
+  }
+
+  if (index.repository !== expectedRepo) failures.push("evidence_index_repository_mismatch");
+  if (String(index.workflowRunId ?? "") !== expectedRun) failures.push("evidence_index_run_id_mismatch");
+  if (index.reviewedCommit !== expectedSha) failures.push("evidence_index_commit_mismatch");
+  if (index.comparisonBase !== metadata.comparisonBase) failures.push("evidence_index_comparison_base_mismatch");
+  if (index.qualityBuildTimestamp !== metadata.qualityBuildTimestamp) failures.push("evidence_index_timestamp_mismatch");
+
+  const declaredIndexHash = manifest.qualityArtifact?.evidenceIndexSha256;
+  if (manifest.qualityArtifact?.evidenceIndex !== "evidence-index.json") failures.push("release_manifest_evidence_index_missing");
+  if (declaredIndexHash !== sha256File(indexFile.absolutePath)) failures.push("evidence_index_digest_mismatch");
+  if (manifest.qualityArtifact?.metadataSha256 !== sha256File(metadataFile.absolutePath)) {
+    failures.push("artifact_metadata_digest_mismatch");
+  }
+  if (manifest.qualityArtifact?.repository !== expectedRepo) failures.push("release_manifest_artifact_repository_mismatch");
+  if (String(manifest.qualityArtifact?.workflowRunId ?? "") !== expectedRun) {
+    failures.push("release_manifest_artifact_run_mismatch");
+  }
+  if (manifest.qualityArtifact?.reviewedCommit !== expectedSha) failures.push("release_manifest_artifact_commit_mismatch");
+  if (manifest.qualityArtifact?.comparisonBase !== metadata.comparisonBase) {
+    failures.push("release_manifest_artifact_comparison_base_mismatch");
+  }
+  if (manifest.qualityArtifact?.qualityBuildTimestamp !== metadata.qualityBuildTimestamp) {
+    failures.push("release_manifest_artifact_timestamp_mismatch");
+  }
+  if (manifest.qualityArtifact?.fullReleaseQuality !== true) {
+    failures.push("release_manifest_artifact_not_full_release_quality");
+  }
+
+  const indexedFiles = index.files && typeof index.files === "object" ? index.files : {};
+  for (const [relativePath, fileEvidence] of Object.entries(indexedFiles)) {
+    const file = requiredFile(reportsPath, relativePath, failures, `indexed_file_${relativePath.replaceAll(/[^a-z0-9]/gi, "_")}`);
+    if (!file) continue;
+    if (fileEvidence?.sha256 !== sha256File(file.absolutePath)) failures.push(`indexed_file_${relativePath}_digest_mismatch`);
+    if (fileEvidence?.bytes !== statSync(file.absolutePath).size) failures.push(`indexed_file_${relativePath}_size_mismatch`);
+  }
+
+  for (const required of REQUIRED_CANONICAL_FILES) {
+    if (!indexedFiles[required]) failures.push(`canonical_file_${required}_not_indexed`);
+    requiredFile(reportsPath, required, failures, `canonical_file_${required.replaceAll(/[^a-z0-9]/gi, "_")}`);
+  }
+
+  for (const [gate, evidenceName] of Object.entries(REQUIRED_QUALITY_GATES)) {
+    const evidence = manifest.qualityGates?.[gate];
+    if (!evidence || evidence.status !== "passed") {
+      failures.push(`quality_gate_${gate}_not_passed`);
+      continue;
+    }
+    if (evidence.exitCode !== 0) failures.push(`quality_gate_${gate}_exit_nonzero`);
+    if (evidence.commitSha !== expectedSha) failures.push(`quality_gate_${gate}_commit_mismatch`);
+    if (evidence.stale === true) failures.push(`quality_gate_${gate}_stale`);
+    const expectedPaths = {
+      evidence: `${evidenceName}.log`,
+      exitEvidence: `${evidenceName}.exit`,
+      metadata: `${evidenceName}.meta.json`,
+    };
+    for (const [field, expectedPath] of Object.entries(expectedPaths)) {
+      if (evidence[field] !== expectedPath) failures.push(`quality_gate_${gate}_${field}_mismatch`);
+      const file = requiredFile(reportsPath, expectedPath, failures, `quality_gate_${gate}_${field}`);
+      if (!file) continue;
+      if (!indexedFiles[expectedPath]) failures.push(`quality_gate_${gate}_${field}_not_indexed`);
+      const manifestDigestField = field === "evidence" ? "logSha256" : field === "exitEvidence" ? "exitSha256" : "metadataSha256";
+      if (evidence[manifestDigestField] !== sha256File(file.absolutePath)) {
+        failures.push(`quality_gate_${gate}_${field}_digest_mismatch`);
+      }
+      if (indexedFiles[expectedPath]?.sha256 !== sha256File(file.absolutePath)) {
+        failures.push(`quality_gate_${gate}_${field}_index_digest_mismatch`);
+      }
+    }
+    const exitFile = resolve(reportsPath, `${evidenceName}.exit`);
+    if (existsSync(exitFile) && readFileSync(exitFile, "utf8").trim() !== "0") {
+      failures.push(`quality_gate_${gate}_exit_file_nonzero`);
+    }
+    const gateMetaPath = resolve(reportsPath, `${evidenceName}.meta.json`);
+    if (existsSync(gateMetaPath)) {
+      const gateMeta = readJson(gateMetaPath, `${gate} metadata`);
+      if (gateMeta.commitSha !== expectedSha) failures.push(`quality_gate_${gate}_metadata_commit_mismatch`);
+      if (gateMeta.exitCode !== 0 || gateMeta.passed !== true) failures.push(`quality_gate_${gate}_metadata_failed`);
+      const gateCaptured = Date.parse(gateMeta.capturedAt ?? "");
+      if (Number.isNaN(gateCaptured) || (!Number.isNaN(qualityBuildTimestamp) && gateCaptured < qualityBuildTimestamp)) {
+        failures.push(`quality_gate_${gate}_metadata_stale`);
+      }
+    }
+  }
+
+  const parityPath = resolve(reportsPath, "unit-failure-parity.json");
+  if (existsSync(parityPath)) {
+    const parity = readJson(parityPath, "unit failure parity");
+    if (parity.headSha !== expectedSha) failures.push("unit_parity_head_mismatch");
+    if (parity.baseSha !== metadata.comparisonBase) failures.push("unit_parity_base_mismatch");
+    if (parity.passed !== true) failures.push("unit_parity_failed");
+  }
+
+  return {
+    valid: failures.length === 0,
+    failures: unique(failures),
+    manifest,
+    metadata,
+    evidenceIndex: index,
+  };
 }
 
 export function evaluateReleasePreflight({
@@ -103,11 +274,12 @@ export function evaluateReleasePreflight({
   nodeFileVersion,
   installedNextVersion,
   migrationState,
-  manifest
+  manifest,
+  artifactFailures = [],
 }) {
   const normalizedMode = normalizePreflightMode(mode);
-  const commonFailures = [];
-  if (!EXACT_SHA.test(expectedCommit)) commonFailures.push("expected_commit_invalid");
+  const commonFailures = [...artifactFailures];
+  if (!/^[a-f0-9]{40}$/i.test(expectedCommit)) commonFailures.push("expected_commit_invalid");
   if (checkedOutCommit !== expectedCommit) commonFailures.push("checkout_commit_mismatch");
   if (!remoteUrl.includes(expectedRepository)) commonFailures.push("repository_origin_mismatch");
   if (packageJson.engines?.node !== "24.x") commonFailures.push("package_node_engine_mismatch");
@@ -121,9 +293,7 @@ export function evaluateReleasePreflight({
   if (manifest?.release?.migrationLedgerReconciliationState !== migrationState.reconciliationState) {
     commonFailures.push("release_manifest_reconciliation_mismatch");
   }
-  if (manifest?.release?.pendingMigrationCount !== migrationState.pendingCount) {
-    commonFailures.push("release_manifest_pending_count_mismatch");
-  }
+  if (manifest?.release?.pendingMigrationCount !== migrationState.pendingCount) commonFailures.push("release_manifest_pending_count_mismatch");
   if (manifest?.release?.schemaAppliedUntrackedCount !== migrationState.schemaAppliedUntrackedCount) {
     commonFailures.push("release_manifest_untracked_count_mismatch");
   }
@@ -131,16 +301,10 @@ export function evaluateReleasePreflight({
     commonFailures.push("release_manifest_unresolved_count_mismatch");
   }
 
-  const requiredGates = [
-    "repositoryIntegrity", "fullMigrationChain", "databaseLint", "databasePreflight",
-    "migrationLedger", "dependencyAudit", "lint", "typecheck", "unitTests",
-    "integrationTests", "scriptTests", "telemetryTests", "environmentValidation",
-    "releaseMetadata", "productionBuild", "renderedBrowserQa"
-  ];
   const manifestBuildTimestamp = Date.parse(manifest?.release?.buildTimestamp ?? "");
-  for (const gate of requiredGates) {
+  for (const gate of Object.keys(REQUIRED_QUALITY_GATES)) {
     const evidence = manifest?.qualityGates?.[gate];
-    if (!evidence || evidence.status === "missing" || !evidence.evidence) {
+    if (!evidence || !evidence.evidence) {
       commonFailures.push(`quality_gate_${gate}_missing`);
       continue;
     }
@@ -162,39 +326,44 @@ export function evaluateReleasePreflight({
     }
   }
 
-  const releaseBlockers = unique([
-    ...commonFailures,
-    ...(!migrationState.releaseReady ? ["migration_ledger_not_reconciled"] : [])
-  ]);
+  const releaseBlockers = unique([...commonFailures, ...(!migrationState.releaseReady ? ["migration_ledger_not_reconciled"] : [])]);
   const reviewFailures = unique([...commonFailures, ...reviewMigrationFailures(migrationState)]);
   const releaseReady = releaseBlockers.length === 0;
   const reviewReady = reviewFailures.length === 0;
   const failures = normalizedMode === "release" ? releaseBlockers : reviewFailures;
-
   return {
     mode: normalizedMode,
     ready: normalizedMode === "release" ? releaseReady : reviewReady,
     reviewReady,
     releaseReady,
     releaseBlockers,
-    failures
+    failures,
   };
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const mode = resolvePreflightMode(options.mode || process.env.PLAIVRA_PREFLIGHT_MODE);
-  const expectedCommit = exactSha(options.commit || process.env.PLAIVRA_RELEASE_PREFLIGHT_SHA, "Reviewed commit");
-  const expectedRepository = safeRepository(options.repository || process.env.GITHUB_REPOSITORY || "ahmedmohameda7222-ship-it/gymsands");
-  const checkedOutCommit = exactSha(git("rev-parse", "HEAD"), "Checked-out commit");
+  const expectedCommit = exactCommit(options.commit || process.env.PLAIVRA_RELEASE_PREFLIGHT_SHA, "Reviewed commit");
+  const expectedRepository = safeRepository(options.repository || process.env.GITHUB_REPOSITORY || EXPECTED_REPOSITORY);
+  const qualityRunId = numericRunId(options["quality-run-id"] || process.env.PLAIVRA_QUALITY_RUN_ID);
+  const checkedOutCommit = exactCommit(git("rev-parse", "HEAD"), "Checked-out commit");
   const remoteUrl = git("remote", "get-url", "origin");
   const packageJson = readJson(resolve(root, "package.json"));
   const ledger = readJson(resolve(root, "supabase/migration-ledger.json"));
   const migrationState = deriveMigrationLedgerState(ledger);
   const nextVersion = readInstalledNextVersion(root);
-  const reportsPath = resolve(root, options["quality-reports"] || "quality-reports");
-  const manifestPath = resolve(reportsPath, "release-manifest.json");
-  const manifest = existsSync(manifestPath) ? readJson(manifestPath) : null;
+  const reportsPath = isAbsolute(options["quality-reports"] ?? "")
+    ? options["quality-reports"]
+    : resolve(root, options["quality-reports"] || "quality-reports");
+  const artifactValidation = validateCanonicalQualityArtifact({
+    reportsPath,
+    expectedCommit,
+    expectedRepository,
+    qualityRunId,
+    migrationState,
+  });
+  const manifest = artifactValidation.manifest ?? null;
   const result = evaluateReleasePreflight({
     mode,
     expectedCommit,
@@ -207,14 +376,21 @@ async function main() {
     nodeFileVersion: readFileSync(resolve(root, ".node-version"), "utf8"),
     installedNextVersion: nextVersion,
     migrationState,
-    manifest
+    manifest,
+    artifactFailures: artifactValidation.failures,
   });
+  const validationContext = options["validation-context"] || "release";
+  const productionPromotionAuthorized = validationContext === "production-marker-promotion-authorization" && result.ready === true;
   const evidence = {
     checkedAt: new Date().toISOString(),
+    validationContext,
     mode,
     expectedRepository,
     expectedCommit,
     checkedOutCommit,
+    qualityRunId,
+    qualityArtifactValid: artifactValidation.valid,
+    artifactFailures: artifactValidation.failures,
     nodeVersion: process.version,
     nextVersion,
     expectedDatabaseMigrationVersion: migrationState.latestAppliedMigrationVersion,
@@ -222,10 +398,13 @@ async function main() {
     pendingMigrationCount: migrationState.pendingCount,
     schemaAppliedUntrackedCount: migrationState.schemaAppliedUntrackedCount,
     unresolvedMigrationCount: migrationState.unresolvedCount,
-    manifestPath: existsSync(manifestPath) ? "quality-reports/release-manifest.json" : null,
+    manifestPath: "quality-reports/release-manifest.json",
+    evidenceIndexPath: "quality-reports/evidence-index.json",
     deploymentPerformed: false,
+    productionMutationPerformed: false,
+    productionPromotionAuthorized,
     oldArtifactRedeployAccepted: false,
-    ...result
+    ...result,
   };
   const outputPath = isAbsolute(options.output ?? "")
     ? options.output
