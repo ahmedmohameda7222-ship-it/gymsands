@@ -297,3 +297,17 @@ jobs:
           path: quality-reports/
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Package exact repository source for correction workspace
+        if: always()
+        shell: bash
+        run: git archive --format=zip --output=/tmp/plaivra-source-${PLAIVRA_COMMIT_SHA}.zip HEAD
+
+      - name: Upload exact repository source for correction workspace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plaivra-source-${{ github.event.pull_request.head.sha || github.sha }}
+          path: /tmp/plaivra-source-${{ env.PLAIVRA_COMMIT_SHA }}.zip
+          if-no-files-found: error
+          retention-days: 1
