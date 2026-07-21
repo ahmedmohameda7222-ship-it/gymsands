@@ -1,0 +1,53 @@
+name: Stage 1 Final QA Corrections Apply
+
+on:
+  push:
+    branches:
+      - fix/aw2a-post-merge-release-closure
+    paths:
+      - .github/workflows/stage1-final-qa-corrections-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact correction branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/aw2a-post-merge-release-closure
+          fetch-depth: 0
+
+      - name: Apply and validate final Planner corrections
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .stage1-correction/part* \
+            | base64 -d \
+            | python -c 'import pathlib,sys,zlib; pathlib.Path("/tmp/apply-stage1-final-qa.py").write_bytes(zlib.decompress(sys.stdin.buffer.read()))'
+          python /tmp/apply-stage1-final-qa.py
+          node --test \
+            scripts/release-preflight.test.mjs \
+            scripts/promote-release-schema-compatibility.test.mjs \
+            scripts/release-closure-stage1.test.mjs \
+            scripts/release-closure-final-qa.test.mjs \
+            scripts/run-quality-gate.test.mjs \
+            scripts/permanent-quality-replay.test.mjs
+          git diff --check
+          test -z "$(git status --porcelain | grep -E 'supabase/migrations/|^(.. )?(app|components|lib|services)/' || true)"
+
+      - name: Commit corrected Stage 1 implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .stage1-correction
+          rm -f .github/workflows/stage1-final-qa-corrections-apply.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(release): bind Stage 1 release identities"
+          git push origin HEAD:fix/aw2a-post-merge-release-closure
