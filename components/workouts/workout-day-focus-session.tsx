@@ -54,15 +54,21 @@ import { ExercisePickerDialog } from "@/components/workouts/exercise-picker-dial
 import { SessionMuscleLoadPanel } from "@/components/workouts/session-muscle-load-panel";
 import { getActiveWorkoutDeviceId } from "@/lib/workouts/active-workout-device";
 import {
+  createWorkoutSessionExecutionWriteQueue,
   executionCursorToIndexes,
+  executionDurationMinutes,
   executionElapsedSeconds,
   executionRestSecondsLeft,
-  executionStartedAtMs
+  executionStartedAtMs,
+  persistCanonicalSetThenExecution,
+  planWorkoutSessionAfterSetCompletion,
+  WorkoutSessionExecutionSyncError
 } from "@/lib/workouts/workout-session-execution";
 import {
   clearWorkoutSessionRestTimer,
   getWorkoutSessionExecutionCursorItems,
   importLegacyWorkoutExecutionCache,
+  persistWorkoutSessionAfterSetCompletion,
   persistWorkoutSessionCursor,
   persistWorkoutSessionRestTimer,
   persistWorkoutSessionTimerReset,
@@ -477,10 +483,11 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const [executionState, setExecutionState] = useState<WorkoutSessionExecutionState | null>(null);
   const [executionCursorItems, setExecutionCursorItems] = useState<WorkoutSessionExecutionCursorRow[]>([]);
   const executionHydratedRef = useRef(false);
-  const executionWriteRef = useRef<Promise<unknown>>(Promise.resolve());
+  const executionWriteQueueRef = useRef(createWorkoutSessionExecutionWriteQueue());
   const controllerDeviceIdRef = useRef<string | null>(null);
 
   const mirrorExecutionState = useCallback((next: WorkoutSessionExecutionState) => {
+    executionWriteQueueRef.current.replace(next);
     setExecutionState(next);
     const now = Date.now();
     const derivedStartedAt = executionStartedAtMs(next, now);
@@ -513,14 +520,22 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   }, [day.day_name, day.id, restTimerKey, user, workoutTimerKey]);
 
   const queueExecutionWrite = useCallback((
-    write: () => Promise<WorkoutSessionExecutionState>,
-    rollback?: () => void
+    write: (currentServerState: WorkoutSessionExecutionState) => Promise<WorkoutSessionExecutionState>,
+    options: {
+      rollback?: (currentServerState: WorkoutSessionExecutionState | null) => void;
+      reportFailure?: boolean;
+    } = {}
   ) => {
-    const operation = executionWriteRef.current.then(write);
-    executionWriteRef.current = operation.then(
+    let attemptedState: WorkoutSessionExecutionState | null = null;
+    const operation = executionWriteQueueRef.current.enqueue((currentServerState) => {
+      attemptedState = currentServerState;
+      return write(currentServerState);
+    });
+    void operation.then(
       (next) => { mirrorExecutionState(next); },
       (error) => {
-        rollback?.();
+        options.rollback?.(attemptedState);
+        if (options.reportFailure === false) return;
         setSetFeedbackVariant("error");
         setSetFeedback(tr("offline.setSaveCombined"));
         toast({ title: tr("completion.saveFailedTitle"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
@@ -558,6 +573,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         ]);
 
         let authoritativeState = persistedState;
+        executionWriteQueueRef.current.replace(authoritativeState);
         if (persistedState.bootstrap_source === "legacy_backfill" && persistedState.revision === 0) {
           try {
             const imported = await importLegacyWorkoutExecutionCache(
@@ -570,31 +586,32 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
               { endsAtMs: storedRestEndsAt, durationSeconds: day.exercises[0]?.rest_seconds ?? 75 }
             );
             authoritativeState = imported.state;
+            executionWriteQueueRef.current.replace(authoritativeState);
           } catch (error) {
             console.warn("Plaivra could not import the optional legacy workout timer cache.", error);
           }
         }
 
         if (controllerDeviceIdRef.current && authoritativeState.controller_device_id !== controllerDeviceIdRef.current) {
-          authoritativeState = await queueExecutionWrite(() => persistWorkoutSessionCursor(
+          authoritativeState = await queueExecutionWrite((currentServerState) => persistWorkoutSessionCursor(
             user.id,
             nextSession.id,
             {
-              snapshotItemId: authoritativeState.active_snapshot_item_id,
-              itemOrder: authoritativeState.active_item_order,
-              setNumber: authoritativeState.active_set_number,
+              snapshotItemId: currentServerState.active_snapshot_item_id,
+              itemOrder: currentServerState.active_item_order,
+              setNumber: currentServerState.active_set_number,
               controllerDeviceId: controllerDeviceIdRef.current
             }
           ));
         }
 
         if (authoritativeState.view_state === "rest" && executionRestSecondsLeft(authoritativeState) <= 0) {
-          authoritativeState = await clearWorkoutSessionRestTimer(
+          authoritativeState = await queueExecutionWrite(() => clearWorkoutSessionRestTimer(
             user.id,
             nextSession.id,
             "set_entry",
             controllerDeviceIdRef.current
-          );
+          ));
         }
 
         if (!active) return;
@@ -636,11 +653,15 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   useEffect(() => {
     if (!session) return;
     const interval = window.setInterval(() => {
-      const durationMinutes = Math.max(1, Math.ceil((Date.now() - startedAtMs) / 60000));
-      updateWorkoutSessionDuration(session.id, durationMinutes).catch(() => undefined);
+      const authoritativeState = executionWriteQueueRef.current.current();
+      if (!authoritativeState) return;
+      updateWorkoutSessionDuration(
+        session.id,
+        executionDurationMinutes(authoritativeState)
+      ).catch(() => undefined);
     }, 20000);
     return () => window.clearInterval(interval);
-  }, [session, startedAtMs]);
+  }, [session]);
 
   useEffect(() => {
     if (!timerEndsAtMs) return;
@@ -685,7 +706,6 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       && executionState.controller_device_id === controllerDeviceIdRef.current
     ) return;
 
-    const previousCursor = executionCursorToIndexes(executionState, executionCursorItems, day.exercises);
     void queueExecutionWrite(
       () => persistWorkoutSessionCursor(user.id, session.id, {
         snapshotItemId: cursorItem?.id ?? null,
@@ -693,9 +713,13 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         setNumber,
         controllerDeviceId: controllerDeviceIdRef.current
       }),
-      () => {
-        setActiveExerciseIndex(previousCursor.exerciseIndex);
-        setActiveSetIndex(previousCursor.setIndex);
+      {
+        rollback: (currentServerState) => {
+          if (!currentServerState) return;
+          const previousCursor = executionCursorToIndexes(currentServerState, executionCursorItems, day.exercises);
+          setActiveExerciseIndex(previousCursor.exerciseIndex);
+          setActiveSetIndex(previousCursor.setIndex);
+        }
       }
     );
   }, [activeExerciseIndex, activeSetIndex, day.exercises, executionCursorItems, executionState, queueExecutionWrite, session?.id, user?.id]);
@@ -782,21 +806,6 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     );
   }
 
-  function moveToNextSet(states = exerciseStates, fromExerciseIndex = activeExerciseIndex, fromSetIndex = activeSetIndex) {
-    const currentExercise = states[fromExerciseIndex];
-    if (!currentExercise) return;
-    if (fromSetIndex + 1 < currentExercise.sets.length) {
-      setActiveExerciseIndex(fromExerciseIndex);
-      setActiveSetIndex(fromSetIndex + 1);
-      return;
-    }
-    if (fromExerciseIndex + 1 < states.length) {
-      const next = states[fromExerciseIndex + 1];
-      setActiveExerciseIndex(fromExerciseIndex + 1);
-      setActiveSetIndex(0);
-      setTimerSeconds(next.exercise.rest_seconds ?? 75);
-    }
-  }
 
   async function persistProgress(states = exerciseStates) {
     if (!session) return;
@@ -817,7 +826,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     if (user?.id && session?.id && executionHydratedRef.current) {
       void queueExecutionWrite(
         () => persistWorkoutSessionRestTimer(user.id, session.id, safeSeconds, controllerDeviceIdRef.current),
-        () => restoreRestTimer(previous)
+        { rollback: () => restoreRestTimer(previous) }
       );
     }
   }
@@ -831,7 +840,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     if (user?.id && session?.id && executionHydratedRef.current) {
       void queueExecutionWrite(
         () => clearWorkoutSessionRestTimer(user.id, session.id, "set_entry", controllerDeviceIdRef.current),
-        () => restoreRestTimer(previous)
+        { rollback: () => restoreRestTimer(previous) }
       );
     }
   }
@@ -845,6 +854,22 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     else clearStoredValue(restTimerKey);
   }
 
+  async function reconcileSavedSetAfterExecutionFailure(savedStates: ExerciseState[]) {
+    if (!user?.id || !session?.id) return;
+    const [authoritativeState, authoritativeLogs] = await Promise.all([
+      requireWorkoutSessionExecutionState(user.id, session.id),
+      getWorkoutSessionLogs(session.id)
+    ]);
+    const reconciledStates = hydrateStates(savedStates, authoritativeLogs);
+    const cursor = executionCursorToIndexes(authoritativeState, executionCursorItems, day.exercises);
+    const exerciseIndex = Math.min(Math.max(0, cursor.exerciseIndex), Math.max(0, reconciledStates.length - 1));
+    const setCount = reconciledStates[exerciseIndex]?.sets.length ?? 1;
+    setExerciseStates(reconciledStates);
+    setActiveExerciseIndex(exerciseIndex);
+    setActiveSetIndex(Math.min(Math.max(0, cursor.setIndex), Math.max(0, setCount - 1)));
+    mirrorExecutionState(authoritativeState);
+  }
+
   async function finishSet(exerciseIndex: number, setIndex: number) {
     const targetSet = exerciseStates[exerciseIndex]?.sets[setIndex];
     if (!targetSet || targetSet.completedAt || isSaving) return;
@@ -853,28 +878,64 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     const previousActiveExerciseIndex = activeExerciseIndex;
     const previousActiveSetIndex = activeSetIndex;
     const previousTimer = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
+    const completedAt = new Date();
+    const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: completedAt.toISOString() });
+    const transition = planWorkoutSessionAfterSetCompletion({
+      exerciseIndex,
+      setIndex,
+      exerciseSetCounts: nextStates.map((item) => item.sets.length),
+      orderedSnapshotItems: executionCursorItems,
+      dayExercises: day.exercises,
+      restDurationSeconds: exerciseStates[exerciseIndex]?.exercise.rest_seconds ?? timerSeconds,
+      controllerDeviceId: controllerDeviceIdRef.current,
+      now: completedAt
+    });
+
     setIsSaving(true);
-    const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: new Date().toISOString() });
     setExerciseStates(nextStates);
-    const hasNextSet = completedSets + 1 < totalSets;
-    if (hasNextSet) {
-      startRestTimer(exerciseStates[exerciseIndex]?.exercise.rest_seconds ?? timerSeconds);
-      moveToNextSet(nextStates, exerciseIndex, setIndex);
-    }
 
     try {
-      await persistProgress(nextStates);
-      if (!hasNextSet && user?.id && session?.id && executionHydratedRef.current) {
-        const cursorItem = executionCursorItems.find((item) => item.sourcePlanExerciseId === exerciseStates[exerciseIndex]?.exercise.id)
-          ?? executionCursorItems.find((item) => item.itemOrder === exerciseIndex + 1)
-          ?? null;
-        await queueExecutionWrite(() => persistWorkoutSessionCursor(user.id, session.id, {
-          snapshotItemId: cursorItem?.id ?? null,
-          itemOrder: cursorItem?.itemOrder ?? exerciseIndex + 1,
-          setNumber: setIndex + 1,
-          viewState: "exercise_complete",
-          controllerDeviceId: controllerDeviceIdRef.current
-        }));
+      await persistCanonicalSetThenExecution({
+        saveCanonicalSet: async () => {
+          if (!session?.id) throw new Error("The workout session is unavailable.");
+          await saveWorkoutSetLogs(session.id, buildLogRows(nextStates));
+        },
+        persistExecutionState: async () => {
+          if (!user?.id || !session?.id || !executionHydratedRef.current) {
+            throw new Error("The workout execution state is unavailable.");
+          }
+          return queueExecutionWrite(
+            () => persistWorkoutSessionAfterSetCompletion(user.id, session.id, {
+              activeSnapshotItemId: transition.patch.active_snapshot_item_id,
+              activeItemOrder: transition.patch.active_item_order,
+              activeSetNumber: transition.patch.active_set_number,
+              viewState: transition.patch.view_state,
+              restStartedAt: transition.patch.rest_started_at,
+              restDurationSeconds: transition.patch.rest_duration_seconds,
+              restEndsAt: transition.patch.rest_ends_at,
+              controllerDeviceId: transition.patch.controller_device_id
+            }),
+            { reportFailure: false }
+          );
+        }
+      });
+
+      setActiveExerciseIndex(transition.nextExerciseIndex);
+      setActiveSetIndex(transition.nextSetIndex);
+      if (!transition.hasNextSet || transition.patch.view_state !== "rest") {
+        setTimerLeft(0);
+        setTimerEndsAtMs(null);
+        setIsTimerRunning(false);
+        clearStoredValue(restTimerKey);
+      }
+      if (transition.nextExerciseIndex !== exerciseIndex && transition.patch.view_state !== "rest") {
+        setTimerSeconds(nextStates[transition.nextExerciseIndex]?.exercise.rest_seconds ?? 75);
+      }
+      if (session?.id) {
+        const authoritativeState = executionWriteQueueRef.current.current();
+        if (authoritativeState) {
+          void updateWorkoutSessionDuration(session.id, executionDurationMinutes(authoritativeState)).catch(() => undefined);
+        }
       }
       setMuscleLoadRevision((current) => current + 1);
       setSetFeedbackVariant("info");
@@ -890,13 +951,31 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         }
       }
     } catch (error) {
-      setExerciseStates(previousStates);
-      setActiveExerciseIndex(previousActiveExerciseIndex);
-      setActiveSetIndex(previousActiveSetIndex);
-      restoreRestTimer(previousTimer);
-      setSetFeedbackVariant("error");
-      setSetFeedback(tr("offline.setSaveCombined"));
-      toast({ title: tr("completion.saveFailedTitle"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
+      if (error instanceof WorkoutSessionExecutionSyncError) {
+        setExerciseStates(nextStates);
+        setSetFeedbackVariant("error");
+        setSetFeedback(`${tr("set.saved")} ${tr("offline.keepOpenRetry")}`);
+        toast({ title: tr("set.saved"), description: userSafeError(error.cause, tr("offline.keepOpenRetry")) });
+        if (session?.id) {
+          const authoritativeState = executionWriteQueueRef.current.current();
+          if (authoritativeState) {
+            void updateWorkoutSessionDuration(session.id, executionDurationMinutes(authoritativeState)).catch(() => undefined);
+          }
+        }
+        try {
+          await reconcileSavedSetAfterExecutionFailure(nextStates);
+        } catch (reconcileError) {
+          console.warn("Plaivra saved the completed set but could not reconcile the workout position.", reconcileError);
+        }
+      } else {
+        setExerciseStates(previousStates);
+        setActiveExerciseIndex(previousActiveExerciseIndex);
+        setActiveSetIndex(previousActiveSetIndex);
+        restoreRestTimer(previousTimer);
+        setSetFeedbackVariant("error");
+        setSetFeedback(tr("offline.setSaveCombined"));
+        toast({ title: tr("completion.saveFailedTitle"), description: userSafeError(error, tr("offline.keepOpenRetry")) });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -939,11 +1018,11 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     setFinishOpen(true);
     if (!user?.id || !session?.id || !executionHydratedRef.current) return;
     const cursor = executionCursorFor(activeExerciseIndex, activeSetIndex);
-    void queueExecutionWrite(() => persistWorkoutSessionCursor(user.id, session.id, {
+    void queueExecutionWrite((currentServerState) => persistWorkoutSessionCursor(user.id, session.id, {
       ...cursor,
       viewState: "session_review",
       controllerDeviceId: controllerDeviceIdRef.current,
-      currentState: executionState
+      currentState: currentServerState
     }));
   }
 
@@ -953,13 +1032,13 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       return;
     }
     setFinishOpen(false);
-    if (!user?.id || !session?.id || !executionHydratedRef.current || executionState?.session_state !== "review") return;
+    if (!user?.id || !session?.id || !executionHydratedRef.current) return;
     const cursor = executionCursorFor(activeExerciseIndex, activeSetIndex);
-    void queueExecutionWrite(() => persistWorkoutSessionCursor(user.id, session.id, {
+    void queueExecutionWrite((currentServerState) => persistWorkoutSessionCursor(user.id, session.id, {
       ...cursor,
       viewState: isFinished ? "exercise_complete" : "set_entry",
       controllerDeviceId: controllerDeviceIdRef.current,
-      currentState: executionState
+      currentState: currentServerState
     }));
   }
 
@@ -993,10 +1072,12 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     if (user?.id && session?.id && executionHydratedRef.current) {
       void queueExecutionWrite(
         () => persistWorkoutSessionTimerReset(user.id, session.id, controllerDeviceIdRef.current),
-        () => {
-          setStartedAtMs(previousStartedAt);
-          setElapsedSeconds(previousElapsed);
-          storeTimestamp(workoutTimerKey, previousStartedAt);
+        {
+          rollback: () => {
+            setStartedAtMs(previousStartedAt);
+            setElapsedSeconds(previousElapsed);
+            storeTimestamp(workoutTimerKey, previousStartedAt);
+          }
         }
       );
     }
