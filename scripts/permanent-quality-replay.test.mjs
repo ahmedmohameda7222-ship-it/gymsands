@@ -13,6 +13,7 @@ import {
   nextSyntheticVersion,
   validateMigrationHistory,
 } from "./replay-local-migration-chain.mjs";
+import { REQUIRED_QUALITY_GATES } from "./quality-evidence-contract.mjs";
 
 const quality = readFileSync(".github/workflows/quality.yml", "utf8").replaceAll("\r\n", "\n");
 const helper = readFileSync("scripts/replay-local-migration-chain.mjs", "utf8").replaceAll("\r\n", "\n");
@@ -22,15 +23,9 @@ function sha256(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-test("Quality delegates chronological replay to the permanent helper", () => {
-  assert.match(
-    quality,
-    /node scripts\/replay-local-migration-chain\.mjs --log quality-reports\/database-validation\.log --prove-future-order/,
-  );
-  assert.match(
-    helper,
-    /\["db", "reset", "--local", "--no-seed", "--version", ORIGINAL_AW2A_VERSION\]/,
-  );
+test("Quality delegates chronological replay to the permanent helper through retained evidence", () => {
+  assert.match(quality, /--name full-migration-chain[\s\S]*-- node scripts\/replay-local-migration-chain\.mjs[\s\S]*--log quality-reports\/database-validation\.log[\s\S]*--prove-future-order/);
+  assert.match(helper, /\["db", "reset", "--local", "--no-seed", "--version", ORIGINAL_AW2A_VERSION\]/);
   assert.match(helper, /\["migration", "up", "--local", "--include-all"\]/);
   assert.match(helper, /\["start", "--exclude", DATABASE_ONLY_EXCLUDES\]/);
   assert.doesNotMatch(quality, /restore_correction|temporary_correction|cp "\$correction_migration"|rm "\$correction_migration"/);
@@ -78,26 +73,28 @@ test("compatibility bridge is explicit, exact, and local-only", () => {
   assert.match(helper, /Replay helper changed the repository working tree/);
 });
 
-test("workflow_dispatch never passes an empty pull-request base to parity", () => {
-  assert.match(
-    quality,
-    /- name: Verify full unit failure parity\n\s+if: github\.event_name == 'pull_request' && steps\.scope\.outputs\.database == 'true'/,
-  );
-  assert.match(
-    quality,
-    /- name: Record workflow-dispatch parity skip\n\s+if: github\.event_name == 'workflow_dispatch' && steps\.scope\.outputs\.database == 'true'/,
-  );
-  assert.match(quality, /node scripts\/check-unit-failure-parity\.mjs --base "\$\{\{ github\.event\.pull_request\.base\.sha \}\}"/);
+test("manual and PR Quality always use exact nonempty comparison identities", () => {
+  assert.match(quality, /workflow_dispatch:[\s\S]*reviewed_commit:[\s\S]*required: true[\s\S]*comparison_base:[\s\S]*required: true/);
+  assert.match(quality, /PR_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(quality, /PR_BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(quality, /\[\[ "\$reviewed_commit" =~ \^\[0-9a-fA-F\]\{40\}\$ \]\]/);
+  assert.match(quality, /\[\[ "\$comparison_base" =~ \^\[0-9a-fA-F\]\{40\}\$ \]\]/);
+  assert.match(quality, /--base "\$PLAIVRA_COMPARISON_BASE"/);
+  assert.doesNotMatch(quality, /Record workflow-dispatch parity skip|workflow_dispatch has no pull-request base SHA/);
 });
 
-test("permanent validation names are generic and AW-2A verification remains enforced", () => {
+test("permanent validation names are generic and every release gate is retained", () => {
+  for (const evidenceName of Object.values(REQUIRED_QUALITY_GATES)) {
+    assert.match(quality, new RegExp(`--name ${evidenceName.replaceAll("-", "\\-")}`));
+    assert.match(quality, new RegExp(`quality-reports/\\$\\{evidence\\}\\.log|quality-reports/${evidenceName.replaceAll("-", "\\-")}\\.log`));
+  }
+  assert.match(quality, /name: quality-reports-\$\{\{ github\.run_id \}\}/);
   assert.match(quality, /quality-reports\/database-validation\.log/);
   assert.match(quality, /quality-reports\/unit-failure-parity\.json/);
-  assert.match(quality, /name: database-validation-\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
   assert.doesNotMatch(quality, /aw2a-database-validation|aw2a-unit-failure-parity|aw2a-validation-/);
   assert.doesNotMatch(parity, /aw2a-/i);
   assert.match(quality, /supabase\/verification\/active-workout-aw2a-execution-state\.sql/);
-  assert.match(quality, /services\/database\/workout-session-execution\.integration\.test\.ts/);
+  assert.match(quality, /npm run test:integration/);
 });
 
 test("applied AW-2A migrations remain byte-for-byte immutable", () => {

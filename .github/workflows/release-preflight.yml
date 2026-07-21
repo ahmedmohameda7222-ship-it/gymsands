@@ -1,4 +1,5 @@
 name: Release preflight
+run-name: Release preflight / ${{ inputs.preflight_request_id }}
 
 on:
   workflow_dispatch:
@@ -7,9 +8,38 @@ on:
         description: Exact 40-character reviewed commit SHA
         required: true
         type: string
-      quality_run_id:
-        description: GitHub Actions run ID containing quality-reports-<run id>
+      comparison_base:
+        description: Exact 40-character comparison base SHA
         required: true
+        type: string
+      quality_run_id:
+        description: Exact Quality workflow run ID
+        required: true
+        type: string
+      validation_request_id:
+        description: Exact Quality validation request identity
+        required: true
+        type: string
+      preflight_request_id:
+        description: Unique preflight orchestration request identity
+        required: true
+        type: string
+      expected_migration:
+        description: Expected migration derived from the checked-out ledger
+        required: true
+        type: string
+      validation_context:
+        description: Read-only preflight authorization context
+        required: true
+        default: stage1-infrastructure-validation
+        type: choice
+        options:
+          - stage1-infrastructure-validation
+          - production-marker-promotion-authorization
+      production_authorization_token:
+        description: Exact identity-bound Production authorization token; blank for Stage 1
+        required: false
+        default: ""
         type: string
 
 permissions:
@@ -17,20 +47,24 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-preflight-${{ inputs.reviewed_commit }}
+  group: release-preflight-${{ inputs.preflight_request_id }}
   cancel-in-progress: false
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Validate exact inputs
         shell: bash
         run: |
           set -euo pipefail
           [[ "${{ inputs.reviewed_commit }}" =~ ^[0-9a-fA-F]{40}$ ]]
+          [[ "${{ inputs.comparison_base }}" =~ ^[0-9a-fA-F]{40}$ ]]
           [[ "${{ inputs.quality_run_id }}" =~ ^[0-9]+$ ]]
+          [[ "${{ inputs.validation_request_id }}" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{7,127}$ ]]
+          [[ "${{ inputs.preflight_request_id }}" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{7,127}$ ]]
+          [[ "${{ inputs.expected_migration }}" =~ ^[0-9]{12,14}$ ]]
 
       - name: Checkout reviewed commit
         uses: actions/checkout@v4
@@ -38,12 +72,20 @@ jobs:
           ref: ${{ inputs.reviewed_commit }}
           fetch-depth: 0
 
-      - name: Verify repository and checkout identity
+      - name: Verify repository, checkout, and ledger identity
         shell: bash
         run: |
           set -euo pipefail
-          test "${GITHUB_REPOSITORY}" = "ahmedmohameda7222-ship-it/gymsands"
+          test "$GITHUB_REPOSITORY" = "ahmedmohameda7222-ship-it/gymsands"
           test "$(git rev-parse HEAD)" = "${{ inputs.reviewed_commit }}"
+          node --input-type=module - <<'NODE'
+          import { readFileSync } from "node:fs";
+          import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs";
+          const target = deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")));
+          if (target.expectedMigration !== "${{ inputs.expected_migration }}") {
+            throw new Error("Preflight expected migration does not equal checked-out ledger head.");
+          }
+          NODE
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -54,7 +96,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download exact quality evidence
+      - name: Download exact canonical Quality artifact
         uses: actions/download-artifact@v4
         with:
           name: quality-reports-${{ inputs.quality_run_id }}
@@ -62,34 +104,50 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ inputs.quality_run_id }}
 
-      - name: Verify manifest belongs to reviewed commit
-        shell: bash
-        run: |
-          set -euo pipefail
-          node -e '
-            const fs = require("node:fs");
-            const manifest = JSON.parse(fs.readFileSync("quality-reports/release-manifest.json", "utf8"));
-            if (manifest.release?.commitSha !== process.argv[1]) throw new Error("Quality manifest commit mismatch.");
-          ' "${{ inputs.reviewed_commit }}"
-
       - name: Validate migration ledger
         run: npm run migration:ledger:check
 
-      - name: Run non-deploying release preflight
+      - name: Run strict non-deploying release preflight
         run: >-
           npm run release:preflight --
           --commit "${{ inputs.reviewed_commit }}"
+          --comparison-base "${{ inputs.comparison_base }}"
+          --quality-run-id "${{ inputs.quality_run_id }}"
+          --validation-request-id "${{ inputs.validation_request_id }}"
+          --preflight-request-id "${{ inputs.preflight_request_id }}"
+          --expected-migration "${{ inputs.expected_migration }}"
           --repository "${{ github.repository }}"
+          --validation-context "${{ inputs.validation_context }}"
+          --production-authorization-token "${{ inputs.production_authorization_token }}"
           --quality-reports quality-reports
           --output quality-reports/release-preflight.json
 
-      - name: Upload preflight evidence
+      - name: Assert selected mode remains read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import { readFileSync } from "node:fs";
+          const evidence = JSON.parse(readFileSync("quality-reports/release-preflight.json", "utf8"));
+          if (evidence.ready !== true || evidence.qualityArtifactValid !== true) throw new Error("Release preflight was not successful.");
+          if (evidence.deploymentPerformed !== false) throw new Error("Release preflight attempted deployment.");
+          if (evidence.productionMutationPerformed !== false) throw new Error("Release preflight attempted a Production mutation.");
+          const expectedContext = "${{ inputs.validation_context }}";
+          if (evidence.validationContext !== expectedContext) throw new Error("Preflight context mismatch.");
+          const shouldAuthorize = expectedContext === "production-marker-promotion-authorization";
+          if (evidence.productionPromotionAuthorized !== shouldAuthorize) throw new Error("Preflight authorization result mismatch.");
+          NODE
+
+      - name: Upload immutable preflight evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-preflight-${{ inputs.reviewed_commit }}
+          name: release-preflight-${{ inputs.preflight_request_id }}
           path: |
             quality-reports/release-preflight.json
             quality-reports/release-manifest.json
+            quality-reports/evidence-index.json
+            quality-reports/artifact-metadata.json
+            quality-reports/unit-failure-parity.json
           if-no-files-found: error
           retention-days: 30

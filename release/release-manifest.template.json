@@ -21,22 +21,70 @@
     "architecture": ""
   },
   "qualityGates": {
-    "repositoryIntegrity": { "status": "pending", "evidence": null },
-    "fullMigrationChain": { "status": "pending", "evidence": null },
-    "databaseLint": { "status": "pending", "evidence": null },
-    "databasePreflight": { "status": "pending", "evidence": null },
-    "migrationLedger": { "status": "pending", "evidence": null },
-    "dependencyAudit": { "status": "pending", "evidence": null },
-    "lint": { "status": "pending", "evidence": null },
-    "typecheck": { "status": "pending", "evidence": null },
-    "unitTests": { "status": "pending", "evidence": null },
-    "integrationTests": { "status": "pending", "evidence": null },
-    "scriptTests": { "status": "pending", "evidence": null },
-    "telemetryTests": { "status": "pending", "evidence": null },
-    "environmentValidation": { "status": "pending", "evidence": null },
-    "releaseMetadata": { "status": "pending", "evidence": null },
-    "productionBuild": { "status": "pending", "evidence": null },
-    "renderedBrowserQa": { "status": "pending", "evidence": null }
+    "repositoryIntegrity": {
+      "status": "pending",
+      "evidence": null
+    },
+    "fullMigrationChain": {
+      "status": "pending",
+      "evidence": null
+    },
+    "databaseLint": {
+      "status": "pending",
+      "evidence": null
+    },
+    "databasePreflight": {
+      "status": "pending",
+      "evidence": null
+    },
+    "migrationLedger": {
+      "status": "pending",
+      "evidence": null
+    },
+    "dependencyAudit": {
+      "status": "pending",
+      "evidence": null
+    },
+    "lint": {
+      "status": "pending",
+      "evidence": null
+    },
+    "typecheck": {
+      "status": "pending",
+      "evidence": null
+    },
+    "unitTests": {
+      "status": "pending",
+      "evidence": null
+    },
+    "integrationTests": {
+      "status": "pending",
+      "evidence": null
+    },
+    "scriptTests": {
+      "status": "pending",
+      "evidence": null
+    },
+    "telemetryTests": {
+      "status": "pending",
+      "evidence": null
+    },
+    "environmentValidation": {
+      "status": "pending",
+      "evidence": null
+    },
+    "releaseMetadata": {
+      "status": "pending",
+      "evidence": null
+    },
+    "productionBuild": {
+      "status": "pending",
+      "evidence": null
+    },
+    "renderedBrowserQa": {
+      "status": "pending",
+      "evidence": null
+    }
   },
   "deployment": {
     "status": "pending",
@@ -45,8 +93,32 @@
     "deployedCommitSha": null
   },
   "smoke": {
-    "anonymous": { "status": "pending", "evidence": null },
-    "authenticatedPopulated": { "status": "pending", "evidence": null },
-    "authenticatedEmpty": { "status": "pending", "evidence": null }
+    "anonymous": {
+      "status": "pending",
+      "evidence": null
+    },
+    "authenticatedPopulated": {
+      "status": "pending",
+      "evidence": null
+    },
+    "authenticatedEmpty": {
+      "status": "pending",
+      "evidence": null
+    }
+  },
+  "qualityArtifact": {
+    "repository": "",
+    "workflowRunId": "",
+    "workflowRunAttempt": "",
+    "reviewedCommit": "",
+    "comparisonBase": "",
+    "eventType": "",
+    "qualityBuildTimestamp": "",
+    "capturedAt": "",
+    "metadata": null,
+    "metadataSha256": "",
+    "evidenceIndex": null,
+    "evidenceIndexSha256": "",
+    "fullReleaseQuality": false
   }
 }
