@@ -30,18 +30,12 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           path = Path('stage1-workflow-blobs/exact-release-quality-validation-fixed.yml')
-          text = path.read_text(encoding='utf-8')
-          old = '''          expected_migration="$(
-            node --input-type=module - <<'NODE'
-            import { readFileSync } from "node:fs";
-            import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs";
-            process.stdout.write(deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8"))).expectedMigration);
-            NODE
-          )"'''
-          new = '''          expected_migration="$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs"; process.stdout.write(deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8"))).expectedMigration);')"'''
-          if old not in text:
-              raise SystemExit('exact workflow migration heredoc block not found')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          lines = path.read_text(encoding='utf-8').splitlines()
+          start = next(i for i, line in enumerate(lines) if line == '          expected_migration="$(')
+          end = next(i for i in range(start + 1, len(lines)) if lines[i] == '          )"')
+          replacement = '          expected_migration="$(node --input-type=module -e \'import { readFileSync } from "node:fs"; import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs"; process.stdout.write(deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8"))).expectedMigration);\')"'
+          lines[start:end + 1] = [replacement]
+          path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
           PY
           grep -F 'expected_migration="$(node --input-type=module -e' stage1-workflow-blobs/exact-release-quality-validation-fixed.yml
           git config user.name github-actions[bot]
