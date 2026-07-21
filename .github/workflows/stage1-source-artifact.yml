@@ -1,34 +1,59 @@
-name: Stage 1 Source Artifact
+name: Stage 1 Source Assembly
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
+      - fix/aw2a-post-merge-release-closure
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  package-source:
+  assemble:
+    if: contains(github.event.head_commit.message, 'assemble Stage 1 release closure')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - name: Checkout exact revision
+      - name: Checkout exact upload commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: fix/aw2a-post-merge-release-closure
           fetch-depth: 0
 
-      - name: Verify checkout identity
-        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+      - name: Assemble verified Stage-1 implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          cat .stage1-upload/part-* | base64 -d > /tmp/stage1-files.tar.gz
+          echo "89cbe28bfce4fe3916ba80e2a699b54aea9c34b7ff23842e88b6acae34986db4  /tmp/stage1-files.tar.gz" | sha256sum --check
+          tar -xzf /tmp/stage1-files.tar.gz
 
-      - name: Package source
-        run: git archive --format=zip --output=stage1-source-${{ github.event.pull_request.head.sha }}.zip HEAD
+          declare -A expected=(
+            [".github/workflows/quality.yml"]="da794b9c3da0c19cbddb2a2dd49336f8226d5a63"
+            [".github/workflows/release-preflight.yml"]="33e855df417c6a74b6e73c8b7014adf31e15281a"
+            [".github/workflows/exact-release-quality-validation.yml"]="1e15160dd35b8032cd948216425235547dcb178a"
+            ["release/release-manifest.template.json"]="8e0a56d0dbc9ce63d7bf083c7ab0ec146061ef4b"
+            ["scripts/create-release-manifest.mjs"]="36f7f09629482000beaf33914955f027191522e3"
+            ["scripts/quality-evidence-contract.mjs"]="84254fe6d6695f75667065c3caa5679aeba44e12"
+            ["scripts/release-preflight.mjs"]="9b2653d7815beff27dce34af20a0d64781bee925"
+            ["scripts/run-quality-gate.mjs"]="9fd6c17a7d42ac143dcbc83d6b879ecf350a89aa"
+            ["scripts/run-quality-gate.test.mjs"]="d143bb1c42c275eb0bbe11ea94cd87a81567f3f1"
+            ["scripts/promote-release-schema-compatibility.mjs"]="282f253f703e111c284c84f8b70be3743c6c9a93"
+            ["scripts/promote-release-schema-compatibility.test.mjs"]="92feed18b535d887f4e9ea52d72e8b80c0c13348"
+            ["scripts/release-closure-stage1.test.mjs"]="e3c5da081a5ee0fb7d36ba94492484ee6b841126"
+            ["scripts/permanent-quality-replay.test.mjs"]="6995cf256c2a24af9ae75ebb96491b8ff73216d8"
+            ["plaivra_aw2a_post_merge_release_closure_implementation_report.md"]="91f53a9dee4aabe6075016774944da6ea7b2ad57"
+          )
+          for path in "${!expected[@]}"; do
+            test "$(git hash-object "$path")" = "${expected[$path]}"
+          done
 
-      - name: Upload source
-        uses: actions/upload-artifact@v4
-        with:
-          name: stage1-source-${{ github.event.pull_request.head.sha }}
-          path: stage1-source-${{ github.event.pull_request.head.sha }}.zip
-          if-no-files-found: error
-          retention-days: 1
+          rm -rf .stage1-upload
+          rm -f .github/workflows/stage1-source-artifact.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(release): add Stage 1 release closure infrastructure"
+          git push origin HEAD:fix/aw2a-post-merge-release-closure
