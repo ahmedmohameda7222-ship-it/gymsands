@@ -4,54 +4,307 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  prepare-permanent-quality-commit:
-    if: github.head_ref == 'feat/active-workout-aw2a-persisted-execution-state'
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45
     env:
-      STAGING_SHA: ${{ github.event.pull_request.head.sha }}
-      ORIGINAL_HEAD: 32b6fe8a13131c4e869e4be94d9fb26864db08ae
-      GH_TOKEN: ${{ github.token }}
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+      PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+      PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+      PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+      PLAIVRA_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PLAIVRA_RELEASE_ENVIRONMENT: ci
+      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+
     steps:
-      - name: Build permanent workflow and remote objects
+      - name: Checkout exact revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Verify checkout identity
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+
+      - name: Detect relevant verification scope
+        id: scope
         shell: bash
         run: |
-          set -u
-          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
-          auth=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
-          curl -sS "${auth[@]}" "${api}/contents/.github/workflows/quality.yml?ref=${ORIGINAL_HEAD}" | jq -r '.content' | tr -d '\n' | base64 --decode > /tmp/quality.yml
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            changed_files="$(git ls-files)"
+          else
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            changed_files="$(git diff --name-only "${base_sha}...HEAD")"
+          fi
+
+          printf '%s\n' "$changed_files"
+
+          code=false
+          runtime=false
+          dependencies=false
+          database=false
+          integration=false
+          scripts=false
+          environment=false
+          ui=false
+          train_ui=false
+          i18n=false
+
+          if grep -Eq '\.(ts|tsx|js|jsx|mjs|cjs)$|^(package(-lock)?\.json|tsconfig\.json|vitest\..*\.mjs|eslint\.config\.)' <<< "$changed_files"; then
+            code=true
+          fi
+
+          if grep -Eq '^(app/|components/|lib/|services/|types/|middleware\.|next\.config\.|package\.json)' <<< "$changed_files" \
+            && grep -Eqv '(\.test\.|\.spec\.|^docs/)' <<< "$changed_files"; then
+            runtime=true
+          fi
+
+          if grep -Eq '^package-lock\.json$' <<< "$changed_files"; then dependencies=true; fi
+          if grep -Eq '^(supabase/migrations/|supabase/migration-ledger\.json|scripts/(check-migration-ledger|test-database-preflight-control)|services/database/|types/database\.ts)' <<< "$changed_files"; then database=true; fi
+          if grep -Eq '^(services/database/|app/api/|supabase/migrations/|vitest\.integration\.config\.mjs)' <<< "$changed_files"; then integration=true; fi
+          if grep -Eq '^scripts/' <<< "$changed_files"; then scripts=true; fi
+          if grep -Eq '^(scripts/validate-production-env\.mjs|lib/integrations/env|next\.config\.|vercel\.json|package-lock\.json)' <<< "$changed_files"; then environment=true; fi
+          if grep -Eq '^(app/|components/|public/|styles/|lib/i18n/|messages/|next\.config\.|postcss\.config\.|tailwind\.config\.)' <<< "$changed_files"; then ui=true; fi
+          if grep -Eq '^(app/.*/train/|components/train/|components/workouts/|lib/train/|services/activity-catalog/|app/api/activity-catalog/)' <<< "$changed_files"; then train_ui=true; fi
+          if grep -Eq '^(messages/|lib/i18n/|components/workouts/|lib/train/muscle-intelligence/active-session-muscle-load-copy\.ts|types/next-intl\.d\.ts|package\.json)' <<< "$changed_files"; then i18n=true; fi
+
+          {
+            echo "code=${code}"
+            echo "runtime=${runtime}"
+            echo "dependencies=${dependencies}"
+            echo "database=${database}"
+            echo "integration=${integration}"
+            echo "scripts=${scripts}"
+            echo "environment=${environment}"
+            echo "ui=${ui}"
+            echo "train_ui=${train_ui}"
+            echo "i18n=${i18n}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        if: steps.scope.outputs.code == 'true' || steps.scope.outputs.dependencies == 'true' || steps.scope.outputs.i18n == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.scope.outputs.code == 'true' || steps.scope.outputs.dependencies == 'true' || steps.scope.outputs.i18n == 'true'
+        run: npm ci
+
+      - name: Lint changed source files
+        if: steps.scope.outputs.code == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            mapfile -d '' files < <(git ls-files -z | grep -zE '\.(ts|tsx|js|jsx|mjs|cjs)$' || true)
+          else
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            mapfile -d '' files < <(git diff --diff-filter=ACMRT --name-only -z "${base_sha}...HEAD" | grep -zE '\.(ts|tsx|js|jsx|mjs|cjs)$' || true)
+          fi
+          if [ "${#files[@]}" -gt 0 ]; then
+            npx eslint -- "${files[@]}"
+          fi
+
+      - name: Typecheck application
+        if: steps.scope.outputs.runtime == 'true' || steps.scope.outputs.dependencies == 'true' || steps.scope.outputs.i18n == 'true'
+        run: npm run typecheck
+
+      - name: Enforce i18n contract
+        if: steps.scope.outputs.i18n == 'true'
+        run: npm run test:i18n
+
+      - name: Run tests related to changed code
+        if: steps.scope.outputs.code == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            npm run test:unit
+            exit 0
+          fi
+
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          mapfile -d '' test_files < <(git diff --diff-filter=ACMRT --name-only -z "${base_sha}...HEAD" | grep -zE '\.(test|spec)\.(ts|tsx|js|jsx)$' || true)
+          if [ "${#test_files[@]}" -gt 0 ]; then
+            npx vitest run --config vitest.unit.config.mjs "${test_files[@]}"
+          fi
+
+          mapfile -d '' source_files < <(git diff --diff-filter=ACMRT --name-only -z "${base_sha}...HEAD" \
+            | grep -zE '\.(ts|tsx|js|jsx)$' \
+            | grep -zEv '\.(test|spec)\.(ts|tsx|js|jsx)$' || true)
+          if [ "${#source_files[@]}" -gt 0 ]; then
+            npx vitest related "${source_files[@]}" --run --config vitest.unit.config.mjs --passWithNoTests
+          fi
+
+      - name: Check production dependencies
+        if: steps.scope.outputs.dependencies == 'true' || steps.scope.outputs.database == 'true'
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Run script tests
+        if: steps.scope.outputs.scripts == 'true' || steps.scope.outputs.database == 'true'
+        run: npm run test:scripts
+
+      - name: Run integration tests for API or database changes
+        if: steps.scope.outputs.integration == 'true'
+        run: npm run test:integration
+
+      - name: Set up Supabase CLI
+        if: steps.scope.outputs.database == 'true'
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Replay and lint database migrations
+        if: steps.scope.outputs.database == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p quality-reports
+          exec > >(tee -a quality-reports/aw2a-database-validation.log) 2>&1
+          supabase db start
+          supabase db reset --local --no-seed
+          supabase db lint --local --schema public --level error --fail-on error
+          database_url="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql
+          PLAIVRA_AW2A_TEST_DATABASE_URL="$database_url" npx vitest run --config vitest.integration.config.mjs services/database/workout-session-execution.integration.test.ts
+          npm run migration:ledger:check
+          PLAIVRA_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" npm run release:manifest -- --output /tmp/plaivra-aw2a-release-manifest.json
+
+      - name: Verify production database security contracts
+        if: steps.scope.outputs.database == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_url="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql
+          PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$database_url" node scripts/test-database-preflight-control.mjs
+          PGPASSWORD=postgres psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
+
+      - name: Validate production environment contract
+        if: steps.scope.outputs.environment == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PLAIVRA_VALIDATE_PRODUCTION_ENV=true
+          export PLAIVRA_RELEASE_ENVIRONMENT=production
+          export NEXT_PUBLIC_APP_URL=https://app.plaivra.com
+          export NEXT_PUBLIC_USE_MOCK_AUTH=false
+          export PLAIVRA_MCP_BASE_URL=https://app.plaivra.com/api/mcp
+          export PLAIVRA_OAUTH_ISSUER=https://app.plaivra.com
+          export PLAIVRA_CIMD_ALLOWED_ORIGINS=https://chatgpt.com
+          export CRON_SECRET=ci-placeholder-cron-secret-that-is-long-enough
+          npm run validate:env
+
+      - name: Build production application
+        if: steps.scope.outputs.runtime == 'true' || steps.scope.outputs.dependencies == 'true' || steps.scope.outputs.i18n == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PLAIVRA_BUILD_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build
+
+      - name: Install Playwright Chromium
+        if: steps.scope.outputs.ui == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Run relevant browser QA
+        if: steps.scope.outputs.ui == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p quality-reports
+          NEXT_PUBLIC_USE_MOCK_AUTH=true npm run dev > quality-reports/qa-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3000/ > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://localhost:3000/ > /dev/null
+
+          if [ "${{ steps.scope.outputs.train_ui }}" = "true" ]; then
+            QA_BASE_URL=http://localhost:3000 QA_TRAIN_EVIDENCE_DIR=quality-reports/train-qa-evidence npm run qa:train
+          else
+            QA_BASE_URL=http://localhost:3000 QA_EVIDENCE_DIR=quality-reports/rendered-qa-evidence npm run qa:rendered
+          fi
+
+      - name: Record i18n evidence metadata
+        if: github.event_name == 'pull_request' && steps.scope.outputs.i18n == 'true' && steps.scope.outputs.ui == 'true'
+        shell: bash
+        env:
+          PLAIVRA_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
           python - <<'PY'
+          import json
+          import os
           from pathlib import Path
-          path = Path('/tmp/quality.yml')
-          text = path.read_text()
-          text = text.replace('timeout-minutes: 30', 'timeout-minutes: 45', 1)
-          text = text.replace("      - name: Check changed production dependencies\n        if: steps.scope.outputs.dependencies == 'true'\n        run: npm audit --omit=dev --audit-level=moderate\n\n      - name: Run changed script tests\n        if: steps.scope.outputs.scripts == 'true'\n        run: npm run test:scripts\n", "      - name: Check production dependencies\n        if: steps.scope.outputs.dependencies == 'true' || steps.scope.outputs.database == 'true'\n        run: npm audit --omit=dev --audit-level=moderate\n\n      - name: Run script tests\n        if: steps.scope.outputs.scripts == 'true' || steps.scope.outputs.database == 'true'\n        run: npm run test:scripts\n", 1)
-          text = text.replace("      - name: Replay and lint database migrations\n        if: steps.scope.outputs.database == 'true'\n        shell: bash\n        run: |\n          set -euo pipefail\n          supabase db start\n", "      - name: Replay and lint database migrations\n        if: steps.scope.outputs.database == 'true'\n        shell: bash\n        run: |\n          set -euo pipefail\n          mkdir -p quality-reports\n          exec > >(tee -a quality-reports/aw2a-database-validation.log) 2>&1\n          supabase db start\n", 1)
-          text = text.replace("      - name: Upload browser evidence on failure\n        if: failure() && steps.scope.outputs.ui == 'true'\n", "      - name: Upload AW-2A database validation evidence\n        if: always() && steps.scope.outputs.database == 'true'\n        uses: actions/upload-artifact@v4\n        with:\n          name: aw2a-database-validation-${{ github.event.pull_request.head.sha || github.sha }}\n          path: quality-reports/aw2a-database-validation.log\n          if-no-files-found: warn\n          retention-days: 14\n\n      - name: Upload browser evidence on failure\n        if: failure() && steps.scope.outputs.ui == 'true'\n", 1)
-          path.write_text(text)
+
+          metadata = {
+              "headSha": os.environ["PLAIVRA_COMMIT_SHA"],
+              "workflowRunId": os.environ["GITHUB_RUN_ID"],
+              "workflowRunAttempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "pullRequestNumber": int(os.environ["PLAIVRA_PULL_REQUEST_NUMBER"]),
+          }
+          output = Path("quality-reports/i18n-rendered-evidence-metadata.json")
+          output.parent.mkdir(parents=True, exist_ok=True)
+          output.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
           PY
-          echo "WORKFLOW_SHA256=$(sha256sum /tmp/quality.yml | awk '{print $1}')"
-          encoded="$(base64 -w0 /tmp/quality.yml)"
-          blob_payload="$(jq -n --arg content "$encoded" '{content:$content,encoding:"base64"}')"
-          echo '--- blob response ---'
-          blob_response="$(curl -sS -X POST "${auth[@]}" "${api}/git/blobs" -d "$blob_payload")"
-          echo "$blob_response"
-          blob_sha="$(jq -r '.sha // empty' <<<"$blob_response")"
-          echo '--- staging commit response ---'
-          commit_response="$(curl -sS "${auth[@]}" "${api}/git/commits/${STAGING_SHA}")"
-          echo "$commit_response" | jq '{sha,tree,message}'
-          base_tree="$(jq -r '.tree.sha' <<<"$commit_response")"
-          tree_payload="$(jq -n --arg base_tree "$base_tree" --arg blob_sha "$blob_sha" '{base_tree:$base_tree,tree:[{path:".github/workflows/quality.yml",mode:"100644",type:"blob",sha:$blob_sha}]}')"
-          echo '--- tree response ---'
-          tree_response="$(curl -sS -X POST "${auth[@]}" "${api}/git/trees" -d "$tree_payload")"
-          echo "$tree_response"
-          tree_sha="$(jq -r '.sha // empty' <<<"$tree_response")"
-          commit_payload="$(jq -n --arg message "test(ci): strengthen AW-2A final validation" --arg tree "$tree_sha" --arg parent "$STAGING_SHA" '{message:$message,tree:$tree,parents:[$parent]}')"
-          echo '--- new commit response ---'
-          new_commit_response="$(curl -sS -X POST "${auth[@]}" "${api}/git/commits" -d "$commit_payload")"
-          echo "$new_commit_response"
+
+      - name: Upload successful i18n rendered evidence
+        if: github.event_name == 'pull_request' && steps.scope.outputs.i18n == 'true' && steps.scope.outputs.ui == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: i18n-rendered-evidence-${{ github.event.pull_request.head.sha }}
+          path: |
+            quality-reports/train-qa-evidence/active-workout-en-390x844.png
+            quality-reports/train-qa-evidence/active-workout-de-390x844.png
+            quality-reports/train-qa-evidence/active-workout-ar-390x844.png
+            quality-reports/train-qa-evidence/active-workout-en-1440x900.png
+            quality-reports/train-qa-evidence/active-workout-de-1440x900.png
+            quality-reports/train-qa-evidence/active-workout-ar-1440x900.png
+            quality-reports/train-qa-evidence/active-workout-indicator-ar-390x844.png
+            quality-reports/train-qa-evidence/train-layout-qa-results.json
+            quality-reports/i18n-rendered-evidence-metadata.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload AW-2A database validation evidence
+        if: always() && steps.scope.outputs.database == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw2a-database-validation-46571eee8fa13cc22b4190668678abae03cc643a
+          path: quality-reports/aw2a-database-validation.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload browser evidence on failure
+        if: failure() && steps.scope.outputs.ui == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-failure-evidence-${{ github.run_id }}
+          path: quality-reports/
+          if-no-files-found: ignore
+          retention-days: 7
