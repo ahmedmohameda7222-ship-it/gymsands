@@ -18,6 +18,10 @@ import { REQUIRED_QUALITY_GATES } from "./quality-evidence-contract.mjs";
 const quality = readFileSync(".github/workflows/quality.yml", "utf8").replaceAll("\r\n", "\n");
 const helper = readFileSync("scripts/replay-local-migration-chain.mjs", "utf8").replaceAll("\r\n", "\n");
 const parity = readFileSync("scripts/check-unit-failure-parity.mjs", "utf8").replaceAll("\r\n", "\n");
+const aw2bSqlIntegration = readFileSync(
+  "services/database/workout-session-execution-sql.integration.test.ts",
+  "utf8",
+).replaceAll("\r\n", "\n");
 
 function sha256(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -95,6 +99,15 @@ test("permanent validation names are generic and every release gate is retained"
   assert.doesNotMatch(parity, /aw2a-/i);
   assert.match(quality, /supabase\/verification\/active-workout-aw2a-execution-state\.sql/);
   assert.match(quality, /npm run test:integration/);
+});
+
+test("Quality executes the permanent AW-2B schema and command integration SQL", () => {
+  assert.match(aw2bSqlIntegration, /PLAIVRA_AW2A_TEST_DATABASE_URL/);
+  assert.match(aw2bSqlIntegration, /active-workout-aw2b-command-authority\.sql/);
+  assert.match(aw2bSqlIntegration, /active-workout-aw2b-integration\.sql/);
+  assert.match(aw2bSqlIntegration, /execFileSync\([\s\S]*"psql"/);
+  assert.match(aw2bSqlIntegration, /ON_ERROR_STOP=1/);
+  assert.match(aw2bSqlIntegration, /describe\.skipIf\(!databaseUrl\)/);
 });
 
 test("applied AW-2A migrations remain byte-for-byte immutable", () => {
