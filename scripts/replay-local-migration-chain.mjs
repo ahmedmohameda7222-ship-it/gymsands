@@ -6,15 +6,15 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { mkdtempSync } from "node:fs";
 
 export const ORIGINAL_AW2A_VERSION = "20260720213000";
 export const CORRECTION_AW2A_VERSION = "20260721012814";
@@ -22,268 +22,214 @@ export const MARKER_BEFORE_BRIDGE = "20260711014500";
 export const MARKER_AFTER_BRIDGE = "20260717051011";
 export const LOCAL_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
-const ORIGINAL_AW2A_FILE = `${ORIGINAL_AW2A_VERSION}_active_workout_aw2a_execution_state.sql`;
-const CORRECTION_AW2A_FILE = `${CORRECTION_AW2A_VERSION}_active_workout_aw2a_execution_state_corrections.sql`;
-const SYNTHETIC_SUFFIX = "ci_future_replay_proof.sql";
+const ORIGINAL_FILE = `${ORIGINAL_AW2A_VERSION}_active_workout_aw2a_execution_state.sql`;
+const CORRECTION_FILE = `${CORRECTION_AW2A_VERSION}_active_workout_aw2a_execution_state_corrections.sql`;
 const MIGRATION_PATTERN = /^(\d{14})_[A-Za-z0-9][A-Za-z0-9_-]*\.sql$/;
+const DATABASE_ONLY_EXCLUDES = [
+  "gotrue",
+  "realtime",
+  "storage-api",
+  "imgproxy",
+  "kong",
+  "mailpit",
+  "postgrest",
+  "postgres-meta",
+  "studio",
+  "edge-runtime",
+  "logflare",
+  "vector",
+  "supavisor",
+].join(",");
 
 function parseArguments(argv) {
   const options = {
     logPath: "quality-reports/database-validation.log",
     proveFutureOrder: false,
   };
-
   for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index];
-    if (argument === "--log") {
-      const value = argv[index + 1];
-      if (!value) throw new Error("--log requires a path.");
-      options.logPath = value;
+    if (argv[index] === "--log") {
+      if (!argv[index + 1]) throw new Error("--log requires a path.");
+      options.logPath = argv[index + 1];
       index += 1;
-      continue;
-    }
-    if (argument === "--prove-future-order") {
+    } else if (argv[index] === "--prove-future-order") {
       options.proveFutureOrder = true;
-      continue;
+    } else {
+      throw new Error(`Unknown argument: ${argv[index]}`);
     }
-    throw new Error(`Unknown argument: ${argument}`);
   }
-
   return options;
 }
 
 function git(repositoryRoot, ...args) {
-  return execFileSync("git", args, {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-  }).trim();
+  return execFileSync("git", args, { cwd: repositoryRoot, encoding: "utf8" }).trim();
 }
 
-function shellQuote(value) {
+function quote(value) {
   return /^[A-Za-z0-9_./:@%+=,-]+$/.test(value)
     ? value
     : `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-function appendLog(logPath, message) {
+function log(logPath, text) {
   mkdirSync(dirname(logPath), { recursive: true });
-  appendFileSync(logPath, `${message}\n`, "utf8");
+  appendFileSync(logPath, text.endsWith("\n") ? text : `${text}\n`, "utf8");
 }
 
-function runCommand(command, args, { repositoryRoot, logPath, env = {} }) {
-  const rendered = [command, ...args].map(shellQuote).join(" ");
+function run(command, args, context) {
+  const rendered = [command, ...args].map(quote).join(" ");
   process.stdout.write(`$ ${rendered}\n`);
-  appendLog(logPath, `$ ${rendered}`);
-
+  log(context.logPath, `$ ${rendered}`);
   const result = spawnSync(command, args, {
-    cwd: repositoryRoot,
+    cwd: context.repositoryRoot,
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: process.env,
     maxBuffer: 64 * 1024 * 1024,
   });
-
   if (result.stdout) {
     process.stdout.write(result.stdout);
-    appendFileSync(logPath, result.stdout, "utf8");
+    log(context.logPath, result.stdout);
   }
   if (result.stderr) {
     process.stderr.write(result.stderr);
-    appendFileSync(logPath, result.stderr, "utf8");
+    log(context.logPath, result.stderr);
   }
   if (result.error) throw result.error;
   if (result.status !== 0) {
     throw new Error(`${rendered} exited with status ${result.status ?? "unknown"}.`);
   }
-
   return result.stdout.trim();
 }
 
 export function assertLocalOnly(repositoryRoot) {
   const linkedProjectRef = join(repositoryRoot, "supabase", ".temp", "project-ref");
   if (existsSync(linkedProjectRef) && readFileSync(linkedProjectRef, "utf8").trim()) {
-    throw new Error(
-      `Refusing to run against a linked Supabase project (${linkedProjectRef}). Remove the local link before replay.`,
-    );
+    throw new Error(`Refusing to run against a linked Supabase project (${linkedProjectRef}).`);
   }
-
-  const parsed = new URL(LOCAL_DATABASE_URL);
-  if (!["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)) {
+  const host = new URL(LOCAL_DATABASE_URL).hostname;
+  if (!["127.0.0.1", "localhost", "::1"].includes(host)) {
     throw new Error(`Refusing non-local database URL: ${LOCAL_DATABASE_URL}`);
   }
 }
 
 export function listRepositoryMigrations(repositoryRoot) {
-  const migrationsDirectory = join(repositoryRoot, "supabase", "migrations");
-  if (!existsSync(migrationsDirectory)) {
-    throw new Error(`Missing migrations directory: ${migrationsDirectory}`);
-  }
-
-  const migrations = readdirSync(migrationsDirectory)
+  const directory = join(repositoryRoot, "supabase", "migrations");
+  if (!existsSync(directory)) throw new Error(`Missing migrations directory: ${directory}`);
+  const migrations = readdirSync(directory)
     .filter((filename) => filename.endsWith(".sql"))
     .map((filename) => {
       const match = filename.match(MIGRATION_PATTERN);
-      if (!match) {
-        throw new Error(`Invalid migration filename: ${filename}`);
-      }
+      if (!match) throw new Error(`Invalid migration filename: ${filename}`);
       return { filename, version: match[1] };
     })
     .sort((left, right) => left.version.localeCompare(right.version));
-
-  const duplicateVersions = migrations
+  const duplicates = migrations
     .filter((migration, index) => migrations[index - 1]?.version === migration.version)
     .map((migration) => migration.version);
-  if (duplicateVersions.length > 0) {
-    throw new Error(`Duplicate repository migration versions: ${[...new Set(duplicateVersions)].join(", ")}`);
+  if (duplicates.length) {
+    throw new Error(`Duplicate repository migration versions: ${[...new Set(duplicates)].join(", ")}`);
   }
-
   return migrations;
 }
 
 export function nextSyntheticVersion(migrations) {
-  if (migrations.length === 0) throw new Error("Cannot derive a synthetic version from an empty migration chain.");
-  const maximum = BigInt(migrations.at(-1).version);
-  const candidate = (maximum + 1n).toString().padStart(14, "0");
-  if (candidate.length !== 14) {
-    throw new Error(`Synthetic migration version overflow after ${maximum}.`);
-  }
-  return candidate;
+  if (!migrations.length) throw new Error("Cannot derive a synthetic version from an empty migration chain.");
+  const version = (BigInt(migrations.at(-1).version) + 1n).toString().padStart(14, "0");
+  if (version.length !== 14) throw new Error("Synthetic migration version overflow.");
+  return version;
 }
 
 export function validateMigrationHistory(expectedVersions, recordedVersions) {
   const expected = [...expectedVersions].sort();
   const counts = new Map();
-  for (const version of recordedVersions) {
-    counts.set(version, (counts.get(version) ?? 0) + 1);
-  }
-
-  const duplicates = [...counts.entries()]
-    .filter(([, count]) => count !== 1)
-    .map(([version, count]) => `${version} (${count})`);
+  for (const version of recordedVersions) counts.set(version, (counts.get(version) ?? 0) + 1);
+  const duplicates = [...counts].filter(([, count]) => count !== 1).map(([version, count]) => `${version} (${count})`);
   const missing = expected.filter((version) => !counts.has(version));
   const unexpected = [...counts.keys()].filter((version) => !expected.includes(version));
+  const errors = [
+    duplicates.length ? `duplicate local records: ${duplicates.join(", ")}` : null,
+    missing.length ? `missing local records: ${missing.join(", ")}` : null,
+    unexpected.length ? `unexpected local records: ${unexpected.join(", ")}` : null,
+  ].filter(Boolean);
+  if (errors.length) throw new Error(errors.join("; "));
+}
 
-  if (duplicates.length || missing.length || unexpected.length) {
-    throw new Error(
-      [
-        duplicates.length ? `duplicate local records: ${duplicates.join(", ")}` : null,
-        missing.length ? `missing local records: ${missing.join(", ")}` : null,
-        unexpected.length ? `unexpected local records: ${unexpected.join(", ")}` : null,
-      ]
-        .filter(Boolean)
-        .join("; "),
-    );
+function requiredMigrations(repositoryRoot) {
+  const directory = join(repositoryRoot, "supabase", "migrations");
+  for (const filename of [ORIGINAL_FILE, CORRECTION_FILE]) {
+    if (!existsSync(join(directory, filename))) throw new Error(`Missing required migration file: ${filename}`);
   }
+}
+
+function psql(context, sql, tuplesOnly = false) {
+  return run(
+    "psql",
+    [
+      LOCAL_DATABASE_URL,
+      "-X",
+      ...(tuplesOnly ? ["-A", "-t"] : []),
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-c",
+      sql,
+    ],
+    context,
+  );
 }
 
 function readMarker(context) {
-  return runCommand(
-    "psql",
-    [
-      LOCAL_DATABASE_URL,
-      "-X",
-      "-A",
-      "-t",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-c",
-      "select migration_version from public.release_schema_compatibility where singleton",
-    ],
+  return psql(
     context,
+    "select migration_version from public.release_schema_compatibility where singleton",
+    true,
   );
 }
 
-function applyLocalMarkerBridge(context) {
-  runCommand(
-    "psql",
-    [
-      LOCAL_DATABASE_URL,
-      "-X",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-c",
-      `update public.release_schema_compatibility set migration_version = '${MARKER_AFTER_BRIDGE}' where singleton`,
-    ],
+function recordedVersions(context) {
+  return psql(
     context,
-  );
+    "select version from supabase_migrations.schema_migrations order by version",
+    true,
+  ).split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
 }
 
-function readLocalMigrationVersions(context) {
-  const output = runCommand(
-    "psql",
-    [
-      LOCAL_DATABASE_URL,
-      "-X",
-      "-A",
-      "-t",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-c",
-      "select version from supabase_migrations.schema_migrations order by version",
-    ],
-    context,
-  );
-  return output.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
-}
-
-function verifyRequiredFiles(repositoryRoot) {
-  const migrationsDirectory = join(repositoryRoot, "supabase", "migrations");
-  for (const filename of [ORIGINAL_AW2A_FILE, CORRECTION_AW2A_FILE]) {
-    const path = join(migrationsDirectory, filename);
-    if (!existsSync(path)) throw new Error(`Missing required migration file: ${path}`);
-  }
-}
-
-function replayChronologically(context, expectedMigrations, label) {
-  appendLog(context.logPath, `\n=== ${label} ===`);
-  runCommand(
+function replay(context, expectedMigrations, label) {
+  log(context.logPath, `\n=== ${label} ===`);
+  run(
     "supabase",
     ["db", "reset", "--local", "--no-seed", "--version", ORIGINAL_AW2A_VERSION],
     context,
   );
-
   const markerBefore = readMarker(context);
   if (markerBefore !== MARKER_BEFORE_BRIDGE) {
-    throw new Error(
-      `Expected local compatibility marker ${MARKER_BEFORE_BRIDGE} before bridge, received ${markerBefore || "<empty>"}.`,
-    );
+    throw new Error(`Expected marker ${MARKER_BEFORE_BRIDGE} before bridge, received ${markerBefore || "<empty>"}.`);
   }
-
-  applyLocalMarkerBridge(context);
-  runCommand("supabase", ["migration", "up", "--local", "--include-all"], context);
-
+  psql(
+    context,
+    `update public.release_schema_compatibility set migration_version = '${MARKER_AFTER_BRIDGE}' where singleton`,
+  );
+  run("supabase", ["migration", "up", "--local", "--include-all"], context);
   const markerAfter = readMarker(context);
   if (markerAfter !== MARKER_AFTER_BRIDGE) {
-    throw new Error(
-      `Expected local compatibility marker ${MARKER_AFTER_BRIDGE} after replay, received ${markerAfter || "<empty>"}.`,
-    );
+    throw new Error(`Expected marker ${MARKER_AFTER_BRIDGE} after replay, received ${markerAfter || "<empty>"}.`);
   }
-
-  const recordedVersions = readLocalMigrationVersions(context);
-  validateMigrationHistory(
-    expectedMigrations.map((migration) => migration.version),
-    recordedVersions,
-  );
-
-  return recordedVersions;
+  const versions = recordedVersions(context);
+  validateMigrationHistory(expectedMigrations.map(({ version }) => version), versions);
+  return versions;
 }
 
-function syntheticMigrationSql() {
+function syntheticSql() {
   return `begin;
 
 do $$
 begin
   if to_regclass('public.workout_session_execution_states') is null then
-    raise exception 'AW-2A original migration was not applied before the synthetic future migration';
+    raise exception 'AW-2A original migration missing before synthetic migration';
   end if;
   if to_regclass('public.workout_session_execution_states_active_snapshot_item_idx') is null then
-    raise exception 'AW-2A correction was not applied before the synthetic future migration';
+    raise exception 'AW-2A correction missing before synthetic migration';
   end if;
-  if (
-    select migration_version
-    from public.release_schema_compatibility
-    where singleton
-  ) <> '${MARKER_AFTER_BRIDGE}' then
-    raise exception 'local compatibility marker bridge was not preserved';
+  if (select migration_version from public.release_schema_compatibility where singleton) <> '${MARKER_AFTER_BRIDGE}' then
+    raise exception 'local compatibility bridge missing before synthetic migration';
   end if;
 end
 $$;
@@ -292,18 +238,16 @@ commit;
 `;
 }
 
-function assertSyntheticOrder(recordedVersions, syntheticVersion) {
-  const originalIndex = recordedVersions.indexOf(ORIGINAL_AW2A_VERSION);
-  const correctionIndex = recordedVersions.indexOf(CORRECTION_AW2A_VERSION);
-  const syntheticIndex = recordedVersions.indexOf(syntheticVersion);
-  if (!(originalIndex >= 0 && originalIndex < correctionIndex && correctionIndex < syntheticIndex)) {
-    throw new Error(
-      `Synthetic replay order invalid: original=${originalIndex}, correction=${correctionIndex}, synthetic=${syntheticIndex}.`,
-    );
+function assertSyntheticOrder(versions, syntheticVersion) {
+  const original = versions.indexOf(ORIGINAL_AW2A_VERSION);
+  const correction = versions.indexOf(CORRECTION_AW2A_VERSION);
+  const synthetic = versions.indexOf(syntheticVersion);
+  if (!(original >= 0 && original < correction && correction < synthetic)) {
+    throw new Error(`Synthetic replay order invalid: original=${original}, correction=${correction}, synthetic=${synthetic}.`);
   }
 }
 
-function workingTreeStatus(repositoryRoot) {
+function status(repositoryRoot) {
   return git(repositoryRoot, "status", "--porcelain=v1", "--untracked-files=all");
 }
 
@@ -312,84 +256,69 @@ async function main() {
   const repositoryRoot = git(process.cwd(), "rev-parse", "--show-toplevel");
   const logPath = resolve(repositoryRoot, options.logPath);
   const context = { repositoryRoot, logPath };
-  const initialStatus = workingTreeStatus(repositoryRoot);
-  let syntheticPath = null;
-  let bootstrapRoot = null;
-
-  mkdirSync(dirname(logPath), { recursive: true });
+  const initialStatus = status(repositoryRoot);
+  let bootstrapRoot;
+  let syntheticPath;
   writeFileSync(logPath, "", "utf8");
 
   try {
     assertLocalOnly(repositoryRoot);
-    verifyRequiredFiles(repositoryRoot);
+    requiredMigrations(repositoryRoot);
 
     bootstrapRoot = mkdtempSync(join(tmpdir(), "plaivra-supabase-bootstrap-"));
-    const bootstrapSupabaseDirectory = join(bootstrapRoot, "supabase");
-    mkdirSync(bootstrapSupabaseDirectory, { recursive: true });
+    mkdirSync(join(bootstrapRoot, "supabase"), { recursive: true });
     copyFileSync(
       join(repositoryRoot, "supabase", "config.toml"),
-      join(bootstrapSupabaseDirectory, "config.toml"),
+      join(bootstrapRoot, "supabase", "config.toml"),
     );
-    runCommand(
+    run(
       "supabase",
-      ["db", "start"],
+      ["start", "--exclude", DATABASE_ONLY_EXCLUDES],
       { ...context, repositoryRoot: bootstrapRoot },
     );
     rmSync(bootstrapRoot, { recursive: true, force: true });
-    bootstrapRoot = null;
+    bootstrapRoot = undefined;
 
-    const repositoryMigrations = listRepositoryMigrations(repositoryRoot);
-    const original = repositoryMigrations.find((migration) => migration.version === ORIGINAL_AW2A_VERSION);
-    const correction = repositoryMigrations.find((migration) => migration.version === CORRECTION_AW2A_VERSION);
-    if (!original || original.filename !== ORIGINAL_AW2A_FILE) {
-      throw new Error(`Expected immutable original AW-2A migration ${ORIGINAL_AW2A_FILE}.`);
-    }
-    if (!correction || correction.filename !== CORRECTION_AW2A_FILE) {
-      throw new Error(`Expected immutable AW-2A correction migration ${CORRECTION_AW2A_FILE}.`);
-    }
+    const migrations = listRepositoryMigrations(repositoryRoot);
+    const original = migrations.find(({ version }) => version === ORIGINAL_AW2A_VERSION);
+    const correction = migrations.find(({ version }) => version === CORRECTION_AW2A_VERSION);
+    if (original?.filename !== ORIGINAL_FILE) throw new Error(`Expected immutable migration ${ORIGINAL_FILE}.`);
+    if (correction?.filename !== CORRECTION_FILE) throw new Error(`Expected immutable migration ${CORRECTION_FILE}.`);
 
     if (options.proveFutureOrder) {
-      const syntheticVersion = nextSyntheticVersion(repositoryMigrations);
+      const syntheticVersion = nextSyntheticVersion(migrations);
       syntheticPath = join(
         repositoryRoot,
         "supabase",
         "migrations",
-        `${syntheticVersion}_${SYNTHETIC_SUFFIX}`,
+        `${syntheticVersion}_ci_future_replay_proof.sql`,
       );
-      if (existsSync(syntheticPath)) {
-        throw new Error(`Synthetic migration path already exists: ${syntheticPath}`);
-      }
-      writeFileSync(syntheticPath, syntheticMigrationSql(), "utf8");
-      const migrationsWithSynthetic = listRepositoryMigrations(repositoryRoot);
-      const recorded = replayChronologically(
-        context,
-        migrationsWithSynthetic,
-        "synthetic future-migration chronological replay proof",
-      );
-      assertSyntheticOrder(recorded, syntheticVersion);
+      if (existsSync(syntheticPath)) throw new Error(`Synthetic path already exists: ${syntheticPath}`);
+      writeFileSync(syntheticPath, syntheticSql(), "utf8");
+      const withSynthetic = listRepositoryMigrations(repositoryRoot);
+      const versions = replay(context, withSynthetic, "synthetic future-migration chronological replay proof");
+      assertSyntheticOrder(versions, syntheticVersion);
       rmSync(syntheticPath, { force: true });
-      syntheticPath = null;
+      syntheticPath = undefined;
     }
 
-    const finalMigrations = listRepositoryMigrations(repositoryRoot);
-    replayChronologically(context, finalMigrations, "final repository migration replay");
-    appendLog(logPath, "Chronological local migration replay passed.");
+    replay(context, listRepositoryMigrations(repositoryRoot), "final repository migration replay");
+    log(logPath, "Chronological local migration replay passed.");
+  } catch (error) {
+    log(logPath, `REPLAY FAILURE: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
+    throw error;
   } finally {
     if (syntheticPath) rmSync(syntheticPath, { force: true });
     if (bootstrapRoot) rmSync(bootstrapRoot, { recursive: true, force: true });
-    const finalStatus = workingTreeStatus(repositoryRoot);
+    const finalStatus = status(repositoryRoot);
     if (finalStatus !== initialStatus) {
-      throw new Error(
-        `Replay helper changed the repository working tree.\nBefore:\n${initialStatus}\nAfter:\n${finalStatus}`,
-      );
+      throw new Error(`Replay helper changed the repository working tree.\nBefore:\n${initialStatus}\nAfter:\n${finalStatus}`);
     }
   }
 }
 
-const isMainModule = process.argv[1]
-  && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
-
-if (isMainModule) {
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+if (isMain) {
   main().catch((error) => {
     process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
     process.exitCode = 1;
