@@ -1,30 +1,30 @@
 name: Stage 1 Source Assembly
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/aw2a-post-merge-release-closure
+      - main
 
 permissions:
   contents: write
 
 jobs:
   assemble:
-    if: contains(github.event.head_commit.message, 'assemble Stage 1 release closure')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout exact upload commit
         uses: actions/checkout@v4
         with:
-          ref: fix/aw2a-post-merge-release-closure
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - name: Assemble verified Stage-1 implementation
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          test -f .stage1-upload/READY
           cat .stage1-upload/part-* | base64 -d > /tmp/stage1-files.tar.gz
           echo "89cbe28bfce4fe3916ba80e2a699b54aea9c34b7ff23842e88b6acae34986db4  /tmp/stage1-files.tar.gz" | sha256sum --check
           tar -xzf /tmp/stage1-files.tar.gz
