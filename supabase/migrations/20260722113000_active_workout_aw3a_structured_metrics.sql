@@ -11,9 +11,26 @@ begin
   from public.release_schema_compatibility
   where singleton = true;
 
-  if v_version is distinct from '2' or v_migration is distinct from '20260722093115' then
-    raise exception 'AW-3A requires compatibility version 2 at marker 20260722093115; found version %, marker %.',
-      v_version, v_migration using errcode = '55000';
+  if v_version is distinct from '2' then
+    raise exception 'AW-3A requires compatibility schema version 2; found version %.',
+      v_version using errcode = '55000';
+  end if;
+
+  if v_migration = '20260722093115' then
+    if not exists (
+      select 1 from supabase_migrations.schema_migrations
+      where version = '20260722093115' and name = 'active_workout_aw2c_timeline_events'
+    ) then
+      raise exception 'AW-3A Production marker exists without its reconciled AW-2C migration identity.' using errcode = '55000';
+    end if;
+  elsif v_migration = '20260721012814' and exists (
+    select 1 from supabase_migrations.schema_migrations
+    where version = '20260722070000' and name = 'active_workout_aw2c_timeline_events'
+  ) then
+    null; -- Clean repository replay uses the immutable repository identity while Production uses its applied alias.
+  else
+    raise exception 'AW-3A requires Production marker 20260722093115 or the exact reconciled repository-replay identity; found marker %.',
+      v_migration using errcode = '55000';
   end if;
 
   if to_regclass('public.workout_sessions') is null
@@ -725,22 +742,20 @@ begin
         'changedFields',to_jsonb(v_changed_fields),
         'before',jsonb_build_object(
           'reps',(v_before->>'reps')::integer,'weightKg',(v_before->>'weight_kg')::numeric,
-          'completed',(v_before->>'completed_at') is not null,'setType',v_before->>'set_type',
-          'performanceMetrics',v_before_metrics
+          'completed',(v_before->>'completed_at') is not null,'setType',v_before->>'set_type'
         ),
         'after',jsonb_build_object(
           'reps',v_after.reps,'weightKg',v_after.weight_kg,
-          'completed',v_after.completed_at is not null,'setType',v_after.set_type,
-          'performanceMetrics',v_after_metrics
+          'completed',v_after.completed_at is not null,'setType',v_after.set_type
         ),
+        'performanceMetrics',v_after_metrics,
         'notesChanged',v_notes_changed
       );
       v_fingerprint := encode(extensions.digest(convert_to(jsonb_build_object(
-        'beforeLog',v_before-array['id','created_at','updated_at','notes'],
+        'beforeLog',v_before-array['id','created_at','updated_at'],
         'beforeMetrics',v_before_metrics,
-        'afterLog',to_jsonb(v_after)-array['id','created_at','updated_at','notes'],
-        'afterMetrics',v_after_metrics,
-        'notesChanged',v_notes_changed
+        'afterLog',to_jsonb(v_after)-array['id','created_at','updated_at'],
+        'afterMetrics',v_after_metrics
       )::text,'UTF8'),'sha256'),'hex');
       perform private.append_workout_session_timeline_event(
         p_session_id,p_user_id,'set_edited',clock_timestamp(),'runtime',
