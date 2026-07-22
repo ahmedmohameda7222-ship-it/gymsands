@@ -536,12 +536,12 @@ begin
       v_provider := coalesce(nullif(v_item->>'metric_source_provider',''),case when v_source='chatgpt' then 'openai' end);
       v_source_version := nullif(v_item->>'metric_source_version','');
       perform private.validate_workout_performance_metric_value(
-        'repetitions',1,'none',coalesce(nullif(v_item->>'reps','')::numeric,0),
+        'repetitions',1::smallint,'none',coalesce(nullif(v_item->>'reps','')::numeric,0),
         v_source,v_provider,v_source_version,
         coalesce(nullif(v_item->>'completed_at','')::timestamptz,clock_timestamp())
       );
       perform private.validate_workout_performance_metric_value(
-        'external_load_kg',1,'none',coalesce(nullif(v_item->>'weight_kg','')::numeric,0),
+        'external_load_kg',1::smallint,'none',coalesce(nullif(v_item->>'weight_kg','')::numeric,0),
         v_source,v_provider,v_source_version,
         coalesce(nullif(v_item->>'completed_at','')::timestamptz,clock_timestamp())
       );
