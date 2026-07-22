@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: aw2c-mcp-coverage-correction-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   correct:
     runs-on: ubuntu-latest
