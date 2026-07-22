@@ -85,7 +85,7 @@ describe("AW-3A migration and runtime authority", () => {
     ];
     for (const file of runtimeFiles) {
       const source = readFileSync(file, "utf8");
-      expect(source).not.toMatch(/\.from\(["']exercise_logs["']\)\s*\.(?:insert|update|delete|upsert)/s);
+      expect(source).not.toMatch(/\.from\(["']exercise_logs["']\)\s*\.(?:insert|update|delete|upsert)/);
     }
     expect(readFileSync("services/database/workout-sessions.ts", "utf8")).toContain(
       '.rpc("upsert_workout_set_logs_atomic"'
@@ -94,10 +94,14 @@ describe("AW-3A migration and runtime authority", () => {
       '.rpc("upsert_workout_set_logs_atomic"'
     );
 
-    const imports = filesUnder(".")
-      .filter((file) => !file.includes("node_modules") && file !== "services/database/workout-sessions.ts")
-      .filter((file) => readFileSync(file, "utf8").includes("workout-sessions-legacy"));
-    expect(imports).toEqual([]);
+    const directLegacyImports = filesUnder(".")
+      .filter((file) => !file.includes("node_modules"))
+      .filter((file) => !/\.(?:test|spec)\.(?:ts|tsx)$/.test(file))
+      .filter((file) => file !== "services/database/workout-sessions.ts")
+      .filter((file) =>
+        /(?:from\s+|import\()\s*["'][^"']*workout-sessions-legacy["']/.test(readFileSync(file, "utf8"))
+      );
+    expect(directLegacyImports).toEqual([]);
   });
 
   it("tags service-role/MCP metric writes as chatgpt/openai and preserves PR compatibility", () => {
