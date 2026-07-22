@@ -152,18 +152,34 @@ select (public.start_or_resume_workout_session_atomic(
 select public.cancel_workout_session_atomic(:'owner_id'::uuid,:'cancel_session_id'::uuid,'started_by_mistake');
 select public.cancel_workout_session_atomic(:'owner_id'::uuid,:'cancel_session_id'::uuid,'started_by_mistake');
 select pg_temp.aw2c_assert(
-  (select status='cancelled' and cancelled_at is not null and completed_at is null from public.workout_sessions where id=:'cancel_session_id'::uuid)
+  (select status='cancelled' and cancelled_at is not null and completed_at is null and scheduled_session_id is null from public.workout_sessions where id=:'cancel_session_id'::uuid)
   and (select count(*)=1 from public.workout_session_timeline_events where workout_session_id=:'cancel_session_id'::uuid and event_type='session_cancelled')
   and (select status='scheduled' and started_at is null and completed_at is null and skipped_at is null from public.user_workout_sessions where id='c2c00000-0000-4000-8000-000000000015'::uuid)
   and not exists(select 1 from public.workout_session_execution_states where workout_session_id=:'cancel_session_id'::uuid),
   'AW-2C cancellation is not durable, idempotent, or schedule-safe.');
 
 select (public.start_or_resume_workout_session_atomic(
+  :'owner_id'::uuid,'c2c00000-0000-4000-8000-000000000011'::uuid,'c2c00000-0000-4000-8000-000000000015'::uuid
+)->'session'->>'id') as retry_session_id \gset
+set constraints all immediate;
+select pg_temp.aw2c_assert(
+  :'retry_session_id'::uuid<>:'cancel_session_id'::uuid
+  and (select status='started' and scheduled_session_id='c2c00000-0000-4000-8000-000000000015'::uuid from public.workout_sessions where id=:'retry_session_id'::uuid)
+  and (select status='started' from public.user_workout_sessions where id='c2c00000-0000-4000-8000-000000000015'::uuid)
+  and (select count(*)=1 from public.workout_session_timeline_events where workout_session_id=:'retry_session_id'::uuid and event_type='session_started'),
+  'AW-2C did not allow a new performed session from the reset schedule.');
+select public.cancel_workout_session_atomic(:'owner_id'::uuid,:'retry_session_id'::uuid,'user_cancelled');
+select pg_temp.aw2c_assert(
+  (select status='cancelled' and scheduled_session_id is null from public.workout_sessions where id=:'retry_session_id'::uuid)
+  and (select status='scheduled' and started_at is null from public.user_workout_sessions where id='c2c00000-0000-4000-8000-000000000015'::uuid),
+  'AW-2C schedule retry cancellation did not release the schedule again.');
+
+select (public.start_or_resume_workout_session_atomic(
   :'owner_id'::uuid,'c2c00000-0000-4000-8000-000000000011'::uuid,'c2c00000-0000-4000-8000-000000000016'::uuid
 )->'session'->>'id') as delete_session_id \gset
 delete from public.workout_sessions where id=:'delete_session_id'::uuid and status='started';
 select pg_temp.aw2c_assert(
-  (select status='cancelled' from public.workout_sessions where id=:'delete_session_id'::uuid)
+  (select status='cancelled' and scheduled_session_id is null from public.workout_sessions where id=:'delete_session_id'::uuid)
   and (select count(*)=1 from public.workout_session_timeline_events where workout_session_id=:'delete_session_id'::uuid and event_type='session_cancelled')
   and (select status='scheduled' and started_at is null from public.user_workout_sessions where id='c2c00000-0000-4000-8000-000000000016'::uuid),
   'AW-2C old-client DELETE bridge hard-deleted the session or failed schedule reset.');
