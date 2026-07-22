@@ -215,7 +215,7 @@ begin
   select migration_version into strict v_marker
   from public.release_schema_compatibility
   where singleton;
-  if v_marker not in ('20260711014500', '20260717051011', '20260721012814')
+  if v_marker not in ('20260711014500', '20260717051011', '20260721012814', '20260721224813')
      or v_marker = '20260720213000' then
     raise exception 'AW-2A changed the release compatibility marker: %', v_marker;
   end if;
