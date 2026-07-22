@@ -208,7 +208,7 @@ begin
   end if;
 
   if v_cleanup_definition !~ 'delete from public.workout_session_execution_states'
-     or v_cleanup_definition !~ 'workout_session_id = new.id' then
+     or v_cleanup_definition !~ 'workout_session_id[[:space:]]*=[[:space:]]*new.id' then
     raise exception 'Terminal cleanup source contract is missing.';
   end if;
 
