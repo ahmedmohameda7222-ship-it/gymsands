@@ -184,6 +184,58 @@ select pg_temp.aw2c_assert(
   and (select status='scheduled' and started_at is null from public.user_workout_sessions where id='c2c00000-0000-4000-8000-000000000016'::uuid),
   'AW-2C old-client DELETE bridge hard-deleted the session or failed schedule reset.');
 
+-- Direct public start authority: one canonical root and one runtime start event.
+reset role;
+select exercise.id::text as direct_exercise_id
+from public.exercises exercise
+where exercise.is_global and exercise.is_approved
+  and exists (
+    select 1 from public.exercise_muscle_mapping_sets mapping
+    where mapping.exercise_id=exercise.id and mapping.status='published'
+  )
+order by exercise.id
+limit 1 \gset
+set local role authenticated;
+select set_config('request.jwt.claim.sub',:'owner_id',true);
+select set_config('request.jwt.claim.role','authenticated',true);
+select (public.start_or_resume_direct_workout_session_atomic(
+  :'owner_id'::uuid,'global_exercise',:'direct_exercise_id',null,
+  'AW-2C direct exercise','Strength','{"sets":3,"reps":"8","restSeconds":90}'::jsonb,null
+)->'session'->>'id') as direct_session_id \gset
+set constraints all immediate;
+select pg_temp.aw2c_assert(
+  (select count(*)=1 from public.workout_sessions
+   where id=:'direct_session_id'::uuid and user_id=:'owner_id'::uuid)
+  and (select count(*)=1 from public.workout_session_timeline_events
+       where workout_session_id=:'direct_session_id'::uuid
+         and user_id=:'owner_id'::uuid and event_type='session_started'
+         and source='runtime' and sequence_number=1)
+  and not exists(
+    select 1 from public.workout_session_timeline_events
+    where workout_session_id=:'direct_session_id'::uuid
+      and payload ?| array['notes','requestHash','controllerDeviceId','token','ip','userAgent','browserFingerprint']
+  ),
+  'AW-2C direct start did not create one privacy-safe runtime start event.');
+select (public.start_or_resume_direct_workout_session_atomic(
+  :'owner_id'::uuid,'global_exercise',:'direct_exercise_id',null,
+  'AW-2C direct exercise','Strength','{"sets":3,"reps":"8","restSeconds":90}'::jsonb,
+  :'direct_session_id'::uuid
+)->'session'->>'id') as direct_candidate_retry_id \gset
+select (public.start_or_resume_direct_workout_session_atomic(
+  :'owner_id'::uuid,'global_exercise',:'direct_exercise_id',null,
+  'AW-2C direct exercise','Strength','{"sets":3,"reps":"8","restSeconds":90}'::jsonb,null
+)->'session'->>'id') as direct_identity_retry_id \gset
+select pg_temp.aw2c_assert(
+  :'direct_candidate_retry_id'=:'direct_session_id'
+  and :'direct_identity_retry_id'=:'direct_session_id'
+  and (select count(*)=1 from public.workout_sessions where id=:'direct_session_id'::uuid)
+  and (select count(*)=1 from public.workout_session_timeline_events
+       where workout_session_id=:'direct_session_id'::uuid and event_type='session_started')
+  and (select min(sequence_number)=1 and max(sequence_number)=1
+       from public.workout_session_timeline_events where workout_session_id=:'direct_session_id'::uuid),
+  'AW-2C direct retry duplicated the session root or start event.');
+select public.cancel_workout_session_atomic(:'owner_id'::uuid,:'direct_session_id'::uuid,'user_cancelled');
+
 select (public.skip_workout_day_atomic(
   :'owner_id'::uuid,'c2c00000-0000-4000-8000-000000000011'::uuid,
   'private skip note','no_time','skip_and_continue'

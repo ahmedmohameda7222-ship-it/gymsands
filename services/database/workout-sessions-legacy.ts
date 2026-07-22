@@ -11,7 +11,6 @@ import type {
   ExerciseLog,
   UserExerciseLog,
   UserWorkoutSession,
-  Weekday,
   Workout,
   WorkoutPlanDaySession,
   WorkoutSession,
@@ -43,37 +42,6 @@ async function getWorkoutSessionIdentity(sessionId: string): Promise<WorkoutSess
   return data as WorkoutSessionIdentity;
 }
 
-function summarizeWorkoutCategory(
-  day: { exercises?: Array<{ category?: string | null; target_muscle?: string | null; equipment?: string | null }> } | null | undefined
-) {
-  const categories = new Set(
-    (day?.exercises ?? [])
-      .map((exercise) => exercise.category || exercise.target_muscle || exercise.equipment)
-      .filter(Boolean)
-  );
-  const values = Array.from(categories) as string[];
-  if (!values.length) return "Workout";
-  return values.slice(0, 2).join(", ");
-}
-
-type SkipWorkoutDayInput = {
-  id: string;
-  plan_id?: string | null;
-  planId?: string | null;
-  day_name?: string;
-  dayName?: string;
-  weekday: Weekday | null;
-  exercises: Array<{ category?: string | null; target_muscle?: string | null; equipment?: string | null }>;
-};
-
-function skipDayName(day: SkipWorkoutDayInput) {
-  return day.day_name || day.dayName || "Workout day";
-}
-
-function skipDayPlanId(day: SkipWorkoutDayInput) {
-  return day.plan_id ?? day.planId ?? null;
-}
-
 function isSchemaCompatibilityError(error: { message?: string; code?: string } | null | undefined) {
   const message = error?.message?.toLowerCase() ?? "";
   return (
@@ -102,10 +70,6 @@ function isMissingTemplateSchemaError(error: { message?: string; code?: string }
     message.includes("custom_video_url") ||
     message.includes("is_default")
   );
-}
-
-function markSkippedNote(notes = "") {
-  return `${skippedNotePrefix}${notes ? ` ${notes}` : ""}`.trim();
 }
 
 function normalizeWorkoutSession(session: WorkoutSession): WorkoutSession {
@@ -240,49 +204,6 @@ function sortExerciseLogsByWorkoutOrder(logs: ExerciseLog[]) {
     const createdSort = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     return createdSort || a.set_number - b.set_number;
   });
-}
-
-async function persistedLegacyWorkoutId(workoutId: string) {
-  if (!isUuid(workoutId)) return null;
-  const { data, error } = await supabase!
-    .from("workouts")
-    .select("id")
-    .eq("id", workoutId)
-    .limit(1)
-    .maybeSingle();
-  if (error) {
-    console.warn("Plaivra could not verify the local workout catalog identity.", error.message);
-    return null;
-  }
-  return data?.id ?? null;
-}
-
-export async function startWorkoutSession(userId: string, workout: Workout, resolvedWorkoutId?: string | null) {
-  requireWorkoutPersistence(userId, "Workout session");
-  const workoutId = resolvedWorkoutId === undefined ? await persistedLegacyWorkoutId(workout.id) : resolvedWorkoutId;
-  const payload = {
-    user_id: userId,
-    workout_id: workoutId,
-    workout_category: workout.category || workout.target_muscle || "Workout",
-    workout_name: workout.name,
-    started_at: new Date().toISOString(),
-    completed_at: null,
-    duration_minutes: null,
-    notes: null,
-    status: "started"
-  };
-  let { data, error } = await supabase!.from("workout_sessions").insert(payload).select("*").single();
-  if (error && isSchemaCompatibilityError(error)) {
-    const { workout_category: _category, ...compatiblePayload } = payload;
-    const compatible = await supabase!.from("workout_sessions").insert(compatiblePayload).select("*").single();
-    data = compatible.data;
-    error = compatible.error;
-  }
-  if (error) {
-    console.warn("Plaivra could not start a Supabase workout session.", error.message);
-    throw error;
-  }
-  return normalizeWorkoutSession(data as WorkoutSession);
 }
 
 export async function startWorkoutDaySession(userId: string, day: WorkoutPlanDaySession) {
@@ -550,89 +471,6 @@ export async function detectPersonalRecordsAfterWorkoutCompletion(
   }
 }
 
-export async function skipWorkoutDay(userId: string, day: SkipWorkoutDayInput, notes = "") {
-  const skippedAt = new Date().toISOString();
-  const existing = await getOpenWorkoutDaySession(userId, day.id);
-  const dayName = skipDayName(day);
-  const planId = skipDayPlanId(day);
-  const workoutName = day.weekday ? `${dayName} - ${day.weekday}` : dayName;
-
-  if (!canUseUserData(userId)) throw new Error("User session invalid");
-
-  if (existing) {
-    let { data, error } = await supabase!
-      .from("workout_sessions")
-      .update({
-        status: "skipped",
-        completed_at: skippedAt,
-        skipped_at: skippedAt,
-        duration_minutes: 0,
-        notes: notes || existing.notes || null
-      })
-      .eq("id", existing.id)
-      .select("*")
-      .single();
-    if (error && isSchemaCompatibilityError(error)) {
-      const compatible = await supabase!
-        .from("workout_sessions")
-        .update({
-          status: "completed",
-          completed_at: skippedAt,
-          duration_minutes: 0,
-          notes: markSkippedNote(notes || existing.notes || "")
-        })
-        .eq("id", existing.id)
-        .select("*")
-        .single();
-      data = compatible.data;
-      error = compatible.error;
-    }
-    if (error) throw error;
-    return normalizeWorkoutSession(data as WorkoutSession);
-  }
-
-  const payload = {
-    user_id: userId,
-    workout_id: null,
-    plan_id: planId,
-    plan_day_id: day.id,
-    workout_day_name: dayName,
-    workout_category: summarizeWorkoutCategory(day),
-    workout_name: workoutName,
-    started_at: skippedAt,
-    completed_at: skippedAt,
-    skipped_at: skippedAt,
-    duration_minutes: 0,
-    notes: notes || null,
-    status: "skipped"
-  };
-
-  let { data, error } = await supabase!.from("workout_sessions").insert(payload).select("*").single();
-  if (error && isSchemaCompatibilityError(error)) {
-    const compatiblePayload = {
-      user_id: payload.user_id,
-      workout_id: payload.workout_id,
-      plan_id: payload.plan_id,
-      plan_day_id: payload.plan_day_id,
-      workout_day_name: payload.workout_day_name,
-      workout_name: payload.workout_name,
-      started_at: payload.started_at,
-      completed_at: payload.completed_at,
-      duration_minutes: payload.duration_minutes,
-      notes: markSkippedNote(notes),
-      status: "completed"
-    };
-    const compatible = await supabase!.from("workout_sessions").insert(compatiblePayload).select("*").single();
-    data = compatible.data;
-    error = compatible.error;
-  }
-  if (error) {
-    console.warn("Plaivra could not skip this workout day.", error.message);
-    throw error;
-  }
-  return normalizeWorkoutSession(data as WorkoutSession);
-}
-
 export async function getOpenWorkoutSession(userId: string, workoutId?: string | null) {
   if (!canUseUserData(userId)) return null;
   let query = supabase!
@@ -681,82 +519,6 @@ export async function getOpenWorkoutSessionWithStatus(userId: string, workoutId?
     return { session: null, error: "Active workout could not load. Your current route was left unchanged." };
   }
   return { session: data ? normalizeWorkoutSession(data as WorkoutSession) : null };
-}
-
-const directSessionStartPromises = new Map<string, Promise<WorkoutSession>>();
-
-export async function getOrStartWorkoutSession(userId: string, workout: Workout, candidateSessionId?: string | null) {
-  requireWorkoutPersistence(userId, "Workout session");
-  const workoutId = await persistedLegacyWorkoutId(workout.id);
-
-  if (candidateSessionId && isUuid(candidateSessionId)) {
-    let candidateQuery = supabase!
-      .from("workout_sessions")
-      .select("*")
-      .eq("id", candidateSessionId)
-      .eq("user_id", userId)
-      .eq("status", "started")
-      .is("plan_day_id", null);
-    candidateQuery = workoutId
-      ? candidateQuery.eq("workout_id", workoutId)
-      : candidateQuery.is("workout_id", null);
-    const candidate = await candidateQuery.maybeSingle();
-    if (candidate.error) throw candidate.error;
-    if (candidate.data) return normalizeWorkoutSession(candidate.data as WorkoutSession);
-  }
-
-  if (workoutId) {
-    const { data, error } = await supabase!
-      .from("workout_sessions")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("status", "started")
-      .is("plan_day_id", null)
-      .eq("workout_id", workoutId)
-      .order("started_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
-    return data ? normalizeWorkoutSession(data as WorkoutSession) : startWorkoutSession(userId, workout, workoutId);
-  }
-
-  if (workout.catalog_source === "custom") {
-    const { data, error } = await supabase!
-      .from("workout_sessions")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("status", "started")
-      .is("plan_day_id", null)
-      .is("workout_id", null)
-      .eq("workout_name", workout.name)
-      .order("started_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
-    return data ? normalizeWorkoutSession(data as WorkoutSession) : startWorkoutSession(userId, workout, null);
-  }
-
-  const { data: unresolved, error: unresolvedError } = await supabase!
-    .from("workout_sessions")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("status", "started")
-    .is("plan_day_id", null)
-    .is("workout_id", null)
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (unresolvedError) throw unresolvedError;
-  if (unresolved) {
-    throw new Error("An open direct workout session already exists. Resume or finish it before starting another external activity.");
-  }
-
-  const key = userId + ":" + workout.id;
-  const pending = directSessionStartPromises.get(key);
-  if (pending) return pending;
-  const start = startWorkoutSession(userId, workout, null).finally(() => directSessionStartPromises.delete(key));
-  directSessionStartPromises.set(key, start);
-  return start;
 }
 
 export async function cancelWorkoutSession(sessionId: string) {

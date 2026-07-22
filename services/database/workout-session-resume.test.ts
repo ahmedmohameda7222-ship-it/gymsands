@@ -74,6 +74,45 @@ describe("direct workout session atomic authority", () => {
     });
   });
 
+  it("routes the public standalone start through the same direct authority", async () => {
+  const { startWorkoutSession } = await import("./workout-sessions");
+  await expect(startWorkoutSession(userId, externalWorkout())).resolves.toMatchObject({ id: candidateId });
+  expect(supabase.rpc).toHaveBeenCalledWith(
+    "start_or_resume_direct_workout_session_atomic",
+    expect.objectContaining({
+      p_user_id: userId,
+      p_target_type: "provider_activity",
+      p_identity: externalId,
+      p_candidate_session_id: null
+    })
+  );
+  expect(supabase.from).not.toHaveBeenCalled();
+});
+
+it("preserves an explicitly resolved local identity as a canonical global exercise", async () => {
+  const resolvedId = "77777777-7777-4777-8777-777777777777";
+  const { startWorkoutSession } = await import("./workout-sessions");
+  await startWorkoutSession(userId, externalWorkout(), resolvedId);
+  expect(supabase.rpc).toHaveBeenCalledWith(
+    "start_or_resume_direct_workout_session_atomic",
+    expect.objectContaining({
+      p_target_type: "global_exercise",
+      p_identity: resolvedId,
+      p_provider: null,
+      p_display_name: "Kniebeuge",
+      p_category: "Kraft"
+    })
+  );
+  expect(supabase.from).not.toHaveBeenCalled();
+});
+
+it("rejects an invalid resolved local identity before calling the authority", async () => {
+  const { startWorkoutSession } = await import("./workout-sessions");
+  await expect(startWorkoutSession(userId, externalWorkout(), "not-a-uuid")).rejects.toThrow(/resolved workout identity/i);
+  expect(supabase.rpc).not.toHaveBeenCalled();
+  expect(supabase.from).not.toHaveBeenCalled();
+});
+
   it("passes the route-scoped candidate to database ownership validation", async () => {
     const { getOrStartWorkoutSession } = await import("./workout-sessions");
     await expect(getOrStartWorkoutSession(userId, externalWorkout({ name: "Squat" }), candidateId)).resolves.toMatchObject({ id: candidateId });

@@ -113,17 +113,32 @@ describe("approved Train Phase 1 semantic contracts", () => {
     expect(detail).toContain("normalizeExerciseName(log.exercise_name) === target");
   });
 
-  it("routes direct workout starts through the server-authoritative atomic RPC", () => {
-    const sessions = source("services/database/workout-sessions.ts");
-    const direct = source("services/database/direct-workout-sessions.ts");
-    expect(sessions).toContain("startOrResumeDirectWorkoutSession(userId, workout, candidateSessionId)");
-    expect(direct).toContain('supabase.rpc("start_or_resume_direct_workout_session_atomic"');
-    expect(direct).toContain("p_user_id: userId");
-    expect(direct).toContain("p_target_type: stable.targetType");
-    expect(direct).toContain("p_identity: stable.identity");
-    expect(direct).toContain("p_provider: stable.provider");
-    expect(direct).not.toContain('.insert(');
-  });
+  it("routes every reachable performed-session start through reviewed atomic authorities", () => {
+  const runtimeFiles = [
+    "services/database/workout-sessions.ts",
+    "services/database/workout-sessions-legacy.ts",
+    "services/database/direct-workout-sessions.ts",
+    "services/database/legacy-repository.ts",
+    "components/workouts/workout-session-form.tsx"
+  ];
+  const runtime = runtimeFiles.map(source).join("\n");
+  const sessions = source("services/database/workout-sessions.ts");
+  const legacy = source("services/database/workout-sessions-legacy.ts");
+  const direct = source("services/database/direct-workout-sessions.ts");
+  const barrel = source("services/database/legacy-repository.ts");
+  expect(runtime).not.toMatch(/\.from\(\s*["']workout_sessions["']\s*\)\s*\.insert\s*\(/s);
+  expect(legacy).not.toMatch(/export\s+async\s+function\s+(?:startWorkoutSession|getOrStartWorkoutSession|skipWorkoutDay)\b/);
+  expect(sessions).not.toContain("startLegacyWorkoutSession");
+  expect(sessions).toContain("directWorkoutIdentity(workout, resolvedWorkoutId)");
+  expect(sessions).toContain("startOrResumeDirectWorkoutSession(userId, workout, candidateSessionId)");
+  expect(direct).toContain('supabase.rpc("start_or_resume_direct_workout_session_atomic"');
+  expect(direct).toContain("p_user_id: userId");
+  expect(direct).toContain("p_target_type: stable.targetType");
+  expect(direct).toContain("p_identity: stable.identity");
+  expect(direct).toContain("p_provider: stable.provider");
+  expect(legacy).toContain('supabase!.rpc("start_or_resume_workout_session_atomic"');
+  expect(barrel).toContain("startWorkoutSession");
+});
 
   it("passes the route-scoped candidate to the owner-validated direct-session authority", () => {
     const direct = source("services/database/direct-workout-sessions.ts");

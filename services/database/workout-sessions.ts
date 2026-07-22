@@ -8,9 +8,6 @@ import type { Weekday, Workout, WorkoutSession } from "@/types";
 import {
   getOrStartWorkoutSession as startOrResumeDirectWorkoutSession
 } from "./direct-workout-sessions";
-import {
-  startWorkoutSession as startLegacyWorkoutSession
-} from "./workout-sessions-legacy";
 import type { WorkoutSetLogInput } from "./workout-sessions-legacy";
 
 export type SkipWorkoutDayInput = {
@@ -48,12 +45,29 @@ function workoutSetLogRows(logs: WorkoutSetLogInput[]) {
   }));
 }
 
+function directWorkoutIdentity(workout: Workout, resolvedWorkoutId?: string | null): Workout {
+  if (resolvedWorkoutId === undefined || resolvedWorkoutId === null) return workout;
+  if (!isUuid(resolvedWorkoutId)) throw new Error("Resolved workout identity is invalid.");
+  return {
+    ...workout,
+    id: resolvedWorkoutId,
+    catalog_source: null,
+    catalog_slug: null,
+    catalog_version: null,
+    is_global: true
+  };
+}
+
 export async function startWorkoutSession(
   userId: string,
   workout: Workout,
   resolvedWorkoutId?: string | null
 ): Promise<WorkoutSession> {
-  return startLegacyWorkoutSession(userId, workout, resolvedWorkoutId);
+  return startOrResumeDirectWorkoutSession(
+    userId,
+    directWorkoutIdentity(workout, resolvedWorkoutId),
+    null
+  );
 }
 
 export async function getOrStartWorkoutSession(

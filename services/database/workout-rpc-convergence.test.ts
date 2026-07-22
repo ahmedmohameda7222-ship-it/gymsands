@@ -283,11 +283,17 @@ describe("atomic plan-day workout sessions", () => {
     expect(autoDetectPersonalRecordsFromExerciseLogs).toHaveBeenCalledOnce();
   });
 
-  it("keeps standalone workout start on the existing table path", async () => {
-    state.singleData = { ...session, plan_id: null, plan_day_id: null, workout_id: workout.id, workout_name: workout.name };
-    const { startWorkoutSession } = await import("@/services/database/workout-sessions");
-    await startWorkoutSession(userId, workout);
-    expect(supabase.from).toHaveBeenCalledWith("workout_sessions");
-    expect(supabase.rpc).not.toHaveBeenCalled();
-  });
+  it("keeps standalone workout start on the canonical direct RPC path", async () => {
+  const directSession = { ...session, plan_id: null, plan_day_id: null, workout_id: workout.id, workout_name: workout.name };
+  state.rpcData.start_or_resume_direct_workout_session_atomic = { session: directSession, resumed: false };
+  const { startWorkoutSession } = await import("@/services/database/workout-sessions");
+  await expect(startWorkoutSession(userId, workout)).resolves.toMatchObject({ id: sessionId });
+  expect(supabase.rpc).toHaveBeenCalledWith("start_or_resume_direct_workout_session_atomic", expect.objectContaining({
+    p_user_id: userId,
+    p_target_type: "global_exercise",
+    p_identity: workout.id,
+    p_candidate_session_id: null
+  }));
+  expect(supabase.from).not.toHaveBeenCalled();
+});
 });
