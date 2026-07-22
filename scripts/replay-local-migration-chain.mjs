@@ -9,7 +9,7 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export * from "./replay-local-migration-chain-legacy.mjs";
@@ -95,21 +95,50 @@ function recordedVersions(cwd, logPath) {
   ).split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
 }
 
+function stageAw2cAndFutureMigrations(repositoryRoot, stagedDirectory) {
+  const migrationsDirectory = join(repositoryRoot, "supabase", "migrations");
+  const staged = listRepositoryMigrations(repositoryRoot)
+    .filter(({ version }) => version >= AW2C_VERSION)
+    .map(({ filename, version }) => {
+      const source = join(migrationsDirectory, filename);
+      const destination = join(stagedDirectory, filename);
+      renameSync(source, destination);
+      return { source, destination, filename, version };
+    });
+
+  if (!staged.some(({ filename }) => filename === AW2C_FILE)) {
+    throw new Error(`Missing required AW-2C migration: ${AW2C_FILE}`);
+  }
+  return staged;
+}
+
+function restoreStagedMigrations(staged) {
+  for (const entry of staged) {
+    if (existsSync(entry.destination) && !existsSync(entry.source)) {
+      renameSync(entry.destination, entry.source);
+    }
+  }
+}
+
 async function main() {
   const { logPath: requestedLogPath } = parseArguments(process.argv.slice(2));
   const repositoryRoot = git(process.cwd(), "rev-parse", "--show-toplevel");
   const logPath = resolve(repositoryRoot, requestedLogPath);
-  const migrationPath = join(repositoryRoot, "supabase", "migrations", AW2C_FILE);
-  const stagedDirectory = mkdtempSync(join(tmpdir(), "plaivra-aw2c-replay-"));
-  const stagedPath = join(stagedDirectory, AW2C_FILE);
+  const stagedDirectory = mkdtempSync(join(tmpdir(), "plaivra-aw2c-and-future-replay-"));
   const initialStatus = git(repositoryRoot, "status", "--porcelain=v1", "--untracked-files=all");
+  let staged = [];
 
   assertLocalOnly(repositoryRoot);
-  if (!existsSync(migrationPath)) throw new Error(`Missing required AW-2C migration: ${AW2C_FILE}`);
   if (AW2B_VERSION >= AW2C_VERSION) throw new Error("AW-2C migration must sort after AW-2B.");
 
   try {
-    renameSync(migrationPath, stagedPath);
+    staged = stageAw2cAndFutureMigrations(repositoryRoot, stagedDirectory);
+    appendFileSync(
+      logPath,
+      `Staged AW-2C and ${Math.max(staged.length - 1, 0)} future migration(s) before legacy replay: ${staged.map(({ filename }) => basename(filename)).join(", ")}\n`,
+      "utf8",
+    );
+
     const child = spawnSync(process.execPath, [LEGACY_HELPER, ...process.argv.slice(2)], {
       cwd: repositoryRoot,
       env: process.env,
@@ -121,7 +150,7 @@ async function main() {
     if (child.error) throw child.error;
     if (child.status !== 0) throw new Error(`Legacy chronological replay exited with status ${child.status ?? "unknown"}.`);
 
-    renameSync(stagedPath, migrationPath);
+    restoreStagedMigrations(staged);
     run(
       "psql",
       [LOCAL_DATABASE_URL, "-X", "-v", "ON_ERROR_STOP=1", "-c", `update public.release_schema_compatibility set migration_version='${MARKER_AFTER_AW2B_PROMOTION}' where singleton`],
@@ -132,13 +161,13 @@ async function main() {
 
     const markerAfter = marker(repositoryRoot, logPath);
     if (markerAfter !== MARKER_AFTER_AW2B_PROMOTION) {
-      throw new Error(`Expected marker ${MARKER_AFTER_AW2B_PROMOTION} after AW-2C replay, received ${markerAfter || "<empty>"}.`);
+      throw new Error(`Expected marker ${MARKER_AFTER_AW2B_PROMOTION} after AW-2C and future replay, received ${markerAfter || "<empty>"}.`);
     }
     const migrations = listRepositoryMigrations(repositoryRoot);
     validateMigrationHistory(migrations.map(({ version }) => version), recordedVersions(repositoryRoot, logPath));
-    appendFileSync(logPath, "AW-2C chronological local migration replay passed.\n", "utf8");
+    appendFileSync(logPath, "AW-2C and future chronological local migration replay passed.\n", "utf8");
   } finally {
-    if (existsSync(stagedPath) && !existsSync(migrationPath)) renameSync(stagedPath, migrationPath);
+    restoreStagedMigrations(staged);
     rmSync(stagedDirectory, { recursive: true, force: true });
     const finalStatus = git(repositoryRoot, "status", "--porcelain=v1", "--untracked-files=all");
     if (finalStatus !== initialStatus) {
