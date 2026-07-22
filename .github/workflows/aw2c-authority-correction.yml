@@ -1,0 +1,351 @@
+name: AW-2C Authority Correction
+
+on:
+  push:
+    branches:
+      - feat/active-workout-aw2c-timeline-events
+    paths:
+      - .github/workflows/aw2c-authority-correction.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aw2c-authority-correction
+  cancel-in-progress: false
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-aw2c-timeline-events
+          fetch-depth: 0
+
+      - name: Apply reviewed AW-2C authority correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              if text.count(old) != 1:
+                  raise SystemExit(f"Expected exactly one replacement in {path}, found {text.count(old)}")
+              file.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          def remove_between(text: str, start: str, end: str, label: str) -> str:
+              start_index = text.find(start)
+              end_index = text.find(end, start_index + len(start))
+              if start_index < 0 or end_index < 0:
+                  raise SystemExit(f"Unable to remove {label}")
+              return text[:start_index] + text[end_index:]
+
+          wrapper = Path("services/database/workout-sessions.ts")
+          text = wrapper.read_text(encoding="utf-8")
+          text = text.replace(
+              'import {\n  startWorkoutSession as startLegacyWorkoutSession\n} from "./workout-sessions-legacy";\n',
+              "",
+              1,
+          )
+          old_start = '''export async function startWorkoutSession(
+            userId: string,
+            workout: Workout,
+            resolvedWorkoutId?: string | null
+          ): Promise<WorkoutSession> {
+            return startLegacyWorkoutSession(userId, workout, resolvedWorkoutId);
+          }
+          '''
+          new_start = '''function directWorkoutIdentity(workout: Workout, resolvedWorkoutId?: string | null): Workout {
+            if (resolvedWorkoutId === undefined || resolvedWorkoutId === null) return workout;
+            if (!isUuid(resolvedWorkoutId)) throw new Error("Resolved workout identity is invalid.");
+            return {
+              ...workout,
+              id: resolvedWorkoutId,
+              catalog_source: null,
+              catalog_slug: null,
+              catalog_version: null,
+              is_global: true
+            };
+          }
+
+          export async function startWorkoutSession(
+            userId: string,
+            workout: Workout,
+            resolvedWorkoutId?: string | null
+          ): Promise<WorkoutSession> {
+            return startOrResumeDirectWorkoutSession(
+              userId,
+              directWorkoutIdentity(workout, resolvedWorkoutId),
+              null
+            );
+          }
+          '''
+          if old_start not in text:
+              raise SystemExit("Public startWorkoutSession block drifted")
+          wrapper.write_text(text.replace(old_start, new_start, 1), encoding="utf-8")
+
+          legacy = Path("services/database/workout-sessions-legacy.ts")
+          text = legacy.read_text(encoding="utf-8")
+          text = text.replace("  Weekday,\n", "", 1)
+          text = remove_between(
+              text,
+              "function summarizeWorkoutCategory(",
+              "function isSchemaCompatibilityError(",
+              "legacy skipped-day helpers",
+          )
+          text = remove_between(
+              text,
+              "async function persistedLegacyWorkoutId(",
+              "export async function startWorkoutDaySession(",
+              "legacy direct workout start",
+          )
+          text = remove_between(
+              text,
+              "export async function skipWorkoutDay(",
+              "export async function getOpenWorkoutSession(",
+              "legacy skipped-day direct insert",
+          )
+          text = remove_between(
+              text,
+              "const directSessionStartPromises",
+              "export async function cancelWorkoutSession(",
+              "legacy get-or-start direct insert path",
+          )
+          forbidden = [
+              '.from("workout_sessions").insert',
+              "export async function startWorkoutSession",
+              "export async function getOrStartWorkoutSession",
+              "export async function skipWorkoutDay",
+          ]
+          for marker in forbidden:
+              if marker in text:
+                  raise SystemExit(f"Unsafe legacy marker remains: {marker}")
+          legacy.write_text(text, encoding="utf-8")
+
+          test_path = "lib/product/train-phase1-approved-semantics.test.ts"
+          old_contract = '''  it("routes direct workout starts through the server-authoritative atomic RPC", () => {
+              const sessions = source("services/database/workout-sessions.ts");
+              const direct = source("services/database/direct-workout-sessions.ts");
+              expect(sessions).toContain("startOrResumeDirectWorkoutSession(userId, workout, candidateSessionId)");
+              expect(direct).toContain('supabase.rpc("start_or_resume_direct_workout_session_atomic"');
+              expect(direct).toContain("p_user_id: userId");
+              expect(direct).toContain("p_target_type: stable.targetType");
+              expect(direct).toContain("p_identity: stable.identity");
+              expect(direct).toContain("p_provider: stable.provider");
+              expect(direct).not.toContain('.insert(');
+            });
+          '''
+          new_contract = '''  it("routes every reachable performed-session start through reviewed atomic authorities", () => {
+              const runtimeFiles = [
+                "services/database/workout-sessions.ts",
+                "services/database/workout-sessions-legacy.ts",
+                "services/database/direct-workout-sessions.ts",
+                "services/database/legacy-repository.ts",
+                "components/workouts/workout-session-form.tsx"
+              ];
+              const runtime = runtimeFiles.map(source).join("\\n");
+              const sessions = source("services/database/workout-sessions.ts");
+              const legacy = source("services/database/workout-sessions-legacy.ts");
+              const direct = source("services/database/direct-workout-sessions.ts");
+              const barrel = source("services/database/legacy-repository.ts");
+              expect(runtime).not.toMatch(/\\.from\\(\\s*["']workout_sessions["']\\s*\\)\\s*\\.insert\\s*\\(/s);
+              expect(legacy).not.toMatch(/export\\s+async\\s+function\\s+(?:startWorkoutSession|getOrStartWorkoutSession|skipWorkoutDay)\\b/);
+              expect(sessions).not.toContain("startLegacyWorkoutSession");
+              expect(sessions).toContain("directWorkoutIdentity(workout, resolvedWorkoutId)");
+              expect(sessions).toContain("startOrResumeDirectWorkoutSession(userId, workout, candidateSessionId)");
+              expect(direct).toContain('supabase.rpc("start_or_resume_direct_workout_session_atomic"');
+              expect(direct).toContain("p_user_id: userId");
+              expect(direct).toContain("p_target_type: stable.targetType");
+              expect(direct).toContain("p_identity: stable.identity");
+              expect(direct).toContain("p_provider: stable.provider");
+              expect(legacy).toContain('supabase!.rpc("start_or_resume_workout_session_atomic"');
+              expect(barrel).toContain("startWorkoutSession");
+            });
+          '''
+          replace_once(test_path, old_contract, new_contract)
+
+          resume = Path("services/database/workout-session-resume.test.ts")
+          text = resume.read_text(encoding="utf-8")
+          anchor = '''  it("passes the route-scoped candidate to database ownership validation", async () => {
+          '''
+          addition = '''  it("routes the public standalone start through the same direct authority", async () => {
+              const { startWorkoutSession } = await import("./workout-sessions");
+              await expect(startWorkoutSession(userId, externalWorkout())).resolves.toMatchObject({ id: candidateId });
+              expect(supabase.rpc).toHaveBeenCalledWith(
+                "start_or_resume_direct_workout_session_atomic",
+                expect.objectContaining({
+                  p_user_id: userId,
+                  p_target_type: "provider_activity",
+                  p_identity: externalId,
+                  p_candidate_session_id: null
+                })
+              );
+              expect(supabase.from).not.toHaveBeenCalled();
+            });
+
+            it("preserves an explicitly resolved local identity as a canonical global exercise", async () => {
+              const resolvedId = "77777777-7777-4777-8777-777777777777";
+              const { startWorkoutSession } = await import("./workout-sessions");
+              await startWorkoutSession(userId, externalWorkout(), resolvedId);
+              expect(supabase.rpc).toHaveBeenCalledWith(
+                "start_or_resume_direct_workout_session_atomic",
+                expect.objectContaining({
+                  p_target_type: "global_exercise",
+                  p_identity: resolvedId,
+                  p_provider: null,
+                  p_display_name: "Kniebeuge",
+                  p_category: "Kraft"
+                })
+              );
+              expect(supabase.from).not.toHaveBeenCalled();
+            });
+
+            it("rejects an invalid resolved local identity before calling the authority", async () => {
+              const { startWorkoutSession } = await import("./workout-sessions");
+              await expect(startWorkoutSession(userId, externalWorkout(), "not-a-uuid")).rejects.toThrow(/resolved workout identity/i);
+              expect(supabase.rpc).not.toHaveBeenCalled();
+              expect(supabase.from).not.toHaveBeenCalled();
+            });
+
+          '''
+          if anchor not in text:
+              raise SystemExit("Resume-test insertion anchor drifted")
+          resume.write_text(text.replace(anchor, addition + anchor, 1), encoding="utf-8")
+
+          convergence_path = "services/database/workout-rpc-convergence.test.ts"
+          old_convergence = '''  it("keeps standalone workout start on the existing table path", async () => {
+              state.singleData = { ...session, plan_id: null, plan_day_id: null, workout_id: workout.id, workout_name: workout.name };
+              const { startWorkoutSession } = await import("@/services/database/workout-sessions");
+              await startWorkoutSession(userId, workout);
+              expect(supabase.from).toHaveBeenCalledWith("workout_sessions");
+              expect(supabase.rpc).not.toHaveBeenCalled();
+            });
+          '''
+          new_convergence = '''  it("keeps standalone workout start on the canonical direct RPC path", async () => {
+              const directSession = { ...session, plan_id: null, plan_day_id: null, workout_id: workout.id, workout_name: workout.name };
+              state.rpcData.start_or_resume_direct_workout_session_atomic = { session: directSession, resumed: false };
+              const { startWorkoutSession } = await import("@/services/database/workout-sessions");
+              await expect(startWorkoutSession(userId, workout)).resolves.toMatchObject({ id: sessionId });
+              expect(supabase.rpc).toHaveBeenCalledWith("start_or_resume_direct_workout_session_atomic", expect.objectContaining({
+                p_user_id: userId,
+                p_target_type: "global_exercise",
+                p_identity: workout.id,
+                p_candidate_session_id: null
+              }));
+              expect(supabase.from).not.toHaveBeenCalled();
+            });
+          '''
+          replace_once(convergence_path, old_convergence, new_convergence)
+
+          integration_path = "supabase/verification/active-workout-aw2c-integration.sql"
+          integration_anchor = '''select pg_temp.aw2c_assert(
+            (select count(*)=1 from public.workout_session_timeline_events
+             where workout_session_id=:'session_id'::uuid and event_type='session_started'),
+            'AW-2C resume duplicated the start event.');
+
+          '''
+          direct_integration = '''-- The public direct-session authority creates one durable start event and
+          -- retains it across candidate resume and identity-based retry.
+          reset role;
+          select exercise.id::text as direct_exercise_id
+          from public.exercises exercise
+          where exercise.is_global and exercise.is_approved
+            and exists (
+              select 1 from public.exercise_muscle_mapping_sets mapping
+              where mapping.exercise_id=exercise.id and mapping.status='published'
+            )
+          order by exercise.id
+          limit 1 \\gset
+          set local role authenticated;
+          select set_config('request.jwt.claim.sub',:'owner_id',true);
+          select set_config('request.jwt.claim.role','authenticated',true);
+          select (public.start_or_resume_direct_workout_session_atomic(
+            :'owner_id'::uuid,'global_exercise',:'direct_exercise_id',null,
+            'AW-2C direct exercise','Strength','{"sets":3,"reps":"8","restSeconds":90}'::jsonb,null
+          )->'session'->>'id') as direct_session_id \\gset
+          set constraints all immediate;
+          select pg_temp.aw2c_assert(
+            (select count(*)=1 from public.workout_sessions where id=:'direct_session_id'::uuid and user_id=:'owner_id'::uuid)
+            and (select count(*)=1 from public.workout_session_timeline_events
+                 where workout_session_id=:'direct_session_id'::uuid and user_id=:'owner_id'::uuid
+                   and event_type='session_started' and source='runtime' and sequence_number=1)
+            and not exists(
+              select 1 from public.workout_session_timeline_events
+              where workout_session_id=:'direct_session_id'::uuid
+                and payload ?| array['notes','requestHash','controllerDeviceId','token','ip','userAgent','browserFingerprint']
+            ),
+            'AW-2C direct start did not create one privacy-safe runtime start event.');
+          select (public.start_or_resume_direct_workout_session_atomic(
+            :'owner_id'::uuid,'global_exercise',:'direct_exercise_id',null,
+            'AW-2C direct exercise','Strength','{"sets":3,"reps":"8","restSeconds":90}'::jsonb,
+            :'direct_session_id'::uuid
+          )->'session'->>'id') as direct_candidate_retry_id \\gset
+          select (public.start_or_resume_direct_workout_session_atomic(
+            :'owner_id'::uuid,'global_exercise',:'direct_exercise_id',null,
+            'AW-2C direct exercise','Strength','{"sets":3,"reps":"8","restSeconds":90}'::jsonb,null
+          )->'session'->>'id') as direct_identity_retry_id \\gset
+          select pg_temp.aw2c_assert(
+            :'direct_candidate_retry_id'=:'direct_session_id'
+            and :'direct_identity_retry_id'=:'direct_session_id'
+            and (select count(*)=1 from public.workout_sessions where id=:'direct_session_id'::uuid)
+            and (select count(*)=1 from public.workout_session_timeline_events
+                 where workout_session_id=:'direct_session_id'::uuid and event_type='session_started')
+            and (select min(sequence_number)=1 and max(sequence_number)=1
+                 from public.workout_session_timeline_events where workout_session_id=:'direct_session_id'::uuid),
+            'AW-2C direct retry created a duplicate session root or start event.');
+          select public.cancel_workout_session_atomic(:'owner_id'::uuid,:'direct_session_id'::uuid,'user_cancelled');
+
+          '''
+          integration = Path(integration_path)
+          text = integration.read_text(encoding="utf-8")
+          if integration_anchor not in text:
+              raise SystemExit("AW-2C integration insertion anchor drifted")
+          integration.write_text(text.replace(integration_anchor, integration_anchor + direct_integration, 1), encoding="utf-8")
+
+          for path in [
+              "services/database/workout-sessions.ts",
+              "services/database/workout-sessions-legacy.ts",
+              "services/database/direct-workout-sessions.ts",
+              "services/database/legacy-repository.ts",
+          ]:
+              source = Path(path).read_text(encoding="utf-8")
+              if '.from("workout_sessions").insert' in source:
+                  raise SystemExit(f"Direct performed-session insert remains in {path}")
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run targeted correction validation
+        run: |
+          set -euo pipefail
+          npm run lint
+          npm run typecheck
+          npx vitest run \
+            services/database/workout-session-resume.test.ts \
+            services/database/workout-rpc-convergence.test.ts \
+            lib/product/train-phase1-approved-semantics.test.ts \
+            services/database/direct-workout-sessions.test.ts
+
+      - name: Commit correction and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/aw2c-authority-correction.yml
+          git config user.name "plaivra-release-owner"
+          git config user.email "actions@users.noreply.github.com"
+          git add services/database/workout-sessions.ts \
+            services/database/workout-sessions-legacy.ts \
+            services/database/workout-session-resume.test.ts \
+            services/database/workout-rpc-convergence.test.ts \
+            lib/product/train-phase1-approved-semantics.test.ts \
+            supabase/verification/active-workout-aw2c-integration.sql \
+            .github/workflows/aw2c-authority-correction.yml
+          git commit -m "fix(workouts): close AW-2C direct start authority"
+          git push origin HEAD:feat/active-workout-aw2c-timeline-events
