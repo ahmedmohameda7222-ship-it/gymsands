@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migration = readFileSync("supabase/migrations/20260710193700_canonical_data_convergence_foundation.sql", "utf8");
-const workoutExecutor = readFileSync("lib/mcp/tool-executor.ts", "utf8");
+const workoutExecutor = [
+  readFileSync("lib/mcp/tool-executor.ts", "utf8"),
+  readFileSync("lib/mcp/tool-executor-implementation.ts", "utf8")
+].join("\n");
 const safeExecutor = readFileSync("lib/mcp/tool-executor-safe.ts", "utf8");
 
 describe("canonical data convergence", () => {
