@@ -7,6 +7,10 @@ const legacyImplementation = readFileSync(
   "services/database/workout-sessions-legacy-implementation.ts",
   "utf8"
 );
+const serializer = readFileSync(
+  "services/database/workout-set-log-serialization.ts",
+  "utf8"
+);
 const mcpExecutor = readFileSync("lib/mcp/tool-executor.ts", "utf8");
 const mcpImplementation = readFileSync("lib/mcp/tool-executor-implementation.ts", "utf8");
 const migration = readFileSync(
@@ -16,31 +20,36 @@ const migration = readFileSync(
 
 describe("AW-3A set-write integration contract", () => {
   it("keeps legacy callers compatible while serializing structured values only when supplied", () => {
-    expect(writeService).toContain("performanceMetrics?: WorkoutPerformanceMetricInput[]");
-    expect(writeService).toContain('Object.prototype.hasOwnProperty.call(log, "performanceMetrics")');
-    expect(writeService).toContain("performance_metrics:");
-    expect(writeService).toContain("metric_source:");
-    expect(writeService).toContain("metric_source_provider:");
-    expect(writeService).toContain("metric_source_version:");
-    expect(writeService).toContain("workoutPerformanceMetricInputToSql");
+    expect(writeService).toContain('import { serializeWorkoutSetLogs } from "./workout-set-log-serialization"');
+    expect(legacyImplementation).toContain("serializeWorkoutSetLogs(finalLogs)");
+    expect(serializer).toContain("performanceMetrics?: WorkoutPerformanceMetricInput[]");
+    expect(serializer).toContain('Object.prototype.hasOwnProperty.call(log, "performanceMetrics")');
+    expect(serializer).toContain("performance_metrics:");
+    expect(serializer).toContain("metric_source:");
+    expect(serializer).toContain("metric_source_provider:");
+    expect(serializer).toContain("metric_source_version:");
+    expect(serializer).toContain("workoutPerformanceMetricInputToSql");
   });
 
   it("routes browser and MCP set mutations through the canonical atomic RPC", () => {
     expect(writeService).toContain('.rpc("upsert_workout_set_logs_atomic"');
     expect(legacyService).toContain('.rpc("upsert_workout_set_logs_atomic"');
+    expect(legacyImplementation).toContain('.rpc("upsert_workout_set_logs_atomic"');
     expect(mcpImplementation).toContain('.rpc("upsert_workout_set_logs_atomic"');
     expect(mcpExecutor).toContain('functionName === "upsert_workout_set_logs_atomic"');
-    for (const source of [writeService, legacyService, mcpExecutor, mcpImplementation]) {
+    for (const source of [writeService, legacyService, legacyImplementation, mcpExecutor, mcpImplementation]) {
       expect(source).not.toMatch(/\.from\(["']exercise_logs["']\)\s*\.(?:insert|update|delete|upsert)/);
     }
   });
 
-  it("makes the old direct set-write fallback unreachable from the public service barrel", () => {
+  it("removes the old direct set-write fallback from every public and implementation service path", () => {
     expect(writeService).toContain('export * from "./workout-sessions-legacy"');
     expect(writeService).toMatch(/export async function saveWorkoutSetLogs\(/);
     expect(legacyService).toContain('export * from "./workout-sessions-legacy-implementation"');
     expect(legacyService).toMatch(/export async function saveWorkoutSetLogs\(/);
+    expect(legacyImplementation).toMatch(/export async function saveWorkoutSetLogs\(/);
     expect(legacyService).not.toContain('.from("exercise_logs")');
+    expect(legacyImplementation).not.toMatch(/\.from\(["']exercise_logs["']\)\s*\.(?:insert|update|delete|upsert)/);
   });
 
   it("implements full replacement and old-client preservation in the database transaction", () => {
@@ -54,6 +63,7 @@ describe("AW-3A set-write integration contract", () => {
 
   it("keeps completion on the same public RPC and relies on metric cascade for omitted logs", () => {
     expect(legacyImplementation).toContain('.rpc("complete_workout_session_atomic"');
+    expect(legacyImplementation).toContain("serializeWorkoutSetLogs(finalLogs)");
     expect(migration).toContain("on delete cascade");
     expect(migration).toContain("references public.exercise_logs(id,workout_session_id) on delete cascade");
   });
