@@ -8,6 +8,7 @@ const legacyImplementation = readFileSync(
   "utf8"
 );
 const mcpExecutor = readFileSync("lib/mcp/tool-executor.ts", "utf8");
+const mcpImplementation = readFileSync("lib/mcp/tool-executor-implementation.ts", "utf8");
 const migration = readFileSync(
   "supabase/migrations/20260722113000_active_workout_aw3a_structured_metrics.sql",
   "utf8"
@@ -27,8 +28,9 @@ describe("AW-3A set-write integration contract", () => {
   it("routes browser and MCP set mutations through the canonical atomic RPC", () => {
     expect(writeService).toContain('.rpc("upsert_workout_set_logs_atomic"');
     expect(legacyService).toContain('.rpc("upsert_workout_set_logs_atomic"');
-    expect(mcpExecutor).toContain('.rpc("upsert_workout_set_logs_atomic"');
-    for (const source of [writeService, legacyService, mcpExecutor]) {
+    expect(mcpImplementation).toContain('.rpc("upsert_workout_set_logs_atomic"');
+    expect(mcpExecutor).toContain('functionName === "upsert_workout_set_logs_atomic"');
+    for (const source of [writeService, legacyService, mcpExecutor, mcpImplementation]) {
       expect(source).not.toMatch(/\.from\(["']exercise_logs["']\)\s*\.(?:insert|update|delete|upsert)/);
     }
   });
@@ -57,9 +59,9 @@ describe("AW-3A set-write integration contract", () => {
   });
 
   it("assigns ChatGPT/OpenAI metadata at the trusted MCP boundary without expanding the MCP schema", () => {
+    expect(mcpExecutor).toContain('AW3A_MCP_METRIC_SOURCE = "chatgpt"');
+    expect(mcpExecutor).toContain('AW3A_MCP_METRIC_SOURCE_PROVIDER = "openai"');
     expect(migration).toContain("coalesce(auth.role(),'')='service_role'");
-    expect(migration).toContain("then 'chatgpt'");
-    expect(migration).toContain("then 'openai'");
-    expect(mcpExecutor).not.toContain("performance_metrics:");
+    expect(mcpImplementation).not.toContain("performance_metrics:");
   });
 });
