@@ -138,7 +138,7 @@ describe("approved Train Phase 1 semantic contracts", () => {
       "services/database/legacy-repository.ts",
       "components/workouts/workout-session-form.tsx",
     ]));
-    expect(runtime).not.toMatch(/\.from\(\s*["']workout_sessions["']\s*\)\s*\.insert\s*\(/s);
+    expect(runtime).not.toMatch(/\.from\(\s*["']workout_sessions["']\s*\)\s*\.insert\s*\(/);
     expect(legacy).not.toMatch(/export\s+async\s+function\s+(?:startWorkoutSession|getOrStartWorkoutSession|skipWorkoutDay)\b/);
     expect(sessions).not.toContain("startLegacyWorkoutSession");
     expect(sessions).toContain("directWorkoutIdentity(workout, resolvedWorkoutId)");
@@ -150,13 +150,13 @@ describe("approved Train Phase 1 semantic contracts", () => {
     expect(direct).toContain("p_provider: stable.provider");
     expect(legacy).toContain('supabase!.rpc("start_or_resume_workout_session_atomic"');
     expect(barrel).toContain("startWorkoutSession");
-    expect(mcp).not.toMatch(/\.from\(\s*["']workout_sessions["']\s*\)\s*\.(?:insert|upsert|update|delete)\s*\(/s);
+    expect(mcp).not.toMatch(/\.from\(\s*["']workout_sessions["']\s*\)\s*\.(?:insert|upsert|update|delete)\s*\(/);
     expect(mcp).toContain('ctx.supabase.rpc("start_or_resume_workout_session_atomic"');
     expect(mcp).toContain('ctx.supabase.rpc("skip_workout_day_atomic"');
     expect(mcp).toContain('return fail("missing_required_input", "scheduled_session_id or plan_day_id is required.")');
 
     if (existsSync("services/database/index.ts")) {
-      expect(source("services/database/index.ts")).not.toMatch(/(?:startLegacyWorkoutSession|\.from\(\s*["']workout_sessions["']\s*\)\s*\.insert\s*\()/s);
+      expect(source("services/database/index.ts")).not.toMatch(/(?:startLegacyWorkoutSession|\.from\(\s*["']workout_sessions["']\s*\)\s*\.insert\s*\()/);
     }
   });
 
