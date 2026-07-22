@@ -79,15 +79,17 @@ test("Activity Catalog, other projects, generic hosts and localhost are rejected
 
 test("future reconciled ledger automatically derives its later target", () => {
   const ledger = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
+  const currentTarget = deriveReleaseTarget(ledger).expectedMigration;
+  const futureVersion = (BigInt(currentTarget) + 1n).toString().padStart(currentTarget.length, "0");
   const future = structuredClone(ledger);
   future.entries.push({
-    productionVersion: "20260721012815",
+    productionVersion: futureVersion,
     productionName: "synthetic_future_release",
-    localFile: "20260721012815_synthetic_future_release.sql",
+    localFile: `${futureVersion}_synthetic_future_release.sql`,
     state: "applied",
   });
   future.productionMigrationCount += 1;
-  assert.equal(deriveReleaseTarget(future).expectedMigration, "20260721012815");
+  assert.equal(deriveReleaseTarget(future).expectedMigration, futureVersion);
 });
 
 test("generic workflow and evidence code contain no pinned AW-2A migration", () => {
@@ -108,16 +110,22 @@ test("generic workflow and evidence code contain no pinned AW-2A migration", () 
   assert.match(preflight, /expected_migration/);
 });
 
-test("same-head run selection is request-bound and permissions are least privilege", () => {
+test("same-head run selection and artifact-only evidence permissions are exact", () => {
   const workflow = source(".github/workflows/exact-release-quality-validation.yml");
   assert.match(workflow, /displayTitle == env\.EXPECTED_TITLE/);
   assert.match(workflow, /stage1-q-\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}-\$\{REVIEWED_COMMIT\}/);
   assert.match(workflow, /Download and independently verify canonical Quality evidence/);
   assert.match(workflow, /Download and independently verify preflight evidence/);
+  assert.match(workflow, /plaivra_aw2b_command_authority_implementation_report\.md/);
+  assert.match(workflow, /stage1-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /schemaVersion: 3/);
+  assert.match(workflow, /canonicalArtifact:/);
+  assert.match(workflow, /preflightArtifact:/);
+  assert.match(workflow, /exactValidation:/);
   assert.match(workflow, /actions: write/);
   assert.match(workflow, /contents: read/);
-  assert.match(workflow, /issues: write/);
-  assert.doesNotMatch(workflow, /pull-requests:\s*write|pull_request_target/);
+  assert.doesNotMatch(workflow, /issues:\s*write|pull-requests:\s*write|pull_request_target|contents:\s*write/);
+  assert.doesNotMatch(workflow, /issues\/\$PULL_REQUEST_NUMBER\/comments|pr-comment|recorded_comment/i);
 });
 
 test("promotion target validation precedes adapter construction", () => {

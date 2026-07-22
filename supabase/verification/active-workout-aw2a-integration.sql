@@ -106,36 +106,47 @@ select pg_temp.assert_true(
   'Idempotent initialization rewrote the existing cursor.'
 );
 
--- Revision is database-managed on effective updates and stable on no-op updates.
-update public.workout_session_execution_states
-set active_set_number = 2
-where workout_session_id = :'plan_session_id'::uuid;
-select revision as plan_revision_after_update
-from public.workout_session_execution_states
-where workout_session_id = :'plan_session_id'::uuid \gset
-update public.workout_session_execution_states
-set active_set_number = 2
-where workout_session_id = :'plan_session_id'::uuid;
+-- AW-2B preserves AW-2A database-maintained revision semantics while routing
+-- authenticated mutation through the command authority.
+select public.apply_workout_session_execution_command_atomic(
+  :'owner_id'::uuid,
+  :'plan_session_id'::uuid,
+  'a2000000-0000-4000-8000-000000000101'::uuid,
+  0,
+  'move_cursor',
+  '{"active_snapshot_item_id":null,"active_item_order":1,"active_set_number":2,"view_state":"set_entry","controller_device_id":null}'::jsonb
+) as aw2a_effective_response \gset
 select pg_temp.assert_true(
-  (select revision = :'plan_revision_after_update'::bigint from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid),
-  'True no-op update incremented execution-state revision.'
+  (:'aw2a_effective_response'::jsonb->>'outcome') = 'applied'
+  and (:'aw2a_effective_response'::jsonb->>'revisionAfter')::bigint = 1
+  and (select revision = 1 and active_set_number = 2 from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid),
+  'AW-2B command authority did not preserve AW-2A effective revision increment semantics.'
+);
+select public.apply_workout_session_execution_command_atomic(
+  :'owner_id'::uuid,
+  :'plan_session_id'::uuid,
+  'a2000000-0000-4000-8000-000000000102'::uuid,
+  1,
+  'move_cursor',
+  '{"active_snapshot_item_id":null,"active_item_order":1,"active_set_number":2,"view_state":"set_entry","controller_device_id":null}'::jsonb
+) as aw2a_noop_response \gset
+select pg_temp.assert_true(
+  (:'aw2a_noop_response'::jsonb->>'outcome') = 'no_op'
+  and (:'aw2a_noop_response'::jsonb->>'revisionAfter')::bigint = 1
+  and (select revision = 1 from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid),
+  'AW-2B command authority changed AW-2A no-op revision semantics.'
 );
 
--- Cross-user RLS isolation.
+-- Cross-user RLS and direct-mutation isolation.
 select set_config('request.jwt.claim.sub', :'other_member_id', true);
 select pg_temp.assert_true(
   (select count(*) from public.workout_session_execution_states where workout_session_id = :'plan_session_id'::uuid) = 0,
   'Another member can read the owner execution-state row.'
 );
-with changed as (
-  update public.workout_session_execution_states
-  set active_set_number = 3
-  where workout_session_id = :'plan_session_id'::uuid
-  returning 1
-)
-select pg_temp.assert_true(
-  (select count(*) from changed) = 0,
-  'Another member can update the owner execution-state row.'
+select pg_temp.assert_rejected(
+  format('update public.workout_session_execution_states set active_set_number=3 where workout_session_id=%L::uuid', :'plan_session_id'),
+  array['42501'],
+  'Another member can directly update the owner execution-state row.'
 );
 select pg_temp.assert_rejected(
   format('insert into public.workout_session_execution_states (workout_session_id,user_id,session_state,view_state,active_item_order,active_set_number,session_elapsed_seconds,session_running_since,bootstrap_source) values (%L::uuid,%L::uuid,''active'',''set_entry'',1,1,0,clock_timestamp(),''session_start'')', :'plan_session_id', :'other_member_id'),
@@ -328,4 +339,4 @@ select pg_temp.assert_true(
 );
 
 rollback;
-\echo 'AW-2A execution-state integration verification passed.'
+\echo 'AW-2A execution-state integration verification passed under AW-2B command authority.'

@@ -56,8 +56,10 @@ export function deriveMigrationLedgerState(ledger) {
     : ledger.historyRepair?.state === "pending"
       ? "pending"
       : "unknown";
+  // The release target is the newest reconciled physical production record,
+  // including generated production aliases whose immutable repository filename differs.
   const latestAppliedMigrationVersion = entries
-    .filter((entry) => entry.state === "applied" && typeof entry.productionVersion === "string")
+    .filter((entry) => RESOLVED_STATES.has(entry.state) && typeof entry.productionVersion === "string")
     .map((entry) => entry.productionVersion)
     .sort()
     .at(-1) ?? null;

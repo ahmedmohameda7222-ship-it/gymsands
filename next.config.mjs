@@ -33,8 +33,9 @@ const migrationLedger = JSON.parse(
   readFileSync(new URL("./supabase/migration-ledger.json", import.meta.url), "utf8")
 );
 const migrationEntries = migrationLedger.entries ?? [];
+const resolvedMigrationStates = new Set(["applied", "applied_version_alias"]);
 const latestAppliedMigration = [...migrationEntries]
-  .filter((entry) => entry.state === "applied" && typeof entry.productionVersion === "string")
+  .filter((entry) => resolvedMigrationStates.has(entry.state) && typeof entry.productionVersion === "string")
   .sort((left, right) => left.productionVersion.localeCompare(right.productionVersion))
   .at(-1)?.productionVersion ?? "";
 const pendingMigrationCount = migrationEntries.filter((entry) => entry.state === "pending").length;
@@ -42,7 +43,7 @@ const schemaAppliedUntrackedCount = migrationEntries.filter(
   (entry) => entry.state === "applied_schema_untracked"
 ).length;
 const unresolvedMigrationCount = migrationEntries.filter(
-  (entry) => !["applied", "applied_version_alias"].includes(entry.state)
+  (entry) => !resolvedMigrationStates.has(entry.state)
 ).length;
 
 // Values in nextConfig.env are substituted into the built artifact. Runtime code

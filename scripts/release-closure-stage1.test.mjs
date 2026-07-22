@@ -222,8 +222,7 @@ test("preflight rejects unexpected migration and unreconciled ledger", () => {
   }
 });
 
-
-test("exact release validation binds Quality and preflight to unique request identities", () => {
+test("exact release validation binds Quality and preflight to artifact-only evidence", () => {
   const workflow = source(".github/workflows/exact-release-quality-validation.yml");
   assert.match(workflow, /validation_request_id="\$VALIDATION_REQUEST_ID"/);
   assert.match(workflow, /displayTitle == env\.EXPECTED_TITLE/);
@@ -232,7 +231,14 @@ test("exact release validation binds Quality and preflight to unique request ide
   assert.match(workflow, /comparison_base="\$COMPARISON_BASE"/);
   assert.match(workflow, /expected_migration="\$EXPECTED_MIGRATION"/);
   assert.match(workflow, /validation_context=stage1-infrastructure-validation/);
-  assert.doesNotMatch(workflow, /pull_request_target|pull-requests:\s*write/);
+  assert.match(workflow, /stage1-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /schemaVersion: 3/);
+  assert.match(workflow, /preflightArtifact:/);
+  assert.match(workflow, /exactValidation:/);
+  assert.match(workflow, /actions: write/);
+  assert.match(workflow, /contents: read/);
+  assert.doesNotMatch(workflow, /pull_request_target|pull-requests:\s*write|issues:\s*write|contents:\s*write/);
+  assert.doesNotMatch(workflow, /issues\/\$PULL_REQUEST_NUMBER\/comments|pr-comment|recorded_comment/i);
   assert.doesNotMatch(workflow, /supabase db push|apply_migration|deploy_to_vercel/i);
 });
 
@@ -240,9 +246,9 @@ test("Stage-1 preflight cannot authorize marker promotion", () => {
   const workflow = source(".github/workflows/release-preflight.yml");
   const promotion = source("scripts/promote-release-schema-compatibility.mjs");
   assert.match(workflow, /type: choice/);
-assert.match(workflow, /stage1-infrastructure-validation/);
-assert.match(workflow, /production-marker-promotion-authorization/);
-assert.match(workflow, /production_authorization_token/);
+  assert.match(workflow, /stage1-infrastructure-validation/);
+  assert.match(workflow, /production-marker-promotion-authorization/);
+  assert.match(workflow, /production_authorization_token/);
   assert.match(promotion, /requireProductionAuthorization: mode === "apply"/);
   assert.match(promotion, /explicit Production marker-promotion authorization evidence/);
 });

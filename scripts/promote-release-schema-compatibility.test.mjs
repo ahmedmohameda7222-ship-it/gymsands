@@ -12,7 +12,10 @@ import {
 } from "./promote-release-schema-compatibility.mjs";
 
 const reviewedCommit = "1111111111111111111111111111111111111111";
-const ledger = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
+const currentLedger = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
+const ledger = structuredClone(currentLedger);
+ledger.entries = ledger.entries.filter((entry) => entry.productionVersion !== "20260721224813");
+ledger.historyRepair.note = "AW-2A release-promotion fixture reconciled through 20260721012814. Do not replay any applied migration.";
 
 function successfulPreflight(overrides = {}) {
   return {
