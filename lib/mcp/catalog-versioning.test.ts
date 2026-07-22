@@ -43,7 +43,10 @@ describe("versioned public MCP catalog", () => {
       expect(tool, name).toBeDefined();
       expect(tool?.inputSchema.required).toContain("expected_updated_at");
     }
-    const executor = await readFile(path.join(process.cwd(), "lib/mcp/tool-executor.ts"), "utf8");
+    const executor = [
+      await readFile(path.join(process.cwd(), "lib/mcp/tool-executor.ts"), "utf8"),
+      await readFile(path.join(process.cwd(), "lib/mcp/tool-executor-implementation.ts"), "utf8")
+    ].join("\n");
     const safeExecutor = await readFile(path.join(process.cwd(), "lib/mcp/tool-executor-safe.ts"), "utf8");
     expect(executor).toContain('.eq("updated_at", getString(input, "expected_updated_at"))');
     expect(safeExecutor).toContain('.eq("updated_at", getString(input, "expected_updated_at"))');

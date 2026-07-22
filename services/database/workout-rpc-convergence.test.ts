@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserWorkoutPlan, Workout, WorkoutPlanDaySession, WorkoutSession } from "@/types";
+import type { WorkoutSetLogInput } from "@/services/database/workout-sessions";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const planId = "22222222-2222-4222-8222-222222222222";
@@ -252,22 +253,36 @@ describe("atomic plan-day workout sessions", () => {
     });
   });
 
-  it("upserts stable sets and completes through plan-day RPCs", async () => {
+  it("serializes structured final logs through completion and preserves Personal Record refresh behavior", async () => {
     state.singleData = session;
     state.rpcData.complete_workout_session_atomic = {
       session: { ...session, status: "completed" },
-      logs: [{ exercise_name: "Bench press", reps: 8, weight_kg: 60 }]
+      logs: [{ exercise_name: "Single-arm row", reps: null, weight_kg: null }]
     };
     autoDetectPersonalRecordsFromExerciseLogs.mockRejectedValueOnce(new Error("PR unavailable"));
     const { completeWorkoutSession } = await import("@/services/database/workout-sessions");
-    const finalLogs = [{
+    const capturedAt = "2026-07-13T10:30:00.000Z";
+    const finalLogs: WorkoutSetLogInput[] = [{
       planExerciseId: exerciseId,
       exerciseOrder: 1,
-      exerciseName: "Bench press",
+      exerciseName: "Single-arm row",
       setNumber: 1,
-      reps: 8,
-      weightKg: 60
+      reps: null,
+      weightKg: null,
+      completedAt: capturedAt,
+      metricSource: "manual",
+      metricSourceProvider: "plaivra",
+      metricSourceVersion: "aw3a-final-qaqc",
+      performanceMetrics: [
+        { metricKey: "duration_seconds", value: 95, capturedAt },
+        { metricKey: "distance_meters", value: 500, capturedAt },
+        { metricKey: "repetitions", side: "left", value: 8, capturedAt },
+        { metricKey: "repetitions", side: "right", value: 7, capturedAt },
+        { metricKey: "external_load_kg", side: "left", value: 22.5, capturedAt },
+        { metricKey: "external_load_kg", side: "right", value: 20, capturedAt }
+      ]
     }];
+
     expect(autoDetectPersonalRecordsFromExerciseLogs).not.toHaveBeenCalled();
     await expect(completeWorkoutSession(sessionId, "Done", 42, finalLogs)).resolves.toBe(true);
     await Promise.resolve();
@@ -276,13 +291,36 @@ describe("atomic plan-day workout sessions", () => {
     expect(supabase.rpc).toHaveBeenCalledWith("complete_workout_session_atomic", {
       p_user_id: userId,
       p_session_id: sessionId,
-      p_logs: [expect.objectContaining({ plan_exercise_id: exerciseId, exercise_order: 1, set_number: 1 })],
+      p_logs: [{
+        plan_exercise_id: exerciseId,
+        exercise_order: 1,
+        exercise_name: "Single-arm row",
+        exercise_category: null,
+        planned_sets: null,
+        planned_reps: null,
+        planned_rest_seconds: null,
+        set_number: 1,
+        reps: null,
+        weight_kg: null,
+        notes: null,
+        completed_at: capturedAt,
+        metric_source: "manual",
+        metric_source_provider: "plaivra",
+        metric_source_version: "aw3a-final-qaqc",
+        performance_metrics: [
+          { metric_key: "duration_seconds", metric_version: 1, value: 95, side: "none", source: "manual", source_provider: "plaivra", source_version: "aw3a-final-qaqc", captured_at: capturedAt },
+          { metric_key: "distance_meters", metric_version: 1, value: 500, side: "none", source: "manual", source_provider: "plaivra", source_version: "aw3a-final-qaqc", captured_at: capturedAt },
+          { metric_key: "repetitions", metric_version: 1, value: 8, side: "left", source: "manual", source_provider: "plaivra", source_version: "aw3a-final-qaqc", captured_at: capturedAt },
+          { metric_key: "repetitions", metric_version: 1, value: 7, side: "right", source: "manual", source_provider: "plaivra", source_version: "aw3a-final-qaqc", captured_at: capturedAt },
+          { metric_key: "external_load_kg", metric_version: 1, value: 22.5, side: "left", source: "manual", source_provider: "plaivra", source_version: "aw3a-final-qaqc", captured_at: capturedAt },
+          { metric_key: "external_load_kg", metric_version: 1, value: 20, side: "right", source: "manual", source_provider: "plaivra", source_version: "aw3a-final-qaqc", captured_at: capturedAt }
+        ]
+      }],
       p_duration_minutes: 42,
       p_notes: "Done"
     });
     expect(autoDetectPersonalRecordsFromExerciseLogs).toHaveBeenCalledOnce();
   });
-
   it("keeps standalone workout start on the canonical direct RPC path", async () => {
   const directSession = { ...session, plan_id: null, plan_day_id: null, workout_id: workout.id, workout_name: workout.name };
   state.rpcData.start_or_resume_direct_workout_session_atomic = { session: directSession, resumed: false };

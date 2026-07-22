@@ -1,9 +1,11 @@
 export * from "./database-legacy";
 
 import type {
+  ExerciseLog as LegacyExerciseLog,
   WorkoutSession as LegacyWorkoutSession,
   WorkoutSessionSummary as LegacyWorkoutSessionSummary
 } from "./database-legacy";
+import type { SavedWorkoutPerformanceMetricValue } from "./workout-performance";
 
 export type WorkoutSessionStatus = "started" | "completed" | "skipped" | "cancelled";
 
@@ -20,5 +22,11 @@ export type WorkoutSession = Omit<LegacyWorkoutSession, "status"> & {
     | null;
 };
 
-export type WorkoutSessionSummary = Omit<LegacyWorkoutSessionSummary, keyof LegacyWorkoutSession> &
-  WorkoutSession;
+export type ExerciseLog = LegacyExerciseLog & {
+  performance_metrics?: SavedWorkoutPerformanceMetricValue[];
+};
+
+export type WorkoutSessionSummary = Omit<LegacyWorkoutSessionSummary, keyof LegacyWorkoutSession | "exercise_logs"> &
+  WorkoutSession & {
+    exercise_logs: ExerciseLog[];
+  };
