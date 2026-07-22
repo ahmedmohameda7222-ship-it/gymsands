@@ -120,6 +120,7 @@ describe("approved Train Phase 1 semantic contracts", () => {
       "services/database/direct-workout-sessions.ts",
       "services/database/legacy-repository.ts",
       "services/database/index.ts",
+      "lib/mcp/tool-executor.ts",
       "components/workouts/workout-session-form.tsx",
     ];
     const existingRuntimeFiles = runtimeFiles.filter((path) => existsSync(path));
@@ -128,6 +129,7 @@ describe("approved Train Phase 1 semantic contracts", () => {
     const legacy = source("services/database/workout-sessions-legacy.ts");
     const direct = source("services/database/direct-workout-sessions.ts");
     const barrel = source("services/database/legacy-repository.ts");
+    const mcp = source("lib/mcp/tool-executor.ts");
 
     expect(existingRuntimeFiles).toEqual(expect.arrayContaining([
       "services/database/workout-sessions.ts",
@@ -148,6 +150,10 @@ describe("approved Train Phase 1 semantic contracts", () => {
     expect(direct).toContain("p_provider: stable.provider");
     expect(legacy).toContain('supabase!.rpc("start_or_resume_workout_session_atomic"');
     expect(barrel).toContain("startWorkoutSession");
+    expect(mcp).not.toMatch(/\.from\(\s*["']workout_sessions["']\s*\)\s*\.(?:insert|upsert|update|delete)\s*\(/s);
+    expect(mcp).toContain('ctx.supabase.rpc("start_or_resume_workout_session_atomic"');
+    expect(mcp).toContain('ctx.supabase.rpc("skip_workout_day_atomic"');
+    expect(mcp).toContain('return fail("missing_required_input", "scheduled_session_id or plan_day_id is required.")');
 
     if (existsSync("services/database/index.ts")) {
       expect(source("services/database/index.ts")).not.toMatch(/(?:startLegacyWorkoutSession|\.from\(\s*["']workout_sessions["']\s*\)\s*\.insert\s*\()/s);
