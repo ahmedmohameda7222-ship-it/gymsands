@@ -27,17 +27,26 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
+          import re
 
           integration = Path('supabase/verification/active-workout-aw2c-integration.sql')
           text = integration.read_text(encoding='utf-8')
-          replacements = {
-            "and source='runtime' and sequence_number=1)": "and source='runtime' and sequence_number>0)",
-            "and (select min(sequence_number)=1 and max(sequence_number)=1\n     from public.workout_session_timeline_events where workout_session_id=:'direct_session_id'::uuid),": "and (select min(sequence_number)=max(sequence_number) and min(sequence_number)>0\n     from public.workout_session_timeline_events where workout_session_id=:'direct_session_id'::uuid),",
-          }
-          for old, new in replacements.items():
-            if text.count(old) != 1:
-              raise SystemExit(f'Expected one sequence assertion, found {text.count(old)} for {old!r}')
-            text = text.replace(old, new, 1)
+          text, count = re.subn(
+            r"and source='runtime' and sequence_number=1\)",
+            "and source='runtime' and sequence_number>0)",
+            text,
+            count=1,
+          )
+          if count != 1:
+            raise SystemExit(f'Initial sequence assertion replacement count: {count}')
+          text, count = re.subn(
+            r"and \(select min\(sequence_number\)=1 and max\(sequence_number\)=1\s+from public\.workout_session_timeline_events where workout_session_id=:'direct_session_id'::uuid\),",
+            "and (select min(sequence_number)=max(sequence_number) and min(sequence_number)>0\n       from public.workout_session_timeline_events where workout_session_id=:'direct_session_id'::uuid),",
+            text,
+            count=1,
+          )
+          if count != 1:
+            raise SystemExit(f'Retry sequence assertion replacement count: {count}')
           integration.write_text(text, encoding='utf-8')
 
           report = Path('plaivra_aw2c_final_planner_qaqc_correction_report.md')
