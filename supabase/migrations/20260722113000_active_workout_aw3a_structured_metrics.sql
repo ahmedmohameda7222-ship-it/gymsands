@@ -804,6 +804,7 @@ declare
   v_before record;
   v_after_count bigint;
   v_after_hash text;
+  v_marker text;
 begin
   if (select count(*) from public.workout_performance_metric_definitions) <> 7 then
     raise exception 'AW-3A definition seed count mismatch.' using errcode='23514';
@@ -850,9 +851,17 @@ begin
   where l.id is null or s.id is null;
   if v_bad<>0 then raise exception 'AW-3A created orphan metric rows.' using errcode='23514'; end if;
 
-  if (select migration_version from public.release_schema_compatibility where singleton=true)
-     <> '20260722093115' then
-    raise exception 'AW-3A must not promote the compatibility marker.' using errcode='23514';
+  select migration_version into strict v_marker
+  from public.release_schema_compatibility where singleton=true;
+  if v_marker = '20260722093115' then
+    null;
+  elsif v_marker = '20260721012814' and exists (
+    select 1 from supabase_migrations.schema_migrations
+    where version='20260722070000' and name='active_workout_aw2c_timeline_events'
+  ) then
+    null;
+  else
+    raise exception 'AW-3A unexpectedly changed or entered with an unreconciled compatibility marker %.',v_marker using errcode='23514';
   end if;
 end
 $aw3a_postflight$;
