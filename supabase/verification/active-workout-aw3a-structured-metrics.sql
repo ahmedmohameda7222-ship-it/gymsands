@@ -3,6 +3,7 @@ begin;
 do $aw3a_schema_verification$
 declare
   v_count bigint;
+  v_rls boolean;
   v_definition jsonb;
   v_function record;
 begin
@@ -76,10 +77,10 @@ begin
       and pg_get_constraintdef(c.oid) ilike '%unique (exercise_log_id, metric_key, side)%'
   ) then raise exception 'AW-3A metric/side identity constraint is missing.'; end if;
 
-  select relrowsecurity into strict v_count
+  select relrowsecurity into strict v_rls
   from pg_class c join pg_namespace n on n.oid=c.relnamespace
   where n.nspname='public' and c.relname='exercise_log_metric_values';
-  if v_count::boolean is not true then raise exception 'AW-3A metric RLS is not enabled.'; end if;
+  if v_rls is not true then raise exception 'AW-3A metric RLS is not enabled.'; end if;
 
   if not exists (
     select 1 from pg_policies
