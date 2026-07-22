@@ -79,7 +79,9 @@ describe("AW-3A migration and runtime authority", () => {
   it("keeps all reachable set mutations on the one atomic RPC", () => {
     const runtimeFiles = [
       "services/database/workout-sessions.ts",
+      "services/database/workout-sessions-legacy.ts",
       "lib/mcp/tool-executor.ts",
+      "lib/mcp/tool-executor-implementation.ts",
       "components/workouts/workout-session-form.tsx",
       "components/workouts/workout-day-focus-session.tsx"
     ];
@@ -90,9 +92,13 @@ describe("AW-3A migration and runtime authority", () => {
     expect(readFileSync("services/database/workout-sessions.ts", "utf8")).toContain(
       '.rpc("upsert_workout_set_logs_atomic"'
     );
-    expect(readFileSync("lib/mcp/tool-executor.ts", "utf8")).toContain(
+    expect(readFileSync("services/database/workout-sessions-legacy.ts", "utf8")).toContain(
       '.rpc("upsert_workout_set_logs_atomic"'
     );
+    const mcpBoundary = readFileSync("lib/mcp/tool-executor.ts", "utf8");
+    const mcpImplementation = readFileSync("lib/mcp/tool-executor-implementation.ts", "utf8");
+    expect(mcpBoundary).toContain('functionName === "upsert_workout_set_logs_atomic"');
+    expect(mcpImplementation).toContain('.rpc("upsert_workout_set_logs_atomic"');
 
     const directLegacyImports = filesUnder(".")
       .filter((file) => !file.includes("node_modules"))
@@ -104,10 +110,11 @@ describe("AW-3A migration and runtime authority", () => {
     expect(directLegacyImports).toEqual([]);
   });
 
-  it("tags service-role/MCP metric writes as chatgpt/openai and preserves PR compatibility", () => {
+  it("tags MCP metric writes as chatgpt/openai and preserves PR compatibility", () => {
+    const mcpBoundary = readFileSync("lib/mcp/tool-executor.ts", "utf8");
+    expect(mcpBoundary).toContain('AW3A_MCP_METRIC_SOURCE = "chatgpt"');
+    expect(mcpBoundary).toContain('AW3A_MCP_METRIC_SOURCE_PROVIDER = "openai"');
     expect(migration).toContain("coalesce(auth.role(),'')='service_role'");
-    expect(migration).toContain("then 'chatgpt'");
-    expect(migration).toContain("then 'openai'");
     const progress = readFileSync("services/database/progress.ts", "utf8");
     expect(progress).toContain("reps");
     expect(progress).toContain("weight_kg");
