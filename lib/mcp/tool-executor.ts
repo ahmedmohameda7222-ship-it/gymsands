@@ -30,6 +30,8 @@ function withChatGptMetricSource(args: RpcArguments | undefined): RpcArguments |
 }
 
 function withAw3aMcpMetricAuthority(ctx: McpContext): McpContext {
+  if (typeof ctx.supabase.rpc !== "function") return ctx;
+
   const originalRpc = ctx.supabase.rpc.bind(ctx.supabase);
   const supabase = new Proxy(ctx.supabase, {
     get(target, property, receiver) {
@@ -42,6 +44,9 @@ function withAw3aMcpMetricAuthority(ctx: McpContext): McpContext {
           const normalizedArgs = functionName === "upsert_workout_set_logs_atomic"
             ? withChatGptMetricSource(args)
             : args;
+          if (options === undefined) {
+            return originalRpc(functionName as never, normalizedArgs as never);
+          }
           return originalRpc(functionName as never, normalizedArgs as never, options as never);
         };
       }
