@@ -16,6 +16,10 @@ import type {
   WorkoutSession,
   WorkoutSessionSummary
 } from "@/types";
+import { serializeWorkoutSetLogs } from "./workout-set-log-serialization";
+import type { WorkoutSetLogInput } from "./workout-set-log-serialization";
+
+export type { WorkoutSetLogInput } from "./workout-set-log-serialization";
 
 const skippedNotePrefix = "[skipped]";
 
@@ -286,129 +290,23 @@ export async function updateWorkoutSessionDuration(sessionId: string, durationMi
   return true;
 }
 
-export type WorkoutSetLogInput = {
-  planExerciseId?: string | null;
-  exerciseOrder?: number | null;
-  exerciseName: string;
-  exerciseCategory?: string | null;
-  plannedSets?: number | null;
-  plannedReps?: string | null;
-  plannedRestSeconds?: number | null;
-  setNumber: number;
-  reps: number | null;
-  weightKg: number | null;
-  notes?: string | null;
-  completedAt?: string | null;
-};
-
-function workoutSetLogRows(sessionId: string, logs: WorkoutSetLogInput[]) {
-  return logs.map((log) => ({
-    workout_session_id: sessionId,
-    plan_exercise_id: log.planExerciseId ?? null,
-    exercise_order: log.exerciseOrder ?? null,
-    exercise_name: log.exerciseName,
-    exercise_category: log.exerciseCategory ?? null,
-    planned_sets: log.plannedSets ?? null,
-    planned_reps: log.plannedReps ?? null,
-    planned_rest_seconds: log.plannedRestSeconds ?? null,
-    set_number: log.setNumber,
-    reps: log.reps,
-    weight_kg: log.weightKg,
-    notes: log.notes ?? null,
-    completed_at: log.completedAt ?? null
-  }));
-}
-
 export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogInput[]) {
   requireWorkoutPersistence(sessionId, "Workout sets");
-  const rows = workoutSetLogRows(sessionId, logs);
-
-  if (!rows.length) return true;
+  if (!logs.length) return true;
   const session = await getWorkoutSessionIdentity(sessionId);
-  if (session.plan_day_id) {
-    const { error } = await supabase!.rpc("upsert_workout_set_logs_atomic", {
-      p_user_id: session.user_id,
-      p_session_id: sessionId,
-      p_logs: rows.map(({ workout_session_id: _sessionId, ...row }) => row)
-    });
-    if (error) throw error;
-    return true;
-  }
-
-  const existingResult = await supabase!
-    .from("exercise_logs")
-    .select("id,exercise_name,set_number")
-    .eq("workout_session_id", sessionId);
-  if (existingResult.error) throw existingResult.error;
-
-  const existingByKey = new Map(
-    ((existingResult.data ?? []) as Array<{ id: string; exercise_name: string; set_number: number }>).map((log) => [
-      `${log.exercise_name.toLowerCase()}::${log.set_number}`,
-      log.id
-    ])
-  );
-
-  const inserts = rows.filter((row) => !existingByKey.has(`${row.exercise_name.toLowerCase()}::${row.set_number}`));
-  const updates = rows
-    .map((row) => ({ row, id: existingByKey.get(`${row.exercise_name.toLowerCase()}::${row.set_number}`) }))
-    .filter((item): item is { row: typeof rows[number]; id: string } => Boolean(item.id));
-
-  let error = null as { message?: string; code?: string } | null;
-  if (inserts.length) {
-    const insertResult = await supabase!.from("exercise_logs").insert(inserts);
-    error = insertResult.error;
-  }
-  if (error && isSchemaCompatibilityError(error)) {
-    const compatibleRows = inserts.map(({ exercise_category: _category, exercise_order: _order, ...row }) => row);
-    error = (await supabase!.from("exercise_logs").insert(compatibleRows)).error;
-  }
+  const { error } = await supabase!.rpc("upsert_workout_set_logs_atomic", {
+    p_user_id: session.user_id,
+    p_session_id: sessionId,
+    p_logs: serializeWorkoutSetLogs(logs)
+  });
   if (error) throw error;
-
-  for (const { row, id } of updates) {
-    const updateResult = await supabase!
-      .from("exercise_logs")
-      .update({
-        plan_exercise_id: row.plan_exercise_id,
-        exercise_order: row.exercise_order,
-        exercise_category: row.exercise_category,
-        planned_sets: row.planned_sets,
-        planned_reps: row.planned_reps,
-        planned_rest_seconds: row.planned_rest_seconds,
-        reps: row.reps,
-        weight_kg: row.weight_kg,
-        notes: row.notes,
-        completed_at: row.completed_at
-      })
-      .eq("id", id)
-      .eq("workout_session_id", sessionId);
-    if (updateResult.error && isSchemaCompatibilityError(updateResult.error)) {
-      const compatibleUpdate = await supabase!
-        .from("exercise_logs")
-        .update({
-          plan_exercise_id: row.plan_exercise_id,
-          planned_sets: row.planned_sets,
-          planned_reps: row.planned_reps,
-          planned_rest_seconds: row.planned_rest_seconds,
-          reps: row.reps,
-          weight_kg: row.weight_kg,
-          notes: row.notes,
-          completed_at: row.completed_at
-        })
-        .eq("id", id)
-        .eq("workout_session_id", sessionId);
-      if (compatibleUpdate.error) throw compatibleUpdate.error;
-    } else if (updateResult.error) {
-      throw updateResult.error;
-    }
-  }
-
   return true;
 }
 
 export async function completeWorkoutSession(sessionId: string, notes: string, durationMinutes: number, finalLogs?: WorkoutSetLogInput[]) {
   requireWorkoutPersistence(sessionId, "Workout session");
   const session = await getWorkoutSessionIdentity(sessionId);
-  const rows = finalLogs ? workoutSetLogRows(sessionId, finalLogs).map(({ workout_session_id: _sessionId, ...row }) => row) : null;
+  const rows = finalLogs ? serializeWorkoutSetLogs(finalLogs) : null;
   const { data, error } = await supabase!.rpc("complete_workout_session_atomic", {
     p_user_id: session.user_id,
     p_session_id: sessionId,

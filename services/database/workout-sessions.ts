@@ -4,77 +4,14 @@ export * from "./workout-sessions-legacy";
 
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
-import type {
-  Weekday,
-  Workout,
-  WorkoutPerformanceMetricInput,
-  WorkoutPerformanceMetricSource,
-  WorkoutSession
-} from "@/types";
+import type { Weekday, Workout, WorkoutSession } from "@/types";
 import {
   getOrStartWorkoutSession as startOrResumeDirectWorkoutSession
 } from "./direct-workout-sessions";
-import type { WorkoutSetLogInput as LegacyWorkoutSetLogInput } from "./workout-sessions-legacy";
-import { workoutPerformanceMetricInputToSql } from "./workout-performance";
+import { serializeWorkoutSetLogs } from "./workout-set-log-serialization";
+import type { WorkoutSetLogInput } from "./workout-set-log-serialization";
 
-export type WorkoutSetLogInput = LegacyWorkoutSetLogInput & {
-  performanceMetrics?: WorkoutPerformanceMetricInput[];
-  metricSource?: WorkoutPerformanceMetricSource;
-  metricSourceProvider?: string | null;
-  metricSourceVersion?: string | null;
-};
-
-export type SkipWorkoutDayInput = {
-  id: string;
-  plan_id?: string | null;
-  planId?: string | null;
-  day_name?: string;
-  dayName?: string;
-  weekday: Weekday | null;
-  exercises: Array<{
-    category?: string | null;
-    target_muscle?: string | null;
-    equipment?: string | null;
-  }>;
-};
-
-function requireSessionIdentity(value: string, label: string) {
-  if (!supabase || !isUuid(value)) throw new Error(`${label} is invalid.`);
-}
-
-function workoutSetLogRows(logs: WorkoutSetLogInput[]) {
-  return logs.map((log) => {
-    const base = {
-      plan_exercise_id: log.planExerciseId ?? null,
-      exercise_order: log.exerciseOrder ?? null,
-      exercise_name: log.exerciseName,
-      exercise_category: log.exerciseCategory ?? null,
-      planned_sets: log.plannedSets ?? null,
-      planned_reps: log.plannedReps ?? null,
-      planned_rest_seconds: log.plannedRestSeconds ?? null,
-      set_number: log.setNumber,
-      reps: log.reps,
-      weight_kg: log.weightKg,
-      notes: log.notes ?? null,
-      completed_at: log.completedAt ?? null,
-      ...(log.metricSource !== undefined ? { metric_source: log.metricSource } : {}),
-      ...(log.metricSourceProvider !== undefined ? { metric_source_provider: log.metricSourceProvider } : {}),
-      ...(log.metricSourceVersion !== undefined ? { metric_source_version: log.metricSourceVersion } : {})
-    };
-
-    if (!Object.prototype.hasOwnProperty.call(log, "performanceMetrics")) return base;
-    return {
-      ...base,
-      performance_metrics: (log.performanceMetrics ?? []).map((metric) =>
-        workoutPerformanceMetricInputToSql(metric, {
-          source: log.metricSource,
-          sourceProvider: log.metricSourceProvider,
-          sourceVersion: log.metricSourceVersion
-        })
-      )
-    };
-  });
-}
+export type { WorkoutSetLogInput } from "./workout-set-log-serialization";
 
 function directWorkoutIdentity(workout: Workout, resolvedWorkoutId?: string | null): Workout {
   if (resolvedWorkoutId === undefined || resolvedWorkoutId === null) return workout;
@@ -121,7 +58,7 @@ export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogI
   const { error } = await supabase!.rpc("upsert_workout_set_logs_atomic", {
     p_user_id: sessionResult.data.user_id,
     p_session_id: sessionId,
-    p_logs: workoutSetLogRows(logs)
+    p_logs: serializeWorkoutSetLogs(logs)
   });
   if (error) throw error;
   return true;

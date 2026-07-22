@@ -9,12 +9,14 @@ type QueryCall = {
   selection?: string;
   filters: Array<[string, unknown]>;
   inFilters: Array<[string, unknown[]]>;
+  orders: string[];
+  range?: [number, number];
 };
 
-function exportSupabaseMock() {
+function exportSupabaseMock(metricRowCount = 1) {
   const calls: QueryCall[] = [];
   const from = vi.fn((table: string) => {
-    const call: QueryCall = { table, filters: [], inFilters: [] };
+    const call: QueryCall = { table, filters: [], inFilters: [], orders: [] };
     let recorded = false;
     const record = () => {
       if (!recorded) calls.push(call);
@@ -22,6 +24,32 @@ function exportSupabaseMock() {
     };
     const result = () => {
       record();
+      if (table === "exercise_log_metric_values") {
+        const [start, requestedEnd] = call.range ?? [0, metricRowCount - 1];
+        const end = Math.min(requestedEnd, metricRowCount - 1);
+        const length = Math.max(0, end - start + 1);
+        return {
+          data: Array.from({ length }, (_, offset) => {
+            const index = start + offset;
+            return {
+              id: `metric-${String(index).padStart(5, "0")}`,
+              exercise_log_id: `log-${index}`,
+              workout_session_id: "session-a",
+              metric_key: "duration_seconds",
+              metric_version: 1,
+              side: "none",
+              value: index,
+              source: "manual",
+              source_provider: null,
+              source_version: null,
+              captured_at: "2026-07-22T10:00:00.000Z",
+              created_at: "2026-07-22T10:00:00.000Z",
+              updated_at: "2026-07-22T10:00:00.000Z"
+            };
+          }),
+          error: null
+        };
+      }
       if (table === "profiles") {
         return { data: { id: userA, email: "a@example.test", full_name: "User A", role: "member" }, error: null };
       }
@@ -64,8 +92,9 @@ function exportSupabaseMock() {
     builder.select = vi.fn((selection: string) => { call.selection = selection; return builder; });
     builder.eq = vi.fn((field: string, value: unknown) => { call.filters.push([field, value]); return builder; });
     builder.in = vi.fn((field: string, values: unknown[]) => { call.inFilters.push([field, values]); return builder; });
-    builder.order = vi.fn(() => builder);
+    builder.order = vi.fn((field: string) => { call.orders.push(field); return builder; });
     builder.limit = vi.fn(() => builder);
+    builder.range = vi.fn((from: number, to: number) => { call.range = [from, to]; return builder; });
     builder.maybeSingle = vi.fn(async () => result());
     builder.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(result()).then(resolve, reject);
     return builder;
@@ -141,5 +170,25 @@ describe("current-user privacy export", () => {
     expect(payload.data.chatgpt_activity).toEqual([expect.objectContaining({ connectionLabel: "ChatGPT" })]);
     expect(payload.formatVersion).toBe(2);
     expect(payload.scope).toBe("authenticated-current-user-canonical-data");
+  });
+
+  it("exports every performance metric row with deterministic pagination beyond 8000 rows", async () => {
+    const { client, calls } = exportSupabaseMock(8005);
+    const payload = await buildCurrentUserDataExport(client, {
+      id: userA,
+      email: "a@example.test",
+      created_at: "2026-01-01T00:00:00.000Z"
+    });
+
+    const workouts = payload.data.workouts as { performance_metric_values: Array<{ id: string }> };
+    expect(workouts.performance_metric_values).toHaveLength(8005);
+    expect(new Set(workouts.performance_metric_values.map((row) => row.id)).size).toBe(8005);
+
+    const metricCalls = calls.filter((call) => call.table === "exercise_log_metric_values");
+    expect(metricCalls.map((call) => call.range)).toEqual([
+      [0, 999], [1000, 1999], [2000, 2999], [3000, 3999], [4000, 4999],
+      [5000, 5999], [6000, 6999], [7000, 7999], [8000, 8999]
+    ]);
+    expect(metricCalls.every((call) => call.orders.join(",") === "captured_at,id")).toBe(true);
   });
 });

@@ -4,6 +4,27 @@ export * from "./data-export-legacy";
 
 import { buildCurrentUserDataExport as buildLegacyCurrentUserDataExport } from "./data-export-legacy";
 
+const performanceMetricPageSize = 1000;
+const performanceMetricSelection = "id,exercise_log_id,workout_session_id,metric_key,metric_version,side,value,source,source_provider,source_version,captured_at,created_at,updated_at";
+
+async function loadAllPerformanceMetricValues(supabase: SupabaseClient, userId: string) {
+  const rows: Record<string, unknown>[] = [];
+  for (let from = 0; ; from += performanceMetricPageSize) {
+    const page = await supabase
+      .from("exercise_log_metric_values")
+      .select(performanceMetricSelection)
+      .eq("user_id", userId)
+      .order("captured_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + performanceMetricPageSize - 1);
+
+    if (page.error) return { data: null, error: page.error };
+    const pageRows = (page.data ?? []) as Record<string, unknown>[];
+    rows.push(...pageRows);
+    if (pageRows.length < performanceMetricPageSize) return { data: rows, error: null };
+  }
+}
+
 export async function buildCurrentUserDataExport(
   supabase: SupabaseClient,
   user: Pick<User, "id" | "email" | "created_at">
@@ -16,12 +37,7 @@ export async function buildCurrentUserDataExport(
       .eq("user_id", user.id)
       .order("sequence_number", { ascending: true })
       .limit(5000),
-    supabase
-      .from("exercise_log_metric_values")
-      .select("id,exercise_log_id,workout_session_id,metric_key,metric_version,side,value,source,source_provider,source_version,captured_at,created_at,updated_at")
-      .eq("user_id", user.id)
-      .order("captured_at", { ascending: true })
-      .limit(8000)
+    loadAllPerformanceMetricValues(supabase, user.id)
   ]);
 
   if (timelineResult.error) {

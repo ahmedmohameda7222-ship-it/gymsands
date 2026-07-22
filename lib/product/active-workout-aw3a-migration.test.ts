@@ -81,6 +81,8 @@ describe("AW-3A migration and runtime authority", () => {
     const runtimeFiles = [
       "services/database/workout-sessions.ts",
       "services/database/workout-sessions-legacy.ts",
+      "services/database/workout-sessions-legacy-implementation.ts",
+      "services/database/workout-set-log-serialization.ts",
       "lib/mcp/tool-executor.ts",
       "lib/mcp/tool-executor-implementation.ts",
       "components/workouts/workout-session-form.tsx",
@@ -96,6 +98,16 @@ describe("AW-3A migration and runtime authority", () => {
     expect(readFileSync("services/database/workout-sessions-legacy.ts", "utf8")).toContain(
       '.rpc("upsert_workout_set_logs_atomic"'
     );
+    expect(readFileSync("services/database/workout-sessions-legacy-implementation.ts", "utf8")).toContain(
+      '.rpc("upsert_workout_set_logs_atomic"'
+    );
+
+    const directExerciseLogMutators = filesUnder("services")
+      .filter((file) => !/\.(?:test|spec)\.(?:ts|tsx)$/.test(file))
+      .filter((file) =>
+        /\.from\(["']exercise_logs["']\)\s*\.(?:insert|update|delete|upsert)/.test(readFileSync(file, "utf8"))
+      );
+    expect(directExerciseLogMutators).toEqual([]);
     const mcpBoundary = readFileSync("lib/mcp/tool-executor.ts", "utf8");
     const mcpImplementation = readFileSync("lib/mcp/tool-executor-implementation.ts", "utf8");
     expect(mcpBoundary).toContain('functionName === "upsert_workout_set_logs_atomic"');
@@ -125,6 +137,17 @@ describe("AW-3A migration and runtime authority", () => {
     const exportSource = readFileSync("lib/privacy/data-export.ts", "utf8");
     expect(exportSource).toContain('.from("exercise_log_metric_values")');
     expect(exportSource).toContain("workouts.performance_metric_values");
+    expect(exportSource).toContain('.order("captured_at", { ascending: true })');
+    expect(exportSource).toContain('.order("id", { ascending: true })');
+    expect(exportSource).toContain(".range(from, from + performanceMetricPageSize - 1)");
+    expect(exportSource).not.toContain(".limit(8000)");
     expect(exportSource).not.toContain('.from("workout_performance_metric_definitions")');
+  });
+
+  it("records the exact audited repository commit consistently in the correction report", () => {
+    const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as { auditedRepositoryCommit: string };
+    const report = readFileSync("plaivra_aw3a_final_planner_qaqc_corrections_report.md", "utf8");
+    expect(ledger.auditedRepositoryCommit).toBe("a196cb217245557030cdc812a9dfcb670fcc0ba6");
+    expect(report).toContain(`auditedRepositoryCommit: ${ledger.auditedRepositoryCommit}`);
   });
 });
