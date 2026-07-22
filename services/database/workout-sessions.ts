@@ -8,6 +8,9 @@ import type { Weekday, Workout, WorkoutSession } from "@/types";
 import {
   getOrStartWorkoutSession as startOrResumeDirectWorkoutSession
 } from "./direct-workout-sessions";
+import {
+  startWorkoutSession as startLegacyWorkoutSession
+} from "./workout-sessions-legacy";
 import type { WorkoutSetLogInput } from "./workout-sessions-legacy";
 
 export type SkipWorkoutDayInput = {
@@ -48,9 +51,9 @@ function workoutSetLogRows(logs: WorkoutSetLogInput[]) {
 export async function startWorkoutSession(
   userId: string,
   workout: Workout,
-  _resolvedWorkoutId?: string | null
+  resolvedWorkoutId?: string | null
 ): Promise<WorkoutSession> {
-  return startOrResumeDirectWorkoutSession(userId, workout);
+  return startLegacyWorkoutSession(userId, workout, resolvedWorkoutId);
 }
 
 export async function getOrStartWorkoutSession(
