@@ -1,0 +1,102 @@
+name: AW-2C Authority Correction Apply
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/aw2c-authority-correction-apply.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aw2c-authority-correction-apply-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout correction branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-aw2c-timeline-events
+          fetch-depth: 0
+
+      - name: Apply reviewed correction patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+          import re
+
+          workflow = Path('.github/workflows/aw2c-authority-correction-final.yml').read_text(encoding='utf-8')
+          blocks = re.findall(r"          python - <<'PY'\n([\s\S]*?)\n          PY\n", workflow)
+          if len(blocks) != 5:
+              raise SystemExit(f'Expected 5 reviewed patch blocks, found {len(blocks)}')
+          for index, block in enumerate(blocks, start=1):
+              exec(compile(dedent(block), f'aw2c-correction-{index}.py', 'exec'))
+          PY
+
+      - name: Verify effective source authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          paths = [
+              'services/database/workout-sessions.ts',
+              'services/database/workout-sessions-legacy.ts',
+              'services/database/direct-workout-sessions.ts',
+              'services/database/legacy-repository.ts',
+              'components/workouts/workout-session-form.tsx',
+          ]
+          source = '\n'.join(Path(path).read_text(encoding='utf-8') for path in paths)
+          if re.search(r'\.from\(\s*["\']workout_sessions["\']\s*\)\s*\.insert\s*\(', source, re.S):
+              raise SystemExit('A reachable direct workout_sessions insert remains')
+          legacy = Path('services/database/workout-sessions-legacy.ts').read_text(encoding='utf-8')
+          if re.search(r'export\s+async\s+function\s+(startWorkoutSession|getOrStartWorkoutSession|skipWorkoutDay)\b', legacy):
+              raise SystemExit('An unsafe legacy performed-session creator remains exported')
+          wrapper = Path('services/database/workout-sessions.ts').read_text(encoding='utf-8')
+          direct = Path('services/database/direct-workout-sessions.ts').read_text(encoding='utf-8')
+          if 'startLegacyWorkoutSession' in wrapper:
+              raise SystemExit('Public start still delegates to legacy authority')
+          if 'start_or_resume_direct_workout_session_atomic' not in direct:
+              raise SystemExit('Direct atomic RPC reference is missing')
+          if 'start_or_resume_workout_session_atomic' not in legacy:
+              raise SystemExit('Scheduled atomic RPC reference is missing')
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate correction
+        run: |
+          set -euo pipefail
+          npm run lint
+          npm run typecheck
+          npx vitest run \
+            services/database/workout-session-resume.test.ts \
+            services/database/workout-rpc-convergence.test.ts \
+            lib/product/train-phase1-approved-semantics.test.ts \
+            services/database/direct-workout-sessions.test.ts
+
+      - name: Commit correction to existing branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/aw2c-authority-correction.yml
+          rm .github/workflows/aw2c-authority-correction-dispatch.yml
+          rm .github/workflows/aw2c-authority-correction-final.yml
+          rm .github/workflows/aw2c-authority-correction-apply.yml
+          git config user.name "plaivra-release-owner"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(workouts): close AW-2C direct start authority"
+          git push origin HEAD:feat/active-workout-aw2c-timeline-events
