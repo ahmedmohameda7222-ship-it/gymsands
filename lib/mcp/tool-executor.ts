@@ -139,7 +139,7 @@ async function requireExercise(ctx: McpContext, exerciseId: string) {
 async function requireWorkoutSession(ctx: McpContext, sessionId: string) {
   const { data, error } = await ctx.supabase
     .from("workout_sessions")
-    .select("id,user_id,scheduled_session_id")
+    .select("id,user_id,scheduled_session_id,plan_day_id,status")
     .eq("id", sessionId)
     .eq("user_id", ctx.userId)
     .maybeSingle();
@@ -557,9 +557,7 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
           if (error) throw new Error(error.message);
           return ok({ ok: true, session: (data as { session?: unknown } | null)?.session ?? data });
         }
-        const { data, error } = await ctx.supabase.from("workout_sessions").insert({ user_id: ctx.userId, plan_day_id: planDayId ?? null, workout_name: "ChatGPT logged workout", status: "started" }).select("*").single();
-        if (error) throw new Error(error.message);
-        return ok({ ok: true, session: data });
+        return fail("missing_required_input", "scheduled_session_id or plan_day_id is required.");
       }
 
       case "log_exercise_sets": {
@@ -604,20 +602,35 @@ export async function executeMcpTool(ctx: McpContext, toolName: string, rawInput
         const scheduledId = getOptionalString(input, "scheduled_session_id");
         const performedId = getOptionalString(input, "workout_session_id");
         if (!scheduledId && !performedId) return fail("missing_required_input", "scheduled_session_id or workout_session_id is required.");
-        const skippedAt = new Date().toISOString();
-        const update = { status: "skipped", skipped_at: skippedAt, notes: getOptionalString(input, "reason") ?? null };
+
+        let planDayId: string | null = null;
         if (performedId) {
           const ownedSession = await requireWorkoutSession(ctx, performedId);
-          const { data, error } = await ctx.supabase.from("workout_sessions").update(update).eq("id", performedId).eq("user_id", ctx.userId).select("*").single();
-          if (error) throw new Error(error.message);
-          if (ownedSession.scheduled_session_id) await ctx.supabase.from("user_workout_sessions").update(update).eq("id", ownedSession.scheduled_session_id).eq("user_id", ctx.userId);
-          return ok({ ok: true, session: data });
+          planDayId = typeof ownedSession.plan_day_id === "string" ? ownedSession.plan_day_id : null;
+          if (!planDayId) {
+            return fail("unsupported_direct_session_skip", "Direct workout sessions cannot be marked skipped through this tool. Cancel or complete the session instead.");
+          }
+        } else {
+          const { data: scheduled, error: scheduledError } = await ctx.supabase
+            .from("user_workout_sessions")
+            .select("id,plan_day_id")
+            .eq("id", scheduledId!)
+            .eq("user_id", ctx.userId)
+            .maybeSingle();
+          if (scheduledError || !scheduled) throw new Error(scheduledError?.message ?? "Scheduled workout not found.");
+          planDayId = typeof scheduled.plan_day_id === "string" ? scheduled.plan_day_id : null;
+          if (!planDayId) throw new Error("Scheduled workout is not linked to a workout plan day.");
         }
-        const { data: scheduled, error: scheduledError } = await ctx.supabase.from("user_workout_sessions").update(update).eq("id", scheduledId!).eq("user_id", ctx.userId).select("*").single();
-        if (scheduledError || !scheduled) throw new Error(scheduledError?.message ?? "Scheduled workout not found.");
-        const { data, error } = await ctx.supabase.from("workout_sessions").upsert({ user_id: ctx.userId, scheduled_session_id: scheduled.id, plan_id: scheduled.user_workout_plan_id, plan_day_id: scheduled.plan_day_id, workout_name: scheduled.day_title ?? "Scheduled workout", workout_day_name: scheduled.day_title ?? null, status: "skipped", skipped_at: skippedAt, notes: update.notes, source: "chatgpt" }, { onConflict: "scheduled_session_id" }).select("*").single();
+
+        const { data, error } = await ctx.supabase.rpc("skip_workout_day_atomic", {
+          p_user_id: ctx.userId,
+          p_plan_day_id: planDayId,
+          p_notes: getOptionalString(input, "reason") ?? null,
+          p_reason: null,
+          p_followup_action: null
+        });
         if (error) throw new Error(error.message);
-        return ok({ ok: true, session: data });
+        return ok({ ok: true, session: (data as { session?: unknown } | null)?.session ?? data });
       }
 
       case "get_personal_records": {

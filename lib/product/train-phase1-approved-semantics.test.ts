@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getTrainLocaleMetadata, translateTrain } from "@/lib/i18n/train";
 import { buildTrainWeek } from "@/lib/workouts/train-week";
@@ -102,7 +102,7 @@ describe("approved Train Phase 1 semantic contracts", () => {
   });
 
   it("keeps skipped legacy history and stable catalog identity across localized exercise names", () => {
-    const sessions = source("services/database/workout-sessions.ts");
+    const sessions = source("services/database/workout-sessions-legacy.ts");
     const detail = source("app/(private)/workouts/[id]/page.tsx");
     expect(sessions).toContain('.in("status", ["completed", "skipped"])');
     expect(sessions).toContain('session.status === "completed" || session.status === "skipped"');
@@ -113,41 +113,60 @@ describe("approved Train Phase 1 semantic contracts", () => {
     expect(detail).toContain("normalizeExerciseName(log.exercise_name) === target");
   });
 
-  it("starts local workouts by FK and keeps external direct starts fail-closed", () => {
+  it("routes every reachable performed-session start through reviewed atomic authorities", () => {
+    const runtimeFiles = [
+      "services/database/workout-sessions.ts",
+      "services/database/workout-sessions-legacy.ts",
+      "services/database/direct-workout-sessions.ts",
+      "services/database/legacy-repository.ts",
+      "services/database/index.ts",
+      "lib/mcp/tool-executor.ts",
+      "components/workouts/workout-session-form.tsx",
+    ];
+    const existingRuntimeFiles = runtimeFiles.filter((path) => existsSync(path));
+    const runtime = existingRuntimeFiles.map(source).join("\n");
     const sessions = source("services/database/workout-sessions.ts");
-    const directStart = sessions.slice(sessions.indexOf("export async function getOrStartWorkoutSession"), sessions.indexOf("export async function cancelWorkoutSession"));
-    expect(sessions).toContain('from("workouts")');
-    expect(sessions).toContain("const workoutId = resolvedWorkoutId === undefined ? await persistedLegacyWorkoutId(workout.id) : resolvedWorkoutId");
-    expect(sessions).toContain("workout_id: workoutId");
-    expect(directStart).toContain('.eq("user_id", userId)');
-    expect(directStart).toContain('.eq("status", "started")');
-    expect(directStart).toContain('.eq("workout_id", workoutId)');
-    expect(directStart).toContain('if (workout.catalog_source === "custom")');
-    expect(directStart).toContain("An open direct workout session already exists");
-    expect(directStart).toContain("directSessionStartPromises");
+    const legacy = source("services/database/workout-sessions-legacy.ts");
+    const direct = source("services/database/direct-workout-sessions.ts");
+    const barrel = source("services/database/legacy-repository.ts");
+    const mcp = source("lib/mcp/tool-executor.ts");
+
+    expect(existingRuntimeFiles).toEqual(expect.arrayContaining([
+      "services/database/workout-sessions.ts",
+      "services/database/workout-sessions-legacy.ts",
+      "services/database/direct-workout-sessions.ts",
+      "services/database/legacy-repository.ts",
+      "components/workouts/workout-session-form.tsx",
+    ]));
+    expect(runtime).not.toMatch(/\.from\(\s*["']workout_sessions["']\s*\)\s*\.insert\s*\(/);
+    expect(legacy).not.toMatch(/export\s+async\s+function\s+(?:startWorkoutSession|getOrStartWorkoutSession|skipWorkoutDay)\b/);
+    expect(sessions).not.toContain("startLegacyWorkoutSession");
+    expect(sessions).toContain("directWorkoutIdentity(workout, resolvedWorkoutId)");
+    expect(sessions).toContain("startOrResumeDirectWorkoutSession(userId, workout, candidateSessionId)");
+    expect(direct).toContain('supabase.rpc("start_or_resume_direct_workout_session_atomic"');
+    expect(direct).toContain("p_user_id: userId");
+    expect(direct).toContain("p_target_type: stable.targetType");
+    expect(direct).toContain("p_identity: stable.identity");
+    expect(direct).toContain("p_provider: stable.provider");
+    expect(legacy).toContain('supabase!.rpc("start_or_resume_workout_session_atomic"');
+    expect(barrel).toContain("startWorkoutSession");
+    expect(mcp).not.toMatch(/\.from\(\s*["']workout_sessions["']\s*\)\s*\.(?:insert|upsert|update|delete)\s*\(/);
+    expect(mcp).toContain('ctx.supabase.rpc("start_or_resume_workout_session_atomic"');
+    expect(mcp).toContain('ctx.supabase.rpc("skip_workout_day_atomic"');
+    expect(mcp).toContain('return fail("missing_required_input", "scheduled_session_id or plan_day_id is required.")');
+
+    if (existsSync("services/database/index.ts")) {
+      expect(source("services/database/index.ts")).not.toMatch(/(?:startLegacyWorkoutSession|\.from\(\s*["']workout_sessions["']\s*\)\s*\.insert\s*\()/);
+    }
   });
 
-  it("resumes null-FK external sessions only by owner-scoped direct session ID", () => {
-    const sessions = source("services/database/workout-sessions.ts");
+  it("passes the route-scoped candidate to the owner-validated direct-session authority", () => {
+    const direct = source("services/database/direct-workout-sessions.ts");
     const form = source("components/workouts/workout-session-form.tsx");
     const active = source("components/workouts/active-workout-indicator.tsx");
-    const functionStart = sessions.indexOf("export async function getOrStartWorkoutSession");
-    const candidateStart = sessions.indexOf("if (candidateSessionId && isUuid(candidateSessionId))", functionStart);
-    const localBranch = sessions.indexOf("if (workoutId)", candidateStart);
-    const customBranch = sessions.indexOf('if (workout.catalog_source === "custom")', localBranch);
-    const unresolvedBranch = sessions.indexOf("const { data: unresolved", customBranch);
-    expect(candidateStart).toBeGreaterThan(functionStart);
-    expect(localBranch).toBeGreaterThan(candidateStart);
-    expect(customBranch).toBeGreaterThan(localBranch);
-    expect(unresolvedBranch).toBeGreaterThan(customBranch);
-    const candidateBlock = sessions.slice(candidateStart, localBranch);
-    expect(candidateBlock).toContain('.eq("id", candidateSessionId)');
-    expect(candidateBlock).toContain('.eq("user_id", userId)');
-    expect(candidateBlock).toContain('.eq("status", "started")');
-    expect(candidateBlock).toContain('.is("plan_day_id", null)');
-    expect(candidateBlock).not.toContain("workout.name");
-    const customBlock = sessions.slice(customBranch, unresolvedBranch);
-    expect(customBlock).toContain('.eq("workout_name", workout.name)');
+    expect(direct).toContain("p_candidate_session_id: candidateSessionId && isUuid(candidateSessionId) ? candidateSessionId : null");
+    expect(direct).toContain("p_user_id: userId");
+    expect(direct).toContain("getStableWorkoutIdentity(workout)");
     expect(form).toContain("storedActiveWorkout.route === sessionRoute");
     expect(form).toContain("getOrStartWorkoutSession(user.id, workout, candidateSessionId)");
     expect(active).toContain("getOpenWorkoutSessionWithStatus(userId, null, candidateSessionId)");

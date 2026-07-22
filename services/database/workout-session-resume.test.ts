@@ -1,131 +1,196 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Workout, WorkoutSession } from "@/types";
 
-const userA = "11111111-1111-4111-8111-111111111111";
-const userB = "22222222-2222-4222-8222-222222222222";
+const userId = "11111111-1111-4111-8111-111111111111";
 const candidateId = "33333333-3333-4333-8333-333333333333";
 const externalId = "55555555-5555-4555-8555-555555555555";
-const legacyId = "77777777-7777-4777-8777-777777777777";
 
-const { state, supabase } = vi.hoisted(() => {
-  const state: { workouts: Array<Record<string, unknown>>; sessions: Array<Record<string, unknown>>; inserts: Array<Record<string, unknown>>; insertDelay: Promise<void> | null } = { workouts: [], sessions: [], inserts: [], insertDelay: null };
-  function from(table: string) {
-    const filters: Array<{ kind: "eq" | "is" | "in"; key: string; value: unknown }> = [];
-    let inserted: Record<string, unknown> | null = null;
-    const builder = {
-      select() { return builder; },
-      eq(key: string, value: unknown) { filters.push({ kind: "eq", key, value }); return builder; },
-      is(key: string, value: unknown) { filters.push({ kind: "is", key, value }); return builder; },
-      in(key: string, value: unknown[]) { filters.push({ kind: "in", key, value }); return builder; },
-      order() { return builder; },
-      limit() { return builder; },
-      insert(payload: Record<string, unknown>) { inserted = payload; state.inserts.push(payload); return builder; },
-      async maybeSingle() {
-        const rows = table === "workouts" ? state.workouts : state.sessions;
-        const data = rows.find((row) => filters.every((filter) => filter.kind === "is" ? (row[filter.key] ?? null) === filter.value : filter.kind === "in" ? (filter.value as unknown[]).includes(row[filter.key]) : row[filter.key] === filter.value)) ?? null;
-        return { data, error: null };
-      },
-      async single() {
-        if (state.insertDelay) await state.insertDelay;
-        if (!inserted) return { data: null, error: { message: "Missing insert" } };
-        return { data: { id: "44444444-4444-4444-8444-444444444444", ...inserted }, error: null };
-      }
-    };
-    return builder;
+const { supabase } = vi.hoisted(() => ({
+  supabase: {
+    from: vi.fn(),
+    rpc: vi.fn()
   }
-  return { state, supabase: { from: vi.fn(from), rpc: vi.fn() } };
-});
+}));
 
 vi.mock("@/lib/supabase/client", () => ({ supabase }));
-vi.mock("@/services/database/progress", () => ({ autoDetectPersonalRecordsFromExerciseLogs: vi.fn(async () => []) }));
+vi.mock("@/services/database/progress", () => ({
+  autoDetectPersonalRecordsFromExerciseLogs: vi.fn(async () => [])
+}));
 
 function externalWorkout(overrides: Partial<Workout> = {}): Workout {
-  return { id: externalId, name: "Kniebeuge", category: "Kraft", target_muscle: "Quadrizeps", equipment: "Langhantel", difficulty: "Anfänger", sets: null, reps: null, rest_seconds: null, instructions: "", notes: null, catalog_source: "external", catalog_slug: "barbell_squat", is_global: true, ...overrides };
+  return {
+    id: externalId,
+    name: "Kniebeuge",
+    category: "Kraft",
+    target_muscle: "Quadrizeps",
+    equipment: "Langhantel",
+    difficulty: "Anfänger",
+    sets: null,
+    reps: null,
+    rest_seconds: null,
+    instructions: "",
+    notes: null,
+    catalog_source: "external",
+    catalog_slug: "barbell_squat",
+    is_global: true,
+    ...overrides
+  };
 }
 
 function session(overrides: Partial<WorkoutSession> = {}): WorkoutSession {
-  return { id: candidateId, user_id: userA, workout_id: null, plan_day_id: null, workout_name: "Squat", started_at: "2026-07-15T08:00:00.000Z", completed_at: null, duration_minutes: null, notes: null, status: "started", ...overrides };
+  return {
+    id: candidateId,
+    user_id: userId,
+    workout_id: null,
+    plan_day_id: null,
+    workout_name: "Squat",
+    started_at: "2026-07-15T08:00:00.000Z",
+    completed_at: null,
+    duration_minutes: null,
+    notes: null,
+    status: "started",
+    ...overrides
+  };
 }
 
-beforeEach(() => { state.workouts = []; state.sessions = []; state.inserts = []; state.insertDelay = null; vi.clearAllMocks(); });
+beforeEach(() => {
+  vi.clearAllMocks();
+  supabase.rpc.mockResolvedValue({ data: { session: session() }, error: null });
+});
 
-describe("direct workout session identity", () => {
-  it("starts an external activity when no direct session is open", async () => {
+describe("direct workout session atomic authority", () => {
+  it("starts an external activity through the provider-activity identity", async () => {
     const { getOrStartWorkoutSession } = await import("./workout-sessions");
-    const result = await getOrStartWorkoutSession(userA, externalWorkout(), null);
-    expect(result.workout_id).toBeNull();
-    expect(state.inserts).toHaveLength(1);
+    await expect(getOrStartWorkoutSession(userId, externalWorkout(), null)).resolves.toMatchObject({ id: candidateId });
+    expect(supabase.rpc).toHaveBeenCalledWith("start_or_resume_direct_workout_session_atomic", {
+      p_user_id: userId,
+      p_target_type: "provider_activity",
+      p_identity: externalId,
+      p_provider: "plaivra_activity_catalog",
+      p_display_name: "Kniebeuge",
+      p_category: "Kraft",
+      p_planned_prescription: {},
+      p_candidate_session_id: null
+    });
   });
 
-  it("resumes the route-scoped external candidate after a locale change", async () => {
-    state.sessions = [session()];
+  it("routes the public standalone start through the same direct authority", async () => {
+  const { startWorkoutSession } = await import("./workout-sessions");
+  await expect(startWorkoutSession(userId, externalWorkout())).resolves.toMatchObject({ id: candidateId });
+  expect(supabase.rpc).toHaveBeenCalledWith(
+    "start_or_resume_direct_workout_session_atomic",
+    expect.objectContaining({
+      p_user_id: userId,
+      p_target_type: "provider_activity",
+      p_identity: externalId,
+      p_candidate_session_id: null
+    })
+  );
+  expect(supabase.from).not.toHaveBeenCalled();
+});
+
+it("preserves an explicitly resolved local identity as a canonical global exercise", async () => {
+  const resolvedId = "77777777-7777-4777-8777-777777777777";
+  const { startWorkoutSession } = await import("./workout-sessions");
+  await startWorkoutSession(userId, externalWorkout(), resolvedId);
+  expect(supabase.rpc).toHaveBeenCalledWith(
+    "start_or_resume_direct_workout_session_atomic",
+    expect.objectContaining({
+      p_target_type: "global_exercise",
+      p_identity: resolvedId,
+      p_provider: null,
+      p_display_name: "Kniebeuge",
+      p_category: "Kraft"
+    })
+  );
+  expect(supabase.from).not.toHaveBeenCalled();
+});
+
+it("rejects an invalid resolved local identity before calling the authority", async () => {
+  const { startWorkoutSession } = await import("./workout-sessions");
+  await expect(startWorkoutSession(userId, externalWorkout(), "not-a-uuid")).rejects.toThrow(/resolved workout identity/i);
+  expect(supabase.rpc).not.toHaveBeenCalled();
+  expect(supabase.from).not.toHaveBeenCalled();
+});
+
+  it("passes the route-scoped candidate to database ownership validation", async () => {
     const { getOrStartWorkoutSession } = await import("./workout-sessions");
-    const result = await getOrStartWorkoutSession(userA, externalWorkout(), candidateId);
-    expect(result.id).toBe(candidateId);
-    expect(state.inserts).toHaveLength(0);
+    await expect(getOrStartWorkoutSession(userId, externalWorkout({ name: "Squat" }), candidateId)).resolves.toMatchObject({ id: candidateId });
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "start_or_resume_direct_workout_session_atomic",
+      expect.objectContaining({ p_user_id: userId, p_candidate_session_id: candidateId })
+    );
   });
 
-  it.each([
-    ["foreign", session({ user_id: userB })],
-    ["completed", session({ status: "completed", completed_at: "2026-07-15T09:00:00.000Z" })],
-    ["skipped", session({ status: "skipped", completed_at: "2026-07-15T09:00:00.000Z" })],
-    ["plan-day", session({ plan_day_id: "99999999-9999-4999-8999-999999999999" })]
-  ])("never resumes a %s candidate", async (_label, invalidCandidate) => {
-    state.sessions = [invalidCandidate];
+  it("maps custom exercises to the custom authority identity", async () => {
+    const customId = "88888888-8888-4888-8888-888888888888";
     const { getOrStartWorkoutSession } = await import("./workout-sessions");
-    const result = await getOrStartWorkoutSession(userA, externalWorkout(), candidateId);
-    expect(result.id).not.toBe(candidateId);
-    expect(state.inserts).toHaveLength(1);
+    await getOrStartWorkoutSession(userId, externalWorkout({
+      id: customId,
+      name: "My circuit",
+      catalog_source: "custom",
+      catalog_slug: null,
+      catalog_version: null,
+      is_global: false
+    }));
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "start_or_resume_direct_workout_session_atomic",
+      expect.objectContaining({ p_target_type: "custom_exercise", p_identity: customId, p_provider: null })
+    );
   });
 
-  it("blocks ambiguous external auto-start when local active-session storage is cleared", async () => {
-    state.sessions = [session({ id: "66666666-6666-4666-8666-666666666666", workout_name: "Kniebeuge" })];
+  it("maps canonical local exercises to the global authority identity", async () => {
+    const globalId = "77777777-7777-4777-8777-777777777777";
     const { getOrStartWorkoutSession } = await import("./workout-sessions");
-    await expect(getOrStartWorkoutSession(userA, externalWorkout(), null)).rejects.toThrow(/open direct workout session/i);
-    expect(state.inserts).toHaveLength(0);
+    await getOrStartWorkoutSession(userId, externalWorkout({
+      id: globalId,
+      catalog_source: undefined,
+      catalog_slug: null,
+      catalog_version: null
+    }));
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "start_or_resume_direct_workout_session_atomic",
+      expect.objectContaining({ p_target_type: "global_exercise", p_identity: globalId, p_provider: null })
+    );
   });
 
-  it("does not resume two external UUIDs that share the same display name", async () => {
-    state.sessions = [session({ id: "66666666-6666-4666-8666-666666666666", workout_name: "Kniebeuge" })];
+  it("forwards planned set, rep, and rest metadata without client-side persistence", async () => {
     const { getOrStartWorkoutSession } = await import("./workout-sessions");
-    await expect(getOrStartWorkoutSession(userA, externalWorkout({ id: "88888888-8888-4888-8888-888888888888" }), null)).rejects.toThrow(/open direct workout session/i);
-    expect(state.inserts).toHaveLength(0);
+    await getOrStartWorkoutSession(userId, externalWorkout({ sets: 4, reps: "8", rest_seconds: 120 }));
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "start_or_resume_direct_workout_session_atomic",
+      expect.objectContaining({ p_planned_prescription: { sets: 4, reps: "8", restSeconds: 120 } })
+    );
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 
-  it("preserves real local workout identity and reuses its open legacy session", async () => {
-    state.workouts = [{ id: legacyId }];
-    state.sessions = [session({ workout_id: legacyId, workout_name: "Bench press" })];
+  it("surfaces authority conflicts instead of creating a client-side fallback", async () => {
+    supabase.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: "An open direct workout session already exists." }
+    });
     const { getOrStartWorkoutSession } = await import("./workout-sessions");
-    const result = await getOrStartWorkoutSession(userA, externalWorkout({ id: legacyId, name: "Bench press", catalog_source: "legacy" }), null);
-    expect(result.workout_id).toBe(legacyId);
-    expect(state.inserts).toHaveLength(0);
+    await expect(getOrStartWorkoutSession(userId, externalWorkout())).rejects.toThrow(/open direct workout session/i);
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 
-  it("preserves exact-name resume for user-owned custom direct workouts", async () => {
-    state.sessions = [session({ workout_name: "My circuit" })];
+  it("fails closed when the authority response has no canonical session", async () => {
+    supabase.rpc.mockResolvedValueOnce({ data: {}, error: null });
     const { getOrStartWorkoutSession } = await import("./workout-sessions");
-    const result = await getOrStartWorkoutSession(userA, externalWorkout({ id: "88888888-8888-4888-8888-888888888888", name: "My circuit", catalog_source: "custom", is_global: false }), null);
-    expect(result.id).toBe(candidateId);
-    expect(state.inserts).toHaveLength(0);
+    await expect(getOrStartWorkoutSession(userId, externalWorkout())).rejects.toThrow("Workout session could not be started.");
   });
 
-  it("deduplicates concurrent external starts in the supported process flow", async () => {
-    let release!: () => void;
-    state.insertDelay = new Promise<void>((resolve) => { release = resolve; });
+  it("delegates concurrent requests to the same idempotent database authority", async () => {
+    const canonical = session({ id: "44444444-4444-4444-8444-444444444444" });
+    supabase.rpc.mockResolvedValue({ data: { session: canonical }, error: null });
     const { getOrStartWorkoutSession } = await import("./workout-sessions");
-    const first = getOrStartWorkoutSession(userA, externalWorkout(), null);
-    const second = getOrStartWorkoutSession(userA, externalWorkout(), null);
-    await Promise.resolve();
-    release();
-    const [left, right] = await Promise.all([first, second]);
-    expect(left.id).toBe(right.id);
-    expect(state.inserts).toHaveLength(1);
-  });
-
-  it("keeps plan-day starts on the canonical atomic RPC path", async () => {
-    supabase.rpc.mockResolvedValueOnce({ data: { session: session({ plan_day_id: "99999999-9999-4999-8999-999999999999" }) }, error: null });
-    const { startWorkoutDaySession } = await import("./workout-sessions");
-    await startWorkoutDaySession(userA, { id: "99999999-9999-4999-8999-999999999999", plan_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", day_number: 1, day_name: "Day 1", weekday: "Monday", notes: null, exercises: [], plan: null });
-    expect(supabase.rpc).toHaveBeenCalledWith("start_or_resume_workout_session_atomic", expect.objectContaining({ p_user_id: userA, p_plan_day_id: "99999999-9999-4999-8999-999999999999" }));
+    const [left, right] = await Promise.all([
+      getOrStartWorkoutSession(userId, externalWorkout()),
+      getOrStartWorkoutSession(userId, externalWorkout())
+    ]);
+    expect(left.id).toBe(canonical.id);
+    expect(right.id).toBe(canonical.id);
+    expect(supabase.rpc).toHaveBeenCalledTimes(2);
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 });

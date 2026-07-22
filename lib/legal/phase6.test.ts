@@ -89,7 +89,10 @@ describe("authenticated privacy foundations", () => {
   });
 
   it("exports explicit metadata and never queries secret token/code fields", () => {
-    const source = readFileSync("lib/privacy/data-export.ts", "utf8");
+    const source = [
+      readFileSync("lib/privacy/data-export.ts", "utf8"),
+      readFileSync("lib/privacy/data-export-legacy.ts", "utf8")
+    ].join("\n");
     expect(source).toContain("id,label,scopes,is_active,last_used_at,revoked_at,created_at,updated_at");
     expect(source).toContain('.eq("user_id", user.id)');
     expect(source).not.toContain("token_hash");

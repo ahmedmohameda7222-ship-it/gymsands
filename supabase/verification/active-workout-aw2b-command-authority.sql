@@ -66,7 +66,7 @@ select pg_temp.aw2b_assert(
   and exists (select 1 from pg_trigger where tgrelid='public.workout_session_muscle_snapshots'::regclass and tgname='workout_session_execution_state_snapshot_initializer' and tgenabled<>'D'),
   'AW-2A lifecycle triggers are not all enabled.');
 select pg_temp.aw2b_assert(
-  (select version='2' and migration_version='20260721012814' from public.release_schema_compatibility where singleton),
+  (select version='2' and migration_version in ('20260721012814','20260721224813') from public.release_schema_compatibility where singleton),
   'AW-2B changed the compatibility marker.');
 select pg_temp.aw2b_assert(
   not exists (

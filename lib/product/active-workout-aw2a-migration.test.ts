@@ -13,7 +13,10 @@ const correctionMigrationFile = migrationFiles.find((file) => file.endsWith("_ac
 const correctionMigration = correctionMigrationFile
   ? readFileSync(`supabase/migrations/${correctionMigrationFile}`, "utf8").replaceAll("\r\n", "\n").toLowerCase()
   : "";
-const verification = readFileSync("supabase/verification/active-workout-aw2a-execution-state.sql", "utf8").replaceAll("\r\n", "\n").toLowerCase();
+const verification = [
+  readFileSync("supabase/verification/active-workout-aw2a-execution-state.sql", "utf8"),
+  readFileSync("supabase/verification/active-workout-aw2a-execution-state-legacy.sql", "utf8")
+].join("\n").replaceAll("\r\n", "\n").toLowerCase();
 const repositoryText = [
   readFileSync("services/database/workout-session-execution.ts", "utf8"),
   readFileSync("lib/workouts/workout-session-execution.ts", "utf8"),

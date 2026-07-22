@@ -16,7 +16,10 @@ import {
 import { REQUIRED_QUALITY_GATES } from "./quality-evidence-contract.mjs";
 
 const quality = readFileSync(".github/workflows/quality.yml", "utf8").replaceAll("\r\n", "\n");
-const helper = readFileSync("scripts/replay-local-migration-chain.mjs", "utf8").replaceAll("\r\n", "\n");
+const helper = [
+  readFileSync("scripts/replay-local-migration-chain.mjs", "utf8"),
+  readFileSync("scripts/replay-local-migration-chain-legacy.mjs", "utf8")
+].join("\n").replaceAll("\r\n", "\n");
 const parity = readFileSync("scripts/check-unit-failure-parity.mjs", "utf8").replaceAll("\r\n", "\n");
 const aw2bSqlIntegration = readFileSync(
   "services/database/workout-session-execution-sql.integration.test.ts",

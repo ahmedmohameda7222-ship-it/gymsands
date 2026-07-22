@@ -6,7 +6,10 @@ const verificationPath = "supabase/verification/muscle-intelligence-phase1.sql";
 const migration = readFileSync(migrationPath, "utf8").replaceAll("\r\n", "\n").toLowerCase();
 const verification = readFileSync(verificationPath, "utf8").replaceAll("\r\n", "\n").toLowerCase();
 const qualityWorkflow = readFileSync(".github/workflows/quality.yml", "utf8");
-const privacyExport = readFileSync("lib/privacy/data-export.ts", "utf8");
+const privacyExport = [
+  readFileSync("lib/privacy/data-export.ts", "utf8"),
+  readFileSync("lib/privacy/data-export-legacy.ts", "utf8")
+].join("\n");
 const adr = readFileSync("docs/architecture/decisions/0005-muscle-intelligence-taxonomy-and-mapping-authority.md", "utf8");
 const canonical = readFileSync("docs/architecture/canonical-domain-model.md", "utf8");
 const migrationLedger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
