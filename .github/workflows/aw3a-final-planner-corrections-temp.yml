@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   apply-corrections:
-    if: contains(github.event.head_commit.message, 'run AW-3A final planner corrections')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -59,5 +58,9 @@ jobs:
             package.json \
             supabase/verification/active-workout-aw3a-final-completion.sql \
             plaivra_aw3a_final_planner_qaqc_corrections_report.md
+          if git diff --cached --quiet; then
+            echo "No correction changes remain to commit."
+            exit 0
+          fi
           git commit -m "fix(workouts): close AW-3A final planner blockers"
           git push origin HEAD:feat/active-workout-aw3a-structured-metrics
