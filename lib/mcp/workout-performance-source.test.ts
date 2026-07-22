@@ -66,7 +66,10 @@ describe("MCP AW-3A performance metric source authority", () => {
       ]
     });
 
-    const payload = rpc.mock.calls[0]?.[1] as { p_logs?: Array<Record<string, unknown>> };
-    expect(payload.p_logs?.[0]).not.toHaveProperty("performance_metrics");
+    const calls = rpc.mock.calls as unknown as Array<
+      [string, { p_logs?: Array<Record<string, unknown>> }]
+    >;
+    const payload = calls[0]?.[1];
+    expect(payload?.p_logs?.[0]).not.toHaveProperty("performance_metrics");
   });
 });
