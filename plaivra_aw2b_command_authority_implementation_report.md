@@ -85,7 +85,7 @@ The failure was isolated to the PR evidence-comment recording sub-operation afte
 
 The permanent correction:
 
-- uses `pull-requests: write` for the PR conversation write and removes unrelated issue-write authority;
+- retains the existing least-privilege `issues: write` authority required for a PR conversation issue-comment and does not add pull-request mutation authority;
 - constructs the comment through a JSON payload file and `gh api --input`, avoiding inline form/body parsing;
 - finds the marker-bound existing comment across paginated responses;
 - creates or updates exactly that marker-bound comment;
