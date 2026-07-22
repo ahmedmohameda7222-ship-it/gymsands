@@ -1,0 +1,64 @@
+name: AW-2C MCP Coverage Correction
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/aw2c-mcp-coverage-correction.yml
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout correction branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-aw2c-timeline-events
+          fetch-depth: 0
+
+      - name: Align in-memory RPC contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/mcp/public-tool-handler-coverage.test.ts')
+          text = path.read_text(encoding='utf-8')
+          anchor = '''    if (name === "complete_workout_session_atomic") {
+      const session = tables.workout_sessions.find((row) => row.id === args.p_session_id) ?? tables.workout_sessions[0];
+      Object.assign(session, { status: "completed", completed_at: UPDATED_AT, duration_minutes: args.p_duration_minutes });
+      return { data: { session }, error: null };
+    }
+    if (name !== "complete_meal_plan_item") return { data: [], error: null };'''
+          replacement = '''    if (name === "complete_workout_session_atomic") {
+      const session = tables.workout_sessions.find((row) => row.id === args.p_session_id) ?? tables.workout_sessions[0];
+      Object.assign(session, { status: "completed", completed_at: UPDATED_AT, duration_minutes: args.p_duration_minutes });
+      return { data: { session }, error: null };
+    }
+    if (name === "skip_workout_day_atomic") {
+      const session = tables.workout_sessions.find((row) => row.user_id === USER_ID && row.plan_day_id === args.p_plan_day_id) ?? tables.workout_sessions[0];
+      Object.assign(session, { status: "skipped", skipped_at: UPDATED_AT });
+      return { data: { session }, error: null };
+    }
+    if (name !== "complete_meal_plan_item") return { data: [], error: null };'''
+          if text.count(anchor) != 1:
+            raise SystemExit(f'MCP coverage RPC anchor drifted: {text.count(anchor)}')
+          path.write_text(text.replace(anchor, replacement, 1), encoding='utf-8')
+          PY
+
+      - name: Commit correction and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/aw2c-mcp-coverage-correction.yml
+          git config user.name "plaivra-release-owner"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "test(mcp): cover AW-2C skip authority success path"
+          git push origin HEAD:feat/active-workout-aw2c-timeline-events
