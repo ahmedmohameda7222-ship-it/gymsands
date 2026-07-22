@@ -641,6 +641,7 @@ declare
   v_event public.workout_session_timeline_events%rowtype;
   v_now timestamptz:=clock_timestamp();
   v_schedule_count integer;
+  v_scheduled_session_id uuid;
 begin
   if p_reason not in ('user_cancelled','started_by_mistake','not_feeling_well','time_constraint','pain_or_discomfort','other') then
     raise exception 'Unsupported workout cancellation reason.' using errcode='22023';
@@ -655,23 +656,25 @@ begin
     return jsonb_build_object('schemaVersion',1,'session',to_jsonb(v_session),'cancelled',true,'alreadyCancelled',true,'event',case when v_event.id is null then null else to_jsonb(v_event) end);
   end if;
   if v_session.status::text<>'started' then raise exception 'Only a started workout can be cancelled.' using errcode='23514'; end if;
+  v_scheduled_session_id:=v_session.scheduled_session_id;
 
   -- Dynamic SQL delays use of the newly-added enum value until runtime, after this
-  -- migration transaction has committed.
+  -- migration transaction has committed. The frozen snapshot retains the original
+  -- schedule identity while the canonical schedule link is released for a retry.
   execute $cancel$
     update public.workout_sessions session
     set status='cancelled'::public.workout_session_status,
         cancelled_at=$1,cancel_reason=$2,completed_at=null,skipped_at=null,
-        skip_reason=null,skip_followup_action=null,updated_at=$1
+        skip_reason=null,skip_followup_action=null,scheduled_session_id=null,updated_at=$1
     where session.id=$3 and session.user_id=$4 and session.status::text='started'
     returning session.*
   $cancel$ into v_session using v_now,p_reason,p_session_id,p_user_id;
   if not found then raise exception 'Workout session state changed while cancelling it.' using errcode='40001'; end if;
 
-  if v_session.scheduled_session_id is not null then
+  if v_scheduled_session_id is not null then
     update public.user_workout_sessions schedule
     set status='scheduled',started_at=null,completed_at=null,skipped_at=null,duration_minutes=null,updated_at=v_now
-    where schedule.id=v_session.scheduled_session_id and schedule.user_id=p_user_id and schedule.status='started';
+    where schedule.id=v_scheduled_session_id and schedule.user_id=p_user_id and schedule.status='started';
     get diagnostics v_schedule_count=row_count;
     if v_schedule_count<>1 then raise exception 'Linked scheduled workout could not be returned to scheduled state.' using errcode='40001'; end if;
   end if;
