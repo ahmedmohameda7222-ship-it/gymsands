@@ -18,6 +18,16 @@ function runScript(script, args, environment = {}) {
   });
 }
 
+function latestResolvedProductionMigration(ledger) {
+  return [...(ledger.entries ?? [])]
+    .filter(
+      (entry) => ["applied", "applied_version_alias"].includes(entry.state)
+        && typeof entry.productionVersion === "string"
+    )
+    .sort((left, right) => left.productionVersion.localeCompare(right.productionVersion))
+    .at(-1)?.productionVersion ?? null;
+}
+
 test("next.config bundles deterministic release and migration metadata", async () => {
   process.env.PLAIVRA_COMMIT_SHA = fullSha;
   process.env.PLAIVRA_BUILD_TIMESTAMP = "2026-07-14T01:02:03.000Z";
@@ -27,6 +37,7 @@ test("next.config bundles deterministic release and migration metadata", async (
   const moduleUrl = new URL(`../next.config.mjs?test=${Date.now()}`, import.meta.url);
   const { default: config, releaseMetadata } = await import(moduleUrl.href);
   const ledger = JSON.parse(readFileSync(resolve(root, "supabase/migration-ledger.json"), "utf8"));
+  const latestResolvedMigration = latestResolvedProductionMigration(ledger);
 
   assert.equal(releaseMetadata.commitSha, fullSha);
   assert.equal(releaseMetadata.buildTimestamp, "2026-07-14T01:02:03.000Z");
@@ -36,9 +47,10 @@ test("next.config bundles deterministic release and migration metadata", async (
   assert.equal(releaseMetadata.schemaAppliedUntrackedCount, String(ledger.schemaVerifiedUntrackedCount));
   assert.equal(releaseMetadata.unresolvedMigrationCount, String(ledger.unresolvedCount));
   assert.match(releaseMetadata.expectedDatabaseMigrationVersion, /^\d{12,14}$/);
+  assert.equal(releaseMetadata.expectedDatabaseMigrationVersion, latestResolvedMigration);
   assert.equal(config.env.PLAIVRA_COMMIT_SHA, fullSha);
   assert.equal(config.env.PLAIVRA_BUILD_TIMESTAMP, "2026-07-14T01:02:03.000Z");
-  assert.equal(config.env.PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION, releaseMetadata.expectedDatabaseMigrationVersion);
+  assert.equal(config.env.PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION, latestResolvedMigration);
 });
 
 test("post-deploy smoke rejects abbreviated release SHAs before network access", () => {
