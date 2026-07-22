@@ -110,16 +110,20 @@ test("generic workflow and evidence code contain no pinned AW-2A migration", () 
   assert.match(preflight, /expected_migration/);
 });
 
-test("same-head run selection is request-bound and permissions are least privilege", () => {
+test("same-head run selection, evidence recording, and permissions are exact", () => {
   const workflow = source(".github/workflows/exact-release-quality-validation.yml");
   assert.match(workflow, /displayTitle == env\.EXPECTED_TITLE/);
   assert.match(workflow, /stage1-q-\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}-\$\{REVIEWED_COMMIT\}/);
   assert.match(workflow, /Download and independently verify canonical Quality evidence/);
   assert.match(workflow, /Download and independently verify preflight evidence/);
+  assert.match(workflow, /plaivra_aw2b_command_authority_implementation_report\.md/);
+  assert.match(workflow, /stage1-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /--input stage1-validation\/pr-comment-payload\.json/);
+  assert.match(workflow, /prComment: \{id: \$commentId, url: \$commentUrl/);
   assert.match(workflow, /actions: write/);
   assert.match(workflow, /contents: read/);
-  assert.match(workflow, /issues: write/);
-  assert.doesNotMatch(workflow, /pull-requests:\s*write|pull_request_target/);
+  assert.match(workflow, /pull-requests: write/);
+  assert.doesNotMatch(workflow, /issues:\s*write|pull_request_target|contents:\s*write/);
 });
 
 test("promotion target validation precedes adapter construction", () => {
