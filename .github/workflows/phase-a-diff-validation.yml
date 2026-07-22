@@ -6,7 +6,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: phase-a-diff-${{ github.workflow }}-${{ github.ref }}
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   verify-diff:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - name: Checkout exact pull request head
         uses: actions/checkout@v4
@@ -23,35 +23,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Apply AW-3A Final Planner corrections temporarily
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat scripts/.aw3a-final-correction-part-* > /tmp/aw3a-final-planner-corrections.mjs
-          node --check /tmp/aw3a-final-planner-corrections.mjs
-          node /tmp/aw3a-final-planner-corrections.mjs
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            services/database/workout-set-log-serialization.ts \
-            services/database/workout-sessions-legacy-implementation.ts \
-            services/database/workout-sessions-legacy.ts \
-            services/database/workout-sessions.ts \
-            services/database/workout-rpc-convergence.test.ts \
-            lib/privacy/data-export.ts \
-            lib/privacy/data-export.test.ts \
-            lib/product/active-workout-aw3a-migration.test.ts \
-            package.json \
-            supabase/verification/active-workout-aw3a-final-completion.sql \
-            plaivra_aw3a_final_planner_qaqc_corrections_report.md
-          if ! git diff --cached --quiet; then
-            git commit -m "fix(workouts): close AW-3A final planner blockers"
-            git push origin HEAD:feat/active-workout-aw3a-structured-metrics
-          fi
-
       - name: Verify exact checkout identity
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "$(git rev-parse feat/active-workout-aw3a-structured-metrics 2>/dev/null || git rev-parse HEAD)"
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
 
       - name: Check branch diff formatting against main
         run: git diff --check origin/main...HEAD
