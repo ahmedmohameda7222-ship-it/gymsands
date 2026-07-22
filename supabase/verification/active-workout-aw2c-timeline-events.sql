@@ -1,6 +1,5 @@
 \set ON_ERROR_STOP on
 begin;
-set local transaction read only;
 
 create or replace function pg_temp.aw2c_assert(p_condition boolean,p_message text)
 returns void language plpgsql as $function$
