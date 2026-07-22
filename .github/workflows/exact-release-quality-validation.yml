@@ -26,7 +26,6 @@ on:
 permissions:
   actions: write # dispatch and inspect exact workflow runs/artifacts
   contents: read # checkout exact PR head and ledger
-  issues: write # update only the PR conversation evidence comment
 
 concurrency:
   group: exact-release-quality-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
@@ -41,7 +40,6 @@ jobs:
       REVIEWED_COMMIT: ${{ github.event.pull_request.head.sha }}
       COMPARISON_BASE: ${{ github.event.pull_request.base.sha }}
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
-      PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
     steps:
       - name: Checkout exact PR head
         uses: actions/checkout@v4
@@ -191,6 +189,7 @@ jobs:
           gh run watch "$preflight_run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 10
 
       - name: Download and independently verify preflight evidence
+        id: preflight_artifact
         shell: bash
         env:
           QUALITY_RUN_ID: ${{ steps.quality.outputs.run_id }}
@@ -201,8 +200,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p exact-preflight
+          preflight_artifact_name="release-preflight-$PREFLIGHT_REQUEST_ID"
           gh run download "$PREFLIGHT_RUN_ID" --repo "$GITHUB_REPOSITORY" \
-            --name "release-preflight-$PREFLIGHT_REQUEST_ID" --dir exact-preflight
+            --name "$preflight_artifact_name" --dir exact-preflight
           node --input-type=module - <<'NODE'
           import { readFileSync } from "node:fs";
           const evidence = JSON.parse(readFileSync("exact-preflight/release-preflight.json", "utf8"));
@@ -224,6 +224,14 @@ jobs:
             throw new Error("Stage-1 preflight was not read-only.");
           }
           NODE
+          artifact_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PREFLIGHT_RUN_ID/artifacts" \
+            --jq '[.artifacts[] | select(.name == "'"$preflight_artifact_name"'")] | if length == 1 then .[0] else empty end')"
+          test -n "$artifact_json"
+          {
+            echo "id=$(jq -r '.id' <<< "$artifact_json")"
+            echo "name=$(jq -r '.name' <<< "$artifact_json")"
+            echo "digest=$(jq -r '.digest' <<< "$artifact_json")"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Record exact Stage-1 validation evidence
         shell: bash
@@ -233,12 +241,16 @@ jobs:
           QUALITY_ARTIFACT_NAME: ${{ steps.quality_artifact.outputs.name }}
           QUALITY_ARTIFACT_DIGEST: ${{ steps.quality_artifact.outputs.digest }}
           PREFLIGHT_RUN_ID: ${{ steps.preflight.outputs.run_id }}
+          PREFLIGHT_ARTIFACT_ID: ${{ steps.preflight_artifact.outputs.id }}
+          PREFLIGHT_ARTIFACT_NAME: ${{ steps.preflight_artifact.outputs.name }}
+          PREFLIGHT_ARTIFACT_DIGEST: ${{ steps.preflight_artifact.outputs.digest }}
           VALIDATION_REQUEST_ID: ${{ steps.identity.outputs.quality_request_id }}
           PREFLIGHT_REQUEST_ID: ${{ steps.identity.outputs.preflight_request_id }}
           EXPECTED_MIGRATION: ${{ steps.identity.outputs.expected_migration }}
         run: |
           set -euo pipefail
           mkdir -p stage1-validation
+          exact_artifact_name="stage1-exact-release-validation-$REVIEWED_COMMIT"
           jq -n \
             --arg repository "$GITHUB_REPOSITORY" \
             --arg reviewedCommit "$REVIEWED_COMMIT" \
@@ -251,8 +263,14 @@ jobs:
             --arg qualityArtifactName "$QUALITY_ARTIFACT_NAME" \
             --arg qualityArtifactDigest "$QUALITY_ARTIFACT_DIGEST" \
             --arg preflightRunId "$PREFLIGHT_RUN_ID" \
+            --arg preflightArtifactId "$PREFLIGHT_ARTIFACT_ID" \
+            --arg preflightArtifactName "$PREFLIGHT_ARTIFACT_NAME" \
+            --arg preflightArtifactDigest "$PREFLIGHT_ARTIFACT_DIGEST" \
+            --arg exactValidationRunId "$GITHUB_RUN_ID" \
+            --arg exactValidationRunAttempt "$GITHUB_RUN_ATTEMPT" \
+            --arg exactValidationArtifactName "$exact_artifact_name" \
             '{
-              schemaVersion: 2,
+              schemaVersion: 3,
               repository: $repository,
               reviewedCommit: $reviewedCommit,
               comparisonBase: $comparisonBase,
@@ -262,67 +280,41 @@ jobs:
               manualQuality: { runId: $qualityRunId, status: "success" },
               canonicalArtifact: { id: $qualityArtifactId, name: $qualityArtifactName, digest: $qualityArtifactDigest },
               releasePreflight: { runId: $preflightRunId, status: "success", context: "stage1-infrastructure-validation", productionAuthorization: false },
+              preflightArtifact: { id: $preflightArtifactId, name: $preflightArtifactName, digest: $preflightArtifactDigest },
+              exactValidation: { runId: $exactValidationRunId, runAttempt: $exactValidationRunAttempt, status: "success", artifactName: $exactValidationArtifactName },
               productionWritePerformed: false,
               deploymentPerformed: false
             }' > stage1-validation/exact-release-validation.json
 
-          marker='<!-- plaivra-stage1-exact-release-validation -->'
-          comment_body_path='stage1-validation/pr-comment.md'
-          cat > "$comment_body_path" <<BODY
-          $marker
-          ## Stage-1 exact release-quality validation
-
-          - Reviewed commit: \`$REVIEWED_COMMIT\`
-          - Comparison base: \`$COMPARISON_BASE\`
-          - Validation request ID: \`$VALIDATION_REQUEST_ID\`
-          - Expected migration from ledger: \`$EXPECTED_MIGRATION\`
-          - Manual full Quality run: \`$QUALITY_RUN_ID\` — success
-          - Canonical artifact: \`$QUALITY_ARTIFACT_NAME\`
-          - Artifact ID: \`$QUALITY_ARTIFACT_ID\`
-          - Artifact digest: \`$QUALITY_ARTIFACT_DIGEST\`
-          - Preflight request ID: \`$PREFLIGHT_REQUEST_ID\`
-          - Release preflight run: \`$PREFLIGHT_RUN_ID\` — success
-          - Context: Stage-1 infrastructure validation only
-          - Production authorization: no
-          - Production write: no
-          - Deployment: no
-          BODY
-
-          jq -n --rawfile body "$comment_body_path" '{body: $body}' \
-            > stage1-validation/pr-comment-payload.json
-          comments_pages="$(mktemp)"
-          gh api --paginate \
-            "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/comments?per_page=100" \
-            > "$comments_pages"
-          comment_id="$(jq -sr --arg marker "$marker" \
-            '[.[][] | select((.body // "") | contains($marker)) | .id] | last // empty' \
-            "$comments_pages")"
-
-          if [[ "$comment_id" =~ ^[0-9]+$ ]]; then
-            comment_response="$(gh api --method PATCH \
-              "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
-              --input stage1-validation/pr-comment-payload.json)"
-          else
-            comment_response="$(gh api --method POST \
-              "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/comments" \
-              --input stage1-validation/pr-comment-payload.json)"
-          fi
-
-          recorded_comment_id="$(jq -r '.id' <<< "$comment_response")"
-          recorded_comment_url="$(jq -r '.html_url' <<< "$comment_response")"
-          recorded_comment_body="$(jq -r '.body' <<< "$comment_response")"
-          [[ "$recorded_comment_id" =~ ^[0-9]+$ ]]
-          [[ "$recorded_comment_url" == https://github.com/* ]]
-          [[ "$recorded_comment_body" == *"$marker"* ]]
-
-          jq \
-            --arg commentId "$recorded_comment_id" \
-            --arg commentUrl "$recorded_comment_url" \
-            '. + {prComment: {id: $commentId, url: $commentUrl, marker: "<!-- plaivra-stage1-exact-release-validation -->"}}' \
-            stage1-validation/exact-release-validation.json \
-            > stage1-validation/exact-release-validation.tmp.json
-          mv stage1-validation/exact-release-validation.tmp.json \
-            stage1-validation/exact-release-validation.json
+          jq -e \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg reviewedCommit "$REVIEWED_COMMIT" \
+            --arg comparisonBase "$COMPARISON_BASE" \
+            --arg validationRequestId "$VALIDATION_REQUEST_ID" \
+            --arg preflightRequestId "$PREFLIGHT_REQUEST_ID" \
+            --arg expectedMigration "$EXPECTED_MIGRATION" \
+            --arg qualityRunId "$QUALITY_RUN_ID" \
+            --arg preflightRunId "$PREFLIGHT_RUN_ID" \
+            --arg exactValidationRunId "$GITHUB_RUN_ID" \
+            '.repository == $repository
+             and .reviewedCommit == $reviewedCommit
+             and .comparisonBase == $comparisonBase
+             and .validationRequestId == $validationRequestId
+             and .preflightRequestId == $preflightRequestId
+             and .expectedDatabaseMigrationVersion == $expectedMigration
+             and .manualQuality.runId == $qualityRunId
+             and .manualQuality.status == "success"
+             and .canonicalArtifact.id != ""
+             and (.canonicalArtifact.digest | startswith("sha256:"))
+             and .releasePreflight.runId == $preflightRunId
+             and .releasePreflight.status == "success"
+             and .preflightArtifact.id != ""
+             and (.preflightArtifact.digest | startswith("sha256:"))
+             and .exactValidation.runId == $exactValidationRunId
+             and .exactValidation.status == "success"
+             and .productionWritePerformed == false
+             and .deploymentPerformed == false' \
+            stage1-validation/exact-release-validation.json > /dev/null
 
       - name: Upload Stage-1 exact validation summary
         uses: actions/upload-artifact@v4
