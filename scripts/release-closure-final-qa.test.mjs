@@ -122,8 +122,8 @@ test("same-head run selection, evidence recording, and permissions are exact", (
   assert.match(workflow, /prComment: \{id: \$commentId, url: \$commentUrl/);
   assert.match(workflow, /actions: write/);
   assert.match(workflow, /contents: read/);
-  assert.match(workflow, /pull-requests: write/);
-  assert.doesNotMatch(workflow, /issues:\s*write|pull_request_target|contents:\s*write/);
+  assert.match(workflow, /issues: write/);
+  assert.doesNotMatch(workflow, /pull-requests:\s*write|pull_request_target|contents:\s*write/);
 });
 
 test("promotion target validation precedes adapter construction", () => {
