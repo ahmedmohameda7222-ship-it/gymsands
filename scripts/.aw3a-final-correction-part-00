@@ -1,0 +1,110 @@
+import { readFileSync, writeFileSync } from "node:fs";
+
+function read(path) {
+  return readFileSync(path, "utf8");
+}
+
+function write(path, content) {
+  writeFileSync(path, content.endsWith("\n") ? content : `${content}\n`, "utf8");
+}
+
+function requireIncludes(source, needle, path) {
+  if (!source.includes(needle)) throw new Error(`Expected anchor not found in ${path}: ${needle}`);
+}
+
+function replaceOnce(source, before, after, path) {
+  requireIncludes(source, before, path);
+  const updated = source.replace(before, after);
+  if (updated === source) throw new Error(`Replacement did not change ${path}`);
+  return updated;
+}
+
+const serializerPath = "services/database/workout-set-log-serialization.ts";
+write(serializerPath, `import type {
+  WorkoutPerformanceMetricInput,
+  WorkoutPerformanceMetricSource
+} from "@/types";
+import { workoutPerformanceMetricInputToSql } from "./workout-performance";
+
+export type WorkoutSetLogInput = {
+  planExerciseId?: string | null;
+  exerciseOrder?: number | null;
+  exerciseName: string;
+  exerciseCategory?: string | null;
+  plannedSets?: number | null;
+  plannedReps?: string | null;
+  plannedRestSeconds?: number | null;
+  setNumber: number;
+  reps: number | null;
+  weightKg: number | null;
+  notes?: string | null;
+  completedAt?: string | null;
+  performanceMetrics?: WorkoutPerformanceMetricInput[];
+  metricSource?: WorkoutPerformanceMetricSource;
+  metricSourceProvider?: string | null;
+  metricSourceVersion?: string | null;
+};
+
+export function serializeWorkoutSetLogs(logs: WorkoutSetLogInput[]) {
+  return logs.map((log) => {
+    const row = {
+      plan_exercise_id: log.planExerciseId ?? null,
+      exercise_order: log.exerciseOrder ?? null,
+      exercise_name: log.exerciseName,
+      exercise_category: log.exerciseCategory ?? null,
+      planned_sets: log.plannedSets ?? null,
+      planned_reps: log.plannedReps ?? null,
+      planned_rest_seconds: log.plannedRestSeconds ?? null,
+      set_number: log.setNumber,
+      reps: log.reps,
+      weight_kg: log.weightKg,
+      notes: log.notes ?? null,
+      completed_at: log.completedAt ?? null,
+      ...(log.metricSource !== undefined ? { metric_source: log.metricSource } : {}),
+      ...(log.metricSourceProvider !== undefined ? { metric_source_provider: log.metricSourceProvider } : {}),
+      ...(log.metricSourceVersion !== undefined ? { metric_source_version: log.metricSourceVersion } : {})
+    };
+
+    if (!Object.prototype.hasOwnProperty.call(log, "performanceMetrics")) return row;
+    return {
+      ...row,
+      performance_metrics: (log.performanceMetrics ?? []).map((metric) =>
+        workoutPerformanceMetricInputToSql(metric, {
+          source: log.metricSource,
+          sourceProvider: log.metricSourceProvider,
+          sourceVersion: log.metricSourceVersion
+        })
+      )
+    };
+  });
+}
+`);
+
+const legacyImplementationPath = "services/database/workout-sessions-legacy-implementation.ts";
+let legacyImplementation = read(legacyImplementationPath);
+legacyImplementation = replaceOnce(
+  legacyImplementation,
+  `} from "@/types";\n`,
+  `} from "@/types";\nimport { serializeWorkoutSetLogs } from "./workout-set-log-serialization";\nimport type { WorkoutSetLogInput } from "./workout-set-log-serialization";\n\nexport type { WorkoutSetLogInput } from "./workout-set-log-serialization";\n`,
+  legacyImplementationPath
+);
+const legacyMutationStart = legacyImplementation.indexOf("export type WorkoutSetLogInput = {");
+const legacyCompletionStart = legacyImplementation.indexOf("export async function completeWorkoutSession", legacyMutationStart);
+if (legacyMutationStart < 0 || legacyCompletionStart < 0) {
+  throw new Error("Could not locate the legacy set-write block.");
+}
+legacyImplementation = `${legacyImplementation.slice(0, legacyMutationStart)}export async function saveWorkoutSetLogs(sessionId: string, logs: WorkoutSetLogInput[]) {
+  requireWorkoutPersistence(sessionId, "Workout sets");
+  if (!logs.length) return true;
+  const session = await getWorkoutSessionIdentity(sessionId);
+  const { error } = await supabase!.rpc("upsert_workout_set_logs_atomic", {
+    p_user_id: session.user_id,
+    p_session_id: sessionId,
+    p_logs: serializeWorkoutSetLogs(logs)
+  });
+  if (error) throw error;
+  return true;
+}
+
+${legacyImplementation.slice(legacyCompletionStart)}`;
+legacyImplementation = replaceOnce(
