@@ -26,7 +26,7 @@ on:
 permissions:
   actions: write # dispatch and inspect exact workflow runs/artifacts
   contents: read # checkout exact PR head and ledger
-  pull-requests: write # update only the PR conversation evidence comment
+  issues: write # update only the PR conversation evidence comment
 
 concurrency:
   group: exact-release-quality-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
