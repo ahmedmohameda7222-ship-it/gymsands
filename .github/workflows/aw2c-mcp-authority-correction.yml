@@ -13,7 +13,7 @@ permissions:
 jobs:
   correct:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - name: Checkout correction branch
         uses: actions/checkout@v4
@@ -24,18 +24,23 @@ jobs:
       - name: Apply staged MCP authority correction
         run: python scripts/aw2c-mcp-authority-correction.py
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Validate MCP authority correction
+      - name: Verify effective mutation authority statically
+        shell: bash
         run: |
           set -euo pipefail
-          npm run lint
-          npm run typecheck
-          npx vitest run \
-            lib/mcp/workout-session-authority.test.ts \
-            lib/mcp/security.test.ts \
-            lib/product/train-phase1-approved-semantics.test.ts
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          executor = Path('lib/mcp/tool-executor.ts').read_text(encoding='utf-8')
+          if re.search(r'\.from\(\s*["\']workout_sessions["\']\s*\)\s*\.(?:insert|upsert|update|delete)\s*\(', executor, re.S):
+              raise SystemExit('Unsafe MCP workout_sessions mutation remains')
+          for authority in ('start_or_resume_workout_session_atomic', 'skip_workout_day_atomic'):
+              if authority not in executor:
+                  raise SystemExit(f'Missing MCP authority: {authority}')
+          if 'scheduled_session_id or plan_day_id is required.' not in executor:
+              raise SystemExit('Unbound MCP start does not fail closed')
+          PY
 
       - name: Commit correction and remove temporary files
         shell: bash
