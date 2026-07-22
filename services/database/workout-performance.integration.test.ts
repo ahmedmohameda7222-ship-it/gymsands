@@ -23,8 +23,8 @@ describe("AW-3A set-write integration contract", () => {
   it("routes browser and MCP set mutations through the canonical atomic RPC", () => {
     expect(writeService).toContain('.rpc("upsert_workout_set_logs_atomic"');
     expect(mcpExecutor).toContain('.rpc("upsert_workout_set_logs_atomic"');
-    expect(writeService).not.toMatch(/\.from\(["']exercise_logs["']\)\s*\.(?:insert|update|delete|upsert)/s);
-    expect(mcpExecutor).not.toMatch(/\.from\(["']exercise_logs["']\)\s*\.(?:insert|update|delete|upsert)/s);
+    expect(writeService).not.toMatch(/\.from\(["']exercise_logs["']\)\s*\.(?:insert|update|delete|upsert)/);
+    expect(mcpExecutor).not.toMatch(/\.from\(["']exercise_logs["']\)\s*\.(?:insert|update|delete|upsert)/);
   });
 
   it("makes the old direct set-write fallback unreachable from the public service barrel", () => {
