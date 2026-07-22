@@ -4,14 +4,25 @@ export * from "./workout-sessions-legacy";
 
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
-import type { Workout, WorkoutSession } from "@/types";
+import type { Weekday, Workout, WorkoutSession } from "@/types";
 import {
   getOrStartWorkoutSession as startOrResumeDirectWorkoutSession
 } from "./direct-workout-sessions";
-import type {
-  SkipWorkoutDayInput,
-  WorkoutSetLogInput
-} from "./workout-sessions-legacy";
+import type { WorkoutSetLogInput } from "./workout-sessions-legacy";
+
+export type SkipWorkoutDayInput = {
+  id: string;
+  plan_id?: string | null;
+  planId?: string | null;
+  day_name?: string;
+  dayName?: string;
+  weekday: Weekday | null;
+  exercises: Array<{
+    category?: string | null;
+    target_muscle?: string | null;
+    equipment?: string | null;
+  }>;
+};
 
 function requireSessionIdentity(value: string, label: string) {
   if (!supabase || !isUuid(value)) throw new Error(`${label} is invalid.`);
