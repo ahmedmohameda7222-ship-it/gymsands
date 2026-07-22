@@ -43,19 +43,23 @@ describe("AW-2C durable timeline migration", () => {
   });
 
   it("adds durable cancellation without promoting release compatibility", () => {
-    expect(migration).toContain("alter type public.workout_session_status add value 'cancelled'");
+    expect(migration).toMatch(/alter type public\.workout_session_status add value(?: if not exists)? 'cancelled'/);
     expect(migration).toContain("add column cancelled_at timestamptz");
     expect(migration).toContain("add column cancel_reason text");
-    expect(migration).toContain("workout_sessions_terminal_delete_guard");
+    expect(migration).toContain("private.enforce_terminal_workout_session_delete");
     expect(migration).toContain("'20260721224813'");
     expect(migration).not.toMatch(/update\s+public\.release_schema_compatibility/i);
   });
 
   it("backfills only provable history and never targets Activity Catalog", () => {
-    expect(migration).toContain("source='migration_backfill'");
-    expect(migration).toContain("where log.completed_at is not null");
-    expect(migration).toContain("item.replacement_recorded_at is not null");
-    expect(migration).toContain("Ambiguous snapshot state='skipped' rows are intentionally excluded");
+    const backfill = migration.slice(
+      migration.indexOf("insert into public.workout_session_timeline_events(workout_session_id,user_id,event_type,occurred_at,source,payload_version,payload,idempotency_key)"),
+      migration.indexOf("do $aw2c_postconditions$")
+    );
+    expect(backfill).toContain("'migration_backfill'");
+    expect(backfill).toContain("where log.completed_at is not null");
+    expect(backfill).toContain("item.replacement_recorded_at is not null");
+    expect(backfill).not.toContain("'exercise_skipped'");
     expect(migration).not.toContain("khlcctuefiuhunqymkbp");
   });
 });
