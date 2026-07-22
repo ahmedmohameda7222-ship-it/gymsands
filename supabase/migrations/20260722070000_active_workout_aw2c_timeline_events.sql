@@ -367,7 +367,7 @@ begin
           'exerciseOrder',v_after.exercise_order,'planExerciseId',v_after.plan_exercise_id,
           'exerciseNameSnapshot',v_after.exercise_name,'setNumber',v_after.set_number,
           'reps',v_after.reps,'weightKg',v_after.weight_kg,'completedAt',v_after.completed_at,'setType',v_after.set_type
-        ),null,v_after.id,null,1
+        ),null,v_after.id,null,1::smallint
       );
     elsif v_before is not null and v_before<>'null'::jsonb and v_before_completed and v_changed then
       v_notes_changed:=(v_before->>'notes') is distinct from v_after.notes;
@@ -397,7 +397,7 @@ begin
       perform private.append_workout_session_timeline_event(
         p_session_id,p_user_id,'set_edited',clock_timestamp(),'runtime',
         'runtime:set_edited:'||v_after.id::text||':'||v_fingerprint,
-        v_payload,null,v_after.id,null,1
+        v_payload,null,v_after.id,null,1::smallint
       );
     end if;
   end loop;
@@ -485,7 +485,7 @@ begin
         'itemOrder',v_after.item_order,
         'planned',jsonb_build_object('targetType',v_planned_type,'stableIdentity',v_planned_identity,'nameSnapshot',v_after.activity_name_snapshot),
         'actual',jsonb_build_object('targetType',v_actual_type,'stableIdentity',v_actual_identity,'provider',v_after.actual_provider,'nameSnapshot',v_after.actual_name_snapshot)
-      ),null,null,v_after.id,1
+      ),null,null,v_after.id,1::smallint
     );
   end if;
   return v_result;
@@ -625,7 +625,7 @@ begin
     p_session_id,p_user_id,'exercise_skipped',clock_timestamp(),'runtime',
     'runtime:exercise_skipped:'||v_item.id::text,
     jsonb_build_object('itemOrder',v_item.item_order,'plannedNameSnapshot',v_item.activity_name_snapshot,'actualNameSnapshot',v_item.actual_name_snapshot,'reason',p_reason),
-    null,null,v_item.id,1
+    null,null,v_item.id,1::smallint
   );
   return jsonb_build_object('schemaVersion',1,'item',to_jsonb(v_item),'skipped',true,'alreadySkipped',false,'event',to_jsonb(v_event));
 end $function$;
