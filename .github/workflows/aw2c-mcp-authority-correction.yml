@@ -1,0 +1,246 @@
+name: AW-2C MCP Authority Correction
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/aw2c-mcp-authority-correction.yml
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout correction branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-aw2c-timeline-events
+          fetch-depth: 0
+
+      - name: Route MCP workout mutations through AW-2C authorities
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          executor = Path('lib/mcp/tool-executor.ts')
+          text = executor.read_text(encoding='utf-8')
+          old_select = '.select("id,user_id,scheduled_session_id")'
+          new_select = '.select("id,user_id,scheduled_session_id,plan_day_id,status")'
+          if text.count(old_select) != 1:
+              raise SystemExit(f'requireWorkoutSession select drifted: {text.count(old_select)}')
+          text = text.replace(old_select, new_select, 1)
+
+          old_start_fallback = '''        const { data, error } = await ctx.supabase.from("workout_sessions").insert({ user_id: ctx.userId, plan_day_id: planDayId ?? null, workout_name: "ChatGPT logged workout", status: "started" }).select("*").single();
+          if (error) throw new Error(error.message);
+          return ok({ ok: true, session: data });'''
+          new_start_fallback = '''        return fail("missing_required_input", "scheduled_session_id or plan_day_id is required.");'''
+          if text.count(old_start_fallback) != 1:
+              raise SystemExit(f'start_workout fallback drifted: {text.count(old_start_fallback)}')
+          text = text.replace(old_start_fallback, new_start_fallback, 1)
+
+          old_skip = '''      case "skip_workout": {
+        const scheduledId = getOptionalString(input, "scheduled_session_id");
+        const performedId = getOptionalString(input, "workout_session_id");
+        if (!scheduledId && !performedId) return fail("missing_required_input", "scheduled_session_id or workout_session_id is required.");
+        const skippedAt = new Date().toISOString();
+        const update = { status: "skipped", skipped_at: skippedAt, notes: getOptionalString(input, "reason") ?? null };
+        if (performedId) {
+          const ownedSession = await requireWorkoutSession(ctx, performedId);
+          const { data, error } = await ctx.supabase.from("workout_sessions").update(update).eq("id", performedId).eq("user_id", ctx.userId).select("*").single();
+          if (error) throw new Error(error.message);
+          if (ownedSession.scheduled_session_id) await ctx.supabase.from("user_workout_sessions").update(update).eq("id", ownedSession.scheduled_session_id).eq("user_id", ctx.userId);
+          return ok({ ok: true, session: data });
+        }
+        const { data: scheduled, error: scheduledError } = await ctx.supabase.from("user_workout_sessions").update(update).eq("id", scheduledId!).eq("user_id", ctx.userId).select("*").single();
+        if (scheduledError || !scheduled) throw new Error(scheduledError?.message ?? "Scheduled workout not found.");
+        const { data, error } = await ctx.supabase.from("workout_sessions").upsert({ user_id: ctx.userId, scheduled_session_id: scheduled.id, plan_id: scheduled.user_workout_plan_id, plan_day_id: scheduled.plan_day_id, workout_name: scheduled.day_title ?? "Scheduled workout", workout_day_name: scheduled.day_title ?? null, status: "skipped", skipped_at: skippedAt, notes: update.notes, source: "chatgpt" }, { onConflict: "scheduled_session_id" }).select("*").single();
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, session: data });
+      }'''
+          new_skip = '''      case "skip_workout": {
+        const scheduledId = getOptionalString(input, "scheduled_session_id");
+        const performedId = getOptionalString(input, "workout_session_id");
+        if (!scheduledId && !performedId) return fail("missing_required_input", "scheduled_session_id or workout_session_id is required.");
+
+        let planDayId: string | null = null;
+        if (performedId) {
+          const ownedSession = await requireWorkoutSession(ctx, performedId);
+          planDayId = typeof ownedSession.plan_day_id === "string" ? ownedSession.plan_day_id : null;
+          if (!planDayId) {
+            return fail("unsupported_direct_session_skip", "Direct workout sessions cannot be marked skipped through this tool. Cancel or complete the session instead.");
+          }
+        } else {
+          const { data: scheduled, error: scheduledError } = await ctx.supabase
+            .from("user_workout_sessions")
+            .select("id,plan_day_id")
+            .eq("id", scheduledId!)
+            .eq("user_id", ctx.userId)
+            .maybeSingle();
+          if (scheduledError || !scheduled) throw new Error(scheduledError?.message ?? "Scheduled workout not found.");
+          planDayId = typeof scheduled.plan_day_id === "string" ? scheduled.plan_day_id : null;
+          if (!planDayId) throw new Error("Scheduled workout is not linked to a workout plan day.");
+        }
+
+        const { data, error } = await ctx.supabase.rpc("skip_workout_day_atomic", {
+          p_user_id: ctx.userId,
+          p_plan_day_id: planDayId,
+          p_notes: getOptionalString(input, "reason") ?? null,
+          p_reason: null,
+          p_followup_action: null
+        });
+        if (error) throw new Error(error.message);
+        return ok({ ok: true, session: (data as { session?: unknown } | null)?.session ?? data });
+      }'''
+          if text.count(old_skip) != 1:
+              raise SystemExit(f'skip_workout block drifted: {text.count(old_skip)}')
+          executor.write_text(text.replace(old_skip, new_skip, 1), encoding='utf-8')
+
+          contract = Path('lib/product/train-phase1-approved-semantics.test.ts')
+          text = contract.read_text(encoding='utf-8')
+          runtime_anchor = '      "services/database/index.ts",\n      "components/workouts/workout-session-form.tsx",'
+          runtime_replacement = '      "services/database/index.ts",\n      "lib/mcp/tool-executor.ts",\n      "components/workouts/workout-session-form.tsx",'
+          if text.count(runtime_anchor) != 1:
+              raise SystemExit('Runtime-file audit anchor drifted')
+          text = text.replace(runtime_anchor, runtime_replacement, 1)
+          source_anchor = '    const barrel = source("services/database/legacy-repository.ts");\n'
+          source_replacement = '    const barrel = source("services/database/legacy-repository.ts");\n    const mcp = source("lib/mcp/tool-executor.ts");\n'
+          if text.count(source_anchor) != 1:
+              raise SystemExit('Runtime source variable anchor drifted')
+          text = text.replace(source_anchor, source_replacement, 1)
+          assertion_anchor = '    expect(barrel).toContain("startWorkoutSession");\n'
+          assertion_replacement = '''    expect(barrel).toContain("startWorkoutSession");
+    expect(mcp).not.toMatch(/\.from\(\s*["']workout_sessions["']\s*\)\s*\.(?:insert|upsert|update|delete)\s*\(/s);
+    expect(mcp).toContain('ctx.supabase.rpc("start_or_resume_workout_session_atomic"');
+    expect(mcp).toContain('ctx.supabase.rpc("skip_workout_day_atomic"');
+    expect(mcp).toContain('return fail("missing_required_input", "scheduled_session_id or plan_day_id is required.")');
+'''
+          if text.count(assertion_anchor) != 1:
+              raise SystemExit('Runtime assertion anchor drifted')
+          contract.write_text(text.replace(assertion_anchor, assertion_replacement, 1), encoding='utf-8')
+
+          test = Path('lib/mcp/workout-session-authority.test.ts')
+          test.write_text('''import { describe, expect, it, vi } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { McpContext } from "./auth";
+import { MCP_SCOPES } from "./scopes";
+import { executeMcpTool } from "./tool-executor-safe";
+
+const userId = "11111111-1111-4111-8111-111111111111";
+const scheduledId = "22222222-2222-4222-8222-222222222222";
+const planDayId = "33333333-3333-4333-8333-333333333333";
+const sessionId = "44444444-4444-4444-8444-444444444444";
+
+function contextWith(supabase: unknown): McpContext {
+  return {
+    supabase: supabase as SupabaseClient,
+    userId,
+    connectionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    scopes: [MCP_SCOPES.workoutsWrite],
+    profile: { id: userId, email: "owner@example.test", full_name: "Owner", role: "member" }
+  };
+}
+
+function queryResult(data: unknown) {
+  const query: Record<string, ReturnType<typeof vi.fn>> = {};
+  for (const method of ["select", "eq", "limit", "order", "is", "in"]) query[method] = vi.fn(() => query);
+  query.maybeSingle = vi.fn(async () => ({ data, error: null }));
+  query.single = vi.fn(async () => ({ data, error: null }));
+  return query;
+}
+
+describe("MCP AW-2C workout-session authority", () => {
+  it("fails closed instead of directly creating an unbound workout session", async () => {
+    const supabase = { from: vi.fn(), rpc: vi.fn() };
+    const result = await executeMcpTool(contextWith(supabase), "start_workout", {});
+    expect(result).toMatchObject({ isError: true, structuredContent: { ok: false, code: "missing_required_input" } });
+    expect(supabase.from).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("starts a scheduled workout only through the scheduled atomic authority", async () => {
+    const rpc = vi.fn(async () => ({ data: { session: { id: sessionId } }, error: null }));
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === "user_workout_sessions") return queryResult({ id: scheduledId, plan_day_id: planDayId });
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+      rpc
+    };
+    const result = await executeMcpTool(contextWith(supabase), "start_workout", { scheduled_session_id: scheduledId });
+    expect(result.structuredContent).toMatchObject({ ok: true, session: { id: sessionId } });
+    expect(rpc).toHaveBeenCalledWith("start_or_resume_workout_session_atomic", {
+      p_user_id: userId,
+      p_plan_day_id: planDayId,
+      p_scheduled_session_id: scheduledId
+    });
+  });
+
+  it("skips a scheduled workout only through the AW-2C skip authority", async () => {
+    const rpc = vi.fn(async () => ({ data: { session: { id: sessionId, status: "skipped" } }, error: null }));
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === "user_workout_sessions") return queryResult({ id: scheduledId, plan_day_id: planDayId });
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+      rpc
+    };
+    const result = await executeMcpTool(contextWith(supabase), "skip_workout", {
+      scheduled_session_id: scheduledId,
+      reason: "Private reason"
+    });
+    expect(result.structuredContent).toMatchObject({ ok: true, session: { id: sessionId, status: "skipped" } });
+    expect(rpc).toHaveBeenCalledWith("skip_workout_day_atomic", {
+      p_user_id: userId,
+      p_plan_day_id: planDayId,
+      p_notes: "Private reason",
+      p_reason: null,
+      p_followup_action: null
+    });
+  });
+
+  it("fails closed for a direct performed-session skip without a plan day", async () => {
+    const rpc = vi.fn();
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === "workout_sessions") return queryResult({ id: sessionId, user_id: userId, scheduled_session_id: null, plan_day_id: null, status: "started" });
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+      rpc
+    };
+    const result = await executeMcpTool(contextWith(supabase), "skip_workout", { workout_session_id: sessionId });
+    expect(result).toMatchObject({ isError: true, structuredContent: { ok: false, code: "unsupported_direct_session_skip" } });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+});
+''', encoding='utf-8')
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate MCP authority correction
+        run: |
+          set -euo pipefail
+          npm run lint
+          npm run typecheck
+          npx vitest run \
+            lib/mcp/workout-session-authority.test.ts \
+            lib/mcp/security.test.ts \
+            lib/product/train-phase1-approved-semantics.test.ts
+
+      - name: Commit correction and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/aw2c-mcp-authority-correction.yml
+          git config user.name "plaivra-release-owner"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(mcp): enforce AW-2C workout authorities"
+          git push origin HEAD:feat/active-workout-aw2c-timeline-events
