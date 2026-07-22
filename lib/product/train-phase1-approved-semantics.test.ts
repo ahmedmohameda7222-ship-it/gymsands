@@ -102,7 +102,10 @@ describe("approved Train Phase 1 semantic contracts", () => {
   });
 
   it("keeps skipped legacy history and stable catalog identity across localized exercise names", () => {
-    const sessions = source("services/database/workout-sessions-legacy.ts");
+    const sessions = [
+      source("services/database/workout-sessions-legacy.ts"),
+      source("services/database/workout-sessions-legacy-implementation.ts"),
+    ].join("\n");
     const detail = source("app/(private)/workouts/[id]/page.tsx");
     expect(sessions).toContain('.in("status", ["completed", "skipped"])');
     expect(sessions).toContain('session.status === "completed" || session.status === "skipped"');
@@ -117,23 +120,32 @@ describe("approved Train Phase 1 semantic contracts", () => {
     const runtimeFiles = [
       "services/database/workout-sessions.ts",
       "services/database/workout-sessions-legacy.ts",
+      "services/database/workout-sessions-legacy-implementation.ts",
       "services/database/direct-workout-sessions.ts",
       "services/database/legacy-repository.ts",
       "services/database/index.ts",
       "lib/mcp/tool-executor.ts",
+      "lib/mcp/tool-executor-implementation.ts",
       "components/workouts/workout-session-form.tsx",
     ];
     const existingRuntimeFiles = runtimeFiles.filter((path) => existsSync(path));
     const runtime = existingRuntimeFiles.map(source).join("\n");
     const sessions = source("services/database/workout-sessions.ts");
-    const legacy = source("services/database/workout-sessions-legacy.ts");
+    const legacy = [
+      source("services/database/workout-sessions-legacy.ts"),
+      source("services/database/workout-sessions-legacy-implementation.ts"),
+    ].join("\n");
     const direct = source("services/database/direct-workout-sessions.ts");
     const barrel = source("services/database/legacy-repository.ts");
-    const mcp = source("lib/mcp/tool-executor.ts");
+    const mcp = [
+      source("lib/mcp/tool-executor.ts"),
+      source("lib/mcp/tool-executor-implementation.ts"),
+    ].join("\n");
 
     expect(existingRuntimeFiles).toEqual(expect.arrayContaining([
       "services/database/workout-sessions.ts",
       "services/database/workout-sessions-legacy.ts",
+      "services/database/workout-sessions-legacy-implementation.ts",
       "services/database/direct-workout-sessions.ts",
       "services/database/legacy-repository.ts",
       "components/workouts/workout-session-form.tsx",
