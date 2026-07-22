@@ -72,7 +72,8 @@ describe("AW-3A migration and runtime authority", () => {
     expect(migration).toContain("'external_load_kg',1,'none',l.weight_kg");
     expect(migration).toContain("where l.reps is not null");
     expect(migration).toContain("where l.weight_kg is not null");
-    expect(migration).toContain("<> '20260722093115'");
+    expect(migration).toContain("if v_marker = '20260722093115' then");
+    expect(migration).toContain("AW-3A unexpectedly changed or entered with an unreconciled compatibility marker");
     expect(migration).not.toContain("update public.release_schema_compatibility");
   });
 
