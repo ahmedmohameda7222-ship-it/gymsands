@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 
 const writeService = readFileSync("services/database/workout-sessions.ts", "utf8");
 const legacyService = readFileSync("services/database/workout-sessions-legacy.ts", "utf8");
+const legacyImplementation = readFileSync(
+  "services/database/workout-sessions-legacy-implementation.ts",
+  "utf8"
+);
 const mcpExecutor = readFileSync("lib/mcp/tool-executor.ts", "utf8");
 const migration = readFileSync(
   "supabase/migrations/20260722113000_active_workout_aw3a_structured_metrics.sql",
@@ -22,16 +26,19 @@ describe("AW-3A set-write integration contract", () => {
 
   it("routes browser and MCP set mutations through the canonical atomic RPC", () => {
     expect(writeService).toContain('.rpc("upsert_workout_set_logs_atomic"');
+    expect(legacyService).toContain('.rpc("upsert_workout_set_logs_atomic"');
     expect(mcpExecutor).toContain('.rpc("upsert_workout_set_logs_atomic"');
-    expect(writeService).not.toMatch(/\.from\(["']exercise_logs["']\)\s*\.(?:insert|update|delete|upsert)/);
-    expect(mcpExecutor).not.toMatch(/\.from\(["']exercise_logs["']\)\s*\.(?:insert|update|delete|upsert)/);
+    for (const source of [writeService, legacyService, mcpExecutor]) {
+      expect(source).not.toMatch(/\.from\(["']exercise_logs["']\)\s*\.(?:insert|update|delete|upsert)/);
+    }
   });
 
   it("makes the old direct set-write fallback unreachable from the public service barrel", () => {
     expect(writeService).toContain('export * from "./workout-sessions-legacy"');
     expect(writeService).toMatch(/export async function saveWorkoutSetLogs\(/);
-    expect(legacyService).toContain('.from("exercise_logs")');
-    expect(legacyService).toContain("export async function saveWorkoutSetLogs");
+    expect(legacyService).toContain('export * from "./workout-sessions-legacy-implementation"');
+    expect(legacyService).toMatch(/export async function saveWorkoutSetLogs\(/);
+    expect(legacyService).not.toContain('.from("exercise_logs")');
   });
 
   it("implements full replacement and old-client preservation in the database transaction", () => {
@@ -44,7 +51,7 @@ describe("AW-3A set-write integration contract", () => {
   });
 
   it("keeps completion on the same public RPC and relies on metric cascade for omitted logs", () => {
-    expect(legacyService).toContain('.rpc("complete_workout_session_atomic"');
+    expect(legacyImplementation).toContain('.rpc("complete_workout_session_atomic"');
     expect(migration).toContain("on delete cascade");
     expect(migration).toContain("references public.exercise_logs(id,workout_session_id) on delete cascade");
   });
