@@ -156,6 +156,11 @@ function createInMemorySupabase() {
       Object.assign(session, { status: "completed", completed_at: UPDATED_AT, duration_minutes: args.p_duration_minutes });
       return { data: { session }, error: null };
     }
+    if (name === "skip_workout_day_atomic") {
+      const session = tables.workout_sessions.find((row) => row.user_id === USER_ID && row.plan_day_id === args.p_plan_day_id) ?? tables.workout_sessions[0];
+      Object.assign(session, { status: "skipped", skipped_at: UPDATED_AT });
+      return { data: { session }, error: null };
+    }
     if (name !== "complete_meal_plan_item") return { data: [], error: null };
     const item = tables.user_meal_plan_items.find((row) => row.id === args.p_item_id && row.user_id === USER_ID);
     if (!item) return { data: null, error: { message: "not found" } };
