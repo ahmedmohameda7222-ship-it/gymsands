@@ -4,11 +4,25 @@ export * from "./workout-sessions-legacy";
 
 import { supabase } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/utils";
-import type { Weekday, Workout, WorkoutSession } from "@/types";
+import type {
+  Weekday,
+  Workout,
+  WorkoutPerformanceMetricInput,
+  WorkoutPerformanceMetricSource,
+  WorkoutSession
+} from "@/types";
 import {
   getOrStartWorkoutSession as startOrResumeDirectWorkoutSession
 } from "./direct-workout-sessions";
-import type { WorkoutSetLogInput } from "./workout-sessions-legacy";
+import type { WorkoutSetLogInput as LegacyWorkoutSetLogInput } from "./workout-sessions-legacy";
+import { workoutPerformanceMetricInputToSql } from "./workout-performance";
+
+export type WorkoutSetLogInput = LegacyWorkoutSetLogInput & {
+  performanceMetrics?: WorkoutPerformanceMetricInput[];
+  metricSource?: WorkoutPerformanceMetricSource;
+  metricSourceProvider?: string | null;
+  metricSourceVersion?: string | null;
+};
 
 export type SkipWorkoutDayInput = {
   id: string;
@@ -29,20 +43,37 @@ function requireSessionIdentity(value: string, label: string) {
 }
 
 function workoutSetLogRows(logs: WorkoutSetLogInput[]) {
-  return logs.map((log) => ({
-    plan_exercise_id: log.planExerciseId ?? null,
-    exercise_order: log.exerciseOrder ?? null,
-    exercise_name: log.exerciseName,
-    exercise_category: log.exerciseCategory ?? null,
-    planned_sets: log.plannedSets ?? null,
-    planned_reps: log.plannedReps ?? null,
-    planned_rest_seconds: log.plannedRestSeconds ?? null,
-    set_number: log.setNumber,
-    reps: log.reps,
-    weight_kg: log.weightKg,
-    notes: log.notes ?? null,
-    completed_at: log.completedAt ?? null
-  }));
+  return logs.map((log) => {
+    const base = {
+      plan_exercise_id: log.planExerciseId ?? null,
+      exercise_order: log.exerciseOrder ?? null,
+      exercise_name: log.exerciseName,
+      exercise_category: log.exerciseCategory ?? null,
+      planned_sets: log.plannedSets ?? null,
+      planned_reps: log.plannedReps ?? null,
+      planned_rest_seconds: log.plannedRestSeconds ?? null,
+      set_number: log.setNumber,
+      reps: log.reps,
+      weight_kg: log.weightKg,
+      notes: log.notes ?? null,
+      completed_at: log.completedAt ?? null,
+      ...(log.metricSource !== undefined ? { metric_source: log.metricSource } : {}),
+      ...(log.metricSourceProvider !== undefined ? { metric_source_provider: log.metricSourceProvider } : {}),
+      ...(log.metricSourceVersion !== undefined ? { metric_source_version: log.metricSourceVersion } : {})
+    };
+
+    if (!Object.prototype.hasOwnProperty.call(log, "performanceMetrics")) return base;
+    return {
+      ...base,
+      performance_metrics: (log.performanceMetrics ?? []).map((metric) =>
+        workoutPerformanceMetricInputToSql(metric, {
+          source: log.metricSource,
+          sourceProvider: log.metricSourceProvider,
+          sourceVersion: log.metricSourceVersion
+        })
+      )
+    };
+  });
 }
 
 function directWorkoutIdentity(workout: Workout, resolvedWorkoutId?: string | null): Workout {
