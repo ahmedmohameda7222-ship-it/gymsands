@@ -16,6 +16,7 @@ export * from "./replay-local-migration-chain-legacy.mjs";
 import {
   AW2B_VERSION,
   LOCAL_DATABASE_URL,
+  MARKER_AFTER_AW2A_PROMOTION,
   assertLocalOnly,
   listRepositoryMigrations,
   validateMigrationHistory,
@@ -77,6 +78,15 @@ function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
+function setMarker(cwd, logPath, value) {
+  run(
+    "psql",
+    [LOCAL_DATABASE_URL, "-X", "-v", "ON_ERROR_STOP=1", "-c", `update public.release_schema_compatibility set migration_version='${value}' where singleton`],
+    cwd,
+    logPath,
+  );
+}
+
 function marker(cwd, logPath) {
   return run(
     "psql",
@@ -133,9 +143,11 @@ async function main() {
 
   try {
     staged = stageAw2cAndFutureMigrations(repositoryRoot, stagedDirectory);
+    const aw2c = staged.filter(({ version }) => version === AW2C_VERSION);
+    const future = staged.filter(({ version }) => version > AW2C_VERSION);
     appendFileSync(
       logPath,
-      `Staged AW-2C and ${Math.max(staged.length - 1, 0)} future migration(s) before legacy replay: ${staged.map(({ filename }) => basename(filename)).join(", ")}\n`,
+      `Staged AW-2C and ${future.length} future migration(s) before legacy replay: ${staged.map(({ filename }) => basename(filename)).join(", ")}\n`,
       "utf8",
     );
 
@@ -150,14 +162,20 @@ async function main() {
     if (child.error) throw child.error;
     if (child.status !== 0) throw new Error(`Legacy chronological replay exited with status ${child.status ?? "unknown"}.`);
 
-    restoreStagedMigrations(staged);
-    run(
-      "psql",
-      [LOCAL_DATABASE_URL, "-X", "-v", "ON_ERROR_STOP=1", "-c", `update public.release_schema_compatibility set migration_version='${MARKER_AFTER_AW2B_PROMOTION}' where singleton`],
-      repositoryRoot,
-      logPath,
-    );
+    restoreStagedMigrations(aw2c);
+    setMarker(repositoryRoot, logPath, MARKER_AFTER_AW2B_PROMOTION);
     run("supabase", ["migration", "up", "--local", "--include-all"], repositoryRoot, logPath);
+    if (marker(repositoryRoot, logPath) !== MARKER_AFTER_AW2B_PROMOTION) {
+      throw new Error("AW-2C replay changed its compatibility marker unexpectedly.");
+    }
+
+    // Future repository migrations run after AW-2C. Reproduce the immutable repository
+    // marker context used by their local replay preflights, then restore the latest release
+    // closure marker once the complete repository chain has been proven.
+    setMarker(repositoryRoot, logPath, MARKER_AFTER_AW2A_PROMOTION);
+    restoreStagedMigrations(future);
+    run("supabase", ["migration", "up", "--local", "--include-all"], repositoryRoot, logPath);
+    setMarker(repositoryRoot, logPath, MARKER_AFTER_AW2B_PROMOTION);
 
     const markerAfter = marker(repositoryRoot, logPath);
     if (markerAfter !== MARKER_AFTER_AW2B_PROMOTION) {
