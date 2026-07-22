@@ -146,7 +146,7 @@ The PostgreSQL AW-2C integration proof verifies:
 - one canonical direct session root;
 - exactly one runtime `session_started` event;
 - correct owner and session association;
-- sequence number `1` for the initial event;
+- one positive database-allocated global sequence token for the initial event;
 - absence of forbidden payload fields;
 - candidate retry returns the same session;
 - identity retry returns the same session;

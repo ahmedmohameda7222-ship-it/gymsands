@@ -209,7 +209,7 @@ select pg_temp.aw2c_assert(
   and (select count(*)=1 from public.workout_session_timeline_events
        where workout_session_id=:'direct_session_id'::uuid
          and user_id=:'owner_id'::uuid and event_type='session_started'
-         and source='runtime' and sequence_number=1)
+         and source='runtime' and sequence_number>0)
   and not exists(
     select 1 from public.workout_session_timeline_events
     where workout_session_id=:'direct_session_id'::uuid
@@ -231,7 +231,7 @@ select pg_temp.aw2c_assert(
   and (select count(*)=1 from public.workout_sessions where id=:'direct_session_id'::uuid)
   and (select count(*)=1 from public.workout_session_timeline_events
        where workout_session_id=:'direct_session_id'::uuid and event_type='session_started')
-  and (select min(sequence_number)=1 and max(sequence_number)=1
+  and (select min(sequence_number)=max(sequence_number) and min(sequence_number)>0
        from public.workout_session_timeline_events where workout_session_id=:'direct_session_id'::uuid),
   'AW-2C direct retry duplicated the session root or start event.');
 select public.cancel_workout_session_atomic(:'owner_id'::uuid,:'direct_session_id'::uuid,'user_cancelled');
