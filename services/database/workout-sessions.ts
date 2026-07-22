@@ -13,6 +13,24 @@ import type { WorkoutSetLogInput } from "./workout-set-log-serialization";
 
 export type { WorkoutSetLogInput } from "./workout-set-log-serialization";
 
+export type SkipWorkoutDayInput = {
+  id: string;
+  plan_id?: string | null;
+  planId?: string | null;
+  day_name?: string;
+  dayName?: string;
+  weekday: Weekday | null;
+  exercises: Array<{
+    category?: string | null;
+    target_muscle?: string | null;
+    equipment?: string | null;
+  }>;
+};
+
+function requireSessionIdentity(value: string, label: string) {
+  if (!supabase || !isUuid(value)) throw new Error(`${label} is invalid.`);
+}
+
 function directWorkoutIdentity(workout: Workout, resolvedWorkoutId?: string | null): Workout {
   if (resolvedWorkoutId === undefined || resolvedWorkoutId === null) return workout;
   if (!isUuid(resolvedWorkoutId)) throw new Error("Resolved workout identity is invalid.");
