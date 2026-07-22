@@ -21,11 +21,12 @@ on:
       - scripts/run-quality-gate.test.mjs
       - scripts/promote-release-schema-compatibility.test.mjs
       - plaivra_aw2a_post_merge_release_closure_implementation_report.md
+      - plaivra_aw2b_command_authority_implementation_report.md
 
 permissions:
   actions: write # dispatch and inspect exact workflow runs/artifacts
   contents: read # checkout exact PR head and ledger
-  issues: write # update the PR conversation evidence comment
+  pull-requests: write # update only the PR conversation evidence comment
 
 concurrency:
   group: exact-release-quality-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
@@ -167,7 +168,7 @@ jobs:
             -f validation_request_id="$VALIDATION_REQUEST_ID" \
             -f preflight_request_id="$PREFLIGHT_REQUEST_ID" \
             -f expected_migration="$EXPECTED_MIGRATION" \
-            -f validation_context=stage1-infrastructure-validation \
+            -f validation_context=stage1-infrastructure-validation
 
           preflight_run_id=""
           expected_title="Release preflight / $PREFLIGHT_REQUEST_ID"
@@ -266,7 +267,8 @@ jobs:
             }' > stage1-validation/exact-release-validation.json
 
           marker='<!-- plaivra-stage1-exact-release-validation -->'
-          body="$(cat <<BODY
+          comment_body_path='stage1-validation/pr-comment.md'
+          cat > "$comment_body_path" <<BODY
           $marker
           ## Stage-1 exact release-quality validation
 
@@ -285,14 +287,42 @@ jobs:
           - Production write: no
           - Deployment: no
           BODY
-          )"
-          comment_id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/comments" --paginate \
-            --jq '.[] | select(.body | contains("'"$marker"'")) | .id' | tail -n 1)"
+
+          jq -n --rawfile body "$comment_body_path" '{body: $body}' \
+            > stage1-validation/pr-comment-payload.json
+          comments_pages="$(mktemp)"
+          gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/comments?per_page=100" \
+            > "$comments_pages"
+          comment_id="$(jq -sr --arg marker "$marker" \
+            '[.[][] | select((.body // "") | contains($marker)) | .id] | last // empty' \
+            "$comments_pages")"
+
           if [[ "$comment_id" =~ ^[0-9]+$ ]]; then
-            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" -f body="$body" >/dev/null
+            comment_response="$(gh api --method PATCH \
+              "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
+              --input stage1-validation/pr-comment-payload.json)"
           else
-            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/comments" -f body="$body" >/dev/null
+            comment_response="$(gh api --method POST \
+              "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/comments" \
+              --input stage1-validation/pr-comment-payload.json)"
           fi
+
+          recorded_comment_id="$(jq -r '.id' <<< "$comment_response")"
+          recorded_comment_url="$(jq -r '.html_url' <<< "$comment_response")"
+          recorded_comment_body="$(jq -r '.body' <<< "$comment_response")"
+          [[ "$recorded_comment_id" =~ ^[0-9]+$ ]]
+          [[ "$recorded_comment_url" == https://github.com/* ]]
+          [[ "$recorded_comment_body" == *"$marker"* ]]
+
+          jq \
+            --arg commentId "$recorded_comment_id" \
+            --arg commentUrl "$recorded_comment_url" \
+            '. + {prComment: {id: $commentId, url: $commentUrl, marker: "<!-- plaivra-stage1-exact-release-validation -->"}}' \
+            stage1-validation/exact-release-validation.json \
+            > stage1-validation/exact-release-validation.tmp.json
+          mv stage1-validation/exact-release-validation.tmp.json \
+            stage1-validation/exact-release-validation.json
 
       - name: Upload Stage-1 exact validation summary
         uses: actions/upload-artifact@v4
