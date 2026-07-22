@@ -35,7 +35,7 @@ insert into public.user_workout_plan_days(id,plan_id,day_number,day_name,weekday
 values('c2c00000-0000-4000-8000-000000000011','c2c00000-0000-4000-8000-000000000010',1,'AW-2C day','Monday',now(),now());
 insert into public.user_workout_plan_exercises
 (id,plan_day_id,exercise_name,sets,reps,rest_seconds,sort_order,order_index,created_at)
-values('c2c00000-0000-4000-8000-000000000012','c2c00000-0000-4000-8000-000000000010','AW-2C exercise',3,'8',90,1,1,now());
+values('c2c00000-0000-4000-8000-000000000012','c2c00000-0000-4000-8000-000000000011','AW-2C exercise',3,'8',90,1,1,now());
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub',:'owner_id',true);
