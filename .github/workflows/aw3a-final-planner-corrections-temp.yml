@@ -1,0 +1,63 @@
+name: AW-3A Final Planner Corrections Temporary
+
+on:
+  push:
+    branches:
+      - feat/active-workout-aw3a-structured-metrics
+
+permissions:
+  contents: write
+
+jobs:
+  apply-corrections:
+    if: contains(github.event.head_commit.message, 'run AW-3A final planner corrections')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-aw3a-structured-metrics
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Assemble and apply corrections
+        shell: bash
+        run: |
+          cat scripts/.aw3a-final-correction-part-* > /tmp/aw3a-final-planner-corrections.mjs
+          node --check /tmp/aw3a-final-planner-corrections.mjs
+          node /tmp/aw3a-final-planner-corrections.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run focused AW-3A tests
+        run: npm run test:active-workout:aw3a
+
+      - name: Run typecheck
+        run: npm run typecheck
+
+      - name: Commit corrections to the same branch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            services/database/workout-set-log-serialization.ts \
+            services/database/workout-sessions-legacy-implementation.ts \
+            services/database/workout-sessions-legacy.ts \
+            services/database/workout-sessions.ts \
+            services/database/workout-rpc-convergence.test.ts \
+            lib/privacy/data-export.ts \
+            lib/privacy/data-export.test.ts \
+            lib/product/active-workout-aw3a-migration.test.ts \
+            package.json \
+            supabase/verification/active-workout-aw3a-final-completion.sql \
+            plaivra_aw3a_final_planner_qaqc_corrections_report.md
+          git commit -m "fix(workouts): close AW-3A final planner blockers"
+          git push origin HEAD:feat/active-workout-aw3a-structured-metrics
