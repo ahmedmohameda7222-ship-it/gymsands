@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getTrainLocaleMetadata, translateTrain } from "@/lib/i18n/train";
 import { buildTrainWeek } from "@/lib/workouts/train-week";
@@ -114,31 +114,45 @@ describe("approved Train Phase 1 semantic contracts", () => {
   });
 
   it("routes every reachable performed-session start through reviewed atomic authorities", () => {
-  const runtimeFiles = [
-    "services/database/workout-sessions.ts",
-    "services/database/workout-sessions-legacy.ts",
-    "services/database/direct-workout-sessions.ts",
-    "services/database/legacy-repository.ts",
-    "components/workouts/workout-session-form.tsx"
-  ];
-  const runtime = runtimeFiles.map(source).join("\n");
-  const sessions = source("services/database/workout-sessions.ts");
-  const legacy = source("services/database/workout-sessions-legacy.ts");
-  const direct = source("services/database/direct-workout-sessions.ts");
-  const barrel = source("services/database/legacy-repository.ts");
-  expect(runtime).not.toMatch(/\.from\(\s*["']workout_sessions["']\s*\)\s*\.insert\s*\(/s);
-  expect(legacy).not.toMatch(/export\s+async\s+function\s+(?:startWorkoutSession|getOrStartWorkoutSession|skipWorkoutDay)\b/);
-  expect(sessions).not.toContain("startLegacyWorkoutSession");
-  expect(sessions).toContain("directWorkoutIdentity(workout, resolvedWorkoutId)");
-  expect(sessions).toContain("startOrResumeDirectWorkoutSession(userId, workout, candidateSessionId)");
-  expect(direct).toContain('supabase.rpc("start_or_resume_direct_workout_session_atomic"');
-  expect(direct).toContain("p_user_id: userId");
-  expect(direct).toContain("p_target_type: stable.targetType");
-  expect(direct).toContain("p_identity: stable.identity");
-  expect(direct).toContain("p_provider: stable.provider");
-  expect(legacy).toContain('supabase!.rpc("start_or_resume_workout_session_atomic"');
-  expect(barrel).toContain("startWorkoutSession");
-});
+    const runtimeFiles = [
+      "services/database/workout-sessions.ts",
+      "services/database/workout-sessions-legacy.ts",
+      "services/database/direct-workout-sessions.ts",
+      "services/database/legacy-repository.ts",
+      "services/database/index.ts",
+      "components/workouts/workout-session-form.tsx",
+    ];
+    const existingRuntimeFiles = runtimeFiles.filter((path) => existsSync(path));
+    const runtime = existingRuntimeFiles.map(source).join("\n");
+    const sessions = source("services/database/workout-sessions.ts");
+    const legacy = source("services/database/workout-sessions-legacy.ts");
+    const direct = source("services/database/direct-workout-sessions.ts");
+    const barrel = source("services/database/legacy-repository.ts");
+
+    expect(existingRuntimeFiles).toEqual(expect.arrayContaining([
+      "services/database/workout-sessions.ts",
+      "services/database/workout-sessions-legacy.ts",
+      "services/database/direct-workout-sessions.ts",
+      "services/database/legacy-repository.ts",
+      "components/workouts/workout-session-form.tsx",
+    ]));
+    expect(runtime).not.toMatch(/\.from\(\s*["']workout_sessions["']\s*\)\s*\.insert\s*\(/s);
+    expect(legacy).not.toMatch(/export\s+async\s+function\s+(?:startWorkoutSession|getOrStartWorkoutSession|skipWorkoutDay)\b/);
+    expect(sessions).not.toContain("startLegacyWorkoutSession");
+    expect(sessions).toContain("directWorkoutIdentity(workout, resolvedWorkoutId)");
+    expect(sessions).toContain("startOrResumeDirectWorkoutSession(userId, workout, candidateSessionId)");
+    expect(direct).toContain('supabase.rpc("start_or_resume_direct_workout_session_atomic"');
+    expect(direct).toContain("p_user_id: userId");
+    expect(direct).toContain("p_target_type: stable.targetType");
+    expect(direct).toContain("p_identity: stable.identity");
+    expect(direct).toContain("p_provider: stable.provider");
+    expect(legacy).toContain('supabase!.rpc("start_or_resume_workout_session_atomic"');
+    expect(barrel).toContain("startWorkoutSession");
+
+    if (existsSync("services/database/index.ts")) {
+      expect(source("services/database/index.ts")).not.toMatch(/(?:startLegacyWorkoutSession|\.from\(\s*["']workout_sessions["']\s*\)\s*\.insert\s*\()/s);
+    }
+  });
 
   it("passes the route-scoped candidate to the owner-validated direct-session authority", () => {
     const direct = source("services/database/direct-workout-sessions.ts");
