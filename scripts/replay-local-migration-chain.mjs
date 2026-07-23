@@ -24,6 +24,8 @@ import {
 
 export const AW2C_VERSION = "20260722070000";
 export const MARKER_AFTER_AW2B_PROMOTION = "20260721224813";
+export const AW3B_HARDENING_VERSION = "20260722224500";
+export const MARKER_AFTER_AW3A_PROMOTION = "20260722161542";
 const AW2C_FILE = `${AW2C_VERSION}_active_workout_aw2c_timeline_events.sql`;
 const LEGACY_HELPER = fileURLToPath(new URL("./replay-local-migration-chain-legacy.mjs", import.meta.url));
 
@@ -145,6 +147,8 @@ async function main() {
     staged = stageAw2cAndFutureMigrations(repositoryRoot, stagedDirectory);
     const aw2c = staged.filter(({ version }) => version === AW2C_VERSION);
     const future = staged.filter(({ version }) => version > AW2C_VERSION);
+    const aw3aReplayContext = future.filter(({ version }) => version < AW3B_HARDENING_VERSION);
+    const aw3aReleasedContext = future.filter(({ version }) => version >= AW3B_HARDENING_VERSION);
     appendFileSync(
       logPath,
       `Staged AW-2C and ${future.length} future migration(s) before legacy replay: ${staged.map(({ filename }) => basename(filename)).join(", ")}\n`,
@@ -170,16 +174,23 @@ async function main() {
     }
 
     // Future repository migrations run after AW-2C. Reproduce the immutable repository
-    // marker context used by their local replay preflights, then restore the latest release
-    // closure marker once the complete repository chain has been proven.
+    // marker context used by the AW-3A and initial AW-3B replay preflights.
     setMarker(repositoryRoot, logPath, MARKER_AFTER_AW2A_PROMOTION);
-    restoreStagedMigrations(future);
+    restoreStagedMigrations(aw3aReplayContext);
     run("supabase", ["migration", "up", "--local", "--include-all"], repositoryRoot, logPath);
-    setMarker(repositoryRoot, logPath, MARKER_AFTER_AW2B_PROMOTION);
+    if (marker(repositoryRoot, logPath) !== MARKER_AFTER_AW2A_PROMOTION) {
+      throw new Error("AW-3A/AW-3B repository-context replay changed its compatibility marker unexpectedly.");
+    }
+
+    // The AW-3B Production hardening migration was authored after AW-3A release
+    // closure and therefore runs under the exact released AW-3A marker.
+    setMarker(repositoryRoot, logPath, MARKER_AFTER_AW3A_PROMOTION);
+    restoreStagedMigrations(aw3aReleasedContext);
+    run("supabase", ["migration", "up", "--local", "--include-all"], repositoryRoot, logPath);
 
     const markerAfter = marker(repositoryRoot, logPath);
-    if (markerAfter !== MARKER_AFTER_AW2B_PROMOTION) {
-      throw new Error(`Expected marker ${MARKER_AFTER_AW2B_PROMOTION} after AW-2C and future replay, received ${markerAfter || "<empty>"}.`);
+    if (markerAfter !== MARKER_AFTER_AW3A_PROMOTION) {
+      throw new Error(`Expected marker ${MARKER_AFTER_AW3A_PROMOTION} after AW-2C and future replay, received ${markerAfter || "<empty>"}.`);
     }
     const migrations = listRepositoryMigrations(repositoryRoot);
     validateMigrationHistory(migrations.map(({ version }) => version), recordedVersions(repositoryRoot, logPath));

@@ -6,6 +6,7 @@ declare
   v_rls boolean;
   v_definition jsonb;
   v_function record;
+  v_marker text;
 begin
   if to_regclass('public.workout_performance_metric_definitions') is null
      or to_regclass('public.exercise_log_metric_values') is null then
@@ -162,8 +163,9 @@ begin
     where source='backfill' and metric_key not in ('repetitions','external_load_kg')
   ) then raise exception 'AW-3A backfill invented an unapproved metric.'; end if;
 
-  if (select migration_version from public.release_schema_compatibility where singleton=true) <> '20260722093115' then
-    raise exception 'AW-3A compatibility marker was promoted unexpectedly.';
+  select migration_version into strict v_marker from public.release_schema_compatibility where singleton=true;
+  if v_marker not in ('20260722161542','20260721224813') then
+    raise exception 'AW-3A compatibility marker differs from the released Production or exact local-replay baseline.';
   end if;
 end
 $aw3a_schema_verification$;

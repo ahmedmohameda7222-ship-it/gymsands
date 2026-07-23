@@ -151,6 +151,19 @@ describe("current-user privacy export", () => {
     expect(calls.find((call) => call.table === "user_fitness_constraints")?.filters).toContainEqual(["user_id", userA]);
     expect(calls.find((call) => call.table === "user_nutrition_preference_profiles")?.filters).toContainEqual(["user_id", userA]);
     expect(calls.find((call) => call.table === "user_daily_checkins")?.filters).toContainEqual(["user_id", userA]);
+    for (const table of [
+      "exercise_log_set_details",
+      "exercise_log_set_segments",
+      "exercise_log_set_segment_metric_values"
+    ]) {
+      expect(calls.find((call) => call.table === table)?.filters).toContainEqual(["user_id", userA]);
+      expect(calls.find((call) => call.table === table)?.range).toEqual([0, 999]);
+    }
+    expect(payload.data.workouts).toMatchObject({
+      set_details: [expect.objectContaining({ user_id: userA })],
+      set_segments: [expect.objectContaining({ user_id: userA })],
+      set_segment_metric_values: [expect.objectContaining({ user_id: userA })]
+    });
 
     const queriedTables = calls.map((call) => call.table);
     expect(queriedTables).not.toContain("mcp_oauth_access_tokens");

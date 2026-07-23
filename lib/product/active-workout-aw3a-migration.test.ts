@@ -8,6 +8,7 @@ const migration = readFileSync(migrationPath, "utf8");
 function filesUnder(root: string): string[] {
   const result: string[] = [];
   for (const entry of readdirSync(root)) {
+    if (["node_modules", ".next", ".git", "graphify-out"].includes(entry)) continue;
     const path = join(root, entry);
     const stat = statSync(path);
     if (stat.isDirectory()) result.push(...filesUnder(path));

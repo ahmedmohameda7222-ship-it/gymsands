@@ -24,7 +24,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import { MobileStickyActions, MobileStickyActionsSpacer } from "@/components/layout/mobile-sticky-actions";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/toaster";
@@ -43,7 +49,7 @@ import {
   updateWorkoutSessionDuration
 } from "@/services/database/workout-sessions";
 import { createExerciseAlternative, getExerciseAlternatives, getProgressionTargets } from "@/services/database/execution-layer";
-import type { ExerciseLog, UserWorkoutPlanExercise, Workout, WorkoutPlanDaySession, WorkoutSession, WorkoutSessionExecutionState, WorkoutSessionSummary } from "@/types";
+import type { ExerciseLog, UserWorkoutPlanExercise, Workout, WorkoutPerformanceMetricSource, WorkoutPlanDaySession, WorkoutSession, WorkoutSessionExecutionState, WorkoutSessionSummary, WorkoutSetSideMode, WorkoutSetTempoAdherence, WorkoutSetType } from "@/types";
 import type { ExerciseAlternativeReason, UserExerciseAlternative, UserProgressionTarget } from "@/types";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
@@ -75,6 +81,12 @@ import {
   requireWorkoutSessionExecutionState,
   type WorkoutSessionExecutionCursorRow
 } from "@/services/database/workout-session-execution";
+import {
+  canUpdateWorkoutSetNote,
+  editableWorkoutSetProvenance,
+  WORKOUT_SET_NOTE_MAX_CODE_POINTS,
+  workoutSetNoteCodePointLength
+} from "@/services/database/workout-set-details";
 
 // These inert markers preserve the frozen Train Phase 1 source contract while
 // user-visible copy is resolved exclusively through the canonical ActiveWorkout namespace.
@@ -92,7 +104,7 @@ const legacyTrainSourceContractMarkers = [
 ] as const;
 void legacyTrainSourceContractMarkers;
 
-type SetType = "normal" | "warmup" | "working" | "failure" | "drop";
+type SetType = WorkoutSetType;
 
 type SetState = {
   setNumber: number;
@@ -102,6 +114,17 @@ type SetState = {
   rpe: string;
   rir: string;
   setType: SetType;
+  sideMode: WorkoutSetSideMode;
+  plannedTempo: string | null;
+  performedTempo: string | null;
+  tempoAdherence: WorkoutSetTempoAdherence;
+  detailSource: WorkoutPerformanceMetricSource;
+  detailSourceProvider: string | null;
+  detailSourceVersion: string | null;
+  hasPersistedLog: boolean;
+  hasSetDetails: boolean;
+  setDetailsWriteRequired: boolean;
+  logWriteRequired: boolean;
   completedAt: string | null;
 };
 
@@ -191,9 +214,114 @@ function makeExerciseState(exercise: UserWorkoutPlanExercise): ExerciseState {
       rpe: "",
       rir: "",
       setType: index === 0 && count > 2 ? "warmup" : "working",
+      sideMode: "none",
+      plannedTempo: null,
+      performedTempo: null,
+      tempoAdherence: "not_recorded",
+      detailSource: "manual",
+      detailSourceProvider: "plaivra",
+      detailSourceVersion: "aw3b-v1",
+      hasPersistedLog: false,
+      hasSetDetails: false,
+      setDetailsWriteRequired: true,
+      logWriteRequired: false,
       completedAt: null
     }))
   };
+}
+
+const detailWriteKeys: Array<keyof SetState> = [
+  "notes",
+  "rpe",
+  "rir",
+  "setType",
+  "sideMode",
+  "plannedTempo",
+  "performedTempo",
+  "tempoAdherence",
+  "detailSource",
+  "detailSourceProvider",
+  "detailSourceVersion"
+];
+
+const logWriteKeys: Array<keyof SetState> = [
+  "reps",
+  "weightKg",
+  "completedAt",
+  ...detailWriteKeys
+];
+
+function patchChangesAnyKey(
+  set: SetState,
+  patch: Partial<SetState>,
+  keys: Array<keyof SetState>
+) {
+  return keys.some((key) =>
+    Object.prototype.hasOwnProperty.call(patch, key) && patch[key] !== set[key]
+  );
+}
+
+function mergeSetPatch(set: SetState, patch: Partial<SetState>): SetState {
+  const detailsChanged = patchChangesAnyKey(set, patch, detailWriteKeys);
+  const provenance = detailsChanged
+    ? editableWorkoutSetProvenance(
+        set.detailSource,
+        set.detailSourceProvider,
+        set.detailSourceVersion
+      )
+    : null;
+  const nextPatch = provenance && set.detailSource === "backfill"
+    ? {
+        ...patch,
+        detailSource: provenance.source,
+        detailSourceProvider: provenance.sourceProvider,
+        detailSourceVersion: provenance.sourceVersion
+      }
+    : patch;
+  const logChanged = patchChangesAnyKey(set, nextPatch, logWriteKeys);
+  return {
+    ...set,
+    ...nextPatch,
+    setDetailsWriteRequired: set.setDetailsWriteRequired || detailsChanged,
+    logWriteRequired: set.logWriteRequired || logChanged
+  };
+}
+
+function setValuesMatch(
+  current: SetState,
+  saved: SetState,
+  keys: Array<keyof SetState>
+) {
+  return keys.every((key) => current[key] === saved[key]);
+}
+
+function isPendingSetWrite(set: SetState) {
+  return set.logWriteRequired && Boolean(set.completedAt || set.hasPersistedLog);
+}
+
+function acknowledgeSetWrites(
+  currentStates: ExerciseState[],
+  savedStates: ExerciseState[] = currentStates
+): ExerciseState[] {
+  return currentStates.map((item, exerciseIndex) => ({
+    ...item,
+    sets: item.sets.map((set, setIndex) => {
+      const saved = savedStates[exerciseIndex]?.sets[setIndex];
+      if (!saved || !isPendingSetWrite(saved)) return set;
+      const detailsMatch = setValuesMatch(set, saved, detailWriteKeys);
+      const logMatch = setValuesMatch(set, saved, logWriteKeys);
+      return {
+        ...set,
+        hasPersistedLog: true,
+        hasSetDetails: set.hasSetDetails || saved.setDetailsWriteRequired,
+        setDetailsWriteRequired:
+          saved.setDetailsWriteRequired && detailsMatch
+            ? false
+            : set.setDetailsWriteRequired,
+        logWriteRequired: logMatch ? false : set.logWriteRequired
+      };
+    })
+  }));
 }
 
 
@@ -240,27 +368,8 @@ function normalizeSetType(value: string): SetType {
   const clean = value.trim().toLowerCase().replace(/\s+/g, "");
   if (clean === "warmup" || clean === "warm-up") return "warmup";
   if (clean === "dropset" || clean === "drop") return "drop";
-  if (clean === "failure") return "failure";
-  if (clean === "normal") return "normal";
+  if (["working", "normal", "failure", "backoff", "amrap", "timed", "other"].includes(clean)) return clean as SetType;
   return "working";
-}
-
-function parseSetNote(raw: string | null | undefined): Pick<SetState, "notes" | "rpe" | "rir" | "setType"> {
-  const segments = (raw ?? "").split("|").map((item) => item.trim()).filter(Boolean);
-  let rpe = "";
-  let rir = "";
-  let setType: SetType = "working";
-  const notes: string[] = [];
-
-  segments.forEach((segment) => {
-    const lower = segment.toLowerCase();
-    if (lower.startsWith("rpe:")) rpe = segment.slice(4).trim();
-    else if (lower.startsWith("rir:")) rir = segment.slice(4).trim();
-    else if (lower.startsWith("type:")) setType = normalizeSetType(segment.slice(5));
-    else notes.push(segment);
-  });
-
-  return { notes: notes.join(" | "), rpe, rir, setType };
 }
 
 function hydrateStates(baseStates: ExerciseState[], logs: ExerciseLog[]) {
@@ -274,16 +383,31 @@ function hydrateStates(baseStates: ExerciseState[], logs: ExerciseLog[]) {
           ((entry.plan_exercise_id && entry.plan_exercise_id === item.exercise.id) || entry.exercise_name === item.exercise.exercise_name)
       );
       if (!log) return set;
-      const parsed = parseSetNote(log.notes);
+      const details = log.set_details;
       return {
         ...set,
         reps: log.reps === null || log.reps === undefined ? set.reps : String(log.reps),
         weightKg: log.weight_kg === null || log.weight_kg === undefined ? "" : String(log.weight_kg),
-        notes: parsed.notes,
-        rpe: parsed.rpe,
-        rir: parsed.rir,
-        setType: parsed.setType,
-        completedAt: log.completed_at ?? log.created_at ?? new Date().toISOString()
+        notes: log.notes ?? "",
+        rpe: details?.rpe === null || details?.rpe === undefined ? "" : String(details.rpe),
+        rir: details?.rir === null || details?.rir === undefined ? "" : String(details.rir),
+        setType: normalizeSetType(details?.set_type ?? log.set_type ?? "working"),
+        sideMode: details?.side_mode ?? set.sideMode,
+        plannedTempo: details?.planned_tempo ?? null,
+        performedTempo: details?.performed_tempo ?? null,
+        tempoAdherence: details?.tempo_adherence ?? set.tempoAdherence,
+        detailSource: details?.source ?? set.detailSource,
+        detailSourceProvider: details
+          ? details.source_provider
+          : set.detailSourceProvider,
+        detailSourceVersion: details
+          ? details.source_version
+          : set.detailSourceVersion,
+        hasPersistedLog: true,
+        hasSetDetails: Boolean(details),
+        setDetailsWriteRequired: false,
+        logWriteRequired: false,
+        completedAt: log.completed_at ?? null
       };
     })
   }));
@@ -294,15 +418,6 @@ function supersetLabel(exercise: UserWorkoutPlanExercise) {
   if (nameMatch?.[1]) return nameMatch[1].toUpperCase();
   const notesMatch = exercise.notes?.match(/(?:superset|group)\s*[:=]\s*([A-Z]\d)|\[([A-Z]\d)\]/i);
   return (notesMatch?.[1] ?? notesMatch?.[2] ?? "").toUpperCase() || null;
-}
-
-function setNote(set: SetState) {
-  const metadata = [
-    set.setType !== "working" ? `type:${set.setType}` : null,
-    set.rpe ? `RPE:${set.rpe}` : null,
-    set.rir ? `RIR:${set.rir}` : null
-  ].filter(Boolean);
-  return [set.notes, ...metadata].filter(Boolean).join(" | ") || null;
 }
 
 function buildSessionSets(states: ExerciseState[]): SessionSetSummary[] {
@@ -464,6 +579,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isStarting, setIsStarting] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
   const [completedSummary, setCompletedSummary] = useState<WorkoutSummary | null>(null);
   const [progressionTargets, setProgressionTargets] = useState<UserProgressionTarget[]>([]);
@@ -485,6 +601,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const executionHydratedRef = useRef(false);
   const executionWriteQueueRef = useRef(createWorkoutSessionExecutionWriteQueue());
   const controllerDeviceIdRef = useRef<string | null>(null);
+  const setDetailsTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const mirrorExecutionState = useCallback((next: WorkoutSessionExecutionState) => {
     executionWriteQueueRef.current.replace(next);
@@ -547,6 +664,9 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   useEffect(() => {
     let active = true;
     executionHydratedRef.current = false;
+    setIsStarting(true);
+    setSession(null);
+    setLoadFailed(false);
     if (!user?.id) {
       setIsStarting(false);
       toast({ title: tr("header.signInRequired"), description: tr("header.signInBeforeSaving") });
@@ -556,8 +676,6 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     getOrStartWorkoutDaySession(user.id, day)
       .then(async (nextSession) => {
         if (!active) return;
-        setSession(nextSession);
-        setSessionNotes(nextSession.notes ?? "");
         controllerDeviceIdRef.current = getActiveWorkoutDeviceId();
 
         const storedStartedAt = readStoredTimestamp(workoutTimerKey);
@@ -624,12 +742,18 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         setActiveExerciseIndex(exerciseIndex);
         setActiveSetIndex(Math.min(Math.max(0, cursor.setIndex), Math.max(0, setCount - 1)));
         mirrorExecutionState(authoritativeState);
+        setSession(nextSession);
+        setSessionNotes(nextSession.notes ?? "");
         setHistory(workoutHistory.filter((item) => item.id !== nextSession.id));
         setProgressionTargets(targets);
         setAlternatives(savedAlternatives.filter((item) => exerciseIds.includes(item.plan_exercise_id)));
         executionHydratedRef.current = true;
       })
       .catch((error) => {
+        if (active) {
+          setSession(null);
+          setLoadFailed(true);
+        }
         toast({ title: tr("header.loadFailedTitle"), description: userSafeError(error, tr("header.loadFailedDescription")) });
       })
       .finally(() => {
@@ -752,14 +876,18 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     warmup: tr("set.warmup"),
     working: tr("set.working"),
     failure: tr("set.failure"),
-    drop: tr("set.drop")
+    drop: tr("set.drop"),
+    backoff: tr("set.backoff"),
+    amrap: tr("set.amrap"),
+    timed: tr("set.timed"),
+    other: tr("set.other")
   };
   const workoutContext = {
     plan: day.plan,
     workout_day: { id: day.id, name: day.day_name, weekday: day.weekday, notes: day.notes },
     planned_exercises: day.exercises,
     active_exercise: activeExercise?.exercise ?? null,
-    logged_sets: buildLogRows(),
+    logged_sets: buildWorkoutContextLogRows(exerciseStates),
     session: session ? { id: session.id, duration_minutes: durationMinutes, notes: sessionNotes } : null,
     previous_performance: activePreviousPerformance,
     possible_prs: previewPrs,
@@ -767,32 +895,86 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     saved_progression_target: activeProgressionTarget
   };
 
-  function buildLogRows(states = exerciseStates) {
+  function buildLogRows(
+    states = exerciseStates,
+    options: { pendingOnly?: boolean } = {}
+  ) {
     return states.flatMap((item, exerciseIndex) =>
       item.sets
-        .filter((set) => set.completedAt)
-        .map((set) => ({
-          planExerciseId: item.exercise.id,
-          exerciseOrder: exerciseIndex + 1,
-          exerciseName: item.exercise.exercise_name,
-          exerciseCategory: item.exercise.category || item.exercise.target_muscle || item.exercise.equipment || "Workout",
-          plannedSets: item.exercise.sets ?? item.sets.length,
-          plannedReps: item.exercise.reps,
-          plannedRestSeconds: item.exercise.rest_seconds,
-          setNumber: set.setNumber,
-          reps: toNumberOrNull(set.reps),
-          weightKg: toNumberOrNull(set.weightKg),
-          notes: setNote(set),
-          completedAt: set.completedAt
-        }))
+        .filter((set) => options.pendingOnly
+          ? isPendingSetWrite(set)
+          : Boolean(set.completedAt))
+        .map((set) => {
+          const includeSetDetails = set.setDetailsWriteRequired;
+          const detailProvenance = editableWorkoutSetProvenance(
+            set.detailSource,
+            set.detailSourceProvider,
+            set.detailSourceVersion
+          );
+          return {
+            planExerciseId: item.exercise.id,
+            exerciseOrder: exerciseIndex + 1,
+            exerciseName: item.exercise.exercise_name,
+            exerciseCategory: item.exercise.category || item.exercise.target_muscle || item.exercise.equipment || "Workout",
+            plannedSets: item.exercise.sets ?? item.sets.length,
+            plannedReps: item.exercise.reps,
+            plannedRestSeconds: item.exercise.rest_seconds,
+            setNumber: set.setNumber,
+            reps: toNumberOrNull(set.reps),
+            weightKg: toNumberOrNull(set.weightKg),
+            notes: set.notes || null,
+            ...(includeSetDetails ? {
+              setDetails: {
+                schemaVersion: 1 as const,
+                setType: set.setType,
+                rpe: toNumberOrNull(set.rpe),
+                rir: toNumberOrNull(set.rir),
+                notes: set.notes || null,
+                sideMode: set.sideMode,
+                plannedTempo: set.plannedTempo,
+                performedTempo: set.performedTempo,
+                tempoAdherence: set.tempoAdherence,
+                source: detailProvenance.source,
+                sourceProvider: detailProvenance.sourceProvider,
+                sourceVersion: detailProvenance.sourceVersion
+              }
+            } : {}),
+            completedAt: set.completedAt
+          };
+        })
     );
+  }
+
+  function buildWorkoutContextLogRows(states = exerciseStates) {
+    return buildLogRows(states).map((row) => {
+      const item = states.find((candidate) => candidate.exercise.id === row.planExerciseId);
+      const set = item?.sets.find((candidate) => candidate.setNumber === row.setNumber);
+      if (!set?.hasSetDetails || row.setDetails) return row;
+      return {
+        ...row,
+        setDetails: {
+          schemaVersion: 1 as const,
+          setType: set.setType,
+          rpe: toNumberOrNull(set.rpe),
+          rir: toNumberOrNull(set.rir),
+          notes: set.notes || null,
+          sideMode: set.sideMode,
+          plannedTempo: set.plannedTempo,
+          performedTempo: set.performedTempo,
+          tempoAdherence: set.tempoAdherence,
+          source: set.detailSource,
+          sourceProvider: set.detailSourceProvider,
+          sourceVersion: set.detailSourceVersion
+        }
+      };
+    });
   }
 
   function updateSet(exerciseIndex: number, setIndex: number, patch: Partial<SetState>) {
     setExerciseStates((current) =>
       current.map((item, itemIndex) =>
         itemIndex === exerciseIndex
-          ? { ...item, sets: item.sets.map((set, currentSetIndex) => (currentSetIndex === setIndex ? { ...set, ...patch } : set)) }
+          ? { ...item, sets: item.sets.map((set, currentSetIndex) => (currentSetIndex === setIndex ? mergeSetPatch(set, patch) : set)) }
           : item
       )
     );
@@ -801,7 +983,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   function statesWithSetPatch(exerciseIndex: number, setIndex: number, patch: Partial<SetState>) {
     return exerciseStates.map((item, itemIndex) =>
       itemIndex === exerciseIndex
-        ? { ...item, sets: item.sets.map((set, currentSetIndex) => (currentSetIndex === setIndex ? { ...set, ...patch } : set)) }
+        ? { ...item, sets: item.sets.map((set, currentSetIndex) => (currentSetIndex === setIndex ? mergeSetPatch(set, patch) : set)) }
         : item
     );
   }
@@ -809,8 +991,9 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
   async function persistProgress(states = exerciseStates) {
     if (!session) return;
-    await saveWorkoutSetLogs(session.id, buildLogRows(states));
+    await saveWorkoutSetLogs(session.id, buildLogRows(states, { pendingOnly: true }));
     await updateWorkoutSessionDuration(session.id, Math.max(1, Math.ceil(elapsedSeconds / 60)));
+    setExerciseStates((current) => acknowledgeSetWrites(current, states));
   }
 
   function startRestTimer(seconds: number) {
@@ -872,7 +1055,15 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
   async function finishSet(exerciseIndex: number, setIndex: number) {
     const targetSet = exerciseStates[exerciseIndex]?.sets[setIndex];
-    if (!targetSet || targetSet.completedAt || isSaving) return;
+    if (
+      !targetSet
+      || targetSet.completedAt
+      || isSaving
+      || isStarting
+      || !session?.id
+      || !user?.id
+      || !executionHydratedRef.current
+    ) return;
 
     const previousStates = exerciseStates;
     const previousActiveExerciseIndex = activeExerciseIndex;
@@ -893,12 +1084,14 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
     setIsSaving(true);
     setExerciseStates(nextStates);
+    let canonicalSetSaved = false;
 
     try {
       await persistCanonicalSetThenExecution({
         saveCanonicalSet: async () => {
           if (!session?.id) throw new Error("The workout session is unavailable.");
-          await saveWorkoutSetLogs(session.id, buildLogRows(nextStates));
+          await saveWorkoutSetLogs(session.id, buildLogRows(nextStates, { pendingOnly: true }));
+          canonicalSetSaved = true;
         },
         persistExecutionState: async () => {
           if (!user?.id || !session?.id || !executionHydratedRef.current) {
@@ -920,6 +1113,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         }
       });
 
+      setExerciseStates((current) => acknowledgeSetWrites(current, nextStates));
       setActiveExerciseIndex(transition.nextExerciseIndex);
       setActiveSetIndex(transition.nextSetIndex);
       if (!transition.hasNextSet || transition.patch.view_state !== "rest") {
@@ -952,7 +1146,9 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       }
     } catch (error) {
       if (error instanceof WorkoutSessionExecutionSyncError) {
-        setExerciseStates(nextStates);
+        setExerciseStates((current) => canonicalSetSaved
+          ? acknowledgeSetWrites(current, nextStates)
+          : current);
         setSetFeedbackVariant("error");
         setSetFeedback(`${tr("set.saved")} ${tr("offline.keepOpenRetry")}`);
         toast({ title: tr("set.saved"), description: userSafeError(error.cause, tr("offline.keepOpenRetry")) });
@@ -1015,8 +1211,9 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   }
 
   function openSessionReview() {
+    if (isStarting || !session?.id || !executionHydratedRef.current) return;
     setFinishOpen(true);
-    if (!user?.id || !session?.id || !executionHydratedRef.current) return;
+    if (!user?.id) return;
     const cursor = executionCursorFor(activeExerciseIndex, activeSetIndex);
     void queueExecutionWrite((currentServerState) => persistWorkoutSessionCursor(user.id, session.id, {
       ...cursor,
@@ -1043,11 +1240,16 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   }
 
   async function completeSession() {
-    if (!session || isSaving) return;
+    if (!session || isSaving || isStarting || !executionHydratedRef.current) return;
     try {
       setIsSaving(true);
       const summary = buildSummary(exerciseStates, history, durationMinutes, sessionNotes, tr, formatters);
-      await completeWorkoutSession(session.id, sessionNotes, durationMinutes, buildLogRows());
+      await completeWorkoutSession(
+        session.id,
+        sessionNotes,
+        durationMinutes,
+        buildLogRows(exerciseStates)
+      );
       if (user?.id) clearActiveWorkoutState(user.id);
       clearStoredValue(workoutTimerKey);
       clearStoredValue(restTimerKey);
@@ -1129,6 +1331,20 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     });
   }
 
+  if (loadFailed) {
+    return (
+      <Card>
+        <CardContent className="space-y-3 pt-5">
+          <p className="font-semibold">{tr("header.loadFailedTitle")}</p>
+          <p className="text-sm text-muted-foreground">{tr("header.loadFailedDescription")}</p>
+          <Button type="button" variant="outline" className="min-h-12" onClick={() => window.location.reload()}>
+            <RefreshCcw className="h-4 w-4" /> {tr("common.retry")}
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!exerciseStates.length) {
     return (
       <Card>
@@ -1195,6 +1411,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
             <button
               key={item.exercise.id}
               type="button"
+              disabled={isSaving || isStarting}
               onClick={() => {
                 setActiveExerciseIndex(index);
                 const firstOpen = item.sets.findIndex((set) => !set.completedAt);
@@ -1238,7 +1455,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                     {supersetLabel(activeExercise.exercise) ? <Badge className="rounded-full text-[10px]">{tr("superset.label", { label: supersetLabel(activeExercise.exercise) ?? "" })}</Badge> : null}
                   </div>
                 </div>
-                <Button type="button" variant="outline" size="icon" className="h-12 w-12 shrink-0 rounded-[16px]" aria-label={tr("accessibility.openSessionMenu")} onClick={() => setActionsOpen(true)}>
+                <Button data-active-set-details-trigger type="button" variant="outline" size="icon" className="h-12 w-12 shrink-0 rounded-[16px]" aria-label={tr("accessibility.openSessionMenu")} onClick={(event) => { setDetailsTriggerRef.current = event.currentTarget; setActionsOpen(true); }} disabled={isSaving || isStarting}>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </div>
@@ -1267,20 +1484,24 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">{tr("set.reps")}</Label>
+                    <Label htmlFor="active-set-reps" className="text-xs uppercase tracking-wider text-muted-foreground">{tr("set.reps")}</Label>
                   <Input
+                    id="active-set-reps"
                     className="h-16 rounded-[18px] text-center text-2xl font-bold tabular-nums sm:h-20 sm:text-3xl" dir="ltr"
                     value={activeSet.reps}
+                    disabled={isSaving || isStarting}
                     onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { reps: event.target.value })}
                     inputMode="numeric"
                     placeholder="0"
                   />
                 </div>
                 <div className="space-y-2">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">{tr("set.weightKg")}</Label>
+                    <Label htmlFor="active-set-weight" className="text-xs uppercase tracking-wider text-muted-foreground">{tr("set.weightKg")}</Label>
                   <Input
+                    id="active-set-weight"
                     className="h-16 rounded-[18px] text-center text-2xl font-bold tabular-nums sm:h-20 sm:text-3xl" dir="ltr"
                     value={activeSet.weightKg}
+                    disabled={isSaving || isStarting}
                     onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { weightKg: event.target.value })}
                     inputMode="decimal"
                     placeholder="0"
@@ -1294,10 +1515,10 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
               </Button>
 
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <Button type="button" variant="outline" className="min-h-12 rounded-[16px]" onClick={() => setActionsOpen(true)}>
+                <Button data-active-set-details-trigger type="button" variant="outline" className="min-h-12 rounded-[16px]" onClick={(event) => { setDetailsTriggerRef.current = event.currentTarget; setActionsOpen(true); }} disabled={isSaving || isStarting}>
                   <MoreHorizontal className="mr-2 h-4 w-4" /> {tr("common.more")}
                 </Button>
-                <Button type="button" variant="outline" className="min-h-12 rounded-[16px]" onClick={openSessionReview}>
+                <Button type="button" variant="outline" className="min-h-12 rounded-[16px]" onClick={openSessionReview} disabled={isSaving || isStarting}>
                   <Save className="mr-2 h-4 w-4" /> {tr("common.finish")}
                 </Button>
               </div>
@@ -1310,11 +1531,11 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
               <p className="mt-3 font-semibold text-success">{tr("exercise.complete")}</p>
               <p className="mt-1 text-sm text-muted-foreground"><bdi>{activeExercise.exercise.exercise_name}</bdi> · {tr("set.setsLogged", { count: activeExercise.sets.length })}</p>
               {nextExercise ? (
-                <Button className="mt-4 min-h-12 rounded-[18px]" onClick={() => { setActiveExerciseIndex(activeExerciseIndex + 1); setActiveSetIndex(0); setTimerSeconds(nextExercise.exercise.rest_seconds ?? 75); }}>
+                <Button className="mt-4 min-h-12 rounded-[18px]" onClick={() => { setActiveExerciseIndex(activeExerciseIndex + 1); setActiveSetIndex(0); setTimerSeconds(nextExercise.exercise.rest_seconds ?? 75); }} disabled={isSaving || isStarting}>
                   {tr("exercise.nextExercise", { name: isolateBidiText(nextExercise.exercise.exercise_name) })}
                 </Button>
               ) : (
-                <Button className="mt-4 min-h-[52px] rounded-[18px]" onClick={openSessionReview}><Save className="me-2 h-4 w-4" /> {tr("common.finish")}</Button>
+                <Button className="mt-4 min-h-[52px] rounded-[18px]" onClick={openSessionReview} disabled={isSaving || isStarting || !session}><Save className="me-2 h-4 w-4" /> {tr("common.finish")}</Button>
               )}
             </MotionCard>
           )}
@@ -1336,6 +1557,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                     <button
                       key={set.setNumber}
                       type="button"
+                      disabled={isSaving || isStarting}
                       onClick={() => setActiveSetIndex(setIndex)}
                       className={`flex h-12 items-center justify-center rounded-[14px] border text-sm font-bold transition-colors ${isCompleted ? "border-success/30 bg-success/10 text-success" : isActive ? "border-primary/50 bg-primary/10 text-primary" : "border-border bg-muted/40 text-muted-foreground"}`}
                       aria-label={isCompleted ? tr("accessibility.completedSet", { number: formatters.integer(set.setNumber) }) : isActive ? tr("accessibility.currentSet", { number: formatters.integer(set.setNumber) }) : tr("accessibility.plannedSet", { number: formatters.integer(set.setNumber) })}
@@ -1389,7 +1611,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                 <InfoStat label={tr("navigation.exercisesCount", { count: exerciseStates.filter((item) => item.sets.some((set) => set.completedAt)).length })} value={formatters.ratio(exerciseStates.filter((item) => item.sets.some((set) => set.completedAt)).length, exerciseStates.length)} valueDirection="ltr" />
                 <InfoStat label={tr("review.personalRecords")} value={formatters.integer(previewPrs.length)} />
               </div>
-              <Button className="min-h-12 w-full rounded-[18px]" onClick={openSessionReview} disabled={!session || isSaving}>
+              <Button className="min-h-12 w-full rounded-[18px]" onClick={openSessionReview} disabled={!session || isSaving || isStarting}>
                 <Save className="mr-2 h-4 w-4" /> {isFinished ? tr("common.finish") : tr("review.partialFinish")}
               </Button>
             </CardContent>
@@ -1398,13 +1620,11 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       </div>
 
       <Dialog open={actionsOpen} onOpenChange={setActionsOpen}>
-          <DialogContent layout="responsive-drawer" className="max-h-[88dvh] overflow-y-auto p-5 lg:inset-y-6 lg:left-auto lg:right-6 lg:h-auto lg:w-[420px] lg:max-w-[420px] lg:translate-x-0 lg:translate-y-0 lg:rounded-[28px] lg:border">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-lg font-semibold">{tr("chatGPT.actionsTitle")}</p>
-                <p className="text-sm text-muted-foreground">{tr("chatGPT.actionsDescription")}</p>
-              </div>
-            </div>
+          <DialogContent data-active-set-details-dialog layout="responsive-drawer" closeLabel={tr("common.close")} onCloseAutoFocus={(event) => { event.preventDefault(); setDetailsTriggerRef.current?.focus(); }} className="max-h-[88dvh] overflow-y-auto p-5 lg:inset-y-6 lg:left-auto lg:right-6 lg:h-auto lg:w-[420px] lg:max-w-[420px] lg:translate-x-0 lg:translate-y-0 lg:rounded-[28px] lg:border">
+            <DialogHeader>
+              <DialogTitle>{tr("chatGPT.actionsTitle")}</DialogTitle>
+              <DialogDescription>{tr("chatGPT.actionsDescription")}</DialogDescription>
+            </DialogHeader>
 
             <div className="space-y-3">
               <ActionBlock icon={<ExternalLink className="h-4 w-4" />} title={tr("details.exerciseGuideVideo")} description={<bdi dir="auto">{currentInstructions}</bdi>}>
@@ -1417,22 +1637,47 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
               <ActionBlock icon={<Sparkles className="h-4 w-4" />} title={tr("details.advancedDetails")} description={tr("details.workoutNotes")}>
                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                  <div className="space-y-1"><Label className="text-xs">RPE</Label><Input className="h-12 tabular-nums" dir="ltr" value={activeSet.rpe} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" /></div>
-                  <div className="space-y-1"><Label className="text-xs">RIR</Label><Input className="h-12 tabular-nums" dir="ltr" value={activeSet.rir} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rir: event.target.value })} inputMode="numeric" placeholder="2" /></div>
+                  <div className="space-y-1"><Label htmlFor="active-set-rpe" className="text-xs">RPE</Label><Input id="active-set-rpe" className="h-12 tabular-nums" dir="ltr" type="number" min="0" max="10" step="0.1" value={activeSet.rpe} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" disabled={isSaving || isStarting} /></div>
+                  <div className="space-y-1"><Label htmlFor="active-set-rir" className="text-xs">RIR</Label><Input id="active-set-rir" className="h-12 tabular-nums" dir="ltr" type="number" min="0" max="20" step="0.1" value={activeSet.rir} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rir: event.target.value })} inputMode="decimal" placeholder="2" disabled={isSaving || isStarting} /></div>
                   <div className="space-y-1">
-                    <Label className="text-xs">{tr("set.type")}</Label>
-                    <select value={activeSet.setType} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-12 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <Label htmlFor="active-set-type" className="text-xs">{tr("set.type")}</Label>
+                    <select id="active-set-type" value={activeSet.setType} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-12 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" disabled={isSaving || isStarting}>
                       <option value="normal">{tr("set.normal")}</option>
                       <option value="warmup">{tr("set.warmup")}</option>
                       <option value="working">{tr("set.working")}</option>
                       <option value="failure">{tr("set.failure")}</option>
                       <option value="drop">{tr("set.drop")}</option>
+                      <option value="backoff">{tr("set.backoff")}</option>
+                      <option value="amrap">{tr("set.amrap")}</option>
+                      <option value="timed">{tr("set.timed")}</option>
+                      <option value="other">{tr("set.other")}</option>
                     </select>
                   </div>
-                  <div className="space-y-1 sm:col-span-3"><Label className="text-xs">{tr("set.note")}</Label><textarea dir="auto" className="min-h-20 w-full resize-y rounded-[14px] border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" value={activeSet.notes} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { notes: event.target.value })} placeholder={tr("common.optional")} /></div>
+                  <div className="space-y-1 sm:col-span-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="active-set-note" className="text-xs">{tr("set.note")}</Label>
+                      <span id="active-set-note-limit" dir="ltr" className="text-[10px] tabular-nums text-muted-foreground">
+                        {formatters.ratio(workoutSetNoteCodePointLength(activeSet.notes), WORKOUT_SET_NOTE_MAX_CODE_POINTS)}
+                      </span>
+                    </div>
+                    <textarea
+                      id="active-set-note"
+                      aria-describedby="active-set-note-limit"
+                      dir="auto"
+                      className="min-h-20 w-full resize-y rounded-[14px] border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      value={activeSet.notes}
+                      disabled={isSaving || isStarting}
+                      onChange={(event) => {
+                        if (canUpdateWorkoutSetNote(activeSet.notes, event.target.value)) {
+                          updateSet(activeExerciseIndex, activeSetIndex, { notes: event.target.value });
+                        }
+                      }}
+                      placeholder={tr("common.optional")}
+                    />
+                  </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button className="min-h-12" variant="outline" onClick={() => applyPreviousSet(activeExerciseIndex, activeSetIndex)} disabled={Boolean(activeSet.completedAt)}>{tr("exercise.previousSet")}</Button>
+                  <Button className="min-h-12" variant="outline" onClick={() => applyPreviousSet(activeExerciseIndex, activeSetIndex)} disabled={Boolean(activeSet.completedAt) || isSaving || isStarting}>{tr("exercise.previousSet")}</Button>
                   <Button className="min-h-12" variant="outline" onClick={() => restartSet(activeExerciseIndex, activeSetIndex)} disabled={!activeSet.completedAt || isSaving}>{isSaving ? tr("common.saving") : legacyReopenSetLabel}</Button>
                 </div>
               </ActionBlock>
@@ -1491,13 +1736,11 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       />
 
       <Dialog open={finishOpen} onOpenChange={handleSessionReviewOpenChange}>
-          <DialogContent layout="responsive-drawer" className="p-5 lg:max-w-lg lg:rounded-[28px]">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-lg font-semibold">{tr("review.finishQuestion")}</p>
-                <p className="text-sm text-muted-foreground">{tr("review.finishDescription")}</p>
-              </div>
-            </div>
+          <DialogContent layout="responsive-drawer" closeLabel={tr("common.close")} className="p-5 lg:max-w-lg lg:rounded-[28px]">
+            <DialogHeader>
+              <DialogTitle>{tr("review.finishQuestion")}</DialogTitle>
+              <DialogDescription>{tr("review.finishDescription")}</DialogDescription>
+            </DialogHeader>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <InfoStat label={tr("review.minutes")} value={formatters.measurement(durationMinutes, "minutes", 0)} />
               <InfoStat label={tr("set.labelPlural")} value={formatters.ratio(completedSets, totalSets)} valueDirection="ltr" />
@@ -1507,12 +1750,12 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
             {previewPrs.length ? <div className="mt-3 rounded-[16px] border border-primary/20 bg-primary/5 p-3 text-sm text-primary"><Trophy className="mr-1 inline h-4 w-4" /> {tr("review.possiblePrs", { count: previewPrs.length })}</div> : null}
             <div className="mt-4 space-y-2">
               <Label htmlFor="finish-notes">{tr("details.workoutNotes")}</Label>
-              <textarea id="finish-notes" dir="auto" className="min-h-24 w-full resize-y rounded-[16px] border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" value={sessionNotes} onChange={(event) => setSessionNotes(event.target.value)} placeholder={tr("review.optionalNote")} />
+              <textarea id="finish-notes" dir="auto" className="min-h-24 w-full resize-y rounded-[16px] border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" value={sessionNotes} onChange={(event) => setSessionNotes(event.target.value)} placeholder={tr("review.optionalNote")} disabled={isSaving || isStarting} />
             </div>
-            <Button className="mt-4 min-h-[52px] w-full rounded-[18px]" onClick={completeSession} disabled={isSaving || !session}>
+            <Button className="mt-4 min-h-[52px] w-full rounded-[18px]" onClick={completeSession} disabled={isSaving || isStarting || !session}>
               <Save className="me-2 h-4 w-4" /> {isSaving ? tr("common.saving") : isFinished ? tr("common.save") : tr("common.save")}
             </Button>
-            <Button className="mt-2 min-h-[52px] w-full rounded-[18px]" variant="outline" onClick={() => handleSessionReviewOpenChange(false)}>{tr("review.continueWorkout")}</Button>
+            <Button className="mt-2 min-h-[52px] w-full rounded-[18px]" variant="outline" onClick={() => handleSessionReviewOpenChange(false)} disabled={isSaving || isStarting}>{tr("review.continueWorkout")}</Button>
           </DialogContent>
       </Dialog>
 
@@ -1535,7 +1778,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                 <p className="font-semibold text-foreground">{tr("completion.title")}</p>
                 <p className="truncate text-xs text-muted-foreground"><span dir="ltr" className="tabular-nums">{formatters.timer(elapsedSeconds)}</span> · {formatters.integer(completedSets)} {tr("set.labelPlural")}</p>
               </div>
-              <Button className="min-h-[52px] flex-1 text-base" onClick={openSessionReview} disabled={isSaving || !session}>
+              <Button className="min-h-[52px] flex-1 text-base" onClick={openSessionReview} disabled={isSaving || isStarting || !session}>
                 <Save className="me-2 h-5 w-5" /> {tr("common.finish")}
               </Button>
             </>
