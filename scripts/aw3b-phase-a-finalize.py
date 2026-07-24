@@ -84,10 +84,19 @@ reconstruct(
     delta_patch,
 )
 
+release_contract_patch = Path("/tmp/aw3b-release-contract.patch")
+reconstruct(
+    ".aw3b-release-contract.patch.gz.b64",
+    "b0b871a7c897dddb926dbd5c922a04d03f8a2ad48e15888b310c0a08196ea446",
+    "5ad40bff48f9d10b30419dfe0fc4dc2ff41bde6df7a6bf038f28ad7329740a6b",
+    release_contract_patch,
+)
+
 for relative in (
     ".aw3b-patch",
     ".aw3b-delta",
     ".aw3b-diagnostics",
+    ".aw3b-release-contract.patch.gz.b64",
     "scripts/aw3b-finalize-runner.py",
     "scripts/aw3b-finalize-runner-v2.py",
     "scripts/aw3b-phase-a-finalize.py",
@@ -105,6 +114,8 @@ for relative in (
 run("git", "checkout", "origin/main", "--", ".github/workflows/phase-a-diff-validation.yml")
 run("git", "apply", "--check", str(delta_patch))
 run("git", "apply", str(delta_patch))
+run("git", "apply", "--check", str(release_contract_patch))
+run("git", "apply", str(release_contract_patch))
 run("git", "diff", "--check")
 run("git", "config", "user.name", "github-actions[bot]")
 run("git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
