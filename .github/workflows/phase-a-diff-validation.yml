@@ -47,7 +47,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(sha256sum .aw3b-exact-preapplication.patch | cut -d' ' -f1)" = "e8a1619bfb952d367bbeae0cd166aa19659220829d832f2e6e861b865b5e6fa2"
+          test "$(git hash-object .aw3b-exact-preapplication.patch)" = "7d3bb74958ef854f4e2d4471ff1b1625b65d1f34"
           git apply --check .aw3b-exact-preapplication.patch
           git apply .aw3b-exact-preapplication.patch
           git diff --check
