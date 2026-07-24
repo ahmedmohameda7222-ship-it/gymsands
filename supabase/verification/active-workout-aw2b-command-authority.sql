@@ -2,6 +2,11 @@
 
 begin;
 
+select migration_version as aw2b_marker_baseline
+from public.release_schema_compatibility
+where singleton
+\gset
+
 create or replace function pg_temp.aw2b_assert(p_condition boolean, p_message text)
 returns void
 language plpgsql
@@ -13,6 +18,8 @@ begin
 end
 $function$;
 
+select pg_temp.aw2b_assert(:'aw2b_marker_baseline' <> '20260722013000',
+  'AW-2B verification encountered invalid repository-only compatibility marker.');
 select pg_temp.aw2b_assert(to_regclass('public.workout_session_execution_commands') is not null,
   'AW-2B command receipt table is missing.');
 select pg_temp.aw2b_assert(
@@ -66,8 +73,8 @@ select pg_temp.aw2b_assert(
   and exists (select 1 from pg_trigger where tgrelid='public.workout_session_muscle_snapshots'::regclass and tgname='workout_session_execution_state_snapshot_initializer' and tgenabled<>'D'),
   'AW-2A lifecycle triggers are not all enabled.');
 select pg_temp.aw2b_assert(
-  (select version='2' and migration_version in ('20260721012814','20260721224813') from public.release_schema_compatibility where singleton),
-  'AW-2B changed the compatibility marker.');
+  (select version='2' and migration_version=:'aw2b_marker_baseline' from public.release_schema_compatibility where singleton),
+  'AW-2B changed the compatibility marker from its transaction baseline.');
 select pg_temp.aw2b_assert(
   not exists (
     select 1 from public.workout_sessions session
