@@ -67,19 +67,26 @@ SELECT
   (SELECT encode(extensions.digest(convert_to(coalesce(string_agg(to_jsonb(t)::text, '' ORDER BY t.workout_session_id, t.sequence_number, t.id), ''), 'UTF8'), 'sha256'), 'hex') FROM public.workout_session_timeline_events t) AS timeline_hash;
 
 CREATE FUNCTION private.aw3b_graph_revision(p_exercise_log_id uuid)
-RETURNS bigint
+RETURNS text
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
-  SELECT floor(extract(epoch FROM greatest(
-    l.updated_at,
-    coalesce((SELECT d.updated_at FROM public.exercise_log_set_details d WHERE d.exercise_log_id = l.id), l.updated_at),
-    coalesce((SELECT max(s.updated_at) FROM public.exercise_log_set_segments s WHERE s.exercise_log_id = l.id), l.updated_at),
-    coalesce((SELECT max(m.updated_at) FROM public.exercise_log_set_segment_metric_values m WHERE m.exercise_log_id = l.id), l.updated_at),
-    coalesce((SELECT max(v.updated_at) FROM public.exercise_log_metric_values v WHERE v.exercise_log_id = l.id), l.updated_at)
-  )) * 1000000)::bigint
+  SELECT pg_catalog.encode(
+    extensions.digest(
+      pg_catalog.convert_to(
+        pg_catalog.jsonb_build_object(
+          'log', pg_catalog.to_jsonb(l),
+          'performanceMetrics', private.workout_performance_metric_snapshot(l.id),
+          'structuredSet', private.workout_set_detail_snapshot(l.id)
+        )::text,
+        'UTF8'
+      ),
+      'sha256'
+    ),
+    'hex'
+  )
   FROM public.exercise_logs l
   WHERE l.id = p_exercise_log_id
 $function$;
@@ -131,7 +138,7 @@ DECLARE
   v_changed_fields text[];
   v_payload jsonb;
   v_result jsonb;
-  v_revision bigint;
+  v_revision text;
   v_completion_revision bigint;
 BEGIN
   IF jsonb_typeof(v_logs) <> 'array' THEN
