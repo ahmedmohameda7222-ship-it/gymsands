@@ -1,0 +1,78 @@
+name: AW3B Apply Runtime Patch
+
+on:
+  push:
+    branches:
+      - feat/active-workout-aw3b-structured-set-details
+    paths:
+      - .github/workflows/aw3b-apply-runtime-patch.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aw3b-runtime-patch
+  cancel-in-progress: false
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-aw3b-structured-set-details
+          fetch-depth: 0
+
+      - name: Reconstruct and verify patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .aw3b-patch/chunk-*.txt > /tmp/aw3b-runtime.patch.gz.b64
+          echo "4fc11028de520541624fdfe5891c84214e8f271a05db6cd5d06611aa30c57bc5  /tmp/aw3b-runtime.patch.gz.b64" | sha256sum -c -
+          base64 --decode /tmp/aw3b-runtime.patch.gz.b64 | gzip --decompress > /tmp/aw3b-runtime.patch
+          echo "d62df09b4b5439d6e1c3987b631838298f9700755364efbe2529f0a671e6df94  /tmp/aw3b-runtime.patch" | sha256sum -c -
+          git apply --check /tmp/aw3b-runtime.patch
+          git apply /tmp/aw3b-runtime.patch
+          rm -rf .aw3b-patch
+          git diff --check
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run AW-3B targeted tests
+        run: npm run test:active-workout:aw3b
+
+      - name: Run i18n tests
+        run: npm run test:i18n
+
+      - name: Run script tests
+        run: npm run test:scripts
+
+      - name: Check migration ledger
+        run: npm run migration:ledger:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Commit validated runtime correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(workouts): complete AW-3B logic hardening"
+          git push origin HEAD:feat/active-workout-aw3b-structured-set-details
