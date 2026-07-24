@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const migrationPath = "supabase/migrations/20260722113000_active_workout_aw3a_structured_metrics.sql";
 const migration = readFileSync(migrationPath, "utf8");
+const verification = readFileSync(
+  "supabase/verification/active-workout-aw3a-structured-metrics.sql",
+  "utf8"
+).replaceAll("\r\n", "\n").toLowerCase();
 
 function filesUnder(root: string): string[] {
   const result: string[] = [];
@@ -76,6 +80,21 @@ describe("AW-3A migration and runtime authority", () => {
     expect(migration).toContain("if v_marker = '20260722093115' then");
     expect(migration).toContain("AW-3A unexpectedly changed or entered with an unreconciled compatibility marker");
     expect(migration).not.toContain("update public.release_schema_compatibility");
+  });
+
+  it("keeps permanent AW-3A verification future-safe and schema-exact", () => {
+    expect(verification).toContain("set local transaction read only");
+    expect(verification).toContain("set_config('plaivra.aw3a_marker_baseline'");
+    expect(verification).toContain("current_setting('plaivra.aw3a_marker_baseline', true)");
+    expect(verification).toContain("v_marker_final is distinct from v_marker_baseline");
+    expect(verification).toContain("aw-3a metric value column contract is incorrect");
+    expect(verification).toContain("'updated_at:timestamptz:no'");
+    expect(verification).not.toContain("metric value column count is incorrect");
+    expect(verification).not.toMatch(/v_marker\s+not\s+in\s*\(/);
+    expect(verification).not.toMatch(
+      /(?:insert\s+into|update|delete\s+from)\s+public\.release_schema_compatibility/
+    );
+    expect(verification).toContain("20260722113000");
   });
 
   it("keeps all reachable set mutations on the one atomic RPC", () => {
