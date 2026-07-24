@@ -83,9 +83,28 @@ jobs:
         if: always()
         run: npm run migration:ledger:check
 
-      - name: Validate TypeScript
+      - name: Capture TypeScript diagnostics
+        id: typecheck
         if: always()
-        run: npm run typecheck
+        continue-on-error: true
+        shell: bash
+        run: npm run typecheck > /tmp/aw3b-typecheck.log 2>&1
+
+      - name: Upload TypeScript diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw3b-typecheck-diagnostics
+          path: /tmp/aw3b-typecheck.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Require TypeScript success
+        if: always()
+        shell: bash
+        run: |
+          cat /tmp/aw3b-typecheck.log
+          test "${{ steps.typecheck.outcome }}" = "success"
 
       - name: Validate ESLint
         if: always()
