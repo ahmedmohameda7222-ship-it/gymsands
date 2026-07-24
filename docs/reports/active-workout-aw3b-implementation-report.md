@@ -48,7 +48,9 @@ The Active Workout surface exposes non-visual persisted/completed/detail state a
 
 Invalid draft RPE/RIR values remain visible and accessible to the user but are excluded from non-persistence workout context serialization. Strict parsing is retained for actual persistence, so the rendered validation flow cannot crash while invalid draft values are being corrected and invalid values still cannot reach the atomic save RPC.
 
-Permanent script tests reject a return to duplicated hard-coded fixture identities or an autosave assertion without a proven hydration precondition.
+The remaining autosave failure was traced to lifecycle ownership under React Strict Mode. The development-only effect cleanup cancelled the coordinator while leaving its ref non-null, so the simulated remount reused a permanently cancelled coordinator and every later flush became a no-op. The permanent repair creates a new coordinator for every mounted lifecycle, cancels only that owned instance, and clears the ref conditionally during cleanup. A mount-cleanup-remount regression test proves that the replacement coordinator remains live.
+
+Permanent script and unit tests reject a return to duplicated hard-coded fixture identities, an autosave assertion without a proven hydration precondition, or reuse of a cancelled coordinator after a Strict Mode remount.
 
 ## Validated repository gates
 
