@@ -1,0 +1,71 @@
+
+> plaivra@1.0.0 test:active-workout:aw3b
+> vitest run --config vitest.unit.config.mjs services/database/workout-set-details.test.ts services/database/workout-set-autosave.test.ts services/database/workout-performance.test.ts services/database/workout-rpc-convergence.test.ts lib/privacy/data-export.test.ts lib/product/active-workout-aw3b-migration.test.ts lib/mcp/workout-performance-source.test.ts && vitest run --config vitest.integration.config.mjs services/database/workout-set-details.integration.test.ts services/database/workout-performance.integration.test.ts
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/runner/work/gymsands/gymsands[39m
+
+ [31m❯[39m services/database/workout-set-details.test.ts [2m([22m[2m11 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 39[2mms[22m[39m
+     [32m✓[39m normalizes deterministic PostgREST relations and rejects malformed cardinality[32m 17[2mms[22m[39m
+     [32m✓[39m normalizes the complete bounded v1 detail contract[32m 1[2mms[22m[39m
+     [32m✓[39m rejects out-of-range or over-precise RPE and RIR[32m 1[2mms[22m[39m
+     [32m✓[39m validates typed RPE and RIR without silent rounding[32m 1[2mms[22m[39m
+     [32m✓[39m bounds Unicode notes, tempo text, side modes, and machine sources[32m 2[2mms[22m[39m
+     [32m✓[39m distinguishes omitted provenance inheritance from explicit null clearing[32m 0[2mms[22m[39m
+     [32m✓[39m reserves backfill provenance and reattributes edited backfilled details[32m 2[2mms[22m[39m
+[31m     [31m×[31m orders and validates drop segments without inventing an ordinary primary segment[39m[32m 9[2mms[22m[39m
+     [32m✓[39m rejects duplicate orders and duplicate or invalid segment metrics[32m 1[2mms[22m[39m
+     [32m✓[39m preserves omitted fields and serializes explicit create, clear, and replacement intent[32m 2[2mms[22m[39m
+     [32m✓[39m rejects conflicting compatibility and structured notes[32m 0[2mms[22m[39m
+ [32m✓[39m lib/privacy/data-export.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 60[2mms[22m[39m
+[90mstderr[2m | services/database/workout-rpc-convergence.test.ts[2m > [22m[2matomic plan-day workout sessions[2m > [22m[2mserializes structured final logs through completion and preserves Personal Record refresh behavior
+[22m[39mPlaivra saved the workout, but personal records could not be refreshed. Error: PR unavailable
+    at [90m/home/runner/work/gymsands/gymsands/[39mservices/database/workout-rpc-convergence.test.ts:262:69
+    at [90mfile:///home/runner/work/gymsands/gymsands/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:302:11
+    at [90mfile:///home/runner/work/gymsands/gymsands/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:1903:26
+    at [90mfile:///home/runner/work/gymsands/gymsands/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel [90m(file:///home/runner/work/gymsands/gymsands/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2323:10[90m)[39m
+    at [90mfile:///home/runner/work/gymsands/gymsands/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///home/runner/work/gymsands/gymsands/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2272:10[90m)[39m
+    at [90mfile:///home/runner/work/gymsands/gymsands/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2955:64
+
+ [32m✓[39m services/database/workout-rpc-convergence.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 270[2mms[22m[39m
+ [32m✓[39m lib/product/active-workout-aw3b-migration.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 48[2mms[22m[39m
+ [32m✓[39m services/database/workout-performance.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m services/database/workout-set-autosave.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m lib/mcp/workout-performance-source.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 8[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m services/database/workout-set-details.test.ts[2m > [22mAW-3B structured workout set details[2m > [22morders and validates drop segments without inventing an ordinary primary segment
+[31m[1mAssertionError[22m: expected [ 'external_load_kg', 'repetitions' ] to deeply equal [ 'repetitions', 'external_load_kg' ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  [[22m
+[32m-   "repetitions",[39m
+[2m    "external_load_kg",[22m
+[31m+   "repetitions",[39m
+[2m  ][22m
+
+[36m [2m❯[22m services/database/workout-set-details.test.ts:[2m372:7[22m[39m
+    [90m370|[39m     [34mexpect[39m(
+    [90m371|[39m       segments[1]?.performance_metrics.map((metric) => metric.metric_k…
+    [90m372|[39m     )[33m.[39m[34mtoEqual[39m([[32m"repetitions"[39m[33m,[39m [32m"external_load_kg"[39m])[33m;[39m
+    [90m   |[39m       [31m^[39m
+    [90m373|[39m     [34mexpect[39m([34mworkoutSetSegmentsInputToSql[39m([]))[33m.[39m[34mtoEqual[39m([])[33m;[39m
+    [90m374|[39m   })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m6 passed[39m[22m[90m (7)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m43 passed[39m[22m[90m (44)[39m
+[2m   Start at [22m 01:06:05
+[2m   Duration [22m 983ms[2m (transform 676ms, setup 0ms, import 665ms, tests 445ms, environment 1ms)[22m
+
+
+::error file=/home/runner/work/gymsands/gymsands/services/database/workout-set-details.test.ts,title=services/database/workout-set-details.test.ts > AW-3B structured workout set details > orders and validates drop segments without inventing an ordinary primary segment,line=372,column=7::AssertionError: expected [ 'external_load_kg', 'repetitions' ] to deeply equal [ 'repetitions', 'external_load_kg' ]%0A%0A- Expected%0A+ Received%0A%0A  [%0A-   "repetitions",%0A    "external_load_kg",%0A+   "repetitions",%0A  ]%0A%0A ❯ services/database/workout-set-details.test.ts:372:7%0A%0A
