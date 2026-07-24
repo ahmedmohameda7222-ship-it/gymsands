@@ -138,6 +138,79 @@ replace_exact(
     "          return 1 as unknown as ReturnType<typeof setTimeout>;",
 )
 
+component = ROOT / "components/workouts/workout-day-focus-session.tsx"
+replace_exact(
+    component,
+    '''  autosaveAdapterRef.current = {
+    getSnapshot: () => exerciseStatesRef.current,
+    hasPendingWrites: hasPendingValidSetWrites,
+    persistSnapshot: async (states) => {
+      if (!session) return;
+      const rows = buildLogRows(states, { pendingOnly: true, validOnly: true });
+      if (!rows.length) return;
+      await saveWorkoutSetLogs(session.id, rows);
+      await updateWorkoutSessionDuration(
+        session.id,
+        Math.max(1, Math.ceil(elapsedSeconds / 60))
+      );
+    },
+    acknowledgeSnapshot: (savedStates) => {
+      setExerciseStates((current) => {
+        const next = acknowledgeSetWrites(current, savedStates);
+        exerciseStatesRef.current = next;
+        return next;
+      });
+    },
+    onFailure: (error) => {
+      console.warn("Plaivra will retry the pending completed-set details.", error);
+    }
+  };
+
+  if (!autosaveCoordinatorRef.current) {
+    autosaveCoordinatorRef.current = createWorkoutSetAutosaveCoordinator(() => {
+      const adapter = autosaveAdapterRef.current;
+      if (!adapter) throw new Error("Workout set autosave is unavailable.");
+      return adapter;
+    });
+  }
+''',
+    '''  useEffect(() => {
+    autosaveAdapterRef.current = {
+      getSnapshot: () => exerciseStatesRef.current,
+      hasPendingWrites: hasPendingValidSetWrites,
+      persistSnapshot: async (states) => {
+        if (!session) return;
+        const rows = buildLogRows(states, { pendingOnly: true, validOnly: true });
+        if (!rows.length) return;
+        await saveWorkoutSetLogs(session.id, rows);
+        await updateWorkoutSessionDuration(
+          session.id,
+          Math.max(1, Math.ceil(elapsedSeconds / 60))
+        );
+      },
+      acknowledgeSnapshot: (savedStates) => {
+        setExerciseStates((current) => {
+          const next = acknowledgeSetWrites(current, savedStates);
+          exerciseStatesRef.current = next;
+          return next;
+        });
+      },
+      onFailure: (error) => {
+        console.warn("Plaivra will retry the pending completed-set details.", error);
+      }
+    };
+
+    if (autosaveCoordinatorRef.current == null) {
+      autosaveCoordinatorRef.current = createWorkoutSetAutosaveCoordinator(() => {
+        const adapter = autosaveAdapterRef.current;
+        if (!adapter) throw new Error("Workout set autosave is unavailable.");
+        return adapter;
+      });
+    }
+  });
+''',
+)
+
 run("git", "diff", "--check")
 run("git", "config", "user.name", "github-actions[bot]")
 run("git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
