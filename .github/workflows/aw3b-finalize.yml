@@ -49,11 +49,11 @@ jobs:
           version: 2.109.1
           github-token: ${{ github.token }}
 
-      - name: Apply finalization patch
+      - name: Apply reconciled finalization patch
         run: |
           set -euo pipefail
-          python -m py_compile scripts/aw3b-finalize-runner.py
-          python scripts/aw3b-finalize-runner.py
+          python -m py_compile scripts/aw3b-finalize-runner-v2.py scripts/aw3b-finalize-runner.py
+          python scripts/aw3b-finalize-runner-v2.py
           git diff --check
 
       - name: Install dependencies
@@ -64,6 +64,7 @@ jobs:
           set -euo pipefail
           npm run test:active-workout:aw3b
           npm run test:i18n
+          npm run test:scripts
           npm run test:telemetry
           npm run typecheck
           npm run lint
@@ -82,10 +83,14 @@ jobs:
           PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3b-final-hardening.sql
           PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql
 
-      - name: Commit validated implementation and remove runner
+      - name: Commit validated implementation and remove temporary runners
         run: |
           set -euo pipefail
-          rm -f scripts/aw3b-finalize-runner.py .github/workflows/aw3b-finalize.yml
+          rm -f \
+            scripts/aw3b-finalize-runner.py \
+            scripts/aw3b-finalize-runner-v2.py \
+            .github/workflows/aw3b-finalize.yml \
+            .github/workflows/aw3b-workspace-export.yml
           git add -A
           git diff --cached --check
           git config user.name "github-actions[bot]"
