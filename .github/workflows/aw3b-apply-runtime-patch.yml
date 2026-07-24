@@ -6,6 +6,7 @@ on:
       - feat/active-workout-aw3b-structured-set-details
     paths:
       - .github/workflows/aw3b-apply-runtime-patch.yml
+      - .aw3b-final-patch/**
   workflow_dispatch:
 
 permissions:
@@ -16,136 +17,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  apply-and-validate:
+  apply-final-tree:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    env:
-      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
-      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
-      NEXT_PUBLIC_USE_MOCK_AUTH: "true"
-      PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
-      PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
-      PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
-      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
-      PLAIVRA_RELEASE_ENVIRONMENT: ci
-      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
-      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-
+    timeout-minutes: 15
     steps:
-      - name: Checkout exact branch head
+      - name: Checkout branch
         uses: actions/checkout@v4
         with:
           ref: feat/active-workout-aw3b-structured-set-details
           fetch-depth: 0
 
-      - name: Reconstruct final AW-3B correction tree
+      - name: Apply exact final patch and push
         shell: bash
         run: |
           set -euo pipefail
-          cat .aw3b-patch/chunk-*.txt > /tmp/aw3b-runtime.patch.gz.b64
-          echo "4fc11028de520541624fdfe5891c84214e8f271a05db6cd5d06611aa30c57bc5  /tmp/aw3b-runtime.patch.gz.b64" | sha256sum -c -
-          base64 --decode /tmp/aw3b-runtime.patch.gz.b64 | gzip --decompress > /tmp/aw3b-runtime.patch
-          echo "d62df09b4b5439d6e1c3987b631838298f9700755364efbe2529f0a671e6df94  /tmp/aw3b-runtime.patch" | sha256sum -c -
-          git apply --check /tmp/aw3b-runtime.patch
-          git apply /tmp/aw3b-runtime.patch
-
-          python - <<'PY'
-          from __future__ import annotations
-
-          import hashlib
-          import json
-          from pathlib import Path
-
-          root = Path.cwd()
-          candidate_path = root / "supabase/migrations/20260724003000_active_workout_aw3b_final_logic_hardening.sql"
-          correction_path = root / "supabase/migrations/20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql"
-          candidate = candidate_path.read_text(encoding="utf-8")
-
-          baseline_start = candidate.index("CREATE TEMPORARY TABLE aw3b_final_baseline")
-          append_start = candidate.index("CREATE OR REPLACE FUNCTION private.append_workout_session_timeline_event")
-          graph_start = candidate.index("CREATE FUNCTION private.aw3b_graph_revision")
-          wrapper_start = candidate.index("CREATE OR REPLACE FUNCTION public.upsert_workout_set_logs_atomic")
-          post_start = candidate.index("DO $aw3b_final_postflight$")
-
-          baseline = candidate[baseline_start:append_start].replace(
-              "aw3b_final_baseline", "aw3b_post_apply_baseline"
-          )
-          graph = candidate[graph_start:wrapper_start].replace(
-              "REVOKE ALL ON FUNCTION private.aw3b_safe_structured_summary(uuid) FROM public, anon, authenticated, service_role;\n",
-              "",
-          )
-          wrapper = candidate[wrapper_start:post_start].replace(
-              "private.aw3b_safe_structured_summary",
-              "private.aw3b_timeline_structured_summary",
-          )
-          old_deferral = (
-              "  PERFORM set_config('plaivra.aw3b_defer_set_timeline', 'on', true);\n"
-              "  v_result := private.aw3b_structured_upsert_workout_set_logs_atomic(p_user_id, p_session_id, v_canonical_logs);\n"
-              "  PERFORM set_config('plaivra.aw3b_defer_set_timeline', 'off', true);\n"
-          )
-          safe_deferral = (
-              "  BEGIN\n"
-              "    PERFORM set_config('plaivra.aw3b_defer_set_timeline', 'on', true);\n"
-              "    v_result := private.aw3b_structured_upsert_workout_set_logs_atomic(p_user_id, p_session_id, v_canonical_logs);\n"
-              "    PERFORM set_config('plaivra.aw3b_defer_set_timeline', 'off', true);\n"
-              "  EXCEPTION WHEN OTHERS THEN\n"
-              "    PERFORM set_config('plaivra.aw3b_defer_set_timeline', 'off', true);\n"
-              "    RAISE;\n"
-              "  END;\n"
-          )
-          if old_deferral in wrapper:
-              wrapper = wrapper.replace(old_deferral, safe_deferral, 1)
-          postflight = candidate[post_start:].replace("aw3b_final", "aw3b_post_apply")
-          postflight = postflight.replace(
-              "private.aw3b_safe_structured_summary",
-              "private.aw3b_timeline_structured_summary",
-          )
-          postflight = postflight.replace(
-              "     OR v_definition NOT LIKE '%private.aw3b_graph_revision%'",
-              "     OR v_definition NOT LIKE '%private.aw3b_graph_revision%'\n"
-              "     OR v_definition NOT LIKE '%v_existing_details%'\n"
-              "     OR v_definition NOT LIKE '%v_existing_segment%'\n"
-              "     OR v_definition NOT LIKE '%v_existing_metric%'\n"
-              "     OR to_regprocedure('private.aw3b_canonicalize_actor_set_payload(jsonb,text)') IS NOT NULL",
-              1,
-          )
-
-          preflight = """-- AW-3B post-apply logic corrections.
-          -- Forward-only correction after the immutable applied final-hardening migration.
-          -- Preserves every user row and keeps the released AW-3A compatibility marker unchanged.
-
-          DO $aw3b_post_apply_preflight$
-          DECLARE
-            v_marker text;
-            v_definition text;
-          BEGIN
-            SELECT migration_version INTO STRICT v_marker
-            FROM public.release_schema_compatibility
-            WHERE singleton = true;
-            IF v_marker <> '20260722161542' THEN
-              RAISE EXCEPTION 'AW-3B post-apply correction requires released AW-3A marker 20260722161542; found %.', v_marker
-                USING ERRCODE = '55000';
-            END IF;
-
-            IF NOT EXISTS (
-              SELECT 1 FROM supabase_migrations.schema_migrations
-              WHERE name = 'active_workout_aw3b_final_logic_hardening'
-                AND version IN ('20260724013000','20260724002022')
-            ) THEN
-              RAISE EXCEPTION 'AW-3B post-apply correction requires the immutable applied final-hardening migration.'
-                USING ERRCODE = '55000';
-            END IF;
-
-            IF to_regprocedure('private.aw3b_canonicalize_actor_set_payload(jsonb,text)') IS NULL
-               OR to_regprocedure('private.aw3b_timeline_structured_summary(uuid)') IS NULL
-               OR to_regprocedure('private.aw3b_structured_upsert_workout_set_logs_atomic(uuid,uuid,jsonb)') IS NULL
-               OR to_regprocedure('private.workout_set_detail_snapshot(uuid)') IS NULL
-               OR to_regprocedure('private.workout_performance_metric_snapshot(uuid)') IS NULL
-               OR to_regprocedure('public.upsert_workout_set_logs_atomic(uuid,uuid,jsonb)') IS NULL
-               OR to_regprocedure('public.complete_workout_session_atomic(uuid,uuid,jsonb,integer,text)') IS NULL THEN
-              RAISE EXCEPTION 'AW-3B post-apply correction prerequisites are incomplete.' USING ERRCODE = '55000';
-            END IF;
-            IF to_regprocedure('private.aw3b_graph_revision(uuid)') IS NOT NULL THEN
-              RAISE E¶»§q«^
+          cat .aw3b-final-patch/chunk-*.txt > /tmp/aw3b-final.patch.gz.b64
+          echo "d804a0cdc87560d9072b3895f7d0ff02040059aa78c94eed32342fd613c0066e  /tmp/aw3b-final.patch.gz.b64" | sha256sum -c -
+          base64 --decode /tmp/aw3b-final.patch.gz.b64 > /tmp/aw3b-final.patch.gz
+          echo "bb73931f1ffbacbee235b5b3404cbbf52ad4a1a8556bb740137ecb96a375169e  /tmp/aw3b-final.patch.gz" | sha256sum -c -
+          gzip --decompress --stdout /tmp/aw3b-final.patch.gz > /tmp/aw3b-final.patch
+          echo "2702693ec15f00777423207a10e1189a3209e130c49dfd6190d7938b0a44a519  /tmp/aw3b-final.patch" | sha256sum -c -
+          git apply --check --exclude=.github/workflows/aw3b-apply-runtime-patch.yml /tmp/aw3b-final.patch
+          git apply --exclude=.github/workflows/aw3b-apply-runtime-patch.yml /tmp/aw3b-final.patch
+          rm -rf .aw3b-final-patch .github/workflows/aw3b-apply-runtime-patch.yml
+          git add -A
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(workouts): complete AW-3B logic hardening"
+          git status --short
+          test -z "$(git status --porcelain)"
+          git push origin HEAD:feat/active-workout-aw3b-structured-set-details
