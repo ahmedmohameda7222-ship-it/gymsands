@@ -55,7 +55,25 @@ jobs:
         run: npm ci
 
       - name: Run AW-3B targeted tests
-        run: npm run test:active-workout:aw3b
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:active-workout:aw3b 2>&1 | tee /tmp/aw3b-targeted.log
+
+      - name: Commit bounded targeted-test failure evidence
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          tail -n 240 /tmp/aw3b-targeted.log > /tmp/aw3b-targeted-tail.log
+          git reset --hard HEAD
+          mkdir -p .aw3b-diagnostics
+          cp /tmp/aw3b-targeted-tail.log .aw3b-diagnostics/targeted-failure.log
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .aw3b-diagnostics/targeted-failure.log
+          git commit -m "chore(ci): record AW-3B targeted failure"
+          git push origin HEAD:feat/active-workout-aw3b-structured-set-details
 
       - name: Run i18n tests
         run: npm run test:i18n
@@ -76,6 +94,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf .aw3b-diagnostics
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
