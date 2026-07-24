@@ -34,11 +34,12 @@ describe("workout session timeline service contract", () => {
   });
 
   it("exports meaningful timeline data without internal correlation fields", () => {
-    const select = privacyExport.match(/\.select\("([^"]+)"\)/)?.[1] ?? "";
-    expect(select).toContain("workout_session_id");
-    expect(select).toContain("sequence_number");
-    expect(select).toContain("payload");
-    expect(select).not.toContain("command_id");
-    expect(select).not.toContain("idempotency_key");
+    const selection = privacyExport.match(/const timelineSelection = "([^"]+)"/)?.[1] ?? "";
+    expect(privacyExport).toContain(".select(timelineSelection)");
+    expect(selection).toContain("workout_session_id");
+    expect(selection).toContain("sequence_number");
+    expect(selection).toContain("payload");
+    expect(selection).not.toContain("command_id");
+    expect(selection).not.toContain("idempotency_key");
   });
 });
