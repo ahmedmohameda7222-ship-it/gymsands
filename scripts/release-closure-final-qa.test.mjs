@@ -112,8 +112,12 @@ test("generic workflow and evidence code contain no pinned AW-2A migration", () 
     assert.equal(source(path).includes("20260721012814"), false, `${path} must derive the target`);
   }
   const quality = source(".github/workflows/quality.yml");
-  assert.match(quality, /deriveReleaseTarget/);
+  assert.match(quality, /quality-ledger-target\.mjs/);
   assert.match(quality, /validation_request_id/);
+  const qualityTarget = source("scripts/quality-ledger-target.mjs");
+  assert.match(qualityTarget, /deriveMigrationLedgerState/);
+  assert.match(qualityTarget, /expectedMigrationVersion/);
+  assert.match(source("scripts/release-identity-contract.mjs"), /deriveReleaseTarget/);
   const preflight = source(".github/workflows/release-preflight.yml");
   assert.match(preflight, /type: choice[\s\S]*stage1-infrastructure-validation[\s\S]*production-marker-promotion-authorization/);
   assert.match(preflight, /comparison_base/);
@@ -129,6 +133,10 @@ test("same-head run selection and artifact-only evidence permissions are exact",
   assert.match(workflow, /Download and independently verify preflight evidence/);
   assert.match(workflow, /plaivra_aw2b_command_authority_implementation_report\.md/);
   assert.match(workflow, /stage1-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /pre-application-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /if: steps\.identity\.outputs\.release_ready != 'true'/);
+  assert.match(workflow, /if: steps\.identity\.outputs\.release_ready == 'true'/);
+  assert.match(workflow, /releasePreflightDispatched: false/);
   assert.match(workflow, /schemaVersion: 3/);
   assert.match(workflow, /canonicalArtifact:/);
   assert.match(workflow, /preflightArtifact:/);

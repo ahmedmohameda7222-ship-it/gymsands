@@ -232,6 +232,9 @@ test("exact release validation binds Quality and preflight to artifact-only evid
   assert.match(workflow, /expected_migration="\$EXPECTED_MIGRATION"/);
   assert.match(workflow, /validation_context=stage1-infrastructure-validation/);
   assert.match(workflow, /stage1-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /pre-application-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /releasePreflightDispatched: false/);
+  assert.match(workflow, /if: steps\.identity\.outputs\.release_ready == 'true'/);
   assert.match(workflow, /schemaVersion: 3/);
   assert.match(workflow, /preflightArtifact:/);
   assert.match(workflow, /exactValidation:/);
