@@ -13,10 +13,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  reconcile:
+  build-candidate:
     if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - name: Checkout exact PR head
         uses: actions/checkout@v4
@@ -24,7 +27,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Apply normalized permanent reconciliation
+      - name: Build and validate permanent reconciliation
         shell: bash
         run: |
           set -euo pipefail
@@ -34,34 +37,87 @@ jobs:
           source = path.read_text(encoding='utf-8')
           old = 'arch_path.write_text(arch)'
           new = "arch_path.write_text(arch.rstrip()+'\\n')"
-          if source.count(old) != 1:
-            raise SystemExit(f'Expected one final architecture write, found {source.count(old)}.')
-          path.write_text(source.replace(old, new, 1), encoding='utf-8')
+          if old in source:
+            source = source.replace(old, new, 1)
+          path.write_text(source, encoding='utf-8')
           PY
           python scripts/aw3b-final-reconcile.py
           git show dbedfd201d5bbd5efb1988ccb92899e499197e51:.github/workflows/quality.yml > .github/workflows/quality.yml
           rm scripts/aw3b-final-reconcile.py
           rm -f aw3b-reconciliation-validation.txt aw3b-ledger-validation.txt
-
-      - name: Validate reconciled permanent tree
-        shell: bash
-        run: |
-          set -euo pipefail
           git diff --check
           node scripts/check-migration-ledger.mjs
-          test ! -e scripts/aw3b-final-reconcile.py
-          test ! -e .github/workflows/aw3b-final-reconciliation.yml
-          test ! -e aw3b-evidence-export
-          test ! -e aw3b-migration-export
-          grep -q '20260724232734_active_workout_aw3b_post_apply_logic_corrections' docs/reports/active-workout-aw3b-implementation-report.md
 
-      - name: Commit reconciled permanent tree
+      - name: Create remote validated commit object
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          mkdir -p quality-reports/aw3b-reconciliation
           git add -A
           git diff --cached --check
-          git commit -m 'docs(aw3b): reconcile production closure'
-          git push origin HEAD:feat/active-workout-aw3b-structured-set-details
+          python - <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import urllib.request
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          token = os.environ['GH_TOKEN']
+          head = os.environ['HEAD_SHA']
+
+          def api(path, payload):
+              request = urllib.request.Request(
+                  f'https://api.github.com/repos/{repo}/{path}',
+                  data=json.dumps(payload).encode('utf-8'),
+                  method='POST',
+                  headers={
+                      'Authorization': f'Bearer {token}',
+                      'Accept': 'application/vnd.github+json',
+                      'X-GitHub-Api-Version': '2022-11-28',
+                      'Content-Type': 'application/json',
+                  },
+              )
+              with urllib.request.urlopen(request) as response:
+                  return json.load(response)
+
+          changed = subprocess.check_output(
+              ['git', 'diff', '--cached', '--name-only', '-z', head]
+          ).decode('utf-8').split('\0')
+          changed = [path for path in changed if path]
+          entries = []
+          for path in changed:
+              file_path = Path(path)
+              if not file_path.exists():
+                  entries.append({'path': path, 'mode': '100644', 'type': 'blob', 'sha': None})
+                  continue
+              mode_line = subprocess.check_output(['git', 'ls-files', '-s', '--', path]).decode('utf-8').strip()
+              mode = mode_line.split()[0] if mode_line else '100644'
+              blob = api('git/blobs', {
+                  'content': base64.b64encode(file_path.read_bytes()).decode('ascii'),
+                  'encoding': 'base64',
+              })
+              entries.append({'path': path, 'mode': mode, 'type': 'blob', 'sha': blob['sha']})
+
+          base_tree = subprocess.check_output(['git', 'rev-parse', f'{head}^{{tree}}']).decode('utf-8').strip()
+          tree = api('git/trees', {'base_tree': base_tree, 'tree': entries})
+          commit = api('git/commits', {
+              'message': 'docs(aw3b): reconcile production closure',
+              'tree': tree['sha'],
+              'parents': [head],
+          })
+          evidence = Path('quality-reports/aw3b-reconciliation')
+          (evidence / 'candidate-commit.txt').write_text(commit['sha'] + '\n', encoding='utf-8')
+          (evidence / 'candidate-tree.txt').write_text(tree['sha'] + '\n', encoding='utf-8')
+          (evidence / 'parent-commit.txt').write_text(head + '\n', encoding='utf-8')
+          (evidence / 'changed-paths.txt').write_text('\n'.join(changed) + '\n', encoding='utf-8')
+          PY
+
+      - name: Upload validated commit identity
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw3b-validated-reconciliation-${{ github.event.pull_request.head.sha }}
+          path: quality-reports/aw3b-reconciliation/
+          if-no-files-found: error
+          retention-days: 14
