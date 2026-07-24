@@ -1,0 +1,94 @@
+name: Temporary AW-3B Finalization
+
+on:
+  push:
+    branches:
+      - feat/active-workout-aw3b-structured-set-details
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-aw3b-finalization
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_USE_MOCK_AUTH: "true"
+      PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
+      PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
+      PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
+      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
+      PLAIVRA_RELEASE_ENVIRONMENT: ci
+      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
+      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+
+    steps:
+      - name: Checkout implementation branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-aw3b-structured-set-details
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Apply finalization patch
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/aw3b-finalize-runner.py
+          python scripts/aw3b-finalize-runner.py
+          git diff --check
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run focused behavioral validation
+        run: |
+          set -euo pipefail
+          npm run test:active-workout:aw3b
+          npm run test:i18n
+          npm run test:telemetry
+          npm run typecheck
+          npm run lint
+
+      - name: Replay full migration chain
+        run: node scripts/replay-local-migration-chain.mjs --log quality-reports/database-validation.log --prove-future-order
+
+      - name: Lint local database
+        run: supabase db lint --local --schema public --level error --fail-on error
+
+      - name: Execute AW-3B SQL verification
+        run: |
+          set -euo pipefail
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3b-structured-set-details.sql
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3b-integration.sql
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3b-final-hardening.sql
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql
+
+      - name: Commit validated implementation and remove runner
+        run: |
+          set -euo pipefail
+          rm -f scripts/aw3b-finalize-runner.py .github/workflows/aw3b-finalize.yml
+          git add -A
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(workouts): complete AW-3B logic hardening"
+          git push origin HEAD:feat/active-workout-aw3b-structured-set-details
