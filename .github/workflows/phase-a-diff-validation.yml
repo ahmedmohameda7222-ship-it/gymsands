@@ -76,13 +76,37 @@ jobs:
           git checkout origin/main -- .github/workflows/phase-a-diff-validation.yml
           git diff --check
 
-      - name: Commit permanent correction without temporary residue
+      - name: Publish permanent correction
+        id: publish
+        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
+          set -o pipefail
+          exec > >(tee /tmp/aw3b-quality-publish.log) 2>&1
+          set -euxo pipefail
+          branch=feat/active-workout-aw3b-structured-set-details
+          git fetch origin "$branch"
+          test "$(git rev-parse origin/$branch)" = "${{ github.event.pull_request.head.sha }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git diff --cached --check
+          git status --short
+          git diff --cached --stat
           git commit -m "fix(ci): validate pending AW-3B migration in Quality"
-          git push origin HEAD:feat/active-workout-aw3b-structured-set-details
+          git show --stat --oneline --decorate HEAD
+          git push --verbose origin HEAD:"$branch"
+
+      - name: Upload publication diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw3b-quality-publish-${{ github.event.pull_request.head.sha }}
+          path: /tmp/aw3b-quality-publish.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Require successful publication
+        if: always()
+        shell: bash
+        run: test "${{ steps.publish.outcome }}" = "success"
