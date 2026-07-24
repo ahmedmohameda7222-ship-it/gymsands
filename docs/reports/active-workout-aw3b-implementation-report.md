@@ -8,6 +8,12 @@ AW-3B completes structured workout-set details without expanding into AW-3C. The
 
 The branch contains the permanent AW-3B implementation. Temporary patch chunks, diagnostic logs, finalizer scripts, temporary workflows, workspace-export files, and the superseded `20260724003000` migration candidate have been removed. The permanent Phase A workflow is restored from `main`.
 
+The permanent Strict Mode-safe autosave lifecycle implementation is present in repository history at clean source head:
+
+```text
+43cf6f2088e975fb7c4cccf6939cf4ae64ad60bb
+```
+
 The committed forward-only correction is:
 
 ```text
