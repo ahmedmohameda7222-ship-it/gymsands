@@ -1,0 +1,49 @@
+name: Dependency Lock Refresh
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-lock-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: true
+
+jobs:
+  refresh-lock:
+    if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify exact checkout identity
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Generate deterministic lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Verify high-severity dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Upload generated lockfile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-lock-${{ github.event.pull_request.head.sha }}
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
