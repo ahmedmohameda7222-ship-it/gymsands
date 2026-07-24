@@ -167,10 +167,21 @@ describe("Train finalization UI contracts", () => {
   it("keeps populated Train fixtures behind the explicit mock-auth development gate", () => {
     const loader = source("services/database/workout-plan-loader.ts");
     const fixture = source("lib/fixtures/train-mock.ts");
+    const fixtureContract = JSON.parse(source("lib/fixtures/train-mock-contract.json")) as {
+      schemaVersion: number;
+      planIds: { active: string; inactive: string; archived: string };
+    };
     expect(loader).toContain("env.useMockAuth && isMockAuthUserId(userId)");
     expect(loader).toContain("getMockTrainPlans");
-    expect(fixture).toContain('active: "10000000-0000-4000-8000-000000000001"');
-    expect(fixture).toContain('inactive: "10000000-0000-4000-8000-000000000002"');
-    expect(fixture).toContain('archived: "10000000-0000-4000-8000-000000000003"');
+    expect(fixture).toContain('train-mock-contract.json');
+    expect(fixture).toContain("const planIds = trainMockContract.planIds");
+    expect(fixtureContract).toEqual(expect.objectContaining({
+      schemaVersion: 1,
+      planIds: {
+        active: "10000000-0000-4000-8000-000000000001",
+        inactive: "10000000-0000-4000-8000-000000000002",
+        archived: "10000000-0000-4000-8000-000000000003"
+      }
+    }));
   });
 });
