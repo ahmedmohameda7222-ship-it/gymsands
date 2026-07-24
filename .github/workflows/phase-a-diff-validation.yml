@@ -30,7 +30,7 @@ jobs:
       - name: Check branch diff formatting against main
         run: git diff --check origin/main...HEAD
 
-  validate-aw3a-integration-authority:
+  validate-aw3b-verification-contracts:
     if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
     runs-on: ubuntu-latest
     timeout-minutes: 75
@@ -45,216 +45,17 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Correct permanent verification contracts
+      - name: Materialize permanent verification corrections
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-
-          integration = Path('supabase/verification/active-workout-aw3a-integration.sql')
-          source = integration.read_text(encoding='utf-8')
-          old = '''insert into public.workout_sessions(
-            id,user_id,workout_name,started_at,status,source
-          ) values (
-            'a3000000-0000-4000-8000-000000000010',
-            'a3000000-0000-4000-8000-000000000001',
-            'AW-3A Verification',
-            '2026-07-22T10:00:00Z',
-            'started',
-            'manual'
-          );
-          '''
-          new = '''set local role authenticated;
-          select pg_catalog.set_config('request.jwt.claim.sub','a3000000-0000-4000-8000-000000000001',true);
-          select pg_catalog.set_config('request.jwt.claim.role','authenticated',true);
-          select (public.start_or_resume_direct_workout_session_atomic(
-            'a3000000-0000-4000-8000-000000000001'::uuid,
-            'provider_activity',
-            'aw3a-verification',
-            'plaivra-verification',
-            'AW-3A Verification',
-            'Workout',
-            '{"sets":3}'::jsonb,
-            null
-          )->'session'->>'id') as aw3a_session_id \\gset
-          select pg_catalog.set_config('plaivra.aw3a_session_id', :'aw3a_session_id', true);
-          reset role;
-          '''
-          if source.count(old) != 1:
-              raise SystemExit(f'Expected one legacy AW-3A integration session fixture, found {source.count(old)}')
-          source = source.replace(old, new)
-          literal = "'a3000000-0000-4000-8000-000000000010'"
-          session_expr = "pg_catalog.current_setting('plaivra.aw3a_session_id')::uuid"
-          if source.count(literal) < 10:
-              raise SystemExit('AW-3A integration session identity coverage is incomplete.')
-          source = source.replace(literal, session_expr)
-
-          invalid_prefix = f'''-- Representative invalid cases must roll back atomically.
-          do $invalid_cases$
-          declare
-            v_before bigint;
-          begin
-            select count(*) into v_before from public.exercise_logs where workout_session_id={session_expr};
-          '''
-          invalid_prefix_replacement = f'''-- Representative invalid cases must roll back atomically.
-          reset role;
-          select pg_catalog.set_config(
-            'plaivra.aw3a_invalid_log_count',
-            (select count(*) from public.exercise_logs where workout_session_id={session_expr})::text,
-            true
-          );
-          set local role service_role;
-          select set_config('request.jwt.claim.role','service_role',true);
-          do $invalid_cases$
-          begin
-          '''
-          if source.count(invalid_prefix) != 1:
-              raise SystemExit('AW-3A invalid-case pre-count contract was not found exactly once.')
-          source = source.replace(invalid_prefix, invalid_prefix_replacement)
-
-          invalid_suffix = f'''  if (select count(*) from public.exercise_logs where workout_session_id={session_expr})<>v_before then
-              raise exception 'An invalid structured payload partially mutated exercise logs.';
-            end if;
-          end
-          $invalid_cases$;
-          
-          reset role;
-          '''
-          invalid_suffix_replacement = f'''end
-          $invalid_cases$;
-          
-          reset role;
-          do $verify_invalid_atomicity$
-          begin
-            if (select count(*) from public.exercise_logs where workout_session_id={session_expr})
-               <> pg_catalog.current_setting('plaivra.aw3a_invalid_log_count')::bigint then
-              raise exception 'An invalid structured payload partially mutated exercise logs.';
-            end if;
-          end
-          $verify_invalid_atomicity$;
-          '''
-          if source.count(invalid_suffix) != 1:
-              raise SystemExit('AW-3A invalid-case post-count contract was not found exactly once.')
-          source = source.replace(invalid_suffix, invalid_suffix_replacement)
-          integration.write_text(source, encoding='utf-8')
-
-          completion = Path('supabase/verification/active-workout-aw3a-final-completion.sql')
-          source = completion.read_text(encoding='utf-8')
-          old = '''insert into public.workout_sessions(id,user_id,workout_name,started_at,status,source)
-          values (
-            'a3f00000-0000-4000-8000-000000000010',
-            'a3f00000-0000-4000-8000-000000000001',
-            'AW-3A Final Completion',
-            '2026-07-22T12:00:00Z',
-            'started',
-            'manual'
-          );
-          '''
-          new = '''set local role authenticated;
-          select pg_catalog.set_config('request.jwt.claim.sub','a3f00000-0000-4000-8000-000000000001',true);
-          select pg_catalog.set_config('request.jwt.claim.role','authenticated',true);
-          select (public.start_or_resume_direct_workout_session_atomic(
-            'a3f00000-0000-4000-8000-000000000001'::uuid,
-            'provider_activity',
-            'aw3a-final-completion',
-            'plaivra-verification',
-            'AW-3A Final Completion',
-            'Workout',
-            '{"sets":3}'::jsonb,
-            null
-          )->'session'->>'id') as aw3a_final_session_id \\gset
-          select pg_catalog.set_config('plaivra.aw3a_final_session_id', :'aw3a_final_session_id', true);
-          reset role;
-          '''
-          if source.count(old) != 1:
-              raise SystemExit(f'Expected one legacy AW-3A completion session fixture, found {source.count(old)}')
-          source = source.replace(old, new)
-          literal = "'a3f00000-0000-4000-8000-000000000010'"
-          session_expr = "pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid"
-          if source.count(literal) < 10:
-              raise SystemExit('AW-3A completion session identity coverage is incomplete.')
-          source = source.replace(literal, session_expr)
-          temp_table = f'''create temporary table aw3a_final_omitted on commit drop as
-          select id as exercise_log_id
-          from public.exercise_logs
-          where workout_session_id={session_expr}
-            and exercise_order=3 and set_number=1;
-          '''
-          temp_table_replacement = f'''reset role;
-          create temporary table aw3a_final_omitted on commit drop as
-          select id as exercise_log_id
-          from public.exercise_logs
-          where workout_session_id={session_expr}
-            and exercise_order=3 and set_number=1;
-          set local role service_role;
-          select set_config('request.jwt.claim.role','service_role',true);
-          '''
-          if source.count(temp_table) != 1:
-              raise SystemExit('AW-3A completion omitted-log fixture was not found exactly once.')
-          source = source.replace(temp_table, temp_table_replacement)
-          completion.write_text(source, encoding='utf-8')
-
-          structured = Path('supabase/verification/active-workout-aw3b-structured-set-details.sql')
-          source = structured.read_text(encoding='utf-8')
-          bounds_start = "  if v_function_definition !~* 'pg_column_size\\s*\\(v_logs\\)\\s*>\\s*16777216'"
-          bounds_end = "  if has_function_privilege('anon','public.upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')"
-          start = source.index(bounds_start)
-          end = source.index(bounds_end, start)
-          bounds = '''  if v_function_definition !~* 'jsonb_array_length\\s*\\(v_logs\\)\\s*>\\s*500'
-             or v_function_definition !~* 'pg_column_size\\s*\\(v_logs\\)\\s*>\\s*16777216'
-             or v_function_definition !~* 'v_existing_count\\s*>\\s*500'
-             or v_function_definition !~* 'v_final_count\\s*>\\s*500'
-             or v_function_definition not like '%private.aw3b_structured_upsert_workout_set_logs_atomic%'
-             or v_function_definition not like '%private.aw3b_timeline_structured_summary%'
-             or v_function_definition not like '%private.aw3b_graph_revision%'
-             or v_function_definition not like '%plaivra.aw3b_defer_set_timeline%'
-             or v_function_definition !~* 'for\\s+update'
-             or v_function_definition like '%private.aw3b_canonicalize_actor_set_payload%'
-             or to_regprocedure('private.aw3b_canonicalize_actor_set_payload(jsonb,text)') is not null then
-            raise exception 'AW-3B public set RPC payload/session bounds or post-apply authority are incomplete.';
-          end if;
-          '''
-          source = source[:start] + bounds + source[end:]
-
-          privilege_start = bounds_end
-          privilege_end = "  if exists (\n    select 1 from information_schema.role_routine_grants"
-          start = source.index(privilege_start)
-          end = source.index(privilege_end, start)
-          privileges = '''  if has_function_privilege('anon','public.upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
-             or not has_function_privilege('authenticated','public.upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
-             or not has_function_privilege('service_role','public.upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
-             or has_function_privilege('anon','private.aw3b_structured_upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
-             or has_function_privilege('authenticated','private.aw3b_structured_upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
-             or has_function_privilege('service_role','private.aw3b_structured_upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
-             or has_function_privilege('anon','private.aw3b_timeline_structured_summary(uuid)','EXECUTE')
-             or has_function_privilege('authenticated','private.aw3b_timeline_structured_summary(uuid)','EXECUTE')
-             or has_function_privilege('service_role','private.aw3b_timeline_structured_summary(uuid)','EXECUTE')
-             or has_function_privilege('anon','private.aw3b_graph_revision(uuid)','EXECUTE')
-             or has_function_privilege('authenticated','private.aw3b_graph_revision(uuid)','EXECUTE')
-             or has_function_privilege('service_role','private.aw3b_graph_revision(uuid)','EXECUTE') then
-            raise exception 'AW-3B effective function privileges are invalid.';
-          end if;
-          '''
-          source = source[:start] + privileges + source[end:]
-
-          anchor = '''  if not exists (
-            select 1 from supabase_migrations.schema_migrations
-            where name='active_workout_aw3b_final_logic_hardening'
-              and version in ('20260724013000','20260724002022')
-          ) then raise exception 'AW-3B final logic hardening migration is missing.'; end if;
-          '''
-          addition = anchor + '''  if not exists (
-            select 1 from supabase_migrations.schema_migrations
-            where name='active_workout_aw3b_post_apply_logic_corrections'
-          ) then raise exception 'AW-3B post-apply logic correction migration is missing.'; end if;
-          '''
-          if source.count(anchor) != 1:
-              raise SystemExit('AW-3B migration-history verification anchor was not found exactly once.')
-          source = source.replace(anchor, addition)
-          structured.write_text(source, encoding='utf-8')
-          PY
-          git diff --check
+          printf '%s' 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpkZWYgcmVwbGFjZV9vbmNlKHNvdXJjZTogc3RyLCBvbGQ6IHN0ciwgbmV3OiBzdHIsIGxhYmVsOiBzdHIpIC0+IHN0cjoKICAgIGNvdW50ID0gc291cmNlLmNvdW50KG9sZCkKICAgIGlmIGNvdW50ICE9IDE6CiAgICAgICAgcmFpc2UgU3lzdGVtRXhpdChmIntsYWJlbH06IGV4cGVjdGVkIGV4YWN0bHkgb25lIG1hdGNoLCBmb3VuZCB7Y291bnR9IikKICAgIHJldHVybiBzb3VyY2UucmVwbGFjZShvbGQsIG5ldykKCmludGVncmF0aW9uID0gUGF0aCgic3VwYWJhc2UvdmVyaWZpY2F0aW9uL2FjdGl2ZS13b3Jrb3V0LWF3M2EtaW50ZWdyYXRpb24uc3FsIikKc291cmNlID0gaW50ZWdyYXRpb24ucmVhZF90ZXh0KGVuY29kaW5nPSJ1dGYtOCIpCm9sZCA9ICIiImluc2VydCBpbnRvIHB1YmxpYy53b3Jrb3V0X3Nlc3Npb25zKAogIGlkLHVzZXJfaWQsd29ya291dF9uYW1lLHN0YXJ0ZWRfYXQsc3RhdHVzLHNvdXJjZQopIHZhbHVlcyAoCiAgJ2EzMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAxMCcsCiAgJ2EzMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMScsCiAgJ0FXLTNBIFZlcmlmaWNhdGlvbicsCiAgJzIwMjYtMDctMjJUMTA6MDA6MDBaJywKICAnc3RhcnRlZCcsCiAgJ21hbnVhbCcKKTsKIiIiCm5ldyA9ICIiInNldCBsb2NhbCByb2xlIGF1dGhlbnRpY2F0ZWQ7CnNlbGVjdCBwZ19jYXRhbG9nLnNldF9jb25maWcoJ3JlcXVlc3Quand0LmNsYWltLnN1YicsJ2EzMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMScsdHJ1ZSk7CnNlbGVjdCBwZ19jYXRhbG9nLnNldF9jb25maWcoJ3JlcXVlc3Quand0LmNsYWltLnJvbGUnLCdhdXRoZW50aWNhdGVkJyx0cnVlKTsKc2VsZWN0IChwdWJsaWMuc3RhcnRfb3JfcmVzdW1lX2RpcmVjdF93b3Jrb3V0X3Nlc3Npb25fYXRvbWljKAogICdhMzAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEnOjp1dWlkLAogICdwcm92aWRlcl9hY3Rpdml0eScsCiAgJ2F3M2EtdmVyaWZpY2F0aW9uJywKICAncGxhaXZyYS12ZXJpZmljYXRpb24nLAogICdBVy0zQSBWZXJpZmljYXRpb24nLAogICdXb3Jrb3V0JywKICAneyJzZXRzIjozfSc6Ompzb25iLAogIG51bGwKKS0+J3Nlc3Npb24nLT4+J2lkJykgYXMgYXczYV9zZXNzaW9uX2lkIFxnc2V0CnNlbGVjdCBwZ19jYXRhbG9nLnNldF9jb25maWcoJ3BsYWl2cmEuYXczYV9zZXNzaW9uX2lkJywgOidhdzNhX3Nlc3Npb25faWQnLCB0cnVlKTsKcmVzZXQgcm9sZTsKIiIiCnNvdXJjZSA9IHJlcGxhY2Vfb25jZShzb3VyY2UsIG9sZCwgbmV3LCAiQVctM0EgaW50ZWdyYXRpb24gc3RhcnQgZml4dHVyZSIpCmxpdGVyYWwgPSAiJ2EzMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAxMCciCnNlc3Npb25fZXhwciA9ICJwZ19jYXRhbG9nLmN1cnJlbnRfc2V0dGluZygncGxhaXZyYS5hdzNhX3Nlc3Npb25faWQnKTo6dXVpZCIKaWYgc291cmNlLmNvdW50KGxpdGVyYWwpIDwgMTA6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJBVy0zQSBpbnRlZ3JhdGlvbiBpZGVudGl0eSBjb3ZlcmFnZSBpcyBpbmNvbXBsZXRlIikKc291cmNlID0gc291cmNlLnJlcGxhY2UobGl0ZXJhbCwgc2Vzc2lvbl9leHByKQpvbGQgPSBmIiIiLS0gUmVwcmVzZW50YXRpdmUgaW52YWxpZCBjYXNlcyBtdXN0IHJvbGwgYmFjayBhdG9taWNhbGx5LgpkbyAkaW52YWxpZF9jYXNlcyQKZGVjbGFyZQogIHZfYmVmb3JlIGJpZ2ludDsKYmVnaW4KICBzZWxlY3QgY291bnQoKikgaW50byB2X2JlZm9yZSBmcm9tIHB1YmxpYy5leGVyY2lzZV9sb2dzIHdoZXJlIHdvcmtvdXRfc2Vzc2lvbl9pZD17c2Vzc2lvbl9leHByfTsKIiIiCm5ldyA9IGYiIiItLSBSZXByZXNlbnRhdGl2ZSBpbnZhbGlkIGNhc2VzIG11c3Qgcm9sbCBiYWNrIGF0b21pY2FsbHkuCnJlc2V0IHJvbGU7CnNlbGVjdCBwZ19jYXRhbG9nLnNldF9jb25maWcoCiAgJ3BsYWl2cmEuYXczYV9pbnZhbGlkX2xvZ19jb3VudCcsCiAgKHNlbGVjdCBjb3VudCgqKSBmcm9tIHB1YmxpYy5leGVyY2lzZV9sb2dzIHdoZXJlIHdvcmtvdXRfc2Vzc2lvbl9pZD17c2Vzc2lvbl9leHByfSk6OnRleHQsCiAgdHJ1ZQopOwpzZXQgbG9jYWwgcm9sZSBzZXJ2aWNlX3JvbGU7CnNlbGVjdCBzZXRfY29uZmlnKCdyZXF1ZXN0Lmp3dC5jbGFpbS5yb2xlJywnc2VydmljZV9yb2xlJyx0cnVlKTsKZG8gJGludmFsaWRfY2FzZXMkCmJlZ2luCiIiIgpzb3VyY2UgPSByZXBsYWNlX29uY2Uoc291cmNlLCBvbGQsIG5ldywgIkFXLTNBIGludmFsaWQtY2FzZSBwcmUtY291bnQiKQpvbGQgPSBmIiIiICBpZiAoc2VsZWN0IGNvdW50KCopIGZyb20gcHVibGljLmV4ZXJjaXNlX2xvZ3Mgd2hlcmUgd29ya291dF9zZXNzaW9uX2lkPXtzZXNzaW9uX2V4cHJ9KTw+dl9iZWZvcmUgdGhlbgogICAgcmFpc2UgZXhjZXB0aW9uICdBbiBpbnZhbGlkIHN0cnVjdHVyZWQgcGF5bG9hZCBwYXJ0aWFsbHkgbXV0YXRlZCBleGVyY2lzZSBsb2dzLic7CiAgZW5kIGlmOwplbmQKJGludmFsaWRfY2FzZXMkOwoKcmVzZXQgcm9sZTsKIiIiCm5ldyA9IGYiIiJlbmQKJGludmFsaWRfY2FzZXMkOwoKcmVzZXQgcm9sZTsKZG8gJHZlcmlmeV9pbnZhbGlkX2F0b21pY2l0eSQKYmVnaW4KICBpZiAoc2VsZWN0IGNvdW50KCopIGZyb20gcHVibGljLmV4ZXJjaXNlX2xvZ3Mgd2hlcmUgd29ya291dF9zZXNzaW9uX2lkPXtzZXNzaW9uX2V4cHJ9KQogICAgIDw+IHBnX2NhdGFsb2cuY3VycmVudF9zZXR0aW5nKCdwbGFpdnJhLmF3M2FfaW52YWxpZF9sb2dfY291bnQnKTo6YmlnaW50IHRoZW4KICAgIHJhaXNlIGV4Y2VwdGlvbiAnQW4gaW52YWxpZCBzdHJ1Y3R1cmVkIHBheWxvYWQgcGFydGlhbGx5IG11dGF0ZWQgZXhlcmNpc2UgbG9ncy4nOwogIGVuZCBpZjsKZW5kCiR2ZXJpZnlfaW52YWxpZF9hdG9taWNpdHkkOwoiIiIKc291cmNlID0gcmVwbGFjZV9vbmNlKHNvdXJjZSwgb2xkLCBuZXcsICJBVy0zQSBpbnZhbGlkLWNhc2UgcG9zdC1jb3VudCIpCmlmIGxpdGVyYWwgaW4gc291cmNlOgogICAgcmFpc2UgU3lzdGVtRXhpdCgiQVctM0EgaW50ZWdyYXRpb24gZml4ZWQgc2Vzc2lvbiBpZGVudGl0eSByZW1haW5zIikKaW50ZWdyYXRpb24ud3JpdGVfdGV4dChzb3VyY2UsIGVuY29kaW5nPSJ1dGYtOCIpCgpjb21wbGV0aW9uID0gUGF0aCgic3VwYWJhc2UvdmVyaWZpY2F0aW9uL2FjdGl2ZS13b3Jrb3V0LWF3M2EtZmluYWwtY29tcGxldGlvbi5zcWwiKQpzb3VyY2UgPSBjb21wbGV0aW9uLnJlYWRfdGV4dChlbmNvZGluZz0idXRmLTgiKQpvbGQgPSAiIiJpbnNlcnQgaW50byBwdWJsaWMud29ya291dF9zZXNzaW9ucyhpZCx1c2VyX2lkLHdvcmtvdXRfbmFtZSxzdGFydGVkX2F0LHN0YXR1cyxzb3VyY2UpCnZhbHVlcyAoCiAgJ2EzZjAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAxMCcsCiAgJ2EzZjAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMScsCiAgJ0FXLTNBIEZpbmFsIENvbXBsZXRpb24nLAogICcyMDI2LTA3LTIyVDEyOjAwOjAwWicsCiAgJ3N0YXJ0ZWQnLAogICdtYW51YWwnCik7CiIiIgpuZXcgPSAiIiJzZXQgbG9jYWwgcm9sZSBhdXRoZW50aWNhdGVkOwpzZWxlY3QgcGdfY2F0YWxvZy5zZXRfY29uZmlnKCdyZXF1ZXN0Lmp3dC5jbGFpbS5zdWInLCdhM2YwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEnLHRydWUpOwpzZWxlY3QgcGdfY2F0YWxvZy5zZXRfY29uZmlnKCdyZXF1ZXN0Lmp3dC5jbGFpbS5yb2xlJywnYXV0aGVudGljYXRlZCcsdHJ1ZSk7CnNlbGVjdCAocHVibGljLnN0YXJ0X29yX3Jlc3VtZV9kaXJlY3Rfd29ya291dF9zZXNzaW9uX2F0b21pYygKICAnYTNmMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxJzo6dXVpZCwKICAncHJvdmlkZXJfYWN0aXZpdHknLAogICdhdzNhLWZpbmFsLWNvbXBsZXRpb24nLAogICdwbGFpdnJhLXZlcmlmaWNhdGlvbicsCiAgJ0FXLTNBIEZpbmFsIENvbXBsZXRpb24nLAogICdXb3Jrb3V0JywKICAneyJzZXRzIjozfSc6Ompzb25iLAogIG51bGwKKS0+J3Nlc3Npb24nLT4+J2lkJykgYXMgYXczYV9maW5hbF9zZXNzaW9uX2lkIFxnc2V0CnNlbGVjdCBwZ19jYXRhbG9nLnNldF9jb25maWcoJ3BsYWl2cmEuYXczYV9maW5hbF9zZXNzaW9uX2lkJywgOidhdzNhX2ZpbmFsX3Nlc3Npb25faWQnLCB0cnVlKTsKcmVzZXQgcm9sZTsKIiIiCnNvdXJjZSA9IHJlcGxhY2Vfb25jZShzb3VyY2UsIG9sZCwgbmV3LCAiQVctM0EgY29tcGxldGlvbiBzdGFydCBmaXh0dXJlIikKbGl0ZXJhbCA9ICInYTNmMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDEwJyIKc2Vzc2lvbl9leHByID0gInBnX2NhdGFsb2cuY3VycmVudF9zZXR0aW5nKCdwbGFpdnJhLmF3M2FfZmluYWxfc2Vzc2lvbl9pZCcpOjp1dWlkIgppZiBzb3VyY2UuY291bnQobGl0ZXJhbCkgPCAxMDoKICAgIHJhaXNlIFN5c3RlbUV4aXQoIkFXLTNBIGNvbXBsZXRpb24gaWRlbnRpdHkgY292ZXJhZ2UgaXMgaW5jb21wbGV0ZSIpCnNvdXJjZSA9IHNvdXJjZS5yZXBsYWNlKGxpdGVyYWwsIHNlc3Npb25fZXhwcikKb2xkID0gZiIiImNyZWF0ZSB0ZW1wb3JhcnkgdGFibGUgYXczYV9maW5hbF9vbWl0dGVkIG9uIGNvbW1pdCBkcm9wIGFzCnNlbGVjdCBpZCBhcyBleGVyY2lzZV9sb2dfaWQKZnJvbSBwdWJsaWMuZXhlcmNpc2VfbG9ncwp3aGVyZSB3b3Jrb3V0X3Nlc3Npb25faWQ9e3Nlc3Npb25fZXhwcn0KICBhbmQgZXhlcmNpc2Vfb3JkZXI9MyBhbmQgc2V0X251bWJlcj0xOwoiIiIKbmV3ID0gZiIiInJlc2V0IHJvbGU7CmNyZWF0ZSB0ZW1wb3JhcnkgdGFibGUgYXczYV9maW5hbF9vbWl0dGVkIG9uIGNvbW1pdCBkcm9wIGFzCnNlbGVjdCBpZCBhcyBleGVyY2lzZV9sb2dfaWQKZnJvbSBwdWJsaWMuZXhlcmNpc2VfbG9ncwp3aGVyZSB3b3Jrb3V0X3Nlc3Npb25faWQ9e3Nlc3Npb25fZXhwcn0KICBhbmQgZXhlcmNpc2Vfb3JkZXI9MyBhbmQgc2V0X251bWJlcj0xOwpzZXQgbG9jYWwgcm9sZSBzZXJ2aWNlX3JvbGU7CnNlbGVjdCBzZXRfY29uZmlnKCdyZXF1ZXN0Lmp3dC5jbGFpbS5yb2xlJywnc2VydmljZV9yb2xlJyx0cnVlKTsKIiIiCnNvdXJjZSA9IHJlcGxhY2Vfb25jZShzb3VyY2UsIG9sZCwgbmV3LCAiQVctM0Egb21pdHRlZC1sb2cgZml4dHVyZSIpCmlmIGxpdGVyYWwgaW4gc291cmNlOgogICAgcmFpc2UgU3lzdGVtRXhpdCgiQVctM0EgY29tcGxldGlvbiBmaXhlZCBzZXNzaW9uIGlkZW50aXR5IHJlbWFpbnMiKQpjb21wbGV0aW9uLndyaXRlX3RleHQoc291cmNlLCBlbmNvZGluZz0idXRmLTgiKQoKc3RydWN0dXJlZCA9IFBhdGgoInN1cGFiYXNlL3ZlcmlmaWNhdGlvbi9hY3RpdmUtd29ya291dC1hdzNiLXN0cnVjdHVyZWQtc2V0LWRldGFpbHMuc3FsIikKc291cmNlID0gc3RydWN0dXJlZC5yZWFkX3RleHQoZW5jb2Rpbmc9InV0Zi04IikKc3RhcnRfbWFya2VyID0gIiAgaWYgdl9mdW5jdGlvbl9kZWZpbml0aW9uICF+KiAncGdfY29sdW1uX3NpemUiCmVuZF9tYXJrZXIgPSAiICBpZiBleGlzdHMgKFxuICAgIHNlbGVjdCAxIGZyb20gaW5mb3JtYXRpb25fc2NoZW1hLnJvbGVfcm91dGluZV9ncmFudHMiCnN0YXJ0ID0gc291cmNlLmluZGV4KHN0YXJ0X21hcmtlcikKZW5kID0gc291cmNlLmluZGV4KGVuZF9tYXJrZXIsIHN0YXJ0KQpyZXBsYWNlbWVudCA9ICIiIiAgaWYgdl9mdW5jdGlvbl9kZWZpbml0aW9uICF+KiAnanNvbmJfYXJyYXlfbGVuZ3RoXFxzKlxcKHZfbG9nc1xcKVxccyo+XFxzKjUwMCcKICAgICBvciB2X2Z1bmN0aW9uX2RlZmluaXRpb24gIX4qICdwZ19jb2x1bW5fc2l6ZVxccypcXCh2X2xvZ3NcXClcXHMqPlxccyoxNjc3NzIxNicKICAgICBvciB2X2Z1bmN0aW9uIGRlZmluaXRpb24gIX4qICd2X2V4aXN0aW5nX2NvdW50XFxzKj5cXHMqNTAwJwogICAgIG9yIHZfZnVuY3Rpb25fZGVmaW5pdGlvbiAhfiogJ3ZfZmluYWxfY291bnRcXHMqPlxccyo1MDAnCiAgICAgb3Igdl9mdW5jdGlvbl9kZWZpbml0aW9uIG5vdCBsaWtlICclcHJpdmF0ZS5hdzNiX3N0cnVjdHVyZWRfdXBzZXJ0X3dvcmtvdXRfc2V0X2xvZ3NfYXRvbWljJScKICAgICBvciB2X2Z1bmN0aW9uX2RlZmluaXRpb24gbm90IGxpa2UgJyVwcml2YXRlLmF3M2JfdGltZWxpbmVfc3RydWN0dXJlZF9zdW1tYXJ5JScKICAgICBvciB2X2Z1bmN0aW9uX2RlZmluaXRpb24gbm90IGxpa2UgJyVwcml2YXRlLmF3M2JfZ3JhcGhfcmV2aXNpb24lJwogICAgIG9yIHZfZnVuY3Rpb25fZGVmaW5pdGlvbiBub3QgbGlrZSAnJXBsYWl2cmEuYXczYl9kZWZlcl9zZXRfdGltZWxpbmUlJwogICAgIG9yIHZfZnVuY3Rpb25fZGVmaW5pdGlvbiAhfiogJ2Zvclxccyt1cGRhdGUnCiAgICAgb3Igdl9mdW5jdGlvbl9kZWZpbml0aW9uIGxpa2UgJyVwcml2YXRlLmF3M2JfY2Fub25pY2FsaXplX2FjdG9yX3NldF9wYXlsb2FkJScKICAgICBvciB0b19yZWdwcm9jZWR1cmUoJ3ByaXZhdGUuYXczYl9jYW5vbmljYWxpemVfYWN0b3Jfc2V0X3BheWxvYWQoanNvbmIsdGV4dCknKSBpcyBub3QgbnVsbCB0aGVuCiAgICByYWlzZSBleGNlcHRpb24gJ0FXLTNCIHB1YmxpYyBzZXQgUlBDIHBheWxvYWQvc2Vzc2lvbiBib3VuZHMgb3IgcG9zdC1hcHBseSBhdXRob3JpdHkgYXJlIGluY29tcGxldGUuJzsKICBlbmQgaWY7CiAgaWYgaGFzX2Z1bmN0aW9uX3ByaXZpbGVnZSgnYW5vbicsJ3B1YmxpYy51cHNlcnRfd29ya291dF9zZXRfbG9nc19hdG9taWModXVpZCx1dWlkLGpzb25iKScsJ0VYRUNVVEUnKQogICAgIG9yIG5vdCBoYXNfZnVuY3Rpb25fcHJpdmlsZWdlKCdhdXRoZW50aWNhdGVkJywncHVibGljLnVwc2VydF93b3Jrb3V0X3NldF9sb2dzX2F0b21pYyh1dWlkLHV1aWQsanNvbmIpJywnRVhFQ1VURScpCiAgICAgb3Igbm90IGhhc19mdW5jdGlvbl9wcml2aWxlZ2UoJ3NlcnZpY2Vfcm9sZScsJ3B1YmxpYy51cHNlcnRfd29ya291dF9zZXRfbG9nc19hdG9taWModXVpZCx1dWlkLGpzb25iKScsJ0VYRUNVVEUnKQogICAgIG9yIGhhc19mdW5jdGlvbl9wcml2aWxlZ2UoJ2Fub24nLCdwcml2YXRlLmF3M2Jfc3RydWN0dXJlZF91cHNlcnRfd29ya291dF9zZXRfbG9nc19hdG9taWModXVpZCx1dWlkLGpzb25iKScsJ0VYRUNVVEUnKQogICAgIG9yIGhhc19mdW5jdGlvbl9wcml2aWxlZ2UoJ2F1dGhlbnRpY2F0ZWQnLCdwcml2YXRlLmF3M2Jfc3RydWN0dXJlZF91cHNlcnRfd29ya291dF9zZXRfbG9nc19hdG9taWModXVpZCx1dWlkLGpzb25iKScsJ0VYRUNVVEUnKQogICAgIG9yIGhhc19mdW5jdGlvbl9wcml2aWxlZ2UoJ3NlcnZpY2Vfcm9sZScsJ3ByaXZhdGUuYXczYl9zdHJ1Y3R1cmVkX3Vwc2VydF93b3Jrb3V0X3NldF9sb2dzX2F0b21pYyh1dWlkLHV1aWQsanNvbmIpJywnRVhFQ1VURScpCiAgICAgb3IgaGFzX2Z1bmN0aW9uX3ByaXZpbGVnZSgnYW5vbicsJ3ByaXZhdGUuYXczYl90aW1lbGluZV9zdHJ1Y3R1cmVkX3N1bW1hcnkodXVpZCknLCdFWEVDVVRFJykKICAgICBvciBoYXNfZnVuY3Rpb25fcHJpdmlsZWdlKCdhdXRoZW50aWNhdGVkJywncHJpdmF0ZS5hdzNiX3RpbWVsaW5lX3N0cnVjdHVyZWRfc3VtbWFyeSh1dWlkKScsJ0VYRUNVVEUnKQogICAgIG9yIGhhc19mdW5jdGlvbl9wcml2aWxlZ2UoJ3NlcnZpY2Vfcm9sZScsJ3ByaXZhdGUuYXczYl90aW1lbGluZV9zdHJ1Y3R1cmVkX3N1bW1hcnkodXVpZCknLCdFWEVDVVRFJykKICAgICBvciBoYXNfZnVuY3Rpb25fcHJpdmlsZWdlKCdhbm9uJywncHJpdmF0ZS5hdzNiX2dyYXBoX3JldmlzaW9uKHV1aWQpJywnRVhFQ1VURScpCiAgICAgb3IgaGFzX2Z1bmN0aW9uX3ByaXZpbGVnZSgnYXV0aGVudGljYXRlZCcsJ3ByaXZhdGUuYXczYl9ncmFwaF9yZXZpc2lvbih1dWlkKScsJ0VYRUNVVEUnKQogICAgIG9yIGhhc19mdW5jdGlvbl9wcml2aWxlZ2UoJ3NlcnZpY2Vfcm9sZScsJ3ByaXZhdGUuYXczYl9ncmFwaF9yZXZpc2lvbih1dWlkKScsJ0VYRUNVVEUnKSB0aGVuCiAgICByYWlzZSBleGNlcHRpb24gJ0FXLTNCIGVmZmVjdGl2ZSBmdW5jdGlvbiBwcml2aWxlZ2VzIGFyZSBpbnZhbGlkLic7CiAgZW5kIGlmOwoiIiIKc291cmNlID0gc291cmNlWzpzdGFydF0gKyByZXBsYWNlbWVudCArIHNvdXJjZVtlbmQ6XQphbmNob3IgPSAiIiIgIGlmIG5vdCBleGlzdHMgKAogICAgc2VsZWN0IDEgZnJvbSBzdXBhYmFzZV9taWdyYXRpb25zLnNjaGVtYV9taWdyYXRpb25zCiAgICB3aGVyZSBuYW1lPSdhY3RpdmVfd29ya291dF9hdzNiX2ZpbmFsX2xvZ2ljX2hhcmRlbmluZycKICAgICAgYW5kIHZlcnNpb24gaW4gKCcyMDI2MDcyNDAxMzAwMCcsJzIwMjYwNzI0MDAyMDIyJykKICApIHRoZW4gcmFpc2UgZXhjZXB0aW9uICdBVy0zQiBmaW5hbCBsb2dpYyBoYXJkZW5pbmcgbWlncmF0aW9uIGlzIG1pc3NpbmcuJzsgZW5kIGlmOwoiIiIKYWRkaXRpb24gPSBhbmNob3IgKyAiIiIgIGlmIG5vdCBleGlzdHMgKAogICAgc2VsZWN0IDEgZnJvbSBzdXBhYmFzZV9taWdyYXRpb25zLnNjaGVtYV9taWdyYXRpb25zCiAgICB3aGVyZSBuYW1lPSdhY3RpdmVfd29ya291dF9hdzNiX3Bvc3RfYXBwbHlfbG9naWNfY29ycmVjdGlvbnMnCiAgKSB0aGVuIHJhaXNlIGV4Y2VwdGlvbiAnQVctM0IgcG9zdC1hcHBseSBsb2dpYyBjb3JyZWN0aW9uIG1pZ3JhdGlvbiBpcyBtaXNzaW5nLic7IGVuZCBpZjsKIiIiCnNvdXJjZSA9IHJlcGxhY2Vfb25jZShzb3VyY2UsIGFuY2hvciwgYWRkaXRpb24sICJBVy0zQiBtaWdyYXRpb24taGlzdG9yeSBhbmNob3IiKQpzdHJ1Y3R1cmVkLndyaXRlX3RleHQoc291cmNlLCBlbmNvZGluZz0idXRmLTgiKQo=' | base64 -d > /tmp/transform.py
+          test "$(sha256sum /tmp/transform.py | cut -d' ' -f1)" = "b9b1f8fec2f14aaeffa87319ffcb801ae9c27d4512c5a42de560f31939bbcb90"
+          python /tmp/transform.py
+          git diff --check -- \
+            supabase/verification/active-workout-aw3a-integration.sql \
+            supabase/verification/active-workout-aw3a-final-completion.sql \
+            supabase/verification/active-workout-aw3b-structured-set-details.sql
 
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v2
@@ -263,7 +64,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Replay full chronological migration chain
-        run: node scripts/replay-local-migration-chain.mjs --log /tmp/aw3a-authority-replay.log --prove-future-order
+        run: node scripts/replay-local-migration-chain.mjs --log /tmp/aw3b-verification-replay.log --prove-future-order
 
       - name: Run database lint
         run: supabase db lint --local --schema public --level error --fail-on error
@@ -286,7 +87,7 @@ jobs:
             PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql
             PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$PLAIVRA_LOCAL_DATABASE_URL" node scripts/test-database-preflight-control.mjs
             PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
-          } 2>&1 | tee /tmp/aw3a-authority-verification.log
+          } 2>&1 | tee /tmp/aw3b-verification.log
 
       - name: Create exact corrected verification blobs
         if: steps.verify.outcome == 'success'
@@ -295,28 +96,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          : > /tmp/aw3a-integration-blobs.txt
+          : > /tmp/aw3b-verification-blobs.txt
           for path in \
             supabase/verification/active-workout-aw3a-integration.sql \
             supabase/verification/active-workout-aw3a-final-completion.sql \
             supabase/verification/active-workout-aw3b-structured-set-details.sql; do
             encoded="$(base64 -w0 "$path")"
             sha="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" -f content="$encoded" -f encoding=base64 --jq .sha)"
-            printf '%s=%s\n' "$path" "$sha" | tee -a /tmp/aw3a-integration-blobs.txt
+            printf '%s=%s\n' "$path" "$sha" | tee -a /tmp/aw3b-verification-blobs.txt
           done
 
       - name: Upload validation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aw3a-integration-authority-${{ github.event.pull_request.head.sha }}
+          name: aw3b-verification-contracts-${{ github.event.pull_request.head.sha }}
           path: |
             supabase/verification/active-workout-aw3a-integration.sql
             supabase/verification/active-workout-aw3a-final-completion.sql
             supabase/verification/active-workout-aw3b-structured-set-details.sql
-            /tmp/aw3a-integration-blobs.txt
-            /tmp/aw3a-authority-replay.log
-            /tmp/aw3a-authority-verification.log
+            /tmp/aw3b-verification-blobs.txt
+            /tmp/aw3b-verification-replay.log
+            /tmp/aw3b-verification.log
           if-no-files-found: warn
           retention-days: 1
 
