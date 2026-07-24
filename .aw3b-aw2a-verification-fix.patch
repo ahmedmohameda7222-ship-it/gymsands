@@ -1,0 +1,109 @@
+diff --git a/supabase/verification/active-workout-aw2a-execution-state-legacy.sql b/supabase/verification/active-workout-aw2a-execution-state-legacy.sql
+index cdcc832..0000000 100644
+--- a/supabase/verification/active-workout-aw2a-execution-state-legacy.sql
++++ b/supabase/verification/active-workout-aw2a-execution-state-legacy.sql
+@@ -4,6 +4,23 @@
+ begin;
+ set local transaction read only;
+ 
++do $aw2a_capture_marker_baseline$
++declare
++  v_marker text;
++begin
++  select migration_version into strict v_marker
++  from public.release_schema_compatibility
++  where singleton;
++
++  if v_marker = '20260720213000' then
++    raise exception 'AW-2A verification encountered invalid repository-only release compatibility marker: %', v_marker;
++  end if;
++
++  perform pg_catalog.set_config('plaivra.aw2a_marker_baseline', v_marker, true);
++end
++$aw2a_capture_marker_baseline$;
++
+ do $aw2a_verify_schema$
+ declare
+@@ -31,7 +48,6 @@ declare
+   v_integrity_definition text;
+   v_initializer_definition text;
+   v_cleanup_definition text;
+-  v_marker text;
+   v_aw2b_active boolean := to_regclass('public.workout_session_execution_commands') is not null
+@@ -214,14 +230,6 @@ begin
+      or v_cleanup_definition !~ 'workout_session_id[[:space:]]*=[[:space:]]*new.id' then
+     raise exception 'Terminal cleanup source contract is missing.';
+   end if;
+-
+-  select migration_version into strict v_marker
+-  from public.release_schema_compatibility
+-  where singleton;
+-  if v_marker not in ('20260711014500', '20260717051011', '20260721012814', '20260721224813')
+-     or v_marker = '20260720213000' then
+-    raise exception 'AW-2A changed the release compatibility marker: %', v_marker;
+-  end if;
+ end
+ $aw2a_verify_schema$;
+@@ -257,4 +265,27 @@ begin
+ end
+ $aw2a_verify_rows$;
+ 
++do $aw2a_verify_marker_preserved$
++declare
++  v_marker_baseline text := pg_catalog.current_setting('plaivra.aw2a_marker_baseline', true);
++  v_marker_final text;
++begin
++  if v_marker_baseline is null or v_marker_baseline = '' then
++    raise exception 'AW-2A release compatibility marker baseline is missing.';
++  end if;
++
++  select migration_version into strict v_marker_final
++  from public.release_schema_compatibility
++  where singleton;
++
++  if v_marker_final = '20260720213000' then
++    raise exception 'AW-2A verification encountered invalid repository-only release compatibility marker: %', v_marker_final;
++  end if;
++
++  if v_marker_final is distinct from v_marker_baseline then
++    raise exception 'AW-2A changed the release compatibility marker from % to %', v_marker_baseline, v_marker_final;
++  end if;
++end
++$aw2a_verify_marker_preserved$;
++
+ rollback;
+diff --git a/lib/product/active-workout-aw2a-migration.test.ts b/lib/product/active-workout-aw2a-migration.test.ts
+index ca890ee..0000000 100644
+--- a/lib/product/active-workout-aw2a-migration.test.ts
++++ b/lib/product/active-workout-aw2a-migration.test.ts
+@@ -15,9 +15,13 @@ const correctionMigration = correctionMigrationFile
+   ? readFileSync(`supabase/migrations/${correctionMigrationFile}`, "utf8").replaceAll("\r\n", "\n").toLowerCase()
+   : "";
++const legacyVerification = readFileSync(
++  "supabase/verification/active-workout-aw2a-execution-state-legacy.sql",
++  "utf8"
++).replaceAll("\r\n", "\n").toLowerCase();
+ const verification = [
+   readFileSync("supabase/verification/active-workout-aw2a-execution-state.sql", "utf8"),
+-  readFileSync("supabase/verification/active-workout-aw2a-execution-state-legacy.sql", "utf8")
++  legacyVerification
+ ].join("\n").replaceAll("\r\n", "\n").toLowerCase();
+@@ -105,6 +109,22 @@ describe("AW-2A persisted execution-state migration contract", () => {
+     expect(repositoryText).not.toContain("khlcctuefiuhunqymkbp");
+   });
+ 
++  it("keeps the legacy verification future-safe and read-only", () => {
++    expect(legacyVerification).toContain("set local transaction read only");
++    expect(legacyVerification).toContain("set_config('plaivra.aw2a_marker_baseline'");
++    expect(legacyVerification).toContain("current_setting('plaivra.aw2a_marker_baseline', true)");
++    expect(legacyVerification).toContain("v_marker_final is distinct from v_marker_baseline");
++    expect(legacyVerification).toContain("aw-2a changed the release compatibility marker from % to %");
++    expect(legacyVerification).not.toMatch(/\bv_marker(?:_final)?\s+not\s+in\s*\(/);
++    expect(legacyVerification).not.toMatch(
++      /(?:insert\s+into|update|delete\s+from)\s+public\.release_schema_compatibility/
++    );
++    expect(legacyVerification).toContain("20260720213000");
++    expect(legacyVerification).not.toContain("20260722161542");
++  });
++
+   it("ships permanent transactional verification for the production contract", () => {
