@@ -32,10 +32,11 @@ jobs:
           ref: feat/active-workout-aw3b-structured-set-details
           fetch-depth: 0
 
-      - name: Reconstruct and verify patch
+      - name: Reconstruct clean AW-3B correction snapshot
         shell: bash
         run: |
           set -euo pipefail
+          git rev-parse HEAD > /tmp/aw3b-base-sha
           : > /tmp/aw3b-validation.log
           cat .aw3b-patch/chunk-*.txt > /tmp/aw3b-runtime.patch.gz.b64
           echo "4fc11028de520541624fdfe5891c84214e8f271a05db6cd5d06611aa30c57bc5  /tmp/aw3b-runtime.patch.gz.b64" | sha256sum -c -
@@ -44,6 +45,9 @@ jobs:
           git apply --check /tmp/aw3b-runtime.patch
           git apply /tmp/aw3b-runtime.patch
           python - <<'PY'
+          from __future__ import annotations
+          import hashlib
+          import json
           from pathlib import Path
 
           detail_test = Path("services/database/workout-set-details.test.ts")
@@ -70,8 +74,92 @@ jobs:
           if changed == 0:
               raise SystemExit("expected at least one malformed effort-parser assertion")
           integration_test.write_text(text, encoding="utf-8")
+
+          promotion = Path("scripts/promote-release-schema-compatibility.mjs")
+          text = promotion.read_text(encoding="utf-8")
+          source = 'export const TARGET_MARKER = "20260722232817";'
+          target = 'export const TARGET_MARKER = "20260724002022";'
+          if text.count(source) != 1:
+              raise SystemExit("expected the pre-AW-3B promotion target exactly once")
+          promotion.write_text(text.replace(source, target, 1), encoding="utf-8")
+
+          promotion_test = Path("scripts/promote-release-schema-compatibility.test.mjs")
+          text = promotion_test.read_text(encoding="utf-8")
+          source = '''const ledger = structuredClone(currentLedger);\nledger.historyRepair.note = "AW-3B release-promotion fixture reconciled through 20260722232817. Do not replay any applied migration.";'''
+          target = '''const ledger = structuredClone(currentLedger);\nledger.entries = ledger.entries.filter((entry) => entry.state !== "pending");\nledger.pendingCount = 0;\nledger.unresolvedCount = 0;\nledger.historyRepair = {\n  ...ledger.historyRepair,\n  state: "reconciled",\n  pendingCount: 0,\n  unresolvedCount: 0,\n  note: "AW-3B release-promotion fixture reconciled through 20260724002022. Do not replay any applied migration.",\n};'''
+          if text.count(source) != 1:
+              raise SystemExit("expected the old release-promotion ledger fixture once")
+          promotion_test.write_text(text.replace(source, target, 1), encoding="utf-8")
+
+          ledger_path = Path("supabase/migration-ledger.json")
+          ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+          applied_file = "20260724013000_active_workout_aw3b_final_logic_hardening.sql"
+          pending_file = "20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql"
+          applied_sql = Path("supabase/migrations") / applied_file
+          applied_hash = hashlib.sha256(applied_sql.read_bytes()).hexdigest()
+          entries = [entry for entry in ledger["entries"] if entry.get("localFile") not in {applied_file, pending_file}]
+          entries.append({
+              "localFile": applied_file,
+              "state": "applied_version_alias",
+              "note": (
+                  "Applied exactly once to Plaivra Database through Supabase apply_migration. "
+                  "The generated production version 20260724002022 differs from immutable repository version "
+                  "20260724013000; this alias preserves both identities without renaming or replaying the reviewed SQL. "
+                  f"Durable repository evidence commit dc7d6597bc0aa1d2537a37f2a2e0188ee7f1dfe0; SHA-256 {applied_hash}. Do not replay."
+              ),
+              "productionVersion": "20260724002022",
+              "productionName": "active_workout_aw3b_final_logic_hardening",
+          })
+          entries.append({
+              "localFile": pending_file,
+              "state": "pending",
+              "note": "Committed forward-only AW-3B post-apply correction awaiting one authorized Plaivra Database application. Do not replay any applied migration.",
+          })
+          entries.sort(key=lambda entry: entry["localFile"])
+          ledger["entries"] = entries
+          ledger["capturedAt"] = "2026-07-24T01:15:00Z"
+          ledger["auditedRepositoryCommit"] = "dc7d6597bc0aa1d2537a37f2a2e0188ee7f1dfe0"
+          ledger["productionMigrationCount"] = sum(entry["state"] == "applied" for entry in entries)
+          ledger["schemaVerifiedUntrackedCount"] = sum(entry["state"] == "applied_schema_untracked" for entry in entries)
+          ledger["pendingCount"] = sum(entry["state"] == "pending" for entry in entries)
+          ledger["unresolvedCount"] = sum(entry["state"] not in {"applied", "applied_version_alias"} for entry in entries)
+          ledger["historyRepair"] = {
+              "state": "pending",
+              "schemaAppliedUntrackedCount": ledger["schemaVerifiedUntrackedCount"],
+              "pendingCount": ledger["pendingCount"],
+              "unresolvedCount": ledger["unresolvedCount"],
+              "note": (
+                  "Production history is reconciled through generated AW-3B record 20260724002022. "
+                  f"Repository migration {pending_file} is committed and pending one authorized Production application. "
+                  "The compatibility marker remains 20260722161542. Do not replay any applied migration."
+              ),
+          }
+          ledger_path.write_text(json.dumps(ledger, separators=(",", ":")) + "\n", encoding="utf-8")
+
+          sentence = (
+              "AW-3B post-apply correction `supabase/migrations/"
+              + pending_file
+              + "` is committed and pending one authorized Plaivra Database application; do not replay any applied migration."
+          )
+          for documentation in [Path("README.md"), Path("docs/architecture/migration-ledger-reconciliation.md")]:
+              body = documentation.read_text(encoding="utf-8")
+              if pending_file not in body:
+                  body = body.rstrip() + "\n\n" + sentence + "\n"
+                  documentation.write_text(body, encoding="utf-8")
           PY
-          rm -rf .aw3b-patch
+          rm -rf \
+            .aw3b-patch \
+            .aw3b-diagnostics \
+            scripts/aw3b-finalize-runner.py \
+            scripts/aw3b-finalize-runner-v2.py \
+            .github/workflows/aw3b-finalize.yml \
+            .github/workflows/aw3b-workspace-export.yml \
+            .github/workflows/aw3b-apply-runtime-patch.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(workouts): complete AW-3B logic hardening"
           git diff --check
 
       - name: Set up Node 24
@@ -130,24 +218,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tail -n 320 /tmp/aw3b-validation.log > /tmp/aw3b-validation-tail.log
-          git reset --hard HEAD
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          source = Path("/tmp/aw3b-validation.log").read_text(encoding="utf-8", errors="replace")
+          source = re.sub(r"\x1b\[[0-9;?]*[ -/]*[@-~]", "", source)
+          lines = [line.rstrip() for line in source.splitlines()[-320:]]
+          while lines and not lines[-1]:
+              lines.pop()
+          Path("/tmp/aw3b-validation-tail.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+          git reset --hard "$(cat /tmp/aw3b-base-sha)"
+          rm -rf .aw3b-diagnostics
           mkdir -p .aw3b-diagnostics
           cp /tmp/aw3b-validation-tail.log .aw3b-diagnostics/validation-failure.log
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add .aw3b-diagnostics/validation-failure.log
+          git diff --cached --check
           git commit -m "chore(ci): record AW-3B validation failure"
           git push origin HEAD:feat/active-workout-aw3b-structured-set-details
 
-      - name: Commit validated runtime correction
+      - name: Push validated runtime correction
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf .aw3b-diagnostics
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A
-          git diff --cached --check
-          git commit -m "fix(workouts): complete AW-3B logic hardening"
+          git status --short
+          test -z "$(git status --porcelain)"
           git push origin HEAD:feat/active-workout-aw3b-structured-set-details
