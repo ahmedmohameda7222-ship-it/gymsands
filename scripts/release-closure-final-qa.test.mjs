@@ -7,6 +7,7 @@ import {
   PRODUCTION_AUTHORIZATION_CONTEXT,
   STAGE1_VALIDATION_CONTEXT,
   authorizeProductionPromotion,
+  deriveReleaseReadyTarget,
   deriveReleaseTarget,
   productionAuthorizationToken,
   validateSupabaseProductionTarget,
@@ -77,6 +78,15 @@ test("Activity Catalog, other projects, generic hosts and localhost are rejected
   }
 });
 
+test("pending ledgers remain reviewable but cannot become release-ready", () => {
+  const pending = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
+  const target = deriveReleaseTarget(pending);
+  assert.equal(target.reconciliationState, "pending");
+  assert.equal(target.pendingCount > 0, true);
+  assert.equal(target.releaseReady, false);
+  assert.throws(() => deriveReleaseReadyTarget(pending), /not release-ready/);
+});
+
 test("future reconciled ledger automatically derives its later target", () => {
   const current = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
   const reconciled = structuredClone(current);
@@ -123,6 +133,8 @@ test("generic workflow and evidence code contain no pinned AW-2A migration", () 
   assert.match(preflight, /comparison_base/);
   assert.match(preflight, /validation_request_id/);
   assert.match(preflight, /expected_migration/);
+  const preflightScript = source("scripts/release-preflight.mjs");
+  assert.match(preflightScript, /PRODUCTION_AUTHORIZATION_CONTEXT[\s\S]*deriveReleaseReadyTarget/);
 });
 
 test("same-head run selection and artifact-only evidence permissions are exact", () => {

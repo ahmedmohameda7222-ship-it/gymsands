@@ -21,8 +21,9 @@ export function currentExpectedDatabaseMigration() {
 
 // Backward-compatible dynamic export for test fixtures and evidence parsing. It
 // exposes the newest resolved Production identity without asserting release readiness.
-// Every release mutation path still calls deriveReleaseTarget and fails closed while
-// pending, drift, or schema-untracked migration state exists.
+// Read-only Quality and Stage-1 validation may resolve the latest applied Production
+// identity while a forward migration is pending. Production mutation paths call the
+// explicit strict release-ready target and remain fail-closed on pending or drift.
 export const EXPECTED_DATABASE_MIGRATION = currentExpectedDatabaseMigration();
 
 export const REQUIRED_QUALITY_GATES = Object.freeze({
