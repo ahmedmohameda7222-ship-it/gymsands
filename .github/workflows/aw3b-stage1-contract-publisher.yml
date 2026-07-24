@@ -1,0 +1,63 @@
+name: AW-3B Stage-1 contract publisher
+
+on:
+  push:
+    branches:
+      - feat/active-workout-aw3b-structured-set-details
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Apply and validate permanent script contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .aw3b-stage1-nonworkflow.patch.gz.b64
+          python - <<'PY'
+          import base64
+          import gzip
+          import hashlib
+          from pathlib import Path
+
+          encoded = Path('.aw3b-stage1-nonworkflow.patch.gz.b64').read_bytes()
+          if hashlib.sha256(encoded).hexdigest() != 'e3f2e1fa73cb94e372730e8189110786b1f8db94eaa862291d047d6c103d3826':
+              raise SystemExit('Encoded AW-3B Stage-1 patch identity mismatch.')
+          decoded = gzip.decompress(base64.b64decode(encoded, validate=True))
+          if hashlib.sha256(decoded).hexdigest() != '7739bbda3c1cd2d7fa2f5d1579ae2bb3639c18eebc5329337c1f7af8802804d7':
+              raise SystemExit('Decoded AW-3B Stage-1 patch identity mismatch.')
+          Path('/tmp/aw3b-stage1.patch').write_bytes(decoded)
+          PY
+          git apply --check /tmp/aw3b-stage1.patch
+          git apply /tmp/aw3b-stage1.patch
+          node --test \
+            scripts/release-identity-contract.test.mjs \
+            scripts/release-preflight.test.mjs \
+            scripts/release-closure-final-qa.test.mjs \
+            scripts/release-closure-stage1.test.mjs
+          git diff --check
+
+      - name: Publish permanent non-workflow correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch=feat/active-workout-aw3b-structured-set-details
+          git fetch origin "$branch"
+          test "$(git rev-parse origin/$branch)" = "${{ github.sha }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .aw3b-stage1-nonworkflow.patch.gz.b64
+          git add scripts
+          git diff --cached --check
+          git commit -m "fix(release): enforce pending-aware Stage-1 validation"
+          git push origin HEAD:"$branch"
