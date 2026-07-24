@@ -49,15 +49,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sha="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" -f content="$(base64 -w0 package-lock.json)" -f encoding=base64 --jq .sha)"
+          base64 -w0 package-lock.json > /tmp/package-lock.b64
+          jq -n --rawfile content /tmp/package-lock.b64 '{content:$content,encoding:"base64"}' > /tmp/blob-request.json
+          sha="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" --input /tmp/blob-request.json --jq .sha)"
           printf 'package-lock.json=%s\n' "$sha" | tee /tmp/blobs.txt
 
       - name: Upload generated dependency evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dependency-lock-${{ github.event.pull_request.head.sha }}
           path: |
             package-lock.json
             /tmp/blobs.txt
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 1
