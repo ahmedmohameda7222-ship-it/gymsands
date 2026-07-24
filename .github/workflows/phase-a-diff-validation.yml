@@ -47,56 +47,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat > /tmp/quality-ledger-target.patch <<'PATCH'
-          diff --git a/.github/workflows/quality.yml b/.github/workflows/quality.yml
-          index 375e80d..fe834d0 100644
-          --- a/.github/workflows/quality.yml
-          +++ b/.github/workflows/quality.yml
-          @@ -99,37 +99,14 @@ jobs:
-                     ref: ${{ steps.identity.outputs.reviewed_commit }}
-                     fetch-depth: 0
-           
-          -      - name: Derive release target from exact reconciled ledger
-          +      - name: Derive validation target from exact migration ledger
-                   id: release_target
-                   shell: bash
-                   run: |
-                     set -euo pipefail
-          -          node --input-type=module - <<'NODE'
-          -          import { readFileSync } from "node:fs";
-          -          import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs";
-          -          const target = deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")));
-          -          const values = {
-          -            PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION: target.expectedMigration,
-          -            PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE: target.reconciliationState,
-          -            PLAIVRA_PENDING_MIGRATION_COUNT: String(target.pendingCount),
-          -            PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT: String(target.schemaAppliedUntrackedCount),
-          -            PLAIVRA_UNRESOLVED_MIGRATION_COUNT: String(target.unresolvedCount),
-          -          };
-          -          for (const [key, value] of Object.entries(values)) {
-          -            process.stdout.write(`${key}=${value}\n`);
-          -          }
-          -          NODE
-          -          node --input-type=module - <<'NODE' >> "$GITHUB_ENV"
-          -          import { readFileSync } from "node:fs";
-          -          import { deriveReleaseTarget } from "./scripts/release-identity-contract.mjs";
-          -          const target = deriveReleaseTarget(JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")));
-          -          console.log(`PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION=${target.expectedMigration}`);
-          -          console.log(`PLAIVRA_MIGRATION_LEDGER_RECONCILIATION_STATE=${target.reconciliationState}`);
-          -          console.log(`PLAIVRA_PENDING_MIGRATION_COUNT=${target.pendingCount}`);
-          -          console.log(`PLAIVRA_SCHEMA_APPLIED_UNTRACKED_COUNT=${target.schemaAppliedUntrackedCount}`);
-          -          console.log(`PLAIVRA_UNRESOLVED_MIGRATION_COUNT=${target.unresolvedCount}`);
-          -          NODE
-          -          expected_migration="$(grep '^PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION=' "$GITHUB_ENV" | tail -n 1 | cut -d= -f2-)"
-          +          node scripts/quality-ledger-target.mjs
-          +          node scripts/quality-ledger-target.mjs >> "$GITHUB_ENV"
-          +          expected_migration="$(node scripts/quality-ledger-target.mjs --value expectedMigration)"
-                     [[ "$expected_migration" =~ ^[0-9]{12,14}$ ]]
-                     echo "expected_migration=$expected_migration" >> "$GITHUB_OUTPUT"
-           
-          PATCH
-          git apply --check /tmp/quality-ledger-target.patch
-          git apply /tmp/quality-ledger-target.patch
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/quality.yml')
+          content = path.read_text(encoding='utf-8')
+          start_marker = '      - name: Derive release target from exact reconciled ledger\n'
+          end_marker = '      - name: Set up Node.js\n'
+          if content.count(start_marker) != 1:
+              raise SystemExit(f'Expected one strict Quality target block, found {content.count(start_marker)}')
+          start = content.index(start_marker)
+          end = content.index(end_marker, start)
+          replacement = '''      - name: Derive validation target from exact migration ledger
+                id: release_target
+                shell: bash
+                run: |
+                  set -euo pipefail
+                  node scripts/quality-ledger-target.mjs
+                  node scripts/quality-ledger-target.mjs >> "$GITHUB_ENV"
+                  expected_migration="$(node scripts/quality-ledger-target.mjs --value expectedMigration)"
+                  [[ "$expected_migration" =~ ^[0-9]{12,14}$ ]]
+                  echo "expected_migration=$expected_migration" >> "$GITHUB_OUTPUT"
+
+          '''
+          path.write_text(content[:start] + replacement + content[end:], encoding='utf-8')
+          PY
           rm -f .github/workflows/aw3b-quality-ledger-target-fix.yml
           git checkout origin/main -- .github/workflows/phase-a-diff-validation.yml
           git diff --check
