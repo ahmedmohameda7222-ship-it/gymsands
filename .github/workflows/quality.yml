@@ -6,14 +6,14 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: aw3b-one-shot-reconciliation-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  reconcile:
+  diagnose:
     if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -24,7 +24,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Apply deterministic reconciliation
+      - name: Build reconciled candidate
         shell: bash
         run: |
           set -euo pipefail
@@ -34,34 +34,32 @@ jobs:
           source = path.read_text(encoding='utf-8')
           old = "arch=arch[:arch.index(marker)]+section+'\\n'"
           new = "arch=arch[:arch.index(marker)]+section.rstrip()+'\\n'"
-          if source.count(old) != 1:
-            raise SystemExit(f'Expected one architecture newline anchor, found {source.count(old)}.')
-          path.write_text(source.replace(old, new, 1), encoding='utf-8')
+          if old in source:
+            source = source.replace(old, new, 1)
+          path.write_text(source, encoding='utf-8')
           PY
           python scripts/aw3b-final-reconcile.py
           git show dbedfd201d5bbd5efb1988ccb92899e499197e51:.github/workflows/quality.yml > .github/workflows/quality.yml
           rm scripts/aw3b-final-reconcile.py
           rm -f aw3b-reconciliation-validation.txt aw3b-ledger-validation.txt
 
-      - name: Validate reconciled permanent tree
+      - name: Capture exact validation
         shell: bash
         run: |
-          set -euo pipefail
-          git diff --check
-          node scripts/check-migration-ledger.mjs
-          test ! -e scripts/aw3b-final-reconcile.py
-          test ! -e .github/workflows/aw3b-final-reconciliation.yml
-          test ! -e aw3b-evidence-export
-          test ! -e aw3b-migration-export
-          grep -q '20260724232734_active_workout_aw3b_post_apply_logic_corrections' docs/reports/active-workout-aw3b-implementation-report.md
+          set +e
+          mkdir -p quality-reports/aw3b-reconciliation
+          git status --short > quality-reports/aw3b-reconciliation/git-status.txt
+          git diff --check > quality-reports/aw3b-reconciliation/git-diff-check.txt 2>&1
+          printf 'exit_status=%s\n' "$?" >> quality-reports/aw3b-reconciliation/git-diff-check.txt
+          node scripts/check-migration-ledger.mjs > quality-reports/aw3b-reconciliation/ledger-check.txt 2>&1
+          printf 'exit_status=%s\n' "$?" >> quality-reports/aw3b-reconciliation/ledger-check.txt
+          git diff --stat > quality-reports/aw3b-reconciliation/diff-stat.txt
+          exit 0
 
-      - name: Commit reconciled permanent tree
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git diff --cached --check
-          git commit -m 'docs(aw3b): reconcile production closure'
-          git push origin HEAD:feat/active-workout-aw3b-structured-set-details
+      - name: Upload exact validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw3b-reconciliation-diagnostic-${{ github.event.pull_request.head.sha }}
+          path: quality-reports/aw3b-reconciliation/
+          if-no-files-found: error
+          retention-days: 14
