@@ -106,7 +106,7 @@ describe("AW-3B set-write convergence", () => {
     expect(ui).toContain("details\n          ? details.source_provider");
     expect(ui).toContain("details\n          ? details.source_version");
     expect(ui).toContain("buildLogRows(states, { pendingOnly: true })");
-    expect(ui).toContain("createWorkoutSetAutosaveCoordinator");
+    expect(ui).toContain("mountWorkoutSetAutosaveCoordinator");
     expect(ui).toContain("scheduleFlush(650)");
     expect(ui).toContain("handleSetDetailsOpenChange");
     expect(ui).toContain("validOnly: true");

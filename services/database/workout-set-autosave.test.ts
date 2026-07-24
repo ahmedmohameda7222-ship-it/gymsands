@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createWorkoutSetAutosaveCoordinator } from "./workout-set-autosave";
+import { createWorkoutSetAutosaveCoordinator, mountWorkoutSetAutosaveCoordinator } from "./workout-set-autosave";
 
 type Snapshot = { revision: number; dirty: boolean };
 
@@ -83,4 +83,32 @@ describe("AW-3B completed-set autosave coordinator", () => {
     await coordinator.requestFlush();
     expect(persistSnapshot).not.toHaveBeenCalled();
   });
+
+  it("replaces a cancelled Strict Mode mount with a live coordinator", async () => {
+    let current: Snapshot = { revision: 1, dirty: true };
+    const persisted: Snapshot[] = [];
+    const coordinatorRef: { current: ReturnType<typeof createWorkoutSetAutosaveCoordinator<Snapshot>> | null } = { current: null };
+    const getAdapter = () => ({
+      getSnapshot: () => current,
+      hasPendingWrites: (snapshot: Snapshot) => snapshot.dirty,
+      persistSnapshot: async (snapshot: Snapshot) => { persisted.push({ ...snapshot }); },
+      acknowledgeSnapshot: (saved: Snapshot) => {
+        if (current.revision === saved.revision) current = { ...current, dirty: false };
+      },
+    });
+
+    const cleanupFirstMount = mountWorkoutSetAutosaveCoordinator(coordinatorRef, getAdapter);
+    const cancelledCoordinator = coordinatorRef.current;
+    cleanupFirstMount();
+    expect(coordinatorRef.current).toBeNull();
+
+    const cleanupSecondMount = mountWorkoutSetAutosaveCoordinator(coordinatorRef, getAdapter);
+    expect(coordinatorRef.current).not.toBe(cancelledCoordinator);
+    await coordinatorRef.current?.requestFlush();
+    expect(persisted).toEqual([{ revision: 1, dirty: true }]);
+    expect(current.dirty).toBe(false);
+    cleanupSecondMount();
+    expect(coordinatorRef.current).toBeNull();
+  });
+
 });

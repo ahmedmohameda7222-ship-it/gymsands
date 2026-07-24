@@ -91,7 +91,7 @@ import {
   workoutSetNoteCodePointLength
 } from "@/services/database/workout-set-details";
 import {
-  createWorkoutSetAutosaveCoordinator,
+  mountWorkoutSetAutosaveCoordinator,
   type WorkoutSetAutosaveAdapter,
   type WorkoutSetAutosaveCoordinator
 } from "@/services/database/workout-set-autosave";
@@ -1062,15 +1062,16 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         console.warn("Plaivra will retry the pending completed-set details.", error);
       }
     };
-
-    if (autosaveCoordinatorRef.current == null) {
-      autosaveCoordinatorRef.current = createWorkoutSetAutosaveCoordinator(() => {
-        const adapter = autosaveAdapterRef.current;
-        if (!adapter) throw new Error("Workout set autosave is unavailable.");
-        return adapter;
-      });
-    }
   });
+
+  useEffect(() => mountWorkoutSetAutosaveCoordinator(
+    autosaveCoordinatorRef,
+    () => {
+      const adapter = autosaveAdapterRef.current;
+      if (!adapter) throw new Error("Workout set autosave is unavailable.");
+      return adapter;
+    }
+  ), []);
 
   function flushPendingSetWrites() {
     return autosaveCoordinatorRef.current?.requestFlush() ?? Promise.resolve();
@@ -1089,10 +1090,6 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     if (!session || isStarting || !hasPendingValidSetWrites(exerciseStates)) return;
     autosaveCoordinatorRef.current?.scheduleFlush(650);
   }, [exerciseStates, isStarting, session]);
-
-  useEffect(() => () => {
-    autosaveCoordinatorRef.current?.cancel();
-  }, []);
 
   function startRestTimer(seconds: number) {
     const safeSeconds = Math.max(0, seconds);

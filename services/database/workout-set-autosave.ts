@@ -95,3 +95,18 @@ export function createWorkoutSetAutosaveCoordinator<TSnapshot>(
     },
   };
 }
+
+export function mountWorkoutSetAutosaveCoordinator<TSnapshot>(
+  coordinatorRef: { current: WorkoutSetAutosaveCoordinator | null },
+  getAdapter: () => WorkoutSetAutosaveAdapter<TSnapshot>,
+  options: WorkoutSetAutosaveOptions = {},
+) {
+  const coordinator = createWorkoutSetAutosaveCoordinator(getAdapter, options);
+  coordinatorRef.current = coordinator;
+  return () => {
+    coordinator.cancel();
+    if (coordinatorRef.current === coordinator) {
+      coordinatorRef.current = null;
+    }
+  };
+}
