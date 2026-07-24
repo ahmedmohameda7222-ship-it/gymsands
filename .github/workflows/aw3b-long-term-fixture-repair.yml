@@ -1,0 +1,255 @@
+name: AW3B Long-Term Fixture Repair
+
+on:
+  push:
+    branches:
+      - feat/active-workout-aw3b-structured-set-details
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aw3b-long-term-fixture-repair
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-aw3b-structured-set-details
+          fetch-depth: 0
+
+      - name: Materialize shared fixture contract and durable QA assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          contract = {
+              "userId": "00000000-0000-4000-8000-000000000001",
+              "planIds": {
+                  "active": "10000000-0000-4000-8000-000000000001",
+                  "inactive": "10000000-0000-4000-8000-000000000002",
+                  "archived": "10000000-0000-4000-8000-000000000003"
+              },
+              "activeDaySuffix": "11",
+              "activeDayId": "10000000-0000-4000-8000-000000000011",
+              "activeDayName": "Strength A",
+              "activeFirstExerciseId": "10000000-0000-4000-8000-000000000011",
+              "activeFirstExerciseName": "Back Squat",
+              "activeSessionId": "20000000-0000-4000-8000-000000000001",
+              "activeExerciseLogId": "30000000-0000-4000-8000-000000000001"
+          }
+          contract_path = Path("lib/fixtures/train-mock-contract.json")
+          contract_path.write_text(json.dumps(contract, indent=2) + "\n", encoding="utf-8")
+
+          mock_path = Path("lib/fixtures/train-mock.ts")
+          mock = mock_path.read_text(encoding="utf-8")
+          import_anchor = 'import { MOCK_AUTH_USER_ID } from "@/lib/fixtures/mock-auth";\n'
+          if import_anchor not in mock:
+              raise SystemExit("train-mock import anchor changed")
+          if 'train-mock-contract.json' not in mock:
+              mock = mock.replace(import_anchor, import_anchor + 'import trainMockContract from "@/lib/fixtures/train-mock-contract.json";\n', 1)
+          old_plan_ids = '''const planIds = {
+            active: "10000000-0000-4000-8000-000000000001",
+            inactive: "10000000-0000-4000-8000-000000000002",
+            archived: "10000000-0000-4000-8000-000000000003"
+          };'''
+          if old_plan_ids not in mock and 'const planIds = trainMockContract.planIds;' not in mock:
+              raise SystemExit("train-mock plan identity block changed")
+          mock = mock.replace(old_plan_ids, 'const planIds = trainMockContract.planIds;')
+          old_day = 'day(planIds.active, "11", 1, weekdays[(todayIndex + activeOffsets[0]) % 7], "Strength A", [["Back Squat", "Legs", "Barbell"],'
+          new_day = 'day(planIds.active, trainMockContract.activeDaySuffix, 1, weekdays[(todayIndex + activeOffsets[0]) % 7], trainMockContract.activeDayName, [[trainMockContract.activeFirstExerciseName, "Legs", "Barbell"],'
+          if old_day not in mock and new_day not in mock:
+              raise SystemExit("active mock day anchor changed")
+          mock = mock.replace(old_day, new_day)
+          mock = mock.replace('id: "20000000-0000-4000-8000-000000000001",\n        user_id: MOCK_AUTH_USER_ID,\n        workout_id: null,\n        plan_id: activePlan.id,', 'id: trainMockContract.activeSessionId,\n        user_id: MOCK_AUTH_USER_ID,\n        workout_id: null,\n        plan_id: activePlan.id,', 1)
+          mock_path.write_text(mock, encoding="utf-8")
+
+          component_path = Path("components/workouts/workout-day-focus-session.tsx")
+          component = component_path.read_text(encoding="utf-8")
+          root = '    <div className="space-y-4 pb-28 lg:pb-4" dir={dir}>'
+          replacement = '''    <div
+              className="space-y-4 pb-28 lg:pb-4"
+              dir={dir}
+              data-active-set-state
+              data-active-set-number={activeSet.setNumber}
+              data-active-set-persisted={activeSet.hasPersistedLog ? "true" : "false"}
+              data-active-set-completed={activeSet.completedAt ? "true" : "false"}
+              data-active-set-has-details={activeSet.hasSetDetails ? "true" : "false"}
+            >'''
+          if root not in component and 'data-active-set-state' not in component:
+              raise SystemExit("Active Workout root anchor changed")
+          component = component.replace(root, replacement, 1)
+          component_path.write_text(component, encoding="utf-8")
+
+          qa_path = Path("scripts/run-train-layout-qa.mjs")
+          qa = qa_path.read_text(encoding="utf-8")
+          qa = qa.replace('import { copyFile, mkdir, writeFile } from "node:fs/promises";', 'import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";', 1)
+          constants = '''const activePlanId = "10000000-0000-4000-8000-000000000001";
+          const inactivePlanId = "10000000-0000-4000-8000-000000000002";
+          const archivedPlanId = "10000000-0000-4000-8000-000000000003";
+          const activeDayId = "10000000-0000-4000-8000-000000000011";'''
+          shared = '''const trainMockContract = JSON.parse(
+            await readFile(new URL("../lib/fixtures/train-mock-contract.json", import.meta.url), "utf8")
+          );
+          const activePlanId = trainMockContract.planIds.active;
+          const inactivePlanId = trainMockContract.planIds.inactive;
+          const archivedPlanId = trainMockContract.planIds.archived;
+          const activeDayId = trainMockContract.activeDayId;'''
+          if constants not in qa and 'const trainMockContract = JSON.parse(' not in qa:
+              raise SystemExit("Train QA identity constants changed")
+          qa = qa.replace(constants, shared, 1)
+          qa = qa.replace('id: "20000000-0000-4000-8000-000000000001",\n    user_id: "00000000-0000-4000-8000-000000000001",', 'id: trainMockContract.activeSessionId,\n    user_id: trainMockContract.userId,', 1)
+          qa = qa.replace('sessionId: "20000000-0000-4000-8000-000000000001",', 'sessionId: trainMockContract.activeSessionId,', 1)
+          qa = qa.replace('const owner = { user_id: "00000000-0000-4000-8000-000000000001" };', 'const owner = { user_id: trainMockContract.userId };', 1)
+          qa = qa.replace('id: "30000000-0000-4000-8000-000000000001",\n        workout_session_id: "20000000-0000-4000-8000-000000000001",\n        plan_exercise_id: "10000000-0000-4000-8000-000000000021",\n        exercise_order: 1,\n        exercise_name: "Barbell Back Squat",', 'id: trainMockContract.activeExerciseLogId,\n        workout_session_id: trainMockContract.activeSessionId,\n        plan_exercise_id: trainMockContract.activeFirstExerciseId,\n        exercise_order: 1,\n        exercise_name: trainMockContract.activeFirstExerciseName,', 1)
+
+          state_default = '''    focusReturned: null,
+              artifact: null'''
+          state_replacement = '''    focusReturned: null,
+              hydrationPrecondition: null,
+              artifact: null'''
+          if state_default not in qa and 'hydrationPrecondition: null' not in qa:
+              raise SystemExit("Set-details state anchor changed")
+          qa = qa.replace(state_default, state_replacement, 1)
+
+          dialog_anchor = '''    const rpe = page.locator("#active-set-rpe");
+              const rir = page.locator("#active-set-rir");
+              const setType = page.locator("#active-set-type");
+              const note = page.locator("#active-set-note");'''
+          dialog_replacement = '''    const activeSetState = page.locator("[data-active-set-state]").first();
+              const activeSetIdentity = {
+                number: await activeSetState.getAttribute("data-active-set-number"),
+                persisted: await activeSetState.getAttribute("data-active-set-persisted"),
+                completed: await activeSetState.getAttribute("data-active-set-completed"),
+                hasDetails: await activeSetState.getAttribute("data-active-set-has-details")
+              };
+              const rpe = page.locator("#active-set-rpe");
+              const rir = page.locator("#active-set-rir");
+              const setType = page.locator("#active-set-type");
+              const note = page.locator("#active-set-note");
+              const hydratedValues = {
+                rpe: await rpe.inputValue(),
+                rir: await rir.inputValue(),
+                setType: await setType.inputValue(),
+                note: await note.inputValue()
+              };
+              const hydrationPrecondition = {
+                identity: activeSetIdentity,
+                values: hydratedValues,
+                passed: activeSetIdentity.number === "1"
+                  && activeSetIdentity.persisted === "true"
+                  && activeSetIdentity.completed === "true"
+                  && activeSetIdentity.hasDetails === "true"
+                  && hydratedValues.rpe === "7.5"
+                  && hydratedValues.rir === "3"
+                  && hydratedValues.setType === "working"
+                  && hydratedValues.note === "Hydrated set note"
+              };
+              if (!hydrationPrecondition.passed) {
+                throw new Error(`AW-3B autosave fixture hydration failed: ${JSON.stringify(hydrationPrecondition)}`);
+              }'''
+          if dialog_anchor not in qa and 'AW-3B autosave fixture hydration failed' not in qa:
+              raise SystemExit("Set-details control anchor changed")
+          qa = qa.replace(dialog_anchor, dialog_replacement, 1)
+
+          details_assignment = '''      focusReturned: null,
+                autosaveFlushed: null,'''
+          details_replacement = '''      focusReturned: null,
+                hydrationPrecondition,
+                autosaveFlushed: null,'''
+          if details_assignment not in qa and 'hydrationPrecondition,\n      autosaveFlushed' not in qa:
+              raise SystemExit("Set-details observation anchor changed")
+          qa = qa.replace(details_assignment, details_replacement, 1)
+
+          early_anchor = '''// Exercise the longest connected builder interaction first so a regression
+          // fails quickly instead of after the full screenshot matrix.
+          observations.push(await openScenario({ viewport: viewports[2], scenario: "scheduled", route: "/my-workout/plans/builder", step: 3 }));'''
+          early_replacement = '''// Prove the persisted-set hydration and autosave contract before the expensive
+          // visual matrix so fixture drift fails in minutes, not near the end of Quality.
+          const autosaveSmoke = await openScenario({
+            viewport: viewports[2],
+            scenario: "active",
+            language: "en",
+            route: `/workouts/session/day/${activeDayId}`,
+            openSetDetails: true
+          });
+          if (!autosaveSmoke.setDetailsState.autosaveFlushed) {
+            throw new Error(`AW-3B autosave smoke failed: ${JSON.stringify(autosaveSmoke.setDetailsState)}`);
+          }
+          observations.push(autosaveSmoke);
+
+          // Exercise the longest connected builder interaction next.
+          observations.push(await openScenario({ viewport: viewports[2], scenario: "scheduled", route: "/my-workout/plans/builder", step: 3 }));'''
+          if early_anchor not in qa and 'const autosaveSmoke = await openScenario' not in qa:
+              raise SystemExit("Early QA scenario anchor changed")
+          qa = qa.replace(early_anchor, early_replacement, 1)
+
+          qa = qa.replace('    || !item.setDetailsState.dialogFocused\n', '    || !item.setDetailsState.dialogFocused\n    || !item.setDetailsState.hydrationPrecondition?.passed\n', 1)
+          qa_path.write_text(qa, encoding="utf-8")
+
+          test_path = Path("scripts/train-mock-fixture-contract.test.mjs")
+          test_path.write_text('''import assert from "node:assert/strict";
+          import { readFile } from "node:fs/promises";
+          import test from "node:test";
+
+          const contract = JSON.parse(await readFile(new URL("../lib/fixtures/train-mock-contract.json", import.meta.url), "utf8"));
+          const mockSource = await readFile(new URL("../lib/fixtures/train-mock.ts", import.meta.url), "utf8");
+          const qaSource = await readFile(new URL("./run-train-layout-qa.mjs", import.meta.url), "utf8");
+          const componentSource = await readFile(new URL("../components/workouts/workout-day-focus-session.tsx", import.meta.url), "utf8");
+
+          test("Train mock and rendered QA share one stable persisted-set identity contract", () => {
+            assert.match(contract.activeDayId, /^[0-9a-f-]{36}$/);
+            assert.equal(contract.activeFirstExerciseId, contract.activeDayId);
+            assert.ok(contract.activeFirstExerciseName.trim().length > 0);
+            assert.match(mockSource, /train-mock-contract\.json/);
+            assert.match(qaSource, /train-mock-contract\.json/);
+            assert.match(qaSource, /plan_exercise_id: trainMockContract\.activeFirstExerciseId/);
+            assert.match(qaSource, /exercise_name: trainMockContract\.activeFirstExerciseName/);
+            assert.doesNotMatch(qaSource, /plan_exercise_id: "10000000-0000-4000-8000-000000000021"/);
+          });
+
+          test("AW-3B rendered QA proves hydration before asserting autosave", () => {
+            assert.match(componentSource, /data-active-set-state/);
+            assert.match(componentSource, /data-active-set-persisted/);
+            assert.match(componentSource, /data-active-set-completed/);
+            assert.match(componentSource, /data-active-set-has-details/);
+            assert.match(qaSource, /AW-3B autosave fixture hydration failed/);
+            assert.match(qaSource, /const autosaveSmoke = await openScenario/);
+            assert.match(qaSource, /hydrationPrecondition\?\.passed/);
+          });
+          ''', encoding="utf-8")
+
+          workflow = Path(".github/workflows/aw3b-long-term-fixture-repair.yml")
+          workflow.unlink()
+          PY
+
+      - name: Validate permanent repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/run-train-layout-qa.mjs
+          node --test scripts/train-mock-fixture-contract.test.mjs
+          npm ci
+          npm run test:scripts
+          npm run typecheck
+          git diff --check
+          test ! -e .github/workflows/aw3b-long-term-fixture-repair.yml
+
+      - name: Commit and push permanent repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(train): unify persisted-set QA fixture identities"
+          git push origin HEAD:feat/active-workout-aw3b-structured-set-details
