@@ -36,14 +36,26 @@ jobs:
       - name: Generate deterministic lockfile
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
 
-      - name: Verify high-severity dependency audit
-        run: npm audit --audit-level=high
+      - name: Capture dependency audit
+        id: audit
+        shell: bash
+        run: |
+          set +e
+          npm audit --audit-level=high --json > dependency-audit.json
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
-      - name: Upload generated lockfile
+      - name: Upload generated dependency evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dependency-lock-${{ github.event.pull_request.head.sha }}
-          path: package-lock.json
+          path: |
+            package-lock.json
+            dependency-audit.json
           if-no-files-found: error
           retention-days: 1
+
+      - name: Enforce high-severity dependency audit
+        run: test "${{ steps.audit.outputs.status }}" = 0
