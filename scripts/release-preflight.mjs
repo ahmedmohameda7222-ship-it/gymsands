@@ -18,6 +18,7 @@ import {
   PRODUCTION_AUTHORIZATION_CONTEXT,
   STAGE1_VALIDATION_CONTEXT,
   authorizeProductionPromotion,
+  deriveReleaseReadyTarget,
   deriveReleaseTarget,
   expectedMigrationVersion,
   validationContext,
@@ -156,12 +157,18 @@ export function validateCanonicalQualityArtifact({
   if (expectedTarget !== migrationState.latestAppliedMigrationVersion) {
     failures.push("expected_migration_ledger_mismatch");
   }
-  if (manifest.release?.migrationLedgerReconciliationState !== "reconciled") {
-    failures.push("release_manifest_unreconciled");
+  if (manifest.release?.migrationLedgerReconciliationState !== migrationState.reconciliationState) {
+    failures.push("release_manifest_reconciliation_state_mismatch");
   }
-  if (manifest.release?.pendingMigrationCount !== 0) failures.push("release_manifest_pending_count_mismatch");
-  if (manifest.release?.schemaAppliedUntrackedCount !== 0) failures.push("release_manifest_untracked_count_mismatch");
-  if (manifest.release?.unresolvedMigrationCount !== 0) failures.push("release_manifest_unresolved_count_mismatch");
+  if (manifest.release?.pendingMigrationCount !== migrationState.pendingCount) {
+    failures.push("release_manifest_pending_count_mismatch");
+  }
+  if (manifest.release?.schemaAppliedUntrackedCount !== migrationState.schemaAppliedUntrackedCount) {
+    failures.push("release_manifest_untracked_count_mismatch");
+  }
+  if (manifest.release?.unresolvedMigrationCount !== migrationState.unresolvedCount) {
+    failures.push("release_manifest_unresolved_count_mismatch");
+  }
 
   const metadataRun = String(metadata.workflowRunId ?? "");
   if (metadata.repository !== expectedRepo) failures.push("artifact_repository_mismatch");
@@ -375,9 +382,11 @@ async function main() {
     : resolve(process.cwd(), options["quality-reports"] || "quality-reports");
   const ledger = readJson(resolve(root, "supabase/migration-ledger.json"), "migration ledger");
   const migrationState = deriveMigrationLedgerState(ledger);
-  const releaseTarget = deriveReleaseTarget(ledger);
+  const releaseTarget = context === PRODUCTION_AUTHORIZATION_CONTEXT
+    ? deriveReleaseReadyTarget(ledger)
+    : deriveReleaseTarget(ledger);
   if (requestedMigration !== releaseTarget.expectedMigration) {
-    throw new Error("Expected migration does not equal the checked-out reconciled ledger head.");
+    throw new Error("Expected migration does not equal the checked-out Production migration identity.");
   }
 
   const artifact = validateCanonicalQualityArtifact({
@@ -393,7 +402,7 @@ async function main() {
 
   const manifest = artifact.manifest || readJson(resolve(reportsPath, "release-manifest.json"), "release manifest");
   const evaluation = evaluateReleasePreflight({
-    mode: options.mode || "release",
+    mode: context === PRODUCTION_AUTHORIZATION_CONTEXT ? "release" : "review",
     expectedCommit,
     checkedOutCommit,
     expectedRepository,

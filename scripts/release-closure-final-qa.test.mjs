@@ -7,6 +7,7 @@ import {
   PRODUCTION_AUTHORIZATION_CONTEXT,
   STAGE1_VALIDATION_CONTEXT,
   authorizeProductionPromotion,
+  deriveReleaseReadyTarget,
   deriveReleaseTarget,
   productionAuthorizationToken,
   validateSupabaseProductionTarget,
@@ -77,11 +78,31 @@ test("Activity Catalog, other projects, generic hosts and localhost are rejected
   }
 });
 
+test("pending ledgers remain reviewable but cannot become release-ready", () => {
+  const pending = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
+  const target = deriveReleaseTarget(pending);
+  assert.equal(target.reconciliationState, "pending");
+  assert.equal(target.pendingCount > 0, true);
+  assert.equal(target.releaseReady, false);
+  assert.throws(() => deriveReleaseReadyTarget(pending), /not release-ready/);
+});
+
 test("future reconciled ledger automatically derives its later target", () => {
-  const ledger = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
-  const currentTarget = deriveReleaseTarget(ledger).expectedMigration;
+  const current = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
+  const reconciled = structuredClone(current);
+  reconciled.entries = reconciled.entries.filter((entry) => entry.state !== "pending");
+  reconciled.pendingCount = 0;
+  reconciled.unresolvedCount = 0;
+  reconciled.historyRepair = {
+    ...reconciled.historyRepair,
+    state: "reconciled",
+    pendingCount: 0,
+    unresolvedCount: 0,
+    note: "Synthetic future-target fixture with every migration resolved.",
+  };
+  const currentTarget = deriveReleaseTarget(reconciled).expectedMigration;
   const futureVersion = (BigInt(currentTarget) + 1n).toString().padStart(currentTarget.length, "0");
-  const future = structuredClone(ledger);
+  const future = structuredClone(reconciled);
   future.entries.push({
     productionVersion: futureVersion,
     productionName: "synthetic_future_release",
@@ -101,13 +122,19 @@ test("generic workflow and evidence code contain no pinned AW-2A migration", () 
     assert.equal(source(path).includes("20260721012814"), false, `${path} must derive the target`);
   }
   const quality = source(".github/workflows/quality.yml");
-  assert.match(quality, /deriveReleaseTarget/);
+  assert.match(quality, /quality-ledger-target\.mjs/);
   assert.match(quality, /validation_request_id/);
+  const qualityTarget = source("scripts/quality-ledger-target.mjs");
+  assert.match(qualityTarget, /deriveMigrationLedgerState/);
+  assert.match(qualityTarget, /expectedMigrationVersion/);
+  assert.match(source("scripts/release-identity-contract.mjs"), /deriveReleaseTarget/);
   const preflight = source(".github/workflows/release-preflight.yml");
   assert.match(preflight, /type: choice[\s\S]*stage1-infrastructure-validation[\s\S]*production-marker-promotion-authorization/);
   assert.match(preflight, /comparison_base/);
   assert.match(preflight, /validation_request_id/);
   assert.match(preflight, /expected_migration/);
+  const preflightScript = source("scripts/release-preflight.mjs");
+  assert.match(preflightScript, /PRODUCTION_AUTHORIZATION_CONTEXT[\s\S]*deriveReleaseReadyTarget/);
 });
 
 test("same-head run selection and artifact-only evidence permissions are exact", () => {
@@ -118,6 +145,10 @@ test("same-head run selection and artifact-only evidence permissions are exact",
   assert.match(workflow, /Download and independently verify preflight evidence/);
   assert.match(workflow, /plaivra_aw2b_command_authority_implementation_report\.md/);
   assert.match(workflow, /stage1-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /pre-application-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /if: steps\.identity\.outputs\.release_ready != 'true'/);
+  assert.match(workflow, /if: steps\.identity\.outputs\.release_ready == 'true'/);
+  assert.match(workflow, /releasePreflightDispatched: false/);
   assert.match(workflow, /schemaVersion: 3/);
   assert.match(workflow, /canonicalArtifact:/);
   assert.match(workflow, /preflightArtifact:/);

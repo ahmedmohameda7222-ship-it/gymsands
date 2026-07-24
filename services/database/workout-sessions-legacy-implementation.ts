@@ -18,6 +18,14 @@ import type {
 } from "@/types";
 import { serializeWorkoutSetLogs } from "./workout-set-log-serialization";
 import type { WorkoutSetLogInput } from "./workout-set-log-serialization";
+import {
+  normalizeWorkoutSetDetailsRelation,
+  normalizeWorkoutSetSegmentsRelation
+} from "./workout-set-details";
+import type {
+  WorkoutSetDetailsRelation,
+  WorkoutSetSegmentsRelation
+} from "./workout-set-details";
 
 export type { WorkoutSetLogInput } from "./workout-set-log-serialization";
 
@@ -263,18 +271,44 @@ export async function getOrStartWorkoutDaySession(userId: string, day: WorkoutPl
 
 export async function getWorkoutSessionLogs(sessionId: string) {
   if (!supabase || !isUuid(sessionId)) throw new Error("Database not connected");
+  const session = await getWorkoutSessionIdentity(sessionId);
   const { data, error } = await supabase!
     .from("exercise_logs")
-    .select("*")
+    .select("*,set_details:exercise_log_set_details(*),segments:exercise_log_set_segments(*,metric_values:exercise_log_set_segment_metric_values(*))")
     .eq("workout_session_id", sessionId)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+    .order("segment_order", {
+      ascending: true,
+      referencedTable: "exercise_log_set_segments"
+    });
 
   if (error) {
     console.warn("Plaivra could not load workout session logs.", error.message);
-    return [];
+    throw error;
   }
 
-  return (data ?? []) as ExerciseLog[];
+  return ((data ?? []) as unknown as Array<ExerciseLog & {
+    set_details?: WorkoutSetDetailsRelation;
+    segments?: WorkoutSetSegmentsRelation;
+  }>).map((log) => {
+    const relationContext = {
+      exerciseLogId: log.id,
+      workoutSessionId: log.workout_session_id,
+      userId: session.user_id
+    };
+    return {
+      ...log,
+      set_details: normalizeWorkoutSetDetailsRelation(
+        log.set_details,
+        relationContext
+      ),
+      segments: normalizeWorkoutSetSegmentsRelation(
+        log.segments,
+        relationContext
+      )
+    };
+  });
 }
 
 export async function updateWorkoutSessionDuration(sessionId: string, durationMinutes: number) {

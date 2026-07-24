@@ -302,7 +302,6 @@ describe("atomic plan-day workout sessions", () => {
         set_number: 1,
         reps: null,
         weight_kg: null,
-        notes: null,
         completed_at: capturedAt,
         metric_source: "manual",
         metric_source_provider: "plaivra",

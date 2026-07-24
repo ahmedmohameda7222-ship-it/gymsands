@@ -1,4 +1,23 @@
+\set ON_ERROR_STOP on
+
 begin;
+set local transaction read only;
+
+do $aw3a_capture_marker_baseline$
+declare
+  v_marker text;
+begin
+  select migration_version into strict v_marker
+  from public.release_schema_compatibility
+  where singleton;
+
+  if v_marker = '20260722113000' then
+    raise exception 'AW-3A verification encountered invalid repository-only compatibility marker: %', v_marker;
+  end if;
+
+  perform pg_catalog.set_config('plaivra.aw3a_marker_baseline', v_marker, true);
+end
+$aw3a_capture_marker_baseline$;
 
 do $aw3a_schema_verification$
 declare
@@ -6,6 +25,7 @@ declare
   v_rls boolean;
   v_definition jsonb;
   v_function record;
+  v_metric_columns text[];
 begin
   if to_regclass('public.workout_performance_metric_definitions') is null
      or to_regclass('public.exercise_log_metric_values') is null then
@@ -46,8 +66,28 @@ begin
       and indexdef ilike '%where is_current%'
   ) then raise exception 'AW-3A one-current-definition index is missing.'; end if;
 
-  if (select count(*) from information_schema.columns where table_schema='public' and table_name='exercise_log_metric_values') <> 15 then
-    raise exception 'AW-3A metric value column count is incorrect.';
+  select array_agg(column_name || ':' || udt_name || ':' || is_nullable order by ordinal_position)
+  into v_metric_columns
+  from information_schema.columns
+  where table_schema='public' and table_name='exercise_log_metric_values';
+
+  if v_metric_columns is distinct from array[
+    'id:uuid:NO',
+    'exercise_log_id:uuid:NO',
+    'workout_session_id:uuid:NO',
+    'user_id:uuid:NO',
+    'metric_key:text:NO',
+    'metric_version:int2:NO',
+    'side:text:NO',
+    'value:numeric:NO',
+    'source:text:NO',
+    'source_provider:text:YES',
+    'source_version:text:YES',
+    'captured_at:timestamptz:NO',
+    'created_at:timestamptz:NO',
+    'updated_at:timestamptz:NO'
+  ]::text[] then
+    raise exception 'AW-3A metric value column contract is incorrect: %', v_metric_columns;
   end if;
 
   if not exists (
@@ -161,11 +201,30 @@ begin
     select 1 from public.exercise_log_metric_values
     where source='backfill' and metric_key not in ('repetitions','external_load_kg')
   ) then raise exception 'AW-3A backfill invented an unapproved metric.'; end if;
-
-  if (select migration_version from public.release_schema_compatibility where singleton=true) <> '20260722093115' then
-    raise exception 'AW-3A compatibility marker was promoted unexpectedly.';
-  end if;
 end
 $aw3a_schema_verification$;
+
+do $aw3a_verify_marker_preserved$
+declare
+  v_marker_baseline text := pg_catalog.current_setting('plaivra.aw3a_marker_baseline', true);
+  v_marker_final text;
+begin
+  if v_marker_baseline is null or v_marker_baseline = '' then
+    raise exception 'AW-3A compatibility marker baseline is missing.';
+  end if;
+
+  select migration_version into strict v_marker_final
+  from public.release_schema_compatibility
+  where singleton;
+
+  if v_marker_final = '20260722113000' then
+    raise exception 'AW-3A verification encountered invalid repository-only compatibility marker: %', v_marker_final;
+  end if;
+
+  if v_marker_final is distinct from v_marker_baseline then
+    raise exception 'AW-3A changed the compatibility marker from % to %', v_marker_baseline, v_marker_final;
+  end if;
+end
+$aw3a_verify_marker_preserved$;
 
 rollback;

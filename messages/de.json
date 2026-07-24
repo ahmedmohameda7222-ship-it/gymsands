@@ -101,6 +101,10 @@
       "drop": "Drop-Satz",
       "failure": "Bis zum Muskelversagen",
       "normal": "Standardsatz",
+      "backoff": "Reduktionssatz",
+      "amrap": "AMRAP",
+      "timed": "Zeitbasiert",
+      "other": "Andere",
       "rpe": "RPE",
       "rir": "RIR",
       "note": "Satznotiz",
@@ -113,7 +117,9 @@
       "saveRiskTitle": "Dieser Satz konnte nicht sicher gespeichert werden.",
       "saveRiskDescription": "Lass diesen Bildschirm geöffnet und versuche es erneut.",
       "newBest": "{name}: neue Bestleistung — {weight} × {reps} Wiederholungen",
-      "labelPlural": "Sätze"
+      "labelPlural": "Sätze",
+      "rpeInvalid": "Gib einen RPE-Wert von 0 bis 10 mit höchstens einer Dezimalstelle ein.",
+      "rirInvalid": "Gib einen RIR-Wert von 0 bis 20 mit höchstens einer Dezimalstelle ein."
     },
     "rest": {
       "beforeSet": "Pause vor Satz {number}",

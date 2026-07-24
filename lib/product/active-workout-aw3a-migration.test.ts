@@ -4,10 +4,15 @@ import { describe, expect, it } from "vitest";
 
 const migrationPath = "supabase/migrations/20260722113000_active_workout_aw3a_structured_metrics.sql";
 const migration = readFileSync(migrationPath, "utf8");
+const verification = readFileSync(
+  "supabase/verification/active-workout-aw3a-structured-metrics.sql",
+  "utf8"
+).replaceAll("\r\n", "\n").toLowerCase();
 
 function filesUnder(root: string): string[] {
   const result: string[] = [];
   for (const entry of readdirSync(root)) {
+    if (["node_modules", ".next", ".git", "graphify-out"].includes(entry)) continue;
     const path = join(root, entry);
     const stat = statSync(path);
     if (stat.isDirectory()) result.push(...filesUnder(path));
@@ -77,6 +82,21 @@ describe("AW-3A migration and runtime authority", () => {
     expect(migration).not.toContain("update public.release_schema_compatibility");
   });
 
+  it("keeps permanent AW-3A verification future-safe and schema-exact", () => {
+    expect(verification).toContain("set local transaction read only");
+    expect(verification).toContain("set_config('plaivra.aw3a_marker_baseline'");
+    expect(verification).toContain("current_setting('plaivra.aw3a_marker_baseline', true)");
+    expect(verification).toContain("v_marker_final is distinct from v_marker_baseline");
+    expect(verification).toContain("aw-3a metric value column contract is incorrect");
+    expect(verification).toContain("'updated_at:timestamptz:no'");
+    expect(verification).not.toContain("metric value column count is incorrect");
+    expect(verification).not.toMatch(/v_marker\s+not\s+in\s*\(/);
+    expect(verification).not.toMatch(
+      /(?:insert\s+into|update|delete\s+from)\s+public\.release_schema_compatibility/
+    );
+    expect(verification).toContain("20260722113000");
+  });
+
   it("keeps all reachable set mutations on the one atomic RPC", () => {
     const runtimeFiles = [
       "services/database/workout-sessions.ts",
@@ -139,15 +159,26 @@ describe("AW-3A migration and runtime authority", () => {
     expect(exportSource).toContain("workouts.performance_metric_values");
     expect(exportSource).toContain('.order("captured_at", { ascending: true })');
     expect(exportSource).toContain('.order("id", { ascending: true })');
-    expect(exportSource).toContain(".range(from, from + performanceMetricPageSize - 1)");
+    expect(exportSource).toContain(".range(from, from + exportPageSize - 1)");
     expect(exportSource).not.toContain(".limit(8000)");
     expect(exportSource).not.toContain('.from("workout_performance_metric_definitions")');
   });
 
-  it("records the exact audited repository commit consistently in the correction report", () => {
-    const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as { auditedRepositoryCommit: string };
+  it("preserves the immutable AW-3A production alias after later ledger evidence advances", () => {
+    const ledger = JSON.parse(readFileSync("supabase/migration-ledger.json", "utf8")) as {
+      auditedRepositoryCommit: string;
+      entries: Array<Record<string, string>>;
+    };
+    const aw3a = ledger.entries.find((entry) =>
+      entry.localFile === "20260722113000_active_workout_aw3a_structured_metrics.sql"
+    );
+    expect(aw3a).toMatchObject({
+      state: "applied_version_alias",
+      productionVersion: "20260722161542",
+      productionName: "active_workout_aw3a_structured_metrics"
+    });
+    expect(ledger.auditedRepositoryCommit).toMatch(/^[a-f0-9]{40}$/);
     const report = readFileSync("plaivra_aw3a_final_planner_qaqc_corrections_report.md", "utf8");
-    expect(ledger.auditedRepositoryCommit).toBe("a196cb217245557030cdc812a9dfcb670fcc0ba6");
-    expect(report).toContain(`auditedRepositoryCommit: ${ledger.auditedRepositoryCommit}`);
+    expect(report).toContain("a196cb217245557030cdc812a9dfcb670fcc0ba6");
   });
 });

@@ -6,6 +6,11 @@ import type {
   WorkoutSessionSummary as LegacyWorkoutSessionSummary
 } from "./database-legacy";
 import type { SavedWorkoutPerformanceMetricValue } from "./workout-performance";
+import type {
+  WorkoutSetDetailsRow,
+  WorkoutSetSegmentRow,
+  WorkoutSetType
+} from "./workout-set-details";
 
 export type WorkoutSessionStatus = "started" | "completed" | "skipped" | "cancelled";
 
@@ -24,6 +29,9 @@ export type WorkoutSession = Omit<LegacyWorkoutSession, "status"> & {
 
 export type ExerciseLog = LegacyExerciseLog & {
   performance_metrics?: SavedWorkoutPerformanceMetricValue[];
+  set_type?: WorkoutSetType;
+  set_details?: WorkoutSetDetailsRow | null;
+  segments?: WorkoutSetSegmentRow[];
 };
 
 export type WorkoutSessionSummary = Omit<LegacyWorkoutSessionSummary, keyof LegacyWorkoutSession | "exercise_logs"> &

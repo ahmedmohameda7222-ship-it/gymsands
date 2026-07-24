@@ -2,8 +2,7 @@ name: Phase A Diff Validation
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: read
@@ -17,15 +16,141 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout exact pull request head
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+      - run: git diff --check origin/main...HEAD
+
+  validate-aw3b-verification-contracts:
+    if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+    steps:
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Verify exact checkout identity
+      - name: Restore validated transformations and add active post-completion fixture
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/previous
+          gh run download 30079109835 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name aw3b-final-verification-e98312fa69e99541d1e61cc0356170643680a98a \
+            --dir /tmp/previous
+          source_root=/tmp/previous/home/runner/work/gymsands/gymsands/supabase/verification
+          for name in \
+            active-workout-aw3a-integration.sql \
+            active-workout-aw3a-final-completion.sql \
+            active-workout-aw3b-structured-set-details.sql \
+            active-workout-aw3b-integration.sql; do
+            cp "$source_root/$name" "supabase/verification/$name"
+          done
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('supabase/verification/active-workout-aw3b-integration.sql')
+          source = path.read_text(encoding='utf-8')
+          marker = '''-- Authenticated browser provenance is actor-bound even when the JSON spoofs
+          -- trusted machine actors. Hidden structured values and the segment graph are
+          -- still committed atomically.
+          '''
+          fixture = '''set local role authenticated;
+          select set_config('request.jwt.claim.role','authenticated',true);
+          select set_config('request.jwt.claim.sub','b3000000-0000-4000-8000-000000000001',true);
+          select (public.start_or_resume_direct_workout_session_atomic(
+            'b3000000-0000-4000-8000-000000000001'::uuid,
+            'provider_activity',
+            'aw3b-post-completion-verification',
+            'plaivra-verification',
+            'AW-3B Post Completion Verification',
+            'Verification',
+            '{"sets":3}'::jsonb,
+            null
+          )->'session'->>'id') as aw3b_post_completion_session_id \gset
+          select set_config('plaivra.aw3b_post_completion_session_id', :'aw3b_post_completion_session_id', true);
+          reset role;
 
-      - name: Check branch diff formatting against main
-        run: git diff --check origin/main...HEAD
+          '''
+          if source.count(marker) != 1:
+              raise SystemExit(f'Expected one post-completion marker, found {source.count(marker)}')
+          prefix, suffix = source.split(marker, 1)
+          old = "current_setting('plaivra.aw3b_integration_session_id')::uuid"
+          if suffix.count(old) < 4:
+              raise SystemExit(f'Expected post-completion session references, found {suffix.count(old)}')
+          suffix = suffix.replace(old, "current_setting('plaivra.aw3b_post_completion_session_id')::uuid")
+          path.write_text(prefix + fixture + marker + suffix, encoding='utf-8')
+          PY
+          git diff --check -- supabase/verification
+
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Replay full migration chain
+        run: node scripts/replay-local-migration-chain.mjs --log /tmp/replay.log --prove-future-order
+
+      - name: Lint database
+        run: supabase db lint --local --schema public --level error --fail-on error
+
+      - name: Verify permanent database chain
+        id: verify
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          { set -euo pipefail
+            PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql
+            PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-integration.sql
+            PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3a-structured-metrics.sql
+            PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3a-integration.sql
+            PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3a-final-completion.sql
+            PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3b-structured-set-details.sql
+            PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3b-integration.sql
+            PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql
+            PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$PLAIVRA_LOCAL_DATABASE_URL" node scripts/test-database-preflight-control.mjs
+            PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
+          } 2>&1 | tee /tmp/verify.log
+
+      - name: Create exact corrected blobs
+        if: steps.verify.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > /tmp/blobs.txt
+          for path in \
+            supabase/verification/active-workout-aw3a-integration.sql \
+            supabase/verification/active-workout-aw3a-final-completion.sql \
+            supabase/verification/active-workout-aw3b-structured-set-details.sql \
+            supabase/verification/active-workout-aw3b-integration.sql; do
+            sha="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" -f content="$(base64 -w0 "$path")" -f encoding=base64 --jq .sha)"
+            printf '%s=%s\n' "$path" "$sha" | tee -a /tmp/blobs.txt
+          done
+
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw3b-final-verification-${{ github.event.pull_request.head.sha }}
+          path: |
+            /tmp/blobs.txt
+            /tmp/replay.log
+            /tmp/verify.log
+            supabase/verification/active-workout-aw3a-integration.sql
+            supabase/verification/active-workout-aw3a-final-completion.sql
+            supabase/verification/active-workout-aw3b-structured-set-details.sql
+            supabase/verification/active-workout-aw3b-integration.sql
+          if-no-files-found: warn
+          retention-days: 1
+
+      - if: always()
+        run: test "${{ steps.verify.outcome }}" = success

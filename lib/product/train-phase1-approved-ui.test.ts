@@ -39,7 +39,8 @@ describe("approved Train Phase 1 UI contracts", () => {
     expect(picker).toContain("existing.has(key)");
     expect(picker).toContain("!isActionable(key)");
     expect(picker).toContain("onCloseAutoFocus");
-    expect(picker).toContain('className="absolute inset-0 rounded-2xl');
+    expect(picker).toContain('variant={isSelected ? "default" : "outline"} className="min-h-11 w-full"');
+    expect(picker).toContain("onClick={() => toggle(exercise)}");
     expect(picker).toContain("activeFilterChips");
     expect(picker).toContain("min-h-[52px] w-full");
     expect(picker).toContain("const muscleOptions = filterOptions.primaryMuscles");
@@ -49,7 +50,7 @@ describe("approved Train Phase 1 UI contracts", () => {
     expect(picker).toContain("createCatalogRequestGroupId()");
     expect(picker).toContain("requestGroupId: initialCatalogRequestGroupId");
     expect(picker).toContain("mergeCanonicalWorkoutFilterOptions(options, result.filterOptions!)");
-    expect(picker).toContain("optionLabel(muscleOptions, muscle)");
+    expect(picker).toContain('optionLabel(muscleOptions, muscle, language, "muscle")');
     expect(picker).toContain("signal: controller.signal");
     expect(picker).toContain("data-picker-load-more");
     expect(picker).toContain("pagination.nextOffset");
@@ -83,14 +84,14 @@ describe("approved Train Phase 1 UI contracts", () => {
     ];
     for (const key of keys) expect(translations.match(new RegExp(`${key}:`, "g"))?.length).toBe(3);
     expect(detail).toContain('warnings.push(tr("exerciseVideoLoadWarning"))');
-    expect(detail).toContain("const metadata = metadataLine(item.target_muscle, item.equipment)");
+    expect(detail).toContain('const metadata = metadataLine(formatExerciseDisplayList(item.target_muscle, language, "muscle"), formatExerciseDisplayList(item.equipment, language, "equipment"))');
     expect(detail).toContain("{metadata ? <p");
     expect(history.match(/aria-label=\{tr\("filterWorkoutHistoryWeek"\)\}/g)?.length).toBe(2);
     expect(history.match(/aria-label=\{tr\("filterWorkoutHistoryMonth"\)\}/g)?.length).toBe(2);
     expect(directSession).toContain('userSafeError(error, tr("workoutSessionOpenFailed"))');
     expect(directSession).toContain("[locale, params.id, user?.id]");
-    expect(activeWorkout).toContain('tr("finishActiveWorkoutQuestion")');
-    expect(activeWorkout).toContain('tr("cancelActiveWorkoutQuestion")');
+    expect(activeWorkout).toContain('t("minimized.finishQuestion")');
+    expect(activeWorkout).toContain('t("minimized.cancelQuestion")');
     expect(activeWorkout).not.toContain("Return to workout</Link>");
   });
 

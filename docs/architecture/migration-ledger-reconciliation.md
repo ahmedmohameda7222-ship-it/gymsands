@@ -2,26 +2,47 @@
 
 **Project:** `bkwezjxvapaeasfvlhvv`
 
-**Verified production state:** 2026-07-21
+**Verified production state:** 2026-07-22
 
 **Machine-readable authority:** [`supabase/migration-ledger.json`](../../supabase/migration-ledger.json)
 
-**Status:** **Fully reconciled through production record `20260721012814`; no pending repository migration remains**
+**Status:** **Production reconciled through generated record `20260722232817`; all three AW-3B migrations are applied**
 
 This document records verified production migration history. It is not authorization to replay migrations, deploy, promote, change compatibility markers, or merge. Applied migration files and production identities are immutable.
 
 ## Current production and ledger state
 
-- Actual production migration records: 64
+- Actual production migration records: 70
 - Ledger exact-applied rows (`state = applied`): 63
-- Ledger version-alias rows (`state = applied_version_alias`): 1
-- Latest production migration: `20260721012814_active_workout_aw2a_execution_state_corrections` (repository file `20260721012814_active_workout_aw2a_execution_state_corrections.sql`)
+- Ledger version-alias rows (`state = applied_version_alias`): 7
+- Latest production migration: `20260722232817_active_workout_aw3b_read_and_payload_corrections` (immutable repository file `20260723010500_active_workout_aw3b_read_and_payload_corrections.sql`)
 - `pendingCount = 0`
 - `schemaAppliedUntrackedCount = 0`
 - `unresolvedCount = 0`
 - `historyRepair.state = reconciled`
-- Compatibility marker: `20260717051011`
+- Compatibility marker: `20260722161542`
 - Ledger-level migration-history release readiness: true
+
+## Applied AW-3B structured-set chain
+
+```text
+Repository 20260722210312_active_workout_aw3b_structured_set_details.sql
+Production 20260722223426_active_workout_aw3b_structured_set_details
+Git blob   8843c1dd46369501c771e34f4324e793b04edb01
+SHA-256    22ea89a6c63356b8e5b3040076a4268f88dde8059dd21798659d6978859238ff
+
+Repository 20260722224500_active_workout_aw3b_production_hardening.sql
+Production 20260722224246_active_workout_aw3b_production_hardening
+Git blob   c41892195a25e21e35c3fede1ce8e696fc99eaa4
+SHA-256    19bdbaad1bd80318e5893f4c80d6a9b037816b6ebed2480c2ed5574ce74409a3
+
+Repository 20260723010500_active_workout_aw3b_read_and_payload_corrections.sql
+Production 20260722232817_active_workout_aw3b_read_and_payload_corrections
+Git blob   e585dda90f2f25cea76b975476144982899c9502
+SHA-256    4847061819b8f19cdcaf2cf0023eb44d0e3ecfaaef2de298926bff8fe07fb6f
+```
+
+The first migration normalizes owner-bound set details, multi-stage segments, segment metrics, conservative legacy tokens, and atomic write/timeline behavior. The second forward migration adds FK-supporting indexes and enables authenticated-read RLS on the shared metric-definition registry. The third makes the detail relationship exactly one-to-one for PostgREST, caches owner-policy identity checks, bounds public payload and total session logs, reserves backfill provenance, and reloads the API schema cache. Production verification confirmed 15 exact backfilled detail rows, 16 removed metadata tokens, zero ownership violations, an object-shaped live Data API relation, unchanged AW-3A metric/timeline hashes, no test-fixture residue, and an unchanged compatibility marker. All three files and generated Production identities are immutable and must not be replayed.
 
 ## Applied Muscle Intelligence Phase 4C.1 chain
 
@@ -125,17 +146,17 @@ The existing owner, privacy, lifecycle, snapshot, and RPC security contracts rem
 Physical production migration head:
 
 ```text
-20260721012814
+20260722232817
 ```
 
 Deployed compatibility marker:
 
 ```text
 version = 2
-migration_version = 20260717051011
+migration_version = 20260722161542
 ```
 
-The difference is intentional. The marker may advance only in a separately authorized coordinated release. Phase 4C.1 does not advance it.
+The difference is intentional. AW-3B schema is applied, while the marker remains on released AW-3A until coordinated AW-3B release closure.
 
 ## Verification authority
 
@@ -150,8 +171,7 @@ The difference is intentional. The marker may advance only in a separately autho
 - exact-head production build
 - `supabase/migration-ledger.json`
 
-PR merge, deployment, compatibility-marker advancement, AW-2B, and later phases remain separate decisions.
-
+AW-3B PR merge, deployment, compatibility-marker advancement, and later execution units remain separate release-closure decisions.
 
 ## Applied AW-2A execution-state migrations
 
@@ -178,10 +198,12 @@ PR merge, deployment, compatibility-marker advancement, AW-2B, and later phases 
 
 ## Production-count interpretation
 
-The physical production history contains **64 records**. The machine ledger intentionally reports `productionMigrationCount = 63` because that field counts only exact `state = applied` rows. The remaining production record is the immutable AW-2A base migration represented as one `applied_version_alias`. Therefore:
+The physical production history contains **70 records**. The machine ledger intentionally reports `productionMigrationCount = 63` because that field counts only exact `state = applied` rows. Seven generated production identities are represented by immutable version aliases. Therefore:
 
 ```text
-63 exact-applied + 1 version-alias = 64 actual production records
+63 exact-applied + 7 version-alias = 70 actual production records
 ```
 
 This is deliberate reconciliation behavior, not drift. `scripts/check-migration-ledger.mjs` remains strict and unchanged.
+
+AW-3B post-apply correction `supabase/migrations/20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql` is committed and pending one authorized Plaivra Database application; do not replay any applied migration.

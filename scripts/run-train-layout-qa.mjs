@@ -66,9 +66,30 @@ function intersects(a, b) {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
-async function openScenario({ viewport, scenario, language = "en", route, step = null, theme = "light", catalogScenario = "success", zoom = 1, openPicker = false, keyboardCheck = false, mobileKeyboard = false, variant = "default" }) {
+function workoutSessionFixture({ planDayId = null, workoutId = null, workoutName = "Strength A" } = {}) {
+  return {
+    id: "20000000-0000-4000-8000-000000000001",
+    user_id: "00000000-0000-4000-8000-000000000001",
+    workout_id: workoutId,
+    plan_id: planDayId ? activePlanId : null,
+    plan_day_id: planDayId,
+    workout_name: workoutName,
+    workout_day_name: planDayId ? "Strength A" : null,
+    workout_category: "strength",
+    started_at: "2026-07-22T08:00:00.000Z",
+    completed_at: null,
+    skipped_at: null,
+    duration_minutes: null,
+    notes: null,
+    status: "started"
+  };
+}
+
+async function openScenario({ viewport, scenario, language = "en", route, step = null, theme = "light", catalogScenario = "success", zoom = 1, openPicker = false, openSetDetails = false, keyboardCheck = false, mobileKeyboard = false, variant = "default" }) {
   const renderedViewport = zoom === 1 ? viewport : { ...viewport, width: Math.max(160, Math.floor(viewport.width / zoom)), height: Math.max(284, Math.floor(viewport.height / zoom)) };
+  const themeId = theme === "dark" ? "elite-noir" : "olive";
   const context = await browser.newContext({ viewport: renderedViewport, reducedMotion: "reduce", colorScheme: theme });
+  const setWritePayloads = [];
   await context.addCookies([{ name: "plaivra.language.v1", value: language, url: baseUrl, sameSite: "Lax" }]);
   await context.route("**/api/activity-catalog/**", async (requestRoute) => {
     const url = new URL(requestRoute.request().url());
@@ -77,13 +98,93 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
   await context.route(/^https:\/\/[^/]+\.supabase\.co\//, async (requestRoute) => {
     const method = requestRoute.request().method();
     const requestUrl = new URL(requestRoute.request().url());
+    if (method === "POST" && requestUrl.pathname.includes("/rest/v1/rpc/start_or_resume_workout_session_atomic")) {
+      await requestRoute.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "x-plaivra-qa-fixture": "active-workout-day-session" },
+        body: JSON.stringify({ session: workoutSessionFixture({ planDayId: activeDayId }), resumed: true })
+      });
+      return;
+    }
+    if (method === "POST" && requestUrl.pathname.includes("/rest/v1/rpc/start_or_resume_direct_workout_session_atomic")) {
+      await requestRoute.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "x-plaivra-qa-fixture": "active-workout-direct-session" },
+        body: JSON.stringify({ session: workoutSessionFixture({ workoutId: catalogActivityId, workoutName: catalogActivities[0].name }), resumed: true })
+      });
+      return;
+    }
+    if (method === "GET" && requestUrl.pathname.includes("/rest/v1/exercise_logs")) {
+      const persistedLog = {
+        id: "30000000-0000-4000-8000-000000000001",
+        workout_session_id: "20000000-0000-4000-8000-000000000001",
+        plan_exercise_id: "10000000-0000-4000-8000-000000000021",
+        exercise_order: 1,
+        exercise_name: "Barbell Back Squat",
+        exercise_category: "strength",
+        planned_sets: 3,
+        planned_reps: "8-10",
+        planned_rest_seconds: 90,
+        set_number: 1,
+        reps: 8,
+        weight_kg: 80,
+        notes: "Hydrated set note",
+        set_type: "working",
+        completed_at: "2026-07-22T08:05:00.000Z",
+        created_at: "2026-07-22T08:05:00.000Z",
+        updated_at: "2026-07-22T08:05:00.000Z",
+        set_details: [{
+          exercise_log_id: "30000000-0000-4000-8000-000000000001",
+          workout_session_id: "20000000-0000-4000-8000-000000000001",
+          user_id: "00000000-0000-4000-8000-000000000001",
+          schema_version: 1, set_type: "working", rpe: 7.5, rir: 3, notes: "Hydrated set note",
+          side_mode: "left", planned_tempo: "3-1-1-0", performed_tempo: "2-1-1-0",
+          tempo_adherence: "adjusted", source: "backfill", source_provider: null, source_version: null,
+          created_at: "2026-07-22T08:05:00.000Z", updated_at: "2026-07-22T08:05:00.000Z"
+        }],
+        segments: [
+          {
+            id: "40000000-0000-4000-8000-000000000002",
+            exercise_log_id: "30000000-0000-4000-8000-000000000001",
+            workout_session_id: "20000000-0000-4000-8000-000000000001",
+            user_id: "00000000-0000-4000-8000-000000000001",
+            segment_order: 2, segment_kind: "drop", side: "left", completed_at: "2026-07-22T08:05:30.000Z",
+            source: "backfill", source_provider: null, source_version: null,
+            created_at: "2026-07-22T08:05:30.000Z", updated_at: "2026-07-22T08:05:30.000Z",
+            metric_values: [
+              { id: "50000000-0000-4000-8000-000000000002", segment_id: "40000000-0000-4000-8000-000000000002", exercise_log_id: "30000000-0000-4000-8000-000000000001", workout_session_id: "20000000-0000-4000-8000-000000000001", user_id: "00000000-0000-4000-8000-000000000001", metric_key: "repetitions", metric_version: 1, side: "left", value: 6, source: "backfill", source_provider: null, source_version: null, captured_at: "2026-07-22T08:05:30.000Z", created_at: "2026-07-22T08:05:30.000Z", updated_at: "2026-07-22T08:05:30.000Z" },
+              { id: "50000000-0000-4000-8000-000000000001", segment_id: "40000000-0000-4000-8000-000000000002", exercise_log_id: "30000000-0000-4000-8000-000000000001", workout_session_id: "20000000-0000-4000-8000-000000000001", user_id: "00000000-0000-4000-8000-000000000001", metric_key: "external_load_kg", metric_version: 1, side: "left", value: 60, source: "backfill", source_provider: null, source_version: null, captured_at: "2026-07-22T08:05:30.000Z", created_at: "2026-07-22T08:05:30.000Z", updated_at: "2026-07-22T08:05:30.000Z" }
+            ]
+          },
+          {
+            id: "40000000-0000-4000-8000-000000000001",
+            exercise_log_id: "30000000-0000-4000-8000-000000000001",
+            workout_session_id: "20000000-0000-4000-8000-000000000001",
+            user_id: "00000000-0000-4000-8000-000000000001",
+            segment_order: 1, segment_kind: "primary", side: "left", completed_at: "2026-07-22T08:05:00.000Z",
+            source: "backfill", source_provider: null, source_version: null,
+            created_at: "2026-07-22T08:05:00.000Z", updated_at: "2026-07-22T08:05:00.000Z", metric_values: []
+          }
+        ]
+      };
+      await requestRoute.fulfill({ status: 200, contentType: "application/json", headers: { "content-range": "0-0/1", "x-plaivra-qa-fixture": "aw3b-hydrated-set" }, body: JSON.stringify([persistedLog]) });
+      return;
+    }
+    if (method === "POST" && requestUrl.pathname.includes("/rest/v1/rpc/upsert_workout_set_logs_atomic")) {
+      const payload = requestRoute.request().postDataJSON();
+      setWritePayloads.push(payload);
+      await requestRoute.fulfill({ status: 200, contentType: "application/json", headers: { "x-plaivra-qa-fixture": "aw3b-autosave" }, body: JSON.stringify({ saved: payload?.p_logs?.length ?? 0, deleted: 0 }) });
+      return;
+    }
     if (requestUrl.pathname.includes("/rest/v1/user_app_settings") && (method === "GET" || method === "HEAD")) {
       const wantsObject = (requestRoute.request().headers().accept || "").includes("application/vnd.pgrst.object");
       const now = "2026-07-20T00:00:00.000Z";
       const row = {
         id: "22222222-2222-4222-8222-222222222222",
         user_id: "00000000-0000-4000-8000-000000000001",
-        theme_id: "olive", theme: "light", accent_color: "olive", language,
+        theme_id: themeId, theme, accent_color: themeId, language,
         weight_unit: "kg", height_unit: "cm", distance_unit: "km", liquid_unit: "ml",
         energy_unit: "kcal", body_measurement_unit: "cm", week_starts_on: "monday",
         default_start_page: "today", compact_mode: false, reduce_animations: true, large_text_mode: false,
@@ -103,21 +204,31 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     }
     await requestRoute.fulfill({ status: method === "POST" ? 201 : 200, contentType: "application/json", headers: { "content-range": "0-0/0", "x-plaivra-qa-fixture": "empty-user-data" }, body: method === "HEAD" ? "" : JSON.stringify(Array.isArray(body) ? body[0] ?? {} : method === "GET" ? [] : body) });
   });
-  await context.addInitScript(({ scenarioValue, languageValue, variantValue }) => {
+  await context.addInitScript(({ scenarioValue, languageValue, variantValue, themeIdValue }) => {
     localStorage.setItem("plaivra.qa.train-scenario", scenarioValue);
     localStorage.setItem("plaivra.language.v1", languageValue);
     localStorage.setItem("plaivra.qa.train-variant", variantValue);
-  }, { scenarioValue: scenario, languageValue: language, variantValue: variant });
+    localStorage.setItem("plaivra-theme-id", themeIdValue);
+  }, { scenarioValue: scenario, languageValue: language, variantValue: variant, themeIdValue: themeId });
   const page = await context.newPage();
   const pageErrors = [];
+  const consoleErrors = [];
+  const consoleWarnings = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+    if (message.type() === "warning") consoleWarnings.push(message.text());
+  });
   const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "domcontentloaded", timeout: 45_000 });
   const isSessionRoute = route.startsWith("/workouts/session");
   await page.waitForSelector(isSessionRoute ? "main#main-content" : "[data-app-shell]", { timeout: 20_000 });
   await page.waitForFunction((expected) => document.documentElement.lang === expected, language, { timeout: 20_000 });
-  // Next's development chrome is not application UI and can intercept
-  // otherwise valid keyboard/pointer verification paths.
-  await page.evaluate(() => document.querySelectorAll("nextjs-portal").forEach((element) => element.remove()));
+  await page.waitForFunction(
+    ({ expectedThemeId, expectedDark }) => document.documentElement.dataset.theme === expectedThemeId
+      && document.documentElement.classList.contains("dark") === expectedDark,
+    { expectedThemeId: themeId, expectedDark: theme === "dark" },
+    { timeout: 20_000 }
+  );
   if (scenario === "active" && !isSessionRoute) {
     await page.waitForSelector("[data-active-workout-controller]", { timeout: 20_000 }).catch(() => undefined);
   }
@@ -203,6 +314,112 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     }
     keyboard = { checked: true, focusVisible, tabSelectionChanged, pickerFocusReturned };
   }
+  let setDetailsTrigger = null;
+  let setDetailsState = {
+    checked: false,
+    dialogFocused: null,
+    inputContract: null,
+    invalidEffortBlocked: null,
+    validCorrectionCleared: null,
+    numericValues: null,
+    setTypeValues: null,
+    setTypeTraversalPassed: null,
+    noteCodePoints: null,
+    noteLimitEnforced: null,
+    noteDescribedBy: null,
+    labelledCoreInputs: null,
+    drawerWithinViewport: null,
+    drawerHorizontalOverflowPx: null,
+    focusReturned: null,
+    artifact: null
+  };
+  if (openSetDetails) {
+    if (!isSessionRoute) throw new Error("Set-details QA requires an Active Workout session route.");
+    setDetailsTrigger = page.locator("[data-active-set-details-trigger]:visible").first();
+    await setDetailsTrigger.waitFor({ state: "visible", timeout: 20_000 });
+    await setDetailsTrigger.focus();
+    await setDetailsTrigger.click();
+    const dialog = page.locator("[data-active-set-details-dialog]");
+    await dialog.waitFor({ state: "visible", timeout: 20_000 });
+    const dialogFocused = await dialog.evaluate((element) => element.contains(document.activeElement));
+
+    const rpe = page.locator("#active-set-rpe");
+    const rir = page.locator("#active-set-rir");
+    const setType = page.locator("#active-set-type");
+    const note = page.locator("#active-set-note");
+    const inputContract = {
+      rpe: { type: await rpe.getAttribute("type"), inputMode: await rpe.getAttribute("inputmode") },
+      rir: { type: await rir.getAttribute("type"), inputMode: await rir.getAttribute("inputmode") }
+    };
+    await rpe.fill("8.25");
+    await rir.fill("20.1");
+    const invalidEffortBlocked = {
+      rpeInvalid: await rpe.getAttribute("aria-invalid"),
+      rirInvalid: await rir.getAttribute("aria-invalid"),
+      rpeError: await page.locator("#active-set-rpe-error").isVisible(),
+      rirError: await page.locator("#active-set-rir-error").isVisible()
+    };
+    await rpe.fill("8.5");
+    await rir.fill("2.5");
+    const validCorrectionCleared = {
+      rpeInvalid: await rpe.getAttribute("aria-invalid"),
+      rirInvalid: await rir.getAttribute("aria-invalid"),
+      rpeErrorCount: await page.locator("#active-set-rpe-error").count(),
+      rirErrorCount: await page.locator("#active-set-rir-error").count()
+    };
+    const numericValues = { rpe: await rpe.inputValue(), rir: await rir.inputValue() };
+
+    const expectedSetTypeValues = ["normal", "warmup", "working", "failure", "drop", "backoff", "amrap", "timed", "other"];
+    const setTypeValues = await setType.locator("option").evaluateAll((options) => options.map((option) => option.value));
+    let setTypeTraversalPassed = JSON.stringify(setTypeValues) === JSON.stringify(expectedSetTypeValues);
+    for (const value of expectedSetTypeValues) {
+      await setType.selectOption(value);
+      setTypeTraversalPassed = setTypeTraversalPassed && (await setType.inputValue()) === value;
+    }
+
+    const maximumNote = "😀".repeat(4000);
+    await note.fill(maximumNote);
+    const noteCodePoints = await note.evaluate((element) => Array.from(element.value).length);
+    await note.press("End");
+    await page.keyboard.insertText("😀");
+    await page.waitForTimeout(50);
+    const noteLimitEnforced = await note.evaluate((element) => Array.from(element.value).length === 4000);
+    const noteDescribedBy = await note.getAttribute("aria-describedby");
+    const labelledCoreInputs = await page.evaluate(() => ["active-set-reps", "active-set-weight", "active-set-rpe", "active-set-rir", "active-set-type", "active-set-note"]
+      .every((id) => {
+        const element = document.getElementById(id);
+        return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement
+          ? Boolean(element.labels?.length)
+          : false;
+      }));
+    const drawerLayout = await dialog.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        withinViewport: rect.left >= -1 && rect.top >= -1 && rect.right <= window.innerWidth + 1 && rect.bottom <= window.innerHeight + 1,
+        horizontalOverflowPx: Math.max(0, element.scrollWidth - element.clientWidth)
+      };
+    });
+    setDetailsState = {
+      checked: true,
+      dialogFocused,
+      inputContract,
+      invalidEffortBlocked,
+      validCorrectionCleared,
+      numericValues,
+      setTypeValues,
+      setTypeTraversalPassed,
+      noteCodePoints,
+      noteLimitEnforced,
+      noteDescribedBy,
+      labelledCoreInputs,
+      drawerWithinViewport: drawerLayout.withinViewport,
+      drawerHorizontalOverflowPx: drawerLayout.horizontalOverflowPx,
+      focusReturned: null,
+      autosaveFlushed: null,
+      autosavePayload: null,
+      artifact: null
+    };
+  }
   let mobileKeyboardState = { checked: false, focused: false, visualViewport: null, diagnostic: null };
   if (mobileKeyboard) {
     const editableSelector = 'input:not([type="hidden"]):not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly])';
@@ -250,6 +467,22 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     const footer = document.querySelector("[data-train-sticky-footer]");
     const restAction = document.querySelector("[data-rest-day-weekly-plan] a");
     const actions = main ? [...main.querySelectorAll("a,button")].filter((element) => visible(element) && !element.closest("[data-train-sticky-footer]")) : [];
+    let frameworkOverlayDetected = false;
+    const frameworkOverlayDetails = [];
+    for (const portal of document.querySelectorAll("nextjs-portal")) {
+      const root = portal.shadowRoot;
+      if (!root) continue;
+      const candidate = root.querySelector("nextjs-errors-dialog, nextjs-error-dialog, [data-nextjs-error-dialog], [data-nextjs-dialog-overlay], [data-nextjs-error-overlay]");
+      const portalText = root.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      const textSignalsError = /(?:Build Error|Unhandled Runtime Error|Runtime Error|Failed to compile)/i.test(portalText);
+      const candidateVisible = candidate instanceof HTMLElement
+        ? visible(candidate)
+        : candidate !== null;
+      if (candidateVisible || textSignalsError) {
+        frameworkOverlayDetected = true;
+        frameworkOverlayDetails.push(portalText.slice(0, 500));
+      }
+    }
     return {
       controller: rect(controller),
       nav: rect(nav),
@@ -258,7 +491,11 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
       shellState: document.querySelector("[data-app-shell]")?.getAttribute("data-active-workout-controller-state") ?? null,
       restActionHref: restAction?.getAttribute("href") ?? null,
       direction: document.querySelector("[data-train-today-card]")?.closest("[dir]")?.getAttribute("dir") ?? document.documentElement.dir,
-      horizontalOverflowPx: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth)
+      horizontalOverflowPx: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+      appliedThemeId: document.documentElement.dataset.theme ?? null,
+      darkThemeApplied: document.documentElement.classList.contains("dark"),
+      frameworkOverlayDetected,
+      frameworkOverlayDetails
     };
   });
   const item = {
@@ -266,12 +503,14 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     scenario,
     language,
     theme,
+    themeId,
     catalogScenario,
     zoom,
     variant,
     mobileKeyboard,
     renderedViewport: `${renderedViewport.width}x${renderedViewport.height}`,
     openPicker,
+    openSetDetails,
     route,
     step,
     status: response?.status() ?? null,
@@ -283,13 +522,40 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
       footerNav: intersects(metrics.footer, metrics.nav)
     },
     pageErrors,
+    consoleErrors,
+    consoleWarnings,
+    unexpectedConsoleErrors: consoleErrors.filter((message) => !/eval\(\) is not supported.*React requires eval\(\) in development mode/is.test(message)),
+    unexpectedConsoleWarnings: consoleWarnings.filter((message) => !/Reduced Motion enabled on your device/is.test(message)),
     keyboard,
-    mobileKeyboardState
+    mobileKeyboardState,
+    setDetailsState
   };
   const safeRoute = route.replaceAll("/", "-").replace(/^-/, "") || "root";
-  const artifact = `${scenario}-${variant}-${catalogScenario}-${theme}-${language}-${viewport.name}-${safeRoute}${step ? `-step${step}` : ""}${openPicker ? "-picker" : ""}${mobileKeyboard ? "-mobile-keyboard" : ""}${zoom !== 1 ? `-zoom${zoom}` : ""}.png`;
+  const artifact = `${scenario}-${variant}-${catalogScenario}-${theme}-${language}-${viewport.name}-${safeRoute}${step ? `-step${step}` : ""}${openPicker ? "-picker" : ""}${openSetDetails ? "-set-details" : ""}${mobileKeyboard ? "-mobile-keyboard" : ""}${zoom !== 1 ? `-zoom${zoom}` : ""}.png`;
   await page.screenshot({ path: path.join(outputDir, artifact), fullPage: true });
   item.artifact = artifact;
+  if (openSetDetails && setDetailsTrigger) {
+    item.setDetailsState.artifact = artifact;
+    await page.keyboard.press("Escape");
+    await page.locator("[data-active-set-details-dialog]").waitFor({ state: "hidden", timeout: 10_000 });
+    await page.waitForFunction(() => true, null, { timeout: 25 });
+    for (let attempt = 0; attempt < 40 && setWritePayloads.length === 0; attempt += 1) {
+      await page.waitForTimeout(50);
+    }
+    const latestSetWrite = setWritePayloads.at(-1) ?? null;
+    const savedDetails = latestSetWrite?.p_logs?.[0]?.set_details ?? null;
+    item.setDetailsState.focusReturned = await setDetailsTrigger.evaluate((element) => element === document.activeElement);
+    item.setDetailsState.autosaveFlushed = Boolean(latestSetWrite);
+    item.setDetailsState.autosavePayload = savedDetails ? {
+      source: savedDetails.source,
+      sourceProvider: savedDetails.source_provider,
+      sourceVersion: savedDetails.source_version,
+      sideMode: savedDetails.side_mode,
+      plannedTempo: savedDetails.planned_tempo,
+      performedTempo: savedDetails.performed_tempo,
+      tempoAdherence: savedDetails.tempo_adherence
+    } : null;
+  }
   await context.close();
   return item;
 }
@@ -400,6 +666,35 @@ for (const language of ["en", "de", "ar"]) {
     });
   }
 }
+for (const drawerScenario of [
+  { filename: "active-workout-set-details-ar-390x844.png", language: "ar", theme: "light", viewportName: "390x844" },
+  { filename: "active-workout-set-details-dark-en-1440x900.png", language: "en", theme: "dark", viewportName: "1440x900" }
+]) {
+  const viewport = viewports.find((item) => item.name === drawerScenario.viewportName);
+  if (!viewport) throw new Error(`Required set-details evidence viewport ${drawerScenario.viewportName} is missing.`);
+  const item = await captureNamedEvidence({
+    filename: drawerScenario.filename,
+    viewport,
+    scenario: "active",
+    language: drawerScenario.language,
+    theme: drawerScenario.theme,
+    route: `/workouts/session/day/${activeDayId}`,
+    openSetDetails: true
+  });
+  observations.push(item);
+  requiredRenderedEvidence.push({
+    filename: drawerScenario.filename,
+    language: drawerScenario.language,
+    theme: drawerScenario.theme,
+    themeId: item.appliedThemeId,
+    viewport: viewport.name,
+    route: item.route,
+    horizontalOverflowPx: item.horizontalOverflowPx,
+    drawerHorizontalOverflowPx: item.setDetailsState.drawerHorizontalOverflowPx,
+    direction: item.direction,
+    focusReturned: item.setDetailsState.focusReturned
+  });
+}
 {
   const viewport = viewports.find((item) => item.name === "390x844");
   if (!viewport) throw new Error("Required minimized-controller evidence viewport is missing.");
@@ -454,9 +749,46 @@ await browser.close();
 const failures = observations.filter((item) => {
   const sessionRoute = item.route.startsWith("/workouts/session");
   const expectedController = item.scenario === "active" && !sessionRoute;
+  const expectedThemeId = item.theme === "dark" ? "elite-noir" : "olive";
+  const setDetailsFailed = item.openSetDetails && (
+    !item.setDetailsState.checked
+    || !item.setDetailsState.dialogFocused
+    || JSON.stringify(item.setDetailsState.inputContract) !== JSON.stringify({
+      rpe: { type: "text", inputMode: "decimal" },
+      rir: { type: "text", inputMode: "decimal" }
+    })
+    || JSON.stringify(item.setDetailsState.invalidEffortBlocked) !== JSON.stringify({
+      rpeInvalid: "true", rirInvalid: "true", rpeError: true, rirError: true
+    })
+    || JSON.stringify(item.setDetailsState.validCorrectionCleared) !== JSON.stringify({
+      rpeInvalid: "false", rirInvalid: "false", rpeErrorCount: 0, rirErrorCount: 0
+    })
+    || JSON.stringify(item.setDetailsState.numericValues) !== JSON.stringify({ rpe: "8.5", rir: "2.5" })
+    || JSON.stringify(item.setDetailsState.setTypeValues) !== JSON.stringify(["normal", "warmup", "working", "failure", "drop", "backoff", "amrap", "timed", "other"])
+    || !item.setDetailsState.setTypeTraversalPassed
+    || item.setDetailsState.noteCodePoints !== 4000
+    || !item.setDetailsState.noteLimitEnforced
+    || item.setDetailsState.noteDescribedBy !== "active-set-note-limit"
+    || !item.setDetailsState.labelledCoreInputs
+    || !item.setDetailsState.drawerWithinViewport
+    || item.setDetailsState.drawerHorizontalOverflowPx > 1
+    || !item.setDetailsState.focusReturned
+    || !item.setDetailsState.autosaveFlushed
+    || JSON.stringify(item.setDetailsState.autosavePayload) !== JSON.stringify({
+      source: "manual", sourceProvider: "plaivra", sourceVersion: "aw3b-v1",
+      sideMode: "left", plannedTempo: "3-1-1-0", performedTempo: "2-1-1-0",
+      tempoAdherence: "adjusted"
+    })
+  );
   return item.status !== 200
     || item.pageErrors.length > 0
+    || item.unexpectedConsoleErrors.length > 0
+    || item.unexpectedConsoleWarnings.length > 0
+    || item.frameworkOverlayDetected
     || item.horizontalOverflowPx > 1
+    || item.appliedThemeId !== expectedThemeId
+    || item.darkThemeApplied !== (item.theme === "dark")
+    || setDetailsFailed
     || Boolean(item.controller) !== expectedController
     || (!sessionRoute && item.shellState !== (expectedController ? "present" : "absent"))
     || item.intersections.controllerFooter

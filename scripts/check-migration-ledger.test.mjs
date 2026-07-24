@@ -3,7 +3,8 @@ import test from "node:test";
 import {
   canonicalizeLedgerTimestamp,
   deriveMigrationLedgerState,
-  validateMigrationLedger
+  validateMigrationLedger,
+  validateMigrationLedgerGitEvidence
 } from "./check-migration-ledger.mjs";
 
 const files = [
@@ -196,4 +197,58 @@ test("derives all fail-closed counts rather than trusting a declared green state
     latestAppliedMigrationVersion: "20260711014500",
     releaseReady: false
   });
+});
+
+
+test("accepts reachable immutable migration evidence with matching committed bytes", async () => {
+  const bytes = Buffer.from("select 1;\n");
+  const commit = "54e9768d52011e1d1839c4f50f0a2bc578ca27db";
+  const sha256 = "4a45092ccf992ea92250053a80b931b787924ba61648f420555511b84f10ab6c";
+  const blob = "40f0e35f840b1f7d176bef8849266cfa2dc21831";
+  const ledger = reconciledLedger();
+  ledger.auditedRepositoryCommit = commit;
+  ledger.entries[0] = {
+    ...ledger.entries[0],
+    evidenceCommit: commit,
+    repositorySha256: sha256,
+    repositoryGitBlob: blob
+  };
+  const calls = [];
+  const errors = await validateMigrationLedgerGitEvidence({
+    ledger,
+    root: "/repo",
+    runGit: async (args) => {
+      calls.push(args);
+      if (args[0] === "show") return bytes;
+      if (args[0] === "rev-parse") return Buffer.from(`${blob}\n`);
+      return Buffer.alloc(0);
+    },
+    readCurrentFile: async () => bytes
+  });
+  assert.deepEqual(errors, []);
+  assert.ok(calls.some((args) => args.join(" ") === `merge-base --is-ancestor ${commit} HEAD`));
+  assert.ok(calls.some((args) => args[0] === "show" && args[1].includes(files[0])));
+});
+
+test("rejects an unrelated or unreachable evidence commit", async () => {
+  const commit = "54e9768d52011e1d1839c4f50f0a2bc578ca27db";
+  const ledger = reconciledLedger();
+  ledger.auditedRepositoryCommit = commit;
+  ledger.entries[0] = {
+    ...ledger.entries[0],
+    evidenceCommit: commit,
+    repositorySha256: "0".repeat(64),
+    repositoryGitBlob: "0".repeat(40)
+  };
+  const errors = await validateMigrationLedgerGitEvidence({
+    ledger,
+    runGit: async (args) => {
+      if (args[0] === "merge-base") throw new Error("not ancestor");
+      if (args[0] === "show") throw new Error("missing migration");
+      return Buffer.alloc(0);
+    },
+    readCurrentFile: async () => Buffer.from("select 1;\n")
+  });
+  assert.ok(errors.some((error) => error.includes("not reachable")));
+  assert.ok(errors.some((error) => error.includes("does not contain attested migration")));
 });

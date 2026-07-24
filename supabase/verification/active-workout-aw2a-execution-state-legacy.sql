@@ -3,6 +3,22 @@
 begin;
 set local transaction read only;
 
+do $aw2a_capture_marker_baseline$
+declare
+  v_marker text;
+begin
+  select migration_version into strict v_marker
+  from public.release_schema_compatibility
+  where singleton;
+
+  if v_marker = '20260720213000' then
+    raise exception 'AW-2A verification encountered invalid repository-only release compatibility marker: %', v_marker;
+  end if;
+
+  perform pg_catalog.set_config('plaivra.aw2a_marker_baseline', v_marker, true);
+end
+$aw2a_capture_marker_baseline$;
+
 do $aw2a_verify_schema$
 declare
   v_expected_columns text[] := array[
@@ -29,7 +45,6 @@ declare
   v_integrity_definition text;
   v_initializer_definition text;
   v_cleanup_definition text;
-  v_marker text;
   v_aw2b_active boolean := to_regclass('public.workout_session_execution_commands') is not null
     and to_regprocedure('public.apply_workout_session_execution_command_atomic(uuid,uuid,uuid,bigint,text,jsonb)') is not null;
 begin
@@ -211,14 +226,6 @@ begin
      or v_cleanup_definition !~ 'workout_session_id[[:space:]]*=[[:space:]]*new.id' then
     raise exception 'Terminal cleanup source contract is missing.';
   end if;
-
-  select migration_version into strict v_marker
-  from public.release_schema_compatibility
-  where singleton;
-  if v_marker not in ('20260711014500', '20260717051011', '20260721012814', '20260721224813')
-     or v_marker = '20260720213000' then
-    raise exception 'AW-2A changed the release compatibility marker: %', v_marker;
-  end if;
 end
 $aw2a_verify_schema$;
 
@@ -255,5 +262,28 @@ begin
   end if;
 end
 $aw2a_verify_rows$;
+
+do $aw2a_verify_marker_preserved$
+declare
+  v_marker_baseline text := pg_catalog.current_setting('plaivra.aw2a_marker_baseline', true);
+  v_marker_final text;
+begin
+  if v_marker_baseline is null or v_marker_baseline = '' then
+    raise exception 'AW-2A release compatibility marker baseline is missing.';
+  end if;
+
+  select migration_version into strict v_marker_final
+  from public.release_schema_compatibility
+  where singleton;
+
+  if v_marker_final = '20260720213000' then
+    raise exception 'AW-2A verification encountered invalid repository-only release compatibility marker: %', v_marker_final;
+  end if;
+
+  if v_marker_final is distinct from v_marker_baseline then
+    raise exception 'AW-2A changed the release compatibility marker from % to %', v_marker_baseline, v_marker_final;
+  end if;
+end
+$aw2a_verify_marker_preserved$;
 
 rollback;
