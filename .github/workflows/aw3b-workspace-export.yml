@@ -10,8 +10,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: aw3b-runtime-patch
-  cancel-in-progress: false
+  group: aw3b-runtime-patch-final
+  cancel-in-progress: true
 
 jobs:
   export-workspace:
