@@ -42,15 +42,25 @@ jobs:
           Path('.github/workflows/aw3b-repair-trigger.yml').unlink()
           PY
 
-      - name: Validate permanent changes
+      - name: Validate Train QA syntax
+        run: node --check scripts/run-train-layout-qa.mjs
+
+      - name: Validate shared fixture contract
+        run: node --test scripts/train-mock-fixture-contract.test.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run script regression tests
+        run: npm run test:scripts
+
+      - name: Run TypeScript validation
+        run: npm run typecheck
+
+      - name: Validate clean permanent diff
         shell: bash
         run: |
           set -euo pipefail
-          node --check scripts/run-train-layout-qa.mjs
-          node --test scripts/train-mock-fixture-contract.test.mjs
-          npm ci
-          npm run test:scripts
-          npm run typecheck
           git diff --check
           test ! -e .github/workflows/aw3b-long-term-fixture-repair.yml
           test ! -e .github/workflows/aw3b-repair-trigger.yml
