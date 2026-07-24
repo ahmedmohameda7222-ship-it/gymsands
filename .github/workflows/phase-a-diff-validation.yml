@@ -1,12 +1,16 @@
 name: Phase A Diff Validation
+
 on:
   pull_request:
     branches: [main]
+
 permissions:
   contents: read
+
 concurrency:
   group: phase-a-diff-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
   verify-diff:
     runs-on: ubuntu-latest
@@ -18,36 +22,118 @@ jobs:
           fetch-depth: 0
       - run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
       - run: git diff --check origin/main...HEAD
+
   validate-aw3b-verification-contracts:
     if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
     runs-on: ubuntu-latest
     timeout-minutes: 75
     permissions:
+      actions: read
       contents: write
     env:
+      GH_TOKEN: ${{ github.token }}
       PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-      - name: Materialize corrections
+
+      - name: Restore validated transformations and isolate session-limit read
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s' 'H4sIAAAAAAAC/91aW5PbthV+569ANPZQskVFWqd2Ruvdju2xX9qHTJI2nXYzHIg8lBBTpAKC2lU97m/vOQBEQdSNWkmOW83OSiRxOec7tw8gEplP2YyrSSpGTExnuVTsB7z0vBgSJmGW8gjCPIugXeSljGDICiW7LE9j+yuDe/sr5SNI9e8OC27pe+gx/ER5mSl2w8wAPX3ZxgE6+qlIbINvbtjAdKCP5KIA9tOiUDB9/yBUO2l90hN8HjJ4mEGkIMYfPFLpguUZsClX0aTLEhwrZp/0kJ9bZgoJqpTZcn6rFEmgpe94nsgUjCVXIs9QTtK/3SrKGR/xAr6dgxSJiPTTb3E+MYfgPpcf81IF/P4FD5zeveL3FCc1M+FQ7iMJPA4VPKg2ZFEei2x80ypVEnyPHVAWbN1qtURWAJoA++VsVo5SEfXsXGEBRYHjFG3UScTdEhuG+L18nPEpdAvFJQITckU/VVl0jSheh815WkLBqLfPX/T1J9D/vqN/3y8vzWfQ97vNWvYHpuWbX4IXb9jfHbDM/av+1cug/yq4uvp50B/26e+f5okV1lxMeVby1Pc61x7C4KFdDCAFKJbmEU+ZzFNgvFQTyBTNAPG1V0CKnsBm4xBv8DQf97B9GOVZIsZtX8LvqLLq/XavelHKxbRXlCO/21ApJUvoHD8FiUlzuILWB2tb02oEwlyGEopyCmEsJD4OaxZHa+ZTEbUb22M4LEv0DGo/k/lcxOgp2nGFWlizkt/ON2yFgSHmctuTXdb9xYhqLj6RtYrW8MVnFOG3Is9GdDsr09TrBLe+VccPbm99EfsdxgtGglR6ipjdjXGIA5hbKXu1vn6XDf3NexZ5RBg9iYxjHKwK0S05Tqc3nRu6rGU0dzOEthpLxANmFcDgTYUCiQ6K/tossnB2KyFmMkn9HE2jUkp0HFRCKcwRu9XtGDO3PMyga6nVytNhrxlGnLc1m25RC90E/VUtMB2j/fkYmCiwQZRPZykocNNaLZPaCbvMVWuZ1BJEOwjYjzAjE2SYlTCB4riYj9DeEWbYgk3LQtsmZSMefWTG33maLnpenLMntnGoGz/ByoSRJgEVm4cjSHIJbCTGqMq1NwL8xgfWgQwezzomn1atE130TAjCA8gIwQkR+4LdTwCf1+NPxDefXNU+uznqRP1cv9zr9k58GldYooLtQq2oDsJ2XfWTlUU/o6pFg1MseTqNrSVlrERzgSG0pkWjLOn2rJLkFpMbuz4qbvU4AY3D0EKBxqXlOqemIBeA7fVt5XBUCpw4hIcIZjrm/DdZ5SrIl8qIUkqMhGyR5py+pRLkJ+hBihvGY0RhJErPv8ZRAfmOSK49/PZquF17G3lv5bSH25MhdClYVM5mXBezxJMq1i6DniGCr29Z49S4GQ/ouSYxfEED7MTr+nT3zQtV+S+ivqw7Ykltm+d6LF6oi0V8lfklTDkyUBreIa73EicyzHUp6CaD9WydeByFTkTG02A1RJ1HO0/ORqOP5dAdb51CJ40pdHIUhf5AWLB3lcabNPrqa6HRyf8ujU7ORqPrvtuMSm+38lnotBboJFJdH2FFrbc8OQ/BdtLHfn6dXJRfb+h3Dpbt6HZBkh1hZlTINYB2cbhcMMVHFOortdD9FdUwlAMnxAsWy3yGfrP0DfQVdCK3YCME3s5i7jUs5ggOz1alEyMVQ+nmhb5JPpiV0xHeGNQZiutS/w/aXZY2PyLoLGQBquvE2/HUwnHwg8zCKeXNiIVDy44lFqNg1TlAZIMYFBdpUacXq1Z76YWpM1MuP4LOKpr7zsOkzCISIIwBPVFoGL75zzOsAURE03KahYX4N7SIINZ7w4MoFFKKu4zwtT4wMPxZZLh4mGrdwiKaIILa/mj1EjMXhMjPMqwPRqxVwhBZDA9tV9YOzVxvsBKmazJux7NOMwW9XbtcGu1RUBelkEvJF2EK2VhN7u6KZ3d37bmOoLu7Dl3f0r8/9fu+4fS5bI7ZzuEGL1+9enU1eNlozHmoYUZbmoXB0ULNbYo5uneWY8SLj8D8pzMp5pjBqMyMwpXDheWMqKpDVpRW1rKVp4+dQYkppOQlzlRIjtDii0ePiQ43myDJmgsK7qOGWdXYETVBJkWKLoV82sgKGA0I+/NyFqNEh3pskz/iWZ7Rxgt6FjG53EhhF3uOECpHLcdI+iKIETnkCM2HaRumRimkg6QMyzvhQKxt3yoU0+hbW4WoBLAff3i3XIR+u0ymI3q1UZB8eiXIZzNclxJBziWlWC7BYRLrS1MdyBNerKAijUQKY1SO1MGiYmvgfn9sa0qs/2k9O9jx/T/ev/vbz+/9ToUfabxztnVG/6WmXS+Z55z1EKyPivsTp65j/AfIUAf8j4BhiwX25EU92RmBPu9U+/A8s1JbYFtP/edG6uTR94FzaPCDaRmSBDS1ZMupWTV1YdOu3qZbz7lrfNz8+NdQM61f2XPmcq3ny8fYdfirx7MIU7rDwCivLYmit8kTl2w4nAq7ZYcEV/NF547uZ1Y0tMt14xu2XAWehsqwHIw/EYUTjuuYDDmTLYt6PYN82/D6jLX1llT/1dV3/QG99EJIqxt9/HWlzWbQ3YWsno/p+Vg1H6uEpuI5FVj8sjFCuwYsj2Nh9xotXM+/PFxUhkNdhi1mUS5p54kG8A8q7xRxg8CqdyMI9q/1DCr4bYGya763q6GDCUKU40raNNXrm2oZ1GxpplE45fDEaN/hifrozbZ+m7jA9i3hVRqFOYal6wO1TYMbvSDp0YYCrfypdagWM3QTql+AiGOOc8LGMjnaqZMzeDfh2Rgb3Pi0cvfXW/grI/wESm/uFTCmNPFOv9O48a+2jGxe0bmM+4MEoGtgeZYayr/fHTW7xDW2WSIHpATF5xgkJjtMUrsdsdpk/qqh9yMD+wcBaVz47M/Mx8Apmra9BzGeqL+Mm7Yn6IsdPqCf1bxg67CX84WDff4KYx4t0GYAge5K0F7UjY7au1pNVJ8Bc8FG4mi40XRa4rns7t6eDdBR6JCJkNIuRdKWfdC1YD3TeEdazaU91cikqIukCfy0t2Xrdd/u/ZrNtuzh243atFfbqh3Y2+ubtV4QsDfMHupgNu6I7km+IC/mmTl+6Ko0pKOGHMmRHpgNusuHTKga/F+Hjhf22YtAeA6Pq3ZNXLdrGhH0ljFVh+LLfXnhnWXoExS3424PtKJXr7HL8xy1+6aC78wQHet8SKeNqZe+px3NvHxstO2yLVK+jJAXjYbjMTjJ4koutvu5e77KbmhunKsz5dtseDc9XbfWZ9drNa2ofQ1zvTtijjkKN6pO27gSHHcazhXrix9483ZZ5JHH3t4eOvZ29Km3NXjoYNuarRudrrKL3o2DVSbRIWvfc5rNwWTnkbb6ibbdfbYda6PGJ55tW8Po2ONrO3z4yBNsj8F4PxLXp3ufe2rtccz8vxwybSClMgAA' | base64 -d | gzip -dc > /tmp/transform.py
-          test "$(sha256sum /tmp/transform.py | cut -d' ' -f1)" = "52d679cd58a34bb3d705764711141893da287a7b3e5c1785a743cc60b680346e"
-          python /tmp/transform.py
-          git diff --check -- supabase/verification/active-workout-aw3a-integration.sql supabase/verification/active-workout-aw3a-final-completion.sql supabase/verification/active-workout-aw3b-structured-set-details.sql supabase/verification/active-workout-aw3b-integration.sql
+          mkdir -p /tmp/previous
+          gh run download 30078686596 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name aw3b-verification-2203f6bd5adce680002800106963376540e67061 \
+            --dir /tmp/previous
+          source_root=/tmp/previous/home/runner/work/gymsands/gymsands/supabase/verification
+          for name in \
+            active-workout-aw3a-integration.sql \
+            active-workout-aw3a-final-completion.sql \
+            active-workout-aw3b-structured-set-details.sql \
+            active-workout-aw3b-integration.sql; do
+            cp "$source_root/$name" "supabase/verification/$name"
+          done
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('supabase/verification/active-workout-aw3b-integration.sql')
+          source = path.read_text(encoding='utf-8')
+          old = '''do $session_log_limit$
+          begin
+            begin
+              perform public.upsert_workout_set_logs_atomic(
+                'b3000000-0000-4000-8000-000000000002',
+                current_setting('plaivra.aw3b_session_limit_id')::uuid,
+                jsonb_build_array(jsonb_build_object(
+                  'exercise_order',1,
+                  'exercise_name','AW-3B Session Limit',
+                  'set_number',501,
+                  'reps',1,
+                  'completed_at','2026-07-22T20:03:01Z'
+                ))
+              );
+              raise exception 'Repeated requests exceeded the AW-3B 500-log session limit.';
+            exception when invalid_parameter_value then null; end;
+            if (select count(*) from public.exercise_logs
+                where workout_session_id=current_setting('plaivra.aw3b_session_limit_id')::uuid)<>500 then
+              raise exception 'AW-3B session-limit rejection was not atomic.';
+            end if;
+          end
+          $session_log_limit$;
+
+          set local role authenticated;
+          '''
+          new = '''do $session_log_limit$
+          begin
+            begin
+              perform public.upsert_workout_set_logs_atomic(
+                'b3000000-0000-4000-8000-000000000002',
+                current_setting('plaivra.aw3b_session_limit_id')::uuid,
+                jsonb_build_array(jsonb_build_object(
+                  'exercise_order',1,
+                  'exercise_name','AW-3B Session Limit',
+                  'set_number',501,
+                  'reps',1,
+                  'completed_at','2026-07-22T20:03:01Z'
+                ))
+              );
+              raise exception 'Repeated requests exceeded the AW-3B 500-log session limit.';
+            exception when invalid_parameter_value then null; end;
+          end
+          $session_log_limit$;
+
+          reset role;
+          do $verify_session_log_limit$
+          begin
+            if (select count(*) from public.exercise_logs
+                where workout_session_id=current_setting('plaivra.aw3b_session_limit_id')::uuid)<>500 then
+              raise exception 'AW-3B session-limit rejection was not atomic.';
+            end if;
+          end
+          $verify_session_log_limit$;
+
+          set local role authenticated;
+          '''
+          if source.count(old) != 1:
+              raise SystemExit(f'Expected one session-limit read contract, found {source.count(old)}')
+          path.write_text(source.replace(old, new), encoding='utf-8')
+          PY
+          git diff --check -- supabase/verification
+
       - uses: supabase/setup-cli@v2
         with:
           version: 2.109.1
           github-token: ${{ github.token }}
-      - name: Replay
+
+      - name: Replay full migration chain
         run: node scripts/replay-local-migration-chain.mjs --log /tmp/replay.log --prove-future-order
-      - name: Lint DB
+
+      - name: Lint database
         run: supabase db lint --local --schema public --level error --fail-on error
-      - name: Verify DB
+
+      - name: Verify permanent database chain
         id: verify
         continue-on-error: true
         shell: bash
@@ -65,21 +151,26 @@ jobs:
             PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$PLAIVRA_LOCAL_DATABASE_URL" node scripts/test-database-preflight-control.mjs
             PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
           } 2>&1 | tee /tmp/verify.log
-      - name: Create blobs
+
+      - name: Create exact corrected blobs
         if: steps.verify.outcome == 'success'
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           : > /tmp/blobs.txt
-          for path in supabase/verification/active-workout-aw3a-integration.sql supabase/verification/active-workout-aw3a-final-completion.sql supabase/verification/active-workout-aw3b-structured-set-details.sql supabase/verification/active-workout-aw3b-integration.sql; do
+          for path in \
+            supabase/verification/active-workout-aw3a-integration.sql \
+            supabase/verification/active-workout-aw3a-final-completion.sql \
+            supabase/verification/active-workout-aw3b-structured-set-details.sql \
+            supabase/verification/active-workout-aw3b-integration.sql; do
             sha="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" -f content="$(base64 -w0 "$path")" -f encoding=base64 --jq .sha)"
             printf '%s=%s\n' "$path" "$sha" | tee -a /tmp/blobs.txt
           done
+
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aw3b-verification-${{ github.event.pull_request.head.sha }}
+          name: aw3b-final-verification-${{ github.event.pull_request.head.sha }}
           path: |
             /tmp/blobs.txt
             /tmp/replay.log
@@ -90,5 +181,6 @@ jobs:
             supabase/verification/active-workout-aw3b-integration.sql
           if-no-files-found: warn
           retention-days: 1
+
       - if: always()
         run: test "${{ steps.verify.outcome }}" = success
