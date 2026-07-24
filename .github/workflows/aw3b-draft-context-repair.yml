@@ -1,0 +1,141 @@
+name: AW3B Draft Context Repair
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aw3b-draft-context-repair-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Isolate draft context from strict persistence parsing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          details_path = Path('services/database/workout-set-details.ts')
+          details = details_path.read_text(encoding='utf-8')
+          parse_anchor = '''export function parseWorkoutSetEffortInput(
+            rawValue: string,
+            field: WorkoutSetEffortField,
+          ) {'''
+          helper = '''export function workoutSetEffortInputForContext(
+            rawValue: string,
+            field: WorkoutSetEffortField,
+          ) {
+            const result = validateWorkoutSetEffortInput(rawValue, field);
+            return result.error ? null : result.value;
+          }
+
+          export function parseWorkoutSetEffortInput(
+            rawValue: string,
+            field: WorkoutSetEffortField,
+          ) {'''
+          if parse_anchor not in details and 'export function workoutSetEffortInputForContext(' not in details:
+              raise SystemExit('Workout-set effort parser anchor changed.')
+          details = details.replace(parse_anchor, helper, 1)
+          details_path.write_text(details, encoding='utf-8')
+
+          component_path = Path('components/workouts/workout-day-focus-session.tsx')
+          component = component_path.read_text(encoding='utf-8')
+          import_anchor = '''  parseWorkoutSetEffortInput,
+            validateWorkoutSetEffortInput,'''
+          import_replacement = '''  parseWorkoutSetEffortInput,
+            validateWorkoutSetEffortInput,
+            workoutSetEffortInputForContext,'''
+          if import_anchor not in component and 'workoutSetEffortInputForContext' not in component:
+              raise SystemExit('Workout-set effort import anchor changed.')
+          component = component.replace(import_anchor, import_replacement, 1)
+
+          signature = '''    options: { pendingOnly?: boolean; validOnly?: boolean } = {}
+            ) {
+              return states.flatMap'''
+          signature_replacement = '''    options: {
+                pendingOnly?: boolean;
+                validOnly?: boolean;
+                effortMode?: "strict" | "draft-context";
+              } = {}
+            ) {
+              const parseEffort = options.effortMode === "draft-context"
+                ? workoutSetEffortInputForContext
+                : parseWorkoutSetEffortInput;
+              return states.flatMap'''
+          if signature not in component and 'effortMode?: "strict" | "draft-context"' not in component:
+              raise SystemExit('buildLogRows signature anchor changed.')
+          component = component.replace(signature, signature_replacement, 1)
+
+          component = component.replace('rpe: parseWorkoutSetEffortInput(set.rpe, "rpe"),', 'rpe: parseEffort(set.rpe, "rpe"),', 1)
+          component = component.replace('rir: parseWorkoutSetEffortInput(set.rir, "rir"),', 'rir: parseEffort(set.rir, "rir"),', 1)
+          context_call = 'return buildLogRows(states).map((row) => {'
+          if context_call not in component and 'buildLogRows(states, { effortMode: "draft-context" })' not in component:
+              raise SystemExit('Workout context row anchor changed.')
+          component = component.replace(context_call, 'return buildLogRows(states, { effortMode: "draft-context" }).map((row) => {', 1)
+          component = component.replace('rpe: parseWorkoutSetEffortInput(set.rpe, "rpe"),', 'rpe: workoutSetEffortInputForContext(set.rpe, "rpe"),', 1)
+          component = component.replace('rir: parseWorkoutSetEffortInput(set.rir, "rir"),', 'rir: workoutSetEffortInputForContext(set.rir, "rir"),', 1)
+          if component.count('parseWorkoutSetEffortInput(set.rpe') or component.count('parseWorkoutSetEffortInput(set.rir'):
+              raise SystemExit('A render-time strict effort parser remains in the component.')
+          component_path.write_text(component, encoding='utf-8')
+
+          test_path = Path('services/database/workout-set-details.test.ts')
+          test = test_path.read_text(encoding='utf-8')
+          test_import = '''  validateWorkoutSetEffortInput,
+            workoutSetDetailsInputToSql,'''
+          test_import_replacement = '''  validateWorkoutSetEffortInput,
+            workoutSetEffortInputForContext,
+            workoutSetDetailsInputToSql,'''
+          if test_import not in test and 'workoutSetEffortInputForContext,' not in test:
+              raise SystemExit('Workout-set test import anchor changed.')
+          test = test.replace(test_import, test_import_replacement, 1)
+          assertion_anchor = '''    expect(() => parseWorkoutSetEffortInput("8.25", "rpe")).toThrow(/one decimal/i);
+              expect(parseWorkoutSetEffortInput("0.0", "rpe")).toBe(0);'''
+          assertion_replacement = '''    expect(workoutSetEffortInputForContext("8.25", "rpe")).toBeNull();
+              expect(workoutSetEffortInputForContext("20.1", "rir")).toBeNull();
+              expect(workoutSetEffortInputForContext("8.5", "rpe")).toBe(8.5);
+              expect(() => parseWorkoutSetEffortInput("8.25", "rpe")).toThrow(/one decimal/i);
+              expect(parseWorkoutSetEffortInput("0.0", "rpe")).toBe(0);'''
+          if assertion_anchor not in test and 'workoutSetEffortInputForContext("8.25"' not in test:
+              raise SystemExit('Workout-set validation assertion anchor changed.')
+          test = test.replace(assertion_anchor, assertion_replacement, 1)
+          test_path.write_text(test, encoding='utf-8')
+
+          Path('.github/workflows/aw3b-draft-context-repair.yml').unlink()
+          PY
+
+      - name: Validate targeted permanent repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          test ! -e .github/workflows/aw3b-draft-context-repair.yml
+          grep -q 'workoutSetEffortInputForContext' services/database/workout-set-details.ts
+          grep -q 'effortMode?: "strict" | "draft-context"' components/workouts/workout-day-focus-session.tsx
+          grep -q 'buildLogRows(states, { effortMode: "draft-context" })' components/workouts/workout-day-focus-session.tsx
+          ! grep -q 'parseWorkoutSetEffortInput(set.rpe' components/workouts/workout-day-focus-session.tsx
+
+      - name: Commit permanent repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(workouts): isolate invalid draft effort from persistence"
+          git push origin HEAD:feat/active-workout-aw3b-structured-set-details
