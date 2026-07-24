@@ -40,6 +40,16 @@ Activity Catalog project: khlcctuefiuhunqymkbp
 
 The compatibility marker remains unchanged. The Activity Catalog is outside AW-3B and must not be modified.
 
+## Durable rendered autosave verification
+
+The Active Workout rendered-QA fixture now uses `lib/fixtures/train-mock-contract.json` as the single source of truth for the active plan, day, exercise, session, and persisted-log identities. The persisted set-detail fixture is therefore bound to the same stable exercise identity rendered by the mock Train plan instead of maintaining a second hard-coded identity set.
+
+The Active Workout surface exposes non-visual persisted/completed/detail state attributes for deterministic QA preconditions. Train QA verifies hydration of the completed persisted Set 1, RPE, RIR, set type, and note before asserting autosave. A targeted autosave smoke scenario runs before the expensive rendered matrix so future identity or hydration drift fails early.
+
+Invalid draft RPE/RIR values remain visible and accessible to the user but are excluded from non-persistence workout context serialization. Strict parsing is retained for actual persistence, so the rendered validation flow cannot crash while invalid draft values are being corrected and invalid values still cannot reach the atomic save RPC.
+
+Permanent script tests reject a return to duplicated hard-coded fixture identities or an autosave assertion without a proven hydration precondition.
+
 ## Validated repository gates
 
 The clean implementation has passed the AW-3B targeted suite, i18n suite, script suite, migration-ledger validation, TypeScript typecheck, ESLint, diff-format validation, and clean-worktree validation. Permanent CI must be bound to the current exact branch head before the pending migration is applied.
