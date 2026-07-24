@@ -30,6 +30,14 @@ def reconstruct(pattern: str, encoded_sha: str, decoded_sha: str, target: Path) 
     target.write_bytes(decoded)
 
 
+def replace_exact(path: Path, old: str, new: str) -> None:
+    content = path.read_text(encoding="utf-8")
+    count = content.count(old)
+    if count != 1:
+        raise RuntimeError(f"Expected one match in {path}, found {count}: {old!r}")
+    path.write_text(content.replace(old, new, 1), encoding="utf-8")
+
+
 old_patch = Path("/tmp/aw3b-old.patch")
 reconstruct(
     ".aw3b-patch/chunk-*.txt",
@@ -87,8 +95,8 @@ reconstruct(
 release_contract_patch = Path("/tmp/aw3b-release-contract.patch")
 reconstruct(
     ".aw3b-release-contract.patch.gz.b64",
-    "f9598a42d66ad7225470c77c3efbdad2a8485a379778863c4c4dc978894d621d",
-    "e2cdb8f70e9bc10f5226472dc9e3624057cb8372ecb313ea03e3a8b2acfb899f",
+    "e7abd6420b276dae429dcc5b98a4d4d0cd3e0b35a5983975a6039d81fc1ac489",
+    "c5ae40d37e2ae8c91632a5a4cb9cd0a30be2a11dd7ecb375bd1d9811acae1c23",
     release_contract_patch,
 )
 
@@ -116,6 +124,20 @@ run("git", "apply", "--check", str(delta_patch))
 run("git", "apply", str(delta_patch))
 run("git", "apply", "--check", str(release_contract_patch))
 run("git", "apply", str(release_contract_patch))
+
+autosave_test = ROOT / "services/database/workout-set-autosave.test.ts"
+replace_exact(
+    autosave_test,
+    "    let releaseFirst: (() => void) | null = null;",
+    "    let releaseFirst!: () => void;",
+)
+replace_exact(autosave_test, "    releaseFirst?.();", "    releaseFirst();")
+replace_exact(
+    autosave_test,
+    "          return 1 as ReturnType<typeof setTimeout>;",
+    "          return 1 as unknown as ReturnType<typeof setTimeout>;",
+)
+
 run("git", "diff", "--check")
 run("git", "config", "user.name", "github-actions[bot]")
 run("git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
