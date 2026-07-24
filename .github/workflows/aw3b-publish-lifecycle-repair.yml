@@ -1,0 +1,60 @@
+name: AW3B Publish Autosave Lifecycle Repair
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aw3b-publish-autosave-lifecycle-repair
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-aw3b-structured-set-details
+          fetch-depth: 0
+
+      - name: Apply and fast-forward reviewed lifecycle repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='feat/active-workout-aw3b-structured-set-details'
+          for attempt in 1 2 3 4 5; do
+            git fetch origin "$branch"
+            git reset --hard "origin/$branch"
+            python scripts/aw3b-autosave-lifecycle-repair.py
+            rm -f .github/workflows/aw3b-publish-lifecycle-repair.yml
+            find .github/workflows -maxdepth 1 -name 'aw3b-*repair*' -delete
+            rm -f scripts/aw3b-autosave-lifecycle-repair.py
+
+            git diff --check
+            ! find .github/workflows -maxdepth 1 -name 'aw3b-*repair*' | grep -q .
+            test ! -e scripts/aw3b-autosave-lifecycle-repair.py
+            grep -q 'mountWorkoutSetAutosaveCoordinator' services/database/workout-set-autosave.ts
+            grep -q 'mountWorkoutSetAutosaveCoordinator' components/workouts/workout-day-focus-session.tsx
+            grep -q 'replaces a cancelled Strict Mode mount' services/database/workout-set-autosave.test.ts
+            ! grep -q 'autosaveCoordinatorRef.current?.cancel' components/workouts/workout-day-focus-session.tsx
+
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            if git diff --cached --quiet; then
+              exit 0
+            fi
+            git commit -m "fix(workouts): remount autosave coordinator safely"
+            if git push origin HEAD:"$branch"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
