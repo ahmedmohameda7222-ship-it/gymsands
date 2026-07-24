@@ -1472,7 +1472,15 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const rirErrorId = activeRirValidation.error ? "active-set-rir-error" : undefined;
 
   return (
-    <div className="space-y-4 pb-28 lg:pb-4" dir={dir}>
+    <div
+    className="space-y-4 pb-28 lg:pb-4"
+    dir={dir}
+    data-active-set-state
+    data-active-set-number={activeSet.setNumber}
+    data-active-set-persisted={activeSet.hasPersistedLog ? "true" : "false"}
+    data-active-set-completed={activeSet.completedAt ? "true" : "false"}
+    data-active-set-has-details={activeSet.hasSetDetails ? "true" : "false"}
+  >
       {completedSummary ? <WorkoutSummaryCard summary={completedSummary} dayName={day.day_name} /> : null}
 
       {isStarting ? (

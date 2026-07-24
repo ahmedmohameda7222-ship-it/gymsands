@@ -1,15 +1,18 @@
 import { chromium } from "@playwright/test";
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const baseUrl = process.env.QA_BASE_URL || "http://127.0.0.1:3000";
 const outputDir = path.resolve(
   process.env.QA_TRAIN_EVIDENCE_DIR || path.join(process.cwd(), "quality-reports", "train-phase0b-phase1")
 );
-const activePlanId = "10000000-0000-4000-8000-000000000001";
-const inactivePlanId = "10000000-0000-4000-8000-000000000002";
-const archivedPlanId = "10000000-0000-4000-8000-000000000003";
-const activeDayId = "10000000-0000-4000-8000-000000000011";
+const trainMockContract = JSON.parse(
+  await readFile(new URL("../lib/fixtures/train-mock-contract.json", import.meta.url), "utf8")
+);
+const activePlanId = trainMockContract.planIds.active;
+const inactivePlanId = trainMockContract.planIds.inactive;
+const archivedPlanId = trainMockContract.planIds.archived;
+const activeDayId = trainMockContract.activeDayId;
 const catalogActivityId = "11111111-1111-4111-8111-111111111111";
 const viewports = [
   { name: "320x568", width: 320, height: 568 },
@@ -68,8 +71,8 @@ function intersects(a, b) {
 
 function workoutSessionFixture({ planDayId = null, workoutId = null, workoutName = "Strength A" } = {}) {
   return {
-    id: "20000000-0000-4000-8000-000000000001",
-    user_id: "00000000-0000-4000-8000-000000000001",
+    id: trainMockContract.activeSessionId,
+    user_id: trainMockContract.userId,
     workout_id: workoutId,
     plan_id: planDayId ? activePlanId : null,
     plan_day_id: planDayId,
@@ -97,7 +100,7 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
       contentType: "application/json",
       headers: { "cache-control": "private, no-store", "x-plaivra-qa-fixture": "session-muscle-analysis" },
       body: JSON.stringify({
-        sessionId: "20000000-0000-4000-8000-000000000001",
+        sessionId: trainMockContract.activeSessionId,
         snapshotId: "60000000-0000-4000-8000-000000000001",
         snapshotSchemaVersion: "workout_session_muscle_snapshot_v1",
         frozenAt: "2026-07-22T08:00:00.000Z",
@@ -150,7 +153,7 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     }
     if (method === "GET" && requestUrl.pathname.includes("/rest/v1/workout_sessions")) {
       const wantsObject = (requestRoute.request().headers().accept || "").includes("application/vnd.pgrst.object");
-      const owner = { user_id: "00000000-0000-4000-8000-000000000001" };
+      const owner = { user_id: trainMockContract.userId };
       await requestRoute.fulfill({
         status: 200,
         contentType: "application/json",
@@ -161,11 +164,11 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     }
     if (method === "GET" && requestUrl.pathname.includes("/rest/v1/exercise_logs")) {
       const persistedLog = {
-        id: "30000000-0000-4000-8000-000000000001",
-        workout_session_id: "20000000-0000-4000-8000-000000000001",
-        plan_exercise_id: "10000000-0000-4000-8000-000000000021",
+        id: trainMockContract.activeExerciseLogId,
+        workout_session_id: trainMockContract.activeSessionId,
+        plan_exercise_id: trainMockContract.activeFirstExerciseId,
         exercise_order: 1,
-        exercise_name: "Barbell Back Squat",
+        exercise_name: trainMockContract.activeFirstExerciseName,
         exercise_category: "strength",
         planned_sets: 3,
         planned_reps: "8-10",
@@ -374,6 +377,7 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     drawerWithinViewport: null,
     drawerHorizontalOverflowPx: null,
     focusReturned: null,
+    hydrationPrecondition: null,
     artifact: null
   };
   if (openSetDetails) {
@@ -386,10 +390,38 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     await dialog.waitFor({ state: "visible", timeout: 20_000 });
     const dialogFocused = await dialog.evaluate((element) => element.contains(document.activeElement));
 
+    const activeSetState = page.locator("[data-active-set-state]").first();
+    const activeSetIdentity = {
+      number: await activeSetState.getAttribute("data-active-set-number"),
+      persisted: await activeSetState.getAttribute("data-active-set-persisted"),
+      completed: await activeSetState.getAttribute("data-active-set-completed"),
+      hasDetails: await activeSetState.getAttribute("data-active-set-has-details")
+    };
     const rpe = page.locator("#active-set-rpe");
     const rir = page.locator("#active-set-rir");
     const setType = page.locator("#active-set-type");
     const note = page.locator("#active-set-note");
+    const hydratedValues = {
+      rpe: await rpe.inputValue(),
+      rir: await rir.inputValue(),
+      setType: await setType.inputValue(),
+      note: await note.inputValue()
+    };
+    const hydrationPrecondition = {
+      identity: activeSetIdentity,
+      values: hydratedValues,
+      passed: activeSetIdentity.number === "1"
+        && activeSetIdentity.persisted === "true"
+        && activeSetIdentity.completed === "true"
+        && activeSetIdentity.hasDetails === "true"
+        && hydratedValues.rpe === "7.5"
+        && hydratedValues.rir === "3"
+        && hydratedValues.setType === "working"
+        && hydratedValues.note === "Hydrated set note"
+    };
+    if (!hydrationPrecondition.passed) {
+      throw new Error(`AW-3B autosave fixture hydration failed: ${JSON.stringify(hydrationPrecondition)}`);
+    }
     const inputContract = {
       rpe: { type: await rpe.getAttribute("type"), inputMode: await rpe.getAttribute("inputmode") },
       rir: { type: await rir.getAttribute("type"), inputMode: await rir.getAttribute("inputmode") }
@@ -458,6 +490,7 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
       drawerWithinViewport: drawerLayout.withinViewport,
       drawerHorizontalOverflowPx: drawerLayout.horizontalOverflowPx,
       focusReturned: null,
+      hydrationPrecondition,
       autosaveFlushed: null,
       autosavePayload: null,
       artifact: null
@@ -610,8 +643,21 @@ async function captureNamedEvidence({ filename, ...scenario }) {
   return item;
 }
 
-// Exercise the longest connected builder interaction first so a regression
-// fails quickly instead of after the full screenshot matrix.
+// Prove the persisted-set hydration and autosave contract before the expensive
+// visual matrix so fixture drift fails in minutes, not near the end of Quality.
+const autosaveSmoke = await openScenario({
+  viewport: viewports[2],
+  scenario: "active",
+  language: "en",
+  route: `/workouts/session/day/${activeDayId}`,
+  openSetDetails: true
+});
+if (!autosaveSmoke.setDetailsState.autosaveFlushed) {
+  throw new Error(`AW-3B autosave smoke failed: ${JSON.stringify(autosaveSmoke.setDetailsState)}`);
+}
+observations.push(autosaveSmoke);
+
+// Exercise the longest connected builder interaction next.
 observations.push(await openScenario({ viewport: viewports[2], scenario: "scheduled", route: "/my-workout/plans/builder", step: 3 }));
 
 for (const viewport of viewports) {
@@ -796,6 +842,7 @@ const failures = observations.filter((item) => {
   const setDetailsFailed = item.openSetDetails && (
     !item.setDetailsState.checked
     || !item.setDetailsState.dialogFocused
+    || !item.setDetailsState.hydrationPrecondition?.passed
     || JSON.stringify(item.setDetailsState.inputContract) !== JSON.stringify({
       rpe: { type: "text", inputMode: "decimal" },
       rir: { type: "text", inputMode: "decimal" }

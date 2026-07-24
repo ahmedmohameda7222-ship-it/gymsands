@@ -1,0 +1,15 @@
+{
+  "userId": "00000000-0000-4000-8000-000000000001",
+  "planIds": {
+    "active": "10000000-0000-4000-8000-000000000001",
+    "inactive": "10000000-0000-4000-8000-000000000002",
+    "archived": "10000000-0000-4000-8000-000000000003"
+  },
+  "activeDaySuffix": "11",
+  "activeDayId": "10000000-0000-4000-8000-000000000011",
+  "activeDayName": "Strength A",
+  "activeFirstExerciseId": "10000000-0000-4000-8000-000000000011",
+  "activeFirstExerciseName": "Back Squat",
+  "activeSessionId": "20000000-0000-4000-8000-000000000001",
+  "activeExerciseLogId": "30000000-0000-4000-8000-000000000001"
+}
