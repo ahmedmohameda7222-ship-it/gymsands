@@ -4,53 +4,28 @@ on:
   push:
     branches:
       - feat/active-workout-aw3b-structured-set-details
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: aw3b-runtime-patch-final
-  cancel-in-progress: true
+  contents: read
 
 jobs:
   export-workspace:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
       - name: Checkout exact branch head
         uses: actions/checkout@v4
         with:
-          ref: feat/active-workout-aw3b-structured-set-details
           fetch-depth: 0
-
-      - name: Apply exact final patch and push
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat .aw3b-final-patch/chunk-*.txt > /tmp/aw3b-final.patch.gz.b64
-          echo "d804a0cdc87560d9072b3895f7d0ff02040059aa78c94eed32342fd613c0066e  /tmp/aw3b-final.patch.gz.b64" | sha256sum -c -
-          base64 --decode /tmp/aw3b-final.patch.gz.b64 > /tmp/aw3b-final.patch.gz
-          echo "bb73931f1ffbacbee235b5b3404cbbf52ad4a1a8556bb740137ecb96a375169e  /tmp/aw3b-final.patch.gz" | sha256sum -c -
-          gzip --decompress --stdout /tmp/aw3b-final.patch.gz > /tmp/aw3b-final.patch
-          echo "2702693ec15f00777423207a10e1189a3209e130c49dfd6190d7938b0a44a519  /tmp/aw3b-final.patch" | sha256sum -c -
-          git apply --check \
-            --exclude=.github/workflows/aw3b-apply-runtime-patch.yml \
-            --exclude=.github/workflows/aw3b-workspace-export.yml \
-            /tmp/aw3b-final.patch
-          git apply \
-            --exclude=.github/workflows/aw3b-apply-runtime-patch.yml \
-            --exclude=.github/workflows/aw3b-workspace-export.yml \
-            /tmp/aw3b-final.patch
-          rm -rf \
-            .aw3b-final-patch \
-            .github/workflows/aw3b-apply-runtime-patch.yml \
-            .github/workflows/aw3b-workspace-export.yml
-          git add -A
-          git diff --cached --check
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "fix(workouts): complete AW-3B logic hardening"
-          git status --short
-          test -z "$(git status --porcelain)"
-          git push origin HEAD:feat/active-workout-aw3b-structured-set-details
+      - name: Package workspace
+        run: tar --exclude=.git -czf /tmp/aw3b-workspace.tgz .
+      - name: Upload workspace
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw3b-workspace-${{ github.sha }}
+          path: /tmp/aw3b-workspace.tgz
+          if-no-files-found: error
+          retention-days: 1
