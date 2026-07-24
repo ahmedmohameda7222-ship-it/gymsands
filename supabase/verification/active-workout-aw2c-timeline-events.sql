@@ -1,11 +1,18 @@
 \set ON_ERROR_STOP on
 begin;
 
+select migration_version as aw2c_marker_baseline
+from public.release_schema_compatibility
+where singleton
+\gset
+
 create or replace function pg_temp.aw2c_assert(p_condition boolean,p_message text)
 returns void language plpgsql as $function$
 begin if not coalesce(p_condition,false) then raise exception '%',p_message; end if; end
 $function$;
 
+select pg_temp.aw2c_assert(:'aw2c_marker_baseline' <> '20260722070000',
+  'AW-2C verification encountered invalid repository-only compatibility marker.');
 select pg_temp.aw2c_assert(to_regclass('public.workout_session_timeline_events') is not null,'AW-2C timeline table is missing.');
 select pg_temp.aw2c_assert(
   (select array_agg(column_name||':'||udt_name||':'||is_nullable order by ordinal_position)
@@ -45,8 +52,8 @@ select pg_temp.aw2c_assert(
   exists(select 1 from pg_trigger where tgrelid='public.workout_sessions'::regclass and tgname='workout_sessions_terminal_delete_guard' and tgenabled<>'D'),
   'AW-2C delete compatibility bridge is missing.');
 select pg_temp.aw2c_assert(
-  (select version='2' and migration_version='20260721224813' from public.release_schema_compatibility where singleton),
-  'AW-2C changed the compatibility marker.');
+  (select version='2' and migration_version=:'aw2c_marker_baseline' from public.release_schema_compatibility where singleton),
+  'AW-2C changed the compatibility marker from its transaction baseline.');
 select pg_temp.aw2c_assert(
   not exists(select 1 from public.workout_session_timeline_events event join public.workout_sessions session on session.id=event.workout_session_id where event.user_id<>session.user_id),
   'AW-2C timeline owner mismatch exists.');
