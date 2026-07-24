@@ -316,6 +316,14 @@ export function validateWorkoutSetEffortInput(
   return { value: numericValue, error: null };
 }
 
+export function workoutSetEffortInputForContext(
+  rawValue: string,
+  field: WorkoutSetEffortField,
+) {
+  const result = validateWorkoutSetEffortInput(rawValue, field);
+  return result.error ? null : result.value;
+}
+
 export function parseWorkoutSetEffortInput(
   rawValue: string,
   field: WorkoutSetEffortField,

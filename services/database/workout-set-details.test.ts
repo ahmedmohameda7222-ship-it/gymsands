@@ -6,6 +6,7 @@ import {
   normalizeWorkoutSetSegmentsRelation,
   parseWorkoutSetEffortInput,
   validateWorkoutSetEffortInput,
+  workoutSetEffortInputForContext,
   workoutSetDetailsInputToSql,
   workoutSetSegmentsInputToSql,
 } from "./workout-set-details";
@@ -218,6 +219,9 @@ describe("AW-3B structured workout set details", () => {
     expect(validateWorkoutSetEffortInput("10.1", "rpe").error).toBe("range");
     expect(validateWorkoutSetEffortInput("1e1", "rpe").error).toBe("format");
     expect(validateWorkoutSetEffortInput("-1", "rir").error).toBe("format");
+    expect(workoutSetEffortInputForContext("8.25", "rpe")).toBeNull();
+    expect(workoutSetEffortInputForContext("20.1", "rir")).toBeNull();
+    expect(workoutSetEffortInputForContext("8.5", "rpe")).toBe(8.5);
     expect(() => parseWorkoutSetEffortInput("8.25", "rpe")).toThrow(/one decimal/i);
     expect(parseWorkoutSetEffortInput("0.0", "rpe")).toBe(0);
   });

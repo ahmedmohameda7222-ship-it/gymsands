@@ -86,6 +86,7 @@ import {
   editableWorkoutSetProvenance,
   parseWorkoutSetEffortInput,
   validateWorkoutSetEffortInput,
+  workoutSetEffortInputForContext,
   WORKOUT_SET_NOTE_MAX_CODE_POINTS,
   workoutSetNoteCodePointLength
 } from "@/services/database/workout-set-details";
@@ -920,8 +921,15 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
   function buildLogRows(
     states = exerciseStates,
-    options: { pendingOnly?: boolean; validOnly?: boolean } = {}
+    options: {
+      pendingOnly?: boolean;
+      validOnly?: boolean;
+      effortMode?: "strict" | "draft-context";
+    } = {}
   ) {
+    const parseEffort = options.effortMode === "draft-context"
+      ? workoutSetEffortInputForContext
+      : parseWorkoutSetEffortInput;
     return states.flatMap((item, exerciseIndex) =>
       item.sets
         .filter((set) => {
@@ -953,8 +961,8 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
               setDetails: {
                 schemaVersion: 1 as const,
                 setType: set.setType,
-                rpe: parseWorkoutSetEffortInput(set.rpe, "rpe"),
-                rir: parseWorkoutSetEffortInput(set.rir, "rir"),
+                rpe: parseEffort(set.rpe, "rpe"),
+                rir: parseEffort(set.rir, "rir"),
                 notes: set.notes || null,
                 sideMode: set.sideMode,
                 plannedTempo: set.plannedTempo,
@@ -972,7 +980,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   }
 
   function buildWorkoutContextLogRows(states = exerciseStates) {
-    return buildLogRows(states).map((row) => {
+    return buildLogRows(states, { effortMode: "draft-context" }).map((row) => {
       const item = states.find((candidate) => candidate.exercise.id === row.planExerciseId);
       const set = item?.sets.find((candidate) => candidate.setNumber === row.setNumber);
       if (!set?.hasSetDetails || row.setDetails) return row;
@@ -981,8 +989,8 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         setDetails: {
           schemaVersion: 1 as const,
           setType: set.setType,
-          rpe: parseWorkoutSetEffortInput(set.rpe, "rpe"),
-          rir: parseWorkoutSetEffortInput(set.rir, "rir"),
+          rpe: workoutSetEffortInputForContext(set.rpe, "rpe"),
+          rir: workoutSetEffortInputForContext(set.rir, "rir"),
           notes: set.notes || null,
           sideMode: set.sideMode,
           plannedTempo: set.plannedTempo,
