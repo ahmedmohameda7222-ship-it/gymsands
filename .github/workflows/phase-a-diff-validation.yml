@@ -39,14 +39,14 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Restore validated transformations and isolate session-limit read
+      - name: Restore validated transformations and add active post-completion fixture
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/previous
-          gh run download 30078686596 \
+          gh run download 30079109835 \
             --repo "$GITHUB_REPOSITORY" \
-            --name aw3b-verification-2203f6bd5adce680002800106963376540e67061 \
+            --name aw3b-final-verification-e98312fa69e99541d1e61cc0356170643680a98a \
             --dir /tmp/previous
           source_root=/tmp/previous/home/runner/work/gymsands/gymsands/supabase/verification
           for name in \
@@ -60,65 +60,35 @@ jobs:
           from pathlib import Path
           path = Path('supabase/verification/active-workout-aw3b-integration.sql')
           source = path.read_text(encoding='utf-8')
-          old = '''do $session_log_limit$
-          begin
-            begin
-              perform public.upsert_workout_set_logs_atomic(
-                'b3000000-0000-4000-8000-000000000002',
-                current_setting('plaivra.aw3b_session_limit_id')::uuid,
-                jsonb_build_array(jsonb_build_object(
-                  'exercise_order',1,
-                  'exercise_name','AW-3B Session Limit',
-                  'set_number',501,
-                  'reps',1,
-                  'completed_at','2026-07-22T20:03:01Z'
-                ))
-              );
-              raise exception 'Repeated requests exceeded the AW-3B 500-log session limit.';
-            exception when invalid_parameter_value then null; end;
-            if (select count(*) from public.exercise_logs
-                where workout_session_id=current_setting('plaivra.aw3b_session_limit_id')::uuid)<>500 then
-              raise exception 'AW-3B session-limit rejection was not atomic.';
-            end if;
-          end
-          $session_log_limit$;
-
-          set local role authenticated;
+          marker = '''-- Authenticated browser provenance is actor-bound even when the JSON spoofs
+          -- trusted machine actors. Hidden structured values and the segment graph are
+          -- still committed atomically.
           '''
-          new = '''do $session_log_limit$
-          begin
-            begin
-              perform public.upsert_workout_set_logs_atomic(
-                'b3000000-0000-4000-8000-000000000002',
-                current_setting('plaivra.aw3b_session_limit_id')::uuid,
-                jsonb_build_array(jsonb_build_object(
-                  'exercise_order',1,
-                  'exercise_name','AW-3B Session Limit',
-                  'set_number',501,
-                  'reps',1,
-                  'completed_at','2026-07-22T20:03:01Z'
-                ))
-              );
-              raise exception 'Repeated requests exceeded the AW-3B 500-log session limit.';
-            exception when invalid_parameter_value then null; end;
-          end
-          $session_log_limit$;
-
+          fixture = '''set local role authenticated;
+          select set_config('request.jwt.claim.role','authenticated',true);
+          select set_config('request.jwt.claim.sub','b3000000-0000-4000-8000-000000000001',true);
+          select (public.start_or_resume_direct_workout_session_atomic(
+            'b3000000-0000-4000-8000-000000000001'::uuid,
+            'provider_activity',
+            'aw3b-post-completion-verification',
+            'plaivra-verification',
+            'AW-3B Post Completion Verification',
+            'Verification',
+            '{"sets":3}'::jsonb,
+            null
+          )->'session'->>'id') as aw3b_post_completion_session_id \gset
+          select set_config('plaivra.aw3b_post_completion_session_id', :'aw3b_post_completion_session_id', true);
           reset role;
-          do $verify_session_log_limit$
-          begin
-            if (select count(*) from public.exercise_logs
-                where workout_session_id=current_setting('plaivra.aw3b_session_limit_id')::uuid)<>500 then
-              raise exception 'AW-3B session-limit rejection was not atomic.';
-            end if;
-          end
-          $verify_session_log_limit$;
 
-          set local role authenticated;
           '''
-          if source.count(old) != 1:
-              raise SystemExit(f'Expected one session-limit read contract, found {source.count(old)}')
-          path.write_text(source.replace(old, new), encoding='utf-8')
+          if source.count(marker) != 1:
+              raise SystemExit(f'Expected one post-completion marker, found {source.count(marker)}')
+          prefix, suffix = source.split(marker, 1)
+          old = "current_setting('plaivra.aw3b_integration_session_id')::uuid"
+          if suffix.count(old) < 4:
+              raise SystemExit(f'Expected post-completion session references, found {suffix.count(old)}')
+          suffix = suffix.replace(old, "current_setting('plaivra.aw3b_post_completion_session_id')::uuid")
+          path.write_text(prefix + fixture + marker + suffix, encoding='utf-8')
           PY
           git diff --check -- supabase/verification
 
