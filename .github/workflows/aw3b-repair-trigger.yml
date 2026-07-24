@@ -1,0 +1,66 @@
+name: AW3B Repair Trigger
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aw3b-repair-trigger-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Execute reviewed repair payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/aw3b-long-term-fixture-repair.yml').read_text(encoding='utf-8')
+          start = "          python - <<'PY'\n"
+          end = "\n          PY\n\n      - name: Validate permanent repair"
+          if start not in workflow or end not in workflow:
+              raise SystemExit('Reviewed repair payload markers are missing.')
+          payload = workflow.split(start, 1)[1].split(end, 1)[0]
+          exec(compile(textwrap.dedent(payload), 'aw3b-long-term-fixture-repair.py', 'exec'))
+          Path('.github/workflows/aw3b-repair-trigger.yml').unlink()
+          PY
+
+      - name: Validate permanent changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/run-train-layout-qa.mjs
+          node --test scripts/train-mock-fixture-contract.test.mjs
+          npm ci
+          npm run test:scripts
+          npm run typecheck
+          git diff --check
+          test ! -e .github/workflows/aw3b-long-term-fixture-repair.yml
+          test ! -e .github/workflows/aw3b-repair-trigger.yml
+
+      - name: Commit permanent repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(train): unify persisted-set QA fixture identities"
+          git push origin HEAD:feat/active-workout-aw3b-structured-set-details
