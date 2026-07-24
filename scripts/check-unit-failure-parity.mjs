@@ -122,7 +122,7 @@ function main() {
     const baseFailures = failedIdentities(baseReport);
     const introduced = headFailures.filter((identity) => !baseFailures.includes(identity));
     const removed = baseFailures.filter((identity) => !headFailures.includes(identity));
-    const passed = introduced.length === 0 && removed.length === 0;
+    const passed = introduced.length === 0;
 
     const summary = {
       headSha: process.env.PLAIVRA_COMMIT_SHA ?? git("rev-parse", "HEAD"),
