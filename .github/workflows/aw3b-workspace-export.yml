@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feat/active-workout-aw3b-structured-set-details
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
