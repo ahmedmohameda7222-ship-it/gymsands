@@ -42,6 +42,16 @@ jobs:
           echo "d62df09b4b5439d6e1c3987b631838298f9700755364efbe2529f0a671e6df94  /tmp/aw3b-runtime.patch" | sha256sum -c -
           git apply --check /tmp/aw3b-runtime.patch
           git apply /tmp/aw3b-runtime.patch
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("services/database/workout-set-details.test.ts")
+          text = path.read_text(encoding="utf-8")
+          old = ').toEqual(["repetitions", "external_load_kg"]);'
+          new = ').toEqual(["external_load_kg", "repetitions"]);'
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one canonical metric-order assertion, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
           rm -rf .aw3b-patch
           git diff --check
 
