@@ -1,0 +1,28 @@
+name: AW3B Workspace Export
+
+on:
+  push:
+    branches:
+      - feat/active-workout-aw3b-structured-set-details
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-workspace:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Package workspace
+        run: tar --exclude=.git -czf /tmp/aw3b-workspace.tgz .
+      - name: Upload workspace
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw3b-workspace-${{ github.sha }}
+          path: /tmp/aw3b-workspace.tgz
+          if-no-files-found: error
+          retention-days: 1
