@@ -6,8 +6,8 @@
 
  RUN  v4.1.9 /home/runner/work/gymsands/gymsands
 
- ✓ services/database/workout-set-details.test.ts (11 tests) 27ms
- ✓ lib/privacy/data-export.test.ts (3 tests) 63ms
+ ✓ services/database/workout-set-details.test.ts (11 tests) 25ms
+ ✓ lib/privacy/data-export.test.ts (3 tests) 49ms
 stderr | services/database/workout-rpc-convergence.test.ts > atomic plan-day workout sessions > serializes structured final logs through completion and preserves Personal Record refresh behavior
 Plaivra saved the workout, but personal records could not be refreshed. Error: PR unavailable
     at /home/runner/work/gymsands/gymsands/services/database/workout-rpc-convergence.test.ts:262:69
@@ -21,27 +21,27 @@ Plaivra saved the workout, but personal records could not be refreshed. Error: P
     at runWithTimeout (file:///home/runner/work/gymsands/gymsands/node_modules/@vitest/runner/dist/chunk-artifact.js:2272:10)
     at file:///home/runner/work/gymsands/gymsands/node_modules/@vitest/runner/dist/chunk-artifact.js:2955:64
 
- ✓ services/database/workout-rpc-convergence.test.ts (8 tests) 247ms
- ✓ lib/product/active-workout-aw3b-migration.test.ts (13 tests) 33ms
- ✓ services/database/workout-performance.test.ts (5 tests) 9ms
- ✓ services/database/workout-set-autosave.test.ts (3 tests) 6ms
- ✓ lib/mcp/workout-performance-source.test.ts (1 test) 7ms
+ ✓ services/database/workout-rpc-convergence.test.ts (8 tests) 195ms
+ ✓ lib/product/active-workout-aw3b-migration.test.ts (13 tests) 26ms
+ ✓ services/database/workout-performance.test.ts (5 tests) 7ms
+ ✓ services/database/workout-set-autosave.test.ts (3 tests) 5ms
+ ✓ lib/mcp/workout-performance-source.test.ts (1 test) 6ms
 
  Test Files  7 passed (7)
       Tests  44 passed (44)
-   Start at  01:17:45
-   Duration  946ms (transform 552ms, setup 0ms, import 592ms, tests 394ms, environment 1ms)
+   Start at  01:21:03
+   Duration  757ms (transform 494ms, setup 0ms, import 486ms, tests 313ms, environment 1ms)
 
 
  RUN  v4.1.9 /home/runner/work/gymsands/gymsands
 
- ✓ services/database/workout-set-details.integration.test.ts (8 tests) 7ms
- ✓ services/database/workout-performance.integration.test.ts (6 tests) 5ms
+ ✓ services/database/workout-set-details.integration.test.ts (8 tests) 6ms
+ ✓ services/database/workout-performance.integration.test.ts (6 tests) 4ms
 
  Test Files  2 passed (2)
       Tests  14 passed (14)
-   Start at  01:17:46
-   Duration  419ms (transform 34ms, setup 0ms, import 55ms, tests 12ms, environment 0ms)
+   Start at  01:21:04
+   Duration  329ms (transform 30ms, setup 0ms, import 46ms, tests 10ms, environment 0ms)
 
 ===== i18n tests =====
 
@@ -52,51 +52,51 @@ Plaivra saved the workout, but personal records could not be refreshed. Error: P
  RUN  v4.1.9 /home/runner/work/gymsands/gymsands
 
  ✓ lib/i18n/active-workout-surface-contract.test.ts (5 tests) 11ms
- ✓ lib/i18n/active-workout-formatters.test.ts (15 tests) 47ms
- ✓ lib/i18n/active-workout-message-contract.test.ts (6 tests) 143ms
- ✓ lib/i18n/message-shape.test.ts (3 tests) 34ms
+ ✓ lib/i18n/active-workout-formatters.test.ts (15 tests) 31ms
+ ✓ lib/i18n/active-workout-message-contract.test.ts (6 tests) 126ms
+ ✓ lib/i18n/message-shape.test.ts (3 tests) 25ms
 
  Test Files  4 passed (4)
       Tests  29 passed (29)
-   Start at  01:17:47
-   Duration  588ms (transform 219ms, setup 0ms, import 306ms, tests 236ms, environment 1ms)
+   Start at  01:21:05
+   Duration  462ms (transform 160ms, setup 0ms, import 221ms, tests 193ms, environment 0ms)
 
 ===== script tests =====
 
 > plaivra@1.0.0 test:scripts
 > node --test scripts/*.test.mjs
 
-✔ redacts every required opaque path example segment-by-segment (2.550167ms)
-✔ redacts URL-safe base64-like and opaque nonhex path identifiers (0.361475ms)
-✔ safe URLs strip credentials, query, fragment, and dynamic identifiers (12.24193ms)
-✔ known static paths remain readable (0.308738ms)
-✔ success and failure evidence use the same sanitizer (1.641281ms)
-✔ text and screenshot failure metadata cannot bypass segment redaction (0.389047ms)
-✔ structured artifact SHA identity remains available (2.016466ms)
-✔ latest release target includes reconciled production version aliases (2.121951ms)
-✔ accepts an internally consistent pending reconciliation ledger (3.18694ms)
-✔ reconciled plus zero unresolved entries is potentially ready (0.440433ms)
-✔ reconciled plus one pending entry is not ready (0.227547ms)
-✔ reconciled plus one schema-untracked entry is not ready (0.210141ms)
-✔ pending history repair is not ready even with zero unresolved entries (0.231062ms)
-✔ a physically applied migration misclassified as pending cannot produce ready state (0.193587ms)
-✔ ledger drift review is unresolved and blocks readiness (0.200527ms)
-✔ rejects stale declared counts (0.403547ms)
-✔ rejects reconciled state while unresolved migrations remain (0.337931ms)
-✔ canonicalizes the repository PostgreSQL UTC timestamp without changing its instant (0.30368ms)
-✔ rejects malformed and missing capture timestamps (0.423337ms)
-✔ derives all fail-closed counts rather than trusting a declared green state (0.313024ms)
-✔ accepts reachable immutable migration evidence with matching committed bytes (1.990538ms)
-✔ rejects an unrelated or unreachable evidence commit (0.430557ms)
+✔ redacts every required opaque path example segment-by-segment (1.963153ms)
+✔ redacts URL-safe base64-like and opaque nonhex path identifiers (0.340095ms)
+✔ safe URLs strip credentials, query, fragment, and dynamic identifiers (0.281019ms)
+✔ known static paths remain readable (0.239176ms)
+✔ success and failure evidence use the same sanitizer (3.492206ms)
+✔ text and screenshot failure metadata cannot bypass segment redaction (0.333557ms)
+✔ structured artifact SHA identity remains available (0.237157ms)
+✔ latest release target includes reconciled production version aliases (2.597758ms)
+✔ accepts an internally consistent pending reconciliation ledger (1.888087ms)
+✔ reconciled plus zero unresolved entries is potentially ready (0.268539ms)
+✔ reconciled plus one pending entry is not ready (0.112899ms)
+✔ reconciled plus one schema-untracked entry is not ready (0.096728ms)
+✔ pending history repair is not ready even with zero unresolved entries (0.15259ms)
+✔ a physically applied migration misclassified as pending cannot produce ready state (0.094386ms)
+✔ ledger drift review is unresolved and blocks readiness (0.148367ms)
+✔ rejects stale declared counts (0.276289ms)
+✔ rejects reconciled state while unresolved migrations remain (0.412536ms)
+✔ canonicalizes the repository PostgreSQL UTC timestamp without changing its instant (0.247738ms)
+✔ rejects malformed and missing capture timestamps (0.303742ms)
+✔ derives all fail-closed counts rather than trusting a declared green state (0.177964ms)
+✔ accepts reachable immutable migration evidence with matching committed bytes (0.974104ms)
+✔ rejects an unrelated or unreachable evidence commit (0.404391ms)
 MIGRATION_RECONCILIATION_SHA256={"supabase/migrations/20260711213000_adaptive_onboarding_v2.sql":"788e5106e103ff0273cf904514c2a3f3fb27f7283c769036339e7a1e3a01e031","supabase/migrations/20260712173000_persistent_meal_plan_skip_status.sql":"5523852f9c9726e60b700d5d25581948f6d5586ac632717f008d8b7dbc6b7d67","supabase/migrations/20260712195000_nutrition_target_date_overrides.sql":"86fd52e397153091aa7a26d36d9957b00c414c7ade0b5d6325808cc76b21625a","supabase/migrations/20260713153000_meal_plan_atomic_execution.sql":"c7d2d776a15f2d8b5e7f43be0acfe2fcc84b893e699ca47cd679fb3ed016ae84","supabase/migrations/20260713160000_train_section_atomic_integrity.sql":"e31c895dbfc1b6bb36c2bbfa58fa231013082d8599cb2dfb50306745ea1eb043","supabase/migrations/20260713170000_finalize_train_schedule_delete_integrity.sql":"f05a4d22f8d63aeb48a8b9004d91aba9dd77c7f0acca602bcb7f37018134b59e","supabase/migrations/20260714030000_harden_train_plan_rpc_execution.sql":"7038cb9830ea4aa9bfc83d6cca582d0860c565061bbd8328cf7feae8c27ca896","supabase/migrations/20260715010000_restrict_nutrition_target_override_acl.sql":"c70d245f1dc11f2d8257d15e987d1014b36d7b665e983994ea8848f3db69afb5"}
-✔ captures SHA-256 for the exact reconciliation migration bytes (3.090988ms)
-✔ accepts exactly the intended authenticated CRUD ACL (1.950889ms)
-✔ rejects a missing required CRUD privilege (0.336338ms)
-✔ rejects extra TRUNCATE (0.43212ms)
-✔ rejects extra TRIGGER (0.159486ms)
-✔ rejects extra REFERENCES (0.208048ms)
-✔ rejects extra MAINTAIN (0.198754ms)
-✔ normalizes duplicates and case without weakening exactness (0.171554ms)
+✔ captures SHA-256 for the exact reconciliation migration bytes (2.232325ms)
+✔ accepts exactly the intended authenticated CRUD ACL (1.627944ms)
+✔ rejects a missing required CRUD privilege (0.301749ms)
+✔ rejects extra TRUNCATE (0.358112ms)
+✔ rejects extra TRIGGER (0.14963ms)
+✔ rejects extra REFERENCES (0.203173ms)
+✔ rejects extra MAINTAIN (0.145143ms)
+✔ normalizes duplicates and case without weakening exactness (0.155157ms)
 file:///home/runner/work/gymsands/gymsands/scripts/release-identity-contract.mjs:40
     throw new Error("Migration ledger is not release-ready.");
           ^
@@ -107,11 +107,11 @@ Error: Migration ledger is not release-ready.
     at file:///home/runner/work/gymsands/gymsands/scripts/quality-evidence-contract.mjs:19:44
 
 Node.js v24.18.0
-✖ scripts/permanent-quality-replay.test.mjs (68.411355ms)
-✔ rendered QA preserves the 126-route matrix and isolates every observation (1.331282ms)
-✔ today-workout is redirected before the React route lifecycle (0.304761ms)
-✔ authenticated evidence is fail-closed and always emits a safe failure summary (0.316789ms)
-✔ post-deploy readiness gates are production-only while artifact identity stays universal (1.826395ms)
+✖ scripts/permanent-quality-replay.test.mjs (38.510352ms)
+✔ rendered QA preserves the 126-route matrix and isolates every observation (1.002343ms)
+✔ today-workout is redirected before the React route lifecycle (0.2221ms)
+✔ authenticated evidence is fail-closed and always emits a safe failure summary (0.242061ms)
+✔ post-deploy readiness gates are production-only while artifact identity stays universal (1.42521ms)
 file:///home/runner/work/gymsands/gymsands/scripts/release-identity-contract.mjs:40
     throw new Error("Migration ledger is not release-ready.");
           ^
@@ -122,29 +122,29 @@ Error: Migration ledger is not release-ready.
     at file:///home/runner/work/gymsands/gymsands/scripts/quality-evidence-contract.mjs:19:44
 
 Node.js v24.18.0
-✖ scripts/promote-release-schema-compatibility.test.mjs (50.748447ms)
-✔ repository config declares Vercel main-only policy intent without claiming provider enforcement (4.230666ms)
-✔ release documentation distinguishes repository intent from actual provider verification (0.519539ms)
-✔ launch documentation places reconciliation, strict preflight, and owner approval before merge (0.681389ms)
-✔ active configuration has no Vercel preview or production SHA approval dependency (0.609923ms)
-✔ tracked references contain no active obsolete Vercel gate dependency (84.584483ms)
-✔ git diff checks pass for the working tree and branch range (106.533293ms)
-✔ Netlify keeps its exact-SHA ignore command and local behavior (38.195671ms)
-✔ Netlify deploy-preview behavior remains unchanged (44.412609ms)
-✔ Netlify branch-deploy behavior remains unchanged (42.839475ms)
-✔ Netlify dev behavior remains unchanged (72.370209ms)
-✔ Netlify production is held without exact approval (46.540965ms)
-✔ Netlify production is held for a mismatched approval (42.415386ms)
-✔ Netlify production is held for abbreviated or malformed identities (104.112563ms)
-✔ Netlify production proceeds only for the exact valid 40-character SHA (29.425238ms)
-✔ Netlify ambiguous provider targets fail closed (28.297303ms)
-✔ Stage-1 cannot authorize and exact Production token is identity bound (1.664745ms)
-✔ Plaivra direct and recognized pooler targets are accepted with redacted identity (0.943367ms)
-✔ Activity Catalog, other projects, generic hosts and localhost are rejected (0.554561ms)
-✖ future reconciled ledger automatically derives its later target (1.375447ms)
-✔ generic workflow and evidence code contain no pinned AW-2A migration (0.889377ms)
-✔ same-head run selection and artifact-only evidence permissions are exact (0.631385ms)
-✔ promotion target validation precedes adapter construction (0.357299ms)
+✖ scripts/promote-release-schema-compatibility.test.mjs (52.933461ms)
+✔ repository config declares Vercel main-only policy intent without claiming provider enforcement (3.21529ms)
+✔ release documentation distinguishes repository intent from actual provider verification (0.433647ms)
+✔ launch documentation places reconciliation, strict preflight, and owner approval before merge (0.484029ms)
+✔ active configuration has no Vercel preview or production SHA approval dependency (0.388678ms)
+✔ tracked references contain no active obsolete Vercel gate dependency (74.636596ms)
+✔ git diff checks pass for the working tree and branch range (21.976584ms)
+✔ Netlify keeps its exact-SHA ignore command and local behavior (29.822526ms)
+✔ Netlify deploy-preview behavior remains unchanged (30.847946ms)
+✔ Netlify branch-deploy behavior remains unchanged (33.337416ms)
+✔ Netlify dev behavior remains unchanged (38.862437ms)
+✔ Netlify production is held without exact approval (36.287095ms)
+✔ Netlify production is held for a mismatched approval (37.234993ms)
+✔ Netlify production is held for abbreviated or malformed identities (99.667233ms)
+✔ Netlify production proceeds only for the exact valid 40-character SHA (33.117113ms)
+✔ Netlify ambiguous provider targets fail closed (24.606293ms)
+✔ Stage-1 cannot authorize and exact Production token is identity bound (1.682469ms)
+✔ Plaivra direct and recognized pooler targets are accepted with redacted identity (0.707115ms)
+✔ Activity Catalog, other projects, generic hosts and localhost are rejected (0.466718ms)
+✖ future reconciled ledger automatically derives its later target (1.150723ms)
+✔ generic workflow and evidence code contain no pinned AW-2A migration (0.734032ms)
+✔ same-head run selection and artifact-only evidence permissions are exact (0.557618ms)
+✔ promotion target validation precedes adapter construction (0.343148ms)
 file:///home/runner/work/gymsands/gymsands/scripts/release-identity-contract.mjs:40
     throw new Error("Migration ledger is not release-ready.");
           ^
@@ -155,13 +155,13 @@ Error: Migration ledger is not release-ready.
     at file:///home/runner/work/gymsands/gymsands/scripts/quality-evidence-contract.mjs:19:44
 
 Node.js v24.18.0
-✖ scripts/release-closure-stage1.test.mjs (70.159875ms)
-✔ next.config bundles deterministic release and migration metadata (68.341733ms)
-✔ post-deploy smoke rejects abbreviated release SHAs before network access (53.549546ms)
-✖ release manifest rejects abbreviated release SHAs (64.614542ms)
-✖ release manifest records exact installed runtime versions and lockfile identity (93.782539ms)
-✔ built metadata verification accepts reconciled ledger metadata while runtime readiness remains fail-closed (1.645406ms)
-✔ Netlify production release gate rejects nonstandard SHA lengths (45.183375ms)
+✖ scripts/release-closure-stage1.test.mjs (60.400962ms)
+✔ next.config bundles deterministic release and migration metadata (47.057765ms)
+✔ post-deploy smoke rejects abbreviated release SHAs before network access (43.14501ms)
+✖ release manifest rejects abbreviated release SHAs (53.216049ms)
+✖ release manifest records exact installed runtime versions and lockfile identity (58.437645ms)
+✔ built metadata verification accepts reconciled ledger metadata while runtime readiness remains fail-closed (1.064514ms)
+✔ Netlify production release gate rejects nonstandard SHA lengths (34.509749ms)
 file:///home/runner/work/gymsands/gymsands/scripts/release-identity-contract.mjs:40
     throw new Error("Migration ledger is not release-ready.");
           ^
@@ -172,7 +172,7 @@ Error: Migration ledger is not release-ready.
     at file:///home/runner/work/gymsands/gymsands/scripts/quality-evidence-contract.mjs:19:44
 
 Node.js v24.18.0
-✖ scripts/release-preflight.test.mjs (79.773802ms)
+✖ scripts/release-preflight.test.mjs (60.8783ms)
 file:///home/runner/work/gymsands/gymsands/scripts/release-identity-contract.mjs:40
     throw new Error("Migration ledger is not release-ready.");
           ^
@@ -183,14 +183,14 @@ Error: Migration ledger is not release-ready.
     at file:///home/runner/work/gymsands/gymsands/scripts/quality-evidence-contract.mjs:19:44
 
 Node.js v24.18.0
-✖ scripts/run-quality-gate.test.mjs (98.015018ms)
-✔ does not enforce provider configuration for ordinary local builds (1.919212ms)
-✔ accepts complete core production configuration (0.35083ms)
-✔ rejects missing and malformed core production configuration without values (0.58741ms)
-✔ validates MCP and OAuth configuration only when enabled (0.39889ms)
-✔ validates Stripe configuration only when checkout is enabled (0.237672ms)
-✔ validates Activity Catalog configuration only for external modes (0.725975ms)
-✔ validates privacy execution key and retention periods conditionally (0.489435ms)
+✖ scripts/run-quality-gate.test.mjs (56.287094ms)
+✔ does not enforce provider configuration for ordinary local builds (1.829524ms)
+✔ accepts complete core production configuration (0.32419ms)
+✔ rejects missing and malformed core production configuration without values (0.536784ms)
+✔ validates MCP and OAuth configuration only when enabled (0.287562ms)
+✔ validates Stripe configuration only when checkout is enabled (0.214075ms)
+✔ validates Activity Catalog configuration only for external modes (0.674546ms)
+✔ validates privacy execution key and retention periods conditionally (0.456658ms)
 ℹ tests 74
 ℹ suites 0
 ℹ pass 66
@@ -198,20 +198,20 @@ Node.js v24.18.0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 986.334765
+ℹ duration_ms 722.903378
 
 ✖ failing tests:
 
 test at scripts/permanent-quality-replay.test.mjs:1:1
-✖ scripts/permanent-quality-replay.test.mjs (68.411355ms)
+✖ scripts/permanent-quality-replay.test.mjs (38.510352ms)
   'test failed'
 
 test at scripts/promote-release-schema-compatibility.test.mjs:1:1
-✖ scripts/promote-release-schema-compatibility.test.mjs (50.748447ms)
+✖ scripts/promote-release-schema-compatibility.test.mjs (52.933461ms)
   'test failed'
 
 test at scripts/release-closure-final-qa.test.mjs:80:1
-✖ future reconciled ledger automatically derives its later target (1.375447ms)
+✖ future reconciled ledger automatically derives its later target (1.150723ms)
   Error: Migration ledger is not release-ready.
       at deriveReleaseTarget (file:///home/runner/work/gymsands/gymsands/scripts/release-identity-contract.mjs:40:11)
       at TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/release-closure-final-qa.test.mjs:82:25)
@@ -223,11 +223,11 @@ test at scripts/release-closure-final-qa.test.mjs:80:1
       at async Test.processPendingSubtests (node:internal/test_runner/test:911:7)
 
 test at scripts/release-closure-stage1.test.mjs:1:1
-✖ scripts/release-closure-stage1.test.mjs (70.159875ms)
+✖ scripts/release-closure-stage1.test.mjs (60.400962ms)
   'test failed'
 
 test at scripts/release-metadata-bundle.test.mjs:66:1
-✖ release manifest rejects abbreviated release SHAs (64.614542ms)
+✖ release manifest rejects abbreviated release SHAs (53.216049ms)
   AssertionError [ERR_ASSERTION]: The input did not match the regular expression /exact 40-character/i. Input:
 
   '\n' +
@@ -258,7 +258,7 @@ test at scripts/release-metadata-bundle.test.mjs:66:1
   }
 
 test at scripts/release-metadata-bundle.test.mjs:77:1
-✖ release manifest records exact installed runtime versions and lockfile identity (93.782539ms)
+✖ release manifest records exact installed runtime versions and lockfile identity (58.437645ms)
   AssertionError [ERR_ASSERTION]:
   file:///home/runner/work/gymsands/gymsands/scripts/release-identity-contract.mjs:40
       throw new Error("Migration ledger is not release-ready.");
@@ -290,9 +290,9 @@ test at scripts/release-metadata-bundle.test.mjs:77:1
   }
 
 test at scripts/release-preflight.test.mjs:1:1
-✖ scripts/release-preflight.test.mjs (79.773802ms)
+✖ scripts/release-preflight.test.mjs (60.8783ms)
   'test failed'
 
 test at scripts/run-quality-gate.test.mjs:1:1
-✖ scripts/run-quality-gate.test.mjs (98.015018ms)
+✖ scripts/run-quality-gate.test.mjs (56.287094ms)
   'test failed'
