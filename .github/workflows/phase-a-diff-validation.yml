@@ -45,7 +45,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Route AW-3A fixtures through authoritative start
+      - name: Correct permanent verification contracts
         shell: bash
         run: |
           set -euo pipefail
@@ -194,6 +194,65 @@ jobs:
               raise SystemExit('AW-3A completion omitted-log fixture was not found exactly once.')
           source = source.replace(temp_table, temp_table_replacement)
           completion.write_text(source, encoding='utf-8')
+
+          structured = Path('supabase/verification/active-workout-aw3b-structured-set-details.sql')
+          source = structured.read_text(encoding='utf-8')
+          bounds_start = "  if v_function_definition !~* 'pg_column_size\\s*\\(v_logs\\)\\s*>\\s*16777216'"
+          bounds_end = "  if has_function_privilege('anon','public.upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')"
+          start = source.index(bounds_start)
+          end = source.index(bounds_end, start)
+          bounds = '''  if v_function_definition !~* 'jsonb_array_length\\s*\\(v_logs\\)\\s*>\\s*500'
+             or v_function_definition !~* 'pg_column_size\\s*\\(v_logs\\)\\s*>\\s*16777216'
+             or v_function_definition !~* 'v_existing_count\\s*>\\s*500'
+             or v_function_definition !~* 'v_final_count\\s*>\\s*500'
+             or v_function_definition not like '%private.aw3b_structured_upsert_workout_set_logs_atomic%'
+             or v_function_definition not like '%private.aw3b_timeline_structured_summary%'
+             or v_function_definition not like '%private.aw3b_graph_revision%'
+             or v_function_definition not like '%plaivra.aw3b_defer_set_timeline%'
+             or v_function_definition !~* 'for\\s+update'
+             or v_function_definition like '%private.aw3b_canonicalize_actor_set_payload%'
+             or to_regprocedure('private.aw3b_canonicalize_actor_set_payload(jsonb,text)') is not null then
+            raise exception 'AW-3B public set RPC payload/session bounds or post-apply authority are incomplete.';
+          end if;
+          '''
+          source = source[:start] + bounds + source[end:]
+
+          privilege_start = bounds_end
+          privilege_end = "  if exists (\n    select 1 from information_schema.role_routine_grants"
+          start = source.index(privilege_start)
+          end = source.index(privilege_end, start)
+          privileges = '''  if has_function_privilege('anon','public.upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
+             or not has_function_privilege('authenticated','public.upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
+             or not has_function_privilege('service_role','public.upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
+             or has_function_privilege('anon','private.aw3b_structured_upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
+             or has_function_privilege('authenticated','private.aw3b_structured_upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
+             or has_function_privilege('service_role','private.aw3b_structured_upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
+             or has_function_privilege('anon','private.aw3b_timeline_structured_summary(uuid)','EXECUTE')
+             or has_function_privilege('authenticated','private.aw3b_timeline_structured_summary(uuid)','EXECUTE')
+             or has_function_privilege('service_role','private.aw3b_timeline_structured_summary(uuid)','EXECUTE')
+             or has_function_privilege('anon','private.aw3b_graph_revision(uuid)','EXECUTE')
+             or has_function_privilege('authenticated','private.aw3b_graph_revision(uuid)','EXECUTE')
+             or has_function_privilege('service_role','private.aw3b_graph_revision(uuid)','EXECUTE') then
+            raise exception 'AW-3B effective function privileges are invalid.';
+          end if;
+          '''
+          source = source[:start] + privileges + source[end:]
+
+          anchor = '''  if not exists (
+            select 1 from supabase_migrations.schema_migrations
+            where name='active_workout_aw3b_final_logic_hardening'
+              and version in ('20260724013000','20260724002022')
+          ) then raise exception 'AW-3B final logic hardening migration is missing.'; end if;
+          '''
+          addition = anchor + '''  if not exists (
+            select 1 from supabase_migrations.schema_migrations
+            where name='active_workout_aw3b_post_apply_logic_corrections'
+          ) then raise exception 'AW-3B post-apply logic correction migration is missing.'; end if;
+          '''
+          if source.count(anchor) != 1:
+              raise SystemExit('AW-3B migration-history verification anchor was not found exactly once.')
+          source = source.replace(anchor, addition)
+          structured.write_text(source, encoding='utf-8')
           PY
           git diff --check
 
@@ -239,7 +298,8 @@ jobs:
           : > /tmp/aw3a-integration-blobs.txt
           for path in \
             supabase/verification/active-workout-aw3a-integration.sql \
-            supabase/verification/active-workout-aw3a-final-completion.sql; do
+            supabase/verification/active-workout-aw3a-final-completion.sql \
+            supabase/verification/active-workout-aw3b-structured-set-details.sql; do
             encoded="$(base64 -w0 "$path")"
             sha="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" -f content="$encoded" -f encoding=base64 --jq .sha)"
             printf '%s=%s\n' "$path" "$sha" | tee -a /tmp/aw3a-integration-blobs.txt
@@ -253,6 +313,7 @@ jobs:
           path: |
             supabase/verification/active-workout-aw3a-integration.sql
             supabase/verification/active-workout-aw3a-final-completion.sql
+            supabase/verification/active-workout-aw3b-structured-set-details.sql
             /tmp/aw3a-integration-blobs.txt
             /tmp/aw3a-authority-replay.log
             /tmp/aw3a-authority-verification.log
