@@ -34,7 +34,9 @@ jobs:
           cache: npm
 
       - name: Generate deterministic lockfile
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm audit fix --package-lock-only --ignore-scripts --no-fund
 
       - name: Capture dependency audit
         id: audit
