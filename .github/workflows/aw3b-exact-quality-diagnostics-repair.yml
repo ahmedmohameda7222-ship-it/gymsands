@@ -14,9 +14,9 @@ concurrency:
 
 jobs:
   repair:
-    if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
+    if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout exact PR head
         uses: actions/checkout@v4
@@ -24,104 +24,185 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Add durable child-run failure evidence
+      - name: Install lifecycle-safe coordinator ownership
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
 
-          workflow_path = Path('.github/workflows/exact-release-quality-validation.yml')
-          workflow = workflow_path.read_text(encoding='utf-8')
-          anchor = '''          gh run watch "$quality_run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 10
+          autosave_path = Path('services/database/workout-set-autosave.ts')
+          autosave = autosave_path.read_text(encoding='utf-8')
+          if 'export function mountWorkoutSetAutosaveCoordinator<' not in autosave:
+              autosave = autosave.rstrip() + '''
 
-                - name: Download and independently verify canonical Quality evidence'''
-          replacement = '''          gh run watch "$quality_run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 10
+export function mountWorkoutSetAutosaveCoordinator<TSnapshot>(
+  coordinatorRef: { current: WorkoutSetAutosaveCoordinator | null },
+  getAdapter: () => WorkoutSetAutosaveAdapter<TSnapshot>,
+  options: WorkoutSetAutosaveOptions = {},
+) {
+  const coordinator = createWorkoutSetAutosaveCoordinator(getAdapter, options);
+  coordinatorRef.current = coordinator;
+  return () => {
+    coordinator.cancel();
+    if (coordinatorRef.current === coordinator) {
+      coordinatorRef.current = null;
+    }
+  };
+}
+'''
+          autosave_path.write_text(autosave, encoding='utf-8')
 
-                - name: Capture request-bound Quality failure evidence
-                  if: failure() && steps.quality.outputs.run_id != ''
-                  shell: bash
-                  env:
-                    QUALITY_RUN_ID: ${{ steps.quality.outputs.run_id }}
-                  run: |
-                    set -euo pipefail
-                    mkdir -p request-bound-quality-failure
-                    gh run view "$QUALITY_RUN_ID" --repo "$GITHUB_REPOSITORY" \\
-                      --json databaseId,displayTitle,event,headSha,status,conclusion,url,jobs \\
-                      > request-bound-quality-failure/run.json
-                    gh run view "$QUALITY_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed \\
-                      > request-bound-quality-failure/failed.log 2>&1 || true
-                    jq -n \\
-                      --arg repository "$GITHUB_REPOSITORY" \\
-                      --arg reviewedCommit "$REVIEWED_COMMIT" \\
-                      --arg comparisonBase "$COMPARISON_BASE" \\
-                      --arg qualityRunId "$QUALITY_RUN_ID" \\
-                      --arg exactValidationRunId "$GITHUB_RUN_ID" \\
-                      --arg exactValidationRunAttempt "$GITHUB_RUN_ATTEMPT" \\
-                      '{
-                        schemaVersion: 1,
-                        repository: $repository,
-                        reviewedCommit: $reviewedCommit,
-                        comparisonBase: $comparisonBase,
-                        qualityRunId: $qualityRunId,
-                        exactValidationRunId: $exactValidationRunId,
-                        exactValidationRunAttempt: $exactValidationRunAttempt,
-                        status: "failure"
-                      }' > request-bound-quality-failure/identity.json
-                    cat request-bound-quality-failure/identity.json
-                    cat request-bound-quality-failure/run.json
-                    tail -n 200 request-bound-quality-failure/failed.log || true
+          component_path = Path('components/workouts/workout-day-focus-session.tsx')
+          component = component_path.read_text(encoding='utf-8')
+          component = component.replace('  createWorkoutSetAutosaveCoordinator,\n  type WorkoutSetAutosaveAdapter,', '  mountWorkoutSetAutosaveCoordinator,\n  type WorkoutSetAutosaveAdapter,', 1)
+          old = '''  useEffect(() => {
+    autosaveAdapterRef.current = {
+      getSnapshot: () => exerciseStatesRef.current,
+      hasPendingWrites: hasPendingValidSetWrites,
+      persistSnapshot: async (states) => {
+        if (!session) return;
+        const rows = buildLogRows(states, { pendingOnly: true, validOnly: true });
+        if (!rows.length) return;
+        await saveWorkoutSetLogs(session.id, rows);
+        await updateWorkoutSessionDuration(
+          session.id,
+          Math.max(1, Math.ceil(elapsedSeconds / 60))
+        );
+      },
+      acknowledgeSnapshot: (savedStates) => {
+        setExerciseStates((current) => {
+          const next = acknowledgeSetWrites(current, savedStates);
+          exerciseStatesRef.current = next;
+          return next;
+        });
+      },
+      onFailure: (error) => {
+        console.warn("Plaivra will retry the pending completed-set details.", error);
+      }
+    };
 
-                - name: Upload request-bound Quality failure evidence
-                  if: failure() && steps.quality.outputs.run_id != ''
-                  uses: actions/upload-artifact@v4
-                  with:
-                    name: request-bound-quality-failure-${{ github.run_id }}-${{ github.run_attempt }}
-                    path: request-bound-quality-failure
-                    if-no-files-found: error
-                    retention-days: 14
+    if (autosaveCoordinatorRef.current == null) {
+      autosaveCoordinatorRef.current = createWorkoutSetAutosaveCoordinator(() => {
+        const adapter = autosaveAdapterRef.current;
+        if (!adapter) throw new Error("Workout set autosave is unavailable.");
+        return adapter;
+      });
+    }
+  });'''
+          new = '''  useEffect(() => {
+    autosaveAdapterRef.current = {
+      getSnapshot: () => exerciseStatesRef.current,
+      hasPendingWrites: hasPendingValidSetWrites,
+      persistSnapshot: async (states) => {
+        if (!session) return;
+        const rows = buildLogRows(states, { pendingOnly: true, validOnly: true });
+        if (!rows.length) return;
+        await saveWorkoutSetLogs(session.id, rows);
+        await updateWorkoutSessionDuration(
+          session.id,
+          Math.max(1, Math.ceil(elapsedSeconds / 60))
+        );
+      },
+      acknowledgeSnapshot: (savedStates) => {
+        setExerciseStates((current) => {
+          const next = acknowledgeSetWrites(current, savedStates);
+          exerciseStatesRef.current = next;
+          return next;
+        });
+      },
+      onFailure: (error) => {
+        console.warn("Plaivra will retry the pending completed-set details.", error);
+      }
+    };
+  });
 
-                - name: Download and independently verify canonical Quality evidence'''
-          if anchor not in workflow and 'Capture request-bound Quality failure evidence' not in workflow:
-              raise SystemExit('Exact Quality dispatch anchor changed.')
-          workflow = workflow.replace(anchor, replacement, 1)
-          workflow_path.write_text(workflow, encoding='utf-8')
+  useEffect(() => mountWorkoutSetAutosaveCoordinator(
+    autosaveCoordinatorRef,
+    () => {
+      const adapter = autosaveAdapterRef.current;
+      if (!adapter) throw new Error("Workout set autosave is unavailable.");
+      return adapter;
+    }
+  ), []);'''
+          if old not in component:
+              raise SystemExit('Autosave lifecycle anchor changed.')
+          component = component.replace(old, new, 1)
+          component = component.replace('''  useEffect(() => () => {
+    autosaveCoordinatorRef.current?.cancel();
+  }, []);
 
-          test_path = Path('scripts/release-closure-stage1.test.mjs')
+''', '', 1)
+          component_path.write_text(component, encoding='utf-8')
+
+          test_path = Path('services/database/workout-set-autosave.test.ts')
           test = test_path.read_text(encoding='utf-8')
-          insertion = '''
-          test("exact release diagnostics persist request-bound Quality failure evidence", () => {
-            assert.match(exactWorkflow, /Capture request-bound Quality failure evidence/);
-            assert.match(exactWorkflow, /steps\.quality\.outputs\.run_id/);
-            assert.match(exactWorkflow, /gh run view \"\$QUALITY_RUN_ID\"/);
-            assert.match(exactWorkflow, /request-bound-quality-failure\/run\.json/);
-            assert.match(exactWorkflow, /request-bound-quality-failure\/failed\.log/);
-            assert.match(exactWorkflow, /Upload request-bound Quality failure evidence/);
-          });
-          '''
-          if 'exact release diagnostics persist request-bound Quality failure evidence' not in test:
-              test = test.rstrip() + '\n' + insertion
+          test = test.replace('import { createWorkoutSetAutosaveCoordinator } from "./workout-set-autosave";', 'import { createWorkoutSetAutosaveCoordinator, mountWorkoutSetAutosaveCoordinator } from "./workout-set-autosave";', 1)
+          if 'replaces a cancelled Strict Mode mount' not in test:
+              test = test.replace('\n});\n', '''
+
+  it("replaces a cancelled Strict Mode mount with a live coordinator", async () => {
+    let current: Snapshot = { revision: 1, dirty: true };
+    const persisted: Snapshot[] = [];
+    const coordinatorRef: { current: ReturnType<typeof createWorkoutSetAutosaveCoordinator<Snapshot>> | null } = { current: null };
+    const getAdapter = () => ({
+      getSnapshot: () => current,
+      hasPendingWrites: (snapshot: Snapshot) => snapshot.dirty,
+      persistSnapshot: async (snapshot: Snapshot) => { persisted.push({ ...snapshot }); },
+      acknowledgeSnapshot: (saved: Snapshot) => {
+        if (current.revision === saved.revision) current = { ...current, dirty: false };
+      },
+    });
+
+    const cleanupFirstMount = mountWorkoutSetAutosaveCoordinator(coordinatorRef, getAdapter);
+    const cancelledCoordinator = coordinatorRef.current;
+    cleanupFirstMount();
+    expect(coordinatorRef.current).toBeNull();
+
+    const cleanupSecondMount = mountWorkoutSetAutosaveCoordinator(coordinatorRef, getAdapter);
+    expect(coordinatorRef.current).not.toBe(cancelledCoordinator);
+    await coordinatorRef.current?.requestFlush();
+    expect(persisted).toEqual([{ revision: 1, dirty: true }]);
+    expect(current.dirty).toBe(false);
+    cleanupSecondMount();
+    expect(coordinatorRef.current).toBeNull();
+  });
+
+});
+''', 1)
           test_path.write_text(test, encoding='utf-8')
 
-          Path('.github/workflows/aw3b-exact-quality-diagnostics-repair.yml').unlink()
+          integration_path = Path('services/database/workout-set-details.integration.test.ts')
+          integration = integration_path.read_text(encoding='utf-8').replace('expect(ui).toContain("createWorkoutSetAutosaveCoordinator");', 'expect(ui).toContain("mountWorkoutSetAutosaveCoordinator");', 1)
+          integration_path.write_text(integration, encoding='utf-8')
+
+          for workflow in [
+              Path('.github/workflows/aw3b-autosave-lifecycle-repair.yml'),
+              Path('.github/workflows/aw3b-autosave-lifecycle-pr-repair.yml'),
+              Path('.github/workflows/aw3b-exact-quality-diagnostics-repair.yml'),
+          ]:
+              if workflow.exists(): workflow.unlink()
           PY
 
-      - name: Validate permanent diagnostics
+      - name: Validate permanent lifecycle repair
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
-          test ! -e .github/workflows/aw3b-exact-quality-diagnostics-repair.yml
-          grep -q 'Capture request-bound Quality failure evidence' .github/workflows/exact-release-quality-validation.yml
-          grep -q 'Upload request-bound Quality failure evidence' .github/workflows/exact-release-quality-validation.yml
-          grep -q 'request-bound-quality-failure/failed.log' .github/workflows/exact-release-quality-validation.yml
+          ! find .github/workflows -maxdepth 1 -name 'aw3b-*repair*' | grep -q .
+          grep -q 'mountWorkoutSetAutosaveCoordinator' components/workouts/workout-day-focus-session.tsx
+          grep -q 'coordinatorRef.current = null' services/database/workout-set-autosave.ts
+          ! grep -q 'autosaveCoordinatorRef.current?.cancel' components/workouts/workout-day-focus-session.tsx
+          npm ci
+          npm run test:active-workout:aw3b
+          npm run typecheck
 
-      - name: Commit permanent diagnostics
+      - name: Commit permanent lifecycle repair
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "fix(ci): preserve request-bound Quality failure evidence"
+          git commit -m "fix(workouts): remount autosave coordinator safely"
           git push origin HEAD:feat/active-workout-aw3b-structured-set-details
