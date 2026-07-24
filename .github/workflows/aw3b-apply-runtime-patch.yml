@@ -36,6 +36,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          : > /tmp/aw3b-validation.log
           cat .aw3b-patch/chunk-*.txt > /tmp/aw3b-runtime.patch.gz.b64
           echo "4fc11028de520541624fdfe5891c84214e8f271a05db6cd5d06611aa30c57bc5  /tmp/aw3b-runtime.patch.gz.b64" | sha256sum -c -
           base64 --decode /tmp/aw3b-runtime.patch.gz.b64 | gzip --decompress > /tmp/aw3b-runtime.patch
@@ -44,13 +45,31 @@ jobs:
           git apply /tmp/aw3b-runtime.patch
           python - <<'PY'
           from pathlib import Path
-          path = Path("services/database/workout-set-details.test.ts")
-          text = path.read_text(encoding="utf-8")
+
+          detail_test = Path("services/database/workout-set-details.test.ts")
+          text = detail_test.read_text(encoding="utf-8")
           old = ').toEqual(["repetitions", "external_load_kg"]);'
           new = ').toEqual(["external_load_kg", "repetitions"]);'
           if text.count(old) != 1:
               raise SystemExit(f"expected one canonical metric-order assertion, found {text.count(old)}")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          detail_test.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          integration_test = Path("services/database/workout-set-details.integration.test.ts")
+          text = integration_test.read_text(encoding="utf-8")
+          replacements = {
+              'expect(ui).toContain("parseWorkoutSetEffortInput(set.rpe, "rpe")");':
+                  'expect(ui).toContain(\'parseWorkoutSetEffortInput(set.rpe, "rpe")\');',
+              'expect(ui).toContain("parseWorkoutSetEffortInput(set.rir, "rir")");':
+                  'expect(ui).toContain(\'parseWorkoutSetEffortInput(set.rir, "rir")\');',
+          }
+          changed = 0
+          for source, target in replacements.items():
+              if source in text:
+                  text = text.replace(source, target, 1)
+                  changed += 1
+          if changed == 0:
+              raise SystemExit("expected at least one malformed effort-parser assertion")
+          integration_test.write_text(text, encoding="utf-8")
           PY
           rm -rf .aw3b-patch
           git diff --check
@@ -68,37 +87,58 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          npm run test:active-workout:aw3b 2>&1 | tee /tmp/aw3b-targeted.log
+          echo "===== AW-3B targeted tests =====" | tee -a /tmp/aw3b-validation.log
+          npm run test:active-workout:aw3b 2>&1 | tee -a /tmp/aw3b-validation.log
 
-      - name: Commit bounded targeted-test failure evidence
+      - name: Run i18n tests
+        shell: bash
+        run: |
+          set -o pipefail
+          echo "===== i18n tests =====" | tee -a /tmp/aw3b-validation.log
+          npm run test:i18n 2>&1 | tee -a /tmp/aw3b-validation.log
+
+      - name: Run script tests
+        shell: bash
+        run: |
+          set -o pipefail
+          echo "===== script tests =====" | tee -a /tmp/aw3b-validation.log
+          npm run test:scripts 2>&1 | tee -a /tmp/aw3b-validation.log
+
+      - name: Check migration ledger
+        shell: bash
+        run: |
+          set -o pipefail
+          echo "===== migration ledger =====" | tee -a /tmp/aw3b-validation.log
+          npm run migration:ledger:check 2>&1 | tee -a /tmp/aw3b-validation.log
+
+      - name: Typecheck
+        shell: bash
+        run: |
+          set -o pipefail
+          echo "===== typecheck =====" | tee -a /tmp/aw3b-validation.log
+          npm run typecheck 2>&1 | tee -a /tmp/aw3b-validation.log
+
+      - name: Lint
+        shell: bash
+        run: |
+          set -o pipefail
+          echo "===== lint =====" | tee -a /tmp/aw3b-validation.log
+          npm run lint 2>&1 | tee -a /tmp/aw3b-validation.log
+
+      - name: Commit bounded validation failure evidence
         if: failure()
         shell: bash
         run: |
           set -euo pipefail
-          tail -n 240 /tmp/aw3b-targeted.log > /tmp/aw3b-targeted-tail.log
+          tail -n 320 /tmp/aw3b-validation.log > /tmp/aw3b-validation-tail.log
           git reset --hard HEAD
           mkdir -p .aw3b-diagnostics
-          cp /tmp/aw3b-targeted-tail.log .aw3b-diagnostics/targeted-failure.log
+          cp /tmp/aw3b-validation-tail.log .aw3b-diagnostics/validation-failure.log
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add .aw3b-diagnostics/targeted-failure.log
-          git commit -m "chore(ci): record AW-3B targeted failure"
+          git add .aw3b-diagnostics/validation-failure.log
+          git commit -m "chore(ci): record AW-3B validation failure"
           git push origin HEAD:feat/active-workout-aw3b-structured-set-details
-
-      - name: Run i18n tests
-        run: npm run test:i18n
-
-      - name: Run script tests
-        run: npm run test:scripts
-
-      - name: Check migration ledger
-        run: npm run migration:ledger:check
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
 
       - name: Commit validated runtime correction
         shell: bash
