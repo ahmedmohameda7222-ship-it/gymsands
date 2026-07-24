@@ -29,3 +29,116 @@ jobs:
 
       - name: Check branch diff formatting against main
         run: git diff --check origin/main...HEAD
+
+  validate-aw3a-integration-authority:
+    if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: write
+    env:
+      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+    steps:
+      - name: Checkout exact pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Route AW-3A integration fixture through authoritative start
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('supabase/verification/active-workout-aw3a-integration.sql')
+          source = path.read_text(encoding='utf-8')
+          old = '''insert into public.workout_sessions(
+            id,user_id,workout_name,started_at,status,source
+          ) values (
+            'a3000000-0000-4000-8000-000000000010',
+            'a3000000-0000-4000-8000-000000000001',
+            'AW-3A Verification',
+            '2026-07-22T10:00:00Z',
+            'started',
+            'manual'
+          );
+          '''
+          new = '''set local role authenticated;
+          select pg_catalog.set_config('request.jwt.claim.sub','a3000000-0000-4000-8000-000000000001',true);
+          select pg_catalog.set_config('request.jwt.claim.role','authenticated',true);
+          select (public.start_or_resume_direct_workout_session_atomic(
+            'a3000000-0000-4000-8000-000000000001'::uuid,
+            'provider_activity',
+            'aw3a-verification',
+            'plaivra-verification',
+            'AW-3A Verification',
+            'Workout',
+            '{"sets":3}'::jsonb,
+            null
+          )->'session'->>'id') as aw3a_session_id \\gset
+          select pg_catalog.set_config('plaivra.aw3a_session_id', :'aw3a_session_id', true);
+          reset role;
+          '''
+          if source.count(old) != 1:
+              raise SystemExit(f'Expected one legacy direct session fixture, found {source.count(old)}')
+          source = source.replace(old, new)
+          literal = "'a3000000-0000-4000-8000-000000000010'"
+          occurrences = source.count(literal)
+          if occurrences < 10:
+              raise SystemExit(f'Expected repeated fixture session identity, found {occurrences}')
+          source = source.replace(literal, "pg_catalog.current_setting('plaivra.aw3a_session_id')::uuid")
+          if literal in source:
+              raise SystemExit('Legacy direct-session fixture identity remains.')
+          path.write_text(source, encoding='utf-8')
+          PY
+          git diff --check
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Replay full chronological migration chain
+        run: node scripts/replay-local-migration-chain.mjs --log /tmp/aw3a-authority-replay.log --prove-future-order
+
+      - name: Run database lint
+        run: supabase db lint --local --schema public --level error --fail-on error
+
+      - name: Run permanent database verification chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-integration.sql
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3a-structured-metrics.sql
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3a-integration.sql
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3a-final-completion.sql
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3b-structured-set-details.sql
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3b-integration.sql
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql
+          PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$PLAIVRA_LOCAL_DATABASE_URL" node scripts/test-database-preflight-control.mjs
+          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
+
+      - name: Create exact corrected verification blob
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          path=supabase/verification/active-workout-aw3a-integration.sql
+          encoded="$(base64 -w0 "$path")"
+          sha="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" -f content="$encoded" -f encoding=base64 --jq .sha)"
+          printf '%s=%s\n' "$path" "$sha" | tee /tmp/aw3a-integration-blob.txt
+
+      - name: Upload validated blob identity
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw3a-integration-authority-${{ github.event.pull_request.head.sha }}
+          path: |
+            /tmp/aw3a-integration-blob.txt
+            /tmp/aw3a-authority-replay.log
+          if-no-files-found: error
+          retention-days: 1
