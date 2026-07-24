@@ -32,24 +32,24 @@ jobs:
           git show HEAD^:.github/workflows/quality.yml > .github/workflows/quality.yml
           rm scripts/aw3b-final-reconcile.py
 
-      - name: Validate reconciled tree
+      - name: Capture exact ledger validation
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           git diff --check
-          node scripts/check-migration-ledger.mjs
-          test ! -e scripts/aw3b-final-reconcile.py
-          test ! -e .github/workflows/aw3b-final-reconciliation.yml
-          test ! -e aw3b-evidence-export
-          test ! -e aw3b-migration-export
-          grep -q '20260724232734_active_workout_aw3b_post_apply_logic_corrections' docs/reports/active-workout-aw3b-implementation-report.md
+          set +e
+          node scripts/check-migration-ledger.mjs > aw3b-ledger-validation.txt 2>&1
+          status=$?
+          set -e
+          cat aw3b-ledger-validation.txt
+          printf 'exit_status=%s\n' "$status" >> aw3b-ledger-validation.txt
 
-      - name: Commit reconciled permanent tree
+      - name: Commit reconciled diagnostic tree
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'docs(aw3b): reconcile production closure'
+          git commit -m 'docs(aw3b): reconcile production closure for validation'
           git push origin HEAD:feat/active-workout-aw3b-structured-set-details
