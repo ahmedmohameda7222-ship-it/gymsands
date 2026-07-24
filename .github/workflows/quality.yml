@@ -32,17 +32,17 @@ jobs:
           git show HEAD^:.github/workflows/quality.yml > .github/workflows/quality.yml
           rm scripts/aw3b-final-reconcile.py
 
-      - name: Capture exact ledger validation
+      - name: Capture exact reconciliation validation
         shell: bash
         run: |
-          set -uo pipefail
-          git diff --check
           set +e
-          node scripts/check-migration-ledger.mjs > aw3b-ledger-validation.txt 2>&1
-          status=$?
-          set -e
-          cat aw3b-ledger-validation.txt
-          printf 'exit_status=%s\n' "$status" >> aw3b-ledger-validation.txt
+          : > aw3b-reconciliation-validation.txt
+          git diff --check >> aw3b-reconciliation-validation.txt 2>&1
+          printf 'git_diff_check_exit=%s\n' "$?" >> aw3b-reconciliation-validation.txt
+          node scripts/check-migration-ledger.mjs >> aw3b-reconciliation-validation.txt 2>&1
+          printf 'ledger_check_exit=%s\n' "$?" >> aw3b-reconciliation-validation.txt
+          cat aw3b-reconciliation-validation.txt
+          exit 0
 
       - name: Commit reconciled diagnostic tree
         shell: bash
