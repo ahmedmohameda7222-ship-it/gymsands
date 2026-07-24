@@ -1,0 +1,127 @@
+name: AW3B Exact Quality Diagnostics Repair
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aw3b-exact-quality-diagnostics-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Add durable child-run failure evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow_path = Path('.github/workflows/exact-release-quality-validation.yml')
+          workflow = workflow_path.read_text(encoding='utf-8')
+          anchor = '''          gh run watch "$quality_run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 10
+
+                - name: Download and independently verify canonical Quality evidence'''
+          replacement = '''          gh run watch "$quality_run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 10
+
+                - name: Capture request-bound Quality failure evidence
+                  if: failure() && steps.quality.outputs.run_id != ''
+                  shell: bash
+                  env:
+                    QUALITY_RUN_ID: ${{ steps.quality.outputs.run_id }}
+                  run: |
+                    set -euo pipefail
+                    mkdir -p request-bound-quality-failure
+                    gh run view "$QUALITY_RUN_ID" --repo "$GITHUB_REPOSITORY" \\
+                      --json databaseId,displayTitle,event,headSha,status,conclusion,url,jobs \\
+                      > request-bound-quality-failure/run.json
+                    gh run view "$QUALITY_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed \\
+                      > request-bound-quality-failure/failed.log 2>&1 || true
+                    jq -n \\
+                      --arg repository "$GITHUB_REPOSITORY" \\
+                      --arg reviewedCommit "$REVIEWED_COMMIT" \\
+                      --arg comparisonBase "$COMPARISON_BASE" \\
+                      --arg qualityRunId "$QUALITY_RUN_ID" \\
+                      --arg exactValidationRunId "$GITHUB_RUN_ID" \\
+                      --arg exactValidationRunAttempt "$GITHUB_RUN_ATTEMPT" \\
+                      '{
+                        schemaVersion: 1,
+                        repository: $repository,
+                        reviewedCommit: $reviewedCommit,
+                        comparisonBase: $comparisonBase,
+                        qualityRunId: $qualityRunId,
+                        exactValidationRunId: $exactValidationRunId,
+                        exactValidationRunAttempt: $exactValidationRunAttempt,
+                        status: "failure"
+                      }' > request-bound-quality-failure/identity.json
+                    cat request-bound-quality-failure/identity.json
+                    cat request-bound-quality-failure/run.json
+                    tail -n 200 request-bound-quality-failure/failed.log || true
+
+                - name: Upload request-bound Quality failure evidence
+                  if: failure() && steps.quality.outputs.run_id != ''
+                  uses: actions/upload-artifact@v4
+                  with:
+                    name: request-bound-quality-failure-${{ github.run_id }}-${{ github.run_attempt }}
+                    path: request-bound-quality-failure
+                    if-no-files-found: error
+                    retention-days: 14
+
+                - name: Download and independently verify canonical Quality evidence'''
+          if anchor not in workflow and 'Capture request-bound Quality failure evidence' not in workflow:
+              raise SystemExit('Exact Quality dispatch anchor changed.')
+          workflow = workflow.replace(anchor, replacement, 1)
+          workflow_path.write_text(workflow, encoding='utf-8')
+
+          test_path = Path('scripts/release-closure-stage1.test.mjs')
+          test = test_path.read_text(encoding='utf-8')
+          insertion = '''
+          test("exact release diagnostics persist request-bound Quality failure evidence", () => {
+            assert.match(exactWorkflow, /Capture request-bound Quality failure evidence/);
+            assert.match(exactWorkflow, /steps\.quality\.outputs\.run_id/);
+            assert.match(exactWorkflow, /gh run view \"\$QUALITY_RUN_ID\"/);
+            assert.match(exactWorkflow, /request-bound-quality-failure\/run\.json/);
+            assert.match(exactWorkflow, /request-bound-quality-failure\/failed\.log/);
+            assert.match(exactWorkflow, /Upload request-bound Quality failure evidence/);
+          });
+          '''
+          if 'exact release diagnostics persist request-bound Quality failure evidence' not in test:
+              test = test.rstrip() + '\n' + insertion
+          test_path.write_text(test, encoding='utf-8')
+
+          Path('.github/workflows/aw3b-exact-quality-diagnostics-repair.yml').unlink()
+          PY
+
+      - name: Validate permanent diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          test ! -e .github/workflows/aw3b-exact-quality-diagnostics-repair.yml
+          grep -q 'Capture request-bound Quality failure evidence' .github/workflows/exact-release-quality-validation.yml
+          grep -q 'Upload request-bound Quality failure evidence' .github/workflows/exact-release-quality-validation.yml
+          grep -q 'request-bound-quality-failure/failed.log' .github/workflows/exact-release-quality-validation.yml
+
+      - name: Commit permanent diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(ci): preserve request-bound Quality failure evidence"
+          git push origin HEAD:feat/active-workout-aw3b-structured-set-details
