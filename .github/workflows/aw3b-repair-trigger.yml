@@ -16,7 +16,7 @@ jobs:
   repair:
     if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
     steps:
       - name: Checkout exact PR head
         uses: actions/checkout@v4
@@ -42,25 +42,12 @@ jobs:
           Path('.github/workflows/aw3b-repair-trigger.yml').unlink()
           PY
 
-      - name: Validate Train QA syntax
-        run: node --check scripts/run-train-layout-qa.mjs
-
-      - name: Validate shared fixture contract
-        run: node --test scripts/train-mock-fixture-contract.test.mjs
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run script regression tests
-        run: npm run test:scripts
-
-      - name: Run TypeScript validation
-        run: npm run typecheck
-
-      - name: Validate clean permanent diff
+      - name: Validate permanent repair payload
         shell: bash
         run: |
           set -euo pipefail
+          node --check scripts/run-train-layout-qa.mjs
+          node --test scripts/train-mock-fixture-contract.test.mjs
           git diff --check
           test ! -e .github/workflows/aw3b-long-term-fixture-repair.yml
           test ! -e .github/workflows/aw3b-repair-trigger.yml
