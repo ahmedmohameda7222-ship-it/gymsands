@@ -87,8 +87,8 @@ reconstruct(
 release_contract_patch = Path("/tmp/aw3b-release-contract.patch")
 reconstruct(
     ".aw3b-release-contract.patch.gz.b64",
-    "e7abd6420b276dae429dcc5b98a4d4d0cd3e0b35a5983975a6039d81fc1ac489",
-    "c5ae40d37e2ae8c91632a5a4cb9cd0a30be2a11dd7ecb375bd1d9811acae1c23",
+    "f9598a42d66ad7225470c77c3efbdad2a8485a379778863c4c4dc978894d621d",
+    "e2cdb8f70e9bc10f5226472dc9e3624057cb8372ecb313ea03e3a8b2acfb899f",
     release_contract_patch,
 )
 
