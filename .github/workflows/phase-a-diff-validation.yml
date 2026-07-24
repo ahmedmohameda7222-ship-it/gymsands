@@ -67,17 +67,37 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate clean AW-3B commit
-        run: |
-          set -euo pipefail
-          npm run test:active-workout:aw3b
-          npm run test:i18n
-          npm run test:scripts
-          npm run migration:ledger:check
-          npm run typecheck
-          npm run lint
-          git diff --check
-          test -z "$(git status --porcelain)"
+      - name: Validate AW-3B targeted tests
+        if: always()
+        run: npm run test:active-workout:aw3b
+
+      - name: Validate i18n tests
+        if: always()
+        run: npm run test:i18n
+
+      - name: Validate script tests
+        if: always()
+        run: npm run test:scripts
+
+      - name: Validate migration ledger
+        if: always()
+        run: npm run migration:ledger:check
+
+      - name: Validate TypeScript
+        if: always()
+        run: npm run typecheck
+
+      - name: Validate ESLint
+        if: always()
+        run: npm run lint
+
+      - name: Validate diff formatting
+        if: always()
+        run: git diff --check
+
+      - name: Validate clean reconstructed worktree
+        if: always()
+        run: test -z "$(git status --porcelain)"
 
       - name: Push validated clean AW-3B commit
         run: git push origin HEAD:feat/active-workout-aw3b-structured-set-details
