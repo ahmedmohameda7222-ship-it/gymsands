@@ -48,7 +48,7 @@ The Active Workout surface exposes non-visual persisted/completed/detail state a
 
 Invalid draft RPE/RIR values remain visible and accessible to the user but are excluded from non-persistence workout context serialization. Strict parsing is retained for actual persistence, so the rendered validation flow cannot crash while invalid draft values are being corrected and invalid values still cannot reach the atomic save RPC.
 
-The remaining autosave failure was traced to lifecycle ownership under React Strict Mode. The development-only effect cleanup cancelled the coordinator while leaving its ref non-null, so the simulated remount reused a permanently cancelled coordinator and every later flush became a no-op. The permanent repair creates a new coordinator for every mounted lifecycle, cancels only that owned instance, and clears the ref conditionally during cleanup. A mount-cleanup-remount regression test proves that the replacement coordinator remains live.
+The remaining autosave failure was traced to lifecycle ownership under React Strict Mode. The development-only effect cleanup cancelled the coordinator while leaving its ref non-null, so the simulated remount reused a permanently cancelled coordinator and every later flush became a no-op. The permanent repair creates a new coordinator for every mounted lifecycle, cancels only that owned instance, clears the ref only when it still points to that instance, and creates a distinct live coordinator on remount. A mount-cleanup-remount regression test proves that the replacement coordinator remains live.
 
 The lifecycle repair is validated through the permanent AW-3B unit suite and exact-head rendered autosave smoke before Production migration authorization.
 
