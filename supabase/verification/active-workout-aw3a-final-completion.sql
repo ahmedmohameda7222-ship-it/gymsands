@@ -13,22 +13,28 @@ insert into public.profiles(id,email,full_name,role)
 values ('a3f00000-0000-4000-8000-000000000001','aw3a-final-completion@plaivra.invalid','AW-3A Final Completion','member')
 on conflict (id) do update set email=excluded.email,full_name=excluded.full_name;
 
-insert into public.workout_sessions(id,user_id,workout_name,started_at,status,source)
-values (
-  'a3f00000-0000-4000-8000-000000000010',
-  'a3f00000-0000-4000-8000-000000000001',
+set local role authenticated;
+select pg_catalog.set_config('request.jwt.claim.sub','a3f00000-0000-4000-8000-000000000001',true);
+select pg_catalog.set_config('request.jwt.claim.role','authenticated',true);
+select (public.start_or_resume_direct_workout_session_atomic(
+  'a3f00000-0000-4000-8000-000000000001'::uuid,
+  'provider_activity',
+  'aw3a-final-completion',
+  'plaivra-verification',
   'AW-3A Final Completion',
-  '2026-07-22T12:00:00Z',
-  'started',
-  'manual'
-);
+  'Workout',
+  '{"sets":3}'::jsonb,
+  null
+)->'session'->>'id') as aw3a_final_session_id \gset
+select pg_catalog.set_config('plaivra.aw3a_final_session_id', :'aw3a_final_session_id', true);
+reset role;
 
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
 
 select public.upsert_workout_set_logs_atomic(
   'a3f00000-0000-4000-8000-000000000001',
-  'a3f00000-0000-4000-8000-000000000010',
+  pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid,
   jsonb_build_array(
     jsonb_build_object(
       'exercise_order',1,'exercise_name','AW-3A Scalar Final','set_number',1,
@@ -54,15 +60,18 @@ select public.upsert_workout_set_logs_atomic(
   )
 );
 
+reset role;
 create temporary table aw3a_final_omitted on commit drop as
 select id as exercise_log_id
 from public.exercise_logs
-where workout_session_id='a3f00000-0000-4000-8000-000000000010'
+where workout_session_id=pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid
   and exercise_order=3 and set_number=1;
+set local role service_role;
+select set_config('request.jwt.claim.role','service_role',true);
 
 select public.complete_workout_session_atomic(
   'a3f00000-0000-4000-8000-000000000001',
-  'a3f00000-0000-4000-8000-000000000010',
+  pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid,
   jsonb_build_array(
     jsonb_build_object(
       'exercise_order',1,'exercise_name','AW-3A Scalar Final','set_number',1,
@@ -96,7 +105,7 @@ select public.complete_workout_session_atomic(
 -- Exact retry must be a no-op: no duplicate rows or timeline events.
 select public.complete_workout_session_atomic(
   'a3f00000-0000-4000-8000-000000000001',
-  'a3f00000-0000-4000-8000-000000000010',
+  pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid,
   jsonb_build_array(
     jsonb_build_object(
       'exercise_order',1,'exercise_name','AW-3A Scalar Final','set_number',1,
@@ -135,12 +144,12 @@ declare
   v_bilateral public.exercise_logs%rowtype;
 begin
   select * into strict v_scalar from public.exercise_logs
-  where workout_session_id='a3f00000-0000-4000-8000-000000000010' and exercise_order=1 and set_number=1;
+  where workout_session_id=pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid and exercise_order=1 and set_number=1;
   select * into strict v_bilateral from public.exercise_logs
-  where workout_session_id='a3f00000-0000-4000-8000-000000000010' and exercise_order=2 and set_number=1;
+  where workout_session_id=pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid and exercise_order=2 and set_number=1;
 
-  if (select status::text from public.workout_sessions where id='a3f00000-0000-4000-8000-000000000010')<>'completed'
-     or (select duration_minutes from public.workout_sessions where id='a3f00000-0000-4000-8000-000000000010')<>45 then
+  if (select status::text from public.workout_sessions where id=pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid)<>'completed'
+     or (select duration_minutes from public.workout_sessions where id=pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid)<>45 then
     raise exception 'Structured final completion did not preserve the terminal session projection.';
   end if;
   if v_scalar.reps<>12 or v_scalar.weight_kg<>60 then
@@ -149,7 +158,7 @@ begin
   if v_bilateral.reps is not null or v_bilateral.weight_kg is not null then
     raise exception 'Left/right final metrics invented scalar projections.';
   end if;
-  if (select count(*) from public.exercise_logs where workout_session_id='a3f00000-0000-4000-8000-000000000010')<>2 then
+  if (select count(*) from public.exercise_logs where workout_session_id=pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid)<>2 then
     raise exception 'Completion did not delete exactly the omitted log.';
   end if;
   if exists (select 1 from public.exercise_logs where id in (select exercise_log_id from aw3a_final_omitted)) then
@@ -175,20 +184,20 @@ begin
      or not exists (select 1 from public.exercise_log_metric_values where exercise_log_id=v_bilateral.id and metric_key='external_load_kg' and side='right' and value=20) then
     raise exception 'Structured final duration/distance/bilateral facts were not preserved.';
   end if;
-  if (select count(*) from public.workout_session_timeline_events where workout_session_id='a3f00000-0000-4000-8000-000000000010' and event_type='set_completed')<>2 then
+  if (select count(*) from public.workout_session_timeline_events where workout_session_id=pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid and event_type='set_completed')<>2 then
     raise exception 'Structured completion did not create exactly one set_completed event per retained log.';
   end if;
-  if (select count(*) from public.workout_session_timeline_events where workout_session_id='a3f00000-0000-4000-8000-000000000010' and event_type='session_completed')<>1 then
+  if (select count(*) from public.workout_session_timeline_events where workout_session_id=pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid and event_type='session_completed')<>1 then
     raise exception 'Structured completion retry duplicated or omitted session_completed.';
   end if;
   if exists (
     select idempotency_key from public.workout_session_timeline_events
-    where workout_session_id='a3f00000-0000-4000-8000-000000000010'
+    where workout_session_id=pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid
     group by idempotency_key having count(*)>1
   ) then raise exception 'Structured completion retry duplicated a timeline identity.'; end if;
   if exists (
     select 1 from public.workout_session_timeline_events
-    where workout_session_id='a3f00000-0000-4000-8000-000000000010'
+    where workout_session_id=pg_catalog.current_setting('plaivra.aw3a_final_session_id')::uuid
       and event_type='set_completed'
       and not (payload ? 'performanceMetrics')
   ) then raise exception 'Structured completion timeline payload omitted performanceMetrics.'; end if;

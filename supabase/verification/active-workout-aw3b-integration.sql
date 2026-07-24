@@ -145,8 +145,13 @@ begin
   if not exists (
     select 1 from public.workout_session_timeline_events
     where exercise_log_id=v_log.id and event_type='set_edited'
-      and payload->>'rpeChanged'='true' and payload->'structuredSet'->>'segmentCount'='2'
+      and payload->'changedFields' ? 'reps'
+      and payload->'changedFields' ? 'weightKg'
+      and payload->'changedFields' ? 'notes'
+      and payload->>'notesChanged'='true'
+      and payload->'structuredSet'->>'segmentCount'='2'
       and payload::text not like '%Free note only%'
+      and payload::text not like '%Legacy free-note edit%'
   ) then raise exception 'AW-3B bounded detail-edit fingerprint is missing.'; end if;
 end
 $verify_edit_preservation$;
@@ -179,9 +184,6 @@ begin
 end
 $verify_legacy_note_clear$;
 
-set local role service_role;
-select set_config('request.jwt.claim.role','service_role',true);
-
 create temporary table aw3b_replacement_baseline on commit drop as
 select
   l.id as exercise_log_id,
@@ -192,6 +194,9 @@ select
 from public.exercise_logs l
 where l.workout_session_id=current_setting('plaivra.aw3b_integration_session_id')::uuid
   and l.exercise_order=1 and l.set_number=1;
+
+set local role service_role;
+select set_config('request.jwt.claim.role','service_role',true);
 
 -- A present segments array is an exact replacement: retain order 1, replace its
 -- metrics, and delete order 2. Repeating the replacement is a no-op.
@@ -211,6 +216,8 @@ select public.upsert_workout_set_logs_atomic(
   ))
 );
 
+reset role;
+
 create temporary table aw3b_replacement_result on commit drop as
 select
   s.id as segment_id,
@@ -222,6 +229,9 @@ from public.exercise_log_set_segments s
 join public.exercise_log_set_segment_metric_values m on m.segment_id=s.id
 where s.exercise_log_id=(select exercise_log_id from aw3b_replacement_baseline)
   and s.segment_order=1;
+
+set local role service_role;
+select set_config('request.jwt.claim.role','service_role',true);
 
 select public.upsert_workout_set_logs_atomic(
   'b3000000-0000-4000-8000-000000000001',current_setting('plaivra.aw3b_integration_session_id')::uuid,
@@ -317,11 +327,17 @@ select public.upsert_workout_set_logs_atomic(
   ))
 );
 
+reset role;
+select pg_catalog.set_config(
+  'plaivra.aw3b_invalid_detail_count',
+  (select count(*) from public.exercise_log_set_details)::text,
+  true
+);
+set local role service_role;
+select set_config('request.jwt.claim.role','service_role',true);
+
 do $invalid_aw3b_cases$
-declare
-  v_detail_count bigint;
 begin
-  select count(*) into v_detail_count from public.exercise_log_set_details;
   begin
     perform public.upsert_workout_set_logs_atomic(
       'b3000000-0000-4000-8000-000000000001',current_setting('plaivra.aw3b_integration_session_id')::uuid,
@@ -508,13 +524,18 @@ begin
     );
     raise exception 'Runtime segment metrics accepted reserved backfill provenance.';
   exception when insufficient_privilege then null; end;
-  if (select count(*) from public.exercise_log_set_details)<>v_detail_count then
-    raise exception 'An invalid AW-3B payload partially committed.';
-  end if;
 end
 $invalid_aw3b_cases$;
 
 reset role;
+do $verify_invalid_aw3b_atomicity$
+begin
+  if (select count(*) from public.exercise_log_set_details)
+     <> pg_catalog.current_setting('plaivra.aw3b_invalid_detail_count')::bigint then
+    raise exception 'An invalid AW-3B payload partially committed.';
+  end if;
+end
+$verify_invalid_aw3b_atomicity$;
 
 do $verify_clear$
 declare v_log_id uuid;
@@ -582,12 +603,18 @@ begin
     );
     raise exception 'Repeated requests exceeded the AW-3B 500-log session limit.';
   exception when invalid_parameter_value then null; end;
+end
+$session_log_limit$;
+
+reset role;
+do $verify_session_log_limit$
+begin
   if (select count(*) from public.exercise_logs
       where workout_session_id=current_setting('plaivra.aw3b_session_limit_id')::uuid)<>500 then
     raise exception 'AW-3B session-limit rejection was not atomic.';
   end if;
 end
-$session_log_limit$;
+$verify_session_log_limit$;
 
 set local role authenticated;
 select set_config('request.jwt.claim.role','authenticated',true);
@@ -649,6 +676,22 @@ end
 $verify_completion$;
 
 
+set local role authenticated;
+select set_config('request.jwt.claim.role','authenticated',true);
+select set_config('request.jwt.claim.sub','b3000000-0000-4000-8000-000000000001',true);
+select (public.start_or_resume_direct_workout_session_atomic(
+  'b3000000-0000-4000-8000-000000000001'::uuid,
+  'provider_activity',
+  'aw3b-post-completion-verification',
+  'plaivra-verification',
+  'AW-3B Post Completion Verification',
+  'Verification',
+  '{"sets":3}'::jsonb,
+  null
+)->'session'->>'id') as aw3b_post_completion_session_id \gset
+select set_config('plaivra.aw3b_post_completion_session_id', :'aw3b_post_completion_session_id', true);
+reset role;
+
 -- Authenticated browser provenance is actor-bound even when the JSON spoofs
 -- trusted machine actors. Hidden structured values and the segment graph are
 -- still committed atomically.
@@ -657,7 +700,7 @@ select set_config('request.jwt.claim.role','authenticated',true);
 select set_config('request.jwt.claim.sub','b3000000-0000-4000-8000-000000000001',true);
 select public.upsert_workout_set_logs_atomic(
   'b3000000-0000-4000-8000-000000000001',
-  current_setting('plaivra.aw3b_integration_session_id')::uuid,
+  current_setting('plaivra.aw3b_post_completion_session_id')::uuid,
   jsonb_build_array(jsonb_build_object(
     'exercise_order',2,'exercise_name','AW-3B Browser Set','set_number',1,
     'reps',10,'weight_kg',30,'notes','Private browser note','completed_at','2026-07-22T20:02:00Z',
@@ -682,7 +725,7 @@ do $verify_actor_bound_provenance$
 declare v_log_id uuid;
 begin
   select id into strict v_log_id from public.exercise_logs
-  where workout_session_id=current_setting('plaivra.aw3b_integration_session_id')::uuid
+  where workout_session_id=current_setting('plaivra.aw3b_post_completion_session_id')::uuid
     and exercise_order=2 and set_number=1;
   if exists (
     select 1 from public.exercise_log_set_details
@@ -710,11 +753,11 @@ select l.id exercise_log_id,
   (select count(*) from public.workout_session_timeline_events e
    where e.exercise_log_id=l.id and e.event_type='set_edited') edit_count
 from public.exercise_logs l
-where l.workout_session_id=current_setting('plaivra.aw3b_integration_session_id')::uuid
+where l.workout_session_id=current_setting('plaivra.aw3b_post_completion_session_id')::uuid
   and l.exercise_order=2 and l.set_number=1;
 
 select public.upsert_workout_set_logs_atomic(
-  'b3000000-0000-4000-8000-000000000001',current_setting('plaivra.aw3b_integration_session_id')::uuid,
+  'b3000000-0000-4000-8000-000000000001',current_setting('plaivra.aw3b_post_completion_session_id')::uuid,
   jsonb_build_array(jsonb_build_object(
     'exercise_order',2,'exercise_name','AW-3B Browser Set','set_number',1,
     'reps',10,'weight_kg',30,'notes','AW3B secret retry note','completed_at','2026-07-22T20:02:00Z',
@@ -726,7 +769,7 @@ select public.upsert_workout_set_logs_atomic(
   ))
 );
 select public.upsert_workout_set_logs_atomic(
-  'b3000000-0000-4000-8000-000000000001',current_setting('plaivra.aw3b_integration_session_id')::uuid,
+  'b3000000-0000-4000-8000-000000000001',current_setting('plaivra.aw3b_post_completion_session_id')::uuid,
   jsonb_build_array(jsonb_build_object(
     'exercise_order',2,'exercise_name','AW-3B Browser Set','set_number',1,
     'reps',10,'weight_kg',30,'notes','AW3B secret retry note','completed_at','2026-07-22T20:02:00Z',
@@ -769,7 +812,7 @@ do $verify_runtime_backfill_rejected$
 begin
   begin
     perform public.upsert_workout_set_logs_atomic(
-      'b3000000-0000-4000-8000-000000000001',current_setting('plaivra.aw3b_integration_session_id')::uuid,
+      'b3000000-0000-4000-8000-000000000001',current_setting('plaivra.aw3b_post_completion_session_id')::uuid,
       jsonb_build_array(jsonb_build_object(
         'exercise_order',2,'exercise_name','AW-3B Browser Set','set_number',1,
         'reps',10,'weight_kg',30,'completed_at','2026-07-22T20:02:00Z',
