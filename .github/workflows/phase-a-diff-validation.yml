@@ -1,35 +1,23 @@
 name: Phase A Diff Validation
-
 on:
   pull_request:
-    branches:
-      - main
-
+    branches: [main]
 permissions:
   contents: read
-
 concurrency:
   group: phase-a-diff-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   verify-diff:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout exact pull request head
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-
-      - name: Verify exact checkout identity
-        shell: bash
-        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
-
-      - name: Check branch diff formatting against main
-        run: git diff --check origin/main...HEAD
-
+      - run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+      - run: git diff --check origin/main...HEAD
   validate-aw3b-verification-contracts:
     if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
     runs-on: ubuntu-latest
@@ -39,47 +27,33 @@ jobs:
     env:
       PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
     steps:
-      - name: Checkout exact pull request head
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-
-      - name: Materialize permanent verification corrections
+      - name: Materialize corrections
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s' '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' | base64 -d > /tmp/transform.py.gz
-          test "$(sha256sum /tmp/transform.py.gz | cut -d' ' -f1)" = "0affbfc63de437df306b59a219d750abbfb1b69e91666fbabac57c1271643b34"
-          gzip -dc /tmp/transform.py.gz > /tmp/transform.py
-          test "$(sha256sum /tmp/transform.py | cut -d' ' -f1)" = "682385e78f944b5d61ecb651a8d36ea848e884c7b28182c10e9f6057a4bd9218"
+          printf '%s' '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' | base64 -d | gzip -dc > /tmp/transform.py
+          test "$(sha256sum /tmp/transform.py | cut -d' ' -f1)" = "52d679cd58a34bb3d705764711141893da287a7b3e5c1785a743cc60b680346e"
           python /tmp/transform.py
-          git diff --check -- \
-            supabase/verification/active-workout-aw3a-integration.sql \
-            supabase/verification/active-workout-aw3a-final-completion.sql \
-            supabase/verification/active-workout-aw3b-structured-set-details.sql \
-            supabase/verification/active-workout-aw3b-integration.sql
-
-      - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v2
+          git diff --check -- supabase/verification/active-workout-aw3a-integration.sql supabase/verification/active-workout-aw3a-final-completion.sql supabase/verification/active-workout-aw3b-structured-set-details.sql supabase/verification/active-workout-aw3b-integration.sql
+      - uses: supabase/setup-cli@v2
         with:
           version: 2.109.1
           github-token: ${{ github.token }}
-
-      - name: Replay full chronological migration chain
-        run: node scripts/replay-local-migration-chain.mjs --log /tmp/aw3b-verification-replay.log --prove-future-order
-
-      - name: Run database lint
+      - name: Replay
+        run: node scripts/replay-local-migration-chain.mjs --log /tmp/replay.log --prove-future-order
+      - name: Lint DB
         run: supabase db lint --local --schema public --level error --fail-on error
-
-      - name: Run permanent database verification chain
+      - name: Verify DB
         id: verify
         continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
-          {
-            set -euo pipefail
+          { set -euo pipefail
             PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql
             PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-integration.sql
             PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3a-structured-metrics.sql
@@ -90,43 +64,31 @@ jobs:
             PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql
             PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$PLAIVRA_LOCAL_DATABASE_URL" node scripts/test-database-preflight-control.mjs
             PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
-          } 2>&1 | tee /tmp/aw3b-verification.log
-
-      - name: Create exact corrected verification blobs
+          } 2>&1 | tee /tmp/verify.log
+      - name: Create blobs
         if: steps.verify.outcome == 'success'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          : > /tmp/aw3b-verification-blobs.txt
-          for path in \
-            supabase/verification/active-workout-aw3a-integration.sql \
-            supabase/verification/active-workout-aw3a-final-completion.sql \
-            supabase/verification/active-workout-aw3b-structured-set-details.sql \
-            supabase/verification/active-workout-aw3b-integration.sql; do
-            encoded="$(base64 -w0 "$path")"
-            sha="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" -f content="$encoded" -f encoding=base64 --jq .sha)"
-            printf '%s=%s\n' "$path" "$sha" | tee -a /tmp/aw3b-verification-blobs.txt
+          : > /tmp/blobs.txt
+          for path in supabase/verification/active-workout-aw3a-integration.sql supabase/verification/active-workout-aw3a-final-completion.sql supabase/verification/active-workout-aw3b-structured-set-details.sql supabase/verification/active-workout-aw3b-integration.sql; do
+            sha="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" -f content="$(base64 -w0 "$path")" -f encoding=base64 --jq .sha)"
+            printf '%s=%s\n' "$path" "$sha" | tee -a /tmp/blobs.txt
           done
-
-      - name: Upload validation evidence
-        if: always()
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aw3b-verification-contracts-${{ github.event.pull_request.head.sha }}
+          name: aw3b-verification-${{ github.event.pull_request.head.sha }}
           path: |
+            /tmp/blobs.txt
+            /tmp/replay.log
+            /tmp/verify.log
             supabase/verification/active-workout-aw3a-integration.sql
             supabase/verification/active-workout-aw3a-final-completion.sql
             supabase/verification/active-workout-aw3b-structured-set-details.sql
             supabase/verification/active-workout-aw3b-integration.sql
-            /tmp/aw3b-verification-blobs.txt
-            /tmp/aw3b-verification-replay.log
-            /tmp/aw3b-verification.log
           if-no-files-found: warn
           retention-days: 1
-
-      - name: Require successful verification
-        if: always()
-        shell: bash
-        run: test "${{ steps.verify.outcome }}" = "success"
+      - if: always()
+        run: test "${{ steps.verify.outcome }}" = success
