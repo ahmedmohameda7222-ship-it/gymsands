@@ -88,7 +88,57 @@ jobs:
           occurrences = source.count(literal)
           if occurrences < 10:
               raise SystemExit(f'Expected repeated fixture session identity, found {occurrences}')
-          source = source.replace(literal, "pg_catalog.current_setting('plaivra.aw3a_session_id')::uuid")
+          session_expr = "pg_catalog.current_setting('plaivra.aw3a_session_id')::uuid"
+          source = source.replace(literal, session_expr)
+
+          invalid_prefix = f'''-- Representative invalid cases must roll back atomically.
+          do $invalid_cases$
+          declare
+            v_before bigint;
+          begin
+            select count(*) into v_before from public.exercise_logs where workout_session_id={session_expr};
+          '''
+          invalid_prefix_replacement = f'''-- Representative invalid cases must roll back atomically.
+          reset role;
+          select pg_catalog.set_config(
+            'plaivra.aw3a_invalid_log_count',
+            (select count(*) from public.exercise_logs where workout_session_id={session_expr})::text,
+            true
+          );
+          set local role service_role;
+          select set_config('request.jwt.claim.role','service_role',true);
+          do $invalid_cases$
+          begin
+          '''
+          if source.count(invalid_prefix) != 1:
+              raise SystemExit('Invalid-case pre-count contract was not found exactly once.')
+          source = source.replace(invalid_prefix, invalid_prefix_replacement)
+
+          invalid_suffix = f'''  if (select count(*) from public.exercise_logs where workout_session_id={session_expr})<>v_before then
+              raise exception 'An invalid structured payload partially mutated exercise logs.';
+            end if;
+          end
+          $invalid_cases$;
+          
+          reset role;
+          '''
+          invalid_suffix_replacement = f'''end
+          $invalid_cases$;
+          
+          reset role;
+          do $verify_invalid_atomicity$
+          begin
+            if (select count(*) from public.exercise_logs where workout_session_id={session_expr})
+               <> pg_catalog.current_setting('plaivra.aw3a_invalid_log_count')::bigint then
+              raise exception 'An invalid structured payload partially mutated exercise logs.';
+            end if;
+          end
+          $verify_invalid_atomicity$;
+          '''
+          if source.count(invalid_suffix) != 1:
+              raise SystemExit('Invalid-case post-count contract was not found exactly once.')
+          source = source.replace(invalid_suffix, invalid_suffix_replacement)
+
           if literal in source:
               raise SystemExit('Legacy direct-session fixture identity remains.')
           path.write_text(source, encoding='utf-8')
