@@ -17,6 +17,10 @@ jobs:
     if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout exact pull request head
         uses: actions/checkout@v4
@@ -38,26 +42,22 @@ jobs:
           npm install --package-lock-only --ignore-scripts --no-audit --no-fund
           npm audit fix --package-lock-only --ignore-scripts --no-fund
 
-      - name: Capture dependency audit
-        id: audit
+      - name: Enforce high-severity dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Create exact lockfile blob
         shell: bash
         run: |
-          set +e
-          npm audit --audit-level=high --json > dependency-audit.json
-          status=$?
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
+          set -euo pipefail
+          sha="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" -f content="$(base64 -w0 package-lock.json)" -f encoding=base64 --jq .sha)"
+          printf 'package-lock.json=%s\n' "$sha" | tee /tmp/blobs.txt
 
       - name: Upload generated dependency evidence
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dependency-lock-${{ github.event.pull_request.head.sha }}
           path: |
             package-lock.json
-            dependency-audit.json
+            /tmp/blobs.txt
           if-no-files-found: error
           retention-days: 1
-
-      - name: Enforce high-severity dependency audit
-        run: test "${{ steps.audit.outputs.status }}" = 0
