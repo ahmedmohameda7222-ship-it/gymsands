@@ -100,7 +100,7 @@ describe("AW-3B set-write convergence", () => {
     expect(ui).toContain("sourceVersion: detailProvenance.sourceVersion");
     expect(ui).toContain("editableWorkoutSetProvenance(");
     expect(ui).not.toContain('set.detailSource === "backfill"');
-    expect(ui).toContain('detailSource: provenance.source');
+    expect(ui).toContain("detailSource: provenance.source");
     expect(ui).toContain("source: set.detailSource");
     expect(types).toContain('Exclude<\n  WorkoutPerformanceMetricSource,\n  "backfill"');
     expect(ui).toContain("details\n          ? details.source_provider");
@@ -131,7 +131,7 @@ describe("AW-3B set-write convergence", () => {
     expect(completion).not.toContain("pendingOnly: true");
   });
 
-  it("acknowledges only the saved snapshot and retains edits made during a request", () => {
+  it("acknowledges only the saved snapshot and isolates invalid draft effort from strict persistence", () => {
     expect(ui).toContain(
       "acknowledgeSetWrites(current, nextStates)",
     );
@@ -141,7 +141,16 @@ describe("AW-3B set-write convergence", () => {
       "hasSetDetails: set.hasSetDetails || saved.setDetailsWriteRequired",
     );
     expect(ui).not.toContain("setExerciseStates(acknowledgeSetWrites(nextStates))");
-    expect(ui).toContain('parseWorkoutSetEffortInput(set.rpe, "rpe")');
+    expect(ui).toContain('effortMode?: "strict" | "draft-context"');
+    expect(ui).toContain('const parseEffort = options.effortMode === "draft-context"');
+    expect(ui).toContain(": parseWorkoutSetEffortInput");
+    expect(ui).toContain('rpe: parseEffort(set.rpe, "rpe")');
+    expect(ui).toContain('rir: parseEffort(set.rir, "rir")');
+    expect(ui).toContain('buildLogRows(states, { effortMode: "draft-context" })');
+    expect(ui).toContain('rpe: workoutSetEffortInputForContext(set.rpe, "rpe")');
+    expect(ui).toContain('rir: workoutSetEffortInputForContext(set.rir, "rir")');
+    expect(ui).not.toContain('parseWorkoutSetEffortInput(set.rpe');
+    expect(ui).not.toContain('parseWorkoutSetEffortInput(set.rir');
     expect(ui).toContain("aria-invalid={Boolean(activeRpeValidation.error)}");
     expect(ui).toContain("aria-invalid={Boolean(activeRirValidation.error)}");
   });
