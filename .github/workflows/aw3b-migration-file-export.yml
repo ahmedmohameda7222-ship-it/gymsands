@@ -1,0 +1,57 @@
+name: AW3B Migration File Export
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aw3b-migration-file-export-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  export-and-clean:
+    if: github.event.pull_request.head.ref == 'feat/active-workout-aw3b-structured-set-details'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Verify exact migration identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          file='supabase/migrations/20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql'
+          test "$(git hash-object "$file")" = '84bfb4a22197f56300245f693f41f91a136814dd'
+          mkdir -p aw3b-migration-export
+          cp "$file" aw3b-migration-export/
+          git hash-object "$file" > aw3b-migration-export/git-blob.txt
+          sha256sum "$file" > aw3b-migration-export/sha256.txt
+          wc -c "$file" > aw3b-migration-export/bytes.txt
+          printf '%s\n' '${{ github.event.pull_request.head.sha }}' > aw3b-migration-export/source-commit.txt
+
+      - name: Upload exact migration file
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw3b-exact-migration-${{ github.event.pull_request.head.sha }}
+          path: aw3b-migration-export/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove temporary export workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/aw3b-migration-file-export.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore(aw3b): remove migration export workflow'
+          git push origin HEAD:feat/active-workout-aw3b-structured-set-details
