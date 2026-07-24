@@ -106,9 +106,28 @@ jobs:
           cat /tmp/aw3b-typecheck.log
           test "${{ steps.typecheck.outcome }}" = "success"
 
-      - name: Validate ESLint
+      - name: Capture ESLint diagnostics
+        id: lint
         if: always()
-        run: npm run lint
+        continue-on-error: true
+        shell: bash
+        run: npm run lint > /tmp/aw3b-lint.log 2>&1
+
+      - name: Upload ESLint diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw3b-lint-diagnostics
+          path: /tmp/aw3b-lint.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Require ESLint success
+        if: always()
+        shell: bash
+        run: |
+          cat /tmp/aw3b-lint.log
+          test "${{ steps.lint.outcome }}" = "success"
 
       - name: Validate diff formatting
         if: always()
