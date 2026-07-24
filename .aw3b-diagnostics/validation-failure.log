@@ -1,0 +1,320 @@
+> vitest run --config vitest.unit.config.mjs lib/i18n/message-shape.test.ts lib/i18n/active-workout-message-contract.test.ts lib/i18n/active-workout-formatters.test.ts lib/i18n/active-workout-surface-contract.test.ts
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/runner/work/gymsands/gymsands[39m
+
+ [32m✓[39m lib/i18n/active-workout-surface-contract.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m lib/i18n/active-workout-formatters.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 57[2mms[22m[39m
+ [32m✓[39m lib/i18n/active-workout-message-contract.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 217[2mms[22m[39m
+ [32m✓[39m lib/i18n/message-shape.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 34[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[32m29 passed[39m[22m[90m (29)[39m
+[2m   Start at [22m 01:11:19
+[2m   Duration [22m 686ms[2m (transform 200ms, setup 0ms, import 318ms, tests 326ms, environment 1ms)[22m
+
+===== script tests =====
+
+> plaivra@1.0.0 test:scripts
+> node --test scripts/*.test.mjs
+
+✔ redacts every required opaque path example segment-by-segment (5.369207ms)
+✔ redacts URL-safe base64-like and opaque nonhex path identifiers (0.343343ms)
+✔ safe URLs strip credentials, query, fragment, and dynamic identifiers (0.282339ms)
+✔ known static paths remain readable (0.31449ms)
+✔ success and failure evidence use the same sanitizer (4.6387ms)
+✔ text and screenshot failure metadata cannot bypass segment redaction (0.420478ms)
+✔ structured artifact SHA identity remains available (0.290174ms)
+✔ latest release target includes reconciled production version aliases (2.521804ms)
+✔ accepts an internally consistent pending reconciliation ledger (3.444753ms)
+✔ reconciled plus zero unresolved entries is potentially ready (0.412063ms)
+✔ reconciled plus one pending entry is not ready (0.276198ms)
+✔ reconciled plus one schema-untracked entry is not ready (0.25054ms)
+✔ pending history repair is not ready even with zero unresolved entries (0.262632ms)
+✔ a physically applied migration misclassified as pending cannot produce ready state (0.275326ms)
+✔ ledger drift review is unresolved and blocks readiness (0.374241ms)
+✔ rejects stale declared counts (0.431619ms)
+✔ rejects reconciled state while unresolved migrations remain (0.473517ms)
+✔ canonicalizes the repository PostgreSQL UTC timestamp without changing its instant (0.327364ms)
+✔ rejects malformed and missing capture timestamps (0.473006ms)
+✔ derives all fail-closed counts rather than trusting a declared green state (0.959648ms)
+✔ accepts reachable immutable migration evidence with matching committed bytes (1.972546ms)
+✔ rejects an unrelated or unreachable evidence commit (0.423754ms)
+MIGRATION_RECONCILIATION_SHA256={"supabase/migrations/20260711213000_adaptive_onboarding_v2.sql":"788e5106e103ff0273cf904514c2a3f3fb27f7283c769036339e7a1e3a01e031","supabase/migrations/20260712173000_persistent_meal_plan_skip_status.sql":"5523852f9c9726e60b700d5d25581948f6d5586ac632717f008d8b7dbc6b7d67","supabase/migrations/20260712195000_nutrition_target_date_overrides.sql":"86fd52e397153091aa7a26d36d9957b00c414c7ade0b5d6325808cc76b21625a","supabase/migrations/20260713153000_meal_plan_atomic_execution.sql":"c7d2d776a15f2d8b5e7f43be0acfe2fcc84b893e699ca47cd679fb3ed016ae84","supabase/migrations/20260713160000_train_section_atomic_integrity.sql":"e31c895dbfc1b6bb36c2bbfa58fa231013082d8599cb2dfb50306745ea1eb043","supabase/migrations/20260713170000_finalize_train_schedule_delete_integrity.sql":"f05a4d22f8d63aeb48a8b9004d91aba9dd77c7f0acca602bcb7f37018134b59e","supabase/migrations/20260714030000_harden_train_plan_rpc_execution.sql":"7038cb9830ea4aa9bfc83d6cca582d0860c565061bbd8328cf7feae8c27ca896","supabase/migrations/20260715010000_restrict_nutrition_target_override_acl.sql":"c70d245f1dc11f2d8257d15e987d1014b36d7b665e983994ea8848f3db69afb5"}
+✔ captures SHA-256 for the exact reconciliation migration bytes (3.617847ms)
+✔ accepts exactly the intended authenticated CRUD ACL (1.709593ms)
+✔ rejects a missing required CRUD privilege (0.254347ms)
+✔ rejects extra TRUNCATE (0.284312ms)
+✔ rejects extra TRIGGER (0.173525ms)
+✔ rejects extra REFERENCES (0.200315ms)
+✔ rejects extra MAINTAIN (0.163136ms)
+✔ normalizes duplicates and case without weakening exactness (0.151764ms)
+✔ Quality delegates chronological replay to the permanent helper through retained evidence (1.292361ms)
+✔ synthetic future migration version sorts after the complete repository chain (0.328736ms)
+✔ helper rejects a linked Supabase repository (1.027735ms)
+✔ migration-history validation requires every migration exactly once (0.54457ms)
+✔ compatibility bridge is explicit, exact, and local-only (0.17047ms)
+✔ manual and PR Quality always use exact nonempty comparison identities (0.5338ms)
+✔ permanent validation names are generic and every release gate is retained (1.083459ms)
+✔ Quality executes the permanent AW-2B schema and command integration SQL (0.243036ms)
+✔ applied AW-2A migrations remain byte-for-byte immutable (0.946262ms)
+✔ rendered QA preserves the 126-route matrix and isolates every observation (1.550074ms)
+✔ today-workout is redirected before the React route lifecycle (0.264465ms)
+✔ authenticated evidence is fail-closed and always emits a safe failure summary (0.337533ms)
+✔ post-deploy readiness gates are production-only while artifact identity stays universal (1.669026ms)
+✖ dry-run performs all checks and no write (2.249443ms)
+✔ rejects wrong and Activity Catalog project refs (0.712635ms)
+✔ rejects wrong current and target markers (0.340097ms)
+✔ rejects a target that is not the reconciled ledger head (0.621495ms)
+✔ rejects unsuccessful or mismatched preflight evidence (0.774511ms)
+✖ rejects an unexpected current database marker (1.05696ms)
+✖ apply requires explicit confirmation (0.739435ms)
+✖ apply rejects Stage-1-only preflight evidence (1.68165ms)
+✖ compare-and-set zero and multiple row results fail closed (0.769792ms)
+✖ apply changes only marker and applied timestamp (0.571861ms)
+✖ redacted evidence contains no credentials or secret values (0.408586ms)
+✔ repository config declares Vercel main-only policy intent without claiming provider enforcement (4.220406ms)
+✔ release documentation distinguishes repository intent from actual provider verification (0.53919ms)
+✔ launch documentation places reconciliation, strict preflight, and owner approval before merge (0.586479ms)
+✔ active configuration has no Vercel preview or production SHA approval dependency (0.649306ms)
+✔ tracked references contain no active obsolete Vercel gate dependency (110.595279ms)
+✖ git diff checks pass for the working tree and branch range (141.818537ms)
+✔ Netlify keeps its exact-SHA ignore command and local behavior (41.687918ms)
+✔ Netlify deploy-preview behavior remains unchanged (43.003025ms)
+✔ Netlify branch-deploy behavior remains unchanged (42.579906ms)
+✔ Netlify dev behavior remains unchanged (40.912952ms)
+✔ Netlify production is held without exact approval (43.190148ms)
+✔ Netlify production is held for a mismatched approval (71.909539ms)
+✔ Netlify production is held for abbreviated or malformed identities (123.700056ms)
+✔ Netlify production proceeds only for the exact valid 40-character SHA (38.341846ms)
+✔ Netlify ambiguous provider targets fail closed (39.813005ms)
+✔ Stage-1 cannot authorize and exact Production token is identity bound (1.961785ms)
+✔ Plaivra direct and recognized pooler targets are accepted with redacted identity (1.015813ms)
+✔ Activity Catalog, other projects, generic hosts and localhost are rejected (0.540513ms)
+✔ future reconciled ledger automatically derives its later target (1.460937ms)
+✔ generic workflow and evidence code contain no pinned AW-2A migration (0.957924ms)
+✔ same-head run selection and artifact-only evidence permissions are exact (0.588943ms)
+✔ promotion target validation precedes adapter construction (0.330719ms)
+✔ Quality workflow requires exact manual identities and all release gates (2.505393ms)
+✔ Release preflight workflow consumes the exact run-keyed artifact read-only (0.31454ms)
+✔ canonical artifact validation accepts exact matching evidence (25.568364ms)
+✔ failed or stale gate cannot generate a release-valid manifest (15.335017ms)
+✔ preflight rejects wrong run, missing evidence, nonzero exit and tampering (47.380079ms)
+✔ preflight rejects unexpected migration and unreconciled ledger (7.864242ms)
+✔ exact release validation binds Quality and preflight to artifact-only evidence (0.492393ms)
+✔ Stage-1 preflight cannot authorize marker promotion (0.244568ms)
+✔ promotion source is guarded and never targets Activity Catalog (0.347982ms)
+✔ next.config bundles deterministic release and migration metadata (59.867112ms)
+✔ post-deploy smoke rejects abbreviated release SHAs before network access (53.075156ms)
+✔ release manifest rejects abbreviated release SHAs (87.926932ms)
+✔ release manifest records exact installed runtime versions and lockfile identity (291.068367ms)
+✔ built metadata verification accepts reconciled ledger metadata while runtime readiness remains fail-closed (0.853529ms)
+✔ Netlify production release gate rejects nonstandard SHA lengths (31.442702ms)
+✔ defaults programmatic evaluation to strict release mode (3.221094ms)
+✔ defaults omitted mode to release even in a pull-request environment (0.322714ms)
+✔ strict release mode rejects a valid pending-only migration state (0.73141ms)
+✔ default release mode rejects a valid pending-only migration state (0.271038ms)
+✔ review mode accepts a valid pending-only migration state without claiming release readiness (0.273442ms)
+✔ review mode rejects schema-applied-untracked migration state (0.296536ms)
+✔ review mode rejects unresolved counts that differ from pending counts (0.210534ms)
+✔ both modes reject an old deployment artifact as a substitute for the reviewed SHA (0.672389ms)
+✔ both modes reject manifest count drift (0.98194ms)
+✔ review mode still distinguishes missing and failed quality evidence (0.740617ms)
+✔ review mode still rejects commit-mismatched and stale quality evidence (0.374933ms)
+✔ reconciled state passes both review and release modes (0.279163ms)
+✔ rejects a manifest whose Next.js evidence differs from the installed runtime (1.784944ms)
+✔ unknown modes fail closed (5.579272ms)
+✔ streams and retains stdout and stderr with exit zero (56.647237ms)
+✔ records and propagates a nonzero command exit (35.381256ms)
+✔ passes command arguments without shell interpolation (43.870673ms)
+✔ does not record command arguments or secret values in metadata (33.29322ms)
+✔ leaves no false-passing partial evidence (34.639963ms)
+✔ does not enforce provider configuration for ordinary local builds (1.633791ms)
+✔ accepts complete core production configuration (0.279835ms)
+✔ rejects missing and malformed core production configuration without values (0.460223ms)
+✔ validates MCP and OAuth configuration only when enabled (0.283071ms)
+✔ validates Stripe configuration only when checkout is enabled (0.265046ms)
+✔ validates Activity Catalog configuration only for external modes (0.530253ms)
+✔ validates privacy execution key and retention periods conditionally (0.397966ms)
+ℹ tests 117
+ℹ suites 0
+ℹ pass 109
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1184.556695
+
+✖ failing tests:
+
+test at scripts/promote-release-schema-compatibility.test.mjs:81:1
+✖ dry-run performs all checks and no write (2.249443ms)
+  Error: Target marker does not equal the latest reconciled applied migration.
+      at validatePromotionRequest (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:113:11)
+      at executeCompatibilityPromotion (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:151:21)
+      at TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:83:26)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17)
+
+test at scripts/promote-release-schema-compatibility.test.mjs:135:1
+✖ rejects an unexpected current database marker (1.05696ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /Current compatibility marker mismatch/. Input:
+  
+  'Error: Target marker does not equal the latest reconciled applied migration.'
+  
+      at async TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:136:3)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: Target marker does not equal the latest reconciled applied migration.
+        at validatePromotionRequest (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:113:11)
+        at executeCompatibilityPromotion (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:151:21)
+        at file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:137:11
+        at waitForActual (node:assert:632:21)
+        at strict.rejects (node:assert:769:31)
+        at TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:136:16)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1325:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+        at Test.postRun (node:internal/test_runner/test:1465:19),
+    expected: /Current compatibility marker mismatch/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/promote-release-schema-compatibility.test.mjs:149:1
+✖ apply requires explicit confirmation (0.739435ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /PROMOTE_BKWEZJXVAPAEASFVLHVV_20260722232817/. Input:
+  
+  'Error: Target marker does not equal the latest reconciled applied migration.'
+  
+      at async TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:150:3)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: Target marker does not equal the latest reconciled applied migration.
+        at validatePromotionRequest (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:113:11)
+        at executeCompatibilityPromotion (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:151:21)
+        at file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:151:11
+        at waitForActual (node:assert:632:21)
+        at strict.rejects (node:assert:769:31)
+        at TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:150:16)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1325:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+        at Test.postRun (node:internal/test_runner/test:1465:19),
+    expected: /PROMOTE_BKWEZJXVAPAEASFVLHVV_20260722232817/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/promote-release-schema-compatibility.test.mjs:162:1
+✖ apply rejects Stage-1-only preflight evidence (1.68165ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /Production marker-promotion authorization evidence/. Input:
+  
+  'Error: Target marker does not equal the latest reconciled applied migration.'
+  
+      at async TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:163:3)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: Target marker does not equal the latest reconciled applied migration.
+        at validatePromotionRequest (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:113:11)
+        at executeCompatibilityPromotion (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:151:21)
+        at file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:164:11
+        at waitForActual (node:assert:632:21)
+        at strict.rejects (node:assert:769:31)
+        at TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:163:16)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1325:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+        at Test.postRun (node:internal/test_runner/test:1465:19),
+    expected: /Production marker-promotion authorization evidence/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/promote-release-schema-compatibility.test.mjs:172:1
+✖ compare-and-set zero and multiple row results fail closed (0.769792ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /expected exactly 1/. Input:
+  
+  'Error: Target marker does not equal the latest reconciled applied migration.'
+  
+      at async TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:176:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: Target marker does not equal the latest reconciled applied migration.
+        at validatePromotionRequest (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:113:11)
+        at executeCompatibilityPromotion (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:151:21)
+        at file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:177:13
+        at waitForActual (node:assert:632:21)
+        at strict.rejects (node:assert:769:31)
+        at TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:176:18)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1325:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+        at Test.postRun (node:internal/test_runner/test:1465:19),
+    expected: /expected exactly 1/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/promote-release-schema-compatibility.test.mjs:191:1
+✖ apply changes only marker and applied timestamp (0.571861ms)
+  Error: Target marker does not equal the latest reconciled applied migration.
+      at validatePromotionRequest (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:113:11)
+      at executeCompatibilityPromotion (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:151:21)
+      at TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:193:26)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7)
+
+test at scripts/promote-release-schema-compatibility.test.mjs:212:1
+✖ redacted evidence contains no credentials or secret values (0.408586ms)
+  Error: Target marker does not equal the latest reconciled applied migration.
+      at validatePromotionRequest (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:113:11)
+      at executeCompatibilityPromotion (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.mjs:151:21)
+      at TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/promote-release-schema-compatibility.test.mjs:213:26)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7)
+
+test at scripts/provider-release-gates.test.mjs:125:1
+✖ git diff checks pass for the working tree and branch range (141.818537ms)
+  AssertionError [ERR_ASSERTION]: .aw3b-diagnostics/targeted-failure.log:49: trailing whitespace.
+  + [38;5;240m    │[0m                         ┬                                      ─┬─  
+  .aw3b-diagnostics/targeted-failure.log:51: trailing whitespace.
+  + [38;5;240m    │[0m                                                                 │   
+  .aw3b-diagnostics/targeted-failure.log:69: new blank line at EOF.
+  
+  
+  
+  2 !== 0
+  
+      at TestContext.<anonymous> (file:///home/runner/work/gymsands/gymsands/scripts/provider-release-gates.test.mjs:132:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
