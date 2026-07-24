@@ -79,3 +79,5 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 These nine files match the production migration identities and were applied exactly once in order. Do not replay or modify them.
 
 AW-2A persisted execution state is applied exactly once to Plaivra Database as production record `20260721000544_active_workout_aw2a_execution_state`, mapped to immutable repository migration `20260720213000_active_workout_aw2a_execution_state.sql`. The migration ledger records this as an `applied_version_alias` because the supported production authority generated a different timestamp while preserving the exact reviewed SQL. The forward-only correction `20260721012814_active_workout_aw2a_execution_state_corrections.sql` is also applied exactly once and adds the partial covering index for `active_snapshot_item_id`; it does not alter the compatibility marker or user workout data. Do not replay or modify either applied migration.
+
+AW-3B post-apply correction `supabase/migrations/20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql` is committed and pending one authorized Plaivra Database application; do not replay any applied migration.

@@ -13,7 +13,7 @@ type QueryCall = {
   range?: [number, number];
 };
 
-function exportSupabaseMock(metricRowCount = 1) {
+function exportSupabaseMock(metricRowCount = 1, timelineRowCount = 1) {
   const calls: QueryCall[] = [];
   const from = vi.fn((table: string) => {
     const call: QueryCall = { table, filters: [], inFilters: [], orders: [] };
@@ -45,6 +45,33 @@ function exportSupabaseMock(metricRowCount = 1) {
               captured_at: "2026-07-22T10:00:00.000Z",
               created_at: "2026-07-22T10:00:00.000Z",
               updated_at: "2026-07-22T10:00:00.000Z"
+            };
+          }),
+          error: null
+        };
+      }
+      if (table === "workout_session_timeline_events") {
+        const [start, requestedEnd] = call.range ?? [0, timelineRowCount - 1];
+        const end = Math.min(requestedEnd, timelineRowCount - 1);
+        const length = Math.max(0, end - start + 1);
+        return {
+          data: Array.from({ length }, (_, offset) => {
+            const index = start + offset;
+            const sessionIndex = Math.floor(index / 2500);
+            const sequenceNumber = index % 2500;
+            return {
+              id: `event-${String(index).padStart(6, "0")}`,
+              workout_session_id: `session-${String(sessionIndex).padStart(2, "0")}`,
+              user_id: userA,
+              sequence_number: sequenceNumber,
+              event_type: "set_edited",
+              occurred_at: "2026-07-22T10:00:00.000Z",
+              source: "runtime",
+              exercise_log_id: `log-${index}`,
+              snapshot_item_id: null,
+              payload_version: 1,
+              payload: { schemaVersion: 1 },
+              created_at: "2026-07-22T10:00:00.000Z"
             };
           }),
           error: null
@@ -151,6 +178,11 @@ describe("current-user privacy export", () => {
     expect(calls.find((call) => call.table === "user_fitness_constraints")?.filters).toContainEqual(["user_id", userA]);
     expect(calls.find((call) => call.table === "user_nutrition_preference_profiles")?.filters).toContainEqual(["user_id", userA]);
     expect(calls.find((call) => call.table === "user_daily_checkins")?.filters).toContainEqual(["user_id", userA]);
+    const timelineCall = calls.find((call) => call.table === "workout_session_timeline_events");
+    expect(timelineCall?.filters).toContainEqual(["user_id", userA]);
+    expect(timelineCall?.orders).toEqual(["workout_session_id", "sequence_number", "id"]);
+    expect(timelineCall?.selection).toContain("id,workout_session_id,user_id");
+
     for (const table of [
       "exercise_log_set_details",
       "exercise_log_set_segments",
@@ -204,4 +236,41 @@ describe("current-user privacy export", () => {
     ]);
     expect(metricCalls.every((call) => call.orders.join(",") === "captured_at,id")).toBe(true);
   });
+
+  it("exports every timeline row beyond 5000 in a stable cross-session order", async () => {
+    const { client, calls } = exportSupabaseMock(1, 5205);
+    const payload = await buildCurrentUserDataExport(client, {
+      id: userA,
+      email: "a@example.test",
+      created_at: "2026-01-01T00:00:00.000Z"
+    });
+
+    const workouts = payload.data.workouts as {
+      timeline_events: Array<{ id: string; workout_session_id: string; sequence_number: number }>;
+    };
+    expect(workouts.timeline_events).toHaveLength(5205);
+    expect(new Set(workouts.timeline_events.map((row) => row.id)).size).toBe(5205);
+    expect(workouts.timeline_events[2499]).toMatchObject({
+      workout_session_id: "session-00",
+      sequence_number: 2499
+    });
+    expect(workouts.timeline_events[2500]).toMatchObject({
+      workout_session_id: "session-01",
+      sequence_number: 0
+    });
+
+    const timelineCalls = calls.filter((call) => call.table === "workout_session_timeline_events");
+    expect(timelineCalls.map((call) => call.range)).toEqual([
+      [0, 999],
+      [1000, 1999],
+      [2000, 2999],
+      [3000, 3999],
+      [4000, 4999],
+      [5000, 5999]
+    ]);
+    expect(timelineCalls.every((call) =>
+      call.orders.join(",") === "workout_session_id,sequence_number,id"
+    )).toBe(true);
+  });
+
 });

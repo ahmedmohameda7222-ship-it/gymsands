@@ -78,10 +78,21 @@ test("Activity Catalog, other projects, generic hosts and localhost are rejected
 });
 
 test("future reconciled ledger automatically derives its later target", () => {
-  const ledger = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
-  const currentTarget = deriveReleaseTarget(ledger).expectedMigration;
+  const current = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
+  const reconciled = structuredClone(current);
+  reconciled.entries = reconciled.entries.filter((entry) => entry.state !== "pending");
+  reconciled.pendingCount = 0;
+  reconciled.unresolvedCount = 0;
+  reconciled.historyRepair = {
+    ...reconciled.historyRepair,
+    state: "reconciled",
+    pendingCount: 0,
+    unresolvedCount: 0,
+    note: "Synthetic future-target fixture with every migration resolved.",
+  };
+  const currentTarget = deriveReleaseTarget(reconciled).expectedMigration;
   const futureVersion = (BigInt(currentTarget) + 1n).toString().padStart(currentTarget.length, "0");
-  const future = structuredClone(ledger);
+  const future = structuredClone(reconciled);
   future.entries.push({
     productionVersion: futureVersion,
     productionName: "synthetic_future_release",

@@ -205,3 +205,5 @@ The physical production history contains **70 records**. The machine ledger inte
 ```
 
 This is deliberate reconciliation behavior, not drift. `scripts/check-migration-ledger.mjs` remains strict and unchanged.
+
+AW-3B post-apply correction `supabase/migrations/20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql` is committed and pending one authorized Plaivra Database application; do not replay any applied migration.

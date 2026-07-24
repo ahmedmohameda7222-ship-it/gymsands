@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { deriveReleaseTarget, validationRequestId } from "./release-identity-contract.mjs";
+import { deriveMigrationLedgerState } from "./check-migration-ledger.mjs";
+import { expectedMigrationVersion, validationRequestId } from "./release-identity-contract.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -11,11 +12,17 @@ export const EXPECTED_SCHEMA_COMPATIBILITY = "2";
 
 export function currentExpectedDatabaseMigration() {
   const ledger = JSON.parse(readFileSync(resolve(root, "supabase/migration-ledger.json"), "utf8"));
-  return deriveReleaseTarget(ledger).expectedMigration;
+  const state = deriveMigrationLedgerState(ledger);
+  return expectedMigrationVersion(
+    state.latestAppliedMigrationVersion,
+    "Latest resolved Production migration",
+  );
 }
 
-// Backward-compatible dynamic export for existing tests. It is derived from the exact ledger,
- // never pinned in generic evidence code.
+// Backward-compatible dynamic export for test fixtures and evidence parsing. It
+// exposes the newest resolved Production identity without asserting release readiness.
+// Every release mutation path still calls deriveReleaseTarget and fails closed while
+// pending, drift, or schema-untracked migration state exists.
 export const EXPECTED_DATABASE_MIGRATION = currentExpectedDatabaseMigration();
 
 export const REQUIRED_QUALITY_GATES = Object.freeze({

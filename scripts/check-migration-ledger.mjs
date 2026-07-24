@@ -1,7 +1,12 @@
 import { pathToFileURL } from "node:url";
 import { readFile, readdir } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import process from "node:process";
+
+const execFileAsync = promisify(execFile);
 
 const ALLOWED_STATES = new Set([
   "applied",
@@ -198,6 +203,91 @@ export function validateMigrationLedger({ ledger, files, documentation = {} }) {
   return { errors, derived };
 }
 
+export async function validateMigrationLedgerGitEvidence({
+  ledger,
+  root = process.cwd(),
+  runGit = async (args) => {
+    const result = await execFileAsync("git", args, { cwd: root, encoding: "buffer" });
+    return result.stdout;
+  },
+  readCurrentFile = (filePath) => readFile(filePath)
+}) {
+  const errors = [];
+  const auditedCommit = ledger.auditedRepositoryCommit;
+  if (!EXACT_SHA.test(auditedCommit ?? "")) return [
+    "auditedRepositoryCommit must be valid before Git evidence can be checked."
+  ];
+
+  try {
+    await runGit(["cat-file", "-e", `${auditedCommit}^{commit}`]);
+  } catch {
+    errors.push(`auditedRepositoryCommit does not exist: ${auditedCommit}`);
+    return errors;
+  }
+
+  try {
+    await runGit(["merge-base", "--is-ancestor", auditedCommit, "HEAD"]);
+  } catch {
+    errors.push(`auditedRepositoryCommit is not reachable from HEAD: ${auditedCommit}`);
+  }
+
+  const evidenceEntries = (ledger.entries ?? []).filter(
+    (entry) => entry.evidenceCommit || entry.repositorySha256 || entry.repositoryGitBlob
+  );
+  if (!evidenceEntries.length) {
+    errors.push("Migration ledger does not contain durable migration-file evidence.");
+    return errors;
+  }
+
+  for (const entry of evidenceEntries) {
+    if (entry.evidenceCommit !== auditedCommit) {
+      errors.push(`${entry.localFile} evidenceCommit does not match auditedRepositoryCommit.`);
+      continue;
+    }
+    if (!/^[a-f0-9]{64}$/i.test(entry.repositorySha256 ?? "")) {
+      errors.push(`${entry.localFile} repositorySha256 is invalid.`);
+      continue;
+    }
+    if (!/^[a-f0-9]{40}$/i.test(entry.repositoryGitBlob ?? "")) {
+      errors.push(`${entry.localFile} repositoryGitBlob is invalid.`);
+      continue;
+    }
+
+    const repositoryPath = `supabase/migrations/${entry.localFile}`;
+    let committedBytes;
+    let committedBlob;
+    try {
+      committedBytes = await runGit(["show", `${auditedCommit}:${repositoryPath}`]);
+      committedBlob = String(
+        await runGit(["rev-parse", `${auditedCommit}:${repositoryPath}`])
+      ).trim();
+    } catch {
+      errors.push(`${auditedCommit} does not contain attested migration ${entry.localFile}.`);
+      continue;
+    }
+
+    const committedHash = createHash("sha256").update(committedBytes).digest("hex");
+    if (committedHash !== entry.repositorySha256) {
+      errors.push(`${entry.localFile} committed bytes do not match repositorySha256.`);
+    }
+    if (committedBlob !== entry.repositoryGitBlob) {
+      errors.push(`${entry.localFile} committed blob does not match repositoryGitBlob.`);
+    }
+
+    try {
+      const currentBytes = await readCurrentFile(path.join(root, repositoryPath));
+      const currentHash = createHash("sha256").update(currentBytes).digest("hex");
+      if (currentHash !== entry.repositorySha256) {
+        errors.push(`${entry.localFile} current bytes differ from the attested evidence commit.`);
+      }
+    } catch {
+      errors.push(`Unable to read current attested migration ${entry.localFile}.`);
+    }
+  }
+
+  return errors;
+}
+
 async function main() {
   const root = process.cwd();
   const migrationsDir = path.join(root, "supabase", "migrations");
@@ -212,6 +302,7 @@ async function main() {
     )
   };
   const { errors, derived } = validateMigrationLedger({ ledger, files, documentation });
+  errors.push(...await validateMigrationLedgerGitEvidence({ ledger, root }));
 
   if (errors.length) {
     console.error(errors.map((error) => `- ${error}`).join("\n"));

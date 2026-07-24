@@ -4,6 +4,8 @@ import {
   editableWorkoutSetProvenance,
   normalizeWorkoutSetDetailsRelation,
   normalizeWorkoutSetSegmentsRelation,
+  parseWorkoutSetEffortInput,
+  validateWorkoutSetEffortInput,
   workoutSetDetailsInputToSql,
   workoutSetSegmentsInputToSql,
 } from "./workout-set-details";
@@ -18,21 +20,142 @@ const baseLog = {
   completedAt: "2026-07-22T20:00:00.000Z",
 };
 
-describe("AW-3B structured workout set details", () => {
-  it("normalizes PostgREST object-or-array embedded relationships", () => {
-    const details = normalizeWorkoutSetDetailsRelation([
-      { exercise_log_id: "log-1", rpe: "8.5" },
-    ] as never);
-    expect(details).toMatchObject({ exercise_log_id: "log-1", rpe: "8.5" });
+const relationContext = {
+  exerciseLogId: "log-1",
+  workoutSessionId: "session-1",
+  userId: "user-1",
+};
 
-    const segments = normalizeWorkoutSetSegmentsRelation({
-      id: "segment-1",
-      metric_values: { id: "metric-1", value: "6" },
-    } as never);
-    expect(segments).toHaveLength(1);
-    expect(segments[0]?.metric_values).toEqual([
-      expect.objectContaining({ id: "metric-1", value: "6" }),
+function detailRow(overrides: Record<string, unknown> = {}) {
+  return {
+    exercise_log_id: "log-1",
+    workout_session_id: "session-1",
+    user_id: "user-1",
+    schema_version: 1,
+    set_type: "working",
+    rpe: "8.5",
+    rir: "1.5",
+    notes: null,
+    side_mode: "none",
+    planned_tempo: null,
+    performed_tempo: null,
+    tempo_adherence: "not_recorded",
+    source: "manual",
+    source_provider: "plaivra",
+    source_version: "aw3b-v1",
+    created_at: "2026-07-22T20:00:00.000Z",
+    updated_at: "2026-07-22T20:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function metricRow(id: string, metricKey: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    segment_id: "segment-1",
+    exercise_log_id: "log-1",
+    workout_session_id: "session-1",
+    user_id: "user-1",
+    metric_key: metricKey,
+    metric_version: 1,
+    side: "none",
+    value: "6",
+    source: "manual",
+    source_provider: "plaivra",
+    source_version: "aw3b-v1",
+    captured_at: "2026-07-22T20:00:00.000Z",
+    created_at: "2026-07-22T20:00:00.000Z",
+    updated_at: "2026-07-22T20:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function segmentRow(id: string, order: number, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    exercise_log_id: "log-1",
+    workout_session_id: "session-1",
+    user_id: "user-1",
+    segment_order: order,
+    segment_kind: "drop",
+    side: "none",
+    completed_at: null,
+    source: "manual",
+    source_provider: "plaivra",
+    source_version: "aw3b-v1",
+    created_at: "2026-07-22T20:00:00.000Z",
+    updated_at: "2026-07-22T20:00:00.000Z",
+    metric_values: [],
+    ...overrides,
+  };
+}
+
+describe("AW-3B structured workout set details", () => {
+  it("normalizes deterministic PostgREST relations and rejects malformed cardinality", () => {
+    expect(normalizeWorkoutSetDetailsRelation(null, relationContext)).toBeNull();
+    expect(normalizeWorkoutSetDetailsRelation([], relationContext)).toBeNull();
+    expect(
+      normalizeWorkoutSetDetailsRelation([detailRow()] as never, relationContext),
+    ).toMatchObject({ exercise_log_id: "log-1", rpe: "8.5" });
+    expect(() =>
+      normalizeWorkoutSetDetailsRelation(
+        [detailRow(), detailRow({ updated_at: "2026-07-22T20:01:00.000Z" })] as never,
+        relationContext,
+      ),
+    ).toThrow(/exactly one/i);
+    expect(() =>
+      normalizeWorkoutSetDetailsRelation(
+        detailRow({ exercise_log_id: "other-log" }) as never,
+        relationContext,
+      ),
+    ).toThrow(/parent log/i);
+
+    expect(() =>
+      normalizeWorkoutSetDetailsRelation("" as never, relationContext),
+    ).toThrow(/malformed/i);
+    expect(() =>
+      normalizeWorkoutSetSegmentsRelation(false as never, relationContext),
+    ).toThrow(/malformed/i);
+
+    const segments = normalizeWorkoutSetSegmentsRelation([
+      segmentRow("segment-2", 2, {
+        metric_values: [
+          metricRow("metric-2", "repetitions", { segment_id: "segment-2" }),
+          metricRow("metric-1", "external_load_kg", { segment_id: "segment-2" }),
+        ],
+      }),
+      segmentRow("segment-1", 1, {
+        metric_values: metricRow("metric-3", "repetitions"),
+      }),
+    ] as never, relationContext);
+    expect(segments.map((segment) => segment.segment_order)).toEqual([1, 2]);
+    expect(segments[1]?.metric_values?.map((metric) => metric.metric_key)).toEqual([
+      "external_load_kg",
+      "repetitions",
     ]);
+
+    expect(() => normalizeWorkoutSetSegmentsRelation([
+      segmentRow("segment-1", 1),
+      segmentRow("segment-2", 1),
+    ] as never, relationContext)).toThrow(/duplicated/i);
+    expect(() => normalizeWorkoutSetSegmentsRelation([
+      segmentRow("segment-1", 1, {
+        metric_values: [
+          metricRow("metric-1", "repetitions"),
+          metricRow("metric-2", "repetitions"),
+        ],
+      }),
+    ] as never, relationContext)).toThrow(/identity is duplicated/i);
+    expect(() => normalizeWorkoutSetSegmentsRelation([
+      segmentRow("segment-1", 1, {
+        metric_values: metricRow("metric-1", "repetitions", { segment_id: "wrong" }),
+      }),
+    ] as never, relationContext)).toThrow(/parent segment/i);
+    expect(() => normalizeWorkoutSetSegmentsRelation([
+      segmentRow("segment-1", 1, {
+        metric_values: metricRow("metric-1", "repetitions", { metric_version: 0 }),
+      }),
+    ] as never, relationContext)).toThrow(/version is malformed/i);
   });
 
   it("normalizes the complete bounded v1 detail contract", () => {
@@ -85,6 +208,18 @@ describe("AW-3B structured workout set details", () => {
     expect(
       workoutSetDetailsInputToSql({ setType: "working", rpe: 0.1 + 0.2 }),
     ).toMatchObject({ rpe: 0.3 });
+  });
+
+  it("validates typed RPE and RIR without silent rounding", () => {
+    expect(validateWorkoutSetEffortInput("", "rpe")).toEqual({ value: null, error: null });
+    expect(validateWorkoutSetEffortInput("8.5", "rpe")).toEqual({ value: 8.5, error: null });
+    expect(validateWorkoutSetEffortInput("20.0", "rir")).toEqual({ value: 20, error: null });
+    expect(validateWorkoutSetEffortInput("8.25", "rpe").error).toBe("format");
+    expect(validateWorkoutSetEffortInput("10.1", "rpe").error).toBe("range");
+    expect(validateWorkoutSetEffortInput("1e1", "rpe").error).toBe("format");
+    expect(validateWorkoutSetEffortInput("-1", "rir").error).toBe("format");
+    expect(() => parseWorkoutSetEffortInput("8.25", "rpe")).toThrow(/one decimal/i);
+    expect(parseWorkoutSetEffortInput("0.0", "rpe")).toBe(0);
   });
 
   it("bounds Unicode notes, tempo text, side modes, and machine sources", () => {
@@ -164,9 +299,23 @@ describe("AW-3B structured workout set details", () => {
     expect(
       editableWorkoutSetProvenance("device", "watch.vendor", "v2"),
     ).toEqual({
-      source: "device",
-      sourceProvider: "watch.vendor",
-      sourceVersion: "v2",
+      source: "manual",
+      sourceProvider: "plaivra",
+      sourceVersion: "aw3b-v1",
+    });
+    expect(
+      editableWorkoutSetProvenance("chatgpt", "openai", "gpt-v1"),
+    ).toEqual({
+      source: "manual",
+      sourceProvider: "plaivra",
+      sourceVersion: "aw3b-v1",
+    });
+    expect(
+      editableWorkoutSetProvenance("import", "vendor", "v1"),
+    ).toEqual({
+      source: "manual",
+      sourceProvider: "plaivra",
+      sourceVersion: "aw3b-v1",
     });
     expect(() =>
       workoutSetDetailsInputToSql({
@@ -232,7 +381,7 @@ describe("AW-3B structured workout set details", () => {
     expect(segments.map((segment) => segment.segment_order)).toEqual([1, 2]);
     expect(
       segments[1]?.performance_metrics.map((metric) => metric.metric_key),
-    ).toEqual(["repetitions", "external_load_kg"]);
+    ).toEqual(["external_load_kg", "repetitions"]);
     expect(workoutSetSegmentsInputToSql([])).toEqual([]);
   });
 

@@ -14,7 +14,16 @@ import {
 const reviewedCommit = "1111111111111111111111111111111111111111";
 const currentLedger = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
 const ledger = structuredClone(currentLedger);
-ledger.historyRepair.note = "AW-3B release-promotion fixture reconciled through 20260722232817. Do not replay any applied migration.";
+ledger.entries = ledger.entries.filter((entry) => entry.state !== "pending");
+ledger.pendingCount = 0;
+ledger.unresolvedCount = 0;
+ledger.historyRepair = {
+  ...ledger.historyRepair,
+  state: "reconciled",
+  pendingCount: 0,
+  unresolvedCount: 0,
+  note: "AW-3B release-promotion fixture reconciled through 20260724002022. Do not replay any applied migration.",
+};
 
 function successfulPreflight(overrides = {}) {
   return {

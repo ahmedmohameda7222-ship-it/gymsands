@@ -13,6 +13,10 @@ const correctionMigration = readFileSync(
   "supabase/migrations/20260723010500_active_workout_aw3b_read_and_payload_corrections.sql",
   "utf8",
 );
+const finalHardeningMigration = readFileSync(
+  "supabase/migrations/20260724013000_active_workout_aw3b_final_logic_hardening.sql",
+  "utf8",
+);
 
 function filesUnder(root: string): string[] {
   return readdirSync(root).flatMap((name) => {
@@ -159,7 +163,7 @@ describe("AW-3B forward migration contract", () => {
     expect(migration).not.toMatch(/lower\([^\n]*notes[^\n]*\)/);
   });
 
-  it("emits only bounded timeline fingerprints and suppresses no-op duplicates", () => {
+  it("keeps the immutable checkpoint migration timeline payload bounded", () => {
     for (const key of [
       "setTypeChanged",
       "rpeChanged",
@@ -182,12 +186,55 @@ describe("AW-3B forward migration contract", () => {
     expect(timelinePayload).not.toContain("v_details->>'notes'");
   });
 
+  it("makes the public authority actor-bound and emits privacy-safe final-graph timeline evidence", () => {
+    expect(finalHardeningMigration).toContain(
+      "private.aw3b_canonicalize_actor_set_payload",
+    );
+    expect(finalHardeningMigration).toContain(
+      "'source', 'manual'",
+    );
+    expect(finalHardeningMigration).toContain(
+      "'source_provider', 'plaivra'",
+    );
+    expect(finalHardeningMigration).toContain(
+      "'source_version', 'aw3b-v1'",
+    );
+    expect(finalHardeningMigration).toContain(
+      "Backfill provenance is reserved for forward migration history.",
+    );
+    expect(finalHardeningMigration).toContain(
+      "plaivra.aw3b_defer_set_timeline",
+    );
+    expect(finalHardeningMigration).toContain(
+      "private.aw3b_timeline_structured_summary",
+    );
+    expect(finalHardeningMigration).toContain(
+      "'runtime:set_completed:' || v_after.id::text || ':aw3b-v1:'",
+    );
+    expect(finalHardeningMigration).toContain(
+      "'runtime:set_edited:' || v_after.id::text || ':aw3b-v1:' || v_change_token::text",
+    );
+    expect(finalHardeningMigration).toContain("v_details - 'notes'");
+    expect(finalHardeningMigration).toContain("'note_present'");
+    expect(finalHardeningMigration).toContain("'notesChanged'");
+    expect(finalHardeningMigration).toContain("'nonNoteGraphDigest'");
+    expect(finalHardeningMigration).not.toContain("digest(convert_to(v_details->>'notes'");
+    expect(finalHardeningMigration).not.toContain("digest(convert_to(v_after.notes");
+    expect(finalHardeningMigration).not.toContain("update public.release_schema_compatibility");
+  });
+
   it("leaves the deployed compatibility marker untouched", () => {
     expect(migration).toContain(
       "v_marker not in ('20260722161542','20260721012814')",
     );
     expect(migration).toContain("if v_marker<>v_baseline.marker");
     expect(migration).not.toContain(
+      "update public.release_schema_compatibility",
+    );
+    expect(finalHardeningMigration).toContain(
+      "requires released AW-3A marker 20260722161542",
+    );
+    expect(finalHardeningMigration).not.toContain(
       "update public.release_schema_compatibility",
     );
   });
@@ -268,7 +315,7 @@ describe("AW-3B forward migration contract", () => {
       .filter((file) => !/\.(?:test|spec)\.(?:ts|tsx)$/.test(file));
     const directMutators = runtimeFiles.filter((file) => {
       const source = readFileSync(file, "utf8");
-      return /\.from\(["']exercise_log_set_(?:details|segments|segment_metric_values)["']\)\s*\.(?:insert|update|delete|upsert)/.test(
+      return /\.from\(["'](?:exercise_log_set_details|exercise_log_set_segments|exercise_log_set_segment_metric_values)["']\)\s*\.(?:insert|update|delete|upsert)/.test(
         source,
       );
     });

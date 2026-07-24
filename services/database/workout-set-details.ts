@@ -75,25 +75,168 @@ export type WorkoutSetSegmentsRelation =
   | null
   | undefined;
 
+export type WorkoutSetRelationContext = {
+  exerciseLogId: string;
+  workoutSessionId: string;
+  userId?: string | null;
+};
+
+export class WorkoutSetRelationIntegrityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkoutSetRelationIntegrityError";
+  }
+}
+
 function relationArray<T>(value: T | T[] | null | undefined): T[] {
+  if (value === null || value === undefined) return [];
   if (Array.isArray(value)) return value;
-  return value ? [value] : [];
+  return [value];
+}
+
+function requireRelationString(
+  value: unknown,
+  label: string,
+): asserts value is string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new WorkoutSetRelationIntegrityError(`${label} is malformed.`);
+  }
+}
+
+function assertRelationOwnership(
+  row: Pick<WorkoutSetDetailsRow, "exercise_log_id" | "workout_session_id" | "user_id">,
+  context?: WorkoutSetRelationContext,
+) {
+  requireRelationString(row.exercise_log_id, "Workout set exercise-log ownership");
+  requireRelationString(row.workout_session_id, "Workout set session ownership");
+  requireRelationString(row.user_id, "Workout set user ownership");
+  if (!context) return;
+  if (
+    row.exercise_log_id !== context.exerciseLogId
+    || row.workout_session_id !== context.workoutSessionId
+    || (context.userId && row.user_id !== context.userId)
+  ) {
+    throw new WorkoutSetRelationIntegrityError(
+      "Workout set relation does not belong to its parent log.",
+    );
+  }
 }
 
 export function normalizeWorkoutSetDetailsRelation(
   value: WorkoutSetDetailsRelation,
+  context?: WorkoutSetRelationContext,
 ): WorkoutSetDetailsRow | null {
-  if (Array.isArray(value)) return value[0] ?? null;
-  return value ?? null;
+  const rows = relationArray(value);
+  if (rows.length === 0) return null;
+  if (rows.length !== 1) {
+    throw new WorkoutSetRelationIntegrityError(
+      "Workout set detail relation must contain exactly one row.",
+    );
+  }
+  const row = rows[0];
+  if (!row || typeof row !== "object") {
+    throw new WorkoutSetRelationIntegrityError(
+      "Workout set detail relation is malformed.",
+    );
+  }
+  assertRelationOwnership(row, context);
+  return row;
+}
+
+function segmentMetricIdentity(
+  metric: Pick<WorkoutSetSegmentMetricValueRow, "metric_key" | "metric_version" | "side">,
+) {
+  return `${metric.metric_key}:${metric.metric_version}:${metric.side}`;
+}
+
+function compareSegmentMetrics(
+  left: WorkoutSetSegmentMetricValueRow,
+  right: WorkoutSetSegmentMetricValueRow,
+) {
+  return (
+    left.metric_key.localeCompare(right.metric_key)
+    || left.metric_version - right.metric_version
+    || left.side.localeCompare(right.side)
+    || left.id.localeCompare(right.id)
+  );
 }
 
 export function normalizeWorkoutSetSegmentsRelation(
   value: WorkoutSetSegmentsRelation,
+  context?: WorkoutSetRelationContext,
 ): WorkoutSetSegmentRow[] {
-  return relationArray(value).map((segment) => ({
-    ...segment,
-    metric_values: relationArray(segment.metric_values),
-  }));
+  const segmentOrders = new Set<number>();
+  const normalized = relationArray(value).map((segment) => {
+    if (!segment || typeof segment !== "object") {
+      throw new WorkoutSetRelationIntegrityError(
+        "Workout set segment relation is malformed.",
+      );
+    }
+    requireRelationString(segment.id, "Workout set segment id");
+    assertRelationOwnership(segment, context);
+    if (
+      !Number.isInteger(segment.segment_order)
+      || segment.segment_order < 1
+      || segment.segment_order > 32
+    ) {
+      throw new WorkoutSetRelationIntegrityError(
+        "Workout set segment order is malformed.",
+      );
+    }
+    if (segmentOrders.has(segment.segment_order)) {
+      throw new WorkoutSetRelationIntegrityError(
+        "Workout set segment order is duplicated.",
+      );
+    }
+    segmentOrders.add(segment.segment_order);
+
+    const metricIdentities = new Set<string>();
+    const metricValues = relationArray(segment.metric_values).map((metric) => {
+      if (!metric || typeof metric !== "object") {
+        throw new WorkoutSetRelationIntegrityError(
+          "Workout set segment metric relation is malformed.",
+        );
+      }
+      requireRelationString(metric.id, "Workout set segment metric id");
+      requireRelationString(metric.segment_id, "Workout set segment metric segment");
+      assertRelationOwnership(metric, context);
+      requireRelationString(metric.metric_key, "Workout set segment metric key");
+      requireRelationString(metric.side, "Workout set segment metric side");
+      if (!Number.isInteger(metric.metric_version) || metric.metric_version < 1) {
+        throw new WorkoutSetRelationIntegrityError(
+          "Workout set segment metric version is malformed.",
+        );
+      }
+      if (
+        metric.segment_id !== segment.id
+        || metric.exercise_log_id !== segment.exercise_log_id
+        || metric.workout_session_id !== segment.workout_session_id
+        || metric.user_id !== segment.user_id
+      ) {
+        throw new WorkoutSetRelationIntegrityError(
+          "Workout set segment metric does not belong to its parent segment.",
+        );
+      }
+      const identity = segmentMetricIdentity(metric);
+      if (metricIdentities.has(identity)) {
+        throw new WorkoutSetRelationIntegrityError(
+          "Workout set segment metric identity is duplicated.",
+        );
+      }
+      metricIdentities.add(identity);
+      return metric;
+    }).sort(compareSegmentMetrics);
+
+    return {
+      ...segment,
+      metric_values: metricValues,
+    };
+  });
+
+  return normalized.sort(
+    (left, right) =>
+      left.segment_order - right.segment_order || left.id.localeCompare(right.id),
+  );
 }
 
 function normalizeOptionalMachineValue(
@@ -135,22 +278,56 @@ function normalizeSource(input: SourceDefaults, defaults?: SourceDefaults) {
 }
 
 export function editableWorkoutSetProvenance(
-  source: WorkoutPerformanceMetricSource,
-  sourceProvider: string | null,
-  sourceVersion: string | null,
+  _source: WorkoutPerformanceMetricSource,
+  _sourceProvider: string | null,
+  _sourceVersion: string | null,
 ): {
   source: WorkoutSetRuntimeSource;
   sourceProvider: string | null;
   sourceVersion: string | null;
 } {
-  if (source === "backfill") {
-    return {
-      source: "manual",
-      sourceProvider: "plaivra",
-      sourceVersion: "aw3b-v1",
-    };
+  return {
+    source: "manual",
+    sourceProvider: "plaivra",
+    sourceVersion: "aw3b-v1",
+  };
+}
+
+export type WorkoutSetEffortField = "rpe" | "rir";
+export type WorkoutSetEffortValidation = {
+  value: number | null;
+  error: "format" | "range" | null;
+};
+
+export function validateWorkoutSetEffortInput(
+  rawValue: string,
+  field: WorkoutSetEffortField,
+): WorkoutSetEffortValidation {
+  const value = rawValue.trim();
+  if (value === "") return { value: null, error: null };
+  if (!/^(?:0|[1-9]\d*)(?:\.\d)?$/.test(value)) {
+    return { value: null, error: "format" };
   }
-  return { source, sourceProvider, sourceVersion };
+  const numericValue = Number(value);
+  const maximum = field === "rpe" ? 10 : 20;
+  if (!Number.isFinite(numericValue) || numericValue < 0 || numericValue > maximum) {
+    return { value: null, error: "range" };
+  }
+  return { value: numericValue, error: null };
+}
+
+export function parseWorkoutSetEffortInput(
+  rawValue: string,
+  field: WorkoutSetEffortField,
+) {
+  const result = validateWorkoutSetEffortInput(rawValue, field);
+  if (result.error) {
+    const maximum = field === "rpe" ? 10 : 20;
+    throw new Error(
+      `${field.toUpperCase()} must be empty or between 0 and ${maximum} with at most one decimal place.`,
+    );
+  }
+  return result.value;
 }
 
 function normalizeOneDecimal(
@@ -287,7 +464,11 @@ export function workoutSetSegmentsInputToSql(
         throw new Error("Workout set segment metrics must be unique.");
       metricIdentities.add(identity);
       return sql as WorkoutSetSegmentSqlInput["performance_metrics"][number];
-    });
+    }).sort((left, right) =>
+      left.metric_key.localeCompare(right.metric_key)
+      || left.metric_version - right.metric_version
+      || left.side.localeCompare(right.side)
+    );
     return {
       segment_order: segment.segmentOrder,
       segment_kind: segment.segmentKind,
@@ -301,5 +482,5 @@ export function workoutSetSegmentsInputToSql(
       source_version: source.sourceVersion,
       performance_metrics: sqlMetrics,
     };
-  });
+  }).sort((left, right) => left.segment_order - right.segment_order);
 }

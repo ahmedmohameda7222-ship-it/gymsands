@@ -117,7 +117,9 @@
       "saveRiskTitle": "تعذر حفظ هذه المجموعة بأمان.",
       "saveRiskDescription": "أبقِ هذه الشاشة مفتوحة وحاول مرة أخرى.",
       "newBest": "{name}: أفضل نتيجة جديدة — {weight} × {reps} تكرارات",
-      "labelPlural": "المجموعات"
+      "labelPlural": "المجموعات",
+      "rpeInvalid": "أدخل قيمة RPE من 0 إلى 10 وبحد أقصى منزلة عشرية واحدة.",
+      "rirInvalid": "أدخل قيمة RIR من 0 إلى 20 وبحد أقصى منزلة عشرية واحدة."
     },
     "rest": {
       "beforeSet": "راحة قبل المجموعة {number}",

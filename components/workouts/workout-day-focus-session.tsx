@@ -84,9 +84,16 @@ import {
 import {
   canUpdateWorkoutSetNote,
   editableWorkoutSetProvenance,
+  parseWorkoutSetEffortInput,
+  validateWorkoutSetEffortInput,
   WORKOUT_SET_NOTE_MAX_CODE_POINTS,
   workoutSetNoteCodePointLength
 } from "@/services/database/workout-set-details";
+import {
+  createWorkoutSetAutosaveCoordinator,
+  type WorkoutSetAutosaveAdapter,
+  type WorkoutSetAutosaveCoordinator
+} from "@/services/database/workout-set-autosave";
 
 // These inert markers preserve the frozen Train Phase 1 source contract while
 // user-visible copy is resolved exclusively through the canonical ActiveWorkout namespace.
@@ -270,7 +277,7 @@ function mergeSetPatch(set: SetState, patch: Partial<SetState>): SetState {
         set.detailSourceVersion
       )
     : null;
-  const nextPatch = provenance && set.detailSource === "backfill"
+  const nextPatch = provenance
     ? {
         ...patch,
         detailSource: provenance.source,
@@ -297,6 +304,19 @@ function setValuesMatch(
 
 function isPendingSetWrite(set: SetState) {
   return set.logWriteRequired && Boolean(set.completedAt || set.hasPersistedLog);
+}
+
+function setHasValidEffortInputs(set: SetState) {
+  return (
+    !validateWorkoutSetEffortInput(set.rpe, "rpe").error
+    && !validateWorkoutSetEffortInput(set.rir, "rir").error
+  );
+}
+
+function hasPendingValidSetWrites(states: ExerciseState[]) {
+  return states.some((item) =>
+    item.sets.some((set) => isPendingSetWrite(set) && setHasValidEffortInputs(set))
+  );
 }
 
 function acknowledgeSetWrites(
@@ -602,6 +622,9 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const executionWriteQueueRef = useRef(createWorkoutSessionExecutionWriteQueue());
   const controllerDeviceIdRef = useRef<string | null>(null);
   const setDetailsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const exerciseStatesRef = useRef(exerciseStates);
+  const autosaveAdapterRef = useRef<WorkoutSetAutosaveAdapter<ExerciseState[]> | null>(null);
+  const autosaveCoordinatorRef = useRef<WorkoutSetAutosaveCoordinator | null>(null);
 
   const mirrorExecutionState = useCallback((next: WorkoutSessionExecutionState) => {
     executionWriteQueueRef.current.replace(next);
@@ -897,13 +920,16 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
   function buildLogRows(
     states = exerciseStates,
-    options: { pendingOnly?: boolean } = {}
+    options: { pendingOnly?: boolean; validOnly?: boolean } = {}
   ) {
     return states.flatMap((item, exerciseIndex) =>
       item.sets
-        .filter((set) => options.pendingOnly
-          ? isPendingSetWrite(set)
-          : Boolean(set.completedAt))
+        .filter((set) => {
+          const selected = options.pendingOnly
+            ? isPendingSetWrite(set)
+            : Boolean(set.completedAt);
+          return selected && (!options.validOnly || setHasValidEffortInputs(set));
+        })
         .map((set) => {
           const includeSetDetails = set.setDetailsWriteRequired;
           const detailProvenance = editableWorkoutSetProvenance(
@@ -927,8 +953,8 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
               setDetails: {
                 schemaVersion: 1 as const,
                 setType: set.setType,
-                rpe: toNumberOrNull(set.rpe),
-                rir: toNumberOrNull(set.rir),
+                rpe: parseWorkoutSetEffortInput(set.rpe, "rpe"),
+                rir: parseWorkoutSetEffortInput(set.rir, "rir"),
                 notes: set.notes || null,
                 sideMode: set.sideMode,
                 plannedTempo: set.plannedTempo,
@@ -955,8 +981,8 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         setDetails: {
           schemaVersion: 1 as const,
           setType: set.setType,
-          rpe: toNumberOrNull(set.rpe),
-          rir: toNumberOrNull(set.rir),
+          rpe: parseWorkoutSetEffortInput(set.rpe, "rpe"),
+          rir: parseWorkoutSetEffortInput(set.rir, "rir"),
           notes: set.notes || null,
           sideMode: set.sideMode,
           plannedTempo: set.plannedTempo,
@@ -971,13 +997,15 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   }
 
   function updateSet(exerciseIndex: number, setIndex: number, patch: Partial<SetState>) {
-    setExerciseStates((current) =>
-      current.map((item, itemIndex) =>
+    setExerciseStates((current) => {
+      const next = current.map((item, itemIndex) =>
         itemIndex === exerciseIndex
           ? { ...item, sets: item.sets.map((set, currentSetIndex) => (currentSetIndex === setIndex ? mergeSetPatch(set, patch) : set)) }
           : item
-      )
-    );
+      );
+      exerciseStatesRef.current = next;
+      return next;
+    });
   }
 
   function statesWithSetPatch(exerciseIndex: number, setIndex: number, patch: Partial<SetState>) {
@@ -991,10 +1019,72 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
   async function persistProgress(states = exerciseStates) {
     if (!session) return;
-    await saveWorkoutSetLogs(session.id, buildLogRows(states, { pendingOnly: true }));
+    const rows = buildLogRows(states, { pendingOnly: true });
+    if (rows.length) await saveWorkoutSetLogs(session.id, rows);
     await updateWorkoutSessionDuration(session.id, Math.max(1, Math.ceil(elapsedSeconds / 60)));
-    setExerciseStates((current) => acknowledgeSetWrites(current, states));
+    setExerciseStates((current) => {
+      const next = acknowledgeSetWrites(current, states);
+      exerciseStatesRef.current = next;
+      return next;
+    });
   }
+
+  useEffect(() => {
+    autosaveAdapterRef.current = {
+      getSnapshot: () => exerciseStatesRef.current,
+      hasPendingWrites: hasPendingValidSetWrites,
+      persistSnapshot: async (states) => {
+        if (!session) return;
+        const rows = buildLogRows(states, { pendingOnly: true, validOnly: true });
+        if (!rows.length) return;
+        await saveWorkoutSetLogs(session.id, rows);
+        await updateWorkoutSessionDuration(
+          session.id,
+          Math.max(1, Math.ceil(elapsedSeconds / 60))
+        );
+      },
+      acknowledgeSnapshot: (savedStates) => {
+        setExerciseStates((current) => {
+          const next = acknowledgeSetWrites(current, savedStates);
+          exerciseStatesRef.current = next;
+          return next;
+        });
+      },
+      onFailure: (error) => {
+        console.warn("Plaivra will retry the pending completed-set details.", error);
+      }
+    };
+
+    if (autosaveCoordinatorRef.current == null) {
+      autosaveCoordinatorRef.current = createWorkoutSetAutosaveCoordinator(() => {
+        const adapter = autosaveAdapterRef.current;
+        if (!adapter) throw new Error("Workout set autosave is unavailable.");
+        return adapter;
+      });
+    }
+  });
+
+  function flushPendingSetWrites() {
+    return autosaveCoordinatorRef.current?.requestFlush() ?? Promise.resolve();
+  }
+
+  function handleSetDetailsOpenChange(open: boolean) {
+    setActionsOpen(open);
+    if (!open) void flushPendingSetWrites();
+  }
+
+  useEffect(() => {
+    exerciseStatesRef.current = exerciseStates;
+  }, [exerciseStates]);
+
+  useEffect(() => {
+    if (!session || isStarting || !hasPendingValidSetWrites(exerciseStates)) return;
+    autosaveCoordinatorRef.current?.scheduleFlush(650);
+  }, [exerciseStates, isStarting, session]);
+
+  useEffect(() => () => {
+    autosaveCoordinatorRef.current?.cancel();
+  }, []);
 
   function startRestTimer(seconds: number) {
     const safeSeconds = Math.max(0, seconds);
@@ -1064,6 +1154,13 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       || !user?.id
       || !executionHydratedRef.current
     ) return;
+
+    if (!setHasValidEffortInputs(targetSet)) {
+      setActiveExerciseIndex(exerciseIndex);
+      setActiveSetIndex(setIndex);
+      setActionsOpen(true);
+      return;
+    }
 
     const previousStates = exerciseStates;
     const previousActiveExerciseIndex = activeExerciseIndex;
@@ -1241,6 +1338,15 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
   async function completeSession() {
     if (!session || isSaving || isStarting || !executionHydratedRef.current) return;
+    const invalidLocation = exerciseStates.flatMap((item, exerciseIndex) =>
+      item.sets.map((set, setIndex) => ({ set, exerciseIndex, setIndex }))
+    ).find(({ set }) => Boolean(set.completedAt || set.hasPersistedLog) && !setHasValidEffortInputs(set));
+    if (invalidLocation) {
+      setActiveExerciseIndex(invalidLocation.exerciseIndex);
+      setActiveSetIndex(invalidLocation.setIndex);
+      setActionsOpen(true);
+      return;
+    }
     try {
       setIsSaving(true);
       const summary = buildSummary(exerciseStates, history, durationMinutes, sessionNotes, tr, formatters);
@@ -1359,6 +1465,11 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   }
 
   if (!activeExercise || !activeSet) return null;
+
+  const activeRpeValidation = validateWorkoutSetEffortInput(activeSet.rpe, "rpe");
+  const activeRirValidation = validateWorkoutSetEffortInput(activeSet.rir, "rir");
+  const rpeErrorId = activeRpeValidation.error ? "active-set-rpe-error" : undefined;
+  const rirErrorId = activeRirValidation.error ? "active-set-rir-error" : undefined;
 
   return (
     <div className="space-y-4 pb-28 lg:pb-4" dir={dir}>
@@ -1531,7 +1642,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
               <p className="mt-3 font-semibold text-success">{tr("exercise.complete")}</p>
               <p className="mt-1 text-sm text-muted-foreground"><bdi>{activeExercise.exercise.exercise_name}</bdi> · {tr("set.setsLogged", { count: activeExercise.sets.length })}</p>
               {nextExercise ? (
-                <Button className="mt-4 min-h-12 rounded-[18px]" onClick={() => { setActiveExerciseIndex(activeExerciseIndex + 1); setActiveSetIndex(0); setTimerSeconds(nextExercise.exercise.rest_seconds ?? 75); }} disabled={isSaving || isStarting}>
+                <Button className="mt-4 min-h-12 rounded-[18px]" onClick={() => { void flushPendingSetWrites(); setActiveExerciseIndex(activeExerciseIndex + 1); setActiveSetIndex(0); setTimerSeconds(nextExercise.exercise.rest_seconds ?? 75); }} disabled={isSaving || isStarting}>
                   {tr("exercise.nextExercise", { name: isolateBidiText(nextExercise.exercise.exercise_name) })}
                 </Button>
               ) : (
@@ -1558,7 +1669,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
                       key={set.setNumber}
                       type="button"
                       disabled={isSaving || isStarting}
-                      onClick={() => setActiveSetIndex(setIndex)}
+                      onClick={() => { void flushPendingSetWrites(); setActiveSetIndex(setIndex); }}
                       className={`flex h-12 items-center justify-center rounded-[14px] border text-sm font-bold transition-colors ${isCompleted ? "border-success/30 bg-success/10 text-success" : isActive ? "border-primary/50 bg-primary/10 text-primary" : "border-border bg-muted/40 text-muted-foreground"}`}
                       aria-label={isCompleted ? tr("accessibility.completedSet", { number: formatters.integer(set.setNumber) }) : isActive ? tr("accessibility.currentSet", { number: formatters.integer(set.setNumber) }) : tr("accessibility.plannedSet", { number: formatters.integer(set.setNumber) })}
                     >
@@ -1619,7 +1730,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         </div>
       </div>
 
-      <Dialog open={actionsOpen} onOpenChange={setActionsOpen}>
+      <Dialog open={actionsOpen} onOpenChange={handleSetDetailsOpenChange}>
           <DialogContent data-active-set-details-dialog layout="responsive-drawer" closeLabel={tr("common.close")} onCloseAutoFocus={(event) => { event.preventDefault(); setDetailsTriggerRef.current?.focus(); }} className="max-h-[88dvh] overflow-y-auto p-5 lg:inset-y-6 lg:left-auto lg:right-6 lg:h-auto lg:w-[420px] lg:max-w-[420px] lg:translate-x-0 lg:translate-y-0 lg:rounded-[28px] lg:border">
             <DialogHeader>
               <DialogTitle>{tr("chatGPT.actionsTitle")}</DialogTitle>
@@ -1637,8 +1748,48 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
               <ActionBlock icon={<Sparkles className="h-4 w-4" />} title={tr("details.advancedDetails")} description={tr("details.workoutNotes")}>
                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                  <div className="space-y-1"><Label htmlFor="active-set-rpe" className="text-xs">RPE</Label><Input id="active-set-rpe" className="h-12 tabular-nums" dir="ltr" type="number" min="0" max="10" step="0.1" value={activeSet.rpe} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rpe: event.target.value })} inputMode="decimal" placeholder="8" disabled={isSaving || isStarting} /></div>
-                  <div className="space-y-1"><Label htmlFor="active-set-rir" className="text-xs">RIR</Label><Input id="active-set-rir" className="h-12 tabular-nums" dir="ltr" type="number" min="0" max="20" step="0.1" value={activeSet.rir} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rir: event.target.value })} inputMode="decimal" placeholder="2" disabled={isSaving || isStarting} /></div>
+                  <div className="space-y-1">
+                    <Label htmlFor="active-set-rpe" className="text-xs">RPE</Label>
+                    <Input
+                      id="active-set-rpe"
+                      className="h-12 tabular-nums"
+                      dir="ltr"
+                      type="text"
+                      value={activeSet.rpe}
+                      onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rpe: event.target.value })}
+                      inputMode="decimal"
+                      placeholder="8"
+                      aria-invalid={Boolean(activeRpeValidation.error)}
+                      aria-describedby={rpeErrorId}
+                      disabled={isSaving || isStarting}
+                    />
+                    {activeRpeValidation.error ? (
+                      <p id="active-set-rpe-error" role="alert" className="text-xs text-destructive">
+                        {tr("set.rpeInvalid")}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="active-set-rir" className="text-xs">RIR</Label>
+                    <Input
+                      id="active-set-rir"
+                      className="h-12 tabular-nums"
+                      dir="ltr"
+                      type="text"
+                      value={activeSet.rir}
+                      onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { rir: event.target.value })}
+                      inputMode="decimal"
+                      placeholder="2"
+                      aria-invalid={Boolean(activeRirValidation.error)}
+                      aria-describedby={rirErrorId}
+                      disabled={isSaving || isStarting}
+                    />
+                    {activeRirValidation.error ? (
+                      <p id="active-set-rir-error" role="alert" className="text-xs text-destructive">
+                        {tr("set.rirInvalid")}
+                      </p>
+                    ) : null}
+                  </div>
                   <div className="space-y-1">
                     <Label htmlFor="active-set-type" className="text-xs">{tr("set.type")}</Label>
                     <select id="active-set-type" value={activeSet.setType} onChange={(event) => updateSet(activeExerciseIndex, activeSetIndex, { setType: event.target.value as SetState["setType"] })} className="flex h-12 w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" disabled={isSaving || isStarting}>

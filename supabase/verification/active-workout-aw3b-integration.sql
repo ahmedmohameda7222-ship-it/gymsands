@@ -88,6 +88,15 @@ begin
      or exists (select 1 from public.workout_session_timeline_events where exercise_log_id=v_log.id and event_type='set_edited') then
     raise exception 'AW-3B exact retry emitted duplicate timeline history.';
   end if;
+  if not exists (
+    select 1 from public.workout_session_timeline_events
+    where exercise_log_id=v_log.id and event_type='set_completed'
+      and payload->'structuredSet'->>'schemaVersion'='1'
+      and payload->'structuredSet'->>'segmentCount'='2'
+      and payload->'structuredSet'->>'segmentMetricCount'='4'
+      and payload->'structuredSet'->'details'->>'note_present'='true'
+      and payload::text not like '%Free note only%'
+  ) then raise exception 'AW-3B initial completion lacks privacy-safe final structured evidence.'; end if;
 end
 $verify_create_retry$;
 
@@ -136,7 +145,7 @@ begin
   if not exists (
     select 1 from public.workout_session_timeline_events
     where exercise_log_id=v_log.id and event_type='set_edited'
-      and payload->>'rpeChanged'='true' and payload->>'segmentCount'='2'
+      and payload->>'rpeChanged'='true' and payload->'structuredSet'->>'segmentCount'='2'
       and payload::text not like '%Free note only%'
   ) then raise exception 'AW-3B bounded detail-edit fingerprint is missing.'; end if;
 end
@@ -638,6 +647,142 @@ begin
   end if;
 end
 $verify_completion$;
+
+
+-- Authenticated browser provenance is actor-bound even when the JSON spoofs
+-- trusted machine actors. Hidden structured values and the segment graph are
+-- still committed atomically.
+set local role authenticated;
+select set_config('request.jwt.claim.role','authenticated',true);
+select set_config('request.jwt.claim.sub','b3000000-0000-4000-8000-000000000001',true);
+select public.upsert_workout_set_logs_atomic(
+  'b3000000-0000-4000-8000-000000000001',
+  current_setting('plaivra.aw3b_integration_session_id')::uuid,
+  jsonb_build_array(jsonb_build_object(
+    'exercise_order',2,'exercise_name','AW-3B Browser Set','set_number',1,
+    'reps',10,'weight_kg',30,'notes','Private browser note','completed_at','2026-07-22T20:02:00Z',
+    'set_details',jsonb_build_object(
+      'set_type','working','rpe',8.0,'rir',2.0,'notes','Private browser note',
+      'side_mode','left','planned_tempo','3-1-1-0','performed_tempo','2-1-1-0',
+      'tempo_adherence','adjusted','source','chatgpt','source_provider','openai','source_version','spoofed'
+    ),
+    'segments',jsonb_build_array(jsonb_build_object(
+      'segment_order',1,'segment_kind','primary','side','left','completed_at','2026-07-22T20:02:00Z',
+      'source','import','source_provider','spoofed.vendor','source_version','spoofed',
+      'performance_metrics',jsonb_build_array(jsonb_build_object(
+        'metric_key','repetitions','metric_version',1,'side','left','value',10,
+        'source','device','source_provider','spoofed.device','source_version','spoofed'
+      ))
+    ))
+  ))
+);
+reset role;
+
+do $verify_actor_bound_provenance$
+declare v_log_id uuid;
+begin
+  select id into strict v_log_id from public.exercise_logs
+  where workout_session_id=current_setting('plaivra.aw3b_integration_session_id')::uuid
+    and exercise_order=2 and set_number=1;
+  if exists (
+    select 1 from public.exercise_log_set_details
+    where exercise_log_id=v_log_id
+      and (source,source_provider,source_version) is distinct from ('manual','plaivra','aw3b-v1')
+  ) or exists (
+    select 1 from public.exercise_log_set_segments
+    where exercise_log_id=v_log_id
+      and (source,source_provider,source_version) is distinct from ('manual','plaivra','aw3b-v1')
+  ) or exists (
+    select 1 from public.exercise_log_set_segment_metric_values
+    where exercise_log_id=v_log_id
+      and (source,source_provider,source_version) is distinct from ('manual','plaivra','aw3b-v1')
+  ) then raise exception 'AW-3B authenticated provenance spoof was not canonicalized.'; end if;
+end
+$verify_actor_bound_provenance$;
+
+-- A note-only edit creates one event, exact retry creates none, and neither the
+-- raw note nor its known SHA-256 appears in payload or idempotency identity.
+set local role authenticated;
+select set_config('request.jwt.claim.role','authenticated',true);
+select set_config('request.jwt.claim.sub','b3000000-0000-4000-8000-000000000001',true);
+create temporary table aw3b_note_event_baseline on commit drop as
+select l.id exercise_log_id,
+  (select count(*) from public.workout_session_timeline_events e
+   where e.exercise_log_id=l.id and e.event_type='set_edited') edit_count
+from public.exercise_logs l
+where l.workout_session_id=current_setting('plaivra.aw3b_integration_session_id')::uuid
+  and l.exercise_order=2 and l.set_number=1;
+
+select public.upsert_workout_set_logs_atomic(
+  'b3000000-0000-4000-8000-000000000001',current_setting('plaivra.aw3b_integration_session_id')::uuid,
+  jsonb_build_array(jsonb_build_object(
+    'exercise_order',2,'exercise_name','AW-3B Browser Set','set_number',1,
+    'reps',10,'weight_kg',30,'notes','AW3B secret retry note','completed_at','2026-07-22T20:02:00Z',
+    'set_details',jsonb_build_object(
+      'set_type','working','rpe',8.0,'rir',2.0,'notes','AW3B secret retry note',
+      'side_mode','left','planned_tempo','3-1-1-0','performed_tempo','2-1-1-0',
+      'tempo_adherence','adjusted','source','import','source_provider','spoof','source_version','spoof'
+    )
+  ))
+);
+select public.upsert_workout_set_logs_atomic(
+  'b3000000-0000-4000-8000-000000000001',current_setting('plaivra.aw3b_integration_session_id')::uuid,
+  jsonb_build_array(jsonb_build_object(
+    'exercise_order',2,'exercise_name','AW-3B Browser Set','set_number',1,
+    'reps',10,'weight_kg',30,'notes','AW3B secret retry note','completed_at','2026-07-22T20:02:00Z',
+    'set_details',jsonb_build_object(
+      'set_type','working','rpe',8.0,'rir',2.0,'notes','AW3B secret retry note',
+      'side_mode','left','planned_tempo','3-1-1-0','performed_tempo','2-1-1-0',
+      'tempo_adherence','adjusted','source','device','source_provider','spoof','source_version','spoof'
+    )
+  ))
+);
+reset role;
+
+do $verify_note_privacy_and_retry$
+declare
+  v_baseline aw3b_note_event_baseline%rowtype;
+  v_known_digest text;
+begin
+  select * into strict v_baseline from aw3b_note_event_baseline;
+  v_known_digest:=encode(extensions.digest(convert_to('AW3B secret retry note','UTF8'),'sha256'),'hex');
+  if (select count(*) from public.workout_session_timeline_events
+      where exercise_log_id=v_baseline.exercise_log_id and event_type='set_edited')
+     <> v_baseline.edit_count+1 then
+    raise exception 'AW-3B note-only edit retry was not idempotent.';
+  end if;
+  if exists (
+    select 1 from public.workout_session_timeline_events
+    where exercise_log_id=v_baseline.exercise_log_id
+      and (payload::text like '%AW3B secret retry note%'
+        or idempotency_key like '%AW3B secret retry note%'
+        or payload::text like '%'||v_known_digest||'%'
+        or idempotency_key like '%'||v_known_digest||'%')
+  ) then raise exception 'AW-3B timeline leaked raw note content or a note-derived digest.'; end if;
+end
+$verify_note_privacy_and_retry$;
+
+-- Backfill provenance remains migration-only even for trusted runtime service.
+set local role service_role;
+select set_config('request.jwt.claim.role','service_role',true);
+do $verify_runtime_backfill_rejected$
+begin
+  begin
+    perform public.upsert_workout_set_logs_atomic(
+      'b3000000-0000-4000-8000-000000000001',current_setting('plaivra.aw3b_integration_session_id')::uuid,
+      jsonb_build_array(jsonb_build_object(
+        'exercise_order',2,'exercise_name','AW-3B Browser Set','set_number',1,
+        'reps',10,'weight_kg',30,'completed_at','2026-07-22T20:02:00Z',
+        'set_details',jsonb_build_object('set_type','working','source','backfill')
+      ))
+    );
+    raise exception 'AW-3B runtime backfill provenance was accepted.';
+  exception when insufficient_privilege then null;
+  end;
+end
+$verify_runtime_backfill_rejected$;
+reset role;
+
 
 delete from auth.users where id in (
   'b3000000-0000-4000-8000-000000000001','b3000000-0000-4000-8000-000000000002'

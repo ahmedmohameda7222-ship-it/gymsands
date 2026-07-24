@@ -14,7 +14,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const PLAIVRA_PROJECT_REF = "bkwezjxvapaeasfvlhvv";
 export const ACTIVITY_CATALOG_PROJECT_REF = "khlcctuefiuhunqymkbp";
 export const EXPECTED_CURRENT_MARKER = "20260722161542";
-export const TARGET_MARKER = "20260722232817";
+export const TARGET_MARKER = "20260724002022";
 export const APPLY_CONFIRMATION = `PROMOTE_${PLAIVRA_PROJECT_REF.toUpperCase()}_${TARGET_MARKER}`;
 const MARKER_PATTERN = /^\d{12,14}$/;
 

@@ -89,6 +89,7 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
   const renderedViewport = zoom === 1 ? viewport : { ...viewport, width: Math.max(160, Math.floor(viewport.width / zoom)), height: Math.max(284, Math.floor(viewport.height / zoom)) };
   const themeId = theme === "dark" ? "elite-noir" : "olive";
   const context = await browser.newContext({ viewport: renderedViewport, reducedMotion: "reduce", colorScheme: theme });
+  const setWritePayloads = [];
   await context.addCookies([{ name: "plaivra.language.v1", value: language, url: baseUrl, sameSite: "Lax" }]);
   await context.route("**/api/activity-catalog/**", async (requestRoute) => {
     const url = new URL(requestRoute.request().url());
@@ -113,6 +114,68 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
         headers: { "x-plaivra-qa-fixture": "active-workout-direct-session" },
         body: JSON.stringify({ session: workoutSessionFixture({ workoutId: catalogActivityId, workoutName: catalogActivities[0].name }), resumed: true })
       });
+      return;
+    }
+    if (method === "GET" && requestUrl.pathname.includes("/rest/v1/exercise_logs")) {
+      const persistedLog = {
+        id: "30000000-0000-4000-8000-000000000001",
+        workout_session_id: "20000000-0000-4000-8000-000000000001",
+        plan_exercise_id: "10000000-0000-4000-8000-000000000021",
+        exercise_order: 1,
+        exercise_name: "Barbell Back Squat",
+        exercise_category: "strength",
+        planned_sets: 3,
+        planned_reps: "8-10",
+        planned_rest_seconds: 90,
+        set_number: 1,
+        reps: 8,
+        weight_kg: 80,
+        notes: "Hydrated set note",
+        set_type: "working",
+        completed_at: "2026-07-22T08:05:00.000Z",
+        created_at: "2026-07-22T08:05:00.000Z",
+        updated_at: "2026-07-22T08:05:00.000Z",
+        set_details: [{
+          exercise_log_id: "30000000-0000-4000-8000-000000000001",
+          workout_session_id: "20000000-0000-4000-8000-000000000001",
+          user_id: "00000000-0000-4000-8000-000000000001",
+          schema_version: 1, set_type: "working", rpe: 7.5, rir: 3, notes: "Hydrated set note",
+          side_mode: "left", planned_tempo: "3-1-1-0", performed_tempo: "2-1-1-0",
+          tempo_adherence: "adjusted", source: "backfill", source_provider: null, source_version: null,
+          created_at: "2026-07-22T08:05:00.000Z", updated_at: "2026-07-22T08:05:00.000Z"
+        }],
+        segments: [
+          {
+            id: "40000000-0000-4000-8000-000000000002",
+            exercise_log_id: "30000000-0000-4000-8000-000000000001",
+            workout_session_id: "20000000-0000-4000-8000-000000000001",
+            user_id: "00000000-0000-4000-8000-000000000001",
+            segment_order: 2, segment_kind: "drop", side: "left", completed_at: "2026-07-22T08:05:30.000Z",
+            source: "backfill", source_provider: null, source_version: null,
+            created_at: "2026-07-22T08:05:30.000Z", updated_at: "2026-07-22T08:05:30.000Z",
+            metric_values: [
+              { id: "50000000-0000-4000-8000-000000000002", segment_id: "40000000-0000-4000-8000-000000000002", exercise_log_id: "30000000-0000-4000-8000-000000000001", workout_session_id: "20000000-0000-4000-8000-000000000001", user_id: "00000000-0000-4000-8000-000000000001", metric_key: "repetitions", metric_version: 1, side: "left", value: 6, source: "backfill", source_provider: null, source_version: null, captured_at: "2026-07-22T08:05:30.000Z", created_at: "2026-07-22T08:05:30.000Z", updated_at: "2026-07-22T08:05:30.000Z" },
+              { id: "50000000-0000-4000-8000-000000000001", segment_id: "40000000-0000-4000-8000-000000000002", exercise_log_id: "30000000-0000-4000-8000-000000000001", workout_session_id: "20000000-0000-4000-8000-000000000001", user_id: "00000000-0000-4000-8000-000000000001", metric_key: "external_load_kg", metric_version: 1, side: "left", value: 60, source: "backfill", source_provider: null, source_version: null, captured_at: "2026-07-22T08:05:30.000Z", created_at: "2026-07-22T08:05:30.000Z", updated_at: "2026-07-22T08:05:30.000Z" }
+            ]
+          },
+          {
+            id: "40000000-0000-4000-8000-000000000001",
+            exercise_log_id: "30000000-0000-4000-8000-000000000001",
+            workout_session_id: "20000000-0000-4000-8000-000000000001",
+            user_id: "00000000-0000-4000-8000-000000000001",
+            segment_order: 1, segment_kind: "primary", side: "left", completed_at: "2026-07-22T08:05:00.000Z",
+            source: "backfill", source_provider: null, source_version: null,
+            created_at: "2026-07-22T08:05:00.000Z", updated_at: "2026-07-22T08:05:00.000Z", metric_values: []
+          }
+        ]
+      };
+      await requestRoute.fulfill({ status: 200, contentType: "application/json", headers: { "content-range": "0-0/1", "x-plaivra-qa-fixture": "aw3b-hydrated-set" }, body: JSON.stringify([persistedLog]) });
+      return;
+    }
+    if (method === "POST" && requestUrl.pathname.includes("/rest/v1/rpc/upsert_workout_set_logs_atomic")) {
+      const payload = requestRoute.request().postDataJSON();
+      setWritePayloads.push(payload);
+      await requestRoute.fulfill({ status: 200, contentType: "application/json", headers: { "x-plaivra-qa-fixture": "aw3b-autosave" }, body: JSON.stringify({ saved: payload?.p_logs?.length ?? 0, deleted: 0 }) });
       return;
     }
     if (requestUrl.pathname.includes("/rest/v1/user_app_settings") && (method === "GET" || method === "HEAD")) {
@@ -255,7 +318,9 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
   let setDetailsState = {
     checked: false,
     dialogFocused: null,
-    numericConstraints: null,
+    inputContract: null,
+    invalidEffortBlocked: null,
+    validCorrectionCleared: null,
     numericValues: null,
     setTypeValues: null,
     setTypeTraversalPassed: null,
@@ -282,12 +347,26 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     const rir = page.locator("#active-set-rir");
     const setType = page.locator("#active-set-type");
     const note = page.locator("#active-set-note");
-    const numericConstraints = {
-      rpe: { min: await rpe.getAttribute("min"), max: await rpe.getAttribute("max"), step: await rpe.getAttribute("step") },
-      rir: { min: await rir.getAttribute("min"), max: await rir.getAttribute("max"), step: await rir.getAttribute("step") }
+    const inputContract = {
+      rpe: { type: await rpe.getAttribute("type"), inputMode: await rpe.getAttribute("inputmode") },
+      rir: { type: await rir.getAttribute("type"), inputMode: await rir.getAttribute("inputmode") }
+    };
+    await rpe.fill("8.25");
+    await rir.fill("20.1");
+    const invalidEffortBlocked = {
+      rpeInvalid: await rpe.getAttribute("aria-invalid"),
+      rirInvalid: await rir.getAttribute("aria-invalid"),
+      rpeError: await page.locator("#active-set-rpe-error").isVisible(),
+      rirError: await page.locator("#active-set-rir-error").isVisible()
     };
     await rpe.fill("8.5");
     await rir.fill("2.5");
+    const validCorrectionCleared = {
+      rpeInvalid: await rpe.getAttribute("aria-invalid"),
+      rirInvalid: await rir.getAttribute("aria-invalid"),
+      rpeErrorCount: await page.locator("#active-set-rpe-error").count(),
+      rirErrorCount: await page.locator("#active-set-rir-error").count()
+    };
     const numericValues = { rpe: await rpe.inputValue(), rir: await rir.inputValue() };
 
     const expectedSetTypeValues = ["normal", "warmup", "working", "failure", "drop", "backoff", "amrap", "timed", "other"];
@@ -323,7 +402,9 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     setDetailsState = {
       checked: true,
       dialogFocused,
-      numericConstraints,
+      inputContract,
+      invalidEffortBlocked,
+      validCorrectionCleared,
       numericValues,
       setTypeValues,
       setTypeTraversalPassed,
@@ -334,6 +415,8 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
       drawerWithinViewport: drawerLayout.withinViewport,
       drawerHorizontalOverflowPx: drawerLayout.horizontalOverflowPx,
       focusReturned: null,
+      autosaveFlushed: null,
+      autosavePayload: null,
       artifact: null
     };
   }
@@ -455,7 +538,23 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     item.setDetailsState.artifact = artifact;
     await page.keyboard.press("Escape");
     await page.locator("[data-active-set-details-dialog]").waitFor({ state: "hidden", timeout: 10_000 });
+    await page.waitForFunction(() => true, null, { timeout: 25 });
+    for (let attempt = 0; attempt < 40 && setWritePayloads.length === 0; attempt += 1) {
+      await page.waitForTimeout(50);
+    }
+    const latestSetWrite = setWritePayloads.at(-1) ?? null;
+    const savedDetails = latestSetWrite?.p_logs?.[0]?.set_details ?? null;
     item.setDetailsState.focusReturned = await setDetailsTrigger.evaluate((element) => element === document.activeElement);
+    item.setDetailsState.autosaveFlushed = Boolean(latestSetWrite);
+    item.setDetailsState.autosavePayload = savedDetails ? {
+      source: savedDetails.source,
+      sourceProvider: savedDetails.source_provider,
+      sourceVersion: savedDetails.source_version,
+      sideMode: savedDetails.side_mode,
+      plannedTempo: savedDetails.planned_tempo,
+      performedTempo: savedDetails.performed_tempo,
+      tempoAdherence: savedDetails.tempo_adherence
+    } : null;
   }
   await context.close();
   return item;
@@ -654,9 +753,15 @@ const failures = observations.filter((item) => {
   const setDetailsFailed = item.openSetDetails && (
     !item.setDetailsState.checked
     || !item.setDetailsState.dialogFocused
-    || JSON.stringify(item.setDetailsState.numericConstraints) !== JSON.stringify({
-      rpe: { min: "0", max: "10", step: "0.1" },
-      rir: { min: "0", max: "20", step: "0.1" }
+    || JSON.stringify(item.setDetailsState.inputContract) !== JSON.stringify({
+      rpe: { type: "text", inputMode: "decimal" },
+      rir: { type: "text", inputMode: "decimal" }
+    })
+    || JSON.stringify(item.setDetailsState.invalidEffortBlocked) !== JSON.stringify({
+      rpeInvalid: "true", rirInvalid: "true", rpeError: true, rirError: true
+    })
+    || JSON.stringify(item.setDetailsState.validCorrectionCleared) !== JSON.stringify({
+      rpeInvalid: "false", rirInvalid: "false", rpeErrorCount: 0, rirErrorCount: 0
     })
     || JSON.stringify(item.setDetailsState.numericValues) !== JSON.stringify({ rpe: "8.5", rir: "2.5" })
     || JSON.stringify(item.setDetailsState.setTypeValues) !== JSON.stringify(["normal", "warmup", "working", "failure", "drop", "backoff", "amrap", "timed", "other"])
@@ -668,6 +773,12 @@ const failures = observations.filter((item) => {
     || !item.setDetailsState.drawerWithinViewport
     || item.setDetailsState.drawerHorizontalOverflowPx > 1
     || !item.setDetailsState.focusReturned
+    || !item.setDetailsState.autosaveFlushed
+    || JSON.stringify(item.setDetailsState.autosavePayload) !== JSON.stringify({
+      source: "manual", sourceProvider: "plaivra", sourceVersion: "aw3b-v1",
+      sideMode: "left", plannedTempo: "3-1-1-0", performedTempo: "2-1-1-0",
+      tempoAdherence: "adjusted"
+    })
   );
   return item.status !== 200
     || item.pageErrors.length > 0

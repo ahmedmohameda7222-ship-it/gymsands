@@ -22,7 +22,7 @@ const requiredKeys = [
   "set.label", "set.weight", "set.reps", "set.finish", "set.saved", "set.editing", "set.completedAt",
   "set.saveChanges", "set.cancelEditing", "set.details", "set.type", "set.working", "set.warmup",
   "set.drop", "set.failure", "set.normal", "set.backoff", "set.amrap", "set.timed", "set.other",
-  "set.rpe", "set.rir", "set.note", "set.addExtra",
+  "set.rpe", "set.rir", "set.rpeInvalid", "set.rirInvalid", "set.note", "set.addExtra",
   "set.extra", "set.userAdded",
   "rest.beforeSet", "rest.next", "rest.skip", "rest.addThirtySeconds", "rest.stopTimer",
   "rest.nextSetReady", "rest.start", "rest.finished",

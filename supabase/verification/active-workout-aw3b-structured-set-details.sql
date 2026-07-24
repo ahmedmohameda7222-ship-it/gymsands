@@ -142,6 +142,9 @@ begin
   if v_function_definition !~* 'pg_column_size\s*\(v_logs\)\s*>\s*16777216'
      or v_function_definition !~* 'v_final_count\s*>\s*500'
      or v_function_definition not like '%private.aw3b_structured_upsert_workout_set_logs_atomic%'
+     or v_function_definition not like '%private.aw3b_canonicalize_actor_set_payload%'
+     or v_function_definition not like '%private.aw3b_timeline_structured_summary%'
+     or v_function_definition not like '%plaivra.aw3b_defer_set_timeline%'
      or v_function_definition !~* 'for\s+update' then
     raise exception 'AW-3B public set RPC payload/session bounds are incomplete.';
   end if;
@@ -150,7 +153,13 @@ begin
      or not has_function_privilege('service_role','public.upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
      or has_function_privilege('anon','private.aw3b_structured_upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
      or has_function_privilege('authenticated','private.aw3b_structured_upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
-     or has_function_privilege('service_role','private.aw3b_structured_upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE') then
+     or has_function_privilege('service_role','private.aw3b_structured_upsert_workout_set_logs_atomic(uuid,uuid,jsonb)','EXECUTE')
+     or has_function_privilege('anon','private.aw3b_canonicalize_actor_set_payload(jsonb,text)','EXECUTE')
+     or has_function_privilege('authenticated','private.aw3b_canonicalize_actor_set_payload(jsonb,text)','EXECUTE')
+     or has_function_privilege('service_role','private.aw3b_canonicalize_actor_set_payload(jsonb,text)','EXECUTE')
+     or has_function_privilege('anon','private.aw3b_timeline_structured_summary(uuid)','EXECUTE')
+     or has_function_privilege('authenticated','private.aw3b_timeline_structured_summary(uuid)','EXECUTE')
+     or has_function_privilege('service_role','private.aw3b_timeline_structured_summary(uuid)','EXECUTE') then
     raise exception 'AW-3B effective function privileges are invalid.';
   end if;
   if exists (
@@ -164,6 +173,18 @@ begin
     select 1 from supabase_migrations.schema_migrations
     where name='active_workout_aw3b_read_and_payload_corrections'
   ) then raise exception 'AW-3B forward read/payload correction migration is missing.'; end if;
+  if not exists (
+    select 1 from supabase_migrations.schema_migrations
+    where name='active_workout_aw3b_final_logic_hardening'
+      and version in ('20260724013000','20260724002022')
+  ) then raise exception 'AW-3B final logic hardening migration is missing.'; end if;
+  select pg_get_functiondef(
+    'private.append_workout_session_timeline_event(uuid,uuid,text,timestamptz,text,text,jsonb,uuid,uuid,uuid,smallint)'::regprocedure
+  ) into strict v_function_definition;
+  if v_function_definition not like '%plaivra.aw3b_defer_set_timeline%'
+     or v_function_definition not like '%return null%' then
+    raise exception 'AW-3B final timeline deferral authority is incomplete.';
+  end if;
 
   if exists (
     select 1 from public.exercise_log_set_details d

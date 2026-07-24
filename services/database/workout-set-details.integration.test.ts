@@ -72,6 +72,9 @@ describe("AW-3B set-write convergence", () => {
     );
     expect(logReader).toContain("normalizeWorkoutSetDetailsRelation");
     expect(logReader).toContain("normalizeWorkoutSetSegmentsRelation");
+    expect(logReader).toContain('.order("segment_order"');
+    expect(logReader).toContain('referencedTable: "exercise_log_set_segments"');
+    expect(logReader).toContain("relationContext");
     expect(ui).toContain("const details = log.set_details");
     expect(ui).toContain("details?.rpe");
     expect(ui).toContain("details?.rir");
@@ -96,12 +99,17 @@ describe("AW-3B set-write convergence", () => {
     expect(ui).toContain("sourceProvider: detailProvenance.sourceProvider");
     expect(ui).toContain("sourceVersion: detailProvenance.sourceVersion");
     expect(ui).toContain("editableWorkoutSetProvenance(");
-    expect(ui).toContain('set.detailSource === "backfill"');
+    expect(ui).not.toContain('set.detailSource === "backfill"');
+    expect(ui).toContain('detailSource: provenance.source');
     expect(ui).toContain("source: set.detailSource");
     expect(types).toContain('Exclude<\n  WorkoutPerformanceMetricSource,\n  "backfill"');
     expect(ui).toContain("details\n          ? details.source_provider");
     expect(ui).toContain("details\n          ? details.source_version");
     expect(ui).toContain("buildLogRows(states, { pendingOnly: true })");
+    expect(ui).toContain("createWorkoutSetAutosaveCoordinator");
+    expect(ui).toContain("scheduleFlush(650)");
+    expect(ui).toContain("handleSetDetailsOpenChange");
+    expect(ui).toContain("validOnly: true");
     expect(ui).toContain("? isPendingSetWrite(set)");
     expect(ui).toContain(": Boolean(set.completedAt)");
     expect(ui).toContain(
@@ -133,6 +141,9 @@ describe("AW-3B set-write convergence", () => {
       "hasSetDetails: set.hasSetDetails || saved.setDetailsWriteRequired",
     );
     expect(ui).not.toContain("setExerciseStates(acknowledgeSetWrites(nextStates))");
+    expect(ui).toContain('parseWorkoutSetEffortInput(set.rpe, "rpe")');
+    expect(ui).toContain("aria-invalid={Boolean(activeRpeValidation.error)}");
+    expect(ui).toContain("aria-invalid={Boolean(activeRirValidation.error)}");
   });
 
   it("fails closed when the nested structured-log read is unavailable", () => {
