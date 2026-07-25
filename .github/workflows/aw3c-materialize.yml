@@ -87,6 +87,13 @@ jobs:
           git apply --check /tmp/aw3c-markerfix.patch
           git apply /tmp/aw3c-markerfix.patch
 
+          test "$(sha256sum .aw3c-transport/functionfix.patch.gz.b64 | cut -d' ' -f1)" = "714a0ec4baadd73f87fec05ceb55e22777fc941714f82a1969b4c4702760c74b"
+          base64 -d .aw3c-transport/functionfix.patch.gz.b64 > /tmp/aw3c-functionfix.patch.gz
+          test "$(sha256sum /tmp/aw3c-functionfix.patch.gz | cut -d' ' -f1)" = "c670856a01ca9aefa76dcf7ca9d25abbb060a293d06006103308e87b754c1d06"
+          gzip -dc /tmp/aw3c-functionfix.patch.gz > /tmp/aw3c-functionfix.patch
+          git apply --check /tmp/aw3c-functionfix.patch
+          git apply /tmp/aw3c-functionfix.patch
+
           sha256sum -c .aw3c-transport/final.sha256
           git diff --check
           git add -A
