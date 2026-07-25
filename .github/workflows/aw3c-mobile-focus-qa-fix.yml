@@ -1,11 +1,9 @@
 name: AW-3C Stable Mobile Focus QA Correction
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
-    types:
-      - synchronize
+      - feat/active-workout-aw3c-prescription-snapshots
 
 permissions:
   contents: write
