@@ -37,6 +37,7 @@ import { useToast } from "@/components/ui/toaster";
 import { InlineFeedback, MotionCard } from "@/components/motion";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKey } from "@/lib/workout-persistence";
+import { isMockAuthUserId } from "@/lib/fixtures/mock-auth";
 import { activeWorkoutCacheFromExecution, clearActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
 import { userSafeError } from "@/lib/error-formatting";
 import {
@@ -49,7 +50,7 @@ import {
   updateWorkoutSessionDuration
 } from "@/services/database/workout-sessions";
 import { createExerciseAlternative, getExerciseAlternatives, getProgressionTargets } from "@/services/database/execution-layer";
-import type { ExerciseLog, UserWorkoutPlanExercise, Workout, WorkoutPerformanceMetricSource, WorkoutPlanDaySession, WorkoutSession, WorkoutSessionExecutionState, WorkoutSessionSummary, WorkoutSetSideMode, WorkoutSetTempoAdherence, WorkoutSetType } from "@/types";
+import type { ExerciseLog, FrozenWorkoutPrescriptionSet, UserWorkoutPlanExercise, Workout, WorkoutPerformanceMetricSource, WorkoutPlanDaySession, WorkoutSession, WorkoutSessionExecutionState, WorkoutSessionPrescriptionItem, WorkoutSessionSummary, WorkoutSetSideMode, WorkoutSetTempoAdherence, WorkoutSetType } from "@/types";
 import type { ExerciseAlternativeReason, UserExerciseAlternative, UserProgressionTarget } from "@/types";
 import { AiActionRequestDialog } from "@/components/ai/ai-action-request-dialog";
 import { WorkoutAiActionPanel } from "@/components/ai/workout-ai-action-panel";
@@ -81,6 +82,7 @@ import {
   requireWorkoutSessionExecutionState,
   type WorkoutSessionExecutionCursorRow
 } from "@/services/database/workout-session-execution";
+import { frozenLogCompatibility, frozenRepetitionsEntryDefault, frozenRepetitionsProjection } from "@/services/database/workout-session-prescriptions";
 import {
   canUpdateWorkoutSetNote,
   editableWorkoutSetProvenance,
@@ -134,10 +136,14 @@ type SetState = {
   setDetailsWriteRequired: boolean;
   logWriteRequired: boolean;
   completedAt: string | null;
+  frozenPrescriptionSet: FrozenWorkoutPrescriptionSet | null;
+  plannedReps: string | null;
+  plannedRestSeconds: number | null;
 };
 
 type ExerciseState = {
   exercise: UserWorkoutPlanExercise;
+  prescriptionItem: WorkoutSessionPrescriptionItem;
   sets: SetState[];
 };
 
@@ -174,11 +180,6 @@ type WorkoutSummary = {
   notes: string;
 };
 
-function firstNumber(value: string | null | undefined) {
-  const match = value?.match(/\d+/);
-  return match?.[0] ?? "10";
-}
-
 const weekdayIndex: Record<string, number> = {
   sunday: 0,
   monday: 1,
@@ -206,36 +207,87 @@ function restDeadline(seconds: number) {
   return Date.now() + seconds * 1000;
 }
 
-function plannedSetCount(exercise: UserWorkoutPlanExercise) {
-  return Math.max(1, exercise.sets ?? 3);
+function frozenExercise(item: WorkoutSessionPrescriptionItem, liveExercises: UserWorkoutPlanExercise[]): UserWorkoutPlanExercise {
+  const live = liveExercises.find((exercise) => exercise.id === item.sourcePlanExerciseId);
+  const firstSet = item.prescriptionSets[0] ?? null;
+  return live ? {
+    ...live,
+    exercise_name: item.activityName,
+    sets: item.prescriptionSets.length || item.plannedSets,
+    reps: frozenRepetitionsProjection(firstSet),
+    rest_seconds: firstSet?.restSeconds ?? null
+  } : {
+    id: item.sourcePlanExerciseId ?? item.id,
+    plan_day_id: "", workout_id: null, source_workout_id: null,
+    exercise_name: item.activityName, category: null, target_muscle: null, equipment: null,
+    sets: item.prescriptionSets.length || item.plannedSets,
+    reps: frozenRepetitionsProjection(firstSet), rest_seconds: firstSet?.restSeconds ?? null,
+    sort_order: item.itemOrder, notes: null
+  };
 }
 
-function makeExerciseState(exercise: UserWorkoutPlanExercise): ExerciseState {
-  const count = plannedSetCount(exercise);
+function makeFrozenExerciseState(item: WorkoutSessionPrescriptionItem, liveExercises: UserWorkoutPlanExercise[]): ExerciseState {
+  const exercise = frozenExercise(item, liveExercises);
+  const planned = item.prescriptionSets.length ? item.prescriptionSets : [null];
   return {
     exercise,
-    sets: Array.from({ length: count }, (_, index) => ({
-      setNumber: index + 1,
-      reps: firstNumber(exercise.reps),
-      weightKg: "",
-      notes: "",
-      rpe: "",
-      rir: "",
-      setType: index === 0 && count > 2 ? "warmup" : "working",
-      sideMode: "none",
-      plannedTempo: null,
-      performedTempo: null,
-      tempoAdherence: "not_recorded",
-      detailSource: "manual",
-      detailSourceProvider: "plaivra",
-      detailSourceVersion: "aw3b-v1",
-      hasPersistedLog: false,
-      hasSetDetails: false,
-      setDetailsWriteRequired: true,
-      logWriteRequired: false,
-      completedAt: null
+    prescriptionItem: item,
+    sets: planned.map((frozenSet, index) => ({
+      setNumber: frozenSet?.setOrder ?? index + 1,
+      reps: frozenRepetitionsEntryDefault(frozenSet),
+      weightKg: "", notes: "", rpe: "", rir: "",
+      setType: frozenSet?.setType ?? "other",
+      sideMode: frozenSet?.sideMode ?? "none",
+      plannedTempo: frozenSet?.tempoTarget ?? null,
+      performedTempo: null, tempoAdherence: "not_recorded",
+      detailSource: "manual", detailSourceProvider: "plaivra", detailSourceVersion: "aw3c-v1",
+      hasPersistedLog: false, hasSetDetails: false, setDetailsWriteRequired: true, logWriteRequired: false, completedAt: null,
+      frozenPrescriptionSet: frozenSet,
+      plannedReps: frozenRepetitionsProjection(frozenSet),
+      plannedRestSeconds: frozenSet?.restSeconds ?? null
     }))
   };
+}
+
+function mockPrescriptionItemsFromPlan(
+  exercises: UserWorkoutPlanExercise[],
+  workoutSessionId: string,
+  userId: string
+): WorkoutSessionPrescriptionItem[] {
+  return exercises.map((exercise, index) => ({
+    snapshotId: `mock-snapshot-${workoutSessionId}`,
+    id: `mock-item-${exercise.id}`,
+    workoutSessionId,
+    userId,
+    itemOrder: index + 1,
+    sourcePlanExerciseId: exercise.id,
+    sourcePlanActivityId: null,
+    activityName: exercise.exercise_name,
+    rawCompatibilityPrescription: {
+      ...(exercise.sets ? { sets: exercise.sets } : {}),
+      ...(exercise.reps ? { reps: exercise.reps } : {}),
+      ...(exercise.rest_seconds !== null ? { rest_seconds: exercise.rest_seconds } : {})
+    },
+    plannedSets: exercise.sets,
+    normalizationStatus: "partial",
+    prescriptionSets: Array.from({ length: Math.max(1, exercise.sets ?? 1) }, (_, setIndex) => ({
+      id: `mock-prescription-set-${exercise.id}-${setIndex + 1}`,
+      snapshotItemId: `mock-item-${exercise.id}`,
+      snapshotId: `mock-snapshot-${workoutSessionId}`,
+      workoutSessionId,
+      userId,
+      setOrder: setIndex + 1,
+      performedOrderHint: null,
+      setType: "other",
+      targetMode: "custom",
+      sideMode: "none",
+      restSeconds: exercise.rest_seconds,
+      tempoTarget: null,
+      schemaVersion: 1,
+      createdAt: new Date(0).toISOString(),
+      targets: []
+    }))
+  }));
 }
 
 const detailWriteKeys: Array<keyof SetState> = [
@@ -412,9 +464,9 @@ function hydrateStates(baseStates: ExerciseState[], logs: ExerciseLog[]) {
         notes: log.notes ?? "",
         rpe: details?.rpe === null || details?.rpe === undefined ? "" : String(details.rpe),
         rir: details?.rir === null || details?.rir === undefined ? "" : String(details.rir),
-        setType: normalizeSetType(details?.set_type ?? log.set_type ?? "working"),
+        setType: normalizeSetType(details?.set_type ?? log.set_type ?? set.setType),
         sideMode: details?.side_mode ?? set.sideMode,
-        plannedTempo: details?.planned_tempo ?? null,
+        plannedTempo: details?.planned_tempo ?? set.plannedTempo,
         performedTempo: details?.performed_tempo ?? null,
         tempoAdherence: details?.tempo_adherence ?? set.tempoAdherence,
         detailSource: details?.source ?? set.detailSource,
@@ -449,7 +501,7 @@ function buildSessionSets(states: ExerciseState[]): SessionSetSummary[] {
       reps: toNumberOrNull(set.reps) ?? 0,
       weightKg: toNumberOrNull(set.weightKg) ?? 0,
       setType: set.setType,
-      plannedReps: item.exercise.reps,
+      plannedReps: set.plannedReps,
       completedAt: set.completedAt
     }))
   );
@@ -592,10 +644,10 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const [startedAtMs, setStartedAtMs] = useState(() => Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [sessionNotes, setSessionNotes] = useState("");
-  const [exerciseStates, setExerciseStates] = useState<ExerciseState[]>(() => day.exercises.map(makeExerciseState));
+  const [exerciseStates, setExerciseStates] = useState<ExerciseState[]>([]);
   const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
   const [activeSetIndex, setActiveSetIndex] = useState(0);
-  const [timerSeconds, setTimerSeconds] = useState(day.exercises[0]?.rest_seconds ?? 75);
+  const [timerSeconds, setTimerSeconds] = useState(75);
   const [timerLeft, setTimerLeft] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -725,7 +777,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
               storedStartedAt,
               controllerDeviceIdRef.current,
               new Date(),
-              { endsAtMs: storedRestEndsAt, durationSeconds: day.exercises[0]?.rest_seconds ?? 75 }
+              { endsAtMs: storedRestEndsAt, durationSeconds: cursorItems[0]?.prescriptionSets[0]?.restSeconds ?? 75 }
             );
             authoritativeState = imported.state;
             executionWriteQueueRef.current.replace(authoritativeState);
@@ -757,14 +809,18 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         }
 
         if (!active) return;
-        setExecutionCursorItems(cursorItems);
-        const hydratedStates = hydrateStates(day.exercises.map(makeExerciseState), existingLogs);
+        const authoritativeItems = cursorItems.length || !isMockAuthUserId(user.id)
+          ? cursorItems
+          : mockPrescriptionItemsFromPlan(day.exercises, nextSession.id, user.id);
+        setExecutionCursorItems(authoritativeItems);
+        const hydratedStates = hydrateStates(authoritativeItems.map((item) => makeFrozenExerciseState(item, day.exercises)), existingLogs);
         setExerciseStates(hydratedStates);
-        const cursor = executionCursorToIndexes(authoritativeState, cursorItems, day.exercises);
+        const cursor = executionCursorToIndexes(authoritativeState, authoritativeItems, hydratedStates.map((item) => item.exercise));
         const exerciseIndex = Math.min(Math.max(0, cursor.exerciseIndex), Math.max(0, hydratedStates.length - 1));
         const setCount = hydratedStates[exerciseIndex]?.sets.length ?? 1;
         setActiveExerciseIndex(exerciseIndex);
         setActiveSetIndex(Math.min(Math.max(0, cursor.setIndex), Math.max(0, setCount - 1)));
+        setTimerSeconds(hydratedStates[exerciseIndex]?.sets[Math.min(Math.max(0, cursor.setIndex), Math.max(0, setCount - 1))]?.plannedRestSeconds ?? 75);
         mirrorExecutionState(authoritativeState);
         setSession(nextSession);
         setSessionNotes(nextSession.notes ?? "");
@@ -841,8 +897,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
 
   useEffect(() => {
     if (!executionHydratedRef.current || !user?.id || !session?.id || !executionState) return;
-    const exercise = day.exercises[activeExerciseIndex];
-    const cursorItem = executionCursorItems.find((item) => item.sourcePlanExerciseId === exercise?.id)
+    const cursorItem = executionCursorItems[activeExerciseIndex]
       ?? executionCursorItems.find((item) => item.itemOrder === activeExerciseIndex + 1)
       ?? null;
     const itemOrder = cursorItem?.itemOrder ?? activeExerciseIndex + 1;
@@ -864,13 +919,13 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       {
         rollback: (currentServerState) => {
           if (!currentServerState) return;
-          const previousCursor = executionCursorToIndexes(currentServerState, executionCursorItems, day.exercises);
+          const previousCursor = executionCursorToIndexes(currentServerState, executionCursorItems);
           setActiveExerciseIndex(previousCursor.exerciseIndex);
           setActiveSetIndex(previousCursor.setIndex);
         }
       }
     );
-  }, [activeExerciseIndex, activeSetIndex, day.exercises, executionCursorItems, executionState, queueExecutionWrite, session?.id, user?.id]);
+  }, [activeExerciseIndex, activeSetIndex, executionCursorItems, executionState, queueExecutionWrite, session?.id, user?.id]);
 
   const activeExercise = exerciseStates[activeExerciseIndex];
   const activeSet = activeExercise?.sets[activeSetIndex];
@@ -909,7 +964,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   const workoutContext = {
     plan: day.plan,
     workout_day: { id: day.id, name: day.day_name, weekday: day.weekday, notes: day.notes },
-    planned_exercises: day.exercises,
+    planned_exercises: executionCursorItems.map((item) => ({ id: item.sourcePlanExerciseId ?? item.sourcePlanActivityId ?? item.id, name: item.activityName, item_order: item.itemOrder, normalization_status: item.normalizationStatus, prescription_sets: item.prescriptionSets })),
     active_exercise: activeExercise?.exercise ?? null,
     logged_sets: buildWorkoutContextLogRows(exerciseStates),
     session: session ? { id: session.id, duration_minutes: durationMinutes, notes: sessionNotes } : null,
@@ -946,13 +1001,12 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
             set.detailSourceVersion
           );
           return {
-            planExerciseId: item.exercise.id,
-            exerciseOrder: exerciseIndex + 1,
-            exerciseName: item.exercise.exercise_name,
+            planExerciseId: item.prescriptionItem.sourcePlanExerciseId,
+            planActivityId: item.prescriptionItem.sourcePlanActivityId,
+            exerciseOrder: item.prescriptionItem.itemOrder,
+            exerciseName: item.prescriptionItem.activityName,
             exerciseCategory: item.exercise.category || item.exercise.target_muscle || item.exercise.equipment || "Workout",
-            plannedSets: item.exercise.sets ?? item.sets.length,
-            plannedReps: item.exercise.reps,
-            plannedRestSeconds: item.exercise.rest_seconds,
+            ...frozenLogCompatibility(item.prescriptionItem, set.frozenPrescriptionSet),
             setNumber: set.setNumber,
             reps: toNumberOrNull(set.reps),
             weightKg: toNumberOrNull(set.weightKg),
@@ -1178,8 +1232,8 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
       setIndex,
       exerciseSetCounts: nextStates.map((item) => item.sets.length),
       orderedSnapshotItems: executionCursorItems,
-      dayExercises: day.exercises,
-      restDurationSeconds: exerciseStates[exerciseIndex]?.exercise.rest_seconds ?? timerSeconds,
+      dayExercises: nextStates.map((item) => item.exercise),
+      restDurationSeconds: targetSet.plannedRestSeconds ?? timerSeconds,
       controllerDeviceId: controllerDeviceIdRef.current,
       now: completedAt
     });
@@ -1225,7 +1279,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
         clearStoredValue(restTimerKey);
       }
       if (transition.nextExerciseIndex !== exerciseIndex && transition.patch.view_state !== "rest") {
-        setTimerSeconds(nextStates[transition.nextExerciseIndex]?.exercise.rest_seconds ?? 75);
+        setTimerSeconds(nextStates[transition.nextExerciseIndex]?.sets[transition.nextSetIndex]?.plannedRestSeconds ?? 75);
       }
       if (session?.id) {
         const authoritativeState = executionWriteQueueRef.current.current();
@@ -1301,8 +1355,7 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
   }
 
   function executionCursorFor(exerciseIndex: number, setIndex: number) {
-    const exercise = day.exercises[exerciseIndex];
-    const item = executionCursorItems.find((candidate) => candidate.sourcePlanExerciseId === exercise?.id)
+    const item = executionCursorItems[exerciseIndex]
       ?? executionCursorItems.find((candidate) => candidate.itemOrder === exerciseIndex + 1)
       ?? null;
     return {

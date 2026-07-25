@@ -226,3 +226,4 @@ Unresolved: 0
 `productionMigrationCount` remains the machine-derived number of exact `state = applied` entries. Generated Production identities use `applied_version_alias`, so the physical history count is intentionally reported separately. The migration preserved all protected row counts and hashes, introduced `private.aw3b_graph_revision(uuid)`, removed the superseded canonicalizer, retained safe RPC ACL/search-path contracts, and left Activity Catalog untouched.
 
 Do not replay, rename, edit, or replace any applied AW-3B migration.
+AW-3C pending migration `20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql` is committed for exact-head validation and one authorized Plaivra Production application only. It must not be replayed or applied to Activity Catalog.

@@ -159,7 +159,7 @@ it("rejects an invalid resolved local identity before calling the authority", as
     await getOrStartWorkoutSession(userId, externalWorkout({ sets: 4, reps: "8", rest_seconds: 120 }));
     expect(supabase.rpc).toHaveBeenCalledWith(
       "start_or_resume_direct_workout_session_atomic",
-      expect.objectContaining({ p_planned_prescription: { sets: 4, reps: "8", restSeconds: 120 } })
+      expect.objectContaining({ p_planned_prescription: { sets: 4, reps: "8", rest_seconds: 120 } })
     );
     expect(supabase.from).not.toHaveBeenCalled();
   });

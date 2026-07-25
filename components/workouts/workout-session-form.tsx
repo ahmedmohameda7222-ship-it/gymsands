@@ -15,7 +15,7 @@ import { clearStoredValue, readStoredTimestamp, storeTimestamp, workoutStorageKe
 import { activeWorkoutCacheFromExecution, clearActiveWorkoutState, isValidActiveWorkoutRoute, readActiveWorkoutState, writeActiveWorkoutState } from "@/lib/active-workout";
 import { getOrStartWorkoutSession } from "@/services/database/direct-workout-sessions";
 import { completeWorkoutSession, getWorkoutHistoryDetailed } from "@/services/database/workout-sessions";
-import type { Workout, WorkoutSession, WorkoutSessionExecutionState, WorkoutSessionSummary } from "@/types";
+import type { FrozenWorkoutPrescriptionSet, Workout, WorkoutSession, WorkoutSessionExecutionState, WorkoutSessionPrescriptionItem, WorkoutSessionSummary } from "@/types";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useSuccessFeedback } from "@/components/feedback/success-feedback";
 import { useTrainTranslation } from "@/lib/i18n/train";
@@ -31,11 +31,13 @@ import {
   persistWorkoutSessionTimerReset,
   requireWorkoutSessionExecutionState
 } from "@/services/database/workout-session-execution";
+import { frozenLogCompatibility, frozenRepetitionsEntryDefault } from "@/services/database/workout-session-prescriptions";
 
 type SetLog = {
   reps: number;
   weight: number;
   notes: string;
+  prescriptionSet: FrozenWorkoutPrescriptionSet | null;
 };
 
 function isLink(value: string | null | undefined) {
@@ -48,6 +50,16 @@ function formatTime(totalSeconds: number) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+function hydrateDirectPrescriptionSets(item: WorkoutSessionPrescriptionItem | null): SetLog[] {
+  const frozenSets = item?.prescriptionSets.length ? item.prescriptionSets : [null];
+  return frozenSets.map((frozenSet) => ({
+    reps: Number(frozenRepetitionsEntryDefault(frozenSet) || 0),
+    weight: 0,
+    notes: "",
+    prescriptionSet: frozenSet
+  }));
+}
+
 export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -58,17 +70,18 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [duration, setDuration] = useState(45);
   const [notes, setNotes] = useState("");
-  const [sets, setSets] = useState<SetLog[]>([{ reps: 10, weight: 0, notes: "" }]);
+  const [sets, setSets] = useState<SetLog[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [startedAtMs, setStartedAtMs] = useState(() => Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [timerSeconds, setTimerSeconds] = useState(workout.rest_seconds ?? 60);
+  const [timerSeconds, setTimerSeconds] = useState(60);
   const [timerLeft, setTimerLeft] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [timerEndsAtMs, setTimerEndsAtMs] = useState<number | null>(null);
   const [history, setHistory] = useState<WorkoutSessionSummary[]>([]);
   const [executionState, setExecutionState] = useState<WorkoutSessionExecutionState | null>(null);
+  const [prescriptionItem, setPrescriptionItem] = useState<WorkoutSessionPrescriptionItem | null>(null);
   const executionWriteRef = useRef<Promise<unknown>>(Promise.resolve());
   const executionHydratedRef = useRef(false);
   const controllerDeviceIdRef = useRef<string | null>(null);
@@ -169,7 +182,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
               storedStartedAt,
               controllerDeviceIdRef.current,
               new Date(),
-              { endsAtMs: storedRestEndsAt, durationSeconds: workout.rest_seconds ?? 60 }
+              { endsAtMs: storedRestEndsAt, durationSeconds: cursorItems[0]?.prescriptionSets[0]?.restSeconds ?? 60 }
             );
             authoritativeState = imported.state;
           } catch (error) {
@@ -196,6 +209,9 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
           ?? cursorItems.find((item) => item.itemOrder === authoritativeState.active_item_order)
           ?? cursorItems[0]
           ?? null;
+        setPrescriptionItem(cursorItem);
+        setSets(hydrateDirectPrescriptionSets(cursorItem));
+        setTimerSeconds(cursorItem?.prescriptionSets[0]?.restSeconds ?? 60);
         if (authoritativeState.controller_device_id !== controllerDeviceIdRef.current
             || authoritativeState.active_snapshot_item_id !== (cursorItem?.id ?? null)) {
           authoritativeState = await persistWorkoutSessionCursor(user.id, nextSession.id, {
@@ -299,13 +315,11 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
         notes,
         duration,
         sets.map((set, index) => ({
-          exerciseName: workout.name,
+          exerciseName: prescriptionItem?.activityName ?? workout.name,
           exerciseCategory: workout.category || workout.target_muscle,
-          exerciseOrder: 1,
-          plannedSets: workout.sets ?? sets.length,
-          plannedReps: workout.reps,
-          plannedRestSeconds: workout.rest_seconds,
-          setNumber: index + 1,
+          exerciseOrder: prescriptionItem?.itemOrder ?? 1,
+          ...(prescriptionItem ? frozenLogCompatibility(prescriptionItem, set.prescriptionSet) : { plannedSets: null, plannedReps: null, plannedRestSeconds: null, plannedTempo: null }),
+          setNumber: set.prescriptionSet?.setOrder ?? index + 1,
           reps: Number.isFinite(set.reps) ? set.reps : null,
           weightKg: Number.isFinite(set.weight) ? set.weight : null,
           notes: set.notes || null,
@@ -486,7 +500,7 @@ export function WorkoutSessionForm({ workout }: { workout: Workout }) {
               </div>
             </div>
           ))}
-          <Button className="w-full sm:w-auto" variant="outline" onClick={() => setSets((current) => [...current, { reps: 10, weight: 0, notes: "" }])}>
+          <Button className="w-full sm:w-auto" variant="outline" onClick={() => setSets((current) => [...current, { reps: 0, weight: 0, notes: "", prescriptionSet: null }])}>
             <Plus className="h-4 w-4" />
             {tr("addSet")}
           </Button>

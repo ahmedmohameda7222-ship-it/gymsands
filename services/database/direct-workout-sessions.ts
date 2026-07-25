@@ -33,7 +33,7 @@ function plannedPrescription(workout: Workout) {
   return {
     ...(workout.sets ? { sets: workout.sets } : {}),
     ...(workout.reps ? { reps: workout.reps } : {}),
-    ...(workout.rest_seconds ? { restSeconds: workout.rest_seconds } : {})
+    ...(workout.rest_seconds ? { rest_seconds: workout.rest_seconds } : {})
   };
 }
 

@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-24T23:28:12Z",
-  "auditedRepositoryCommit": "dbedfd201d5bbd5efb1988ccb92899e499197e51",
+  "capturedAt": "2026-07-25T05:38:39Z",
+  "auditedRepositoryCommit": "0420f5f1238f5beaafbf1b58fec81a4e810dc541",
   "productionMigrationCount": 63,
   "schemaVerifiedUntrackedCount": 0,
-  "pendingCount": 0,
-  "unresolvedCount": 0,
+  "pendingCount": 1,
+  "unresolvedCount": 1,
   "historyRepair": {
-    "state": "reconciled",
+    "state": "pending",
     "schemaAppliedUntrackedCount": 0,
-    "pendingCount": 0,
-    "unresolvedCount": 0,
-    "note": "Production history is reconciled through generated AW-3B record 20260724232734_active_workout_aw3b_post_apply_logic_corrections. Physical Production history contains 72 records; productionMigrationCount remains the validator-derived exact state=applied count and excludes generated-version aliases. The compatibility marker remains 20260722161542. Do not replay any applied migration."
+    "pendingCount": 1,
+    "unresolvedCount": 1,
+    "note": "Production remains reconciled through generated AW-3B record 20260724232734. Repository migration 20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql is pending exact-head validation and authorized Plaivra Production application. Do not replay any applied migration."
   },
   "entries": [
     {
@@ -448,7 +448,7 @@
       "note": "Applied exactly once to Plaivra Database through Supabase apply_migration. The generated production version 20260724002022 differs from immutable repository version 20260724013000; this alias preserves both identities without renaming or replaying the reviewed SQL. Durable repository evidence commit dc7d6597bc0aa1d2537a37f2a2e0188ee7f1dfe0; SHA-256 d5955f5eeccba56cd337385dc818efa9af8b979b7eea18b79d467d726a775d3e. Do not replay.",
       "productionVersion": "20260724002022",
       "productionName": "active_workout_aw3b_final_logic_hardening",
-      "evidenceCommit": "dbedfd201d5bbd5efb1988ccb92899e499197e51",
+      "evidenceCommit": "0420f5f1238f5beaafbf1b58fec81a4e810dc541",
       "repositorySha256": "d5955f5eeccba56cd337385dc818efa9af8b979b7eea18b79d467d726a775d3e",
       "repositoryGitBlob": "095d7bd4edbe87bc8fd296d1d3879b47499448b9"
     },
@@ -458,9 +458,14 @@
       "note": "Applied exactly once to Plaivra Database on 2026-07-24T23:27:34Z through Supabase apply_migration. The generated production version 20260724232734 differs from immutable repository version 20260724023000; this alias preserves both identities without renaming or replaying the reviewed SQL. Durable pre-application evidence commit dbedfd201d5bbd5efb1988ccb92899e499197e51; repository Git blob 84bfb4a22197f56300245f693f41f91a136814dd; repository and applied SQL SHA-256 1e41fa5670c6a3dbf4f889688a8457dd96efd26b7bcdb3623d97f9ff707d8de4. Do not replay.",
       "productionVersion": "20260724232734",
       "productionName": "active_workout_aw3b_post_apply_logic_corrections",
-      "evidenceCommit": "dbedfd201d5bbd5efb1988ccb92899e499197e51",
+      "evidenceCommit": "0420f5f1238f5beaafbf1b58fec81a4e810dc541",
       "repositorySha256": "1e41fa5670c6a3dbf4f889688a8457dd96efd26b7bcdb3623d97f9ff707d8de4",
       "repositoryGitBlob": "84bfb4a22197f56300245f693f41f91a136814dd"
+    },
+    {
+      "localFile": "20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql",
+      "state": "pending",
+      "note": "AW-3C immutable prescription snapshots is committed for exact-head pre-application validation and one authorized Plaivra Production application. It is unresolved and must not be replayed or applied to Activity Catalog. Do not replay."
     }
   ],
   "productionRecordCount": 72

@@ -81,7 +81,9 @@ test("Activity Catalog, other projects, generic hosts and localhost are rejected
 test("synthetic pending ledgers remain reviewable but cannot become release-ready", () => {
   const current = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
   const pending = structuredClone(current);
-  const resolvedTarget = deriveReleaseTarget(current).expectedMigration;
+  const currentTarget = deriveReleaseTarget(current);
+  const resolvedTarget = currentTarget.expectedMigration;
+  const expectedPendingCount = currentTarget.pendingCount + 1;
   const futureVersion = (BigInt(resolvedTarget) + 1n).toString().padStart(resolvedTarget.length, "0");
   pending.entries.push({
     productionVersion: null,
@@ -90,20 +92,20 @@ test("synthetic pending ledgers remain reviewable but cannot become release-read
     state: "pending",
     note: "Synthetic forward-only migration pending application.",
   });
-  pending.pendingCount = 1;
-  pending.unresolvedCount = 1;
+  pending.pendingCount = expectedPendingCount;
+  pending.unresolvedCount = expectedPendingCount;
   pending.historyRepair = {
     ...pending.historyRepair,
     state: "pending",
-    pendingCount: 1,
-    unresolvedCount: 1,
+    pendingCount: expectedPendingCount,
+    unresolvedCount: expectedPendingCount,
     note: "Synthetic pending ledger fixture.",
   };
 
   const target = deriveReleaseTarget(pending);
   assert.equal(target.expectedMigration, resolvedTarget);
   assert.equal(target.reconciliationState, "pending");
-  assert.equal(target.pendingCount, 1);
+  assert.equal(target.pendingCount, expectedPendingCount);
   assert.equal(target.releaseReady, false);
   assert.throws(() => deriveReleaseReadyTarget(pending), /not release-ready/);
 });

@@ -67,7 +67,7 @@ describe("authoritative direct workout sessions", () => {
       p_identity: "provider-activity-1",
       p_provider: "plaivra_activity_catalog",
       p_candidate_session_id: session.id,
-      p_planned_prescription: { sets: 3, reps: "8", restSeconds: 90 }
+      p_planned_prescription: { sets: 3, reps: "8", rest_seconds: 90 }
     }));
   });
 });

@@ -13,7 +13,7 @@ type QueryCall = {
   range?: [number, number];
 };
 
-function exportSupabaseMock(metricRowCount = 1, timelineRowCount = 1) {
+function exportSupabaseMock(metricRowCount = 1, timelineRowCount = 1, prescriptionSetRowCount = 1, prescriptionTargetRowCount = 1) {
   const calls: QueryCall[] = [];
   const from = vi.fn((table: string) => {
     const call: QueryCall = { table, filters: [], inFilters: [], orders: [] };
@@ -73,6 +73,21 @@ function exportSupabaseMock(metricRowCount = 1, timelineRowCount = 1) {
               payload: { schemaVersion: 1 },
               created_at: "2026-07-22T10:00:00.000Z"
             };
+          }),
+          error: null
+        };
+      }
+      if (table === "workout_session_prescription_sets" || table === "workout_session_prescription_metric_targets") {
+        const total = table === "workout_session_prescription_sets" ? prescriptionSetRowCount : prescriptionTargetRowCount;
+        const [start, requestedEnd] = call.range ?? [0, total - 1];
+        const end = Math.min(requestedEnd, total - 1);
+        const length = Math.max(0, end - start + 1);
+        return {
+          data: Array.from({ length }, (_, offset) => {
+            const index = start + offset;
+            return table === "workout_session_prescription_sets"
+              ? { id: `prescription-set-${index}`, workout_session_id: `session-${Math.floor(index / 2000)}`, snapshot_item_id: `item-${Math.floor(index / 10)}`, user_id: userA, set_order: index % 10 + 1 }
+              : { id: `prescription-target-${index}`, workout_session_id: `session-${Math.floor(index / 2000)}`, snapshot_item_id: `item-${Math.floor(index / 10)}`, prescription_set_id: `prescription-set-${Math.floor(index / 2)}`, user_id: userA, metric_key: "repetitions", metric_version: 1, side: "none" };
           }),
           error: null
         };
@@ -141,7 +156,7 @@ describe("current-user privacy export", () => {
     const directlyOwnedTables = [
       "onboarding_answers", "user_app_settings", "user_ai_permission_settings", "user_consents",
       "privacy_requests", "user_workout_plans", "workout_sessions", "workout_session_execution_states", "user_workout_sessions",
-      "workout_session_muscle_snapshots",
+      "workout_session_muscle_snapshots", "workout_session_prescription_sets", "workout_session_prescription_metric_targets",
       "user_custom_exercise_mapping_sets",
       "food_logs", "calorie_targets", "user_food_items", "user_meal_plan_items", "meals",
       "water_logs", "progress_entries", "body_measurements", "progress_photos", "personal_records",
@@ -271,6 +286,21 @@ describe("current-user privacy export", () => {
     expect(timelineCalls.every((call) =>
       call.orders.join(",") === "workout_session_id,sequence_number,id"
     )).toBe(true);
+  });
+
+
+  it("exports every immutable prescription row beyond 5000 in stable owner-scoped order", async () => {
+    const { client, calls } = exportSupabaseMock(1, 1, 5205, 5207);
+    const payload = await buildCurrentUserDataExport(client, { id: userA, email: "a@example.test", created_at: "2026-01-01T00:00:00.000Z" });
+    const workouts = payload.data.workouts as { prescription_sets: Array<{ id: string }>; prescription_metric_targets: Array<{ id: string }> };
+    expect(workouts.prescription_sets).toHaveLength(5205);
+    expect(workouts.prescription_metric_targets).toHaveLength(5207);
+    const setCalls = calls.filter((call) => call.table === "workout_session_prescription_sets");
+    const targetCalls = calls.filter((call) => call.table === "workout_session_prescription_metric_targets");
+    expect(setCalls.map((call) => call.range)).toEqual([[0,999],[1000,1999],[2000,2999],[3000,3999],[4000,4999],[5000,5999]]);
+    expect(targetCalls.map((call) => call.range)).toEqual([[0,999],[1000,1999],[2000,2999],[3000,3999],[4000,4999],[5000,5999]]);
+    expect(setCalls.every((call) => call.orders.join(",") === "workout_session_id,snapshot_item_id,set_order,id")).toBe(true);
+    expect(targetCalls.every((call) => call.orders.join(",") === "workout_session_id,snapshot_item_id,prescription_set_id,metric_key,metric_version,side,id")).toBe(true);
   });
 
 });
