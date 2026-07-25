@@ -1,16 +1,18 @@
 name: AW-3C Export Exact Migration
 
 on:
-  pull_request_target:
+  pull_request:
+    branches:
+      - main
     types:
-      - edited
+      - synchronize
 
 permissions:
   contents: read
 
 jobs:
   export:
-    if: github.event.pull_request.number == 86 && github.event.pull_request.head.sha == '96fe292d57b2d22a21f9cfa402615b0fff60cdfa'
+    if: github.event.pull_request.number == 86
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
