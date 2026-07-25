@@ -22,7 +22,7 @@ ledger.historyRepair = {
   state: "reconciled",
   pendingCount: 0,
   unresolvedCount: 0,
-  note: "AW-3B release-promotion fixture reconciled through 20260724002022. Do not replay any applied migration.",
+  note: `AW-3B release-promotion fixture reconciled through ${TARGET_MARKER}. Do not replay any applied migration.`,
 };
 
 function successfulPreflight(overrides = {}) {
@@ -123,7 +123,7 @@ test("rejects wrong current and target markers", () => {
 test("rejects a target that is not the reconciled ledger head", () => {
   const driftedLedger = structuredClone(ledger);
   driftedLedger.entries = driftedLedger.entries.filter((entry) => entry.productionVersion !== TARGET_MARKER);
-  driftedLedger.productionMigrationCount -= 1;
+  driftedLedger.productionMigrationCount = driftedLedger.entries.filter((entry) => entry.state === "applied").length;
   assert.throws(() => validatePromotionRequest({
     ...validRequest(),
     ledger: driftedLedger,
