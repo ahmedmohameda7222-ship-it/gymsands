@@ -1,0 +1,33 @@
+name: AW-3C Export Exact Migration
+
+on:
+  pull_request_target:
+    types:
+      - edited
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    if: github.event.pull_request.number == 86 && github.event.pull_request.head.sha == '96fe292d57b2d22a21f9cfa402615b0fff60cdfa'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 96fe292d57b2d22a21f9cfa402615b0fff60cdfa
+      - name: Record immutable migration identity
+        run: |
+          set -euo pipefail
+          sha256sum supabase/migrations/20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql | tee aw3c-migration.sha256
+          git hash-object supabase/migrations/20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql | tee aw3c-migration.git-blob
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aw3c-exact-migration-96fe292d
+          path: |
+            supabase/migrations/20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql
+            aw3c-migration.sha256
+            aw3c-migration.git-blob
+          if-no-files-found: error
+          retention-days: 7
