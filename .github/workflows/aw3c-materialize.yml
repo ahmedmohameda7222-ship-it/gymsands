@@ -103,20 +103,34 @@ jobs:
           } >> "$GITHUB_ENV"
           node scripts/quality-ledger-target.mjs >> "$GITHUB_ENV"
 
-      - name: Repository, type, and focused contracts
+      - name: Repository and ledger contracts
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
           node scripts/check-migration-ledger.mjs
           node --test scripts/check-migration-ledger.test.mjs
-          npm run typecheck
-          npm run lint
-          npm run test:active-workout:aw3c
-          npm run test:scripts
-          npm run test:i18n
-          npm run test:telemetry
-          npm audit --omit=dev --audit-level=moderate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: AW-3C focused tests
+        run: npm run test:active-workout:aw3c
+
+      - name: Script tests
+        run: npm run test:scripts
+
+      - name: I18n tests
+        run: npm run test:i18n
+
+      - name: Telemetry tests
+        run: npm run test:telemetry
+
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=moderate
 
       - name: Full chronological database replay and verification
         shell: bash
