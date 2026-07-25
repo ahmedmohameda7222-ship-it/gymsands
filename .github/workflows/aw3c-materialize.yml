@@ -73,6 +73,13 @@ jobs:
           gzip -dc /tmp/aw3c-incremental.patch.gz > /tmp/aw3c-incremental.patch
           git apply --check /tmp/aw3c-incremental.patch
           git apply /tmp/aw3c-incremental.patch
+
+          test "$(sha256sum .aw3c-transport/testfix.patch.gz.b64 | cut -d' ' -f1)" = "ae0b74f1342536b209d2ebdaf505dd55b13dc5212b3a142ac15595a269951581"
+          base64 -d .aw3c-transport/testfix.patch.gz.b64 > /tmp/aw3c-testfix.patch.gz
+          test "$(sha256sum /tmp/aw3c-testfix.patch.gz | cut -d' ' -f1)" = "4078b696a930c821807bf8ec2c07651ea19dc5d3af1a9772b1c4916cea84d9f7"
+          gzip -dc /tmp/aw3c-testfix.patch.gz > /tmp/aw3c-testfix.patch
+          git apply --check /tmp/aw3c-testfix.patch
+          git apply /tmp/aw3c-testfix.patch
           sha256sum -c .aw3c-transport/final.sha256
           git diff --check
 
