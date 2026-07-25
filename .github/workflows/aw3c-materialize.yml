@@ -68,7 +68,7 @@ jobs:
           PY
           git diff --check
 
-      - name: Commit the permanent AW-3C implementation tree
+      - name: Prepare permanent tree index
         shell: bash
         run: |
           set -euo pipefail
@@ -76,7 +76,18 @@ jobs:
           ! grep -qx '__PLACEHOLDER__' supabase/migrations/20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql
           git add -A
           git diff --cached --check
+          git status --short
+
+      - name: Create permanent-tree commit
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'feat(workouts): materialize AW-3C immutable prescription snapshots'
+
+      - name: Push permanent-tree commit
+        shell: bash
+        run: |
+          set -euo pipefail
           git push origin HEAD:feat/active-workout-aw3c-prescription-snapshots
