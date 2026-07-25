@@ -8,6 +8,7 @@ Base: 91ab36077d5528ee1d967ed7def2ba8d2164a6a2
 Branch: feat/active-workout-aw3b-structured-set-details
 Draft PR: #85
 Pre-application approved head: dbedfd201d5bbd5efb1988ccb92899e499197e51
+Post-reconciliation validated head: 4a4aa721c6d4e1ef72721d59d2264e39e423f81b
 ```
 
 AW-3B remains inside the structured-set-details unit. AW-3C and all later Active Workout units were not started.
@@ -22,6 +23,8 @@ The rendered autosave defect had two independent causes and both received long-t
 2. React Strict Mode effect replay cancelled the autosave coordinator while leaving a cancelled object in its ref. Lifecycle ownership now creates one coordinator per mount, cancels only that instance, clears the ref only when it still owns it, and recreates a live coordinator on remount. A mount-cleanup-remount regression test proves the replacement coordinator persists pending writes.
 
 Invalid draft RPE/RIR remains non-throwing for context construction, while actual persistence retains strict validation.
+
+The post-Production release checks were also made future-safe: compatibility-promotion validation derives the latest reconciled Production migration from the ledger rather than pinning an older AW-3B identity, and pending-ledger behavior is tested with a synthetic pending fixture rather than assuming the live repository ledger remains pending forever. No compatibility-marker promotion was executed.
 
 ## Immutable migrations
 
@@ -88,12 +91,22 @@ No new AW-3B table/index/RLS regression was reported. Security advisor warnings 
 
 The ledger is reconciled with `pendingCount = 0`, `unresolvedCount = 0`, and `schemaAppliedUntrackedCount = 0`. `productionMigrationCount` continues to mean entries whose state is exactly `applied`; generated Production versions are represented as `applied_version_alias`. The physical Production history count is recorded separately as 72.
 
+## Post-reconciliation exact-head evidence
+
+All required workflows passed on `4a4aa721c6d4e1ef72721d59d2264e39e423f81b`:
+
+```text
+Phase A Diff Validation: 30136218726 — success
+Quality: 30136218691 — success
+Exact Release Quality Validation: 30136218739 — success
+```
+
+This cycle validated the reconciled ledger, complete migration chain, post-apply SQL surface, release scripts, dependency state, lint, typecheck, unit and integration suites, production build, release metadata, EN/DE/AR rendered browser QA, canonical Quality artifact, and Stage-1 read-only release-preflight evidence. It performed no deployment, compatibility promotion, merge, or additional Production mutation.
+
 ## Boundary
 
 PR #85 remains Draft and unmerged. The compatibility marker was not promoted. No deployment occurred. AW-3C was not started.
 
-## Final validation
+## Final recommendation
 
-Final post-reconciliation Phase A, Quality, and Exact Release Quality run identities are recorded after the final exact head completes.
-
-NOT READY FOR INDEPENDENT PLANNER QA/QC — FINAL EXACT-HEAD VALIDATION PENDING
+READY FOR INDEPENDENT PLANNER QA/QC
