@@ -117,8 +117,38 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: AW-3C focused tests
-        run: npm run test:active-workout:aw3c
+      - name: Prescription projection tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm exec vitest run -- --config vitest.unit.config.mjs services/database/workout-session-prescriptions.test.ts 2>&1 | tee /tmp/aw3c-focused.log
+
+      - name: Export pagination tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm exec vitest run -- --config vitest.unit.config.mjs lib/privacy/data-export.test.ts 2>&1 | tee -a /tmp/aw3c-focused.log
+
+      - name: Migration source-contract tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm exec vitest run -- --config vitest.unit.config.mjs lib/product/active-workout-aw3c-migration.test.ts 2>&1 | tee -a /tmp/aw3c-focused.log
+
+      - name: Prescription database integration tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm exec vitest run -- --config vitest.integration.config.mjs services/database/workout-session-prescriptions.integration.test.ts 2>&1 | tee -a /tmp/aw3c-focused.log
+
+      - name: Upload focused-test failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aw3c-focused-failure-${{ github.run_id }}
+          path: /tmp/aw3c-focused.log
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Script tests
         run: npm run test:scripts
