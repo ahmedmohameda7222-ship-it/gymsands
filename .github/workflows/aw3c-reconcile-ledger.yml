@@ -1,0 +1,75 @@
+name: AW-3C Reconcile Migration Ledger
+
+on:
+  pull_request_target:
+    types:
+      - edited
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: github.event.pull_request.number == 86 && github.event.pull_request.head.ref == 'feat/active-workout-aw3c-prescription-snapshots'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-aw3c-prescription-snapshots
+          fetch-depth: 0
+      - name: Reconcile AW-3C Production identity
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('supabase/migration-ledger.json')
+          ledger = json.loads(path.read_text(encoding='utf-8'))
+          audited = '96fe292d57b2d22a21f9cfa402615b0fff60cdfa'
+          target_file = '20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql'
+          target = next((entry for entry in ledger['entries'] if entry.get('localFile') == target_file), None)
+          if target is None:
+              raise SystemExit('AW-3C ledger entry is missing.')
+          if target.get('state') not in {'pending', 'applied_version_alias'}:
+              raise SystemExit(f"Unexpected AW-3C state: {target.get('state')}")
+
+          ledger['capturedAt'] = '2026-07-25T13:04:22Z'
+          ledger['auditedRepositoryCommit'] = audited
+          ledger['productionMigrationCount'] = 63
+          ledger['schemaVerifiedUntrackedCount'] = 0
+          ledger['pendingCount'] = 0
+          ledger['unresolvedCount'] = 0
+          ledger['productionRecordCount'] = 73
+          ledger['historyRepair'] = {
+              'state': 'reconciled',
+              'schemaAppliedUntrackedCount': 0,
+              'pendingCount': 0,
+              'unresolvedCount': 0,
+              'note': 'Plaivra Production contains 73 physical migration records and is reconciled through generated AW-3C record 20260725130422. Repository migration identities remain immutable; generated aliases preserve exact application history. Do not replay any applied migration.'
+          }
+
+          for entry in ledger['entries']:
+              if entry.get('evidenceCommit'):
+                  entry['evidenceCommit'] = audited
+
+          target.update({
+              'state': 'applied_version_alias',
+              'productionVersion': '20260725130422',
+              'productionName': 'active_workout_aw3c_immutable_prescription_snapshots',
+              'evidenceCommit': audited,
+              'repositorySha256': 'c7ee67e8184d4cf1afe6e7ce9c6ec4de90c5fd36bc9d31006b55e53f62b94031',
+              'repositoryGitBlob': '35af298e904a4cdfdd336a033a91dfc63f827479',
+              'note': 'Applied exactly once to Plaivra Production on 2026-07-25T13:04:22Z through Supabase apply_migration. The generated production version 20260725130422 differs from immutable repository version 20260725013000; this alias preserves both identities without renaming or replaying the reviewed SQL. Durable pre-application evidence commit 96fe292d57b2d22a21f9cfa402615b0fff60cdfa; repository Git blob 35af298e904a4cdfdd336a033a91dfc63f827479; repository and applied SQL SHA-256 c7ee67e8184d4cf1afe6e7ce9c6ec4de90c5fd36bc9d31006b55e53f62b94031. Do not replay.'
+          })
+
+          path.write_text(json.dumps(ledger, indent=2) + '\n', encoding='utf-8')
+          PY
+          node scripts/check-migration-ledger.mjs
+          git diff --check
+          git add supabase/migration-ledger.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore(db): reconcile AW-3C Production migration identity'
+          git push origin HEAD:feat/active-workout-aw3c-prescription-snapshots
