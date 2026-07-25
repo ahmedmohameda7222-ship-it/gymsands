@@ -73,8 +73,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf .aw3c-transport .aw3c-bundle
-          rm -f .github/workflows/aw3c-materialize.yml
-          test "$(cat supabase/migrations/20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql)" != "__PLACEHOLDER__"
+          ! grep -qx '__PLACEHOLDER__' supabase/migrations/20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql
           git add -A
           git diff --cached --check
           git config user.name 'github-actions[bot]'
