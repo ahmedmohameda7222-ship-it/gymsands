@@ -29,11 +29,15 @@ export function getStableWorkoutIdentity(workout: Workout): StableWorkoutIdentit
   return { targetType: "global_exercise", identity: workout.id, provider: null };
 }
 
-function plannedPrescription(workout: Workout) {
+export function plannedPrescriptionForDirectWorkout(workout: Workout) {
   return {
     ...(workout.sets ? { sets: workout.sets } : {}),
-    ...(workout.reps ? { reps: workout.reps } : {}),
-    ...(workout.rest_seconds ? { rest_seconds: workout.rest_seconds } : {})
+    ...(workout.reps !== null && workout.reps !== undefined && workout.reps !== ""
+      ? { reps: workout.reps }
+      : {}),
+    ...(workout.rest_seconds !== null && workout.rest_seconds !== undefined
+      ? { rest_seconds: workout.rest_seconds }
+      : {})
   };
 }
 
@@ -53,7 +57,7 @@ export async function getOrStartWorkoutSession(
     p_provider: stable.provider,
     p_display_name: workout.name,
     p_category: workout.category || workout.target_muscle || "Workout",
-    p_planned_prescription: plannedPrescription(workout),
+    p_planned_prescription: plannedPrescriptionForDirectWorkout(workout),
     p_candidate_session_id: candidateSessionId && isUuid(candidateSessionId) ? candidateSessionId : null
   });
   if (error) {

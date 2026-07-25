@@ -5,6 +5,10 @@ const migration = readFileSync(
   "supabase/migrations/20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql",
   "utf8"
 );
+const auditCorrection = readFileSync(
+  "supabase/migrations/20260725163000_active_workout_aw3c_audit_corrections.sql",
+  "utf8"
+);
 
 describe("AW-3C immutable prescription migration", () => {
   it("creates the exact normalized child graph and composite ownership path", () => {
@@ -43,5 +47,16 @@ describe("AW-3C immutable prescription migration", () => {
     expect(migration).toContain("grant select on table public.workout_session_prescription_sets to authenticated, service_role");
     expect(migration).toContain("revoke all on function private.materialize_workout_session_prescription_item(uuid)");
     expect(migration).not.toMatch(/grant\s+(insert|update|delete|all)[^;]*workout_session_prescription_/i);
+  });
+
+  it("makes multi-target retries canonical without editing the immutable base migration", () => {
+    expect(auditCorrection).toContain("private.canonicalize_workout_session_prescription_graph");
+    expect(auditCorrection).toContain("canonicalize_workout_session_prescription_graph(v_existing)");
+    expect(auditCorrection).toContain("canonicalize_workout_session_prescription_graph(v_expected)");
+    expect(auditCorrection).toContain("set_order must be contiguous");
+    expect(auditCorrection).toContain("AW-3C audit correction changed immutable prescription data");
+    expect(auditCorrection).toContain("revoke all on function private.canonicalize_workout_session_prescription_graph(jsonb)");
+    expect(auditCorrection).not.toMatch(/update\s+public\.workout_session_prescription_(sets|metric_targets)/i);
+    expect(auditCorrection).not.toMatch(/delete\s+from\s+public\.workout_session_prescription_(sets|metric_targets)/i);
   });
 });

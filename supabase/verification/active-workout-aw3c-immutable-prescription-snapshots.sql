@@ -11,6 +11,9 @@ begin
   if to_regprocedure('private.materialize_workout_session_prescription_item(uuid)') is null then
     raise exception 'AW-3C authoritative materializer is missing.';
   end if;
+  if to_regprocedure('private.canonicalize_workout_session_prescription_graph(jsonb)') is null then
+    raise exception 'AW-3C canonical graph comparator is missing.';
+  end if;
   if not exists (
     select 1 from pg_trigger trigger
     where trigger.tgrelid = 'public.workout_session_muscle_snapshot_items'::regclass
@@ -38,8 +41,10 @@ begin
   end if;
 
   if has_function_privilege('authenticated','private.materialize_workout_session_prescription_item(uuid)','EXECUTE')
-     or has_function_privilege('anon','private.materialize_workout_session_prescription_item(uuid)','EXECUTE') then
-    raise exception 'AW-3C private materializer is externally executable.';
+     or has_function_privilege('anon','private.materialize_workout_session_prescription_item(uuid)','EXECUTE')
+     or has_function_privilege('authenticated','private.canonicalize_workout_session_prescription_graph(jsonb)','EXECUTE')
+     or has_function_privilege('anon','private.canonicalize_workout_session_prescription_graph(jsonb)','EXECUTE') then
+    raise exception 'AW-3C private authority is externally executable.';
   end if;
 end
 $$;
@@ -79,6 +84,50 @@ begin
     from public.workout_session_prescription_metric_targets
     group by prescription_set_id,metric_key,metric_version,side having count(*) > 1
   ) then raise exception 'AW-3C duplicate immutable identity exists.'; end if;
+
+  if exists (
+    select 1
+    from (
+      select snapshot_item_id, count(*)::integer as set_count,
+             min(set_order)::integer as min_order,
+             max(set_order)::integer as max_order,
+             count(distinct set_order)::integer as distinct_orders
+      from public.workout_session_prescription_sets
+      group by snapshot_item_id
+    ) item_sets
+    where min_order <> 1
+       or max_order <> set_count
+       or distinct_orders <> set_count
+  ) then raise exception 'AW-3C set_order values are not contiguous.'; end if;
+end
+$$;
+
+do $$
+declare
+  v_left jsonb;
+  v_right jsonb;
+  v_definition text;
+begin
+  v_left := '[{"set_order":1,"targets":[{"metric_key":"repetitions","metric_version":1,"side":"none"},{"metric_key":"external_load_kg","metric_version":1,"side":"none"}]}]'::jsonb;
+  v_right := '[{"set_order":1,"targets":[{"metric_key":"external_load_kg","metric_version":1,"side":"none"},{"metric_key":"repetitions","metric_version":1,"side":"none"}]}]'::jsonb;
+
+  if private.canonicalize_workout_session_prescription_graph(v_left)
+       <> private.canonicalize_workout_session_prescription_graph(v_right) then
+    raise exception 'AW-3C graph comparison remains target-order sensitive.';
+  end if;
+
+  select pg_get_functiondef(
+    'private.materialize_workout_session_prescription_item(uuid)'::regprocedure
+  ) into strict v_definition;
+  if v_definition not like '%private.canonicalize_workout_session_prescription_graph(v_existing)%'
+     or v_definition not like '%private.canonicalize_workout_session_prescription_graph(v_expected)%' then
+    raise exception 'AW-3C materializer is not using canonical graph comparison.';
+  end if;
+  if pg_get_functiondef(
+       'private.enforce_workout_session_prescription_set_immutability()'::regprocedure
+     ) not like '%set_order must be contiguous%' then
+    raise exception 'AW-3C contiguous set_order guard is missing.';
+  end if;
 end
 $$;
 
