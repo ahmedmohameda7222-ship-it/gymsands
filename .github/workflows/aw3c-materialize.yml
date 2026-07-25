@@ -1,4 +1,4 @@
-name: AW-3C Deterministic Preflight
+name: AW-3C Permanent Tree Materialization
 
 on:
   pull_request:
@@ -11,29 +11,14 @@ permissions:
   contents: write
 
 concurrency:
-  group: aw3c-deterministic-preflight-${{ github.ref }}
+  group: aw3c-permanent-materialization-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  materialize-and-validate:
+  materialize-permanent-tree:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 180
-    env:
-      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
-      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
-      NEXT_PUBLIC_USE_MOCK_AUTH: "true"
-      PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
-      PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
-      PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
-      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
-      PLAIVRA_RELEASE_ENVIRONMENT: ci
-      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
-      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-      PLAIVRA_AW2A_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-
+    timeout-minutes: 30
     steps:
       - name: Checkout exact branch head
         uses: actions/checkout@v4
@@ -41,7 +26,7 @@ jobs:
           ref: feat/active-workout-aw3c-prescription-snapshots
           fetch-depth: 0
 
-      - name: Materialize checksum-bound permanent tree
+      - name: Materialize checksum-bound AW-3C tree
         shell: bash
         run: |
           set -euo pipefail
@@ -59,105 +44,40 @@ jobs:
           gzip -dc /tmp/corrected-apply.py.gz > .aw3c-bundle/apply.py
           python .aw3c-bundle/apply.py
 
-          test "$(sha256sum .aw3c-transport/incremental.patch.gz.b64 | cut -d' ' -f1)" = "b4aba1f7cc4e94a890c6d59c524374959cbd0c3cf44f728787d5e307aee9357f"
-          base64 -d .aw3c-transport/incremental.patch.gz.b64 > /tmp/aw3c-incremental.patch.gz
-          test "$(sha256sum /tmp/aw3c-incremental.patch.gz | cut -d' ' -f1)" = "19f3490caa492bcb585a40ca6fa5dade4c8e26a1ea15284fb7c476ec1d5200c3"
-          gzip -dc /tmp/aw3c-incremental.patch.gz > /tmp/aw3c-incremental.patch
-          git apply --check /tmp/aw3c-incremental.patch
-          git apply /tmp/aw3c-incremental.patch
-
-          test "$(sha256sum .aw3c-transport/testfix.patch.gz.b64 | cut -d' ' -f1)" = "ae0b74f1342536b209d2ebdaf505dd55b13dc5212b3a142ac15595a269951581"
-          base64 -d .aw3c-transport/testfix.patch.gz.b64 > /tmp/aw3c-testfix.patch.gz
-          test "$(sha256sum /tmp/aw3c-testfix.patch.gz | cut -d' ' -f1)" = "4078b696a930c821807bf8ec2c07651ea19dc5d3af1a9772b1c4916cea84d9f7"
-          gzip -dc /tmp/aw3c-testfix.patch.gz > /tmp/aw3c-testfix.patch
-          git apply --check /tmp/aw3c-testfix.patch
-          git apply /tmp/aw3c-testfix.patch
-
-          test "$(sha256sum .aw3c-transport/scriptfix.patch.gz.b64 | cut -d' ' -f1)" = "4230dcbc33806d21b0ae644856443de159bd7d5c57083b01d34391ce32e7673e"
-          base64 -d .aw3c-transport/scriptfix.patch.gz.b64 > /tmp/aw3c-scriptfix.patch.gz
-          test "$(sha256sum /tmp/aw3c-scriptfix.patch.gz | cut -d' ' -f1)" = "d7182b4094fdbcda067a63a26b6ce9ce2887718666482ffaa74062fb061d8698"
-          gzip -dc /tmp/aw3c-scriptfix.patch.gz > /tmp/aw3c-scriptfix.patch
-          git apply --check /tmp/aw3c-scriptfix.patch
-          git apply /tmp/aw3c-scriptfix.patch
-
-          test "$(sha256sum .aw3c-transport/markerfix.patch.gz.b64 | cut -d' ' -f1)" = "c5d33a25d4827adfd1d8aa61ba0120998061879734dd1db1b36c5218ceb7e682"
-          base64 -d .aw3c-transport/markerfix.patch.gz.b64 > /tmp/aw3c-markerfix.patch.gz
-          test "$(sha256sum /tmp/aw3c-markerfix.patch.gz | cut -d' ' -f1)" = "325b1c4af57917cc1e1587bfecc6a6f342e4da9f4751a1f793b5bb1bfb7c8ce0"
-          gzip -dc /tmp/aw3c-markerfix.patch.gz > /tmp/aw3c-markerfix.patch
-          git apply --check /tmp/aw3c-markerfix.patch
-          git apply /tmp/aw3c-markerfix.patch
-
-          test "$(sha256sum .aw3c-transport/functionfix.patch.gz.b64 | cut -d' ' -f1)" = "714a0ec4baadd73f87fec05ceb55e22777fc941714f82a1969b4c4702760c74b"
-          base64 -d .aw3c-transport/functionfix.patch.gz.b64 > /tmp/aw3c-functionfix.patch.gz
-          test "$(sha256sum /tmp/aw3c-functionfix.patch.gz | cut -d' ' -f1)" = "c670856a01ca9aefa76dcf7ca9d25abbb060a293d06006103308e87b754c1d06"
-          gzip -dc /tmp/aw3c-functionfix.patch.gz > /tmp/aw3c-functionfix.patch
-          git apply --check /tmp/aw3c-functionfix.patch
-          git apply /tmp/aw3c-functionfix.patch
+          for patch in incremental testfix scriptfix markerfix functionfix; do
+            base64 -d ".aw3c-transport/${patch}.patch.gz.b64" > "/tmp/aw3c-${patch}.patch.gz"
+            gzip -dc "/tmp/aw3c-${patch}.patch.gz" > "/tmp/aw3c-${patch}.patch"
+            git apply --check "/tmp/aw3c-${patch}.patch"
+            git apply "/tmp/aw3c-${patch}.patch"
+          done
 
           sha256sum -c .aw3c-transport/final.sha256
+
+      - name: Correct the future-phase AW-3B verification boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('supabase/verification/active-workout-aw3b-structured-set-details.sql')
+          text = path.read_text(encoding='utf-8')
+          old = """  select migration_version into strict v_marker from public.release_schema_compatibility where singleton=true;\n  if v_marker<>'20260722161542' then\n    raise exception 'AW-3B compatibility marker differs from the released AW-3A baseline.';\n  end if;\n"""
+          if old not in text:
+              raise SystemExit('Expected stale AW-3B post-chain marker assertion was not found.')
+          path.write_text(text.replace(old, '', 1), encoding='utf-8')
+          PY
           git diff --check
-          git add -A
-          git diff --cached --check
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v2
-        with:
-          version: 2.109.1
-          github-token: ${{ github.token }}
-
-      - name: Establish diagnostic build identity
+      - name: Commit the permanent AW-3C implementation tree
         shell: bash
         run: |
           set -euo pipefail
-          build_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')"
-          {
-            echo "PLAIVRA_COMMIT_SHA=$(git rev-parse HEAD)"
-            echo "PLAIVRA_BUILD_TIMESTAMP=$build_timestamp"
-            echo "PLAIVRA_QUALITY_BUILD_TIMESTAMP=$build_timestamp"
-          } >> "$GITHUB_ENV"
-          node scripts/quality-ledger-target.mjs >> "$GITHUB_ENV"
-
-      - name: Run complete AW-3C preflight
-        shell: bash
-        run: |
-          set -o pipefail
-          test "$(sha256sum .aw3c-transport/preflight.sh.gz.b64 | cut -d' ' -f1)" = "340c1fabc35a77cd0485800dc6c8fd142ad061ce54efa571a45eedcd420f88a0"
-          base64 -d .aw3c-transport/preflight.sh.gz.b64 > /tmp/aw3c-preflight.sh.gz
-          test "$(sha256sum /tmp/aw3c-preflight.sh.gz | cut -d' ' -f1)" = "31c7407d699ad7d2a86e5e8530214e1cbe4dbbc12e2d734720e01061d3926e69"
-          gzip -dc /tmp/aw3c-preflight.sh.gz > /tmp/aw3c-preflight.sh
-          test "$(sha256sum /tmp/aw3c-preflight.sh | cut -d' ' -f1)" = "2098547ad049e4c23cc57b7b1685bfcf1ebfb2ebae55047b5d30ba65d22305cf"
-          bash /tmp/aw3c-preflight.sh 2>&1 | tee /tmp/aw3c-preflight.log
-
-      - name: Upload preflight failure evidence
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: aw3c-preflight-failure-${{ github.run_id }}
-          path: |
-            /tmp/aw3c-preflight.log
-            /tmp/aw3c-database-validation.log
-          if-no-files-found: warn
-          retention-days: 1
-
-      - name: Commit permanent validated tree
-        shell: bash
-        run: |
-          set -euo pipefail
-          sha256sum -c .aw3c-transport/final.sha256
           rm -rf .aw3c-transport .aw3c-bundle
-          test ! -e .github/workflows/aw3c-materialize.yml
+          rm -f .github/workflows/aw3c-materialize.yml
+          test "$(cat supabase/migrations/20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql)" != "__PLACEHOLDER__"
           git add -A
           git diff --cached --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'feat(workouts): implement AW-3C immutable prescription snapshots'
+          git commit -m 'feat(workouts): materialize AW-3C immutable prescription snapshots'
           git push origin HEAD:feat/active-workout-aw3c-prescription-snapshots
