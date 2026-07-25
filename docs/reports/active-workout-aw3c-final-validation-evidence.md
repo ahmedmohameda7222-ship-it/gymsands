@@ -2,13 +2,14 @@
 
 ## State
 
-FINAL EXACT-HEAD VALIDATION IN PROGRESS
+READY FOR INDEPENDENT PLANNER QA/QC
 
 ## Reconciled implementation
 
 - Draft PR: `#86`
 - PR base: `main`
-- Post-reconciliation parent head: `db8704fef79f572c31d62a12a81d2d480715e30b`
+- Post-reconciliation implementation head: `db8704fef79f572c31d62a12a81d2d480715e30b`
+- Final implementation-report parent: `f460c48d37d126e9254fd3d39ccbdbd9b7000574`
 - Exact pre-application evidence commit: `96fe292d57b2d22a21f9cfa402615b0fff60cdfa`
 - Production migration: `20260725130422_active_workout_aw3c_immutable_prescription_snapshots`
 - Repository migration Git blob: `35af298e904a4cdfdd336a033a91dfc63f827479`
@@ -30,12 +31,18 @@ FINAL EXACT-HEAD VALIDATION IN PROGRESS
 - Private materializer executable by authenticated: no
 - Activity Catalog AW-3C relations/functions: `0 / 0`
 
-## Final gate
+## Successful reconciled-head gate
 
-This commit launches the normal final exact-head:
+Validated head: `32e9e2fa122cb9b9b4525027b4c783bb90680b08`
 
-- Phase A Diff Validation
-- Quality
-- Exact Release Quality Validation
+- Phase A Diff Validation: run `30159698914`
+- Quality: run `30159698916`, job `89683646037`
+- Exact Release Quality Validation: run `30159698917`, job `89682894806`
 
-PR `#86` remains Draft and unmerged. The compatibility marker remains unchanged. AW-4 has not started.
+Quality passed every database, ledger, lint, typecheck, unit, integration, script, i18n, telemetry, build, release-metadata, and rendered-browser gate. Exact Release independently verified canonical Quality evidence and completed read-only Stage-1 release preflight.
+
+## Final-head boundary
+
+This report-only closure commit must retain the same implementation and Production identities and pass the normal exact-head Phase A, Quality, and Exact Release workflows. PR `#86` remains Draft and unmerged. The compatibility marker remains unchanged. AW-4 has not started.
+
+READY FOR INDEPENDENT PLANNER QA/QC
