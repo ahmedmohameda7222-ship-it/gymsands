@@ -565,7 +565,7 @@ select set_config(
     'plaivra_aw3b_verification',
     'AW-3B Session Limit',
     'Verification',
-    '{"sets":500}'::jsonb,
+    '{"sets":100}'::jsonb,
     null
   )->'session'->>'id',
   true
