@@ -1,4 +1,4 @@
-name: AW-3C Deterministic Preflight
+name: AW-3C Script Diagnostic
 
 on:
   pull_request:
@@ -8,32 +8,17 @@ on:
       - synchronize
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: aw3c-deterministic-preflight-${{ github.ref }}
+  group: aw3c-script-diagnostic-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  materialize-and-validate:
+  diagnose:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 180
-    env:
-      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-public-key-long-enough
-      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key-long-enough
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
-      NEXT_PUBLIC_USE_MOCK_AUTH: "true"
-      PLAIVRA_MCP_BASE_URL: http://localhost:3000/api/mcp
-      PLAIVRA_MCP_TOKEN_SECRET: ci-placeholder-token-secret-that-is-long-enough
-      PLAIVRA_CHATGPT_REDIRECT_URIS: https://chatgpt.com/connector_platform_oauth_redirect
-      PLAIVRA_CIMD_ALLOWED_ORIGINS: https://chatgpt.com
-      PLAIVRA_RELEASE_ENVIRONMENT: ci
-      PLAIVRA_SCHEMA_COMPATIBILITY_VERSION: "2"
-      PLAIVRA_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-      PLAIVRA_AW2A_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-
+    timeout-minutes: 30
     steps:
       - name: Checkout exact branch head
         uses: actions/checkout@v4
@@ -45,40 +30,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat \
-            .aw3c-transport/part00 \
-            .aw3c-transport/part01 \
-            .aw3c-transport/part02 \
-            .aw3c-transport/part03 \
-            .aw3c-transport/part04 \
-            .aw3c-transport/part05 \
-            .aw3c-transport/part06 \
-            .aw3c-transport/part07 > /tmp/aw3c-old.b64
+          cat .aw3c-transport/part00 .aw3c-transport/part01 .aw3c-transport/part02 .aw3c-transport/part03 .aw3c-transport/part04 .aw3c-transport/part05 .aw3c-transport/part06 .aw3c-transport/part07 > /tmp/aw3c-old.b64
           test "$(sha256sum /tmp/aw3c-old.b64 | cut -d' ' -f1)" = "af65dfa4f9f658782f7215eb9961767e2e15e760cbb0e390b5890aa5b787dbe8"
           base64 -d /tmp/aw3c-old.b64 > /tmp/aw3c-old.tar.gz
           test "$(sha256sum /tmp/aw3c-old.tar.gz | cut -d' ' -f1)" = "646fe5036900afd0de3bf1567d0796d303a415ec322ab17d70c7c62743390ce1"
           tar -xzf /tmp/aw3c-old.tar.gz
           rm -rf .aw3c-bundle
           mv aw3c-bundle .aw3c-bundle
-
           test "$(sha256sum .aw3c-transport/corrected-apply.py.gz.b64 | cut -d' ' -f1)" = "a709137090139cd82cab806e3ba8cb63864f89dc18b1d43e1de99ec5ac8a238d"
           base64 -d .aw3c-transport/corrected-apply.py.gz.b64 > /tmp/corrected-apply.py.gz
           test "$(sha256sum /tmp/corrected-apply.py.gz | cut -d' ' -f1)" = "888e0bfb1d4971f01a93b918d0df57bc2b6aeaaa91505df55206046c07b3ad6a"
           gzip -dc /tmp/corrected-apply.py.gz > .aw3c-bundle/apply.py
           python .aw3c-bundle/apply.py
-
           test "$(sha256sum .aw3c-transport/incremental.patch.gz.b64 | cut -d' ' -f1)" = "b4aba1f7cc4e94a890c6d59c524374959cbd0c3cf44f728787d5e307aee9357f"
           base64 -d .aw3c-transport/incremental.patch.gz.b64 > /tmp/aw3c-incremental.patch.gz
           test "$(sha256sum /tmp/aw3c-incremental.patch.gz | cut -d' ' -f1)" = "19f3490caa492bcb585a40ca6fa5dade4c8e26a1ea15284fb7c476ec1d5200c3"
           gzip -dc /tmp/aw3c-incremental.patch.gz > /tmp/aw3c-incremental.patch
-          git apply --check /tmp/aw3c-incremental.patch
           git apply /tmp/aw3c-incremental.patch
-
           test "$(sha256sum .aw3c-transport/testfix.patch.gz.b64 | cut -d' ' -f1)" = "ae0b74f1342536b209d2ebdaf505dd55b13dc5212b3a142ac15595a269951581"
           base64 -d .aw3c-transport/testfix.patch.gz.b64 > /tmp/aw3c-testfix.patch.gz
           test "$(sha256sum /tmp/aw3c-testfix.patch.gz | cut -d' ' -f1)" = "4078b696a930c821807bf8ec2c07651ea19dc5d3af1a9772b1c4916cea84d9f7"
           gzip -dc /tmp/aw3c-testfix.patch.gz > /tmp/aw3c-testfix.patch
-          git apply --check /tmp/aw3c-testfix.patch
           git apply /tmp/aw3c-testfix.patch
           sha256sum -c .aw3c-transport/final.sha256
           git diff --check
@@ -92,134 +64,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v2
-        with:
-          version: 2.109.1
-          github-token: ${{ github.token }}
-
-      - name: Establish diagnostic build identity
-        shell: bash
-        run: |
-          set -euo pipefail
-          build_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')"
-          {
-            echo "PLAIVRA_COMMIT_SHA=$(git rev-parse HEAD)"
-            echo "PLAIVRA_BUILD_TIMESTAMP=$build_timestamp"
-            echo "PLAIVRA_QUALITY_BUILD_TIMESTAMP=$build_timestamp"
-          } >> "$GITHUB_ENV"
-          node scripts/quality-ledger-target.mjs >> "$GITHUB_ENV"
-
-      - name: Repository and ledger contracts
-        shell: bash
-        run: |
-          set -euo pipefail
-          git diff --check
-          node scripts/check-migration-ledger.mjs
-          node --test scripts/check-migration-ledger.test.mjs
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Prescription projection tests
+      - name: Run repository script tests
         shell: bash
         run: |
           set -o pipefail
-          npm exec vitest run -- --config vitest.unit.config.mjs services/database/workout-session-prescriptions.test.ts 2>&1 | tee /tmp/aw3c-focused.log
+          npm run test:scripts 2>&1 | tee /tmp/aw3c-script.log
 
-      - name: Export pagination tests
-        shell: bash
-        run: |
-          set -o pipefail
-          npm exec vitest run -- --config vitest.unit.config.mjs lib/privacy/data-export.test.ts 2>&1 | tee -a /tmp/aw3c-focused.log
-
-      - name: Migration source-contract tests
-        shell: bash
-        run: |
-          set -o pipefail
-          npm exec vitest run -- --config vitest.unit.config.mjs lib/product/active-workout-aw3c-migration.test.ts 2>&1 | tee -a /tmp/aw3c-focused.log
-
-      - name: Prescription database integration tests
-        shell: bash
-        run: |
-          set -o pipefail
-          npm exec vitest run -- --config vitest.integration.config.mjs services/database/workout-session-prescriptions.integration.test.ts 2>&1 | tee -a /tmp/aw3c-focused.log
-
-      - name: Upload focused-test failure evidence
-        if: failure()
+      - name: Upload script-test evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aw3c-focused-failure-${{ github.run_id }}
-          path: /tmp/aw3c-focused.log
+          name: aw3c-script-evidence-${{ github.run_id }}
+          path: /tmp/aw3c-script.log
           if-no-files-found: error
           retention-days: 1
-
-      - name: Script tests
-        run: npm run test:scripts
-
-      - name: I18n tests
-        run: npm run test:i18n
-
-      - name: Telemetry tests
-        run: npm run test:telemetry
-
-      - name: Dependency audit
-        run: npm audit --omit=dev --audit-level=moderate
-
-      - name: Full chronological database replay and verification
-        shell: bash
-        run: |
-          set -euo pipefail
-          node scripts/replay-local-migration-chain.mjs --log /tmp/aw3c-database-validation.log --prove-future-order
-          supabase db lint --local --schema public --level error --fail-on error
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-phase2a-program-architecture.sql
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-execution-state.sql
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw2a-integration.sql
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3a-structured-metrics.sql
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3a-integration.sql
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3a-final-completion.sql
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3b-structured-set-details.sql
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3b-integration.sql
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3c-immutable-prescription-snapshots.sql
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/active-workout-aw3c-integration.sql
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/train-atomic-rpc-security.sql
-          PLAIVRA_PREFLIGHT_TEST_DATABASE_URL="$PLAIVRA_LOCAL_DATABASE_URL" node scripts/test-database-preflight-control.mjs
-          PGPASSWORD=postgres psql "$PLAIVRA_LOCAL_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/verification/production-release-migration-preflight.sql
-          npm run test:integration
-
-      - name: Production environment, build, and metadata
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PLAIVRA_VALIDATE_PRODUCTION_ENV=true
-          export PLAIVRA_RELEASE_ENVIRONMENT=production
-          export NEXT_PUBLIC_APP_URL=https://app.plaivra.com
-          export NEXT_PUBLIC_USE_MOCK_AUTH=false
-          export PLAIVRA_MCP_BASE_URL=https://app.plaivra.com/api/mcp
-          export PLAIVRA_OAUTH_ISSUER=https://app.plaivra.com
-          export PLAIVRA_CIMD_ALLOWED_ORIGINS=https://chatgpt.com
-          export CRON_SECRET=ci-placeholder-cron-secret-that-is-long-enough
-          npm run validate:env
-          PLAIVRA_RELEASE_ENVIRONMENT=ci NEXT_PUBLIC_USE_MOCK_AUTH=false npm run build
-          npm run release:verify-built-metadata -- \
-            --commit "$PLAIVRA_COMMIT_SHA" \
-            --build-timestamp "$PLAIVRA_BUILD_TIMESTAMP" \
-            --environment ci \
-            --expected-migration "$PLAIVRA_EXPECTED_DATABASE_MIGRATION_VERSION"
-
-      - name: Commit permanent validated tree
-        shell: bash
-        run: |
-          set -euo pipefail
-          sha256sum -c .aw3c-transport/final.sha256
-          rm -rf .aw3c-transport .aw3c-bundle
-          test ! -e .github/workflows/aw3c-materialize.yml
-          git diff --check
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'feat(workouts): implement AW-3C immutable prescription snapshots'
-          git push origin HEAD:feat/active-workout-aw3c-prescription-snapshots
