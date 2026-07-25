@@ -1,0 +1,57 @@
+name: AW-3C Registered Focus Correction
+
+on:
+  pull_request:
+    branches:
+      - feat/active-workout-aw3b-structured-set-details
+    types:
+      - synchronize
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-aw3c-prescription-snapshots
+          fetch-depth: 0
+      - name: Bind mobile focus verification to the same editable element
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/run-train-layout-qa.mjs')
+          text = path.read_text(encoding='utf-8')
+          old = '''      await input.waitFor({ state: "visible", timeout: 20_000 });
+          const keyboardViewport = { width: renderedViewport.width, height: Math.max(280, Math.floor(renderedViewport.height * 0.55)) };
+          await page.setViewportSize(keyboardViewport);
+          await input.focus();
+          await page.waitForTimeout(100);
+          const focused = await input.evaluate((element) => element === document.activeElement);
+          mobileKeyboardState = {
+'''
+          new = '''      await input.waitFor({ state: "visible", timeout: 20_000 });
+          const focusedInput = await input.elementHandle();
+          if (!focusedInput) throw new Error("Editable control disappeared before the keyboard viewport check.");
+          const keyboardViewport = { width: renderedViewport.width, height: Math.max(280, Math.floor(renderedViewport.height * 0.55)) };
+          await page.setViewportSize(keyboardViewport);
+          await focusedInput.focus();
+          await page.waitForTimeout(100);
+          const focused = await focusedInput.evaluate((element) => element.isConnected && element === document.activeElement);
+          mobileKeyboardState = {
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected exactly one mobile-keyboard focus block, found {text.count(old)}.')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git diff --check
+          git add scripts/run-train-layout-qa.mjs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'test(qa): bind mobile focus checks to stable elements'
+          git push origin HEAD:feat/active-workout-aw3c-prescription-snapshots
