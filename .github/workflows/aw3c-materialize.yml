@@ -80,6 +80,13 @@ jobs:
           git apply --check /tmp/aw3c-scriptfix.patch
           git apply /tmp/aw3c-scriptfix.patch
 
+          test "$(sha256sum .aw3c-transport/markerfix.patch.gz.b64 | cut -d' ' -f1)" = "c5d33a25d4827adfd1d8aa61ba0120998061879734dd1db1b36c5218ceb7e682"
+          base64 -d .aw3c-transport/markerfix.patch.gz.b64 > /tmp/aw3c-markerfix.patch.gz
+          test "$(sha256sum /tmp/aw3c-markerfix.patch.gz | cut -d' ' -f1)" = "325b1c4af57917cc1e1587bfecc6a6f342e4da9f4751a1f793b5bb1bfb7c8ce0"
+          gzip -dc /tmp/aw3c-markerfix.patch.gz > /tmp/aw3c-markerfix.patch
+          git apply --check /tmp/aw3c-markerfix.patch
+          git apply /tmp/aw3c-markerfix.patch
+
           sha256sum -c .aw3c-transport/final.sha256
           git diff --check
           git add -A
