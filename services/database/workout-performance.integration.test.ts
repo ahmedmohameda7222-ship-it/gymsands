@@ -22,7 +22,7 @@ describe("AW-3A set-write integration contract", () => {
   it("keeps legacy callers compatible while serializing structured values only when supplied", () => {
     expect(writeService).toContain('import { serializeWorkoutSetLogs } from "./workout-set-log-serialization"');
     expect(legacyImplementation).toContain("serializeWorkoutSetLogs(finalLogs)");
-    expect(serializer).toContain("performanceMetrics?: WorkoutPerformanceMetricInput[]");
+    expect(serializer).toContain("performanceMetrics?: WorkoutSetPerformanceMetricInput[]");
     expect(serializer).toContain('Object.prototype.hasOwnProperty.call(log, "performanceMetrics")');
     expect(serializer).toContain("performance_metrics:");
     expect(serializer).toContain("metric_source:");

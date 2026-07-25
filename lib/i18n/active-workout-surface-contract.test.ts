@@ -19,7 +19,7 @@ describe("AW-1B Active Workout surface contract", () => {
 
     expect(session).toContain("useActiveWorkoutTranslation");
     expect(session).not.toContain("useTrainTranslation");
-    for (const key of ["normal", "warmup", "working", "failure", "drop", "newBest"] as const) {
+    for (const key of ["normal", "warmup", "working", "failure", "drop", "backoff", "amrap", "timed", "other", "newBest"] as const) {
       for (const messages of localeMessages) expect(messages.ActiveWorkout.set[key]?.trim()).not.toBe("");
       expect(session).toContain(`tr("set.${key}"`);
     }

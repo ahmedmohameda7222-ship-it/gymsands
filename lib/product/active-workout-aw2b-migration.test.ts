@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const migrationPath = "supabase/migrations/20260722013000_active_workout_aw2b_command_authority.sql";
 const migration = readFileSync(migrationPath, "utf8").replaceAll("\r\n", "\n");
+const verification = readFileSync(
+  "supabase/verification/active-workout-aw2b-command-authority.sql",
+  "utf8"
+).replaceAll("\r\n", "\n").toLowerCase();
 const service = readFileSync("services/database/workout-session-execution.ts", "utf8").replaceAll("\r\n", "\n");
 const contract = readFileSync("lib/workouts/workout-session-execution.ts", "utf8").replaceAll("\r\n", "\n");
 const privacy = readFileSync("docs/privacy/active-workout-command-receipts.md", "utf8").replaceAll("\r\n", "\n");
@@ -60,6 +64,18 @@ describe("AW-2B command authority migration contract", () => {
     expect(migration).toContain("drop policy if exists workout_session_execution_states_member_update");
     expect(migration).toContain("20260721012814");
     expect(migration).not.toMatch(/update\s+public\.release_schema_compatibility/i);
+  });
+
+  it("keeps permanent AW-2B verification future-safe", () => {
+    expect(verification).toContain("select migration_version as aw2b_marker_baseline");
+    expect(verification).toContain("migration_version=:'aw2b_marker_baseline'");
+    expect(verification).toContain("changed the compatibility marker from its transaction baseline");
+    expect(verification).not.toMatch(/migration_version\s+in\s*\(/);
+    expect(verification).not.toMatch(
+      /(?:insert\s+into|update|delete\s+from)\s+public\.release_schema_compatibility/
+    );
+    expect(verification).toContain("20260722013000");
+    expect(verification).not.toContain("20260722161542");
   });
 
   it("routes normal client mutations through one typed RPC without direct UPDATE", () => {

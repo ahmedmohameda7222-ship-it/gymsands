@@ -200,23 +200,32 @@ test("preflight rejects wrong run, missing evidence, nonzero exit and tampering"
   }
 });
 
-test("preflight rejects unexpected migration and unreconciled ledger", () => {
+test("preflight rejects an unexpected migration while accepting exact pending metadata", () => {
   const reportsPath = createReports();
   try {
     const manifest = finalizeManifest(reportsPath);
     manifest.release.expectedDatabaseMigrationVersion = "20260721012813";
     manifest.release.migrationLedgerReconciliationState = "pending";
+    manifest.release.pendingMigrationCount = 1;
+    manifest.release.unresolvedMigrationCount = 1;
     writeFileSync(join(reportsPath, "release-manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
     const result = validateCanonicalQualityArtifact({
       reportsPath,
       expectedCommit: reviewedCommit,
       expectedRepository: EXPECTED_REPOSITORY,
       qualityRunId: runId,
-      migrationState: migrationState({ reconciliationState: "pending", releaseReady: false }),
+      migrationState: migrationState({
+        reconciliationState: "pending",
+        pendingCount: 1,
+        unresolvedCount: 1,
+        releaseReady: false,
+      }),
     });
     assert.equal(result.valid, false);
     assert.ok(result.failures.includes("release_manifest_unexpected_migration"));
-    assert.ok(result.failures.includes("release_manifest_unreconciled"));
+    assert.equal(result.failures.includes("release_manifest_reconciliation_state_mismatch"), false);
+    assert.equal(result.failures.includes("release_manifest_pending_count_mismatch"), false);
+    assert.equal(result.failures.includes("release_manifest_unresolved_count_mismatch"), false);
   } finally {
     rmSync(reportsPath, { recursive: true, force: true });
   }
@@ -232,6 +241,9 @@ test("exact release validation binds Quality and preflight to artifact-only evid
   assert.match(workflow, /expected_migration="\$EXPECTED_MIGRATION"/);
   assert.match(workflow, /validation_context=stage1-infrastructure-validation/);
   assert.match(workflow, /stage1-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /pre-application-exact-release-validation-\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /releasePreflightDispatched: false/);
+  assert.match(workflow, /if: steps\.identity\.outputs\.release_ready == 'true'/);
   assert.match(workflow, /schemaVersion: 3/);
   assert.match(workflow, /preflightArtifact:/);
   assert.match(workflow, /exactValidation:/);

@@ -13,9 +13,13 @@ const correctionMigrationFile = migrationFiles.find((file) => file.endsWith("_ac
 const correctionMigration = correctionMigrationFile
   ? readFileSync(`supabase/migrations/${correctionMigrationFile}`, "utf8").replaceAll("\r\n", "\n").toLowerCase()
   : "";
+const legacyVerification = readFileSync(
+  "supabase/verification/active-workout-aw2a-execution-state-legacy.sql",
+  "utf8"
+).replaceAll("\r\n", "\n").toLowerCase();
 const verification = [
   readFileSync("supabase/verification/active-workout-aw2a-execution-state.sql", "utf8"),
-  readFileSync("supabase/verification/active-workout-aw2a-execution-state-legacy.sql", "utf8")
+  legacyVerification
 ].join("\n").replaceAll("\r\n", "\n").toLowerCase();
 const repositoryText = [
   readFileSync("services/database/workout-session-execution.ts", "utf8"),
@@ -101,6 +105,20 @@ describe("AW-2A persisted execution-state migration contract", () => {
     expect(correctionMigration).toContain("aw-2a correction changed the release compatibility marker");
     expect(`${originalMigration}\n${correctionMigration}`).not.toContain("khlcctuefiuhunqymkbp");
     expect(repositoryText).not.toContain("khlcctuefiuhunqymkbp");
+  });
+
+  it("keeps the legacy verification future-safe and read-only", () => {
+    expect(legacyVerification).toContain("set local transaction read only");
+    expect(legacyVerification).toContain("set_config('plaivra.aw2a_marker_baseline'");
+    expect(legacyVerification).toContain("current_setting('plaivra.aw2a_marker_baseline', true)");
+    expect(legacyVerification).toContain("v_marker_final is distinct from v_marker_baseline");
+    expect(legacyVerification).toContain("aw-2a changed the release compatibility marker from % to %");
+    expect(legacyVerification).not.toMatch(/\bv_marker(?:_final)?\s+not\s+in\s*\(/);
+    expect(legacyVerification).not.toMatch(
+      /(?:insert\s+into|update|delete\s+from)\s+public\.release_schema_compatibility/
+    );
+    expect(legacyVerification).toContain("20260720213000");
+    expect(legacyVerification).not.toContain("20260722161542");
   });
 
   it("ships permanent transactional verification for the production contract", () => {

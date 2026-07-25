@@ -1,13 +1,10 @@
 import { addDays, todayIso } from "@/lib/date-utils";
 import { MOCK_AUTH_USER_ID } from "@/lib/fixtures/mock-auth";
+import trainMockContract from "@/lib/fixtures/train-mock-contract.json";
 import type { UserWorkoutPlan, UserWorkoutPlanDay, UserWorkoutPlanExercise, Weekday, WorkoutSession } from "@/types";
 
 const weekdays: Weekday[] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const planIds = {
-  active: "10000000-0000-4000-8000-000000000001",
-  inactive: "10000000-0000-4000-8000-000000000002",
-  archived: "10000000-0000-4000-8000-000000000003"
-};
+const planIds = trainMockContract.planIds;
 
 export type MockTrainScenario = "active" | "scheduled" | "rest";
 export type MockTrainVariant = "default" | "one-day-one-exercise" | "seven-day-many-exercises" | "long-names";
@@ -68,7 +65,7 @@ export function getMockTrainPlans(): UserWorkoutPlan[] {
   const createdAt = `${addDays(todayIso(), -30)}T08:00:00.000Z`;
   const updatedAt = `${todayIso()}T08:00:00.000Z`;
   let activeDays = [
-    day(planIds.active, "11", 1, weekdays[(todayIndex + activeOffsets[0]) % 7], "Strength A", [["Back Squat", "Legs", "Barbell"], ["Bench Press", "Chest", "Barbell"], ["Row", "Back", "Cable"], ["Plank", "Core", "Bodyweight"]]),
+    day(planIds.active, trainMockContract.activeDaySuffix, 1, weekdays[(todayIndex + activeOffsets[0]) % 7], trainMockContract.activeDayName, [[trainMockContract.activeFirstExerciseName, "Legs", "Barbell"], ["Bench Press", "Chest", "Barbell"], ["Row", "Back", "Cable"], ["Plank", "Core", "Bodyweight"]]),
     day(planIds.active, "12", 2, weekdays[(todayIndex + activeOffsets[1]) % 7], "Strength B", [["Deadlift", "Back", "Barbell"], ["Overhead Press", "Shoulders", "Dumbbells"], ["Pulldown", "Back", "Cable"]]),
     day(planIds.active, "13", 3, weekdays[(todayIndex + activeOffsets[2]) % 7], "Strength C", [["Split Squat", "Legs", "Dumbbells"], ["Incline Press", "Chest", "Dumbbells"], ["Face Pull", "Shoulders", "Cable"]])
   ];

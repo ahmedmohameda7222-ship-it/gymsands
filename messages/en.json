@@ -101,6 +101,10 @@
       "drop": "Drop set",
       "failure": "Failure",
       "normal": "Normal",
+      "backoff": "Back-off set",
+      "amrap": "AMRAP",
+      "timed": "Timed",
+      "other": "Other",
       "rpe": "RPE",
       "rir": "RIR",
       "note": "Set note",
@@ -113,7 +117,9 @@
       "saveRiskTitle": "This set could not be saved safely.",
       "saveRiskDescription": "Keep this screen open and try again.",
       "newBest": "{name}: new best — {weight} × {reps} reps",
-      "labelPlural": "Sets"
+      "labelPlural": "Sets",
+      "rpeInvalid": "Enter an RPE from 0 to 10 with at most one decimal place.",
+      "rirInvalid": "Enter an RIR from 0 to 20 with at most one decimal place."
     },
     "rest": {
       "beforeSet": "Rest before set {number}",

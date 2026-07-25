@@ -30,23 +30,31 @@ export function expectedMigrationVersion(value, label = "Expected migration") {
 
 export function deriveReleaseTarget(ledger) {
   const state = deriveMigrationLedgerState(ledger);
-  if (
-    state.releaseReady !== true
-    || state.reconciliationState !== "reconciled"
-    || state.pendingCount !== 0
-    || state.schemaAppliedUntrackedCount !== 0
-    || state.unresolvedCount !== 0
-  ) {
-    throw new Error("Migration ledger is not release-ready.");
-  }
-  return {
-    expectedMigration: expectedMigrationVersion(state.latestAppliedMigrationVersion),
+  return Object.freeze({
+    expectedMigration: expectedMigrationVersion(
+      state.latestAppliedMigrationVersion,
+      "Latest resolved Production migration",
+    ),
     reconciliationState: state.reconciliationState,
     pendingCount: state.pendingCount,
     schemaAppliedUntrackedCount: state.schemaAppliedUntrackedCount,
     unresolvedCount: state.unresolvedCount,
     releaseReady: state.releaseReady,
-  };
+  });
+}
+
+export function deriveReleaseReadyTarget(ledger) {
+  const target = deriveReleaseTarget(ledger);
+  if (
+    target.releaseReady !== true
+    || target.reconciliationState !== "reconciled"
+    || target.pendingCount !== 0
+    || target.schemaAppliedUntrackedCount !== 0
+    || target.unresolvedCount !== 0
+  ) {
+    throw new Error("Migration ledger is not release-ready.");
+  }
+  return target;
 }
 
 export function validationContext(value) {

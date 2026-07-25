@@ -5,6 +5,10 @@ const migration = readFileSync(
   new URL("../../supabase/migrations/20260722070000_active_workout_aw2c_timeline_events.sql", import.meta.url),
   "utf8"
 );
+const verification = readFileSync(
+  new URL("../../supabase/verification/active-workout-aw2c-timeline-events.sql", import.meta.url),
+  "utf8"
+).replaceAll("\r\n", "\n").toLowerCase();
 
 const requiredEvents = [
   "session_started", "session_paused", "session_resumed", "rest_started", "rest_ended",
@@ -49,6 +53,19 @@ describe("AW-2C durable timeline migration", () => {
     expect(migration).toContain("private.enforce_terminal_workout_session_delete");
     expect(migration).toContain("'20260721224813'");
     expect(migration).not.toMatch(/update\s+public\.release_schema_compatibility/i);
+  });
+
+  it("keeps permanent AW-2C verification future-safe", () => {
+    expect(verification).toContain("select migration_version as aw2c_marker_baseline");
+    expect(verification).toContain("migration_version=:'aw2c_marker_baseline'");
+    expect(verification).toContain("changed the compatibility marker from its transaction baseline");
+    expect(verification).not.toMatch(/migration_version\s*=\s*'20260721224813'/);
+    expect(verification).not.toMatch(/migration_version\s+in\s*\(/);
+    expect(verification).not.toMatch(
+      /(?:insert\s+into|update|delete\s+from)\s+public\.release_schema_compatibility/
+    );
+    expect(verification).toContain("20260722070000");
+    expect(verification).not.toContain("20260722161542");
   });
 
   it("backfills only provable history and never targets Activity Catalog", () => {

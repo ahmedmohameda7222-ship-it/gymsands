@@ -18,6 +18,7 @@
     "test:unit": "vitest run --config vitest.unit.config.mjs",
     "test:integration": "vitest run --config vitest.integration.config.mjs",
     "test:active-workout:aw3a": "vitest run --config vitest.unit.config.mjs services/database/workout-performance.test.ts services/database/workout-performance.integration.test.ts services/database/workout-rpc-convergence.test.ts lib/privacy/data-export.test.ts lib/product/active-workout-aw3a-migration.test.ts lib/mcp/workout-performance-source.test.ts",
+    "test:active-workout:aw3b": "vitest run --config vitest.unit.config.mjs services/database/workout-set-details.test.ts services/database/workout-set-autosave.test.ts services/database/workout-performance.test.ts services/database/workout-rpc-convergence.test.ts lib/privacy/data-export.test.ts lib/product/active-workout-aw3b-migration.test.ts lib/mcp/workout-performance-source.test.ts && vitest run --config vitest.integration.config.mjs services/database/workout-set-details.integration.test.ts services/database/workout-performance.integration.test.ts",
     "test:muscle-intelligence:phase2": "vitest run --config vitest.unit.config.mjs lib/train/muscle-intelligence/curated-registry.test.ts lib/product/muscle-intelligence-phase2-migration.test.ts",
     "test:muscle-intelligence:phase3": "vitest run --config vitest.unit.config.mjs lib/train/muscle-intelligence/session-analysis.test.ts lib/train/muscle-intelligence/session-analysis-route.test.ts lib/product/muscle-intelligence-phase3-migration.test.ts",
     "test:muscle-intelligence:phase4a": "vitest run --config vitest.unit.config.mjs lib/train/muscle-intelligence/advanced-atlas.test.ts lib/train/muscle-intelligence/advanced-exposure.test.ts lib/train/muscle-intelligence/compatibility-projection.test.ts lib/train/muscle-intelligence/advanced-session-analysis.test.ts components/train/muscle-heat-map/muscle-heat-map.test.tsx lib/product/muscle-intelligence-phase4a-migration.test.ts",
@@ -54,7 +55,7 @@
     "jose": "^6.2.3",
     "jszip": "3.10.1",
     "lucide-react": "^0.555.0",
-    "next": "^16.0.3",
+    "next": "16.2.11",
     "next-intl": "^4.13.2",
     "pdf-lib": "1.17.1",
     "react": "^19.2.0",
@@ -74,16 +75,16 @@
     "@vitest/ui": "^4.1.9",
     "autoprefixer": "^10.4.22",
     "eslint": "^9.39.1",
-    "eslint-config-next": "^16.0.3",
+    "eslint-config-next": "16.2.11",
     "jsdom": "^29.1.1",
-    "postcss": "8.5.10",
+    "postcss": "8.5.22",
     "sharp": "0.35.3",
     "tailwindcss": "^3.4.18",
     "typescript": "^5.9.3",
     "vitest": "^4.1.9"
   },
   "overrides": {
-    "postcss": "8.5.10",
+    "postcss": "8.5.22",
     "sharp": "0.35.3"
   }
 }

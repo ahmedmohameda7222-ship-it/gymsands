@@ -23,7 +23,7 @@ import {
   sha256File,
 } from "./quality-evidence-contract.mjs";
 import { installedNextVersion } from "./release-runtime-versions.mjs";
-import { deriveReleaseTarget, validationRequestId } from "./release-identity-contract.mjs";
+import { expectedMigrationVersion, validationRequestId } from "./release-identity-contract.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templatePath = resolve(root, "release/release-manifest.template.json");
@@ -256,13 +256,16 @@ async function main() {
   const packageLock = JSON.parse(readFileSync(packageLockPath, "utf8"));
   const migrationLedger = JSON.parse(readFileSync(resolve(root, "supabase/migration-ledger.json"), "utf8"));
   const migrationState = deriveMigrationLedgerState(migrationLedger);
-  const releaseTarget = deriveReleaseTarget(migrationLedger);
+  const resolvedMigration = expectedMigrationVersion(
+    migrationState.latestAppliedMigrationVersion,
+    "Latest resolved Production migration",
+  );
   const requestedExpectedMigration = requiredIdentifier(
     "Expected database migration version",
-    options["expected-migration"] || releaseTarget.expectedMigration,
+    options["expected-migration"] || resolvedMigration,
   );
-  if (requestedExpectedMigration !== releaseTarget.expectedMigration) {
-    throw new Error("Requested expected migration does not equal the reconciled ledger head.");
+  if (requestedExpectedMigration !== resolvedMigration) {
+    throw new Error("Requested expected migration does not equal the latest resolved Production migration.");
   }
   const commitSha = exactCommit(
     options.commit || process.env.PLAIVRA_COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || currentCommit(),
@@ -283,7 +286,7 @@ async function main() {
       "Schema compatibility version",
       options["schema-compatibility"] || process.env.PLAIVRA_SCHEMA_COMPATIBILITY_VERSION || "2",
     ),
-    expectedDatabaseMigrationVersion: releaseTarget.expectedMigration,
+    expectedDatabaseMigrationVersion: resolvedMigration,
     migrationLedgerReconciliationState: migrationState.reconciliationState,
     pendingMigrationCount: migrationState.pendingCount,
     schemaAppliedUntrackedCount: migrationState.schemaAppliedUntrackedCount,

@@ -62,7 +62,7 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 - Muscle Intelligence Phase 4A provides the approved advanced visible atlas and schema-isolated V2 publication foundation while retaining V1 runtime behavior.
 - Muscle Intelligence Phase 4B publishes 60 reviewed advanced V2 mappings with 453 regional entries and adds plan-building, plan-editing, exercise-preview, and weekly-plan visualization surfaces. It does not cut Active Workout, completion, history, or workout-session snapshots over to V2.
 - Phase 4C.1 runtime cutover is applied in production: existing V1 snapshots remain unchanged, new sessions use V2, and completed V2 workload is frozen independently from mutable set logs.
-- Production migration history contains 64 physical records and is reconciled through `20260721012814_active_workout_aw2a_execution_state_corrections`. The migration ledger contains 63 exact `applied` rows plus one `applied_version_alias` row for the immutable AW-2A base migration, so its strict `productionMigrationCount` is 63 by design. The deployed compatibility marker intentionally remains `20260717051011` until a separately authorized coordinated release.
+- Production migration history contains 70 physical records and is reconciled through generated record `20260722232817_active_workout_aw3b_read_and_payload_corrections`. The ledger contains 63 exact `applied` rows plus seven immutable `applied_version_alias` rows for AW-2A, AW-2B, AW-2C, AW-3A, and all three AW-3B migrations. Repository migrations `20260722210312_active_workout_aw3b_structured_set_details.sql`, `20260722224500_active_workout_aw3b_production_hardening.sql`, and `20260723010500_active_workout_aw3b_read_and_payload_corrections.sql` were applied exactly once as generated Production identities `20260722223426`, `20260722224246`, and `20260722232817`. The deployed compatibility marker intentionally remains at released AW-3A identity `20260722161542` until AW-3B release closure. Do not replay or edit any applied migration.
 
 ## Applied Phase 4C.1 migrations
 
@@ -78,5 +78,6 @@ Merged pull requests and Git history preserve implementation evidence. Old promp
 
 These nine files match the production migration identities and were applied exactly once in order. Do not replay or modify them.
 
-
 AW-2A persisted execution state is applied exactly once to Plaivra Database as production record `20260721000544_active_workout_aw2a_execution_state`, mapped to immutable repository migration `20260720213000_active_workout_aw2a_execution_state.sql`. The migration ledger records this as an `applied_version_alias` because the supported production authority generated a different timestamp while preserving the exact reviewed SQL. The forward-only correction `20260721012814_active_workout_aw2a_execution_state_corrections.sql` is also applied exactly once and adds the partial covering index for `active_snapshot_item_id`; it does not alter the compatibility marker or user workout data. Do not replay or modify either applied migration.
+
+AW-3B post-apply correction `supabase/migrations/20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql` is committed and pending one authorized Plaivra Database application; do not replay any applied migration.

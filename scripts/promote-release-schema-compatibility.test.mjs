@@ -14,9 +14,16 @@ import {
 const reviewedCommit = "1111111111111111111111111111111111111111";
 const currentLedger = JSON.parse(readFileSync(new URL("../supabase/migration-ledger.json", import.meta.url), "utf8"));
 const ledger = structuredClone(currentLedger);
-const laterProductionVersions = new Set(["20260721224813", "20260722093115", "20260722161542"]);
-ledger.entries = ledger.entries.filter((entry) => !laterProductionVersions.has(entry.productionVersion));
-ledger.historyRepair.note = "AW-2A release-promotion fixture reconciled through 20260721012814. Do not replay any applied migration.";
+ledger.entries = ledger.entries.filter((entry) => entry.state !== "pending");
+ledger.pendingCount = 0;
+ledger.unresolvedCount = 0;
+ledger.historyRepair = {
+  ...ledger.historyRepair,
+  state: "reconciled",
+  pendingCount: 0,
+  unresolvedCount: 0,
+  note: `AW-3B release-promotion fixture reconciled through ${TARGET_MARKER}. Do not replay any applied migration.`,
+};
 
 function successfulPreflight(overrides = {}) {
   return {
@@ -116,7 +123,7 @@ test("rejects wrong current and target markers", () => {
 test("rejects a target that is not the reconciled ledger head", () => {
   const driftedLedger = structuredClone(ledger);
   driftedLedger.entries = driftedLedger.entries.filter((entry) => entry.productionVersion !== TARGET_MARKER);
-  driftedLedger.productionMigrationCount -= 1;
+  driftedLedger.productionMigrationCount = driftedLedger.entries.filter((entry) => entry.state === "applied").length;
   assert.throws(() => validatePromotionRequest({
     ...validRequest(),
     ledger: driftedLedger,
