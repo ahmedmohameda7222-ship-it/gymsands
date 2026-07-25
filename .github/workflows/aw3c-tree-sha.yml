@@ -1,0 +1,22 @@
+name: AW-3C Tree Identity
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
+
+permissions:
+  contents: read
+
+jobs:
+  tree:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-aw3c-prescription-snapshots
+          fetch-depth: 1
+      - name: Print tree identity
+        run: echo "AW3C_TREE_SHA=$(git rev-parse 'HEAD^{tree}')"
