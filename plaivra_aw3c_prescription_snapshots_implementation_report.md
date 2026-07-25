@@ -4,7 +4,7 @@
 
 NOT READY FOR PLANNER QA/QC
 
-AW-3C now exists as a normal permanent repository tree. Temporary transport bundles, placeholder migration content, materialization workflows, and focus-correction workflows have been removed. The Draft PR targets `main` again. Exact-head pre-application validation, Production application, ledger reconciliation, post-apply verification, and final-head validation remain pending.
+AW-3C now exists as a normal permanent repository tree. Temporary transport bundles, placeholder migration content, materialization workflows, and focus-correction workflows have been removed. The Draft PR targets `main` again. Exact-head pre-application validation has passed; Production application, ledger reconciliation, post-apply verification, and final-head validation remain pending.
 
 ## Repository
 
@@ -53,31 +53,34 @@ AW-3C now exists as a normal permanent repository tree. Temporary transport bund
 - `scripts/run-train-layout-qa.mjs`: required to diagnose and correct the stable-element mobile keyboard focus assertion.
 - AW-3B verification assets: required to make historical verification future-phase-safe without weakening AW-3B release-boundary proof.
 
-## Validation evidence already observed on permanent code
+## Pre-application validation
 
-A prior clean permanent-tree Quality attempt reached and passed:
+Exact pre-application evidence commit:
 
+`96fe292d57b2d22a21f9cfa402615b0fff60cdfa`
+
+Successful checks on that exact head:
+
+- Phase A Diff Validation: `30157515602`
+- Quality: `30157515607` (successful rerun)
+- Exact Release Quality Validation: `30157515609`
 - Full chronological migration replay
 - Database lint
 - AW-2/AW-3A/AW-3B/AW-3C database preflight and verification SQL
 - Migration ledger validation
 - Dependency audit
-- ESLint
-- TypeScript
-- Unit tests
-- Integration tests
+- ESLint and TypeScript
+- Unit and integration tests
 - Script, i18n, and telemetry tests
 - Production environment contract
-- Production build
-- Built release metadata
+- Production build and built release metadata
+- Rendered browser QA, including the stable-element mobile keyboard focus matrix
 
-That attempt failed only in the rendered mobile-focus assertion described above. The permanent correction is now committed; a new clean exact-head validation is required and prior partial evidence is not treated as final approval.
+The exact migration file is being exported from the immutable pre-application commit solely to record its Git blob and SHA-256 before Production application.
 
 ## Pending evidence
 
-- Clean exact-head Phase A, Quality, and Exact Release Quality results
-- Exact migration Git blob/SHA-256 and pre-application evidence commit
-- Fresh Production baseline immediately before application
+- Exact migration Git blob/SHA-256
 - Generated Production migration identity and applied hash
 - Post-apply counts, RLS, immutability, export/deletion, advisors, and Activity Catalog isolation
 - Final ledger reconciliation, implementation report completion, and final exact head
