@@ -1,38 +1,26 @@
-name: AW-3C deterministic materialization
+name: AW-3C checkout capture
 
 on:
   pull_request:
     branches:
       - feat/active-workout-aw3b-structured-set-details
     types:
-      - opened
+      - synchronize
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  materialize:
-    if: github.actor != 'github-actions[bot]'
+  capture:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feat/active-workout-aw3c-prescription-snapshots
           fetch-depth: 0
-      - name: Materialize reviewed AW-3C patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat .aw3c-transport/part* > /tmp/aw3c-bundle.b64
-          test "$(sha256sum /tmp/aw3c-bundle.b64 | cut -d' ' -f1)" = "af65dfa4f9f658782f7215eb9961767e2e15e760cbb0e390b5890aa5b787dbe8"
-          base64 -d /tmp/aw3c-bundle.b64 > /tmp/aw3c-bundle.tar.gz
-          test "$(sha256sum /tmp/aw3c-bundle.tar.gz | cut -d' ' -f1)" = "646fe5036900afd0de3bf1567d0796d303a415ec322ab17d70c7c62743390ce1"
-          tar -xzf /tmp/aw3c-bundle.tar.gz
-          python .aw3c-bundle/apply.py
-          rm -rf .aw3c-transport
-          git diff --check
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'feat(workouts): implement AW-3C immutable prescription snapshots'
-          git push origin HEAD:feat/active-workout-aw3c-prescription-snapshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aw3c-branch-checkout-${{ github.event.pull_request.head.sha }}
+          path: .
+          include-hidden-files: true
+          retention-days: 1
