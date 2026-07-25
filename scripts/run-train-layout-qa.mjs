@@ -502,11 +502,13 @@ async function openScenario({ viewport, scenario, language = "en", route, step =
     const input = page.locator(editableSelector).filter({ visible: true }).first();
     try {
       await input.waitFor({ state: "visible", timeout: 20_000 });
+      const focusedInput = await input.elementHandle();
+      if (!focusedInput) throw new Error("Editable control disappeared before the keyboard viewport check.");
       const keyboardViewport = { width: renderedViewport.width, height: Math.max(280, Math.floor(renderedViewport.height * 0.55)) };
       await page.setViewportSize(keyboardViewport);
-      await input.focus();
+      await focusedInput.focus();
       await page.waitForTimeout(100);
-      const focused = await input.evaluate((element) => element === document.activeElement);
+      const focused = await focusedInput.evaluate((element) => element.isConnected && element === document.activeElement);
       mobileKeyboardState = {
         checked: true,
         focused,
