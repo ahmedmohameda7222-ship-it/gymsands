@@ -2,9 +2,9 @@
 
 ## Status
 
-NOT READY FOR INDEPENDENT PLANNER QA/QC
+READY FOR INDEPENDENT PLANNER QA/QC
 
-Implementation, exact pre-application validation, one-time Plaivra Production application, post-application verification, and migration-ledger reconciliation are complete. Only final exact-head validation on the reconciled ledger/report head remains.
+Implementation, exact pre-application validation, one-time Plaivra Production application, post-application verification, migration-ledger reconciliation, and final reconciled-head validation are complete. Draft PR `#86` targets `main`, remains open and unmerged, and contains only permanent AW-3C scope.
 
 ## Repository and release boundary
 
@@ -14,6 +14,8 @@ Implementation, exact pre-application validation, one-time Plaivra Production ap
 - PR base: `main`
 - Starting released `main`: `0420f5f1238f5beaafbf1b58fec81a4e810dc541`
 - Exact pre-application evidence commit: `96fe292d57b2d22a21f9cfa402615b0fff60cdfa`
+- Reconciled implementation head: `db8704fef79f572c31d62a12a81d2d480715e30b`
+- Validated final-evidence head: `32e9e2fa122cb9b9b4525027b4c783bb90680b08`
 - Production project: `bkwezjxvapaeasfvlhvv`
 - Activity Catalog project: `khlcctuefiuhunqymkbp`
 - Compatibility marker boundary: `20260724232734`
@@ -43,33 +45,13 @@ Implemented guarantees:
 - Plan/direct Active Workout hydration, planned log compatibility fields, and ChatGPT workout context read from the frozen graph after session start.
 - Privacy export pagination and trusted account-deletion proof include both AW-3C tables.
 
-## Changed-file purpose matrix
-
-| Area | Purpose |
-| --- | --- |
-| AW-3C migration | Tables, ownership constraints, indexes, RLS, grants, materializer, immutable triggers, start/resume convergence, backfill, deletion proof |
-| AW-3C verification SQL | Schema, parser, target registry, retry, ownership, RLS, immutability, backfill, and integration behavior |
-| Prescription service/types | Bounded typed read projection, deterministic ordering, fail-closed validation, frozen compatibility projection |
-| Plan/direct workout UI | Hydrate sets, targets, rest, tempo, type, side, logs, and context from immutable prescription data |
-| Privacy export/deletion | Deterministic paginated export and explicit deletion counts/proof |
-| Quality/replay | AW-3C permanent SQL gates and future-phase-safe AW-3B verification |
-| Rendered QA | Stable same-element mobile keyboard focus verification after asynchronous frozen hydration |
-| Migration ledger/report | Generated Production alias, immutable migration bytes, and release evidence |
-
 ## Blocker corrections completed
 
 - Removed the stale post-chain AW-3B marker assertion while preserving the historical AW-3B marker boundary inside chronological replay and source-contract tests.
 - Kept the AW-3B 500-performed-log session-limit test valid under AW-3C by using 100 planned sets while still inserting 500 performed logs and rejecting the 501st.
-- Replaced the rendered mobile-focus check's dynamic `Locator.first()` re-resolution with a stable same-element handle across viewport resize.
-- Materialized the real repository tree and removed encoded transport bundles, placeholder SQL, temporary write-enabled materializers, correction workflows, and export/reconciliation helpers.
+- Replaced rendered mobile-focus validation's dynamic `Locator.first()` re-resolution with a stable same-element handle across viewport resize.
+- Materialized the real repository tree and removed encoded transport bundles, placeholder SQL, temporary write-enabled materializers, correction workflows, and reconciliation helpers.
 - Retargeted Draft PR `#86` to `main`.
-
-## Conditional extra reads
-
-- `types/database-legacy.ts`: frozen plan UI compatibility construction.
-- `scripts/check-migration-ledger.mjs`, its tests, and migration-ledger documentation: strict alias/reconciliation evidence contract.
-- `scripts/run-train-layout-qa.mjs`: rendered mobile keyboard failure diagnosis.
-- AW-3B verification assets: future-phase-safe historical verification without weakening AW-3B invariants.
 
 ## Exact migration identity
 
@@ -107,17 +89,31 @@ Successful exact-head checks on `96fe292d57b2d22a21f9cfa402615b0fff60cdfa`:
 - Quality: run `30157515607`, successful rerun job `89678750880`
 - Exact Release Quality Validation: run `30157515609`
 
-Passed gates:
+Passed gates included full chronological migration replay, future-order proof, database lint, AW-2/AW-3 verification SQL, ledger validation, dependency audit, lint, typecheck, unit/integration/scripts/i18n/telemetry tests, production build, release metadata, and rendered browser QA.
 
-- Full chronological migration replay and future-order proof
+## Final reconciled-head validation
+
+Successful exact-head checks on `32e9e2fa122cb9b9b4525027b4c783bb90680b08`:
+
+- Phase A Diff Validation: run `30159698914`
+- Quality: run `30159698916`, job `89683646037`
+- Exact Release Quality Validation: run `30159698917`, job `89682894806`
+
+Every Quality gate passed, including:
+
+- Repository integrity
+- Full chronological migration chain
 - Database lint
-- AW-2A/AW-2B/AW-2C/AW-3A/AW-3B/AW-3C verification SQL
+- AW-2A/AW-2B/AW-2C/AW-3A/AW-3B/AW-3C database verification SQL
 - Migration ledger and dependency audit
 - ESLint and TypeScript
-- Unit, integration, scripts, i18n, and telemetry tests
+- Unit and integration tests
+- Scripts, i18n, and telemetry tests
 - Production environment contract
-- Production build and release metadata
+- Production build and built release metadata
 - Rendered browser QA, including mobile/desktop, English/German/Arabic RTL, light/dark, long labels, and stable mobile keyboard focus
+- Canonical Quality artifact creation and independent Exact Release verification
+- Read-only Stage-1 release preflight
 
 ## Production before/after evidence
 
@@ -136,13 +132,7 @@ Passed gates:
 | AW-3C prescription sets | absent | 86 |
 | AW-3C metric targets | absent | 15 |
 
-Frozen raw snapshot evidence hash before and after:
-
-```text
-aeb584444c5b83e0e187c23b8a4311604e09d7a0d4f014e7c9d5b15b0fe47c88
-```
-
-Compatibility marker before and after:
+Frozen raw snapshot evidence remained unchanged. Compatibility marker before and after remained:
 
 ```text
 20260724232734
@@ -165,14 +155,17 @@ Post-apply results:
 - Target orphans: 0
 - Set owner/session path mismatches: 0
 - Target owner/session path mismatches: 0
-- Required materializer, plan core, direct core, and deletion authority: present
+- Set-table constraints/indexes: 13 / 7
+- Target-table constraints/indexes: 7 / 5
+- RLS enabled on both AW-3C tables
+- Owner-select policies: 2
+- `authenticated` table privileges: owner-filtered `SELECT` only
+- Authenticated direct INSERT/UPDATE/DELETE: denied on both tables
+- Required private materializer: present
 - Private materializer executable by `anon`: false
 - Private materializer executable by `authenticated`: false
-- `authenticated` table privileges: owner-filtered `SELECT` only
-- `service_role` table privileges: `SELECT` only
 - Direct set update/delete: blocked
 - Direct target update/delete: blocked
-- Authenticated direct insert: blocked
 - Exact retry across all 34 snapshot items: no-op; counts remained 86/15
 - Owner-one RLS projection: 82 sets / 15 targets
 - Owner-two RLS projection: 4 sets / 0 targets
@@ -201,21 +194,11 @@ No migration, repair, or data mutation was applied to Activity Catalog.
 
 ## Advisor classification
 
-Security advisor:
-
-- No AW-3C missing-policy, exposed-materializer, or table-grant regression.
-- Existing `SECURITY DEFINER` warnings apply to reviewed public application RPCs and pre-existing surfaces.
-- Existing internal RLS-without-policy notices and leaked-password-protection warning are outside AW-3C scope.
-
-Performance advisor:
-
-- No missing-FK-index warning for either AW-3C table.
-- New AW-3C indexes are initially reported as unused immediately after creation; this is expected and does not justify removing required ownership/export indexes.
-- Other unindexed-FK, duplicate-index, multiple-policy, and unused-index notices are pre-existing and outside AW-3C scope.
+- No AW-3C missing-policy, exposed-materializer, table-grant, or missing-FK-index regression.
+- New required AW-3C indexes may initially appear unused immediately after creation; they are retained for ownership, FK, and export paths.
+- Existing reviewed `SECURITY DEFINER`, RLS, leaked-password-protection, duplicate-index, and unrelated unindexed-FK notices are pre-existing and outside AW-3C scope.
 
 ## Migration-ledger reconciliation
-
-Ledger state after reconciliation:
 
 - `historyRepair.state`: `reconciled`
 - `pendingCount`: 0
@@ -224,17 +207,15 @@ Ledger state after reconciliation:
 - Physical Production records: 73
 - Latest reconciled Production identity: `20260725130422`
 - Audited repository ancestor: `96fe292d57b2d22a21f9cfa402615b0fff60cdfa`
+- Ledger reconciliation commit: `db8704fef79f572c31d62a12a81d2d480715e30b`
 
 The repository migration remains immutable and is represented by an `applied_version_alias`. It must not be renamed, edited, or replayed.
 
-## Remaining boundary
+## Stop boundary
 
-Final exact-head Phase A, Quality, and Exact Release Quality must pass on the reconciled ledger/report head. After that, the recommendation changes to:
+- Keep PR `#86` Draft and unmerged until explicit merge approval.
+- Do not promote the compatibility marker during implementation QA/QC.
+- Do not deploy manually.
+- Do not start AW-4A before AW-3C merge and post-merge closure.
 
-```text
 READY FOR INDEPENDENT PLANNER QA/QC
-```
-
-Do not merge, mark ready, promote the compatibility marker, deploy manually, or start AW-4A before explicit approval.
-
-NOT READY FOR INDEPENDENT PLANNER QA/QC
