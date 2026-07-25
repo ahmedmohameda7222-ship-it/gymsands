@@ -2,87 +2,239 @@
 
 ## Status
 
-NOT READY FOR PLANNER QA/QC
+NOT READY FOR INDEPENDENT PLANNER QA/QC
 
-AW-3C now exists as a normal permanent repository tree. Temporary transport bundles, placeholder migration content, materialization workflows, and focus-correction workflows have been removed. The Draft PR targets `main` again. Exact-head pre-application validation has passed; Production application, ledger reconciliation, post-apply verification, and final-head validation remain pending.
+Implementation, exact pre-application validation, one-time Plaivra Production application, post-application verification, and migration-ledger reconciliation are complete. Only final exact-head validation on the reconciled ledger/report head remains.
 
-## Repository
+## Repository and release boundary
 
 - Repository: `ahmedmohameda7222-ship-it/gymsands`
 - Branch: `feat/active-workout-aw3c-prescription-snapshots`
 - Draft PR: `#86`
+- PR base: `main`
 - Starting released `main`: `0420f5f1238f5beaafbf1b58fec81a4e810dc541`
-- Current PR base: `main`
-- Compatibility marker boundary: `20260724232734`
+- Exact pre-application evidence commit: `96fe292d57b2d22a21f9cfa402615b0fff60cdfa`
 - Production project: `bkwezjxvapaeasfvlhvv`
-- Activity Catalog boundary: `khlcctuefiuhunqymkbp` (read-only isolation; no mutation authorized)
+- Activity Catalog project: `khlcctuefiuhunqymkbp`
+- Compatibility marker boundary: `20260724232734`
+- PR remains Draft, open, and unmerged.
+- AW-4A has not started.
 
-## Fresh pre-implementation baseline
+## Implemented architecture
 
-- Physical Production migration records: 72
-- Workout sessions: 10 (3 plan, 7 direct)
-- Snapshot roots/items: 10 / 34
-- AW-3C tables before implementation: absent
-- Data-derived conservative backfill expectation: 86 prescription sets / 15 repetition-range targets
-- Snapshot owner mismatches: 0
-- Frozen raw prescription hash: `ab11eb497643ff257229bac49c22e64763423225dd8e6b9951c0f07f8edbf26c`
+AW-3C adds an immutable normalized prescription graph beneath the existing workout-session snapshot-item authority:
 
-## Implemented scope
+```text
+workout_session_muscle_snapshots
+└── workout_session_muscle_snapshot_items
+    └── workout_session_prescription_sets
+        └── workout_session_prescription_metric_targets
+```
 
-- Forward-only AW-3C schema, ownership paths, indexes, RLS, grants, immutability triggers, and one private authoritative materializer.
-- Plan/direct snapshot-item creation convergence and resume verification.
-- Frozen-item-only deterministic historical backfill.
-- Typed ordered read projection with registry/shape/path validation.
-- Plan and direct execution hydration from immutable prescription sets.
-- Frozen planned compatibility fields for performed logs and ChatGPT workout context.
-- Paginated privacy export and explicit account-deletion proof.
-- Permanent migration, source-contract, projection, integration, and SQL verification assets.
+Implemented guarantees:
+
+- Existing snapshot root and metric registry are reused; no competing root or registry was created.
+- Composite item/snapshot/session/user ownership paths are enforced with foreign keys and covering indexes.
+- `workout_session_prescription_sets` and `workout_session_prescription_metric_targets` are immutable after trusted materialization.
+- One private database materializer parses the bounded frozen JSON contract and validates registry identities, target shapes, aliases, range ordering, side support, and numeric bounds.
+- Plan-based, direct, resume, terminal, and historical paths converge on the same graph authority.
+- Existing frozen `planned_prescription` and `planned_sets` compatibility evidence remains unchanged.
+- New application writes converge on `snake_case`; released `restSeconds` compatibility remains deliberately supported.
+- Plan/direct Active Workout hydration, planned log compatibility fields, and ChatGPT workout context read from the frozen graph after session start.
+- Privacy export pagination and trusted account-deletion proof include both AW-3C tables.
+
+## Changed-file purpose matrix
+
+| Area | Purpose |
+| --- | --- |
+| AW-3C migration | Tables, ownership constraints, indexes, RLS, grants, materializer, immutable triggers, start/resume convergence, backfill, deletion proof |
+| AW-3C verification SQL | Schema, parser, target registry, retry, ownership, RLS, immutability, backfill, and integration behavior |
+| Prescription service/types | Bounded typed read projection, deterministic ordering, fail-closed validation, frozen compatibility projection |
+| Plan/direct workout UI | Hydrate sets, targets, rest, tempo, type, side, logs, and context from immutable prescription data |
+| Privacy export/deletion | Deterministic paginated export and explicit deletion counts/proof |
+| Quality/replay | AW-3C permanent SQL gates and future-phase-safe AW-3B verification |
+| Rendered QA | Stable same-element mobile keyboard focus verification after asynchronous frozen hydration |
+| Migration ledger/report | Generated Production alias, immutable migration bytes, and release evidence |
 
 ## Blocker corrections completed
 
-- Removed the stale post-chain AW-3B compatibility-marker assertion while preserving historical marker proof in chronological replay tests.
-- Kept the AW-3B 500-performed-log limit fixture valid under AW-3C by reducing only its planned prescription count to the supported maximum of 100.
-- Corrected rendered mobile-keyboard focus verification to bind to one concrete DOM element across viewport resize instead of allowing `Locator.first()` to resolve to a different asynchronously hydrated input.
-- Materialized the permanent implementation tree and removed all encoded transport and write-enabled temporary workflow files.
+- Removed the stale post-chain AW-3B marker assertion while preserving the historical AW-3B marker boundary inside chronological replay and source-contract tests.
+- Kept the AW-3B 500-performed-log session-limit test valid under AW-3C by using 100 planned sets while still inserting 500 performed logs and rejecting the 501st.
+- Replaced the rendered mobile-focus check's dynamic `Locator.first()` re-resolution with a stable same-element handle across viewport resize.
+- Materialized the real repository tree and removed encoded transport bundles, placeholder SQL, temporary write-enabled materializers, correction workflows, and export/reconciliation helpers.
 - Retargeted Draft PR `#86` to `main`.
 
 ## Conditional extra reads
 
-- `types/database-legacy.ts`: required to construct the frozen plan UI compatibility object safely.
-- `scripts/check-migration-ledger.mjs`, `README.md`, and `docs/architecture/migration-ledger-reconciliation.md`: required by the repository's strict pending-migration classification contract.
-- `scripts/run-train-layout-qa.mjs`: required to diagnose and correct the stable-element mobile keyboard focus assertion.
-- AW-3B verification assets: required to make historical verification future-phase-safe without weakening AW-3B release-boundary proof.
+- `types/database-legacy.ts`: frozen plan UI compatibility construction.
+- `scripts/check-migration-ledger.mjs`, its tests, and migration-ledger documentation: strict alias/reconciliation evidence contract.
+- `scripts/run-train-layout-qa.mjs`: rendered mobile keyboard failure diagnosis.
+- AW-3B verification assets: future-phase-safe historical verification without weakening AW-3B invariants.
+
+## Exact migration identity
+
+Repository migration:
+
+```text
+supabase/migrations/20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql
+```
+
+Immutable evidence:
+
+- Pre-application evidence commit: `96fe292d57b2d22a21f9cfa402615b0fff60cdfa`
+- Git blob: `35af298e904a4cdfdd336a033a91dfc63f827479`
+- Repository SHA-256: `c7ee67e8184d4cf1afe6e7ce9c6ec4de90c5fd36bc9d31006b55e53f62b94031`
+- Applied SQL SHA-256: `c7ee67e8184d4cf1afe6e7ce9c6ec4de90c5fd36bc9d31006b55e53f62b94031`
+- Size: 60,266 bytes
+- Lines: 1,146
+- Exact-migration artifact: `aw3c-exact-migration-96fe292d`
+- Artifact ID: `8619641912`
+- Artifact digest: `sha256:87e9c2410f1b3b3b2d34efa65572d00dc980b781ba30bcaf6e65dbe77d832242`
+- Artifact expiry: `2026-08-01`
+
+Production identity:
+
+- Generated version: `20260725130422`
+- Generated name: `active_workout_aw3c_immutable_prescription_snapshots`
+- Application identity time: `2026-07-25T13:04:22Z`
+- Applied exactly once through Supabase `apply_migration` to Plaivra Production only.
 
 ## Pre-application validation
 
-Exact pre-application evidence commit:
+Successful exact-head checks on `96fe292d57b2d22a21f9cfa402615b0fff60cdfa`:
 
-`96fe292d57b2d22a21f9cfa402615b0fff60cdfa`
+- Phase A Diff Validation: run `30157515602`
+- Quality: run `30157515607`, successful rerun job `89678750880`
+- Exact Release Quality Validation: run `30157515609`
 
-Successful checks on that exact head:
+Passed gates:
 
-- Phase A Diff Validation: `30157515602`
-- Quality: `30157515607` (successful rerun)
-- Exact Release Quality Validation: `30157515609`
-- Full chronological migration replay
+- Full chronological migration replay and future-order proof
 - Database lint
-- AW-2/AW-3A/AW-3B/AW-3C database preflight and verification SQL
-- Migration ledger validation
-- Dependency audit
+- AW-2A/AW-2B/AW-2C/AW-3A/AW-3B/AW-3C verification SQL
+- Migration ledger and dependency audit
 - ESLint and TypeScript
-- Unit and integration tests
-- Script, i18n, and telemetry tests
+- Unit, integration, scripts, i18n, and telemetry tests
 - Production environment contract
-- Production build and built release metadata
-- Rendered browser QA, including the stable-element mobile keyboard focus matrix
+- Production build and release metadata
+- Rendered browser QA, including mobile/desktop, English/German/Arabic RTL, light/dark, long labels, and stable mobile keyboard focus
 
-The exact migration file is being exported from the immutable pre-application commit solely to record its Git blob and SHA-256 before Production application.
+## Production before/after evidence
 
-## Pending evidence
+| Invariant | Before | After |
+| --- | ---: | ---: |
+| Physical migrations | 72 | 73 |
+| Workout sessions | 10 | 10 |
+| Exercise logs | 64 | 64 |
+| Structured metric values | 75 | 75 |
+| AW-3B set details | 15 | 15 |
+| AW-3B segments | 0 | 0 |
+| AW-3B segment metrics | 0 | 0 |
+| Timeline events | 83 | 83 |
+| Snapshot roots | 10 | 10 |
+| Snapshot items | 34 | 34 |
+| AW-3C prescription sets | absent | 86 |
+| AW-3C metric targets | absent | 15 |
 
-- Exact migration Git blob/SHA-256
-- Generated Production migration identity and applied hash
-- Post-apply counts, RLS, immutability, export/deletion, advisors, and Activity Catalog isolation
-- Final ledger reconciliation, implementation report completion, and final exact head
+Frozen raw snapshot evidence hash before and after:
 
-NOT READY FOR PLANNER QA/QC
+```text
+aeb584444c5b83e0e187c23b8a4311604e09d7a0d4f014e7c9d5b15b0fe47c88
+```
+
+Compatibility marker before and after:
+
+```text
+20260724232734
+```
+
+Backfill distribution:
+
+- 71 `custom` set rows from conservative legacy evidence.
+- 15 `range` set rows.
+- 15 `repetitions:range` target rows.
+- Expected and actual counts matched: 86 sets / 15 targets.
+
+## Integrity, security, and behavior evidence
+
+Post-apply results:
+
+- Set duplicates: 0
+- Target duplicates: 0
+- Set orphans: 0
+- Target orphans: 0
+- Set owner/session path mismatches: 0
+- Target owner/session path mismatches: 0
+- Required materializer, plan core, direct core, and deletion authority: present
+- Private materializer executable by `anon`: false
+- Private materializer executable by `authenticated`: false
+- `authenticated` table privileges: owner-filtered `SELECT` only
+- `service_role` table privileges: `SELECT` only
+- Direct set update/delete: blocked
+- Direct target update/delete: blocked
+- Authenticated direct insert: blocked
+- Exact retry across all 34 snapshot items: no-op; counts remained 86/15
+- Owner-one RLS projection: 82 sets / 15 targets
+- Owner-two RLS projection: 4 sets / 0 targets
+- Unrelated authenticated user projection: 0 sets / 0 targets
+
+## Privacy and retention
+
+Permanent automated coverage proves:
+
+- Deterministic ordered export of both AW-3C tables.
+- Pagination beyond 5,000 rows.
+- Cross-user export isolation.
+- Trusted account deletion reports both AW-3C deletion counts and leaves zero owned rows.
+- Physical retention follows the owning workout-session snapshot; no independent TTL or archive was added.
+
+## Activity Catalog isolation
+
+Activity Catalog project `khlcctuefiuhunqymkbp` has:
+
+- AW-3C relations: 0
+- AW-3C functions: 0
+- Plaivra migration schema: absent
+- AW-3C writes: 0
+
+No migration, repair, or data mutation was applied to Activity Catalog.
+
+## Advisor classification
+
+Security advisor:
+
+- No AW-3C missing-policy, exposed-materializer, or table-grant regression.
+- Existing `SECURITY DEFINER` warnings apply to reviewed public application RPCs and pre-existing surfaces.
+- Existing internal RLS-without-policy notices and leaked-password-protection warning are outside AW-3C scope.
+
+Performance advisor:
+
+- No missing-FK-index warning for either AW-3C table.
+- New AW-3C indexes are initially reported as unused immediately after creation; this is expected and does not justify removing required ownership/export indexes.
+- Other unindexed-FK, duplicate-index, multiple-policy, and unused-index notices are pre-existing and outside AW-3C scope.
+
+## Migration-ledger reconciliation
+
+Ledger state after reconciliation:
+
+- `historyRepair.state`: `reconciled`
+- `pendingCount`: 0
+- `unresolvedCount`: 0
+- `schemaVerifiedUntrackedCount`: 0
+- Physical Production records: 73
+- Latest reconciled Production identity: `20260725130422`
+- Audited repository ancestor: `96fe292d57b2d22a21f9cfa402615b0fff60cdfa`
+
+The repository migration remains immutable and is represented by an `applied_version_alias`. It must not be renamed, edited, or replayed.
+
+## Remaining boundary
+
+Final exact-head Phase A, Quality, and Exact Release Quality must pass on the reconciled ledger/report head. After that, the recommendation changes to:
+
+```text
+READY FOR INDEPENDENT PLANNER QA/QC
+```
+
+Do not merge, mark ready, promote the compatibility marker, deploy manually, or start AW-4A before explicit approval.
+
+NOT READY FOR INDEPENDENT PLANNER QA/QC
