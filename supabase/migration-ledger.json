@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "projectRef": "bkwezjxvapaeasfvlhvv",
-  "capturedAt": "2026-07-25T13:04:22Z",
-  "auditedRepositoryCommit": "96fe292d57b2d22a21f9cfa402615b0fff60cdfa",
+  "capturedAt": "2026-07-25T14:56:36Z",
+  "auditedRepositoryCommit": "d9eb90d90e8be4b01e86733799bb28de3e068179",
   "productionMigrationCount": 63,
   "schemaVerifiedUntrackedCount": 0,
   "pendingCount": 0,
@@ -12,7 +12,7 @@
     "schemaAppliedUntrackedCount": 0,
     "pendingCount": 0,
     "unresolvedCount": 0,
-    "note": "Plaivra Production contains 73 physical migration records and is reconciled through generated AW-3C record 20260725130422. Repository migration identities remain immutable; generated aliases preserve exact application history. Do not replay any applied migration."
+    "note": "Plaivra Production contains 74 physical migration records and is reconciled through generated AW-3C audit correction 20260725145636. Repository migration identities remain immutable; generated aliases preserve exact application history. Do not replay any applied migration."
   },
   "entries": [
     {
@@ -390,7 +390,7 @@
     {
       "localFile": "20260720213000_active_workout_aw2a_execution_state.sql",
       "state": "applied_version_alias",
-      "note": "Applied exactly once to Plaivra Database through the supported Supabase migration authority. The generated production version 20260721000544 differs from immutable repository version 20260720213000; this alias preserves both identities without renaming or replaying the reviewed SQL. Do not replay.",
+      "note": "Applied exactly once to Plaivra Database. The generated production version 20260721000544 differs from immutable repository version 20260720213000; this alias preserves both identities. Do not replay.",
       "productionVersion": "20260721000544",
       "productionName": "active_workout_aw2a_execution_state"
     },
@@ -403,75 +403,85 @@
     {
       "localFile": "20260722013000_active_workout_aw2b_command_authority.sql",
       "state": "applied_version_alias",
-      "note": "Applied exactly once to Plaivra Database on 2026-07-21T22:48:13Z through Supabase apply_migration. The generated production version 20260721224813 differs from immutable repository version 20260722013000; this alias preserves both identities without renaming or replaying the reviewed SQL. Git blob 9cf5b9a95902266fcb231319f492938427a6e45f; SHA-256 c149a6bde073fa1461eaa62f5a96bc555fb0a964695d5c2e3dcac433f9f28672. Do not replay.",
+      "note": "Applied exactly once to Plaivra Database. The generated production version 20260721224813 differs from immutable repository version 20260722013000; this alias preserves both identities. Git blob 9cf5b9a95902266fcb231319f492938427a6e45f; SHA-256 c149a6bde073fa1461eaa62f5a96bc555fb0a964695d5c2e3dcac433f9f28672. Do not replay.",
       "productionVersion": "20260721224813",
       "productionName": "active_workout_aw2b_command_authority"
     },
     {
       "localFile": "20260722070000_active_workout_aw2c_timeline_events.sql",
       "state": "applied_version_alias",
-      "note": "Applied exactly once to Plaivra Database on 2026-07-22T09:31:15Z through Supabase apply_migration. The generated production version 20260722093115 differs from immutable repository version 20260722070000; this alias preserves both identities without renaming or replaying the reviewed SQL. Repository Git blob 4d6d92f8fc712a2e6327685b22bb267c5981cb1a; repository SHA-256 91638a9691fcb5db0bbb3dddebc886b210a536eca76833f152709d39b4eb3b84; recorded applied SQL SHA-256 907e23d18bf2aedabc187b1ebb902c1127debf93ad7c0c9b553efe629cc776a7 (the sole byte difference is the repository final newline, proven by the matching Git blob when appended). Do not replay.",
+      "note": "Applied exactly once to Plaivra Database. The generated production version 20260722093115 differs from immutable repository version 20260722070000; this alias preserves both identities. Repository Git blob 4d6d92f8fc712a2e6327685b22bb267c5981cb1a; repository SHA-256 91638a9691fcb5db0bbb3dddebc886b210a536eca76833f152709d39b4eb3b84. Do not replay.",
       "productionVersion": "20260722093115",
       "productionName": "active_workout_aw2c_timeline_events"
     },
     {
       "localFile": "20260722113000_active_workout_aw3a_structured_metrics.sql",
       "state": "applied_version_alias",
-      "note": "Applied exactly once to Plaivra Database on 2026-07-22T16:15:42Z through Supabase apply_migration. The generated production version 20260722161542 differs from immutable repository version 20260722113000; this alias preserves both identities without renaming or replaying the reviewed SQL. Repository Git blob 3c93c484da42927d7e4b3e7c1f175c359853f424; repository SHA-256 8c63947898b6aae92edb348acd9149dfc3f6089dd93558de2beb49f07c5be8b1; applied SQL SHA-256 8c63947898b6aae92edb348acd9149dfc3f6089dd93558de2beb49f07c5be8b1. Do not replay.",
+      "note": "Applied exactly once to Plaivra Database. The generated production version 20260722161542 differs from immutable repository version 20260722113000; this alias preserves both identities. Repository Git blob 3c93c484da42927d7e4b3e7c1f175c359853f424; SHA-256 8c63947898b6aae92edb348acd9149dfc3f6089dd93558de2beb49f07c5be8b1. Do not replay.",
       "productionVersion": "20260722161542",
       "productionName": "active_workout_aw3a_structured_metrics"
     },
     {
       "localFile": "20260722210312_active_workout_aw3b_structured_set_details.sql",
       "state": "applied_version_alias",
-      "note": "Applied exactly once to Plaivra Database on 2026-07-22T22:34:26Z through Supabase apply_migration. The generated production version 20260722223426 differs from immutable repository version 20260722210312; this alias preserves both identities without renaming or replaying the reviewed SQL. Repository Git blob 8843c1dd46369501c771e34f4324e793b04edb01; repository and applied SQL SHA-256 22ea89a6c63356b8e5b3040076a4268f88dde8059dd21798659d6978859238ff. Do not replay.",
+      "note": "Applied exactly once to Plaivra Database. The generated production version 20260722223426 differs from immutable repository version 20260722210312; this alias preserves both identities. Repository Git blob 8843c1dd46369501c771e34f4324e793b04edb01; SHA-256 22ea89a6c63356b8e5b3040076a4268f88dde8059dd21798659d6978859238ff. Do not replay.",
       "productionVersion": "20260722223426",
       "productionName": "active_workout_aw3b_structured_set_details"
     },
     {
       "localFile": "20260722224500_active_workout_aw3b_production_hardening.sql",
       "state": "applied_version_alias",
-      "note": "Applied exactly once to Plaivra Database on 2026-07-22T22:42:46Z through Supabase apply_migration after post-apply advisors identified FK-index and metric-registry RLS hardening. The generated production version 20260722224246 differs from immutable repository version 20260722224500; this alias preserves both identities without renaming or replaying the reviewed SQL. Repository Git blob c41892195a25e21e35c3fede1ce8e696fc99eaa4; repository and applied SQL SHA-256 19bdbaad1bd80318e5893f4c80d6a9b037816b6ebed2480c2ed5574ce74409a3. Do not replay.",
+      "note": "Applied exactly once to Plaivra Database. The generated production version 20260722224246 differs from immutable repository version 20260722224500; this alias preserves both identities. Repository Git blob c41892195a25e21e35c3fede1ce8e696fc99eaa4; SHA-256 19bdbaad1bd80318e5893f4c80d6a9b037816b6ebed2480c2ed5574ce74409a3. Do not replay.",
       "productionVersion": "20260722224246",
       "productionName": "active_workout_aw3b_production_hardening"
     },
     {
       "localFile": "20260723010500_active_workout_aw3b_read_and_payload_corrections.sql",
       "state": "applied_version_alias",
-      "note": "Applied exactly once to Plaivra Database on 2026-07-22T23:28:17Z through Supabase apply_migration after independent AW-3B QA identified the PostgREST one-to-one read contract and public payload/session-bound corrections. The generated production version 20260722232817 differs from immutable repository version 20260723010500; this alias preserves both identities without renaming or replaying the reviewed SQL. Repository Git blob e585dda90f2f25cea76b975476144982899c9502; repository and applied SQL SHA-256 4847061819b8f19cdcaf2cf0023eb44d0e3ecfaaef2de298926bff8fe07fb6f. Do not replay.",
+      "note": "Applied exactly once to Plaivra Database. The generated production version 20260722232817 differs from immutable repository version 20260723010500; this alias preserves both identities. Repository Git blob e585dda90f2f25cea76b975476144982899c9502; SHA-256 4847061819b8f19cdcaf2cf0023eb44d0e3ecfaaef2de298926bff8fe07fb6f. Do not replay.",
       "productionVersion": "20260722232817",
       "productionName": "active_workout_aw3b_read_and_payload_corrections"
     },
     {
       "localFile": "20260724013000_active_workout_aw3b_final_logic_hardening.sql",
       "state": "applied_version_alias",
-      "note": "Applied exactly once to Plaivra Database through Supabase apply_migration. The generated production version 20260724002022 differs from immutable repository version 20260724013000; this alias preserves both identities without renaming or replaying the reviewed SQL. Durable repository evidence commit dc7d6597bc0aa1d2537a37f2a2e0188ee7f1dfe0; SHA-256 d5955f5eeccba56cd337385dc818efa9af8b979b7eea18b79d467d726a775d3e. Do not replay.",
+      "note": "Applied exactly once to Plaivra Database. The generated production version 20260724002022 differs from immutable repository version 20260724013000; this alias preserves both identities. SHA-256 d5955f5eeccba56cd337385dc818efa9af8b979b7eea18b79d467d726a775d3e. Do not replay.",
       "productionVersion": "20260724002022",
       "productionName": "active_workout_aw3b_final_logic_hardening",
-      "evidenceCommit": "96fe292d57b2d22a21f9cfa402615b0fff60cdfa",
+      "evidenceCommit": "d9eb90d90e8be4b01e86733799bb28de3e068179",
       "repositorySha256": "d5955f5eeccba56cd337385dc818efa9af8b979b7eea18b79d467d726a775d3e",
       "repositoryGitBlob": "095d7bd4edbe87bc8fd296d1d3879b47499448b9"
     },
     {
       "localFile": "20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql",
       "state": "applied_version_alias",
-      "note": "Applied exactly once to Plaivra Database on 2026-07-24T23:27:34Z through Supabase apply_migration. The generated production version 20260724232734 differs from immutable repository version 20260724023000; this alias preserves both identities without renaming or replaying the reviewed SQL. Durable pre-application evidence commit dbedfd201d5bbd5efb1988ccb92899e499197e51; repository Git blob 84bfb4a22197f56300245f693f41f91a136814dd; repository and applied SQL SHA-256 1e41fa5670c6a3dbf4f889688a8457dd96efd26b7bcdb3623d97f9ff707d8de4. Do not replay.",
+      "note": "Applied exactly once to Plaivra Database. The generated production version 20260724232734 differs from immutable repository version 20260724023000; this alias preserves both identities. SHA-256 1e41fa5670c6a3dbf4f889688a8457dd96efd26b7bcdb3623d97f9ff707d8de4. Do not replay.",
       "productionVersion": "20260724232734",
       "productionName": "active_workout_aw3b_post_apply_logic_corrections",
-      "evidenceCommit": "96fe292d57b2d22a21f9cfa402615b0fff60cdfa",
+      "evidenceCommit": "d9eb90d90e8be4b01e86733799bb28de3e068179",
       "repositorySha256": "1e41fa5670c6a3dbf4f889688a8457dd96efd26b7bcdb3623d97f9ff707d8de4",
       "repositoryGitBlob": "84bfb4a22197f56300245f693f41f91a136814dd"
     },
     {
       "localFile": "20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql",
       "state": "applied_version_alias",
-      "note": "Applied exactly once to Plaivra Production on 2026-07-25T13:04:22Z through Supabase apply_migration. The generated production version 20260725130422 differs from immutable repository version 20260725013000; this alias preserves both identities without renaming or replaying the reviewed SQL. Durable pre-application evidence commit 96fe292d57b2d22a21f9cfa402615b0fff60cdfa; repository Git blob 35af298e904a4cdfdd336a033a91dfc63f827479; repository and applied SQL SHA-256 c7ee67e8184d4cf1afe6e7ce9c6ec4de90c5fd36bc9d31006b55e53f62b94031. Do not replay.",
+      "note": "Applied exactly once to Plaivra Production. The generated production version 20260725130422 differs from immutable repository version 20260725013000; this alias preserves both identities. SHA-256 c7ee67e8184d4cf1afe6e7ce9c6ec4de90c5fd36bc9d31006b55e53f62b94031. Do not replay.",
       "productionVersion": "20260725130422",
       "productionName": "active_workout_aw3c_immutable_prescription_snapshots",
-      "evidenceCommit": "96fe292d57b2d22a21f9cfa402615b0fff60cdfa",
+      "evidenceCommit": "d9eb90d90e8be4b01e86733799bb28de3e068179",
       "repositorySha256": "c7ee67e8184d4cf1afe6e7ce9c6ec4de90c5fd36bc9d31006b55e53f62b94031",
       "repositoryGitBlob": "35af298e904a4cdfdd336a033a91dfc63f827479"
+    },
+    {
+      "localFile": "20260725163000_active_workout_aw3c_audit_corrections.sql",
+      "state": "applied_version_alias",
+      "note": "Applied exactly once to Plaivra Production on 2026-07-25T14:56:36Z through Supabase apply_migration. The generated production version 20260725145636 differs from immutable repository version 20260725163000; this alias preserves both identities. Durable audit evidence commit d9eb90d90e8be4b01e86733799bb28de3e068179; repository Git blob 630d0e15e591dc90c2519f4389cec17ece12b15a; repository and applied SQL SHA-256 06dc241e917965447015d34981b125077f0cf68426492cb08bad7ddd7fd1e7fd. Do not replay.",
+      "productionVersion": "20260725145636",
+      "productionName": "active_workout_aw3c_audit_corrections",
+      "evidenceCommit": "d9eb90d90e8be4b01e86733799bb28de3e068179",
+      "repositorySha256": "06dc241e917965447015d34981b125077f0cf68426492cb08bad7ddd7fd1e7fd",
+      "repositoryGitBlob": "630d0e15e591dc90c2519f4389cec17ece12b15a"
     }
   ],
-  "productionRecordCount": 73
+  "productionRecordCount": 74
 }
