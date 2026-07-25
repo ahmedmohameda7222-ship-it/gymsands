@@ -1,9 +1,11 @@
 name: AW-3C Deterministic Preflight
 
 on:
-  push:
+  pull_request:
     branches:
-      - feat/active-workout-aw3c-prescription-snapshots
+      - feat/active-workout-aw3b-structured-set-details
+    types:
+      - synchronize
 
 permissions:
   contents: write
