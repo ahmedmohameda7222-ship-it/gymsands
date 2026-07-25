@@ -198,12 +198,31 @@ AW-3B PR merge, deployment, compatibility-marker advancement, and later executio
 
 ## Production-count interpretation
 
-The physical production history contains **70 records**. The machine ledger intentionally reports `productionMigrationCount = 63` because that field counts only exact `state = applied` rows. Seven generated production identities are represented by immutable version aliases. Therefore:
+The physical production history contained **70 records** at the earlier AW-2A reconciliation point; the current AW-3B post-apply history contains **72 records**. The machine ledger intentionally reports `productionMigrationCount = 63` because that field counts only exact `state = applied` rows. Seven generated production identities are represented by immutable version aliases. Therefore:
 
 ```text
-63 exact-applied + 7 version-alias = 70 actual production records
+63 exact-applied + 9 version-alias = 72 actual production records
 ```
 
 This is deliberate reconciliation behavior, not drift. `scripts/check-migration-ledger.mjs` remains strict and unchanged.
 
-AW-3B post-apply correction `supabase/migrations/20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql` is committed and pending one authorized Plaivra Database application; do not replay any applied migration.
+AW-3B post-apply correction `supabase/migrations/20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql` is applied as generated identity `20260724232734`; do not replay any applied migration.
+
+## AW-3B final reconciliation (2026-07-24)
+
+The forward-only correction `20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql` was applied exactly once to Plaivra Production as generated identity `20260724232734_active_workout_aw3b_post_apply_logic_corrections`.
+
+```text
+Pre-application evidence commit: dbedfd201d5bbd5efb1988ccb92899e499197e51
+Git blob: 84bfb4a22197f56300245f693f41f91a136814dd
+SHA-256: 1e41fa5670c6a3dbf4f889688a8457dd96efd26b7bcdb3623d97f9ff707d8de4
+Physical Production records: 72
+Compatibility marker: 20260722161542
+Pending: 0
+Schema-applied-untracked: 0
+Unresolved: 0
+```
+
+`productionMigrationCount` remains the machine-derived number of exact `state = applied` entries. Generated Production identities use `applied_version_alias`, so the physical history count is intentionally reported separately. The migration preserved all protected row counts and hashes, introduced `private.aw3b_graph_revision(uuid)`, removed the superseded canonicalizer, retained safe RPC ACL/search-path contracts, and left Activity Catalog untouched.
+
+Do not replay, rename, edit, or replace any applied AW-3B migration.

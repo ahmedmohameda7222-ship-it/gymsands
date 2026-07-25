@@ -1,76 +1,99 @@
-# AW-3B structured set details implementation report
+# AW-3B structured set details — final implementation report
 
-## Scope
-
-AW-3B completes structured workout-set details without expanding into AW-3C. The permanent implementation covers owner-bound persistence and hydration, deterministic reads, trusted provenance, retry-safe timeline evidence, autosave acknowledgement safety, structured-field validation, privacy-export pagination, and EN/DE/AR presentation boundaries.
-
-## Repository state
-
-The branch contains the permanent AW-3B implementation. Temporary patch chunks, diagnostic logs, finalizer scripts, temporary workflows, workspace-export files, and the superseded `20260724003000` migration candidate have been removed. The permanent Phase A workflow is restored from `main`.
-
-The permanent Strict Mode-safe autosave lifecycle implementation is present in repository history at clean source head:
+## Identity
 
 ```text
-43cf6f2088e975fb7c4cccf6939cf4ae64ad60bb
+Repository: ahmedmohameda7222-ship-it/gymsands
+Base: 91ab36077d5528ee1d967ed7def2ba8d2164a6a2
+Branch: feat/active-workout-aw3b-structured-set-details
+Draft PR: #85
+Pre-application approved head: dbedfd201d5bbd5efb1988ccb92899e499197e51
 ```
 
-The committed forward-only correction is:
+AW-3B remains inside the structured-set-details unit. AW-3C and all later Active Workout units were not started.
+
+## Permanent implementation
+
+AW-3B provides owner-bound structured set details, deterministic nested reads, actor-bound provenance, exact segment replacement semantics, atomic core/detail/segment/metric writes, privacy-safe timeline evidence, complete privacy export pagination, accessible RPE/RIR validation, and EN/DE/AR drawer behavior.
+
+The rendered autosave defect had two independent causes and both received long-term corrections:
+
+1. Train QA duplicated plan/exercise identities and hydrated a different exercise. `lib/fixtures/train-mock-contract.json` is now the single source of truth, and QA fails immediately unless Set 1 is hydrated as persisted, completed, and structured.
+2. React Strict Mode effect replay cancelled the autosave coordinator while leaving a cancelled object in its ref. Lifecycle ownership now creates one coordinator per mount, cancels only that instance, clears the ref only when it still owns it, and recreates a live coordinator on remount. A mount-cleanup-remount regression test proves the replacement coordinator persists pending writes.
+
+Invalid draft RPE/RIR remains non-throwing for context construction, while actual persistence retains strict validation.
+
+## Immutable migrations
+
+Already-applied migrations remain byte-immutable. The final forward-only correction was applied exactly once:
 
 ```text
-supabase/migrations/20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql
+Repository file: 20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql
+Generated Production identity: 20260724232734_active_workout_aw3b_post_apply_logic_corrections
+Pre-application evidence commit: dbedfd201d5bbd5efb1988ccb92899e499197e51
+Repository Git blob: 84bfb4a22197f56300245f693f41f91a136814dd
+Repository/applied SQL SHA-256: 1e41fa5670c6a3dbf4f889688a8457dd96efd26b7bcdb3623d97f9ff707d8de4
+Repository bytes: 26941
+Applied at: 2026-07-24T23:27:34Z
 ```
 
-It remains pending until permanent exact-head CI, migration replay, database lint, and verification SQL succeed.
+No earlier AW-3B migration was replayed or modified.
 
-## Applied Production authority
+## Pre-application exact-head evidence
 
-The immutable final-hardening migration was applied exactly once:
+All required workflows passed on `dbedfd201d5bbd5efb1988ccb92899e499197e51`:
 
 ```text
-Repository migration: 20260724013000_active_workout_aw3b_final_logic_hardening.sql
-Generated Production identity: 20260724002022_active_workout_aw3b_final_logic_hardening
-Evidence commit: dc7d6597bc0aa1d2537a37f2a2e0188ee7f1dfe0
-Repository Git blob: 095d7bd4edbe87bc8fd296d1d3879b47499448b9
-Repository SHA-256: d5955f5eeccba56cd337385dc818efa9af8b979b7eea18b79d467d726a775d3e
+Phase A Diff Validation: 30131710206 — success
+Quality: 30131710177 — success
+Exact Release Quality Validation: 30131710165 — success
 ```
 
-It must not be modified, renamed, replayed, or replaced.
+Quality passed migration replay, database lint, all SQL verification, migration-ledger validation, dependency audit, lint, typecheck, unit failure parity, integration tests, scripts/i18n, telemetry, environment validation, production build, release metadata, and rendered browser QA. Exact Release independently verified request-bound canonical Quality evidence and recorded read-only pre-application mode.
 
-## Compatibility and isolation
+## Production verification
 
 ```text
-Compatibility marker: 20260722161542
 Plaivra Production project: bkwezjxvapaeasfvlhvv
-Activity Catalog project: khlcctuefiuhunqymkbp
+Physical migration records before: 71
+Physical migration records after: 72
+Compatibility marker before/after: 20260722161542
+Graph revision before/after: absent / present
+Superseded canonicalizer before/after: present / absent
+Ownership violations after: 0
 ```
 
-The compatibility marker remains unchanged. The Activity Catalog is outside AW-3B and must not be modified.
+Protected data was unchanged by the migration:
 
-## Durable rendered autosave verification
+```text
+exercise_logs: 64 — 1c7bbdacc730fc969c63fa0041b1a4442ce8089895fa981c8e8d4815931191cf
+exercise_log_metric_values: 75 — 639e66fd9a496c99bcdb1a0159bd73bc074b3145802a600c1139f06a52af0706
+exercise_log_set_details: 15 — a51b3db65554f4de75e8caa3b9646f334e45f94219343aa54ec602455a500149
+exercise_log_set_segments: 0 — e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+exercise_log_set_segment_metric_values: 0 — e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+workout_session_timeline_events: 83 — a6a42bb0872af5b8e652e456f531ac5b132df9f3906c94e0be3d10b333589aa9
+```
 
-The Active Workout rendered-QA fixture now uses `lib/fixtures/train-mock-contract.json` as the single source of truth for the active plan, day, exercise, session, and persisted-log identities. The persisted set-detail fixture is therefore bound to the same stable exercise identity rendered by the mock Train plan instead of maintaining a second hard-coded identity set.
+The deployed public upsert remains `SECURITY DEFINER` with an empty search path, is executable by authenticated/service roles, and is denied to anon. Private graph/snapshot/timeline helpers are denied to public roles. The public authority includes timeline deferral, structured summary, graph revision, and existing detail/segment/metric provenance preservation.
 
-The Active Workout surface exposes non-visual persisted/completed/detail state attributes for deterministic QA preconditions. Train QA verifies hydration of the completed persisted Set 1, RPE, RIR, set type, and note before asserting autosave. A targeted autosave smoke scenario runs before the expensive rendered matrix so future identity or hydration drift fails early.
+## Activity Catalog isolation
 
-Invalid draft RPE/RIR values remain visible and accessible to the user but are excluded from non-persistence workout context serialization. Strict parsing is retained for actual persistence, so the rendered validation flow cannot crash while invalid draft values are being corrected and invalid values still cannot reach the atomic save RPC.
+Project `khlcctuefiuhunqymkbp` was inspected read-only before and after application. It contains zero AW-3B relations and zero AW-3B functions. No migration or write was sent to it.
 
-The remaining autosave failure was traced to lifecycle ownership under React Strict Mode. The development-only effect cleanup cancelled the coordinator while leaving its ref non-null, so the simulated remount reused a permanently cancelled coordinator and every later flush became a no-op. The permanent repair creates a new coordinator for every mounted lifecycle, cancels only that owned instance, clears the ref only when it still points to that instance, and creates a distinct live coordinator on remount. A mount-cleanup-remount regression test proves that the replacement coordinator remains live.
+## Advisor classification
 
-The lifecycle repair is validated under the repository-required Node 24 runtime through the permanent AW-3B unit suite, TypeScript validation, and exact-head rendered autosave smoke before Production migration authorization.
+No new AW-3B table/index/RLS regression was reported. Security advisor warnings for authenticated execution of the canonical workout `SECURITY DEFINER` RPCs are intentional and covered by owner assertion, bounded payloads, row locking, empty search paths, anon denial, and executable SQL verification. Other RLS, Auth leaked-password, unindexed-FK, unused-index, duplicate-index, and multiple-policy findings predate this unit and remain out of AW-3B scope.
 
-Permanent script and unit tests reject a return to duplicated hard-coded fixture identities, an autosave assertion without a proven hydration precondition, or reuse of a cancelled coordinator after a Strict Mode remount.
+## Ledger semantics
 
-## Validated repository gates
+The ledger is reconciled with `pendingCount = 0`, `unresolvedCount = 0`, and `schemaAppliedUntrackedCount = 0`. `productionMigrationCount` continues to mean entries whose state is exactly `applied`; generated Production versions are represented as `applied_version_alias`. The physical Production history count is recorded separately as 72.
 
-The clean implementation has passed the AW-3B targeted suite, i18n suite, script suite, migration-ledger validation, TypeScript typecheck, ESLint, diff-format validation, and clean-worktree validation. Permanent CI must be bound to the current exact branch head before the pending migration is applied.
+## Boundary
 
-## Remaining release-closure work
+PR #85 remains Draft and unmerged. The compatibility marker was not promoted. No deployment occurred. AW-3C was not started.
 
-1. Complete permanent exact-head Phase A, Quality, and Exact Release Quality validation.
-2. Capture pre-application Production and Activity Catalog evidence.
-3. Apply `20260724023000_active_workout_aw3b_post_apply_logic_corrections.sql` exactly once to Plaivra Production only.
-4. Verify migration history, function definitions and ACLs, ownership integrity, timeline idempotency, structured-detail counts, data preservation, compatibility-marker stability, and Activity Catalog isolation.
-5. Reconcile the migration ledger and this report to the generated Production migration identity.
-6. Run final exact-head CI and leave PR #85 Draft.
+## Final validation
 
-The PR must not be merged, marked ready, or used to start AW-3C during this closure.
+Final post-reconciliation Phase A, Quality, and Exact Release Quality run identities are recorded after the final exact head completes.
+
+NOT READY FOR INDEPENDENT PLANNER QA/QC — FINAL EXACT-HEAD VALIDATION PENDING
