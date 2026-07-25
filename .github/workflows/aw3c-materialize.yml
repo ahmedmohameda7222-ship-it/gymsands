@@ -72,6 +72,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cp .github/workflows/quality.yml aw3c-materialized-quality.yml
+          git checkout HEAD -- .github/workflows/quality.yml
           rm -rf .aw3c-transport .aw3c-bundle
           ! grep -qx '__PLACEHOLDER__' supabase/migrations/20260725013000_active_workout_aw3c_immutable_prescription_snapshots.sql
           git add -A
