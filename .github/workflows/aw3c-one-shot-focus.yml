@@ -1,0 +1,54 @@
+name: AW-3C One-Shot Stable Focus Correction
+
+on:
+  pull_request_target:
+    types:
+      - edited
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.number == 86 && github.event.pull_request.head.ref == 'feat/active-workout-aw3c-prescription-snapshots'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/active-workout-aw3c-prescription-snapshots
+          fetch-depth: 0
+      - name: Bind mobile focus check to one DOM element
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/run-train-layout-qa.mjs')
+          text = path.read_text(encoding='utf-8')
+          replacements = [
+              (
+                  '      await input.waitFor({ state: "visible", timeout: 20_000 });\n      const keyboardViewport',
+                  '      await input.waitFor({ state: "visible", timeout: 20_000 });\n      const focusedInput = await input.elementHandle();\n      if (!focusedInput) throw new Error("Editable control disappeared before the keyboard viewport check.");\n      const keyboardViewport'
+              ),
+              ('      await input.focus();', '      await focusedInput.focus();'),
+              (
+                  '      const focused = await input.evaluate((element) => element === document.activeElement);',
+                  '      const focused = await focusedInput.evaluate((element) => element.isConnected && element === document.activeElement);'
+              ),
+          ]
+          for old, new in replacements:
+              if text.count(old) != 1:
+                  raise SystemExit(f'Expected exactly one occurrence of {old!r}, found {text.count(old)}')
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+          git diff --check
+          git add scripts/run-train-layout-qa.mjs
+          if git diff --cached --quiet; then
+            echo 'Correction already present.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'test(qa): bind mobile focus checks to stable elements'
+          git push origin HEAD:feat/active-workout-aw3c-prescription-snapshots
