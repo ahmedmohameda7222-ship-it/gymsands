@@ -6,21 +6,17 @@ on:
     branches:
       - main
     types:
-      - opened
-      - reopened
-      - synchronize
-      - labeled
+      - ready_for_review
 
 permissions:
   contents: read
 
 concurrency:
-  group: quality-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+  group: quality-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   verify:
-    if: contains(github.event.pull_request.labels.*.name, 'phase-close')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
