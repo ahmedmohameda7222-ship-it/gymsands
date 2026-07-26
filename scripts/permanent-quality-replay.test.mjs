@@ -19,6 +19,8 @@ import { REQUIRED_QUALITY_GATES } from "./quality-evidence-contract.mjs";
 
 const quality = readFileSync(".github/workflows/quality.yml", "utf8").replaceAll("\r\n", "\n");
 const prQuality = readFileSync(".github/workflows/pr-quality.yml", "utf8").replaceAll("\r\n", "\n");
+const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+const integrationRunner = readFileSync("scripts/run-integration-tests.mjs", "utf8").replaceAll("\r\n", "\n");
 const helper = [
   readFileSync("scripts/replay-local-migration-chain.mjs", "utf8"),
   readFileSync("scripts/replay-local-migration-chain-legacy.mjs", "utf8")
@@ -116,6 +118,17 @@ test("automatic PR Quality is path-scoped, parallel and fail-safe", () => {
   assert.match(prQuality, /node scripts\/run-ci-check\.mjs/);
   assert.match(prQuality, /if: always\(\)/);
   assert.match(prQuality, /value\.result === "failure" \|\| value\.result === "cancelled"/);
+});
+
+test("integration validation provisions and exports both database authorities instead of allowing skipped suites", () => {
+  assert.equal(packageJson.scripts["test:integration"], "node scripts/run-integration-tests.mjs");
+  assert.match(integrationRunner, /plaivra_ci_test/);
+  assert.match(integrationRunner, /drop database if exists/);
+  assert.match(integrationRunner, /create database/);
+  assert.match(integrationRunner, /DATABASE_URL: config\.databaseUrl/);
+  assert.match(integrationRunner, /PLAIVRA_AW2A_TEST_DATABASE_URL: config\.aw2aDatabaseUrl/);
+  assert.match(quality, /npm run test:integration/);
+  assert.match(prQuality, /npm run test:integration/);
 });
 
 test("permanent validation names are generic and every release gate is retained", () => {
