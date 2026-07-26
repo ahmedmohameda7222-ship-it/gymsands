@@ -59,8 +59,7 @@ import {
   executionCursorToIndexes,
   executionElapsedSeconds,
   executionRestSecondsLeft,
-  executionStartedAtMs,
-  planWorkoutSessionAfterSetCompletion
+  executionStartedAtMs
 } from "@/lib/workouts/workout-session-execution";
 import type { WorkoutSessionExecutionCursorRow } from "@/services/database/workout-session-execution";
 import { activeSessionPersistenceAdapter } from "@/services/database/active-session-persistence-adapter";
@@ -70,6 +69,7 @@ import {
 } from "@/lib/workouts/active-session-store/store";
 import { activeSessionClock } from "@/lib/workouts/active-session-store/clock";
 import { createSessionCommandId } from "@/lib/workouts/session-engine/commands";
+import { planSessionAfterSetCompletion } from "@/lib/workouts/session-engine/reducer";
 import { frozenLogCompatibility, frozenRepetitionsEntryDefault, frozenRepetitionsProjection } from "@/services/database/workout-session-prescriptions";
 import {
   canUpdateWorkoutSetNote,
@@ -1230,22 +1230,43 @@ export function WorkoutDayFocusSession({ day }: { day: WorkoutPlanDaySession }) 
     const previousTimer = { timerSeconds, timerLeft, timerEndsAtMs, isTimerRunning };
     const completedAt = new Date();
     const nextStates = statesWithSetPatch(exerciseIndex, setIndex, { completedAt: completedAt.toISOString() });
-    const transition = planWorkoutSessionAfterSetCompletion({
-      exerciseIndex,
-      setIndex,
-      exerciseSetCounts: nextStates.map((item) => item.sets.length),
-      orderedSnapshotItems: executionCursorItems,
-      dayExercises: nextStates.map((item) => item.exercise),
-      restDurationSeconds: targetSet.plannedRestSeconds ?? timerSeconds,
-      controllerDeviceId: controllerDeviceIdRef.current,
-      now: completedAt
-    });
+    const store = activeSessionStoreRef.current;
+    if (!store) {
+      toast({
+        title: tr("completion.saveFailedTitle"),
+        description: tr("offline.keepOpenRetry")
+      });
+      return;
+    }
+    let transition;
+    try {
+      const canonical = store.getSnapshot();
+      const currentPrescriptionItem = canonical.prescription.find(
+        (item) => item.id === executionCursorItems[exerciseIndex]?.id
+      ) ?? canonical.prescription.find(
+        (item) => item.itemOrder === exerciseIndex + 1
+      );
+      transition = planSessionAfterSetCompletion({
+        userId: user.id,
+        workoutSessionId: session.id,
+        currentSnapshotItemId: currentPrescriptionItem?.id ?? "",
+        currentSetNumber: setIndex + 1,
+        prescription: canonical.prescription,
+        performedLogs: canonical.performedLogs,
+        restDurationSeconds: targetSet.plannedRestSeconds ?? timerSeconds,
+        controllerDeviceId: controllerDeviceIdRef.current
+      });
+    } catch (error) {
+      toast({
+        title: tr("completion.saveFailedTitle"),
+        description: userSafeError(error, tr("offline.keepOpenRetry"))
+      });
+      return;
+    }
 
     setIsSaving(true);
     setExerciseStates(nextStates);
     try {
-      const store = activeSessionStoreRef.current;
-      if (!store) throw new Error("The workout execution store is unavailable.");
       const response = await store.completeCanonicalSet({
         logs: buildLogRows(nextStates, { pendingOnly: true }),
         executionIntent: {

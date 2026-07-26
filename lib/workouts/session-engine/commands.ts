@@ -5,6 +5,8 @@ import {
   ActiveSessionIdempotencyConflictError,
   ActiveSessionRevisionConflictError,
   ActiveSessionTransportUncertainError,
+  validateSessionCommandIntent,
+  validateSessionCommandRequest,
   type SessionCommandIntent,
   type SessionCommandRequest,
   type SessionCommandResponse
@@ -126,6 +128,7 @@ export function createSessionCommandDispatcher(
       return currentLane.state;
     },
     dispatch(intent) {
+      validateSessionCommandIntent(intent);
       const currentLane = lane(intent.userId, intent.workoutSessionId);
       return enqueue(currentLane, async () => {
         if (!currentLane.state) {
@@ -142,6 +145,7 @@ export function createSessionCommandDispatcher(
       });
     },
     retry(request) {
+      validateSessionCommandRequest(request);
       const currentLane = lane(request.userId, request.workoutSessionId);
       return enqueue(currentLane, async () => {
         if (!currentLane.state) {
@@ -163,6 +167,7 @@ export async function dispatchWithTransportClassification(
   request: SessionCommandRequest,
   send: (request: SessionCommandRequest) => Promise<SessionCommandResponse>
 ) {
+  validateSessionCommandRequest(request);
   try {
     return await send(request);
   } catch (error) {

@@ -189,3 +189,227 @@ export class ActiveSessionTransportUncertainError extends ActiveSessionError {
     this.request = request;
   }
 }
+
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function invalidIntent(message: string): never {
+  throw new ActiveSessionError("invalid_transition", message);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function assertExactKeys(
+  payload: Record<string, unknown>,
+  required: readonly string[],
+  optional: readonly string[] = []
+) {
+  const allowed = new Set([...required, ...optional]);
+  if (
+    required.some((key) => !Object.prototype.hasOwnProperty.call(payload, key))
+    || Object.keys(payload).some((key) => !allowed.has(key))
+  ) {
+    invalidIntent("Workout command payload keys are invalid.");
+  }
+}
+
+function assertUuidOrNull(value: unknown, label: string) {
+  if (value !== null && (typeof value !== "string" || !uuidPattern.test(value))) {
+    invalidIntent(`${label} must be a UUID or null.`);
+  }
+}
+
+function assertPositiveInteger(value: unknown, label: string) {
+  if (!Number.isSafeInteger(value) || Number(value) < 1) {
+    invalidIntent(`${label} must be a positive integer.`);
+  }
+}
+
+function assertBoundedDuration(value: unknown, nullable: boolean) {
+  if (nullable && value === null) return;
+  if (
+    !Number.isSafeInteger(value)
+    || Number(value) < 0
+    || Number(value) > MAX_ACTIVITY_TIMER_DURATION_SECONDS
+  ) {
+    invalidIntent("Timer duration is outside the supported range.");
+  }
+}
+
+function assertController(payload: Record<string, unknown>, optional = false) {
+  if (
+    optional
+    && !Object.prototype.hasOwnProperty.call(payload, "controller_device_id")
+  ) return;
+  assertUuidOrNull(payload.controller_device_id, "Controller identity");
+}
+
+function assertEnum(value: unknown, allowed: readonly string[], label: string) {
+  if (typeof value !== "string" || !allowed.includes(value)) {
+    invalidIntent(`${label} is invalid.`);
+  }
+}
+
+function assertNullableIsoTimestamp(value: unknown, label: string) {
+  if (
+    value !== null
+    && (
+      typeof value !== "string"
+      || !Number.isFinite(Date.parse(value))
+    )
+  ) {
+    invalidIntent(`${label} must be a valid timestamp or null.`);
+  }
+}
+
+export function validateSessionCommandIntent(
+  value: unknown
+): asserts value is SessionCommandIntent {
+  if (!isRecord(value)) invalidIntent("Workout command intent is invalid.");
+  if (
+    typeof value.userId !== "string"
+    || value.userId.length === 0
+    || typeof value.workoutSessionId !== "string"
+    || value.workoutSessionId.length === 0
+    || typeof value.commandId !== "string"
+    || !uuidPattern.test(value.commandId)
+    || typeof value.commandType !== "string"
+    || !sessionCommandTypes.includes(value.commandType as SessionCommandType)
+    || !isRecord(value.payload)
+  ) {
+    invalidIntent("Workout command identity or type is invalid.");
+  }
+  const payload = value.payload;
+  let serializedPayload = "";
+  try {
+    serializedPayload = JSON.stringify(payload);
+  } catch {
+    invalidIntent("Workout command payload is not serializable.");
+  }
+  if (serializedPayload.length > 4096) {
+    invalidIntent("Workout command payload is too large.");
+  }
+
+  switch (value.commandType as SessionCommandType) {
+    case "move_cursor":
+      assertExactKeys(
+        payload,
+        ["active_snapshot_item_id", "active_item_order", "active_set_number"],
+        ["view_state", "controller_device_id"]
+      );
+      assertUuidOrNull(payload.active_snapshot_item_id, "Snapshot item identity");
+      assertPositiveInteger(payload.active_item_order, "Active item order");
+      assertPositiveInteger(payload.active_set_number, "Active set number");
+      if (payload.view_state !== undefined) {
+        assertEnum(
+          payload.view_state,
+          ["set_entry", "exercise_complete", "session_review"],
+          "Workout view"
+        );
+      }
+      assertController(payload, true);
+      break;
+    case "complete_set_transition":
+      assertExactKeys(payload, [
+        "active_snapshot_item_id",
+        "active_item_order",
+        "active_set_number",
+        "view_state",
+        "rest_duration_seconds",
+        "controller_device_id"
+      ]);
+      assertUuidOrNull(payload.active_snapshot_item_id, "Snapshot item identity");
+      assertPositiveInteger(payload.active_item_order, "Active item order");
+      assertPositiveInteger(payload.active_set_number, "Active set number");
+      assertEnum(
+        payload.view_state,
+        ["rest", "set_entry", "exercise_complete"],
+        "Workout view"
+      );
+      assertBoundedDuration(payload.rest_duration_seconds, true);
+      assertController(payload);
+      break;
+    case "start_rest":
+      assertExactKeys(payload, ["duration_seconds", "controller_device_id"]);
+      assertBoundedDuration(payload.duration_seconds, false);
+      assertController(payload);
+      break;
+    case "clear_rest":
+      assertExactKeys(
+        payload,
+        ["view_state"],
+        ["completion_reason", "controller_device_id"]
+      );
+      assertEnum(
+        payload.view_state,
+        ["set_entry", "exercise_complete", "session_review"],
+        "Workout view"
+      );
+      if (payload.completion_reason !== undefined) {
+        assertEnum(
+          payload.completion_reason,
+          ["natural_expiration", "user_skipped", "transitioned"],
+          "Rest completion reason"
+        );
+      }
+      assertController(payload, true);
+      break;
+    case "reset_timer":
+    case "pause":
+    case "resume":
+    case "reset_activity_timer":
+      assertExactKeys(payload, ["controller_device_id"]);
+      assertController(payload);
+      break;
+    case "import_legacy_cache":
+      assertExactKeys(payload, [
+        "cached_started_at",
+        "cached_rest_ends_at",
+        "cached_rest_duration_seconds",
+        "controller_device_id"
+      ]);
+      assertNullableIsoTimestamp(payload.cached_started_at, "Cached workout start");
+      assertNullableIsoTimestamp(payload.cached_rest_ends_at, "Cached rest end");
+      assertBoundedDuration(payload.cached_rest_duration_seconds, true);
+      assertController(payload);
+      break;
+    case "start_activity_timer":
+      assertExactKeys(
+        payload,
+        ["kind", "duration_seconds", "controller_device_id"]
+      );
+      assertEnum(payload.kind, ["timed_set", "block"], "Activity timer kind");
+      assertBoundedDuration(payload.duration_seconds, true);
+      if (payload.kind === "block" && payload.duration_seconds === null) {
+        invalidIntent("A block activity timer must be bounded.");
+      }
+      assertController(payload);
+      break;
+    case "clear_activity_timer":
+      assertExactKeys(payload, ["completion_reason", "controller_device_id"]);
+      assertEnum(
+        payload.completion_reason,
+        ["completed", "user_skipped", "cancelled", "transitioned"],
+        "Activity completion reason"
+      );
+      assertController(payload);
+      break;
+  }
+}
+
+export function validateSessionCommandRequest(
+  value: unknown
+): asserts value is SessionCommandRequest {
+  validateSessionCommandIntent(value);
+  const expectedRevision = (
+    value as SessionCommandIntent & { expectedRevision?: unknown }
+  ).expectedRevision;
+  if (
+    !Number.isSafeInteger(expectedRevision)
+    || Number(expectedRevision) < 0
+  ) {
+    invalidIntent("Expected workout revision is invalid.");
+  }
+}

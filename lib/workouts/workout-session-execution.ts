@@ -1,8 +1,7 @@
 import type {
   WorkoutSessionExecutionBootstrapSource,
   WorkoutSessionExecutionSessionState,
-  WorkoutSessionExecutionState,
-  WorkoutSessionExecutionViewState
+  WorkoutSessionExecutionState
 } from "@/types";
 import {
   ActiveSessionIdempotencyConflictError,
@@ -34,22 +33,6 @@ export type WorkoutSessionExecutionCursorItem = {
 
 export type WorkoutSessionExecutionDayExercise = {
   id: string;
-};
-
-export type WorkoutSessionAfterSetCompletionPlan = {
-  hasNextSet: boolean;
-  nextExerciseIndex: number;
-  nextSetIndex: number;
-  patch: {
-    active_snapshot_item_id: string | null;
-    active_item_order: number;
-    active_set_number: number;
-    view_state: Exclude<WorkoutSessionExecutionViewState, "session_review">;
-    rest_started_at: string | null;
-    rest_duration_seconds: number | null;
-    rest_ends_at: string | null;
-    controller_device_id: string | null;
-  };
 };
 
 export const workoutSessionExecutionCommandTypes = sessionCommandTypes;
@@ -269,47 +252,9 @@ export function executionCursorToIndexes(
   };
 }
 
-export function planWorkoutSessionAfterSetCompletion(input: {
-  exerciseIndex: number;
-  setIndex: number;
-  exerciseSetCounts: readonly number[];
-  orderedSnapshotItems: readonly WorkoutSessionExecutionCursorItem[];
-  dayExercises: readonly WorkoutSessionExecutionDayExercise[];
-  restDurationSeconds: number;
-  controllerDeviceId: string | null;
-  now?: Date;
-}): WorkoutSessionAfterSetCompletionPlan {
-  const exerciseIndex = Math.max(0, Math.floor(input.exerciseIndex));
-  const setIndex = Math.max(0, Math.floor(input.setIndex));
-  const currentSetCount = Math.max(1, Math.floor(input.exerciseSetCounts[exerciseIndex] ?? 1));
-  const hasNextSetInExercise = setIndex + 1 < currentSetCount;
-  const hasNextExercise = exerciseIndex + 1 < input.exerciseSetCounts.length;
-  const hasNextSet = hasNextSetInExercise || hasNextExercise;
-  const nextExerciseIndex = hasNextSetInExercise ? exerciseIndex : hasNextExercise ? exerciseIndex + 1 : exerciseIndex;
-  const nextSetIndex = hasNextSetInExercise ? setIndex + 1 : hasNextExercise ? 0 : setIndex;
-  const nextExercise = input.dayExercises[nextExerciseIndex];
-  const cursorItem = input.orderedSnapshotItems.find((item) => item.sourcePlanExerciseId === nextExercise?.id)
-    ?? input.orderedSnapshotItems.find((item) => item.itemOrder === nextExerciseIndex + 1)
-    ?? null;
-  const restDurationSeconds = Math.min(86400, Math.max(0, Math.floor(input.restDurationSeconds)));
-  const shouldRest = hasNextSet && restDurationSeconds > 0;
-  const now = input.now ?? new Date();
-  const restStartedAt = shouldRest ? now.toISOString() : null;
-  const restEndsAt = shouldRest ? new Date(now.getTime() + restDurationSeconds * 1000).toISOString() : null;
-
-  return {
-    hasNextSet,
-    nextExerciseIndex,
-    nextSetIndex,
-    patch: {
-      active_snapshot_item_id: cursorItem?.id ?? null,
-      active_item_order: cursorItem?.itemOrder ?? nextExerciseIndex + 1,
-      active_set_number: nextSetIndex + 1,
-      view_state: shouldRest ? "rest" : hasNextSet ? "set_entry" : "exercise_complete",
-      rest_started_at: restStartedAt,
-      rest_duration_seconds: shouldRest ? restDurationSeconds : null,
-      rest_ends_at: restEndsAt,
-      controller_device_id: input.controllerDeviceId
-    }
-  };
-}
+export {
+  planSessionAfterSetCompletion as planWorkoutSessionAfterSetCompletion
+} from "./session-engine/reducer";
+export type {
+  SessionAfterSetCompletionPlan as WorkoutSessionAfterSetCompletionPlan
+} from "./session-engine/reducer";

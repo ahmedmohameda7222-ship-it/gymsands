@@ -1,12 +1,21 @@
-import type { WorkoutSessionExecutionState } from "@/types";
+import type {
+  ExerciseLog,
+  WorkoutSessionExecutionState,
+  WorkoutSessionPrescriptionItem
+} from "@/types";
 import {
   ActiveSessionError,
   MAX_ACTIVITY_TIMER_DURATION_SECONDS,
+  validateSessionCommandIntent,
   type SessionCommandIntent,
   type SessionEngineContext,
   type SessionTransitionPlan
 } from "./contracts";
-import { assertCursorInvariants, sameCanonicalExecutionState } from "./invariants";
+import {
+  assertCursorInvariants,
+  assertPrescriptionInvariants,
+  sameCanonicalExecutionState
+} from "./invariants";
 import { activityTimerProjection, restSecondsRemaining, sessionElapsedSeconds } from "./timers";
 
 function iso(nowMs: number) {
@@ -48,12 +57,98 @@ function clearActivity(state: WorkoutSessionExecutionState) {
   } satisfies WorkoutSessionExecutionState;
 }
 
+export type SessionAfterSetCompletionPlan = {
+  hasNextSet: boolean;
+  nextExerciseIndex: number;
+  nextSetIndex: number;
+  patch: {
+    active_snapshot_item_id: string;
+    active_item_order: number;
+    active_set_number: number;
+    view_state: "rest" | "set_entry" | "exercise_complete";
+    rest_duration_seconds: number | null;
+    controller_device_id: string | null;
+  };
+};
+
+export function planSessionAfterSetCompletion(input: {
+  userId: string;
+  workoutSessionId: string;
+  currentSnapshotItemId: string;
+  currentSetNumber: number;
+  prescription: readonly WorkoutSessionPrescriptionItem[];
+  performedLogs?: readonly ExerciseLog[];
+  restDurationSeconds: number;
+  controllerDeviceId: string | null;
+}): SessionAfterSetCompletionPlan {
+  assertPrescriptionInvariants(
+    input.prescription,
+    input.userId,
+    input.workoutSessionId
+  );
+  const ordered = [...input.prescription].sort(
+    (left, right) => left.itemOrder - right.itemOrder
+  );
+  const currentIndex = ordered.findIndex(
+    (item) => item.id === input.currentSnapshotItemId
+  );
+  if (currentIndex < 0) {
+    throw new ActiveSessionError(
+      "identity_mismatch",
+      "The completed set does not belong to the frozen prescription."
+    );
+  }
+  const currentItem = ordered[currentIndex];
+  assertCursorInvariants(
+    {
+      active_snapshot_item_id: currentItem.id,
+      active_item_order: currentItem.itemOrder,
+      active_set_number: input.currentSetNumber
+    },
+    {
+      userId: input.userId,
+      workoutSessionId: input.workoutSessionId,
+      rootStatus: "started",
+      prescription: ordered,
+      performedLogs: input.performedLogs
+    }
+  );
+  validateDuration(input.restDurationSeconds);
+
+  const nextSetInItem = currentItem.prescriptionSets.find(
+    (set) => set.setOrder === input.currentSetNumber + 1
+  );
+  const nextItem = nextSetInItem ? currentItem : ordered[currentIndex + 1] ?? null;
+  const nextSetNumber = nextSetInItem ? nextSetInItem.setOrder : 1;
+  const hasNextSet = nextItem !== null;
+  const shouldRest = hasNextSet && input.restDurationSeconds > 0;
+
+  return {
+    hasNextSet,
+    nextExerciseIndex: hasNextSet ? nextItem.itemOrder - 1 : currentItem.itemOrder - 1,
+    nextSetIndex: hasNextSet ? nextSetNumber - 1 : input.currentSetNumber - 1,
+    patch: {
+      active_snapshot_item_id: hasNextSet ? nextItem.id : currentItem.id,
+      active_item_order: hasNextSet ? nextItem.itemOrder : currentItem.itemOrder,
+      active_set_number: hasNextSet ? nextSetNumber : input.currentSetNumber,
+      view_state: shouldRest
+        ? "rest"
+        : hasNextSet
+          ? "set_entry"
+          : "exercise_complete",
+      rest_duration_seconds: shouldRest ? input.restDurationSeconds : null,
+      controller_device_id: input.controllerDeviceId
+    }
+  };
+}
+
 export function reduceSessionCommand(
   current: WorkoutSessionExecutionState,
   intent: SessionCommandIntent,
   context: SessionEngineContext,
   nowMs: number
 ): SessionTransitionPlan {
+  validateSessionCommandIntent(intent);
   if (context.rootStatus !== "started") {
     throw new ActiveSessionError(
       "terminal_mutation_attempt",

@@ -12,6 +12,7 @@ import {
   planWorkoutSessionAfterSetCompletion,
   type WorkoutSessionExecutionCommandResponse
 } from "./workout-session-execution";
+import { planSessionAfterSetCompletion } from "./session-engine/reducer";
 
 const now = Date.parse("2026-07-20T20:00:10.000Z");
 const sessionId = "11111111-1111-4111-8111-111111111111";
@@ -142,36 +143,8 @@ describe("command response normalization", () => {
   });
 });
 
-describe("post-set transition planning and truthful ordering", () => {
-  const cursorItems = [
-    { id: "item-a", itemOrder: 1, sourcePlanExerciseId: "plan-a" },
-    { id: "item-b", itemOrder: 2, sourcePlanExerciseId: "plan-b" }
-  ];
-  const exercises = [{ id: "plan-a" }, { id: "plan-b" }];
-
-  it("plans duration-only server rest intent and a final non-rest transition", () => {
-    const resting = planWorkoutSessionAfterSetCompletion({
-      exerciseIndex: 0,
-      setIndex: 0,
-      exerciseSetCounts: [2, 1],
-      orderedSnapshotItems: cursorItems,
-      dayExercises: exercises,
-      restDurationSeconds: 90,
-      controllerDeviceId: commandId,
-      now: new Date("2026-07-20T20:00:00.000Z")
-    });
-    expect(resting.patch).toMatchObject({ active_set_number: 2, view_state: "rest", rest_duration_seconds: 90 });
-
-    const complete = planWorkoutSessionAfterSetCompletion({
-      exerciseIndex: 1,
-      setIndex: 0,
-      exerciseSetCounts: [2, 1],
-      orderedSnapshotItems: cursorItems,
-      dayExercises: exercises,
-      restDurationSeconds: 90,
-      controllerDeviceId: null
-    });
-    expect(complete).toMatchObject({ hasNextSet: false, patch: { view_state: "exercise_complete", rest_duration_seconds: null } });
+describe("post-set transition compatibility", () => {
+  it("re-exports the pure frozen-prescription planner without another implementation", () => {
+    expect(planWorkoutSessionAfterSetCompletion).toBe(planSessionAfterSetCompletion);
   });
-
 });

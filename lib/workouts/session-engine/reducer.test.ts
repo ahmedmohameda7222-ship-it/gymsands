@@ -7,7 +7,7 @@ import {
 } from "./contracts";
 import { executionFixture, fixtureIds, prescriptionFixture, transitionFixtureNames } from "./fixtures";
 import { assertCursorInvariants, assertPrescriptionInvariants, normalizeExecutionState } from "./invariants";
-import { reduceSessionCommand } from "./reducer";
+import { planSessionAfterSetCompletion, reduceSessionCommand } from "./reducer";
 
 const now = Date.parse("2026-07-26T08:01:00.000Z");
 const context = {
@@ -209,5 +209,76 @@ describe("AW-4 session reducer", () => {
       expect(error).toBeInstanceOf(ActiveSessionError);
       expect((error as ActiveSessionError).code).toBe("invalid_transition");
     }
+  });
+
+  it("plans the next set and rest only from the frozen prescription graph", () => {
+    const first = prescriptionFixture();
+    const secondItemId = "99999999-9999-4999-8999-999999999999";
+    const second = prescriptionFixture({
+      id: secondItemId,
+      itemOrder: 2,
+      sourcePlanExerciseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      prescriptionSets: [{
+        ...first.prescriptionSets[0],
+        id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        snapshotItemId: secondItemId,
+        setOrder: 1
+      }]
+    });
+    const base = {
+      userId: fixtureIds.userId,
+      workoutSessionId: fixtureIds.sessionId,
+      prescription: [first, second],
+      restDurationSeconds: 90,
+      controllerDeviceId: null
+    };
+
+    expect(planSessionAfterSetCompletion({
+      ...base,
+      currentSnapshotItemId: first.id,
+      currentSetNumber: 1
+    })).toMatchObject({
+      hasNextSet: true,
+      nextExerciseIndex: 0,
+      nextSetIndex: 1,
+      patch: {
+        active_snapshot_item_id: first.id,
+        active_set_number: 2,
+        view_state: "rest",
+        rest_duration_seconds: 90
+      }
+    });
+    expect(planSessionAfterSetCompletion({
+      ...base,
+      currentSnapshotItemId: first.id,
+      currentSetNumber: 2
+    })).toMatchObject({
+      hasNextSet: true,
+      nextExerciseIndex: 1,
+      nextSetIndex: 0,
+      patch: {
+        active_snapshot_item_id: second.id,
+        active_item_order: 2,
+        active_set_number: 1
+      }
+    });
+    expect(planSessionAfterSetCompletion({
+      ...base,
+      currentSnapshotItemId: second.id,
+      currentSetNumber: 1
+    })).toMatchObject({
+      hasNextSet: false,
+      patch: {
+        active_snapshot_item_id: second.id,
+        view_state: "exercise_complete",
+        rest_duration_seconds: null
+      }
+    });
+    expect(() => planSessionAfterSetCompletion({
+      ...base,
+      currentSnapshotItemId: first.id,
+      currentSetNumber: 1,
+      restDurationSeconds: 86_401
+    })).toThrow(/duration/i);
   });
 });
