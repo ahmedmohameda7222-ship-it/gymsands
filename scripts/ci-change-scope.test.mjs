@@ -42,6 +42,18 @@ test("UI changes select UI, core and build without database replay", () => {
   assert.equal(scope.build, true);
 });
 
+test("styling build configuration selects rendered UI QA and production build", () => {
+  for (const path of ["tailwind.config.ts", "postcss.config.mjs"]) {
+    const scope = classifyChangedPaths([path]);
+    assert.equal(scope.core, true);
+    assert.equal(scope.ui, true);
+    assert.equal(scope.ci, true);
+    assert.equal(scope.build, true);
+    assert.equal(scope.database, false);
+    assert.equal(scope.fallback, false);
+  }
+});
+
 test("test-only source changes avoid build and rendered browser QA", () => {
   const scope = classifyChangedPaths([
     "components/workouts/example.test.tsx",
